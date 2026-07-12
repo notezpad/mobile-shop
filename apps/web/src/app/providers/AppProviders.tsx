@@ -18,13 +18,16 @@ const queryClient = new QueryClient({
   },
 });
 
+/** Mounted INSIDE QueryClientProvider so useRealtimeSync (which uses React Query) has context access. */
+function RealtimeSync() {
+  useRealtimeSync();
+  return null;
+}
+
 /** Provider: React Query + Toaster + theme/locale sync + PWA + Realtime. */
 export function AppProviders({ children }: { children: ReactNode }) {
   const theme = useUiStore((s) => s.theme);
   const locale = useUiStore((s) => s.locale);
-
-  // Start realtime sync subscriptions.
-  useRealtimeSync();
 
   // Apply theme + locale to <html> on every change.
   useEffect(() => {
@@ -55,6 +58,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <RealtimeSync />
       {children}
       <Toaster
         position={APP_CONFIG.toast.position}
