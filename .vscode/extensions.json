@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "bradlc.vscode-tailwindcss",
+    "ms-cloudflare.cloudflare-workers-bindings",
+    "supabase.supabase",
+    "editorconfig.editorconfig",
+    "redhat.vscode-yaml"
+  ]
+}

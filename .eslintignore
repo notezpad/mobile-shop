@@ -1,0 +1,20 @@
+# Dependencies
+node_modules
+
+# Build outputs
+dist
+build
+.turbo
+.wrangler
+.output
+
+# Generated
+*.tsbuildinfo
+packages/db/src/generated/
+
+# Logs
+*.log
+
+# Lockfiles (keep pnpm-lock.yaml)
+yarn.lock
+package-lock.json

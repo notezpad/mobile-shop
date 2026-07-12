@@ -1,0 +1,43 @@
+{
+  "name": "mobile-shop-erp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Professional ERP & POS system for mobile phone shops and repair services — Offline-First PWA on Cloudflare Workers + Supabase",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --stream run dev",
+    "dev:web": "pnpm --filter @mobile-shop/web dev",
+    "dev:worker": "pnpm --filter @mobile-shop/worker dev",
+    "build": "pnpm -r run build",
+    "build:web": "pnpm --filter @mobile-shop/web build",
+    "build:worker": "pnpm --filter @mobile-shop/worker build",
+    "lint": "pnpm -r run lint",
+    "lint:fix": "pnpm -r run lint:fix",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "test:watch": "pnpm -r run test:watch",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "prepare": "husky",
+    "clean": "pnpm -r exec rm -rf node_modules dist .turbo .wrangler && rm -rf node_modules",
+    "db:gen-types": "pnpm --filter @mobile-shop/db gen-types",
+    "db:migrate": "pnpm --filter @mobile-shop/db migrate",
+    "db:seed": "pnpm --filter @mobile-shop/db seed"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.5.0",
+    "@commitlint/config-conventional": "^19.5.0",
+    "@types/node": "^22.7.4",
+    "eslint": "^9.12.0",
+    "husky": "^9.1.6",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.3.3",
+    "prettier-plugin-tailwindcss": "^0.6.8",
+    "typescript": "^5.6.2"
+  }
+}

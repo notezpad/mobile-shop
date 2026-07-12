@@ -1,0 +1,218 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Design Tokens ──────────────────────────────────────────────
+   HSL CSS variables consumed by Tailwind theme colors.
+   Light + dark themes via `.dark` class on <html>.
+   Brand identity: slate (primary) + emerald (success) + amber (warn).
+   ───────────────────────────────────────────────────────────── */
+
+@layer base {
+  :root {
+    /* Layout */
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Brand: Slate */
+    --primary: 222 47% 20%;
+    --primary-foreground: 210 40% 98%;
+
+    /* Neutral surface */
+    --secondary: 210 40% 94%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 94%;
+    --muted-foreground: 215 16% 47%;
+
+    /* Accent: subtle indigo tint */
+    --accent: 226 70% 96%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 214 32% 88%;
+    --input: 214 32% 88%;
+    --ring: 222 47% 11%;
+
+    --radius: 0.625rem;
+
+    --sidebar-width: 264px;
+    --sidebar-collapsed-width: 72px;
+    --header-height: 64px;
+  }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 40% 96%;
+
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary: 210 40% 96%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 96%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 96%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 0%;
+
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 215 20% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    @apply bg-background text-foreground;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Custom scrollbar — subtle, works on desktop */
+  @media (pointer: fine) {
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    ::-webkit-scrollbar-track {
+      @apply bg-transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      @apply rounded-full bg-border;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      @apply bg-muted-foreground/40;
+    }
+  }
+
+  /* RTL: flip arrow icons rendered via CSS */
+  [dir='rtl'] .rtl-flip {
+    transform: scaleX(-1);
+  }
+
+  /* Print: hide everything except print-only containers */
+  @media print {
+    body * {
+      visibility: hidden;
+    }
+    .print-area,
+    .print-area * {
+      visibility: visible;
+    }
+    .print-area {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+    }
+    .no-print {
+      display: none !important;
+    }
+    /* Invoice-specific print rules */
+    #invoice-print-area,
+    #invoice-thermal-area {
+      visibility: visible;
+      position: absolute;
+      inset: 0;
+      margin: 0 !important;
+      padding: 8mm !important;
+      box-shadow: none !important;
+    }
+    #invoice-print-area *,
+    #invoice-thermal-area * {
+      visibility: visible;
+    }
+    @page {
+      margin: 0;
+    }
+  }
+}
+
+@layer components {
+  /* Skeleton loader */
+  .skeleton {
+    @apply animate-pulse rounded-md bg-muted;
+  }
+
+  /* Card */
+  .card-base {
+    @apply rounded-lg border bg-card text-card-foreground shadow-subtle;
+  }
+
+  /* Focus ring — keyboard only */
+  .focus-ring {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  /* Page container */
+  .page-container {
+    @apply mx-auto w-full max-w-7xl space-y-6 px-4 py-6 md:px-6 md:py-8;
+  }
+}
+
+@layer utilities {
+  /* Safe-area insets for notched devices */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pl-safe {
+    padding-left: env(safe-area-inset-left);
+  }
+  .pr-safe {
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Hide scrollbar but keep scrollable */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}

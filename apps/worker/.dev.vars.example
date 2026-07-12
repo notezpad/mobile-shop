@@ -1,0 +1,7 @@
+# Local development secrets for `wrangler dev`
+# Copy to `.dev.vars` (which is gitignored) and fill in real values.
+# DO NOT commit this file with real secrets.
+
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_SERVICE_ROLE_KEY=replace-with-local-supabase-service-role-key
+JWT_SECRET=replace-with-local-jwt-secret-min-32-chars-long

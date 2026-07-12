@@ -1,0 +1,51 @@
+name = "mobile-shop-erp-api"
+main = "./src/index.ts"
+compatibility_date = "2024-09-25"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# Logs
+[observability]
+enabled = true
+
+# Production route (configure per environment)
+# routes = [
+#   { pattern = "api.mobileshop.example.com/*", zone_name = "mobileshop.example.com" }
+# ]
+
+# Environment variables (non-secret)
+[vars]
+ENVIRONMENT = "development"
+APP_NAME = "Mobile Shop ERP API"
+APP_VERSION = "0.1.0"
+LOG_LEVEL = "debug"
+CORS_ORIGIN = "http://localhost:5173"
+
+# ─── Secrets (set via `wrangler secret put <NAME>`) ─────────────────
+# Required secrets:
+#   wrangler secret put SUPABASE_URL
+#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#   wrangler secret put JWT_SECRET
+#
+# Do NOT commit actual secret values. The keys below are placeholders for
+# local `wrangler dev` only via `.dev.vars`.
+
+# ─── KV Namespaces (future: rate-limiting, cache) ──────────────────
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "..."
+
+# ─── Durable Objects (future: realtime sync coordination) ──────────
+# [[durable_objects.bindings]]
+# name = "SYNC_COORDINATOR"
+# class_name = "SyncCoordinator"
+
+# ─── Staging environment ───────────────────────────────────────────
+[env.staging]
+name = "mobile-shop-erp-api-staging"
+vars = { ENVIRONMENT = "staging", LOG_LEVEL = "info" }
+
+# ─── Production environment ────────────────────────────────────────
+[env.production]
+name = "mobile-shop-erp-api"
+vars = { ENVIRONMENT = "production", LOG_LEVEL = "warn" }
