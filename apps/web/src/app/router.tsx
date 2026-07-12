@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Navigate, createBrowserRouter, type RouteObject } from 'react-router-dom';
+import { Navigate, createBrowserRouter, RouterProvider, type RouteObject } from 'react-router-dom';
 import { AppProviders } from './providers/AppProviders';
 import { AuthLayout } from './layouts/AuthLayout';
 import { DashboardLayout } from './layouts/DashboardLayout';
@@ -598,5 +598,9 @@ const routes: RouteObject[] = [
 export const router = createBrowserRouter(routes);
 
 export function AppRouter() {
-  return <AppProviders>{null}</AppProviders>;
+  return (
+    <AppProviders>
+      <RouterProvider router={router} />
+    </AppProviders>
+  );
 }
