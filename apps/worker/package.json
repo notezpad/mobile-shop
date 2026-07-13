@@ -6,8 +6,9 @@
   "main": "./src/index.ts",
   "scripts": {
     "dev": "wrangler dev",
-    "build": "wrangler deploy --dry-run",
-    "deploy": "wrangler deploy",
+    "build:web": "pnpm --filter @mobile-shop/web build",
+    "build": "pnpm --filter @mobile-shop/web build && wrangler deploy --dry-run",
+    "deploy": "pnpm --filter @mobile-shop/web build && wrangler deploy",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",

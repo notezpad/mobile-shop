@@ -17,9 +17,8 @@ export interface Env {
   LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error';
   CORS_ORIGIN: string;
 
-  // ─── Future bindings ──────────────────────────────────────────
-  // CACHE: KVNamespace;
-  // SYNC_COORDINATOR: DurableObjectNamespace;
+  // ─── Static Assets (Frontend PWA) ─────────────────────────────
+  ASSETS: Fetcher;
 }
 
 /** Hono app context extended with our env + auth state. */

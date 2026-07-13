@@ -67,6 +67,28 @@ python3 scripts/generate-icons.py
 pnpm dev    # web على :5173 + worker على :8787
 ```
 
+## 🚀 النشر على Cloudflare Workers (الكل في واحد)
+
+المشروع كله (Frontend + Backend) ينشر على **Worker واحد**:
+
+```bash
+# 1. بناء الـ Frontend
+cd apps/worker
+pnpm build:web    # يبني React PWA → apps/web/dist
+
+# 2. ضبط الأسرار
+npx wrangler secret put SUPABASE_URL
+npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+npx wrangler secret put JWT_SECRET
+
+# 3. النشر (يبني web + ينشر worker)
+npx wrangler deploy
+```
+
+رابط واحد يخدم كل حاجة: `https://your-worker.workers.dev`
+- `/api/v1/*` → API endpoints
+- أي مسار آخر → React PWA (مع SPA fallback)
+
 ## 🔑 بيانات الدخول الافتراضية
 
 | المستخدم | كلمة المرور | الدور |

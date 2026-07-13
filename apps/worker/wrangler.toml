@@ -1,51 +1,41 @@
-name = "mobile-shop-erp-api"
+name = "mobile-shop-erp"
 main = "./src/index.ts"
 compatibility_date = "2024-09-25"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
-# Logs
+# ─── Static Assets (Frontend PWA) ──────────────────────────────────
+# Serves the built React app alongside the API from the same Worker.
+# No need for Cloudflare Pages — everything runs on Workers.
+[assets]
+directory = "../web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# ─── Logs ─────────────────────────────────────────────────────────
 [observability]
 enabled = true
 
-# Production route (configure per environment)
-# routes = [
-#   { pattern = "api.mobileshop.example.com/*", zone_name = "mobileshop.example.com" }
-# ]
-
-# Environment variables (non-secret)
+# ─── Environment variables (non-secret) ───────────────────────────
 [vars]
-ENVIRONMENT = "development"
-APP_NAME = "Mobile Shop ERP API"
+ENVIRONMENT = "production"
+APP_NAME = "Mobile Shop ERP"
 APP_VERSION = "0.1.0"
-LOG_LEVEL = "debug"
-CORS_ORIGIN = "http://localhost:5173"
+LOG_LEVEL = "warn"
+CORS_ORIGIN = "*"
 
-# ─── Secrets (set via `wrangler secret put <NAME>`) ─────────────────
+# ─── Secrets (set via `wrangler secret put <NAME>`) ───────────────
 # Required secrets:
 #   wrangler secret put SUPABASE_URL
 #   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 #   wrangler secret put JWT_SECRET
-#
-# Do NOT commit actual secret values. The keys below are placeholders for
-# local `wrangler dev` only via `.dev.vars`.
 
-# ─── KV Namespaces (future: rate-limiting, cache) ──────────────────
-# [[kv_namespaces]]
-# binding = "CACHE"
-# id = "..."
-
-# ─── Durable Objects (future: realtime sync coordination) ──────────
-# [[durable_objects.bindings]]
-# name = "SYNC_COORDINATOR"
-# class_name = "SyncCoordinator"
-
-# ─── Staging environment ───────────────────────────────────────────
+# ─── Staging environment ──────────────────────────────────────────
 [env.staging]
-name = "mobile-shop-erp-api-staging"
+name = "mobile-shop-erp-staging"
 vars = { ENVIRONMENT = "staging", LOG_LEVEL = "info" }
 
-# ─── Production environment ────────────────────────────────────────
-[env.production]
-name = "mobile-shop-erp-api"
-vars = { ENVIRONMENT = "production", LOG_LEVEL = "warn" }
+[env.staging.assets]
+directory = "../web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
