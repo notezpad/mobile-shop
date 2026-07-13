@@ -4,7 +4,7 @@ import { logger as honoLogger } from 'hono/logger';
 import { secureHeaders } from 'hono/secure-headers';
 import { requestId } from 'hono/request-id';
 
-import { API_PREFIX } from '@mobile-shop/shared';
+import { API_PREFIX, AppError, ERROR_CODES } from '@mobile-shop/shared';
 import type { AppContext } from './types/env';
 import { healthRoute } from './routes/health';
 import { authRoutes } from './routes/auth';
@@ -106,17 +106,28 @@ app.onError(errorHandlerMiddleware);
 /**
  * Static assets + SPA fallback.
  *
- * The `ASSETS` binding is configured in wrangler.toml under [assets].
- * Cloudflare Workers automatically serves files from the assets directory.
- * The `not_found_handling = "single-page-application"` setting in
- * wrangler.toml handles the SPA fallback (returns index.html for
- * non-file routes like /dashboard, /pos, /repairs, etc.).
+ * IMPORTANT: When a Worker defines its own `main` script (like this Hono
+ * app), Cloudflare does NOT automatically fall back to serving index.html
+ * for unmatched routes — that automatic behavior only applies when there's
+ * no custom Worker code at all. Since we have a Hono app, any request that
+ * doesn't match a static file (e.g. /login, /dashboard, /pos after a
+ * refresh) is routed to *our* fetch handler. If we don't handle it, Hono's
+ * default 404 kicks in — which is exactly the bare "404 Not Found" page
+ * users were seeing on refresh.
  *
- * We don't need to manually handle static files — Cloudflare's
- * asset serving layer handles it BEFORE the Worker code runs
- * for any URL that matches a file in the assets directory.
+ * So we must explicitly ask the ASSETS binding for the request. When the
+ * asset doesn't exist, the `not_found_handling = "single-page-application"`
+ * setting in wrangler.toml then makes the ASSETS binding itself return
+ * index.html, letting the client-side router take over.
  *
- * Only URLs that DON'T match a file fall through to the Worker,
- * and the SPA fallback returns index.html automatically.
+ * API routes (/api/*) that don't match any defined route should NOT get
+ * the SPA fallback — they should return a proper JSON 404.
  */
+app.notFound(async (c) => {
+  if (c.req.path.startsWith(API_PREFIX) || c.req.path.startsWith('/api/')) {
+    throw new AppError(ERROR_CODES.NOT_FOUND, `Route not found: ${c.req.method} ${c.req.path}`);
+  }
+  return c.env.ASSETS.fetch(c.req.raw);
+});
+
 export default app;
