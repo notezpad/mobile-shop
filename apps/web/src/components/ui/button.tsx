@@ -43,6 +43,28 @@ export interface ButtonProps
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, loading = false, children, disabled, ...props }, ref) => {
     const Comp = asChild ? Slot : 'button';
+
+    // ⚠️ Radix Slot requires EXACTLY ONE element child. `React.Children.count`
+    // does NOT skip null/false/undefined (only `toArray` does), so even
+    // `{loading ? <svg/> : null}{children}` produces count = 2 and triggers:
+    //   "Slot failed to slot onto its children. Expected a single React
+    //    element child or 'Slottable'."
+    // Therefore, in asChild mode we pass `children` straight through and rely
+    // on `aria-busy` + `data-loading` for the consumer to render a spinner.
+    if (asChild) {
+      return (
+        <Comp
+          className={cn(buttonVariants({ variant, size, className }))}
+          ref={ref}
+          aria-busy={loading || undefined}
+          data-loading={loading ? 'true' : undefined}
+          {...props}
+        >
+          {children}
+        </Comp>
+      );
+    }
+
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
