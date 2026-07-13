@@ -39,3 +39,13 @@ vars = { ENVIRONMENT = "staging", LOG_LEVEL = "info" }
 directory = "../web/dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
+
+# ─── Production environment ───────────────────────────────────────
+[env.production]
+name = "mobile-shop-erp"
+vars = { ENVIRONMENT = "production", LOG_LEVEL = "warn" }
+
+[env.production.assets]
+directory = "../web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
