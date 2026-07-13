@@ -1,41 +1,33 @@
-name = "mobile-shop-erp"
+name = "mobile-shop"
 main = "./src/index.ts"
 compatibility_date = "2024-09-25"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
-# ─── Static Assets (Frontend PWA) ──────────────────────────────────
-# Serves the built React app alongside the API from the same Worker.
-# No need for Cloudflare Pages — everything runs on Workers.
 [assets]
 directory = "../web/dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 
-# ─── Logs ─────────────────────────────────────────────────────────
 [observability]
 enabled = true
 
-# ─── Environment variables (non-secret) ───────────────────────────
 [vars]
 ENVIRONMENT = "production"
-APP_NAME = "Mobile Shop ERP"
+APP_NAME = "Mobile Shop ERP API"
 APP_VERSION = "0.1.0"
 LOG_LEVEL = "warn"
 CORS_ORIGIN = "*"
 
-# ─── Secrets (set via `wrangler secret put <NAME>`) ───────────────
-# Required secrets:
-#   wrangler secret put SUPABASE_URL
-#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-#   wrangler secret put JWT_SECRET
+# ─── Secrets (set via dashboard: Settings → Variables and Secrets → Add → Secret) ───
+# SUPABASE_URL
+# SUPABASE_SERVICE_ROLE_KEY
+# JWT_SECRET
 
-# ─── Staging environment ──────────────────────────────────────────
 [env.staging]
-name = "mobile-shop-erp-staging"
+name = "mobile-shop-staging"
 vars = { ENVIRONMENT = "staging", LOG_LEVEL = "info" }
 
-[env.staging.assets]
-directory = "../web/dist"
-binding = "ASSETS"
-not_found_handling = "single-page-application"
+[env.production]
+name = "mobile-shop"
+vars = { ENVIRONMENT = "production", LOG_LEVEL = "warn" }

@@ -36,26 +36,28 @@ import { auditLogRoutes, notificationRoutes } from './routes/audit';
 import { tenantRoutes } from './routes/tenants';
 import { syncRoutes } from './routes/sync';
 import { errorHandlerMiddleware } from './middleware/error-handler';
+import { notFoundMiddleware } from './middleware/not-found';
 
 /**
- * Hono app — serves BOTH the API and the static frontend (PWA).
+ * Hono app entrypoint for Cloudflare Workers.
  *
  * Architecture:
- *  - `/api/v1/*` routes → Hono API handlers
- *  - Everything else → served from static assets (React PWA)
- *  - SPA fallback: all non-API, non-file routes return index.html
- *
- * This eliminates the need for Cloudflare Pages entirely.
- * One Worker = API + Frontend + PWA.
+ *  - Each domain module mounts under `/api/v1/<module>`
+ *  - Auth middleware applies JWT verification on protected routes
+ *  - RBAC middleware checks permission keys per route
+ *  - Error handler catches AppError → JSON response, otherwise → 500
  */
 const app = new Hono<AppContext>();
 
-// ─── Global middleware (API only) ─────────────────────────────────
-app.use('/api/*', honoLogger());
+// ─── Global middleware ────────────────────────────────────────────
+app.use('*', honoLogger());
 app.use(
-  '/api/*',
+  '*',
   cors({
-    origin: '*',
+    origin: (_c, env) => {
+      const e = env as unknown as AppContext['Bindings'];
+      return e.CORS_ORIGIN;
+    },
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'X-Request-Id', 'X-Branch-Id'],
     exposeHeaders: ['X-Request-Id', 'X-Revision'],
@@ -63,10 +65,10 @@ app.use(
     maxAge: 86400,
   }),
 );
-app.use('/api/*', secureHeaders());
-app.use('/api/*', requestId());
+app.use('*', secureHeaders());
+app.use('*', requestId());
 
-// ─── API Routes ───────────────────────────────────────────────────
+// ─── Routes ───────────────────────────────────────────────────────
 app.route(`${API_PREFIX}/health`, healthRoute);
 app.route(`${API_PREFIX}/auth`, authRoutes);
 app.route(`${API_PREFIX}/users`, userRoutes);
@@ -84,7 +86,7 @@ app.route(`${API_PREFIX}/suppliers`, supplierRoutes);
 app.route(`${API_PREFIX}/sales`, saleRoutes);
 app.route(`${API_PREFIX}/returns`, returnRoutes);
 app.route(`${API_PREFIX}/repairs`, repairRoutes);
-app.route(`${API_PREFIX}/repair-tracking`, repairTrackingRoutes); // public
+app.route(`${API_PREFIX}/repair-tracking`, repairTrackingRoutes); // public — no auth
 app.route(`${API_PREFIX}/cashboxes`, cashboxRoutes);
 app.route(`${API_PREFIX}/expenses`, expenseRoutes);
 app.route(`${API_PREFIX}/revenues`, revenueRoutes);
@@ -100,23 +102,24 @@ app.route(`${API_PREFIX}/notifications`, notificationRoutes);
 app.route(`${API_PREFIX}/tenants`, tenantRoutes);
 app.route(`${API_PREFIX}/sync`, syncRoutes);
 
-// ─── Error handler ────────────────────────────────────────────────
+// ─── 404 handler for unmatched /api/* routes ──────────────────────
+app.use(`${API_PREFIX}/*`, notFoundMiddleware);
+
+// ─── Error handler (must be last) ─────────────────────────────────
+// Catches AppError, ZodError, HTTPException, and unknown errors →
+// converts them to a standard ApiResponse envelope.
 app.onError(errorHandlerMiddleware);
 
-/**
- * Static assets + SPA fallback.
- *
- * The `ASSETS` binding is configured in wrangler.toml under [assets].
- * Cloudflare Workers automatically serves files from the assets directory.
- * The `not_found_handling = "single-page-application"` setting in
- * wrangler.toml handles the SPA fallback (returns index.html for
- * non-file routes like /dashboard, /pos, /repairs, etc.).
- *
- * We don't need to manually handle static files — Cloudflare's
- * asset serving layer handles it BEFORE the Worker code runs
- * for any URL that matches a file in the assets directory.
- *
- * Only URLs that DON'T match a file fall through to the Worker,
- * and the SPA fallback returns index.html automatically.
- */
+// ─── Format zValidator's default 400 responses for /api/* ────────
+app.notFound((c) => {
+  if (c.req.path.startsWith(API_PREFIX)) {
+    return errorHandlerMiddleware(
+      new Error(`Route not found: ${c.req.method} ${c.req.path}`),
+      c,
+    );
+  }
+  // Non-API routes: fall through to static asset serving below.
+  return c.env.ASSETS.fetch(c.req.raw);
+});
+
 export default app;
