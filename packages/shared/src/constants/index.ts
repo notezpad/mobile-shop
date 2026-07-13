@@ -21,10 +21,30 @@ export const PIN_UNLOCK_TTL_SECONDS = 60 * 60 * 4; // 4 hours (offline PIN sessi
 export const PASSWORD_MIN_LENGTH = 8;
 export const PIN_LENGTH = 4;
 
-/** PBKDF2 iteration count for password & PIN hashing (Web Crypto). */
-export const PBKDF2_ITERATIONS = 150_000;
+/**
+ * PBKDF2 iteration count for password & PIN hashing (Web Crypto).
+ *
+ * IMPORTANT: Cloudflare Workers' WebCrypto implementation enforces a HARD
+ * MAXIMUM of 100,000 iterations for PBKDF2 (it throws
+ * `NotSupportedError: Pbkdf2 failed: iteration counts above 100000 are not
+ * supported` above that). 100,000 also happens to be the OWASP 2023 minimum
+ * recommendation for PBKDF2-SHA256, so this value is both the Workers ceiling
+ * and a sane security baseline. Do NOT raise this above 100_000 unless you
+ * have migrated to a different KDF (e.g. Argon2id via WASM) that does not
+ * go through WebCrypto's PBKDF2 path.
+ */
+export const PBKDF2_ITERATIONS = 100_000;
 export const PBKDF2_SALT_LENGTH = 16;
 export const PBKDF2_KEY_LENGTH = 32;
+
+/**
+ * Hard ceiling enforced by the Cloudflare Workers WebCrypto runtime.
+ * Used by `apps/worker/src/lib/crypto.ts` as a defensive guard so that a
+ * legacy hash stored with a higher iteration count fails verification
+ * gracefully (returns `false` → "invalid credentials") instead of crashing
+ * the request with a 500.
+ */
+export const PBKDF2_WORKERS_MAX_ITERATIONS = 100_000;
 
 /** Currency formatting. */
 export const DEFAULT_CURRENCY = 'EGP';

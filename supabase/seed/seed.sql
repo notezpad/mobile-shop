@@ -53,7 +53,7 @@ INSERT INTO public.users (
 SELECT
   gen_random_uuid(),
   'admin',
-  'pbkdf2$150000$ullwuV4zU5flwp/l6Ogk6A==$G3ijGmAQzWPUk8MQQmGvI6r7s3mA6RJ15UAzr1KIc44=',
+  'pbkdf2$100000$ewyV6aIax7BXZnWgT4IqzQ==$GADJoM5PFtJfpRCIZbVzXnTmV6KV7Z8VT55Qr7Lf0d8=',
   'مدير المتجر',
   'admin@mobileshop.local',
   (SELECT id FROM public.roles WHERE key = 'admin' LIMIT 1),

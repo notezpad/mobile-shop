@@ -5,8 +5,21 @@
  * Hash format: `pbkdf2$<iterations>$<base64-salt>$<base64-hash>`
  *
  * The same algorithm runs client-side for offline PIN verification.
+ *
+ * ⚠️ CLOUDFLARE WORKERS LIMIT: WebCrypto's PBKDF2 implementation on Workers
+ * rejects iteration counts above 100,000 with
+ * `NotSupportedError: Pbkdf2 failed: iteration counts above 100000 are not
+ * supported`. The `PBKDF2_ITERATIONS` constant must stay ≤ 100,000, and
+ * `verifySecret` defensively rejects any stored hash whose declared iteration
+ * count exceeds that ceiling so that a stale/migrated hash fails as
+ * "invalid credentials" (401) instead of crashing the request (500).
  */
-import { PBKDF2_ITERATIONS, PBKDF2_KEY_LENGTH, PBKDF2_SALT_LENGTH } from '@mobile-shop/shared';
+import {
+  PBKDF2_ITERATIONS,
+  PBKDF2_KEY_LENGTH,
+  PBKDF2_SALT_LENGTH,
+  PBKDF2_WORKERS_MAX_ITERATIONS,
+} from '@mobile-shop/shared';
 
 const HASH_PREFIX = 'pbkdf2';
 const HASH_ALGO = 'SHA-256';
@@ -20,6 +33,13 @@ export function generateSalt(bytes = PBKDF2_SALT_LENGTH): string {
 
 /** Hash a password/PIN with PBKDF2-SHA256. Returns the full `pbkdf2$...$...$...` string. */
 export async function hashSecret(secret: string, iterations = PBKDF2_ITERATIONS): Promise<string> {
+  if (iterations > PBKDF2_WORKERS_MAX_ITERATIONS) {
+    // Never silently lower — that would change the derived bits and produce a
+    // hash that no other runtime (e.g. the Python seed script) could reproduce.
+    throw new Error(
+      `PBKDF2 iterations ${iterations} exceed the Cloudflare Workers hard cap of ${PBKDF2_WORKERS_MAX_ITERATIONS}.`,
+    );
+  }
   const salt = generateSalt();
   const hash = await deriveKey(secret, salt, iterations);
   return `${HASH_PREFIX}$${iterations}$${salt}$${hash}`;
@@ -32,6 +52,15 @@ export async function verifySecret(secret: string, storedHash: string): Promise<
 
   const iterations = parseInt(parts[1]!, 10);
   if (!Number.isFinite(iterations) || iterations < 1000) return false;
+
+  // Defensive guard: if a stored hash requests more iterations than the
+  // Workers runtime allows, `crypto.subtle.deriveBits` would throw
+  // `NotSupportedError`. Treat it as a failed verification so the caller
+  // returns a clean 401 "invalid credentials" instead of a 500.
+  // The fix is to rotate the user's password / re-hash on the next write.
+  if (iterations > PBKDF2_WORKERS_MAX_ITERATIONS) {
+    return false;
+  }
 
   const salt = parts[2]!;
   const expectedHash = parts[3]!;

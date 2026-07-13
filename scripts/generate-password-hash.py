@@ -4,7 +4,12 @@ Generate a PBKDF2-SHA256 hash compatible with the worker's crypto.ts.
 Used to seed the super_admin password in migration 0002.
 
 Format: pbkdf2$<iterations>$<base64-salt>$<base64-hash>
-Algorithm: PBKDF2-HMAC-SHA256, 150000 iterations, 32-byte key, 16-byte salt.
+Algorithm: PBKDF2-HMAC-SHA256, 100000 iterations, 32-byte key, 16-byte salt.
+
+NOTE: 100,000 is the HARD MAXIMUM enforced by the Cloudflare Workers
+WebCrypto runtime. Do NOT raise this above 100_000 — the worker will throw
+`NotSupportedError: Pbkdf2 failed: iteration counts above 100000 are not
+supported` and every login will 500.
 
 Usage:
   python3 scripts/generate-password-hash.py
@@ -19,7 +24,7 @@ import os
 import sys
 
 
-ITERATIONS = 150_000
+ITERATIONS = 100_000  # Cloudflare Workers WebCrypto hard cap
 KEY_LENGTH = 32  # bytes
 SALT_LENGTH = 16  # bytes
 

@@ -161,8 +161,13 @@ begin
 end $$;
 
 -- ─── 3. Create default super_admin user ───────────────────────────
--- The password hash below is PBKDF2-SHA256, 150000 iterations, for "Admin@123".
+-- The password hash below is PBKDF2-SHA256, 100000 iterations, for "Admin@123".
 -- Hash format: pbkdf2$<iterations>$<base64-salt>$<base64-hash>
+--
+-- IMPORTANT: 100,000 iterations is the HARD MAXIMUM enforced by the
+-- Cloudflare Workers WebCrypto runtime. Going above 100_000 throws
+-- `NotSupportedError: Pbkdf2 failed: iteration counts above 100000 are
+-- not supported` and breaks every login. See packages/shared/src/constants.
 --
 -- IMPORTANT: This hash was generated deterministically for development only.
 -- CHANGE the password after first login!
@@ -177,7 +182,7 @@ insert into public.users (
 select
   gen_random_uuid(),
   'super_admin',
-  'pbkdf2$150000$ullwuV4zU5flwp/l6Ogk6A==$G3ijGmAQzWPUk8MQQmGvI6r7s3mA6RJ15UAzr1KIc44=',
+  'pbkdf2$100000$ewyV6aIax7BXZnWgT4IqzQ==$GADJoM5PFtJfpRCIZbVzXnTmV6KV7Z8VT55Qr7Lf0d8=',
   null,
   'مدير عام',
   'admin@mobileshop.local',
