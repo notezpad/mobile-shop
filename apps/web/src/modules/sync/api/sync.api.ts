@@ -7,7 +7,7 @@
  *  3. Resolves conflicts (last_write_wins by revision).
  *  4. Updates the sync store UI state.
  */
-import { api, API_PREFIX } from '@core/db/api-client';
+import { api } from '@core/db/api-client';
 import { getLocalDb } from '@core/db/dexie';
 import { useSyncStore } from '@stores/sync.store';
 import { SYNC_BATCH_SIZE } from '@mobile-shop/shared';
@@ -18,13 +18,13 @@ import type {
 
 export const syncApi = {
   pull: (lastSyncAt?: string) =>
-    api.post<PullChangesResponse>(`${API_PREFIX}/sync/pull`, { lastSyncAt }),
+    api.post<PullChangesResponse>(`/sync/pull`, { lastSyncAt }),
   
   push: (changes: Array<{ table: string; operation: 'create' | 'update' | 'delete'; data: Record<string, unknown> }>) =>
-    api.post<PushChangesResponse>(`${API_PREFIX}/sync/push`, { changes }),
+    api.post<PushChangesResponse>(`/sync/push`, { changes }),
   
   full: (lastSyncAt?: string) =>
-    api.post<{ pull: PullChangesResponse }>(`${API_PREFIX}/sync/full`, { lastSyncAt }),
+    api.post<{ pull: PullChangesResponse }>(`/sync/full`, { lastSyncAt }),
 };
 
 /** Run a full sync cycle: pull → push. */

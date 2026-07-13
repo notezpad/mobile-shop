@@ -2,7 +2,8 @@
  * Backup API client + hooks.
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, API_PREFIX } from '@core/db/api-client';
+import { api } from '@core/db/api-client';
+import { env } from '@core/config/env';
 import { toast } from 'sonner';
 
 export interface BackupRecord {
@@ -16,11 +17,11 @@ export interface BackupRecord {
 }
 
 export const backupApi = {
-  list: () => api.get<BackupRecord[]>(`${API_PREFIX}/backups`),
-  create: () => api.post<BackupRecord>(`${API_PREFIX}/backups`, {}),
-  download: (id: string) => `${API_PREFIX}/backups/${id}/download`,
-  restore: (id: string) => api.post<{ restoredTables: number; restoredRows: number }>(`${API_PREFIX}/backups/${id}/restore`, {}),
-  delete: (id: string) => api.delete<null>(`${API_PREFIX}/backups/${id}`),
+  list: () => api.get<BackupRecord[]>(`/backups`),
+  create: () => api.post<BackupRecord>(`/backups`, {}),
+  download: (id: string) => `${env.VITE_API_URL}/backups/${id}/download`,
+  restore: (id: string) => api.post<{ restoredTables: number; restoredRows: number }>(`/backups/${id}/restore`, {}),
+  delete: (id: string) => api.delete<null>(`/backups/${id}`),
 };
 
 export function useBackups() {
@@ -57,7 +58,7 @@ export function useDeleteBackup() {
 /** Download backup as JSON file (uses auth token). */
 export async function downloadBackupFile(id: string, filename: string) {
   const token = localStorage.getItem('mse-access-token');
-  const res = await fetch(`${API_PREFIX}/backups/${id}/download`, {
+  const res = await fetch(`${env.VITE_API_URL}/backups/${id}/download`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) { toast.error('فشل تحميل النسخة الاحتياطية'); return; }

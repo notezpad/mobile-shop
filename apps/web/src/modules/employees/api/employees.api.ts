@@ -2,7 +2,7 @@
  * Employees API + hooks.
  */
 import { useQuery } from '@tanstack/react-query';
-import { api, API_PREFIX } from '@core/db/api-client';
+import { api } from '@core/db/api-client';
 import type {
   Employee, Shift, Attendance, PaginatedResult,
   CreateEmployeeInput, UpdateEmployeeInput, EmployeeQuery,
@@ -17,18 +17,18 @@ export const employeesApi = {
     if (q.search) p.set('search', q.search);
     if (q.branchId) p.set('branchId', q.branchId);
     if (q.status) p.set('status', q.status);
-    return api.get<PaginatedResult<EmployeeWithDetails>>(`${API_PREFIX}/employees?${p}`);
+    return api.get<PaginatedResult<EmployeeWithDetails>>(`/employees?${p}`);
   },
-  get: (id: string) => api.get<EmployeeWithDetails>(`${API_PREFIX}/employees/${id}`),
-  create: (input: CreateEmployeeInput) => api.post<Employee>(`${API_PREFIX}/employees`, input),
-  update: (id: string, input: UpdateEmployeeInput) => api.patch<Employee>(`${API_PREFIX}/employees/${id}`, input),
-  delete: (id: string) => api.delete<null>(`${API_PREFIX}/employees/${id}`),
+  get: (id: string) => api.get<EmployeeWithDetails>(`/employees/${id}`),
+  create: (input: CreateEmployeeInput) => api.post<Employee>(`/employees`, input),
+  update: (id: string, input: UpdateEmployeeInput) => api.patch<Employee>(`/employees/${id}`, input),
+  delete: (id: string) => api.delete<null>(`/employees/${id}`),
 };
 
 export const shiftsApi = {
-  list: () => api.get<Shift[]>(`${API_PREFIX}/shifts`),
-  create: (input: CreateShiftInput) => api.post<Shift>(`${API_PREFIX}/shifts`, input),
-  update: (id: string, input: UpdateShiftInput) => api.patch<Shift>(`${API_PREFIX}/shifts/${id}`, input),
+  list: () => api.get<Shift[]>(`/shifts`),
+  create: (input: CreateShiftInput) => api.post<Shift>(`/shifts`, input),
+  update: (id: string, input: UpdateShiftInput) => api.patch<Shift>(`/shifts/${id}`, input),
 };
 
 export const attendanceApi = {
@@ -40,10 +40,10 @@ export const attendanceApi = {
     if (q.status) p.set('status', q.status);
     if (q.fromDate) p.set('fromDate', q.fromDate);
     if (q.toDate) p.set('toDate', q.toDate);
-    return api.get<PaginatedResult<Attendance & { employee_name?: string; employee_code?: string; branch_name?: string }>>(`${API_PREFIX}/attendance?${p}`);
+    return api.get<PaginatedResult<Attendance & { employee_name?: string; employee_code?: string; branch_name?: string }>>(`/attendance?${p}`);
   },
-  checkIn: (input: CheckInInput) => api.post<Attendance>(`${API_PREFIX}/attendance/check-in`, input),
-  checkOut: (input: CheckOutInput) => api.post<Attendance>(`${API_PREFIX}/attendance/check-out`, input),
+  checkIn: (input: CheckInInput) => api.post<Attendance>(`/attendance/check-in`, input),
+  checkOut: (input: CheckOutInput) => api.post<Attendance>(`/attendance/check-out`, input),
 };
 
 export function useEmployees(query: EmployeeQuery) {

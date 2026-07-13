@@ -1,7 +1,7 @@
 /**
  * Customers API client.
  */
-import { api, API_PREFIX } from '@core/db/api-client';
+import { api } from '@core/db/api-client';
 import type {
   Customer,
   PaginatedResult,
@@ -30,11 +30,11 @@ export const customersApi = {
     if (query.search) params.set('search', query.search);
     if (query.isActive) params.set('isActive', query.isActive);
     if (query.hasBalance) params.set('hasBalance', query.hasBalance);
-    return api.get(`${API_PREFIX}/customers?${params.toString()}`);
+    return api.get(`/customers?${params.toString()}`);
   },
 
   get(id: string): Promise<Customer> {
-    return api.get(`${API_PREFIX}/customers/${id}`);
+    return api.get(`/customers/${id}`);
   },
 
   getTransactions(
@@ -45,26 +45,26 @@ export const customersApi = {
     const params = new URLSearchParams();
     params.set('page', String(page));
     params.set('pageSize', String(pageSize));
-    return api.get(`${API_PREFIX}/customers/${id}/transactions?${params.toString()}`);
+    return api.get(`/customers/${id}/transactions?${params.toString()}`);
   },
 
   getStats(id: string): Promise<CustomerStats> {
-    return api.get(`${API_PREFIX}/customers/${id}/stats`);
+    return api.get(`/customers/${id}/stats`);
   },
 
   create(input: CreateCustomerInput): Promise<Customer> {
-    return api.post(`${API_PREFIX}/customers`, input);
+    return api.post(`/customers`, input);
   },
 
   update(id: string, input: UpdateCustomerInput): Promise<Customer> {
-    return api.patch(`${API_PREFIX}/customers/${id}`, input);
+    return api.patch(`/customers/${id}`, input);
   },
 
   adjustBalance(id: string, input: AdjustCustomerBalanceInput): Promise<Customer> {
-    return api.post(`${API_PREFIX}/customers/${id}/adjust-balance`, input);
+    return api.post(`/customers/${id}/adjust-balance`, input);
   },
 
   delete(id: string): Promise<null> {
-    return api.delete(`${API_PREFIX}/customers/${id}`);
+    return api.delete(`/customers/${id}`);
   },
 };

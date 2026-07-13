@@ -2,7 +2,7 @@
  * Returns API client + hooks.
  */
 import { useQuery } from '@tanstack/react-query';
-import { api, API_PREFIX } from '@core/db/api-client';
+import { api } from '@core/db/api-client';
 import type {
   ReturnWithDetails,
   PaginatedResult,
@@ -24,23 +24,23 @@ export const returnsApi = {
     if (query.status) params.set('status', query.status);
     if (query.fromDate) params.set('fromDate', query.fromDate);
     if (query.toDate) params.set('toDate', query.toDate);
-    return api.get(`${API_PREFIX}/returns?${params.toString()}`);
+    return api.get(`/returns?${params.toString()}`);
   },
 
   get(id: string): Promise<ReturnWithDetails> {
-    return api.get(`${API_PREFIX}/returns/${id}`);
+    return api.get(`/returns/${id}`);
   },
 
   create(input: CreateReturnInput): Promise<ReturnWithDetails> {
-    return api.post(`${API_PREFIX}/returns`, input);
+    return api.post(`/returns`, input);
   },
 
   approve(id: string): Promise<ReturnWithDetails> {
-    return api.post(`${API_PREFIX}/returns/${id}/approve`, {});
+    return api.post(`/returns/${id}/approve`, {});
   },
 
   reject(id: string): Promise<ReturnWithDetails> {
-    return api.post(`${API_PREFIX}/returns/${id}/reject`, {});
+    return api.post(`/returns/${id}/reject`, {});
   },
 };
 

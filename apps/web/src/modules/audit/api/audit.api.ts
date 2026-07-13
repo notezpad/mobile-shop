@@ -2,7 +2,7 @@
  * Audit + Notifications API + hooks.
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, API_PREFIX } from '@core/db/api-client';
+import { api } from '@core/db/api-client';
 import type { AuditLogWithUser, PaginatedResult, AuditLogQuery, Notification, NotificationQuery } from '@mobile-shop/shared';
 
 export const auditApi = {
@@ -14,15 +14,15 @@ export const auditApi = {
     if (q.action) p.set('action', q.action);
     if (q.fromDate) p.set('fromDate', q.fromDate);
     if (q.toDate) p.set('toDate', q.toDate);
-    return api.get<PaginatedResult<AuditLogWithUser>>(`${API_PREFIX}/audit-logs?${p}`);
+    return api.get<PaginatedResult<AuditLogWithUser>>(`/audit-logs?${p}`);
   },
 };
 
 export const notificationApi = {
-  list: (unreadOnly = false) => api.get<PaginatedResult<Notification>>(`${API_PREFIX}/notifications?unreadOnly=${unreadOnly}&pageSize=20`),
-  unreadCount: () => api.get<{ count: number }>(`${API_PREFIX}/notifications/unread-count`),
-  markRead: (id: string) => api.post<null>(`${API_PREFIX}/notifications/${id}/read`, {}),
-  markAllRead: () => api.post<null>(`${API_PREFIX}/notifications/read-all`, {}),
+  list: (unreadOnly = false) => api.get<PaginatedResult<Notification>>(`/notifications?unreadOnly=${unreadOnly}&pageSize=20`),
+  unreadCount: () => api.get<{ count: number }>(`/notifications/unread-count`),
+  markRead: (id: string) => api.post<null>(`/notifications/${id}/read`, {}),
+  markAllRead: () => api.post<null>(`/notifications/read-all`, {}),
 };
 
 export function useAuditLogs(query: AuditLogQuery) {

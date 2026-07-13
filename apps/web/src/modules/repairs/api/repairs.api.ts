@@ -2,7 +2,7 @@
  * Repairs API client + hooks.
  */
 import { useQuery } from '@tanstack/react-query';
-import { api, API_PREFIX } from '@core/db/api-client';
+import { api } from '@core/db/api-client';
 import type {
   RepairWithDetails,
   RepairTrackingInfo,
@@ -29,46 +29,46 @@ export const repairsApi = {
     if (query.status) params.set('status', query.status);
     if (query.fromDate) params.set('fromDate', query.fromDate);
     if (query.toDate) params.set('toDate', query.toDate);
-    return api.get(`${API_PREFIX}/repairs?${params.toString()}`);
+    return api.get(`/repairs?${params.toString()}`);
   },
 
   get(id: string): Promise<RepairWithDetails> {
-    return api.get(`${API_PREFIX}/repairs/${id}`);
+    return api.get(`/repairs/${id}`);
   },
 
   getByTicketNo(ticketNo: string): Promise<RepairWithDetails> {
-    return api.get(`${API_PREFIX}/repairs/ticket/${ticketNo}`);
+    return api.get(`/repairs/ticket/${ticketNo}`);
   },
 
   create(input: CreateRepairInput): Promise<RepairWithDetails> {
-    return api.post(`${API_PREFIX}/repairs`, input);
+    return api.post(`/repairs`, input);
   },
 
   update(id: string, input: UpdateRepairInput): Promise<RepairWithDetails> {
-    return api.patch(`${API_PREFIX}/repairs/${id}`, input);
+    return api.patch(`/repairs/${id}`, input);
   },
 
   changeStatus(id: string, input: ChangeRepairStatusInput): Promise<RepairWithDetails> {
-    return api.post(`${API_PREFIX}/repairs/${id}/status`, input);
+    return api.post(`/repairs/${id}/status`, input);
   },
 
   addPart(id: string, input: AddRepairPartInput): Promise<RepairWithDetails> {
-    return api.post(`${API_PREFIX}/repairs/${id}/parts`, input);
+    return api.post(`/repairs/${id}/parts`, input);
   },
 
   removePart(id: string, partId: string): Promise<RepairWithDetails> {
-    return api.delete(`${API_PREFIX}/repairs/${id}/parts/${partId}`);
+    return api.delete(`/repairs/${id}/parts/${partId}`);
   },
 
   deliver(id: string, input: DeliverRepairInput): Promise<RepairWithDetails> {
-    return api.post(`${API_PREFIX}/repairs/${id}/deliver`, input);
+    return api.post(`/repairs/${id}/deliver`, input);
   },
 };
 
 /** Public tracking — no auth required. */
 export const repairTrackingApi = {
   track(ticketNo: string): Promise<RepairTrackingInfo> {
-    return api.get(`${API_PREFIX}/repair-tracking/track/${ticketNo}`);
+    return api.get(`/repair-tracking/track/${ticketNo}`);
   },
 };
 

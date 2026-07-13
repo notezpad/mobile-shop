@@ -1,7 +1,7 @@
 /**
  * Settings API client.
  */
-import { api, API_PREFIX } from '@core/db/api-client';
+import { api } from '@core/db/api-client';
 import type {
   Setting,
   SettingCategory,
@@ -14,18 +14,18 @@ export const settingsApi = {
     if (filters.category) params.set('category', filters.category);
     if (filters.branchId) params.set('branchId', filters.branchId);
     const qs = params.toString();
-    return api.get<Setting[]>(`${API_PREFIX}/settings${qs ? `?${qs}` : ''}`);
+    return api.get<Setting[]>(`/settings${qs ? `?${qs}` : ''}`);
   },
 
   upsert(input: UpsertSettingInput): Promise<Setting> {
-    return api.post<Setting>(`${API_PREFIX}/settings`, input);
+    return api.post<Setting>(`/settings`, input);
   },
 
   batchUpsert(inputs: UpsertSettingInput[]): Promise<Setting[]> {
-    return api.post<Setting[]>(`${API_PREFIX}/settings/batch`, { settings: inputs });
+    return api.post<Setting[]>(`/settings/batch`, { settings: inputs });
   },
 
   seedDefaults(): Promise<{ inserted: number }> {
-    return api.post<{ inserted: number }>(`${API_PREFIX}/settings/seed-defaults`, {});
+    return api.post<{ inserted: number }>(`/settings/seed-defaults`, {});
   },
 };

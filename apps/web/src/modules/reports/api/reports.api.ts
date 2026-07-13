@@ -2,7 +2,7 @@
  * Reports API client + hooks.
  */
 import { useQuery } from '@tanstack/react-query';
-import { api, API_PREFIX } from '@core/db/api-client';
+import { api } from '@core/db/api-client';
 import { useAuthStore } from '@stores/auth.store';
 import { useMemo } from 'react';
 
@@ -57,7 +57,7 @@ export function useDashboardOverview() {
   const branchId = isAdmin ? undefined : user?.branchId ?? undefined;
   return useQuery({
     queryKey: ['report', 'dashboard', branchId],
-    queryFn: () => api.get<DashboardOverview>(`${API_PREFIX}/reports/dashboard?${buildParams(branchId)}`),
+    queryFn: () => api.get<DashboardOverview>(`/reports/dashboard?${buildParams(branchId)}`),
     staleTime: 60_000,
   });
 }
@@ -68,7 +68,7 @@ export function useSalesReport(fromDate?: string, toDate?: string) {
   const branchId = isAdmin ? undefined : user?.branchId ?? undefined;
   return useQuery({
     queryKey: ['report', 'sales', branchId, fromDate, toDate],
-    queryFn: () => api.get<SalesReport>(`${API_PREFIX}/reports/sales?${buildParams(branchId, fromDate, toDate)}`),
+    queryFn: () => api.get<SalesReport>(`/reports/sales?${buildParams(branchId, fromDate, toDate)}`),
     staleTime: 60_000,
   });
 }
@@ -79,7 +79,7 @@ export function useInventoryReport() {
   const branchId = isAdmin ? undefined : user?.branchId ?? undefined;
   return useQuery({
     queryKey: ['report', 'inventory', branchId],
-    queryFn: () => api.get<InventoryReport>(`${API_PREFIX}/reports/inventory?${buildParams(branchId)}`),
+    queryFn: () => api.get<InventoryReport>(`/reports/inventory?${buildParams(branchId)}`),
     staleTime: 60_000,
   });
 }
@@ -90,7 +90,7 @@ export function useRepairsReport(fromDate?: string, toDate?: string) {
   const branchId = isAdmin ? undefined : user?.branchId ?? undefined;
   return useQuery({
     queryKey: ['report', 'repairs', branchId, fromDate, toDate],
-    queryFn: () => api.get<RepairsReport>(`${API_PREFIX}/reports/repairs?${buildParams(branchId, fromDate, toDate)}`),
+    queryFn: () => api.get<RepairsReport>(`/reports/repairs?${buildParams(branchId, fromDate, toDate)}`),
     staleTime: 60_000,
   });
 }
@@ -101,7 +101,7 @@ export function useFinanceReport(fromDate?: string, toDate?: string) {
   const branchId = isAdmin ? undefined : user?.branchId ?? undefined;
   return useQuery({
     queryKey: ['report', 'finance', branchId, fromDate, toDate],
-    queryFn: () => api.get<FinanceReport>(`${API_PREFIX}/reports/finance?${buildParams(branchId, fromDate, toDate)}`),
+    queryFn: () => api.get<FinanceReport>(`/reports/finance?${buildParams(branchId, fromDate, toDate)}`),
     staleTime: 60_000,
   });
 }

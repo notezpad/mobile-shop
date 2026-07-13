@@ -1,7 +1,7 @@
 /**
  * Sales API client.
  */
-import { api, API_PREFIX } from '@core/db/api-client';
+import { api } from '@core/db/api-client';
 import type {
   SaleWithDetails,
   PaginatedResult,
@@ -25,18 +25,18 @@ export const salesApi = {
     if (query.paymentMethod) params.set('paymentMethod', query.paymentMethod);
     if (query.fromDate) params.set('fromDate', query.fromDate);
     if (query.toDate) params.set('toDate', query.toDate);
-    return api.get(`${API_PREFIX}/sales?${params.toString()}`);
+    return api.get(`/sales?${params.toString()}`);
   },
 
   get(id: string): Promise<SaleWithDetails> {
-    return api.get(`${API_PREFIX}/sales/${id}`);
+    return api.get(`/sales/${id}`);
   },
 
   create(input: CreateSaleInput): Promise<SaleWithDetails> {
-    return api.post(`${API_PREFIX}/sales`, input);
+    return api.post(`/sales`, input);
   },
 
   void(id: string, input: VoidSaleInput): Promise<unknown> {
-    return api.post(`${API_PREFIX}/sales/${id}/void`, input);
+    return api.post(`/sales/${id}/void`, input);
   },
 };

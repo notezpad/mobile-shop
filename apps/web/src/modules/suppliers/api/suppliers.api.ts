@@ -2,7 +2,7 @@
  * Suppliers API client + hooks.
  */
 import { useQuery } from '@tanstack/react-query';
-import { api, API_PREFIX } from '@core/db/api-client';
+import { api } from '@core/db/api-client';
 import type {
   Supplier,
   PaginatedResult,
@@ -22,27 +22,27 @@ export const suppliersApi = {
     if (query.search) params.set('search', query.search);
     if (query.isActive) params.set('isActive', query.isActive);
     if (query.hasBalance) params.set('hasBalance', query.hasBalance);
-    return api.get(`${API_PREFIX}/suppliers?${params.toString()}`);
+    return api.get(`/suppliers?${params.toString()}`);
   },
 
   get(id: string): Promise<Supplier> {
-    return api.get(`${API_PREFIX}/suppliers/${id}`);
+    return api.get(`/suppliers/${id}`);
   },
 
   create(input: CreateSupplierInput): Promise<Supplier> {
-    return api.post(`${API_PREFIX}/suppliers`, input);
+    return api.post(`/suppliers`, input);
   },
 
   update(id: string, input: UpdateSupplierInput): Promise<Supplier> {
-    return api.patch(`${API_PREFIX}/suppliers/${id}`, input);
+    return api.patch(`/suppliers/${id}`, input);
   },
 
   adjustBalance(id: string, input: AdjustSupplierBalanceInput): Promise<Supplier> {
-    return api.post(`${API_PREFIX}/suppliers/${id}/adjust-balance`, input);
+    return api.post(`/suppliers/${id}/adjust-balance`, input);
   },
 
   delete(id: string): Promise<null> {
-    return api.delete(`${API_PREFIX}/suppliers/${id}`);
+    return api.delete(`/suppliers/${id}`);
   },
 };
 
