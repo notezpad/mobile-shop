@@ -44,7 +44,7 @@ export default function EmployeeFormPage() {
         position: v.position || null,
         nationalId: null,
         address: null,
-        hireDate: new Date().toISOString().split('T')[0],
+        hireDate: new Date().toISOString().split('T')[0] as string,
         allowances: 0,
         shiftId: null,
       };

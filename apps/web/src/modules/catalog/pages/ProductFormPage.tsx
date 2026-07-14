@@ -59,7 +59,7 @@ export default function ProductFormPage() {
         name: existing.name,
         barcode: existing.barcode,
         categoryId: existing.category_id,
-        branchId: (existing as Record<string, unknown>).branch_id as string | null ?? null,
+        branchId: ('branch_id' in existing ? (existing as unknown as { branch_id?: string | null }).branch_id : null) ?? null,
         type: existing.type,
         costPrice: existing.cost_price,
         salePrice: existing.sale_price,

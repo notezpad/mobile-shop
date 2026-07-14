@@ -53,6 +53,8 @@ export default function CustomerFormPage() {
         name: values.name,
         phone: values.phone || null,
         address: values.address || null,
+        isActive: true,
+        creditLimit: 0,
       };
       if (editMode && id) {
         return customersApi.update(id, payload);

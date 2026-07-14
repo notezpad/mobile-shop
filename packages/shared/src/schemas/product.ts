@@ -9,6 +9,7 @@ export const createProductSchema = z.object({
   name: nonEmptyString.min(1).max(200),
   nameAr: z.string().max(200).nullable().optional(),
   categoryId: uuidSchema.nullable().optional(),
+  branchId: uuidSchema.nullable().optional(),
   brand: z.string().max(100).nullable().optional(),
   model: z.string().max(100).nullable().optional(),
   description: z.string().max(2000).nullable().optional(),
