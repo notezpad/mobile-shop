@@ -48,7 +48,8 @@ productRoutes.get('/:id', requirePermission('catalog.products.view'), async (c) 
   const id = c.req.param('id');
   const supabase = getReqSupabase(c);
   const actor = requireUser(c);
-  const product = await getProduct(supabase, id, actor.branchId);
+  // Fetch stock from ALL branches so the form can match the product's own branch_id
+  const product = await getProduct(supabase, id, null);
 
   const response: ApiResponse<typeof product> = { success: true, data: product };
   return c.json(response, 200);

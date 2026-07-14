@@ -56,6 +56,12 @@ export default function ProductFormPage() {
 
   useEffect(() => {
     if (existing) {
+      // Find the stock level matching the product's branch (or any available)
+      const branchId = existing.branch_id;
+      const matchingStock = branchId
+        ? existing.stock_levels?.find((s) => s.branch_id === branchId)
+        : existing.stock_levels?.[0];
+
       setValues({
         name: existing.name,
         barcode: existing.barcode,
@@ -64,7 +70,7 @@ export default function ProductFormPage() {
         type: existing.type,
         costPrice: existing.cost_price,
         salePrice: existing.sale_price,
-        quantity: existing.stock_levels?.[0]?.quantity ?? 0,
+        quantity: matchingStock?.quantity ?? 0,
         minQuantity: existing.min_quantity,
         imageUrl: existing.image_url,
         isActive: existing.is_active,

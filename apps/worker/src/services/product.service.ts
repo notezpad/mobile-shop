@@ -375,6 +375,74 @@ export async function updateProduct(
     after: updated as unknown as Record<string, unknown>,
   });
 
+  // Handle quantity update: upsert inventory_stocks + record stock movement.
+  if (input.quantity !== undefined && input.branchId) {
+    const newQty = input.quantity;
+    const branchId = input.branchId;
+
+    // Find existing stock row for this product+branch
+    const { data: stockRow } = await supabase
+      .from('inventory_stocks')
+      .select('id, quantity')
+      .eq('product_id', id)
+      .eq('branch_id', branchId)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    const oldQty = (stockRow as { quantity?: number } | null)?.quantity ?? 0;
+
+    // Only update if quantity actually changed
+    if (newQty !== oldQty) {
+      const diff = newQty - oldQty;
+      const now = new Date().toISOString();
+
+      if (stockRow) {
+        // Update existing stock row
+        await supabase
+          .from('inventory_stocks')
+          .update({ quantity: newQty, updated_at: now })
+          .eq('id', (stockRow as { id: string }).id);
+      } else {
+        // Create new stock row
+        const stockId = crypto.randomUUID();
+        await supabase.from('inventory_stocks').insert({
+          id: stockId,
+          product_id: id,
+          branch_id: branchId,
+          quantity: newQty,
+          reserved_quantity: 0,
+          min_quantity: input.minQuantity ?? existing.min_quantity ?? 0,
+          max_quantity: null,
+          created_at: now,
+          updated_at: now,
+          deleted_at: null,
+          revision: 1,
+          sync_status: 'synced',
+        });
+      }
+
+      // Record stock movement for audit trail
+      const movementId = crypto.randomUUID();
+      await supabase.from('stock_movements').insert({
+        id: movementId,
+        product_id: id,
+        branch_id: branchId,
+        type: 'adjustment',
+        quantity: diff,
+        balance_after: newQty,
+        reason: `تعديل يدوي للكمية: من ${oldQty} إلى ${newQty}`,
+        ref_type: 'product_update',
+        ref_id: id,
+        user_id: actor.id,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+        revision: 1,
+        sync_status: 'synced',
+      });
+    }
+  }
+
   return updated as Product;
 }
 
