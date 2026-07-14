@@ -254,6 +254,53 @@ export async function createProduct(
     after: product as unknown as Record<string, unknown>,
   });
 
+  // If quantity > 0 and a branch is specified, create initial stock row + movement.
+  const initialQty = input.quantity ?? 0;
+  if (initialQty > 0 && input.branchId) {
+    // Create inventory_stocks row
+    const stockId = crypto.randomUUID();
+    const { error: stockErr } = await supabase
+      .from('inventory_stocks')
+      .insert({
+        id: stockId,
+        product_id: id,
+        branch_id: input.branchId,
+        quantity: initialQty,
+        reserved_quantity: 0,
+        min_quantity: input.minQuantity ?? 0,
+        max_quantity: null,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+        revision: 1,
+        sync_status: 'synced',
+      });
+    if (stockErr) {
+      // Non-fatal: product was created, but stock row failed. Log and continue.
+      console.error('Failed to create initial stock row:', stockErr.message);
+    } else {
+      // Create stock_movement record for audit trail
+      const movementId = crypto.randomUUID();
+      await supabase.from('stock_movements').insert({
+        id: movementId,
+        product_id: id,
+        branch_id: input.branchId,
+        type: 'purchase',
+        quantity: initialQty,
+        balance_after: initialQty,
+        reason: 'رصيد افتتاحي عند إنشاء المنتج',
+        ref_type: 'product_create',
+        ref_id: id,
+        user_id: actor.id,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+        revision: 1,
+        sync_status: 'synced',
+      });
+    }
+  }
+
   return product as Product;
 }
 

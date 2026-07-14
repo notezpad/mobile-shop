@@ -115,7 +115,9 @@
     @apply bg-background text-foreground;
     -webkit-tap-highlight-color: transparent;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    font-family: 'Almarai', 'Inter', system-ui, sans-serif;
   }
 
   /* Custom scrollbar — subtle, works on desktop */

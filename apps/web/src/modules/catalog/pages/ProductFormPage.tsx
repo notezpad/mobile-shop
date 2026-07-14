@@ -88,6 +88,7 @@ export default function ProductFormPage() {
         barcode: values.barcode || null,
         categoryId: values.categoryId || null,
         branchId: values.branchId || null,
+        quantity: values.type !== 'service' ? values.quantity : 0,
         type: values.type,
         unit: 'piece',
         costPrice: values.costPrice,

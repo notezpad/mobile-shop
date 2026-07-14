@@ -229,6 +229,8 @@ export default function POSPage() {
         name: quickAddData.name.trim(),
         barcode: null,
         categoryId: quickAddData.categoryId || null,
+        branchId: user?.branchId ?? null,
+        quantity: 0,
         type: 'standard',
         unit: 'piece',
         costPrice: 0,

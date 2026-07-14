@@ -10,6 +10,8 @@ export const createProductSchema = z.object({
   nameAr: z.string().max(200).nullable().optional(),
   categoryId: uuidSchema.nullable().optional(),
   branchId: uuidSchema.nullable().optional(),
+  /** Initial stock quantity — creates an inventory_stocks row + purchase movement. */
+  quantity: z.coerce.number().min(0).default(0),
   brand: z.string().max(100).nullable().optional(),
   model: z.string().max(100).nullable().optional(),
   description: z.string().max(2000).nullable().optional(),
