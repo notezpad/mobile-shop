@@ -30,8 +30,6 @@ const CategoriesPage = lazy(() => import('@modules/catalog/pages/CategoriesPage'
 const ProductsListPage = lazy(() => import('@modules/catalog/pages/ProductsListPage'));
 const ProductFormPage = lazy(() => import('@modules/catalog/pages/ProductFormPage'));
 const ProductDetailPage = lazy(() => import('@modules/catalog/pages/ProductDetailPage'));
-const DevicesListPage = lazy(() => import('@modules/catalog/pages/DevicesListPage'));
-
 // Inventory module
 const InventoryListPage = lazy(() => import('@modules/inventory/pages/InventoryListPage'));
 const StockMovementsPage = lazy(() => import('@modules/inventory/pages/StockMovementsPage'));
@@ -265,16 +263,6 @@ const routes: RouteObject[] = [
         element: (
           <ProtectedRoute permission="catalog.products.edit">
             <ProductFormPage />
-          </ProtectedRoute>
-        ),
-      },
-
-      // ─── Catalog: Devices (IMEI) ──────────────────────────────
-      {
-        path: 'catalog/devices',
-        element: (
-          <ProtectedRoute permission="catalog.devices.view">
-            <DevicesListPage />
           </ProtectedRoute>
         ),
       },

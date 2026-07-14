@@ -13,20 +13,18 @@ import {
   Input,
   Label,
   Switch,
-  Textarea,
-  Badge,
 } from '@components/ui';
 import { LoadingState } from '@components/feedback/LoadingState';
 import { CategorySelect } from '@components/data/CategorySelect';
+import { BranchSelect } from '@components/data/BranchSelect';
 import { productsApi } from '../api/catalog.api';
 import type { ProductType } from '@mobile-shop/shared';
 
 const isEditMode = (pathname: string) => pathname.endsWith('/edit');
 
-const TYPE_OPTIONS: Array<{ value: ProductType; label: string; description: string }> = [
-  { value: 'standard', label: 'قياسي', description: 'منتج عادي تتبعه الكمية' },
-  { value: 'imei', label: 'IMEI', description: 'جهاز يُتبّع بالـ IMEI (وحدة لكل جهاز)' },
-  { value: 'service', label: 'خدمة', description: 'خدمة بدون مخزون (مثل أجرة تركيب)' },
+const TYPE_OPTIONS: Array<{ value: ProductType; label: string }> = [
+  { value: 'standard', label: 'قياسي' },
+  { value: 'service', label: 'خدمة' },
 ];
 
 export default function ProductFormPage() {
@@ -43,23 +41,14 @@ export default function ProductFormPage() {
   });
 
   const [values, setValues] = useState({
-    sku: '',
-    barcode: '' as string | null,
     name: '',
-    nameAr: '' as string | null,
+    barcode: '' as string | null,
     categoryId: '' as string | null,
-    brand: '' as string | null,
-    model: '' as string | null,
-    description: '' as string | null,
+    branchId: '' as string | null,
     type: 'standard' as ProductType,
-    unit: 'piece',
     costPrice: 0,
     salePrice: 0,
-    wholesalePrice: null as number | null,
-    taxRate: 14,
     minQuantity: 0,
-    hasWarranty: false,
-    warrantyDays: 0,
     imageUrl: null as string | null,
     isActive: true,
   });
@@ -67,23 +56,14 @@ export default function ProductFormPage() {
   useEffect(() => {
     if (existing) {
       setValues({
-        sku: existing.sku,
-        barcode: existing.barcode,
         name: existing.name,
-        nameAr: existing.name_ar,
+        barcode: existing.barcode,
         categoryId: existing.category_id,
-        brand: existing.brand,
-        model: existing.model,
-        description: existing.description,
+        branchId: (existing as Record<string, unknown>).branch_id as string | null ?? null,
         type: existing.type,
-        unit: existing.unit,
         costPrice: existing.cost_price,
         salePrice: existing.sale_price,
-        wholesalePrice: existing.wholesale_price,
-        taxRate: existing.tax_rate,
         minQuantity: existing.min_quantity,
-        hasWarranty: existing.has_warranty,
-        warrantyDays: existing.warranty_days,
         imageUrl: existing.image_url,
         isActive: existing.is_active,
       });
@@ -92,16 +72,30 @@ export default function ProductFormPage() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      // Auto-generate SKU from product name
+      const sku = values.name
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^A-Z0-9-]/g, '')
+        .slice(0, 20) || `PRD-${Date.now().toString(36).toUpperCase()}`;
+
       const payload = {
-        ...values,
-        categoryId: values.categoryId || null,
+        sku,
+        name: values.name,
         barcode: values.barcode || null,
-        nameAr: values.nameAr || null,
-        brand: values.brand || null,
-        model: values.model || null,
-        description: values.description || null,
-        wholesalePrice: values.wholesalePrice ?? null,
+        categoryId: values.categoryId || null,
+        branchId: values.branchId || null,
+        type: values.type,
+        unit: 'piece',
+        costPrice: values.costPrice,
+        salePrice: values.salePrice,
+        taxRate: 14,
+        minQuantity: values.minQuantity,
+        hasWarranty: false,
+        warrantyDays: 0,
         imageUrl: values.imageUrl,
+        isActive: values.isActive,
       };
       if (editMode && id) {
         return productsApi.update(id, payload);
@@ -140,7 +134,7 @@ export default function ProductFormPage() {
     <div className="page-container">
       <PageHeader
         title={editMode ? 'تعديل منتج' : 'إضافة منتج جديد'}
-        description={editMode ? existing?.name : 'أنشئ منتجاً جديداً في الكتالوج'}
+        description={editMode ? existing?.name : 'أنشئ منتجاً جديداً بسهولة'}
         actions={
           <Button asChild variant="outline">
             <Link to="/catalog/products">
@@ -154,11 +148,15 @@ export default function ProductFormPage() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          if (!values.name.trim()) {
+            toast.error('اسم المنتج مطلوب');
+            return;
+          }
           saveMutation.mutate();
         }}
         className="space-y-6"
       >
-        {/* Image upload + basic info */}
+        {/* Basic info */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -166,7 +164,7 @@ export default function ProductFormPage() {
               البيانات الأساسية
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-[200px_1fr]">
+          <CardContent className="grid gap-4 md:grid-cols-[160px_1fr]">
             {/* Image */}
             <div className="space-y-2">
               <Label>صورة المنتج</Label>
@@ -184,7 +182,7 @@ export default function ProductFormPage() {
                   </>
                 ) : (
                   <label className="flex size-full cursor-pointer flex-col items-center justify-center gap-2 text-muted-foreground hover:bg-muted/50">
-                    <Upload className="size-8" />
+                    <Upload className="size-6" />
                     <span className="text-xs">رفع صورة</span>
                     <input
                       type="file"
@@ -195,12 +193,11 @@ export default function ProductFormPage() {
                   </label>
                 )}
               </div>
-              <p className="text-[10px] text-muted-foreground">حجم أقصى 2MB. JPG/PNG/WebP.</p>
             </div>
 
             {/* Fields */}
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
+              <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="name">اسم المنتج *</Label>
                 <Input
                   id="name"
@@ -208,27 +205,6 @@ export default function ProductFormPage() {
                   value={values.name}
                   onChange={(e) => update('name', e.target.value)}
                   placeholder="مثال: iPhone 15 Pro Max 256GB"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="nameAr">الاسم بالعربية</Label>
-                <Input
-                  id="nameAr"
-                  value={values.nameAr ?? ''}
-                  onChange={(e) => update('nameAr', e.target.value || null)}
-                  placeholder="آيفون 15 برو ماكس 256 جيجا"
-                  dir="rtl"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sku">SKU *</Label>
-                <Input
-                  id="sku"
-                  required
-                  value={values.sku}
-                  onChange={(e) => update('sku', e.target.value.toUpperCase())}
-                  placeholder="IP15-PM-256"
-                  className="font-mono"
                 />
               </div>
               <div className="space-y-2">
@@ -241,7 +217,7 @@ export default function ProductFormPage() {
                   dir="ltr"
                 />
               </div>
-              <div className="space-y-2 sm:col-span-2">
+              <div className="space-y-2">
                 <Label htmlFor="categoryId">الفئة</Label>
                 <CategorySelect
                   value={values.categoryId}
@@ -250,73 +226,50 @@ export default function ProductFormPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="brand">العلامة التجارية</Label>
-                <Input
-                  id="brand"
-                  value={values.brand ?? ''}
-                  onChange={(e) => update('brand', e.target.value || null)}
-                  placeholder="Apple"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="model">الموديل</Label>
-                <Input
-                  id="model"
-                  value={values.model ?? ''}
-                  onChange={(e) => update('model', e.target.value || null)}
-                  placeholder="A2849"
+                <Label htmlFor="branchId">الفرع</Label>
+                <BranchSelect
+                  value={values.branchId}
+                  onChange={(v) => update('branchId', v)}
+                  placeholder="— كل الفروع —"
                 />
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="description">الوصف</Label>
-                <Textarea
-                  id="description"
-                  value={values.description ?? ''}
-                  onChange={(e) => update('description', e.target.value || null)}
-                  rows={3}
-                  placeholder="وصف موجز للمنتج"
-                />
+                <Label>نوع المنتج</Label>
+                <div className="flex gap-2">
+                  {TYPE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => update('type', opt.value)}
+                      className={`flex-1 rounded-md border px-4 py-2 text-center text-sm transition-colors ${
+                        values.type === opt.value
+                          ? 'border-primary bg-primary/10 text-primary font-medium'
+                          : 'border-input hover:bg-muted/50'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Type + pricing */}
+        {/* Pricing */}
         <Card>
           <CardHeader>
-            <CardTitle>النوع والتسعير</CardTitle>
+            <CardTitle>التسعير</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>نوع المنتج</Label>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {TYPE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => update('type', opt.value)}
-                    className={`rounded-md border p-3 text-right transition-colors ${
-                      values.type === opt.value
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-input hover:bg-muted/50'
-                    }`}
-                  >
-                    <p className="font-medium">{opt.label}</p>
-                    <p className="text-xs text-muted-foreground">{opt.description}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="costPrice">سعر التكلفة *</Label>
+                <Label htmlFor="costPrice">سعر التكلفة</Label>
                 <Input
                   id="costPrice"
                   type="number"
                   step="0.01"
                   min="0"
-                  required
                   value={values.costPrice}
                   onChange={(e) => update('costPrice', Number(e.target.value))}
                 />
@@ -333,31 +286,6 @@ export default function ProductFormPage() {
                   onChange={(e) => update('salePrice', Number(e.target.value))}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="wholesalePrice">سعر الجملة</Label>
-                <Input
-                  id="wholesalePrice"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={values.wholesalePrice ?? ''}
-                  onChange={(e) =>
-                    update('wholesalePrice', e.target.value ? Number(e.target.value) : null)
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="taxRate">نسبة الضريبة (%)</Label>
-                <Input
-                  id="taxRate"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  value={values.taxRate}
-                  onChange={(e) => update('taxRate', Number(e.target.value))}
-                />
-              </div>
               {values.type !== 'service' ? (
                 <div className="space-y-2">
                   <Label htmlFor="minQuantity">حد التنبيه للمخزون المنخفض</Label>
@@ -367,38 +295,6 @@ export default function ProductFormPage() {
                     min="0"
                     value={values.minQuantity}
                     onChange={(e) => update('minQuantity', Number(e.target.value))}
-                  />
-                </div>
-              ) : null}
-              <div className="space-y-2">
-                <Label htmlFor="unit">وحدة القياس</Label>
-                <Input
-                  id="unit"
-                  value={values.unit}
-                  onChange={(e) => update('unit', e.target.value)}
-                  placeholder="piece"
-                  className="font-mono"
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Label className="flex items-center gap-2">
-                <Switch
-                  checked={values.hasWarranty}
-                  onCheckedChange={(v) => update('hasWarranty', v)}
-                />
-                <span>له ضمان</span>
-              </Label>
-              {values.hasWarranty ? (
-                <div className="space-y-2">
-                  <Label htmlFor="warrantyDays">مدة الضمان (يوم)</Label>
-                  <Input
-                    id="warrantyDays"
-                    type="number"
-                    min="0"
-                    value={values.warrantyDays}
-                    onChange={(e) => update('warrantyDays', Number(e.target.value))}
                   />
                 </div>
               ) : null}
@@ -423,9 +319,6 @@ export default function ProductFormPage() {
           </Button>
         </div>
       </form>
-
-      {/* unused — keep for type parity */}
-      {void Badge}
     </div>
   );
 }

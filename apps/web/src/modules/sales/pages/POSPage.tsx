@@ -43,6 +43,7 @@ import { useBranch } from '@modules/branches/hooks/useBranches';
 import { formatCurrency } from '@core/utils/format';
 import type { PaymentMethodKey, Product } from '@mobile-shop/shared';
 import { cn } from '@core/utils/cn';
+import { CategorySelect } from '@components/data/CategorySelect';
 
 const PAYMENT_METHODS: Array<{ key: PaymentMethodKey; label: string; icon: typeof Wallet }> = [
   { key: 'cash', label: 'كاش', icon: Wallet },
@@ -63,6 +64,8 @@ export default function POSPage() {
   const [search, setSearch] = useState('');
   const [imeiInput, setImeiInput] = useState('');
   const [showCheckout, setShowCheckout] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickAddData, setQuickAddData] = useState({ name: '', salePrice: 0, categoryId: null as string | null });
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { data: searchResult, isLoading: searchLoading } = useProductSearch(search);
@@ -208,6 +211,63 @@ export default function POSPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  // Quick add product mutation
+  const quickAddMutation = useMutation({
+    mutationFn: async () => {
+      if (!quickAddData.name.trim()) throw new Error('اسم المنتج مطلوب');
+      if (quickAddData.salePrice <= 0) throw new Error('سعر البيع مطلوب');
+
+      const sku = quickAddData.name
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^A-Z0-9-]/g, '')
+        .slice(0, 20) || `PRD-${Date.now().toString(36).toUpperCase()}`;
+
+      const product = await productsApi.create({
+        sku,
+        name: quickAddData.name.trim(),
+        barcode: null,
+        categoryId: quickAddData.categoryId || null,
+        type: 'standard',
+        unit: 'piece',
+        costPrice: 0,
+        salePrice: quickAddData.salePrice,
+        taxRate: 14,
+        minQuantity: 0,
+        hasWarranty: false,
+        warrantyDays: 0,
+        imageUrl: null,
+        isActive: true,
+      });
+      return product;
+    },
+    onSuccess: (product) => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      // Add the new product to cart
+      pos.addItem({
+        productId: product.id,
+        productName: product.name,
+        productSku: product.sku,
+        productType: product.type,
+        deviceUnitId: null,
+        imei1: null,
+        quantity: 1,
+        unitPrice: product.sale_price,
+        discount: 0,
+        discountType: 'amount',
+        taxRate: product.tax_rate,
+        stockLevel: 0,
+      });
+      toast.success(`تم إنشاء المنتج "${product.name}" وإضافته للسلة`);
+      setShowQuickAdd(false);
+      setQuickAddData({ name: '', salePrice: 0, categoryId: null });
+      setSearch('');
+      searchInputRef.current?.focus();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const subtotal = pos.getSubtotal();
   const saleDiscount = pos.getSaleDiscount();
   const tax = pos.getTax();
@@ -293,10 +353,72 @@ export default function POSPage() {
                 </button>
               ))}
             </div>
-          ) : search ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          ) : search && search.trim().length >= 2 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
               <PackageIcon className="size-12 mb-3 opacity-50" />
               <p>لا نتائج لـ "{search}"</p>
+              {!showQuickAdd ? (
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => {
+                    setShowQuickAdd(true);
+                    setQuickAddData((prev) => ({ ...prev, name: search }));
+                  }}
+                >
+                  <Plus className="size-4" />
+                  <span>إضافة منتج جديد سريع</span>
+                </Button>
+              ) : (
+                <div className="mt-4 w-full max-w-md rounded-lg border bg-card p-4 space-y-3">
+                  <h3 className="font-semibold text-foreground">إضافة منتج سريع</h3>
+                  <div className="space-y-2">
+                    <Label className="text-xs">اسم المنتج *</Label>
+                    <Input
+                      value={quickAddData.name}
+                      onChange={(e) => setQuickAddData((p) => ({ ...p, name: e.target.value }))}
+                      placeholder="اسم المنتج"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">سعر البيع *</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={quickAddData.salePrice || ''}
+                      onChange={(e) => setQuickAddData((p) => ({ ...p, salePrice: Number(e.target.value) }))}
+                      placeholder="0.00"
+                      dir="ltr"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">الفئة</Label>
+                    <CategorySelect
+                      value={quickAddData.categoryId}
+                      onChange={(v) => setQuickAddData((p) => ({ ...p, categoryId: v }))}
+                      placeholder="— بدون فئة —"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowQuickAdd(false)}
+                    >
+                      إلغاء
+                    </Button>
+                    <Button
+                      size="sm"
+                      loading={quickAddMutation.isPending}
+                      onClick={() => quickAddMutation.mutate()}
+                    >
+                      <Plus className="size-4" />
+                      <span>إنشاء وإضافة</span>
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">

@@ -21,7 +21,7 @@ interface UiState {
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
-      theme: 'system',
+      theme: 'light',
       locale: 'ar',
       sidebarCollapsed: false,
       isOnline: true,

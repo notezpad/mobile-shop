@@ -10,7 +10,7 @@
 
 @layer base {
   :root {
-    /* Layout */
+    /* ─── Daytime (Light) Theme — Fresh & Warm ─── */
     --background: 210 40% 98%;
     --foreground: 222 47% 11%;
 
@@ -20,25 +20,25 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    /* Brand: Slate */
-    --primary: 222 47% 20%;
+    /* Brand: Warm indigo-blue — inviting & professional */
+    --primary: 228 72% 52%;
     --primary-foreground: 210 40% 98%;
 
     /* Neutral surface */
     --secondary: 210 40% 94%;
     --secondary-foreground: 222 47% 11%;
 
-    --muted: 210 40% 94%;
+    --muted: 210 30% 95%;
     --muted-foreground: 215 16% 47%;
 
-    /* Accent: subtle indigo tint */
-    --accent: 226 70% 96%;
-    --accent-foreground: 222 47% 11%;
+    /* Accent: Warm violet tint */
+    --accent: 240 60% 95%;
+    --accent-foreground: 228 72% 35%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
 
-    --success: 142 71% 45%;
+    --success: 152 68% 38%;
     --success-foreground: 0 0% 100%;
 
     --warning: 38 92% 50%;
@@ -49,7 +49,7 @@
 
     --border: 214 32% 88%;
     --input: 214 32% 88%;
-    --ring: 222 47% 11%;
+    --ring: 228 72% 52%;
 
     --radius: 0.625rem;
 
@@ -59,42 +59,49 @@
   }
 
   .dark {
-    --background: 222 47% 8%;
-    --foreground: 210 40% 96%;
+    /* ─── Nighttime (Dark) Theme — Warm & Comfortable ───
+       Designed to be easy on the eyes: softer backgrounds,
+       warmer gray undertones, and rich accent colors instead
+       of the harsh cold navy that felt oppressive. */
 
-    --card: 222 47% 11%;
-    --card-foreground: 210 40% 96%;
+    --background: 220 18% 13%;
+    --foreground: 215 20% 90%;
 
-    --popover: 222 47% 11%;
-    --popover-foreground: 210 40% 96%;
+    --card: 220 17% 17%;
+    --card-foreground: 215 20% 92%;
 
-    --primary: 210 40% 96%;
-    --primary-foreground: 222 47% 11%;
+    --popover: 220 17% 17%;
+    --popover-foreground: 215 20% 92%;
 
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 96%;
+    /* Primary: Warm indigo-blue accent — readable + inviting */
+    --primary: 228 72% 62%;
+    --primary-foreground: 220 18% 10%;
 
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --secondary: 220 15% 23%;
+    --secondary-foreground: 215 18% 85%;
 
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 96%;
+    --muted: 220 14% 23%;
+    --muted-foreground: 215 12% 60%;
 
-    --destructive: 0 62% 50%;
+    /* Accent: Subtle warm tint to avoid coldness */
+    --accent: 228 30% 22%;
+    --accent-foreground: 228 60% 82%;
+
+    --destructive: 0 62% 55%;
     --destructive-foreground: 210 40% 98%;
 
-    --success: 142 71% 45%;
+    --success: 152 68% 45%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 0%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 220 18% 10%;
 
-    --info: 199 89% 48%;
+    --info: 199 89% 55%;
     --info-foreground: 0 0% 100%;
 
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 215 20% 65%;
+    --border: 220 14% 26%;
+    --input: 220 14% 26%;
+    --ring: 228 72% 62%;
   }
 }
 

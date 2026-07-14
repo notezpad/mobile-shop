@@ -12,7 +12,6 @@ import {
   Button,
   Input,
   Label,
-  Textarea,
 } from '@components/ui';
 import { LoadingState } from '@components/feedback/LoadingState';
 import { suppliersApi } from '../api/suppliers.api';
@@ -34,10 +33,7 @@ export default function SupplierFormPage() {
 
   const [values, setValues] = useState({
     name: '',
-    code: '',
     phone: '' as string | null,
-    email: '' as string | null,
-    address: '' as string | null,
     notes: '' as string | null,
     isActive: true,
   });
@@ -46,10 +42,7 @@ export default function SupplierFormPage() {
     if (existing) {
       setValues({
         name: existing.name,
-        code: existing.code,
         phone: existing.phone,
-        email: existing.email,
-        address: existing.address,
         notes: existing.notes,
         isActive: existing.is_active,
       });
@@ -58,12 +51,22 @@ export default function SupplierFormPage() {
 
   const saveMutation = useMutation({
     mutationFn: () => {
+      // Auto-generate code from name
+      const code = values.name
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^A-Z0-9-]/g, '')
+        .slice(0, 15) || `SUP-${Date.now().toString(36).toUpperCase()}`;
+
       const payload = {
-        ...values,
+        name: values.name,
+        code,
         phone: values.phone || null,
-        email: values.email || null,
-        address: values.address || null,
+        email: null,
+        address: null,
         notes: values.notes || null,
+        isActive: values.isActive,
       };
       if (editMode && id) {
         return suppliersApi.update(id, payload);
@@ -88,7 +91,7 @@ export default function SupplierFormPage() {
     <div className="page-container">
       <PageHeader
         title={editMode ? 'تعديل مورد' : 'إضافة مورد جديد'}
-        description={editMode ? existing?.name : 'أنشئ ملف مورد جديد'}
+        description={editMode ? existing?.name : 'أنشئ ملف مورد جديد بسهولة'}
         actions={
           <Button asChild variant="outline">
             <Link to="/suppliers">
@@ -102,8 +105,8 @@ export default function SupplierFormPage() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (!values.name.trim() || !values.code.trim()) {
-            toast.error('الاسم والكود مطلوبان');
+          if (!values.name.trim()) {
+            toast.error('الاسم مطلوب');
             return;
           }
           saveMutation.mutate();
@@ -129,18 +132,6 @@ export default function SupplierFormPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="code">الكود *</Label>
-              <Input
-                id="code"
-                required
-                value={values.code}
-                onChange={(e) => update('code', e.target.value.toUpperCase())}
-                placeholder="SUP-001"
-                dir="ltr"
-                className="font-mono"
-              />
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="phone">الهاتف</Label>
               <Input
                 id="phone"
@@ -150,34 +141,12 @@ export default function SupplierFormPage() {
                 dir="ltr"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">البريد الإلكتروني</Label>
-              <Input
-                id="email"
-                type="email"
-                value={values.email ?? ''}
-                onChange={(e) => update('email', e.target.value || null)}
-                placeholder="supplier@example.com"
-                dir="ltr"
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="address">العنوان</Label>
-              <Textarea
-                id="address"
-                value={values.address ?? ''}
-                onChange={(e) => update('address', e.target.value || null)}
-                rows={2}
-                placeholder="العنوان التفصيلي"
-              />
-            </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="notes">ملاحظات</Label>
-              <Textarea
+              <Input
                 id="notes"
                 value={values.notes ?? ''}
                 onChange={(e) => update('notes', e.target.value || null)}
-                rows={2}
                 placeholder="ملاحظات داخلية"
               />
             </div>

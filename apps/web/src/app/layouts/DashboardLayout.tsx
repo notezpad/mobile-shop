@@ -15,7 +15,6 @@ import {
   Cloud,
   ShieldCheck,
   Building2,
-  Smartphone,
   FolderTree,
   ArrowRightLeft,
   History,
@@ -28,6 +27,8 @@ import {
   Briefcase,
   HardDrive,
   ChevronRight,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { cn } from '@core/utils/cn';
 import { useAuthStore } from '@stores/auth.store';
@@ -54,7 +55,7 @@ const navItems: NavItem[] = [
   { to: '/customers', label: 'العملاء', icon: Users, permission: 'customers.view' },
   { to: '/suppliers', label: 'الموردون', icon: Truck, permission: 'catalog.suppliers.manage' },
   { to: '/catalog/products', label: 'المنتجات', icon: Package, permission: 'catalog.products.view' },
-  { to: '/catalog/devices', label: 'الأجهزة (IMEI)', icon: Smartphone, permission: 'catalog.devices.view' },
+
   { to: '/catalog/categories', label: 'الفئات', icon: FolderTree, permission: 'catalog.products.view' },
   { to: '/inventory', label: 'المخزون', icon: Warehouse, permission: 'inventory.view' },
   { to: '/inventory/movements', label: 'حركات المخزون', icon: History, permission: 'inventory.view' },
@@ -84,6 +85,8 @@ export function DashboardLayout() {
   const collapsed = useUiStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const isOnline = useUiStore((s) => s.isOnline);
+  const theme = useUiStore((s) => s.theme);
+  const setTheme = useUiStore((s) => s.setTheme);
   const pendingCount = useSyncStore((s) => s.pendingCount);
   const { can } = usePermission();
 
@@ -198,6 +201,17 @@ export function DashboardLayout() {
           </Button>
 
           <div className="flex-1" />
+
+          {/* Theme toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            aria-label={theme === 'dark' ? 'التبديل للوضع النهاري' : 'التبديل للوضع الليلى'}
+            title={theme === 'dark' ? 'الوضع النهاري' : 'الوضع الليلى'}
+          >
+            {theme === 'dark' ? <Sun className="size-5 text-amber-400" /> : <Moon className="size-5" />}
+          </Button>
 
           {/* Online status */}
           <div
