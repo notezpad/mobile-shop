@@ -53,7 +53,7 @@ export class ApiClient {
 
     let response: Response;
     try {
-      response = await fetch(url, { ...options, headers });
+      response = await fetch(url, { ...options, headers, credentials: 'include' });
     } catch (err) {
       throw new AppError(
         ERROR_CODES.SERVICE_UNAVAILABLE,

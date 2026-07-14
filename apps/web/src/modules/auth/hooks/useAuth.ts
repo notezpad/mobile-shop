@@ -46,10 +46,18 @@ export function useAuth() {
         setSession({ user: session.user, accessToken: session.accessToken || accessToken });
       } catch (err) {
         if (cancelled) return;
-        // Token invalid/expired — clear session.
-        if (err instanceof AppError && err.code === ERROR_CODES.AUTH_TOKEN_EXPIRED) {
-          clearSession();
-          localStorage.removeItem('mse-access-token');
+        // Only clear session on auth-specific errors (token expired/invalid).
+        // Network errors or server errors should NOT log the user out.
+        if (err instanceof AppError) {
+          const authErrors = [
+            ERROR_CODES.AUTH_TOKEN_EXPIRED,
+            ERROR_CODES.AUTH_TOKEN_INVALID,
+            ERROR_CODES.AUTH_NO_SESSION,
+          ];
+          if (authErrors.includes(err.code as typeof ERROR_CODES.AUTH_TOKEN_EXPIRED)) {
+            clearSession();
+            localStorage.removeItem('mse-access-token');
+          }
         }
       } finally {
         if (!cancelled) setInitializing(false);

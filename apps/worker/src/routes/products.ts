@@ -32,7 +32,7 @@ productRoutes.get(
     const query = c.req.valid('query');
     const supabase = getReqSupabase(c);
     const actor = requireUser(c);
-    const result = await listProducts(supabase, query, actor.branchId);
+    const result = await listProducts(supabase, query, null);
 
     const response: ApiResponse<PaginatedResult<Product & { stock_level?: number }>> = {
       success: true,

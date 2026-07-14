@@ -63,19 +63,31 @@ export async function listProducts(
 
   let products = (data ?? []) as Product[];
 
-  // If branch context provided, attach stock levels.
-  if (branchId && products.length > 0) {
+  // Attach stock levels from inventory_stocks.
+  if (products.length > 0) {
     const productIds = products.map((p) => p.id);
+
+    // Fetch ALL stock rows for these products, then match per-product.
     const { data: stocks } = await supabase
       .from('inventory_stocks')
-      .select('product_id, quantity, reserved_quantity')
-      .eq('branch_id', branchId)
+      .select('product_id, branch_id, quantity, reserved_quantity')
       .in('product_id', productIds)
       .is('deleted_at', null);
 
     const stockMap = new Map<string, number>();
-    (stocks ?? []).forEach((s: { product_id: string; quantity: number; reserved_quantity: number }) => {
-      stockMap.set(s.product_id, s.quantity - s.reserved_quantity);
+    (stocks ?? []).forEach((s: { product_id: string; branch_id: string; quantity: number; reserved_quantity: number }) => {
+      const key = s.product_id;
+      const available = s.quantity - s.reserved_quantity;
+      // Sum all branches for the product, or if branchId filter is given, only that branch
+      if (branchId) {
+        // Only count stock for the requested branch
+        if (s.branch_id === branchId) {
+          stockMap.set(key, (stockMap.get(key) ?? 0) + available);
+        }
+      } else {
+        // No branch filter: sum stock across all branches
+        stockMap.set(key, (stockMap.get(key) ?? 0) + available);
+      }
     });
 
     products = products.map((p) => ({

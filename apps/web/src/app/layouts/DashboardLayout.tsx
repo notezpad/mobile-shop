@@ -58,7 +58,6 @@ const navItems: NavItem[] = [
   { to: '/catalog/categories', label: 'الفئات', icon: FolderTree, permission: 'catalog.products.view' },
   { to: '/inventory', label: 'المخزون', icon: Warehouse, permission: 'inventory.view' },
   { to: '/inventory/transfers', label: 'التحويلات', icon: ArrowRightLeft, permission: 'inventory.transfer' },
-  { to: '/invoices', label: 'الفواتير', icon: Receipt, permission: 'invoices.view' },
   { to: '/cashbox', label: 'الخزنة', icon: Wallet, permission: 'cashbox.view' },
   { to: '/expenses', label: 'المصروفات', icon: TrendingDown, permission: 'expenses.view' },
   { to: '/revenues', label: 'الإيرادات', icon: TrendingUp, permission: 'revenues.view' },
