@@ -44,6 +44,8 @@ export interface Product extends BaseEntity {
   name: string;
   name_ar: string | null;
   category_id: UUID | null;
+  /** Branch this product belongs to. NULL means available in all branches. */
+  branch_id: UUID | null;
   brand: string | null;
   model: string | null;
   description: string | null;

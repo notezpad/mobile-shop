@@ -48,6 +48,7 @@ export default function ProductFormPage() {
     type: 'standard' as ProductType,
     costPrice: 0,
     salePrice: 0,
+    quantity: 0,
     minQuantity: 0,
     imageUrl: null as string | null,
     isActive: true,
@@ -59,10 +60,11 @@ export default function ProductFormPage() {
         name: existing.name,
         barcode: existing.barcode,
         categoryId: existing.category_id,
-        branchId: ('branch_id' in existing ? (existing as unknown as { branch_id?: string | null }).branch_id : null) ?? null,
+        branchId: existing.branch_id ?? null,
         type: existing.type,
         costPrice: existing.cost_price,
         salePrice: existing.sale_price,
+        quantity: existing.stock_levels?.[0]?.quantity ?? 0,
         minQuantity: existing.min_quantity,
         imageUrl: existing.image_url,
         isActive: existing.is_active,
@@ -256,10 +258,10 @@ export default function ProductFormPage() {
           </CardContent>
         </Card>
 
-        {/* Pricing */}
+        {/* Pricing & Stock */}
         <Card>
           <CardHeader>
-            <CardTitle>التسعير</CardTitle>
+            <CardTitle>التسعير والمخزون</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -287,16 +289,29 @@ export default function ProductFormPage() {
                 />
               </div>
               {values.type !== 'service' ? (
-                <div className="space-y-2">
-                  <Label htmlFor="minQuantity">حد التنبيه للمخزون المنخفض</Label>
-                  <Input
-                    id="minQuantity"
-                    type="number"
-                    min="0"
-                    value={values.minQuantity}
-                    onChange={(e) => update('minQuantity', Number(e.target.value))}
-                  />
-                </div>
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="quantity">الكمية</Label>
+                    <Input
+                      id="quantity"
+                      type="number"
+                      min="0"
+                      value={values.quantity}
+                      onChange={(e) => update('quantity', Number(e.target.value))}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="minQuantity">حد التنبيه للمخزون المنخفض</Label>
+                    <Input
+                      id="minQuantity"
+                      type="number"
+                      min="0"
+                      value={values.minQuantity}
+                      onChange={(e) => update('minQuantity', Number(e.target.value))}
+                    />
+                  </div>
+                </>
               ) : null}
               <Label className="flex items-center gap-2">
                 <Switch

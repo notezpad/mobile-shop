@@ -18,7 +18,6 @@ import {
   FolderTree,
   ArrowRightLeft,
   History,
-  ClipboardCheck,
   Truck,
   Undo2,
   TrendingUp,
@@ -58,8 +57,6 @@ const navItems: NavItem[] = [
 
   { to: '/catalog/categories', label: 'الفئات', icon: FolderTree, permission: 'catalog.products.view' },
   { to: '/inventory', label: 'المخزون', icon: Warehouse, permission: 'inventory.view' },
-  { to: '/inventory/movements', label: 'حركات المخزون', icon: History, permission: 'inventory.view' },
-  { to: '/inventory/stocktake', label: 'الجرد', icon: ClipboardCheck, permission: 'inventory.stocktake' },
   { to: '/inventory/transfers', label: 'التحويلات', icon: ArrowRightLeft, permission: 'inventory.transfer' },
   { to: '/invoices', label: 'الفواتير', icon: Receipt, permission: 'invoices.view' },
   { to: '/cashbox', label: 'الخزنة', icon: Wallet, permission: 'cashbox.view' },

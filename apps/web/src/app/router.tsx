@@ -31,9 +31,7 @@ const ProductsListPage = lazy(() => import('@modules/catalog/pages/ProductsListP
 const ProductFormPage = lazy(() => import('@modules/catalog/pages/ProductFormPage'));
 const ProductDetailPage = lazy(() => import('@modules/catalog/pages/ProductDetailPage'));
 // Inventory module
-const InventoryListPage = lazy(() => import('@modules/inventory/pages/InventoryListPage'));
-const StockMovementsPage = lazy(() => import('@modules/inventory/pages/StockMovementsPage'));
-const StocktakePage = lazy(() => import('@modules/inventory/pages/StocktakePage'));
+const InventoryPage = lazy(() => import('@modules/inventory/pages/InventoryPage'));
 const StockTransfersListPage = lazy(() => import('@modules/inventory/pages/StockTransfersListPage'));
 const StockTransferFormPage = lazy(() => import('@modules/inventory/pages/StockTransferFormPage'));
 const StockTransferDetailPage = lazy(() => import('@modules/inventory/pages/StockTransferDetailPage'));
@@ -272,23 +270,7 @@ const routes: RouteObject[] = [
         path: 'inventory',
         element: (
           <ProtectedRoute permission="inventory.view">
-            <InventoryListPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: 'inventory/movements',
-        element: (
-          <ProtectedRoute permission="inventory.view">
-            <StockMovementsPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: 'inventory/stocktake',
-        element: (
-          <ProtectedRoute permission="inventory.stocktake">
-            <StocktakePage />
+            <InventoryPage />
           </ProtectedRoute>
         ),
       },

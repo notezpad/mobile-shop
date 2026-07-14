@@ -18,8 +18,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Cairo', 'Inter', 'system-ui', 'sans-serif'],
-        arabic: ['Cairo', 'sans-serif'],
+        sans: ['Almarai', 'Inter', 'system-ui', 'sans-serif'],
+        arabic: ['Almarai', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
       colors: {
