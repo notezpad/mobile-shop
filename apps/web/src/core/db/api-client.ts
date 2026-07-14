@@ -62,13 +62,17 @@ export class ApiClient {
       );
     }
 
-    // 401 → attempt token refresh once
+    // 401 → attempt token refresh once, then retry. If refresh fails, we
+    // still throw AUTH_TOKEN_EXPIRED — but the auth bootstrap (useAuth)
+    // will NOT clear the session on this error; it leaves the user in
+    // place and surfaces a soft warning, so they can re-login voluntarily
+    // instead of being silently kicked out on every refresh.
     if (response.status === 401) {
       const refreshed = await this.tryRefreshToken();
       if (refreshed) {
         return this.request<T>(path, options);
       }
-      throw new AppError(ERROR_CODES.AUTH_TOKEN_EXPIRED, 'Session expired. Please sign in again.');
+      throw new AppError(ERROR_CODES.AUTH_TOKEN_EXPIRED, 'انتهت صلاحية الجلسة، يرجى إعادة تسجيل الدخول');
     }
 
     const body = (await response.json().catch(() => null)) as ApiResponse<T> | null;

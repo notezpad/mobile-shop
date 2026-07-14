@@ -1,4 +1,5 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -25,9 +26,11 @@ import {
   BarChart3,
   Briefcase,
   HardDrive,
-  ChevronRight,
   Sun,
   Moon,
+  ChevronDown,
+  ChevronLeft,
+  type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@core/utils/cn';
 import { useAuthStore } from '@stores/auth.store';
@@ -41,38 +44,105 @@ import { toast } from 'sonner';
 interface NavItem {
   to: string;
   label: string;
-  icon: typeof LayoutDashboard;
+  icon: LucideIcon;
   permission?: string;
+  // When true, this route is also matched if the user is on any path that
+  // starts with `to` (e.g. /sales/123 should highlight "الفواتير").
+  matchPrefix?: boolean;
 }
 
-const navItems: NavItem[] = [
-  { to: '/dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, permission: 'dashboard.view' },
-  { to: '/pos', label: 'نقطة البيع', icon: ShoppingCart, permission: 'sales.create' },
-  { to: '/sales', label: 'المبيعات', icon: Receipt, permission: 'sales.view' },
-  { to: '/returns', label: 'المرتجعات', icon: Undo2, permission: 'returns.view' },
-  { to: '/repairs', label: 'الصيانة', icon: Wrench, permission: 'repairs.view' },
-  { to: '/customers', label: 'العملاء', icon: Users, permission: 'customers.view' },
-  { to: '/suppliers', label: 'الموردون', icon: Truck, permission: 'catalog.suppliers.manage' },
-  { to: '/catalog/products', label: 'المنتجات', icon: Package, permission: 'catalog.products.view' },
+interface NavSection {
+  id: string;
+  label?: string; // omit for the first (headerless) section
+  items: NavItem[];
+  collapsible?: boolean; // admin sections can be collapsed
+  defaultOpen?: boolean;
+}
 
-  { to: '/catalog/categories', label: 'الفئات', icon: FolderTree, permission: 'catalog.products.view' },
-  { to: '/inventory', label: 'المخزون', icon: Warehouse, permission: 'inventory.view' },
-  { to: '/inventory/transfers', label: 'التحويلات', icon: ArrowRightLeft, permission: 'inventory.transfer' },
-  { to: '/cashbox', label: 'الخزنة', icon: Wallet, permission: 'cashbox.view' },
-  { to: '/expenses', label: 'المصروفات', icon: TrendingDown, permission: 'expenses.view' },
-  { to: '/revenues', label: 'الإيرادات', icon: TrendingUp, permission: 'revenues.view' },
-  { to: '/reports/sales', label: 'تقارير المبيعات', icon: BarChart3, permission: 'reports.sales' },
-  { to: '/reports/inventory', label: 'تقارير المخزون', icon: BarChart3, permission: 'reports.inventory' },
-  { to: '/reports/repairs', label: 'تقارير الصيانة', icon: BarChart3, permission: 'reports.repairs' },
-  { to: '/reports/finance', label: 'التقرير المالي', icon: BarChart3, permission: 'reports.finance' },
-  { to: '/branches', label: 'الفروع', icon: Building2, permission: 'branches.view' },
-  { to: '/employees', label: 'الموظفون', icon: Briefcase, permission: 'employees.view' },
-  { to: '/users', label: 'المستخدمون', icon: Users, permission: 'users.view' },
-  { to: '/roles', label: 'الأدوار والصلاحيات', icon: ShieldCheck, permission: 'roles.view' },
-  { to: '/backup', label: 'النسخ الاحتياطي', icon: HardDrive, permission: 'backup.view' },
-  { to: '/audit-logs', label: 'سجل التدقيق', icon: History, permission: 'audit_logs.view' },
-  { to: '/settings', label: 'الإعدادات', icon: Settings, permission: 'settings.view' },
+/**
+ * Sidebar structure — grouped into logical sections.
+ *
+ * Design principles:
+ *  1. Daily-use items live in the always-visible top sections (operations,
+ *     inventory, finance, reports).
+ *  2. Admin / config items (things you set ONCE: branches, roles, users,
+ *     backup, audit logs) live inside a collapsible "الإدارة" section at
+ *     the bottom — collapsed by default to keep the sidebar clean.
+ *  3. "الإعدادات" is always one click away at the very bottom.
+ */
+const SECTIONS: NavSection[] = [
+  // ─── Operations (no header — primary navigation) ─────────────────
+  {
+    id: 'operations',
+    items: [
+      { to: '/dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, permission: 'dashboard.view' },
+      { to: '/pos', label: 'نقطة البيع', icon: ShoppingCart, permission: 'sales.create' },
+      // "الفواتير" = sales list. Each sale is an invoice. /invoices is an
+      // alias route that maps to the same page.
+      { to: '/invoices', label: 'الفواتير', icon: Receipt, permission: 'sales.view', matchPrefix: true },
+      { to: '/returns', label: 'المرتجعات', icon: Undo2, permission: 'returns.view' },
+      { to: '/repairs', label: 'الصيانة', icon: Wrench, permission: 'repairs.view' },
+      { to: '/customers', label: 'العملاء', icon: Users, permission: 'customers.view' },
+    ],
+  },
+  // ─── Inventory & Catalog ─────────────────────────────────────────
+  {
+    id: 'inventory',
+    label: 'المخزون والمنتجات',
+    items: [
+      { to: '/catalog/products', label: 'المنتجات', icon: Package, permission: 'catalog.products.view' },
+      { to: '/catalog/categories', label: 'الفئات', icon: FolderTree, permission: 'catalog.products.view' },
+      { to: '/inventory', label: 'المخزون', icon: Warehouse, permission: 'inventory.view' },
+      { to: '/inventory/transfers', label: 'التحويلات', icon: ArrowRightLeft, permission: 'inventory.transfer' },
+      { to: '/suppliers', label: 'الموردون', icon: Truck, permission: 'catalog.suppliers.manage' },
+    ],
+  },
+  // ─── Finance ─────────────────────────────────────────────────────
+  {
+    id: 'finance',
+    label: 'المالية',
+    items: [
+      { to: '/cashbox', label: 'الخزنة', icon: Wallet, permission: 'cashbox.view' },
+      { to: '/expenses', label: 'المصروفات', icon: TrendingDown, permission: 'expenses.view' },
+      { to: '/revenues', label: 'الإيرادات', icon: TrendingUp, permission: 'revenues.view' },
+    ],
+  },
+  // ─── Reports ─────────────────────────────────────────────────────
+  {
+    id: 'reports',
+    label: 'التقارير',
+    items: [
+      { to: '/reports/sales', label: 'تقرير المبيعات', icon: BarChart3, permission: 'reports.sales' },
+      { to: '/reports/inventory', label: 'تقرير المخزون', icon: BarChart3, permission: 'reports.inventory' },
+      { to: '/reports/repairs', label: 'تقرير الصيانة', icon: BarChart3, permission: 'reports.repairs' },
+      { to: '/reports/finance', label: 'التقرير المالي', icon: BarChart3, permission: 'reports.finance' },
+    ],
+  },
+  // ─── Administration (collapsible — collapsed by default) ─────────
+  // These are config-once items the user explicitly asked to declutter.
+  {
+    id: 'admin',
+    label: 'الإدارة والضبط',
+    collapsible: true,
+    defaultOpen: false,
+    items: [
+      { to: '/branches', label: 'الفروع', icon: Building2, permission: 'branches.view' },
+      { to: '/employees', label: 'الموظفون', icon: Briefcase, permission: 'employees.view' },
+      { to: '/users', label: 'المستخدمون', icon: Users, permission: 'users.view' },
+      { to: '/roles', label: 'الأدوار والصلاحيات', icon: ShieldCheck, permission: 'roles.view' },
+      { to: '/backup', label: 'النسخ الاحتياطي', icon: HardDrive, permission: 'backup.view' },
+      { to: '/audit-logs', label: 'سجل التدقيق', icon: History, permission: 'audit_logs.view' },
+    ],
+  },
 ];
+
+// Settings is always rendered separately at the very bottom (not inside any section).
+const SETTINGS_ITEM: NavItem = {
+  to: '/settings',
+  label: 'الإعدادات',
+  icon: Settings,
+  permission: 'settings.view',
+};
 
 export function DashboardLayout() {
   const navigate = useNavigate();
@@ -85,6 +155,20 @@ export function DashboardLayout() {
   const setTheme = useUiStore((s) => s.setTheme);
   const pendingCount = useSyncStore((s) => s.pendingCount);
   const { can } = usePermission();
+
+  // Track which collapsible sections are open. Initialize from defaults.
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    for (const s of SECTIONS) {
+      if (s.collapsible) init[s.id] = s.defaultOpen ?? false;
+    }
+    return init;
+  });
+
+  const toggleSection = (id: string) =>
+    setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  const location = useLocation();
 
   const handleLogout = async () => {
     try {
@@ -102,6 +186,18 @@ export function DashboardLayout() {
   const hasPermission = (perm?: string) => {
     if (!perm) return true;
     return can(perm);
+  };
+
+  const isItemActive = (item: NavItem, pathname: string) => {
+    if (item.matchPrefix) {
+      // Match /invoices AND /invoices/123, also alias /sales and /sales/123.
+      // We treat sales + invoices as the same logical area.
+      return (
+        pathname.startsWith(item.to) ||
+        pathname.startsWith('/sales')
+      );
+    }
+    return pathname === item.to || pathname.startsWith(item.to + '/');
   };
 
   return (
@@ -127,28 +223,82 @@ export function DashboardLayout() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 space-y-1 overflow-y-auto p-3 no-scrollbar">
-          {navItems
-            .filter((item) => hasPermission(item.permission))
-            .map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                    'hover:bg-accent hover:text-accent-foreground',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    isActive && 'bg-primary text-primary-foreground hover:bg-primary/90',
-                    collapsed && 'justify-center px-2',
-                  )
-                }
-                title={collapsed ? item.label : undefined}
-              >
-                <item.icon className="size-5 shrink-0" />
-                {!collapsed ? <span className="flex-1">{item.label}</span> : null}
-              </NavLink>
-            ))}
+        <nav className="flex-1 space-y-3 overflow-y-auto p-3 no-scrollbar">
+          {SECTIONS.map((section) => {
+            const visibleItems = section.items.filter((item) => hasPermission(item.permission));
+            if (visibleItems.length === 0) return null;
+
+            // Collapsible admin section
+            if (section.collapsible) {
+              const isOpen = openSections[section.id] ?? false;
+              return (
+                <div key={section.id} className="space-y-1">
+                  {!collapsed ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleSection(section.id)}
+                      className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                      aria-expanded={isOpen}
+                    >
+                      <span className="flex-1 text-right">{section.label}</span>
+                      {isOpen ? (
+                        <ChevronDown className="size-3.5" />
+                      ) : (
+                        <ChevronLeft className="size-3.5 rtl-flip" />
+                      )}
+                    </button>
+                  ) : (
+                    <div className="my-1 border-t border-border/60" />
+                  )}
+
+                  {/* When collapsed, always show admin items (icons only) */}
+                  {(!collapsed ? isOpen : true) &&
+                    visibleItems.map((item) => (
+                      <SidebarLink
+                        key={item.to}
+                        item={item}
+                        collapsed={collapsed}
+                        isActive={isItemActive}
+                        pathname={location.pathname}
+                      />
+                    ))}
+                </div>
+              );
+            }
+
+            // Regular section with optional header
+            return (
+              <div key={section.id} className="space-y-1">
+                {section.label && !collapsed ? (
+                  <p className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {section.label}
+                  </p>
+                ) : null}
+                {visibleItems.map((item) => (
+                  <SidebarLink
+                    key={item.to}
+                    item={item}
+                    collapsed={collapsed}
+                    isActive={isItemActive}
+                    pathname={location.pathname}
+                  />
+                ))}
+              </div>
+            );
+          })}
+
+          {/* Settings — always at the bottom, separated */}
+          {hasPermission(SETTINGS_ITEM.permission) ? (
+            <>
+              <div className="border-t border-border/60 pt-2" />
+              <SidebarLink
+                item={SETTINGS_ITEM}
+                collapsed={collapsed}
+                isActive={isItemActive}
+                pathname={location.pathname}
+              />
+            </>
+          ) : null}
         </nav>
 
         {/* User */}
@@ -243,6 +393,39 @@ export function DashboardLayout() {
   );
 }
 
+/** Single sidebar link — handles active state + collapsed (icon-only) mode. */
+function SidebarLink({
+  item,
+  collapsed,
+  isActive,
+  pathname,
+}: {
+  item: NavItem;
+  collapsed: boolean;
+  isActive: (item: NavItem, pathname: string) => boolean;
+  pathname: string;
+}) {
+  return (
+    <NavLink
+      to={item.to}
+      className={() =>
+        cn(
+          'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+          'hover:bg-accent hover:text-accent-foreground',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          isActive(item, pathname) &&
+            'bg-primary text-primary-foreground hover:bg-primary/90',
+          collapsed && 'justify-center px-2',
+        )
+      }
+      title={collapsed ? item.label : undefined}
+    >
+      <item.icon className="size-5 shrink-0" />
+      {!collapsed ? <span className="flex-1">{item.label}</span> : null}
+    </NavLink>
+  );
+}
+
 function SmartphoneIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -261,5 +444,3 @@ function SmartphoneIcon({ className }: { className?: string }) {
     </svg>
   );
 }
-
-void ChevronRight; // tree-shake safety

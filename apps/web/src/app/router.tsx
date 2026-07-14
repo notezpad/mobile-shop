@@ -385,6 +385,26 @@ const routes: RouteObject[] = [
         ),
       },
 
+      // ─── Invoices (alias for Sales — every sale IS an invoice) ───
+      // Some users navigate to /invoices by URL or bookmark; provide an
+      // explicit route so it doesn't 404. Same component, same permission.
+      {
+        path: 'invoices',
+        element: (
+          <ProtectedRoute permission="sales.view">
+            <SalesListPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'invoices/:id',
+        element: (
+          <ProtectedRoute permission="sales.view">
+            <SaleDetailPage />
+          </ProtectedRoute>
+        ),
+      },
+
       // ─── Returns ──────────────────────────────────────────────
       {
         path: 'returns',

@@ -117,7 +117,9 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-    font-family: 'Cairo', 'Inter', system-ui, sans-serif;
+    /* Single-font policy: Cairo only. Tahoma fallback is for print/PDF
+       contexts where the host OS may not have Cairo installed. */
+    font-family: 'Cairo', 'Tahoma', system-ui, sans-serif;
   }
 
   /* Custom scrollbar — subtle, works on desktop */

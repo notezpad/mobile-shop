@@ -18,9 +18,13 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Cairo', 'Inter', 'system-ui', 'sans-serif'],
-        arabic: ['Cairo', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        // Single font policy: Cairo everywhere (Arabic + Latin subsets).
+        // Tahoma kept ONLY as a print/PDF fallback for invoice rendering,
+        // since some thermal printers ship without Cairo installed.
+        sans: ['Cairo', 'Tahoma', 'system-ui', 'sans-serif'],
+        cairo: ['Cairo', 'Tahoma', 'sans-serif'],
+        arabic: ['Cairo', 'Tahoma', 'sans-serif'],
+        mono: ['Cairo', 'Tahoma', 'monospace'],
       },
       colors: {
         border: 'hsl(var(--border))',
