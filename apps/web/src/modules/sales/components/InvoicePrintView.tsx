@@ -51,7 +51,7 @@ export function InvoicePrintView({ sale, settings, elementId = 'invoice-print-ar
       id={elementId}
       dir="rtl"
       className="mx-auto bg-white p-8 text-black"
-      style={{ maxWidth: '210mm', minHeight: '297mm', fontFamily: 'Almarai, sans-serif' }}
+      style={{ maxWidth: '210mm', minHeight: '297mm', fontFamily: 'Cairo, Tahoma, sans-serif' }}
     >
       {/* Header */}
       <div className="flex items-start justify-between border-b-2 border-black pb-4">

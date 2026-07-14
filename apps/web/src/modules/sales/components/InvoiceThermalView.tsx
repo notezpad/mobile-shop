@@ -55,7 +55,7 @@ export function InvoiceThermalView({
       id={elementId}
       dir="rtl"
       className={`mx-auto bg-white p-2 text-black ${fontSize}`}
-      style={{ width: pageWidth, fontFamily: 'Almarai, monospace' }}
+      style={{ width: pageWidth, fontFamily: 'Cairo, Tahoma, sans-serif' }}
     >
       {/* Store header */}
       <div className="text-center">
