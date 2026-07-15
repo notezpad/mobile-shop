@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shop-saas",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": [
+    // Required: gives Prisma's pg adapter access to Node APIs (Buffer, net, etc.)
+    "nodejs_compat",
+    // Required: lets `pg` open real TCP connections to Supabase Postgres
+    "enable_nodejs_process_v2"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  // Environment variables that are NOT secret can go here.
+  // Put DATABASE_URL, DIRECT_URL and JWT_SECRET in Cloudflare secrets instead:
+  //   wrangler secret put DATABASE_URL
+  //   wrangler secret put DIRECT_URL
+  //   wrangler secret put JWT_SECRET
+  "vars": {
+    "NODE_ENV": "production"
+  }
+}

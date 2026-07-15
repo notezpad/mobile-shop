@@ -1,0 +1,384 @@
+'use client'
+
+import * as React from 'react'
+import { Loader2, Pencil, Plus, ShieldCheck, User, UserCog } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { toast } from 'sonner'
+import { api } from '@/lib/api'
+import { formatDate } from '@/lib/format'
+
+interface UserRow {
+  id: string
+  name: string
+  email: string
+  role: string
+  active: boolean
+  createdAt: string
+  branchId?: number | null
+}
+
+export function UsersView() {
+  const [users, setUsers] = React.useState<UserRow[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [dialogOpen, setDialogOpen] = React.useState(false)
+  const [editing, setEditing] = React.useState<UserRow | null>(null)
+
+  const load = React.useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await api<UserRow[]>('/api/users')
+      setUsers(data)
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل تحميل المستخدمين')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    load()
+  }, [load])
+
+  const toggleActive = async (u: UserRow) => {
+    try {
+      await api(`/api/users/${u.id}`, {
+        method: 'PUT',
+        body: { active: !u.active },
+      })
+      toast.success(u.active ? 'تم تعطيل المستخدم' : 'تم تفعيل المستخدم')
+      load()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل التحديث')
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold">المستخدمين</h1>
+          <p className="text-sm text-muted-foreground">
+            إدارة حسابات المدراء والموظفين
+          </p>
+        </div>
+        <Button
+          onClick={() => {
+            setEditing(null)
+            setDialogOpen(true)
+          }}
+        >
+          <Plus className="size-4" />
+          مستخدم جديد
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="space-y-2 p-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">الرقم</TableHead>
+                    <TableHead>الاسم</TableHead>
+                    <TableHead>البريد الإلكتروني</TableHead>
+                    <TableHead>الدور</TableHead>
+                    <TableHead>الحالة</TableHead>
+                    <TableHead>تاريخ الإنشاء</TableHead>
+                    <TableHead className="text-left">إجراءات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={7}
+                        className="py-8 text-center text-muted-foreground"
+                      >
+                        لا يوجد مستخدمون
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    users.map((u, index) => (
+                      <TableRow key={u.id}>
+                        <TableCell className="font-mono text-xs">
+                          {index + 1}
+                        </TableCell>
+                        <TableCell className="font-medium">{u.name}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {u.email}
+                        </TableCell>
+                        <TableCell>
+                          {u.role === 'ADMIN' ? (
+                            <Badge className="bg-primary/10 text-primary">
+                              <ShieldCheck className="ml-1 size-3" />
+                              المدير
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              <User className="ml-1 size-3" />
+                              الموظف
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {u.active ? (
+                            <Badge className="bg-emerald-100 text-emerald-700">
+                              نشط
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              معطّل
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {formatDate(u.createdAt)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8"
+                              onClick={() => {
+                                setEditing(u)
+                                setDialogOpen(true)
+                              }}
+                              title="تعديل"
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8"
+                              onClick={() => toggleActive(u)}
+                              title={u.active ? 'تعطيل' : 'تفعيل'}
+                            >
+                              {u.active ? 'تعطيل' : 'تفعيل'}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <UserDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        initial={editing}
+        onSaved={load}
+      />
+    </div>
+  )
+}
+
+interface Props {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  initial: UserRow | null
+  onSaved: () => void
+}
+
+function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
+  const [name, setName] = React.useState('')
+  const [email, setEmail] = React.useState('')
+  const [password, setPassword] = React.useState('')
+  const [role, setRole] = React.useState<'ADMIN' | 'EMPLOYEE'>('EMPLOYEE')
+  const [saving, setSaving] = React.useState(false)
+  const [branchId, setBranchId] = React.useState<string>('')
+  const [branches, setBranches] = React.useState<{ id: number; name: string }[]>([])
+
+  React.useEffect(() => {
+    if (open) {
+      setName(initial?.name ?? '')
+      setEmail(initial?.email ?? '')
+      setPassword('')
+      setRole((initial?.role as 'ADMIN' | 'EMPLOYEE') ?? 'EMPLOYEE')
+      setBranchId(initial?.branchId != null ? String(initial.branchId) : '')
+      fetch('/api/branches').then(r => r.ok ? r.json() : []).then(setBranches).catch(() => setBranches([]))
+    }
+  }, [open, initial])
+
+  const submit = async () => {
+    if (!name.trim()) {
+      toast.error('الاسم مطلوب')
+      return
+    }
+    if (!email.trim()) {
+      toast.error('البريد الإلكتروني مطلوب')
+      return
+    }
+    if (!initial && password.length < 6) {
+      toast.error('كلمة المرور يجب أن تكون 6 أحرف على الأقل')
+      return
+    }
+    setSaving(true)
+    try {
+      if (initial) {
+        const body: any = {
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          role,
+          branchId: branchId ? parseInt(branchId, 10) : null,
+        }
+        if (password) body.password = password
+        await api(`/api/users/${initial.id}`, { method: 'PUT', body })
+        toast.success('تم تحديث المستخدم')
+      } else {
+        await api('/api/users', {
+          method: 'POST',
+          body: {
+            name: name.trim(),
+            email: email.trim().toLowerCase(),
+            password,
+            role,
+            branchId: branchId ? parseInt(branchId, 10) : null,
+          },
+        })
+        toast.success('تمت إضافة المستخدم')
+      }
+      onSaved()
+      onOpenChange(false)
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل الحفظ')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <UserCog className="size-5 text-primary" />
+            {initial ? 'تعديل مستخدم' : 'مستخدم جديد'}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="u-name">
+              الاسم <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="u-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="u-email">
+              البريد الإلكتروني <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="u-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              dir="ltr"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="u-pass">
+              كلمة المرور{' '}
+              {initial ? (
+                <span className="text-muted-foreground text-xs">
+                  (اتركها فارغة للإبقاء على الحالية)
+                </span>
+              ) : (
+                <span className="text-destructive">*</span>
+              )}
+            </Label>
+            <Input
+              id="u-pass"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              dir="ltr"
+              placeholder="******"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>الدور</Label>
+            <Select
+              value={role}
+              onValueChange={(v) => setRole(v as 'ADMIN' | 'EMPLOYEE')}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ADMIN">المدير</SelectItem>
+                <SelectItem value="EMPLOYEE">الموظف</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {branches.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>الفرع {role === 'EMPLOYEE' && <span className="text-xs text-muted-foreground">(الموظف سيرى بيانات هذا الفرع فقط)</span>}</Label>
+              <Select value={branchId || 'none'} onValueChange={(v) => setBranchId(v === 'none' ? '' : v)}>
+                <SelectTrigger><SelectValue placeholder="اختر" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">كل الفروع (مدير)</SelectItem>
+                  {branches.map((b) => (
+                    <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            إلغاء
+          </Button>
+          <Button onClick={submit} disabled={saving}>
+            {saving && <Loader2 className="size-4 animate-spin" />}
+            حفظ
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}

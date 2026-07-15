@@ -1,0 +1,415 @@
+// Simplified Shop System Schema (multi-tenant SaaS)
+// Each Tenant represents a shop. All data is isolated by tenantId.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection (via Supabase's PgBouncer, port 6543) — used at runtime
+  url       = env("DATABASE_URL")
+  // Direct connection (port 5432) — used only for migrations
+  directUrl = env("DIRECT_URL")
+}
+
+model Tenant {
+  id                     String    @id @default(cuid())
+  shopName               String    @default("محل الاتصالات")
+  phone                  String?
+  address                String?
+  logoPath               String?
+  invoicePrefix          String    @default("INV")
+  commissionVodafoneCash Float     @default(1.0)
+  commissionInstapay     Float     @default(0.5)
+  commissionFawry        Float     @default(1.0)
+  status                 String    @default("active")
+  ownerEmail             String?
+  ownerPhone             String?
+  adminNotes             String?
+  lastLoginAt            DateTime?
+  createdAt              DateTime  @default(now())
+
+  users             User[]
+  products          Product[]
+  categories        Category[]
+  customers         Customer[]
+  sales             Sale[]
+  maintenanceOrders MaintenanceOrder[]
+  transactions      Transaction[]
+  cashEntries       CashEntry[]
+  payments          Payment[]
+  subscriptions     Subscription[]
+  activationCodes   ActivationCode[]
+  branches          Branch[]
+  stockMovements    StockMovement[]
+  transfers         Transfer[]
+  stocktakes        Stocktake[]
+}
+
+model Plan {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique
+  name         String
+  description  String?
+  priceMonthly Float    @default(0)
+  priceYearly  Float    @default(0)
+  maxUsers     Int      @default(1)
+  maxProducts  Int      @default(50)
+  maxBranches  Int      @default(1)
+  trialDays    Int      @default(0)
+  features     String?
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  subscriptions   Subscription[]
+  activationCodes ActivationCode[]
+}
+
+model Subscription {
+  id            Int      @id @default(autoincrement())
+  tenantId      String
+  planId        Int
+  status        String   @default("active")
+  startDate     DateTime @default(now())
+  endDate       DateTime
+  period        String   @default("monthly")
+  amountPaid    Float    @default(0)
+  paymentMethod String?
+  paymentNote   String?
+  createdAt     DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan   Plan   @relation(fields: [planId], references: [id])
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([endDate])
+}
+
+model ActivationCode {
+  id         Int       @id @default(autoincrement())
+  code       String    @unique
+  planId     Int
+  period     String    @default("monthly")
+  tenantId   String?
+  redeemedAt DateTime?
+  createdAt  DateTime  @default(now())
+  createdBy  String?
+  notes      String?
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+  plan   Plan    @relation(fields: [planId], references: [id])
+
+  @@index([planId])
+  @@index([tenantId])
+}
+
+model Branch {
+  id        Int      @id @default(autoincrement())
+  tenantId  String
+  name      String
+  address   String?
+  phone     String?
+  active    Boolean  @default(true)
+  isMain    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users          User[]
+  products       Product[]
+  sales          Sale[]
+  stockMovements StockMovement[]
+  transfersFrom  Transfer[]      @relation("TransferFrom")
+  transfersTo    Transfer[]      @relation("TransferTo")
+  stocktakes     Stocktake[]
+
+  @@index([tenantId])
+}
+
+model User {
+  id        String   @id @default(cuid())
+  tenantId  String
+  branchId  Int?
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("EMPLOYEE")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id])
+
+  @@index([branchId])
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  tenantId    String
+  branchId    Int?
+  name        String
+  category    String?
+  barcode     String?  @unique
+  price       Float    @default(0)
+  cost        Float    @default(0)
+  quantity    Int      @default(0)
+  minQuantity Int      @default(1)
+  imagePath   String?
+  createdAt   DateTime @default(now())
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch         Branch?         @relation(fields: [branchId], references: [id])
+  saleItems      SaleItem[]
+  stockMovements StockMovement[]
+  transferItems  TransferItem[]
+  stocktakeItems StocktakeItem[]
+
+  @@index([tenantId])
+  @@index([tenantId, name])
+  @@index([tenantId, category])
+  @@index([branchId])
+}
+
+model Category {
+  id       Int    @id @default(autoincrement())
+  tenantId String
+  name     String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  tenantId  String
+  name      String
+  phone     String?
+  balance   Float    @default(0)
+  createdAt DateTime @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sales    Sale[]
+  payments Payment[]
+
+  @@index([tenantId])
+  @@index([tenantId, name])
+  @@index([tenantId, phone])
+}
+
+model Payment {
+  id         Int      @id @default(autoincrement())
+  tenantId   String
+  customerId Int
+  amount     Float
+  method     String   @default("cash")
+  note       String?
+  createdAt  DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, customerId])
+  @@index([tenantId, createdAt])
+}
+
+model Sale {
+  id         Int      @id @default(autoincrement())
+  tenantId   String
+  branchId   Int?
+  invoiceNo  String?
+  customerId Int?
+  total      Float    @default(0)
+  paid       Float    @default(0)
+  status     String   @default("مكتملة")
+  createdAt  DateTime @default(now())
+
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch   Branch?       @relation(fields: [branchId], references: [id])
+  customer Customer?     @relation(fields: [customerId], references: [id])
+  items    SaleItem[]
+  payments SalePayment[]
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@index([branchId])
+}
+
+model SaleItem {
+  id        Int    @id @default(autoincrement())
+  saleId    Int
+  productId Int
+  name      String
+  price     Float
+  quantity  Int
+  cost      Float  @default(0)
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model SalePayment {
+  id        Int      @id @default(autoincrement())
+  saleId    Int
+  amount    Float
+  note      String?
+  createdAt DateTime @default(now())
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+}
+
+model MaintenanceOrder {
+  id           Int       @id @default(autoincrement())
+  tenantId     String
+  customerName String
+  phone        String?
+  device       String
+  issue        String    @default("")
+  cost         Float     @default(0)
+  status       String    @default("مستلم")
+  receivedAt   DateTime  @default(now())
+  deliveredAt  DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, phone])
+  @@index([tenantId, customerName])
+}
+
+model Transaction {
+  id         Int      @id @default(autoincrement())
+  tenantId   String
+  method     String
+  kind       String
+  amount     Float
+  commission Float    @default(0)
+  note       String?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+}
+
+model CashEntry {
+  id        Int      @id @default(autoincrement())
+  tenantId  String
+  source    String
+  refId     Int?
+  amount    Float
+  note      String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+}
+
+model PlatformSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @default(now())
+}
+
+// ================= Inventory =================
+
+model StockMovement {
+  id        Int      @id @default(autoincrement())
+  tenantId  String
+  branchId  Int?
+  productId Int
+  type      String // in | out | adjust | sale | return | transfer_in | transfer_out | stocktake
+  quantity  Int // signed: + increases, - decreases
+  refType   String? // sale | transfer | stocktake | manual
+  refId     Int?
+  note      String?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch  Branch? @relation(fields: [branchId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@index([productId])
+  @@index([branchId])
+}
+
+model Transfer {
+  id           Int       @id @default(autoincrement())
+  tenantId     String
+  fromBranchId Int
+  toBranchId   Int
+  status       String    @default("pending") // pending | completed | cancelled
+  note         String?
+  createdBy    String?
+  createdAt    DateTime  @default(now())
+  completedAt  DateTime?
+
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  fromBranch Branch         @relation("TransferFrom", fields: [fromBranchId], references: [id])
+  toBranch   Branch         @relation("TransferTo", fields: [toBranchId], references: [id])
+  items      TransferItem[]
+
+  @@index([tenantId])
+  @@index([status])
+}
+
+model TransferItem {
+  id         Int @id @default(autoincrement())
+  transferId Int
+  productId  Int
+  quantity   Int
+
+  transfer Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@index([transferId])
+}
+
+model Stocktake {
+  id          Int       @id @default(autoincrement())
+  tenantId    String
+  branchId    Int?
+  status      String    @default("draft") // draft | committed
+  note        String?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  committedAt DateTime?
+
+  tenant Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch?         @relation(fields: [branchId], references: [id])
+  items  StocktakeItem[]
+
+  @@index([tenantId])
+}
+
+model StocktakeItem {
+  id          Int @id @default(autoincrement())
+  stocktakeId Int
+  productId   Int
+  systemQty   Int
+  countedQty  Int
+  diff        Int @default(0)
+
+  stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id])
+
+  @@index([stocktakeId])
+}

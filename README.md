@@ -1,130 +1,155 @@
-# Mobile Shop ERP — نظام إدارة محلات الهواتف المحمولة والصيانة
+# 🏪 نظام المحل - منصة SaaS لإدارة المحلات
 
-نظام ERP + POS متكامل لإدارة محلات الهواتف المحمولة وخدمات الصيانة. مبني كـ **SaaS Multi-Tenant** على Cloudflare Workers + Supabase.
+نظام متكامل لإدارة محلات الموبايل والإكسسوارات في السوق المصري — مبني بتقنية Next.js 16.
 
-## 🌟 المميزات
+## 🚀 المميزات الرئيسية
 
-- ✅ **SaaS Multi-Tenant** — كل متجر (tenant) معزول بالكامل عبر RLS
-- ✅ **Offline-First PWA** — قابل للتثبيت + يعمل بدون إنترنت + مزامنة تلقائية
-- ✅ **نقطة بيع (POS)** كاملة مع دفع متعدد وسلال تفاعلية
-- ✅ **إدارة الصيانة** مع تتبع الحالة + قطع الغيار + QR Code عام
-- ✅ **مخزون** مع 9 أنواع حركات + جرد + تحويل بين الفروع
-- ✅ **مالية** مع خزنة يومية + مصروفات + إيرادات + 5 وسائل دفع
-- ✅ **تقارير** مع رسوم بيانية (Recharts) + تصدير PDF
-- ✅ **فواتير** بـ 3 قوالب (A4 / 80mm / 58mm) + QR + Barcode
-- ✅ **RBAC** مع 6 أدوار + 85 صلاحية
-- ✅ **Realtime Sync** عبر Supabase Realtime + Background Sync API
+### للعملاء (أصحاب المحلات):
+- 📊 **لوحة معلومات متطورة**: 8 بطاقات KPI + رسوم بيانية + تنبيهات المخزون
+- 🛒 **نقطة بيع (POS)**: بيع سريع بالباركود، فواتير، طباعة
+- 📦 **إدارة المنتجات**: 8 حقول فقط، إنشاء تصنيف تلقائي عند الكتابة
+- 👥 **إدارة العملاء**: حسابات الآجل والدفعات، كشف حساب كامل
+- 🔧 **مركز الصيانة**: تتبع أجهزة الصيانة من الاستلام للتسليم
+- 💰 **الإدارة المالية**: خزنة + معاملات فودافون كاش/انستاباي/فوري مع حساب العمولات
+- 📊 **التقارير**: مبيعات، أرباح، أكثر المنتجات مبيعاً
 
-## 🏗️ التقنيات
+### للمنصة (Super Admin):
+- 📊 **لوحة معلومات شاملة**: MRR، ARPU، نمو الاشتراكات، تنبيهات الانتهاء
+- 🏪 **إدارة المحلات**: بحث/فلترة، إيقاف/تفعيل، دخول كمالك (Impersonation)
+- 🔔 **إدارة الاشتراكات**: تفعيل/تمديد/إيقاف
+- 📦 **خطط الاشتراك**: 4 باقات (تجريبي، احترافي، أعمال، مؤسسات)
+- 🎫 **أكواد التفعيل**: توليد بالجملة، تتبع الاستخدام
+- 💰 **التقارير المالية**: إيرادات يومية/شهرية/سنوية
 
-| الطبقة | التقنية |
-|---|---|
-| Frontend | React 18 + Vite 5 + TypeScript + Tailwind CSS + shadcn/ui |
-| State | Zustand + TanStack React Query |
-| Forms | React Hook Form + Zod |
-| Backend | Cloudflare Workers + Hono |
-| Database | Supabase (PostgreSQL + Auth + Storage + Realtime) |
-| PWA | vite-plugin-pwa + Workbox (Service Worker) |
-| Charts | Recharts |
-| PDF | jsPDF + html2canvas |
-| Monorepo | pnpm workspaces |
+### صفحة هبوط احترافية:
+- 11 قسم (Hero، مزايا، كيف يعمل، لقطات، أسعار، شهادات، FAQ، CTA، فوتر)
+- تسجيل ذاتي للزوار → تجربة مجانية 14 يوم تلقائياً
+- تصميم متجاوب بالكامل
+
+## 🔑 بيانات الدخول التجريبية
+
+### 👑 Super Admin (لإدارة المنصة):
+```
+البريد: super@admin.com
+كلمة المرور: super123
+```
+
+### 🏪 محل تجريبي (لاختبار واجهة المحل):
+```
+المدير:   admin@demo.com / admin123
+الموظف:   emp@demo.com  / emp123
+```
+
+## 📦 الباقات الافتراضية
+
+| الباقة | السعر الشهري | السعر السنوي | الحدود |
+|-------|--------------|--------------|--------|
+| تجريبي | مجاني | مجاني | 14 يوم، 50 منتج، مستخدم واحد |
+| احترافي | 99 ج.م | 1,090 ج.م | 500 منتج، 5 مستخدمين |
+| أعمال | 299 ج.م | 3,290 ج.م | 5000 منتج، 20 مستخدم، 3 فروع |
+| مؤسسات | 999 ج.م | 10,990 ج.م | غير محدود، 10 فروع |
+
+## 🛠️ التقنيات المستخدمة
+
+- **Frontend**: Next.js 16 + React 19 + TypeScript 5
+- **Styling**: Tailwind CSS 4 + shadcn/ui (48 مكون)
+- **Database**: Prisma ORM + SQLite
+- **Auth**: JWT + bcrypt + HTTP-only cookies
+- **Charts**: Recharts
+- **Animation**: Framer Motion
+- **Icons**: Lucide React
+- **Forms**: React Hook Form + Zod
+- **Font**: Cairo (عربي)
+
+## 📥 التثبيت والتشغيل
+
+### المتطلبات
+- Node.js 18+ أو Bun
+- npm / yarn / bun
+
+### الخطوات
+
+```bash
+# 1. فك الضغط
+unzip shop-saas-website.zip
+cd shop-saas-website
+
+# 2. تثبيت الحزم
+bun install  # أو npm install
+
+# 3. إنشاء قاعدة البيانات
+bun run db:push  # أو npx prisma db push
+
+# 4. تهيئة البيانات التجريبية (Plans + Super Admin + Demo Tenant)
+bun run scripts/seed.ts
+
+# 5. تشغيل خادم التطوير
+bun run dev  # أو npm run dev
+
+# 6. افتح المتصفح
+# http://localhost:3000
+```
+
+### تسجيل الدخول لأول مرة
+1. افتح الصفحة الرئيسية
+2. اضغط "تسجيل الدخول" في الهيدر
+3. استخدم: `super@admin.com` / `super123` للوصول للوحة الأدمن
+4. أو: `admin@demo.com` / `admin123` لتجربة واجهة المحل
 
 ## 📁 بنية المشروع
 
 ```
-mobile-shop-erp/
-├── apps/
-│   ├── web/              # React PWA (Vite)
-│   └── worker/           # Cloudflare Worker API (Hono)
-├── packages/
-│   ├── shared/           # Types + Zod schemas + RBAC + constants
-│   └── db/               # Supabase clients
-├── supabase/
-│   ├── migrations/       # 14 SQL migrations
-│   └── seed/             # SEED.sql (بيانات تجريبية)
-└── scripts/              # أدوات مساعدة
+├── prisma/
+│   └── schema.prisma          # 12 نموذج (Tenant, User, Product, Sale, etc.)
+├── src/
+│   ├── app/
+│   │   ├── page.tsx           # الصفحة الرئيسية (landing + auth + app)
+│   │   ├── layout.tsx         # RTL Arabic + Cairo font
+│   │   ├── globals.css        # ثيم أخضر + RTL
+│   │   └── api/               # 18+ API endpoints
+│   │       ├── admin/         # APIs خاصة بـ Super Admin
+│   │       ├── auth/          # login, signup, logout, me
+│   │       ├── plans/         # public + admin plans
+│   │       ├── products/
+│   │       ├── customers/
+│   │       ├── sales/
+│   │       ├── payments/      # دفعات العملاء (آجل)
+│   │       ├── maintenance/
+│   │       ├── finance/
+│   │       ├── cash/
+│   │       ├── dashboard/
+│   │       ├── reports/
+│   │       ├── tenant/
+│   │       ├── users/
+│   │       └── upload/
+│   ├── components/
+│   │   ├── admin/             # 7 مكونات لوحة الأدمن
+│   │   ├── shop/              # 14 مكون واجهة المحل
+│   │   ├── landing/           # 12 مكون صفحة الهبوط
+│   │   └── ui/                # 48 مكون shadcn
+│   └── lib/
+│       ├── auth.ts            # مصادقة الخادم (JWT + bcrypt)
+│       ├── auth-client.ts     # مصادقة العميل
+│       ├── db.ts              # Prisma client
+│       ├── format.ts          # تنسيق العملة والتاريخ
+│       └── store.ts           # Zustand store
+├── scripts/
+│   └── seed.ts                # بيانات تجريبية
+└── package.json
 ```
 
-## 🚀 التشغيل السريع
+## 🎯 كيف يعمل نظام الاشتراكات
 
-```bash
-# 1. تثبيت
-pnpm install
+1. **التسجيل الذاتي**: الزائر يفتح الموقع → يضغط "ابدأ مجاناً" → يملأ النموذج → ينشأ له حساب + اشتراك تجريبي 14 يوم تلقائياً
+2. **الوصول**: يمكنه استخدام كل المزايا خلال فترة التجربة
+3. **الانتهاء**: عند انتهاء 14 يوم، يُحظر الدخول تلقائياً (HTTP 402)
+4. **التفعيل بكود**: العميل يُدخل كود تفعيل (يولده الأدمن) لتفعيل اشتراك مدفوع
+5. **إدارة الأدمن**: Super Admin يرى كل المحلات، يقدر يفعّل/يوقف/يحذف، يدخل كمالك لأي محل
 
-# 2. تشغيل Supabase محلياً (يتطلب Docker)
-supabase start
-supabase db reset    # يطبّق migrations + seed
+## 📞 الدعم
 
-# 3. إعداد البيئة
-cp apps/worker/.dev.vars.example apps/worker/.dev.vars
-cp apps/web/.env.example apps/web/.env
-# املأ القيم من: supabase status
+للاستفسارات أو الدعم الفني، تواصل مع فريق المنصة.
 
-# 4. توليد الأيقونات
-python3 scripts/generate-icons.py
+---
 
-# 5. تشغيل
-pnpm dev    # web على :5173 + worker على :8787
-```
-
-## 🚀 النشر على Cloudflare Workers (الكل في واحد)
-
-المشروع كله (Frontend + Backend) ينشر على **Worker واحد**:
-
-```bash
-# 1. بناء الـ Frontend
-cd apps/worker
-pnpm build:web    # يبني React PWA → apps/web/dist
-
-# 2. ضبط الأسرار
-npx wrangler secret put SUPABASE_URL
-npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-npx wrangler secret put JWT_SECRET
-
-# 3. النشر (يبني web + ينشر worker)
-npx wrangler deploy
-```
-
-رابط واحد يخدم كل حاجة: `https://your-worker.workers.dev`
-- `/api/v1/*` → API endpoints
-- أي مسار آخر → React PWA (مع SPA fallback)
-
-## 🔑 بيانات الدخول الافتراضية
-
-| المستخدم | كلمة المرور | الدور |
-|---|---|---|
-| `super_admin` | `Admin@123` | مدير عام |
-| `admin` | `Admin@123` | مدير المتجر |
-
-## 📚 الوثائق
-
-- [DEPLOYMENT.md](./DEPLOYMENT.md) — دليل النشر على Cloudflare + Supabase
-- [ENVIRONMENT.md](./ENVIRONMENT.md) — متغيرات البيئة المطلوبة
-
-## 📋 المراحل المنفذة
-
-| # | المرحلة | الحالة |
-|---|---|---|
-| 0 | Foundation & Setup | ✅ |
-| 1 | Auth & RBAC | ✅ |
-| 2 | Settings & Branches | ✅ |
-| 3 | Catalog (Products + Categories + Devices) | ✅ |
-| 4 | Inventory | ✅ |
-| 5 | Customers & Suppliers | ✅ |
-| 6 | Sales (POS) | ✅ |
-| 7 | Invoices & PDF & QR/Barcode | ✅ |
-| 8 | Returns | ✅ |
-| 9 | Repairs (الصيانة) | ✅ |
-| 10 | Finance | ✅ |
-| 11 | Reports | ✅ |
-| 12 | Employees & HR | ✅ |
-| 13 | Backup & Restore | ✅ |
-| 14 | Audit Logs & Notifications | ✅ |
-| 15 | PWA Finalization | ✅ |
-| 16 | Testing & Polish | ✅ |
-| 17 | Sync Layer (Cloud Realtime) | ✅ |
-| SaaS | Multi-Tenant Transformation | ✅ |
-
-## 📄 الترخيص
-
-UNLICENSED — All rights reserved.
+**صُنع بحب في مصر 🇪🇬** © 2026 نظام المحل

@@ -1,5 +1,0 @@
-/** @type {import('lint-staged').Configuration} */
-module.exports = {
-  '*.{ts,tsx,js,jsx}': ['eslint --fix', 'prettier --write'],
-  '*.{json,md,yml,yaml,css,scss}': ['prettier --write'],
-};
