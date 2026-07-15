@@ -24,6 +24,24 @@ function createPrismaClient() {
   return new PrismaClient({ adapter })
 }
 
-export const db = globalForPrisma.prisma ?? createPrismaClient()
+// IMPORTANT: don't instantiate PrismaClient at module load time.
+// Next.js imports route modules during the build (page-data collection)
+// step even for routes marked `force-dynamic`, and Cloudflare Workers'
+// build environment does not expose runtime secrets/vars. Creating the
+// client eagerly here throws "DATABASE_URL is not set" during `next build`.
+// Instead we lazily create it on first actual use (i.e. at request time),
+// via a Proxy so all 42+ existing `import { db } from '@/lib/db'` call
+// sites keep working unchanged.
+function getPrismaClient(): PrismaClient {
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = createPrismaClient()
+  }
+  return globalForPrisma.prisma
+}
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+export const db = new Proxy({} as PrismaClient, {
+  get(_target, prop, receiver) {
+    const client = getPrismaClient()
+    return Reflect.get(client as object, prop, receiver)
+  },
+})
