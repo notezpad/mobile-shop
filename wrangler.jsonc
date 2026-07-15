@@ -1,7 +1,10 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "shop-saas",
+  "name": "mobileshop",
   "main": ".open-next/worker.js",
+  // Prevents `wrangler deploy`/CI builds from wiping out env vars & secrets
+  // added manually via the Cloudflare dashboard (like DATABASE_URL here).
+  "keep_vars": true,
   "compatibility_date": "2025-01-01",
   "compatibility_flags": [
     // Required: gives Prisma's pg adapter access to Node APIs (Buffer, net, etc.)
