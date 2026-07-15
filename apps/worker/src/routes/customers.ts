@@ -5,9 +5,11 @@ import {
   type Customer,
   type PaginatedResult,
   type CustomerTransaction,
+  type CustomerPayment,
   createCustomerSchema,
   updateCustomerSchema,
   adjustCustomerBalanceSchema,
+  recordCustomerPaymentSchema,
   customerQuerySchema,
 } from '@mobile-shop/shared';
 import type { AppContext } from '../types/env';
@@ -21,6 +23,7 @@ import {
   getCustomerStats,
   getTransactionHistory,
   listCustomers,
+  recordCustomerPayment,
   updateCustomer,
 } from '../services/customer.service';
 
@@ -130,6 +133,28 @@ customerRoutes.post(
 
     const response: ApiResponse<Customer> = { success: true, data: customer };
     return c.json(response, 200);
+  },
+);
+
+// ─── POST /customers/:id/payments ──────────────────────────────────
+// Record a customer payment (installment / settlement on running balance).
+// Reduces customer.balance + adds to cashbox if cash-based method.
+customerRoutes.post(
+  '/:id/payments',
+  requirePermission('customers.edit'),
+  zValidator('json', recordCustomerPaymentSchema),
+  async (c) => {
+    const id = c.req.param('id');
+    const input = c.req.valid('json');
+    const actor = requireUser(c);
+    const supabase = getReqSupabase(c);
+    const result = await recordCustomerPayment(supabase, id, input, actor);
+
+    const response: ApiResponse<{ payment: CustomerPayment; customer: Customer }> = {
+      success: true,
+      data: result,
+    };
+    return c.json(response, 201);
   },
 );
 

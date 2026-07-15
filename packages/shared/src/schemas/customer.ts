@@ -27,6 +27,23 @@ export const adjustCustomerBalanceSchema = z.object({
 
 export type AdjustCustomerBalanceInput = z.infer<typeof adjustCustomerBalanceSchema>;
 
+/** Record a customer payment (installment / settlement on running balance). */
+export const recordCustomerPaymentSchema = z.object({
+  amount: z.coerce.number().positive('المبلغ يجب أن يكون أكبر من صفر'),
+  paymentMethod: z.enum([
+    'cash',
+    'card',
+    'vodafone_cash',
+    'instapay',
+    'fawry',
+  ]).default('cash'),
+  reference: z.string().max(200).nullable().optional(),
+  paidAt: z.string().datetime().optional(), // defaults to now() server-side
+  notes: z.string().max(1000).nullable().optional(),
+});
+
+export type RecordCustomerPaymentInput = z.infer<typeof recordCustomerPaymentSchema>;
+
 export const customerQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
@@ -39,7 +56,7 @@ export const customerQuerySchema = z.object({
 
 export type CustomerQuery = z.infer<typeof customerQuerySchema>;
 
-/** Customer transaction entry — derived from sales, repairs, returns, manual adjustments. */
+/** Customer transaction entry — derived from sales, repairs, returns, payments, adjustments. */
 export interface CustomerTransaction {
   id: string;
   customer_id: string;
@@ -51,4 +68,20 @@ export interface CustomerTransaction {
   balance_after: number;
   created_at: string;
   ref_number?: string | null;
+}
+
+/** Customer payment record (one row per installment / settlement). */
+export interface CustomerPayment {
+  id: string;
+  customer_id: string;
+  branch_id: string;
+  user_id: string;
+  cashbox_id: string | null;
+  amount: number;
+  payment_method: string;
+  reference: string | null;
+  paid_at: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 }

@@ -208,7 +208,24 @@ export default function POSPage() {
       setShowCheckout(false);
       navigate(`/sales/${sale.id}`);
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => {
+      // Provide a friendly, actionable message for common sale-creation
+      // failures. The api-client already wraps network/abort errors, but
+      // we add an extra layer here for business-rule violations that the
+      // worker may surface with terse English messages.
+      const msg = err.message || '';
+      let friendly = msg;
+      if (/aborted|AbortError|تم إلغاء/i.test(msg)) {
+        friendly = 'انقطع الاتصال بالخادم أثناء إتمام البيع. تحقق من الفاتورة في قائمة المبيعات — لو لم تظهر، حاول مرة أخرى.';
+      } else if (/insufficient|غير كافٍ|المخزون/i.test(msg)) {
+        friendly = `المخزون غير كافٍ لإتمام البيع. ${msg}`;
+      } else if (/device|الجهاز|IMEI/i.test(msg)) {
+        friendly = `مشكلة في الجهاز: ${msg}`;
+      } else if (/Network|فشل الاتصال|SERVICE_UNAVAILABLE/i.test(msg)) {
+        friendly = 'فشل الاتصال بالخادم. تحقق من الإنترنت وحاول مرة أخرى.';
+      }
+      toast.error(friendly);
+    },
   });
 
   // Quick add product mutation

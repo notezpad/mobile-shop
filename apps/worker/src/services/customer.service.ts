@@ -19,12 +19,17 @@ import {
   type CustomerQuery,
   type CustomerTransaction,
   type AdjustCustomerBalanceInput,
+  type RecordCustomerPaymentInput,
+  type CustomerPayment,
 } from '@mobile-shop/shared';
 import type { LooseSupabaseClient } from '../lib/supabase';
 import { writeAuditLog } from './audit.service';
+import { getCurrentCashbox } from './finance.service';
 import type { AccessTokenUser } from './auth.service';
 
 const TABLE = 'customers';
+const PAYMENT_TABLE = 'customer_payments';
+const CASHBOX_TXN_TABLE = 'cashbox_transactions';
 
 /** List customers with filters + pagination. */
 export async function listCustomers(
@@ -302,7 +307,7 @@ export async function adjustBalance(
   return updated as Customer;
 }
 
-/** Get customer transaction history (derived from sales, returns, repairs, adjustments). */
+/** Get customer transaction history (derived from sales, returns, repairs, payments, adjustments). */
 export async function getTransactionHistory(
   supabase: LooseSupabaseClient,
   customerId: string,
@@ -312,7 +317,7 @@ export async function getTransactionHistory(
   const pageSize = options.pageSize ?? 20;
   const offset = (page - 1) * pageSize;
 
-  // Use the v_customer_transactions view (migration 0006).
+  // Use the v_customer_transactions view (migration 0006 + 0017).
   const { data, error, count } = await supabase
     .from('v_customer_transactions')
     .select('*', { count: 'exact' })
@@ -330,6 +335,155 @@ export async function getTransactionHistory(
     page,
     pageSize,
     totalPages: Math.ceil(total / pageSize) || 1,
+  };
+}
+
+/**
+ * Record a customer payment — the core "running tab" operation.
+ *
+ * Flow:
+ *  1. Validate customer exists + is active.
+ *  2. Validate amount > 0.
+ *  3. Find the actor's open cashbox (for the actor's branch).
+ *  4. Insert a row in `customer_payments`.
+ *  5. Reduce customer.balance by amount (balance can go negative = credit).
+ *  6. If payment method is cash-based (cash, vodafone_cash, instapay, fawry),
+ *     insert a row in `cashbox_transactions` (type: 'in') so the money
+ *     shows up in the cashbox + reports.
+ *  7. Audit log.
+ *
+ * Returns the inserted payment row + updated customer.
+ */
+export async function recordCustomerPayment(
+  supabase: LooseSupabaseClient,
+  customerId: string,
+  input: RecordCustomerPaymentInput,
+  actor: AccessTokenUser,
+): Promise<{ payment: CustomerPayment; customer: Customer }> {
+  // ─── 1. Validate customer ──────────────────────────────────────────
+  const customer = await getCustomer(supabase, customerId);
+  if (!customer.is_active) {
+    throw new AppError(ERROR_CODES.BUSINESS_RULE_VIOLATION, 'العميل موقوف — لا يمكن تسجيل دفعات له');
+  }
+  if (input.amount <= 0) {
+    throw new AppError(ERROR_CODES.VALIDATION_ERROR, 'مبلغ الدفعة يجب أن يكون أكبر من صفر');
+  }
+
+  // Determine the branch — prefer the actor's branch.
+  const branchId = actor.branchId;
+  if (!branchId) {
+    throw new AppError(ERROR_CODES.BUSINESS_RULE_VIOLATION, 'حسابك غير مرتبط بفرع — لا يمكن تسجيل الدفعة');
+  }
+
+  // ─── 2. Find the actor's open cashbox ──────────────────────────────
+  // We link the payment to the cashbox even if the payment method is not
+  // cash — that way the audit trail is complete. Money is only added to
+  // the cashbox balance for cash-equivalent methods.
+  const cashbox = await getCurrentCashbox(supabase, actor.id);
+
+  const now = new Date().toISOString();
+  const paymentId = crypto.randomUUID();
+  const paidAt = input.paidAt ?? now;
+
+  // ─── 3. Insert customer_payments row ───────────────────────────────
+  const { data: paymentRow, error: payErr } = await supabase
+    .from(PAYMENT_TABLE)
+    .insert({
+      id: paymentId,
+      customer_id: customerId,
+      branch_id: branchId,
+      user_id: actor.id,
+      cashbox_id: cashbox?.id ?? null,
+      amount: input.amount,
+      payment_method: input.paymentMethod,
+      reference: input.reference ?? null,
+      paid_at: paidAt,
+      notes: input.notes ?? null,
+      tenant_id: actor.tenantId,
+      created_at: now,
+      updated_at: now,
+      created_by: actor.id,
+      updated_by: actor.id,
+      revision: 1,
+      sync_status: 'synced',
+    })
+    .select('*')
+    .single();
+
+  if (payErr) {
+    throw new AppError(ERROR_CODES.INTERNAL_ERROR, `فشل تسجيل الدفعة: ${payErr.message}`);
+  }
+
+  // ─── 4. Reduce customer balance ────────────────────────────────────
+  // balance can go negative — that means we owe the customer (advance payment).
+  const newBalance = customer.balance - input.amount;
+  const { data: updatedCustomer, error: custErr } = await supabase
+    .from(TABLE)
+    .update({
+      balance: newBalance,
+      updated_at: now,
+      updated_by: actor.id,
+    })
+    .eq('id', customerId)
+    .select('*')
+    .single();
+
+  if (custErr) {
+    throw new AppError(ERROR_CODES.INTERNAL_ERROR, `فشل تحديث رصيد العميل: ${custErr.message}`);
+  }
+
+  // ─── 5. Add to cashbox if cash-based method ────────────────────────
+  // cash, vodafone_cash, instapay, fawry all represent real money received
+  // — they should be reflected in the cashbox balance + reports.
+  // 'card' is excluded because card payments go to the bank, not the cashbox.
+  const cashBasedMethods = ['cash', 'vodafone_cash', 'instapay', 'fawry'];
+  if (cashbox && cashBasedMethods.includes(input.paymentMethod)) {
+    const customerName = customer.name;
+    const reason = `دفعة من ${customerName}${input.reference ? ` — ${input.reference}` : ''}`;
+
+    const { error: cbErr } = await supabase.from(CASHBOX_TXN_TABLE).insert({
+      id: crypto.randomUUID(),
+      cashbox_id: cashbox.id,
+      type: 'in',
+      amount: input.amount,
+      payment_method: input.paymentMethod,
+      reason,
+      ref_type: 'customer_payment',
+      ref_id: paymentId,
+      user_id: actor.id,
+      created_at: now,
+      updated_at: now,
+      deleted_at: null,
+      revision: 1,
+      sync_status: 'synced',
+    });
+
+    if (cbErr) {
+      // Non-fatal — the payment itself succeeded. Log + continue.
+      console.warn('Failed to record cashbox transaction for customer payment:', cbErr.message);
+    }
+  }
+
+  // ─── 6. Audit log ──────────────────────────────────────────────────
+  await writeAuditLog(supabase, {
+    userId: actor.id,
+    action: 'create',
+    entity: PAYMENT_TABLE,
+    entityId: paymentId,
+    after: {
+      customerId,
+      customerName: customer.name,
+      amount: input.amount,
+      method: input.paymentMethod,
+      reference: input.reference ?? null,
+      balanceBefore: customer.balance,
+      balanceAfter: newBalance,
+    },
+  });
+
+  return {
+    payment: paymentRow as unknown as CustomerPayment,
+    customer: updatedCustomer as Customer,
   };
 }
 

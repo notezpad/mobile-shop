@@ -6,9 +6,11 @@ import type {
   Customer,
   PaginatedResult,
   CustomerTransaction,
+  CustomerPayment,
   CreateCustomerInput,
   UpdateCustomerInput,
   AdjustCustomerBalanceInput,
+  RecordCustomerPaymentInput,
   CustomerQuery,
 } from '@mobile-shop/shared';
 
@@ -62,6 +64,17 @@ export const customersApi = {
 
   adjustBalance(id: string, input: AdjustCustomerBalanceInput): Promise<Customer> {
     return api.post(`/customers/${id}/adjust-balance`, input);
+  },
+
+  /**
+   * Record a customer payment — reduces balance + adds to cashbox.
+   * Used for "running tab" / installment scenarios.
+   */
+  recordPayment(
+    id: string,
+    input: RecordCustomerPaymentInput,
+  ): Promise<{ payment: CustomerPayment; customer: Customer }> {
+    return api.post(`/customers/${id}/payments`, input);
   },
 
   delete(id: string): Promise<null> {
