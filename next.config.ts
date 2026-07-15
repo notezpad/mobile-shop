@@ -6,6 +6,20 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  // These packages ship workerd-specific code paths (conditional "exports"
+  // in their package.json). Next.js's default bundler (esbuild, via
+  // OpenNext) doesn't resolve those correctly and fails with
+  // `Could not resolve "pg-cloudflare"`. Marking them external tells
+  // Next.js to leave them as real require()/import calls resolved at
+  // runtime by the Workers runtime instead of trying to bundle them.
+  // See: https://opennext.js.org/cloudflare/howtos/workerd
+  serverExternalPackages: [
+    "@prisma/client",
+    ".prisma/client",
+    "@prisma/adapter-pg",
+    "pg",
+    "pg-cloudflare",
+  ],
 };
 
 export default nextConfig;
