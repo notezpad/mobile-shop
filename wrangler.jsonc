@@ -20,7 +20,7 @@
     // CRITICAL: without this, process.env stays EMPTY even though secrets
     // are set correctly in the dashboard — this flag is what actually
     // copies Worker vars/secrets into process.env at runtime. It's on by
-    // default only for compatibility_date >= 2025-04-01, and ours is
+    // default only for compatibility_date >= 2025-04-01, and our is
     // 2025-01-01, so it must be listed explicitly here.
     "nodejs_compat_populate_process_env"
   ],
