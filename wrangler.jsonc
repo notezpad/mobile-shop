@@ -28,7 +28,7 @@
   // Environment variables that are NOT secret can go here.
   // Put DATABASE_URL, DIRECT_URL and JWT_SECRET in Cloudflare secrets instead:
   //   wrangler secret put DATABASE_URL
-  //   wrangler secret put DIRECT_URL
+  //   wrangler secret put postgresql://postgres.sfkelvztwtsyjcruurrc:[YOUR-PASSWORD]@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true 
   //   wrangler secret put JWT_SECRET
   "vars": {
     "NODE_ENV": "production"
