@@ -426,6 +426,19 @@ export default function Home() {
     }
   }, [setUser, setShopName])
 
+  // The logout button clears `user` in the store directly (see store.ts's
+  // `logout` action) without going through this component. Without this
+  // effect, `bootState` stayed 'authed' forever after logging out, so the
+  // app kept rendering MainApp/SuperAdminApp with a null user instead of
+  // returning to the landing/login page — the "logout button doesn't work"
+  // bug. This effect brings bootState back in sync whenever the user is
+  // cleared.
+  React.useEffect(() => {
+    if (!user && bootState === 'authed') {
+      setBootState('guest')
+    }
+  }, [user, bootState])
+
   const handleAuthed = async (u: AuthUser, name?: string) => {
     setUser(u)
     if (u.role === 'SUPER_ADMIN') {
