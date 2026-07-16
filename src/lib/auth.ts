@@ -1,34 +1,19 @@
 import bcrypt from 'bcryptjs'
 import { cookies } from 'next/headers'
 import { SignJWT, jwtVerify } from 'jose'
-import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { db } from './db'
-
-// Read secrets lazily. On Cloudflare Workers, process.env may not carry
-// runtime bindings even with nodejs_compat_populate_process_env, so we
-// prefer the OpenNext Cloudflare context (bindings) and fall back to
-// process.env for local dev.
-function readEnv(name: string): string | undefined {
-  try {
-    const ctx = getCloudflareContext()
-    const v = (ctx?.env as Record<string, unknown> | undefined)?.[name]
-    if (typeof v === 'string' && v.length > 0) return v
-  } catch {
-    // outside a request scope — fall through
-  }
-  const p = (globalThis as { process?: { env?: Record<string, string | undefined> } })
-    .process?.env?.[name]
-  if (typeof p === 'string' && p.length > 0) return p
-  return undefined
-}
+import { isProductionRuntime, readEnv } from './env'
 
 function getJwtSecret(): Uint8Array {
-  const s = readEnv('JWT_SECRET') || 'dev-secret-change-in-production'
-  return new TextEncoder().encode(s)
-}
+  const secret = readEnv('JWT_SECRET')
 
-function isProduction(): boolean {
-  return (readEnv('NODE_ENV') || 'development') === 'production'
+  if (!secret && isProductionRuntime()) {
+    throw new Error(
+      'JWT_SECRET is not reachable at runtime. Add JWT_SECRET as a Cloudflare Worker runtime secret/variable, then redeploy with --keep-vars.',
+    )
+  }
+
+  return new TextEncoder().encode(secret || 'dev-secret-change-in-production')
 }
 
 const PLATFORM_TENANT_ID = 'platform-tenant'
@@ -72,7 +57,7 @@ export async function createSession(user: {
   const cookieStore = await cookies()
   cookieStore.set('shop_session', token, {
     httpOnly: true,
-    secure: isProduction(),
+    secure: isProductionRuntime(),
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7, // 7 days
     path: '/',
@@ -239,7 +224,7 @@ export async function startImpersonation(tenantId: string) {
   const cookieStore = await cookies()
   cookieStore.set('impersonate_tenant', tenantId, {
     httpOnly: true,
-    secure: isProduction(),
+    secure: isProductionRuntime(),
     sameSite: 'lax',
     maxAge: 60 * 60 * 4, // 4 hours
     path: '/',
