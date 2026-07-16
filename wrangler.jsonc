@@ -2,6 +2,12 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mobileshop",
   "main": ".open-next/worker.js",
+  // Fixes "Uncaught ReferenceError: __name is not defined" in the browser.
+  // Wrangler's esbuild step enables `keepNames` by default; next-themes
+  // injects an inline <script> into the page that gets keepNames-wrapped,
+  // and the __name() helper it calls isn't defined in that inline-script
+  // scope. See: https://opennext.js.org/cloudflare/howtos/keep_names
+  "keep_names": false,
   // Prevents `wrangler deploy`/CI builds from wiping out env vars & secrets
   // added manually via the Cloudflare dashboard (like DATABASE_URL here).
   "keep_vars": true,
