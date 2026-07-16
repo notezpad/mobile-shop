@@ -156,17 +156,17 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
         </CardHeader>
         <CardContent className="p-0">
           <div className="max-h-[60vh] overflow-auto">
-            <Table>
+            <Table fixed>
               <TableHeader className="sticky top-0 bg-muted/50 backdrop-blur">
                 <TableRow>
                   <TableHead>الصنف</TableHead>
-                  <TableHead>الباركود</TableHead>
-                  <TableHead>الفرع</TableHead>
-                  <TableHead className="text-center">الكمية</TableHead>
-                  <TableHead className="text-center">الحد الأدنى</TableHead>
-                  <TableHead>التكلفة</TableHead>
-                  <TableHead>البيع</TableHead>
-                  <TableHead className="text-center">حركة</TableHead>
+                  <TableHead className="w-36">الباركود</TableHead>
+                  <TableHead className="w-28">الفرع</TableHead>
+                  <TableHead className="w-20 text-center">الكمية</TableHead>
+                  <TableHead className="w-24 text-center">الحد الأدنى</TableHead>
+                  <TableHead className="w-28 text-center">التكلفة</TableHead>
+                  <TableHead className="w-28 text-center">البيع</TableHead>
+                  <TableHead className="w-24 text-center">حركة</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -202,8 +202,8 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                           )}
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground">{p.minQuantity}</TableCell>
-                        <TableCell className="text-muted-foreground">{formatCurrency(p.cost)}</TableCell>
-                        <TableCell className="font-medium">{formatCurrency(p.price)}</TableCell>
+                        <TableCell className="text-muted-foreground text-center">{formatCurrency(p.cost)}</TableCell>
+                        <TableCell className="text-center font-medium">{formatCurrency(p.price)}</TableCell>
                         <TableCell>
                           <div className="flex justify-center gap-1">
                             <Button

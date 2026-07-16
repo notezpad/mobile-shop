@@ -227,15 +227,15 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId, on
         </CardHeader>
         <CardContent className="p-0">
           <div className="max-h-[60vh] overflow-auto">
-            <Table>
+            <Table fixed>
               <TableHeader className="sticky top-0 bg-muted/50 backdrop-blur">
                 <TableRow>
-                  <TableHead>التاريخ</TableHead>
+                  <TableHead className="w-40">التاريخ</TableHead>
                   <TableHead>الصنف</TableHead>
-                  <TableHead>الفرع</TableHead>
-                  <TableHead>النوع</TableHead>
-                  <TableHead className="text-center">الكمية</TableHead>
-                  <TableHead>الملاحظة</TableHead>
+                  <TableHead className="w-32">الفرع</TableHead>
+                  <TableHead className="w-32">النوع</TableHead>
+                  <TableHead className="w-24 text-center">الكمية</TableHead>
+                  <TableHead className="w-48">الملاحظة</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

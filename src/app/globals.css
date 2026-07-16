@@ -137,8 +137,9 @@
 }
 
 /* Replace shadcn's hardcoded `text-left` on <th> with `text-start` so the
- * header text aligns to the right in RTL contexts. */
-[dir="rtl"] th {
+ * header text aligns to the right in RTL contexts. We use :not() so we don't
+ * override explicit `text-center` / `text-right` classes set by the caller. */
+[dir="rtl"] th:not([class*="text-center"]):not([class*="text-right"]) {
   text-align: start;
 }
 

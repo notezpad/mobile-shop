@@ -234,15 +234,15 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
           {items.length > 0 ? (
             <>
               <div className="rounded-lg border">
-                <Table>
+                <Table fixed>
                   <TableHeader className="bg-muted/50">
                     <TableRow>
                       <TableHead>الصنف</TableHead>
-                      <TableHead>الباركود</TableHead>
-                      <TableHead className="text-center">حسب النظام</TableHead>
-                      <TableHead className="text-center">العد الفعلي</TableHead>
-                      <TableHead className="text-center">الفرق</TableHead>
-                      <TableHead className="w-12"></TableHead>
+                      <TableHead className="w-36">الباركود</TableHead>
+                      <TableHead className="w-28 text-center">حسب النظام</TableHead>
+                      <TableHead className="w-32 text-center">العد الفعلي</TableHead>
+                      <TableHead className="w-20 text-center">الفرق</TableHead>
+                      <TableHead className="w-16"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -360,16 +360,16 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
         </CardHeader>
         <CardContent className="p-0">
           <div className="max-h-[60vh] overflow-auto">
-            <Table>
+            <Table fixed>
               <TableHeader className="sticky top-0 bg-muted/50 backdrop-blur">
                 <TableRow>
-                  <TableHead className="w-12">#</TableHead>
-                  <TableHead>الفرع</TableHead>
-                  <TableHead className="text-center">الأصناف</TableHead>
-                  <TableHead className="text-center">الفرق</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead>التاريخ</TableHead>
-                  <TableHead className="w-12"></TableHead>
+                  <TableHead className="w-16 text-center">#</TableHead>
+                  <TableHead className="w-40">الفرع</TableHead>
+                  <TableHead className="w-24 text-center">الأصناف</TableHead>
+                  <TableHead className="w-24 text-center">الفرق</TableHead>
+                  <TableHead className="w-28 text-center">الحالة</TableHead>
+                  <TableHead className="w-40">التاريخ</TableHead>
+                  <TableHead className="w-16 text-center"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -385,7 +385,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                     const totalD = st.items.reduce((s, i) => s + i.diff, 0)
                     return (
                       <TableRow key={st.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setViewing(st)}>
-                        <TableCell className="font-mono text-xs">#{st.id}</TableCell>
+                        <TableCell className="text-center font-mono text-xs">#{st.id}</TableCell>
                         <TableCell className="font-medium">{st.branch?.name ?? 'كل الفروع'}</TableCell>
                         <TableCell className="text-center">{st.items.length}</TableCell>
                         <TableCell className="text-center">
@@ -393,19 +393,19 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                             {totalD > 0 ? '+' : ''}{totalD}
                           </span>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           {st.status === 'committed' ? (
                             <Badge className="bg-emerald-100 text-emerald-800">معتمد</Badge>
                           ) : (
                             <Badge className="bg-amber-100 text-amber-800">مسودة</Badge>
                           )}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground" dir="ltr">
+                        <TableCell className="whitespace-nowrap text-center text-xs text-muted-foreground" dir="ltr">
                           {formatDate(st.committedAt ?? st.createdAt)}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           <Button size="sm" variant="ghost" className="size-8 p-0">
-                            <Eye className="size-3.5" />
+                            <Eye className="mx-auto size-3.5" />
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -492,14 +492,14 @@ function StocktakeDetailDialog({
           </div>
 
           <div className="max-h-[50vh] overflow-auto rounded-lg border">
-            <Table>
+            <Table fixed>
               <TableHeader className="sticky top-0 bg-muted/50">
                 <TableRow>
                   <TableHead>الصنف</TableHead>
-                  <TableHead>الباركود</TableHead>
-                  <TableHead className="text-center">النظام</TableHead>
-                  <TableHead className="text-center">العد</TableHead>
-                  <TableHead className="text-center">الفرق</TableHead>
+                  <TableHead className="w-36">الباركود</TableHead>
+                  <TableHead className="w-24 text-center">النظام</TableHead>
+                  <TableHead className="w-24 text-center">العد</TableHead>
+                  <TableHead className="w-24 text-center">الفرق</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

@@ -337,15 +337,15 @@ export function BranchesView() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-auto">
-                <Table>
+                <Table fixed>
                   <TableHeader>
                     <TableRow>
                       <TableHead>الفرع</TableHead>
-                      <TableHead className="text-center">عدد الفواتير</TableHead>
-                      <TableHead>إجمالي المبيعات</TableHead>
-                      <TableHead>الأرباح</TableHead>
-                      <TableHead className="text-center">عدد المنتجات</TableHead>
-                      <TableHead>متوسط الفاتورة</TableHead>
+                      <TableHead className="w-32 text-center">عدد الفواتير</TableHead>
+                      <TableHead className="w-40 text-center">إجمالي المبيعات</TableHead>
+                      <TableHead className="w-36 text-center">الأرباح</TableHead>
+                      <TableHead className="w-28 text-center">عدد المنتجات</TableHead>
+                      <TableHead className="w-36 text-center">متوسط الفاتورة</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -373,12 +373,12 @@ export function BranchesView() {
                               </div>
                             </TableCell>
                             <TableCell className="text-center">{r.salesCount}</TableCell>
-                            <TableCell className="font-medium">{formatCurrency(r.totalSales)}</TableCell>
-                            <TableCell className="font-medium text-emerald-600 dark:text-emerald-400">
+                            <TableCell className="text-center font-medium">{formatCurrency(r.totalSales)}</TableCell>
+                            <TableCell className="text-center font-medium text-emerald-600 dark:text-emerald-400">
                               {formatCurrency(r.totalProfit)}
                             </TableCell>
                             <TableCell className="text-center">{r.productCount}</TableCell>
-                            <TableCell className="text-muted-foreground">{formatCurrency(avg)}</TableCell>
+                            <TableCell className="text-center text-muted-foreground">{formatCurrency(avg)}</TableCell>
                           </TableRow>
                         )
                       })
@@ -389,8 +389,8 @@ export function BranchesView() {
                       <TableRow>
                         <TableCell className="font-bold">الإجمالي</TableCell>
                         <TableCell className="text-center font-bold">{totals.count}</TableCell>
-                        <TableCell className="font-bold">{formatCurrency(totals.sales)}</TableCell>
-                        <TableCell className="font-bold text-emerald-600 dark:text-emerald-400">
+                        <TableCell className="text-center font-bold">{formatCurrency(totals.sales)}</TableCell>
+                        <TableCell className="text-center font-bold text-emerald-600 dark:text-emerald-400">
                           {formatCurrency(totals.profit)}
                         </TableCell>
                         <TableCell className="text-center font-bold">{totals.products}</TableCell>

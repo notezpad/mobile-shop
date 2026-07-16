@@ -243,13 +243,13 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
           {/* Items table */}
           {items.length > 0 && (
             <div className="rounded-lg border">
-              <Table>
+              <Table fixed>
                 <TableHeader>
                   <TableRow>
                     <TableHead>الصنف</TableHead>
-                    <TableHead className="text-center">المتاح</TableHead>
-                    <TableHead className="text-center">الكمية المحوّلة</TableHead>
-                    <TableHead className="w-12"></TableHead>
+                    <TableHead className="w-28 text-center">المتاح</TableHead>
+                    <TableHead className="w-44 text-center">الكمية المحوّلة</TableHead>
+                    <TableHead className="w-16"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -333,17 +333,17 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
         </CardHeader>
         <CardContent className="p-0">
           <div className="max-h-[60vh] overflow-auto">
-            <Table>
+            <Table fixed>
               <TableHeader className="sticky top-0 bg-muted/50 backdrop-blur">
                 <TableRow>
-                  <TableHead className="w-12">#</TableHead>
-                  <TableHead>من</TableHead>
-                  <TableHead className="w-8"></TableHead>
-                  <TableHead>إلى</TableHead>
+                  <TableHead className="w-16 text-center">#</TableHead>
+                  <TableHead className="w-40">من</TableHead>
+                  <TableHead className="w-12 text-center"></TableHead>
+                  <TableHead className="w-40">إلى</TableHead>
                   <TableHead>الأصناف</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead>التاريخ</TableHead>
-                  <TableHead className="w-12"></TableHead>
+                  <TableHead className="w-28 text-center">الحالة</TableHead>
+                  <TableHead className="w-40">التاريخ</TableHead>
+                  <TableHead className="w-16 text-center"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -359,16 +359,16 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
                     const totalQty = t.items.reduce((s, i) => s + i.quantity, 0)
                     return (
                       <TableRow key={t.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setViewing(t)}>
-                        <TableCell className="font-mono text-xs">#{t.id}</TableCell>
+                        <TableCell className="text-center font-mono text-xs">#{t.id}</TableCell>
                         <TableCell className="font-medium">{t.fromBranch?.name}</TableCell>
                         <TableCell className="text-center text-muted-foreground">
-                          <ChevronLeft className="size-4" />
+                          <ChevronLeft className="mx-auto size-4" />
                         </TableCell>
                         <TableCell className="font-medium">{t.toBranch?.name}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {t.items.length} صنف، {totalQty} وحدة
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           <Badge className={STATUS_BADGES[t.status] ?? 'bg-muted'}>
                             {t.status === 'pending' && <Clock className="ml-1 size-3" />}
                             {t.status === 'completed' && <CheckCircle2 className="ml-1 size-3" />}
@@ -376,12 +376,12 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
                             {STATUS_LABELS[t.status] ?? t.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground" dir="ltr">
+                        <TableCell className="whitespace-nowrap text-center text-xs text-muted-foreground" dir="ltr">
                           {formatDate(t.completedAt ?? t.createdAt)}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           <Button size="sm" variant="ghost" className="size-8 p-0">
-                            <Eye className="size-3.5" />
+                            <Eye className="mx-auto size-3.5" />
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -452,12 +452,12 @@ function TransferDetailDialog({
           </div>
 
           <div className="rounded-lg border">
-            <Table>
+            <Table fixed>
               <TableHeader>
                 <TableRow>
                   <TableHead>الصنف</TableHead>
-                  <TableHead>الباركود</TableHead>
-                  <TableHead className="text-center">الكمية</TableHead>
+                  <TableHead className="w-40">الباركود</TableHead>
+                  <TableHead className="w-24 text-center">الكمية</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

@@ -7,11 +7,11 @@ generator client {
 }
 
 datasource db {
-  // Allow either SQLite (file: URL — local dev) or Postgres (production).
-  // Prisma picks the provider from the URL scheme at runtime via the driver
-  // adapter in src/lib/db.ts.
-  provider  = "sqlite"
+  provider  = "postgresql"
+  // Pooled connection (via Supabase's PgBouncer, port 6543) — used at runtime
   url       = env("DATABASE_URL")
+  // Direct connection (port 5432) — used only for migrations
+  directUrl = env("DIRECT_URL")
 }
 
 model Tenant {

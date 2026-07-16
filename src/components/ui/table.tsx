@@ -28,7 +28,11 @@ import { cn } from "@/lib/utils"
  * document is RTL (detected via the `dir` attribute on `<html>`).
  */
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+function Table({
+  className,
+  fixed,
+  ...props
+}: React.ComponentProps<"table"> & { fixed?: boolean }) {
   return (
     <div
       data-slot="table-container"
@@ -38,7 +42,16 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
       <table
         data-slot="table"
         dir="rtl"
-        className={cn("w-full caption-bottom text-sm", className)}
+        className={cn(
+          "w-full caption-bottom text-sm",
+          // `fixed` enables `table-layout: fixed` — combined with explicit
+          // `w-XX` on <th>, this prevents columns from stretching on wide
+          // screens. Without it, `table-layout: auto` distributes extra space
+          // to ALL columns, making short columns (actions, numbers) look
+          // stretched with the header text misaligned from the cell content.
+          fixed && "table-fixed",
+          className
+        )}
         {...props}
       />
     </div>
