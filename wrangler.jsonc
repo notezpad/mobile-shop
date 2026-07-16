@@ -16,7 +16,13 @@
     // Required: gives Prisma's pg adapter access to Node APIs (Buffer, net, etc.)
     "nodejs_compat",
     // Required: lets `pg` open real TCP connections to Supabase Postgres
-    "enable_nodejs_process_v2"
+    "enable_nodejs_process_v2",
+    // CRITICAL: without this, process.env stays EMPTY even though secrets
+    // are set correctly in the dashboard — this flag is what actually
+    // copies Worker vars/secrets into process.env at runtime. It's on by
+    // default only for compatibility_date >= 2025-04-01, and ours is
+    // 2025-01-01, so it must be listed explicitly here.
+    "nodejs_compat_populate_process_env"
   ],
   "assets": {
     "directory": ".open-next/assets",
@@ -28,7 +34,7 @@
   // Environment variables that are NOT secret can go here.
   // Put DATABASE_URL, DIRECT_URL and JWT_SECRET in Cloudflare secrets instead:
   //   wrangler secret put DATABASE_URL
-  //   wrangler secret put postgresql://postgres.sfkelvztwtsyjcruurrc:[YOUR-PASSWORD]@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true 
+  //   wrangler secret put DIRECT_URL
   //   wrangler secret put JWT_SECRET
   "vars": {
     "NODE_ENV": "production"
