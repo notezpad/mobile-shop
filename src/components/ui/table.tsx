@@ -81,7 +81,13 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b", className)}
+      className={cn(
+        // Muted background + a clear bottom border give the header a
+        // distinct "cap" so it reads as its own row instead of blending
+        // into the body rows underneath it.
+        "bg-muted/40 [&_tr]:border-b [&_tr]:hover:bg-transparent",
+        className
+      )}
       {...props}
     />
   )
@@ -129,11 +135,16 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
       data-slot="table-head"
       className={cn(
         // `text-start` instead of `text-left` — respects inherited direction.
-        // `px-3 py-2.5` (12px / 10px) gives tight, balanced padding that
-        // matches modern dashboards (Stripe, Vercel, Linear). The previous
-        // `px-2` was too cramped for header text and caused apparent
-        // misalignment between header and cell content.
-        "text-foreground h-11 px-3 py-2.5 text-start align-middle font-medium whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        // Header text is deliberately smaller/lighter (text-xs, muted,
+        // semibold + tracking) than the body (text-sm, foreground) — this
+        // is the standard "label vs. data" contrast used by dashboards
+        // like Stripe/Vercel/Linear, and it's what keeps a wide header row
+        // from looking oversized next to compact cell content.
+        // `border-e` on every column except the last draws a thin vertical
+        // divider between headers, which is what keeps unevenly-sized
+        // columns (e.g. a 2-digit number next to a long date) from reading
+        // as a misaligned, borderless block of text.
+        "text-muted-foreground h-10 px-3 py-2 text-start align-middle text-xs font-semibold tracking-wide whitespace-nowrap border-e border-border/60 last:border-e-0 [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className
       )}
       {...props}
@@ -149,7 +160,10 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
         // `px-3 py-2.5` matches the header padding so cells align cleanly
         // under their headers. Combined with `table-fixed` and explicit
         // `w-XX` on <th>, this produces balanced, dashboard-grade tables.
-        "p-2.5 px-3 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        // A faint `border-e` (lighter than the header's) keeps every column
+        // visually separated all the way down the table, matching the
+        // divider that starts in the header instead of stopping at it.
+        "p-2.5 px-3 align-middle text-sm whitespace-nowrap border-e border-border/30 last:border-e-0 [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className
       )}
       {...props}
