@@ -5,6 +5,18 @@ import * as TabsPrimitive from "@radix-ui/react-tabs"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * RTL-aware Tabs primitives.
+ *
+ * Radix UI's Tabs component internally toggles `dir` on the content panel
+ * depending on the orientation and active state. In an RTL document, this
+ * sometimes causes the tab content (and the tables nested inside it) to
+ * inherit a wrong `dir=ltr`, which breaks RTL layout.
+ *
+ * Fix: explicitly inherit `dir="rtl"` on TabsContent so any descendant
+ * (tables, lists, etc.) renders correctly in RTL contexts.
+ */
+
 function Tabs({
   className,
   ...props
@@ -57,6 +69,7 @@ function TabsContent({
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"
+      dir="rtl"
       className={cn("flex-1 outline-none", className)}
       {...props}
     />

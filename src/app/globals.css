@@ -125,6 +125,23 @@
   }
 }
 
+/* RTL safety net — force tables and tab panels to inherit the document's
+ * direction. Without this, shadcn/ui's <Table> (which sets text-left on <th>)
+ * and Radix's <TabsContent> (which toggles dir internally) can render LTR
+ * even inside an RTL <html dir="rtl"> document. This causes column headers
+ * to misalign with their data cells. */
+[dir="rtl"] table,
+[dir="rtl"] [data-slot="tabs-content"],
+[dir="rtl"] [data-slot="table-container"] {
+  direction: rtl;
+}
+
+/* Replace shadcn's hardcoded `text-left` on <th> with `text-start` so the
+ * header text aligns to the right in RTL contexts. */
+[dir="rtl"] th {
+  text-align: start;
+}
+
 /* Hide number input spinners for cleaner Arabic UI */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {

@@ -12,15 +12,45 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const branchId = searchParams.get('branchId')
   const productId = searchParams.get('productId')
-  const where: any = { tenantId: s.tenantId }
-  if (s.branchId) where.branchId = s.branchId
-  else if (branchId && branchId !== 'all') where.branchId = parseInt(branchId, 10)
-  if (productId) where.productId = parseInt(productId, 10)
+  const type = searchParams.get('type')
+  const from = searchParams.get('from')
+  const to = searchParams.get('to')
+  const q = searchParams.get('q')?.trim() || ''
+
+  const where: any = { tenantId: s.tenantId, AND: [] as any[] }
+  if (s.branchId) where.AND.push({ branchId: s.branchId })
+  else if (branchId && branchId !== 'all') {
+    if (branchId === 'none') where.AND.push({ branchId: null })
+    else where.AND.push({ branchId: parseInt(branchId, 10) })
+  }
+  if (productId) where.AND.push({ productId: parseInt(productId, 10) })
+  if (type && type !== 'all') where.AND.push({ type })
+  if (from) {
+    const d = new Date(from); d.setHours(0,0,0,0)
+    where.AND.push({ createdAt: { gte: d } })
+  }
+  if (to) {
+    const d = new Date(to); d.setHours(23,59,59,999)
+    where.AND.push({ createdAt: { lte: d } })
+  }
+  if (q) {
+    where.AND.push({
+      OR: [
+        { product: { name: { contains: q } } },
+        { product: { barcode: { contains: q } } },
+        { note: { contains: q } },
+      ],
+    })
+  }
+
   const rows = await db.stockMovement.findMany({
     where,
     orderBy: { id: 'desc' },
-    take: 500,
-    include: { product: { select: { name: true, barcode: true } }, branch: { select: { name: true } } },
+    take: 1000,
+    include: {
+      product: { select: { name: true, barcode: true } },
+      branch: { select: { name: true } },
+    },
   })
   return NextResponse.json(rows)
 }
@@ -45,12 +75,17 @@ export async function POST(req: NextRequest) {
   else if (type === 'in') delta = Math.abs(qty)
   else if (type === 'adjust') delta = qty // signed
 
+  // For 'out', validate stock availability
+  if (type === 'out' && product.quantity < Math.abs(qty)) {
+    return NextResponse.json({ error: `الكمية غير متوفرة (المتاح: ${product.quantity})` }, { status: 400 })
+  }
+
   await db.$transaction(async (tx) => {
     await tx.product.update({ where: { id: productId }, data: { quantity: { increment: delta } } })
     await tx.stockMovement.create({
       data: {
         tenantId: s.tenantId,
-        branchId: product.branchId ?? null,
+        branchId: product.branchId ?? (s.branchId ?? null),
         productId,
         type,
         quantity: delta,

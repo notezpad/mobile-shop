@@ -1,7 +1,21 @@
 'use client'
 
 import * as React from 'react'
-import { Building2, Plus, Pencil, Trash2, Loader2, Star } from 'lucide-react'
+import {
+  Building2,
+  Plus,
+  Pencil,
+  Trash2,
+  Loader2,
+  Star,
+  Phone,
+  MapPin,
+  TrendingUp,
+  DollarSign,
+  Package,
+  ShoppingCart,
+  Crown,
+} from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,11 +24,26 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@/components/ui/table'
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
@@ -58,12 +87,22 @@ export function BranchesView() {
       setBranches(bs); setReports(rs)
     } catch (e: any) {
       toast.error(e?.message || 'فشل تحميل الفروع')
-    } finally { setLoading(false) }
+    } finally {
+      setLoading(false)
+    }
   }, [])
   React.useEffect(() => { load() }, [load])
 
-  const openNew = () => { setEditing(null); setForm({ name: '', address: '', phone: '', active: true }); setOpen(true) }
-  const openEdit = (b: Branch) => { setEditing(b); setForm({ name: b.name, address: b.address ?? '', phone: b.phone ?? '', active: b.active }); setOpen(true) }
+  const openNew = () => {
+    setEditing(null)
+    setForm({ name: '', address: '', phone: '', active: true })
+    setOpen(true)
+  }
+  const openEdit = (b: Branch) => {
+    setEditing(b)
+    setForm({ name: b.name, address: b.address ?? '', phone: b.phone ?? '', active: b.active })
+    setOpen(true)
+  }
 
   const save = async () => {
     if (!form.name.trim()) { toast.error('اسم الفرع مطلوب'); return }
@@ -76,131 +115,392 @@ export function BranchesView() {
         await api('/api/branches', { method: 'POST', body: form })
         toast.success('تم إنشاء الفرع')
       }
-      setOpen(false); load()
-    } catch (e: any) { toast.error(e?.message || 'فشل الحفظ') }
-    finally { setSaving(false) }
+      setOpen(false)
+      load()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل الحفظ')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const remove = async (b: Branch) => {
-    if (!confirm(`حذف الفرع "${b.name}"؟ (سيتم فك ارتباط منتجاته وموظفيه)`)) return
+    if (b.isMain) {
+      toast.error('لا يمكن حذف الفرع الرئيسي — عيّن فرعاً آخر كرئيسي أولاً')
+      return
+    }
+    if (!confirm(`حذف الفرع "${b.name}"؟\nسيتم فك ارتباط منتجاته وموظفيه به.`)) return
     try {
       await api(`/api/branches/${b.id}`, { method: 'DELETE' })
-      toast.success('تم الحذف'); load()
-    } catch (e: any) { toast.error(e?.message || 'فشل الحذف') }
+      toast.success('تم الحذف')
+      load()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل الحذف')
+    }
   }
 
   const reportMap = new Map(reports.map(r => [r.branchId, r]))
 
+  // Aggregate stats
+  const totals = React.useMemo(() => {
+    return reports.reduce((acc, r) => ({
+      sales: acc.sales + r.totalSales,
+      profit: acc.profit + r.totalProfit,
+      count: acc.count + r.salesCount,
+      products: acc.products + r.productCount,
+    }), { sales: 0, profit: 0, count: 0, products: 0 })
+  }, [reports])
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold">إدارة الفروع</h2>
-          <p className="text-sm text-muted-foreground">أنشئ فروعك وشاهد أداء كل فرع على حدة.</p>
+          <h1 className="flex items-center gap-2 text-2xl font-bold">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Building2 className="size-5" />
+            </span>
+            إدارة الفروع
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            أنشئ فروع متجرك وتابع أداء كل فرع على حدة (مبيعات، أرباح، أصناف).
+          </p>
         </div>
-        <Button onClick={openNew}><Plus className="size-4 ml-1" /> فرع جديد</Button>
+        <Button onClick={openNew}>
+          <Plus className="ml-1 size-4" />
+          فرع جديد
+        </Button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        {loading ? Array.from({length:3}).map((_,i)=>(<Skeleton key={i} className="h-32"/>)) :
-          branches.map(b => {
-            const r = reportMap.get(b.id)
-            return (
-              <Card key={b.id}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Building2 className="size-4 text-primary"/>
-                    <span>{b.name}</span>
-                    {b.isMain && <Badge variant="outline" className="text-[10px]"><Star className="size-3 ml-0.5"/>رئيسي</Badge>}
-                    {!b.active && <Badge variant="destructive" className="text-[10px]">موقوف</Badge>}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-1 text-sm">
-                  <p className="text-muted-foreground">{b.address || '—'}</p>
-                  <p className="text-muted-foreground">{b.phone || '—'}</p>
-                  <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded bg-muted p-1.5">
-                      <div className="text-[10px] text-muted-foreground">مبيعات</div>
-                      <div className="text-xs font-bold">{formatCurrency(r?.totalSales ?? 0)}</div>
-                    </div>
-                    <div className="rounded bg-muted p-1.5">
-                      <div className="text-[10px] text-muted-foreground">أرباح</div>
-                      <div className="text-xs font-bold text-emerald-600">{formatCurrency(r?.totalProfit ?? 0)}</div>
-                    </div>
-                    <div className="rounded bg-muted p-1.5">
-                      <div className="text-[10px] text-muted-foreground">منتجات</div>
-                      <div className="text-xs font-bold">{r?.productCount ?? 0}</div>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <Button variant="outline" size="sm" className="flex-1" onClick={() => openEdit(b)}><Pencil className="size-3 ml-1"/>تعديل</Button>
-                    <Button variant="outline" size="sm" onClick={() => remove(b)}><Trash2 className="size-3"/></Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })
-        }
+      {/* Aggregate stats */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatCard
+          icon={<ShoppingCart className="size-4" />}
+          label="إجمالي المبيعات"
+          value={formatCurrency(totals.sales)}
+          tone="primary"
+          loading={loading}
+        />
+        <StatCard
+          icon={<DollarSign className="size-4" />}
+          label="إجمالي الأرباح"
+          value={formatCurrency(totals.profit)}
+          tone="emerald"
+          loading={loading}
+        />
+        <StatCard
+          icon={<TrendingUp className="size-4" />}
+          label="عدد الفواتير"
+          value={String(totals.count)}
+          tone="default"
+          loading={loading}
+        />
+        <StatCard
+          icon={<Package className="size-4" />}
+          label="إجمالي الأصناف"
+          value={String(totals.products)}
+          tone="default"
+          loading={loading}
+        />
       </div>
 
-      <Card>
-        <CardHeader><CardTitle className="text-base">تقرير أداء الفروع</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>الفرع</TableHead>
-                <TableHead>عدد الفواتير</TableHead>
-                <TableHead>إجمالي المبيعات</TableHead>
-                <TableHead>الأرباح</TableHead>
-                <TableHead>عدد المنتجات</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {reports.length === 0 && (
-                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">لا يوجد فروع بعد</TableCell></TableRow>
-              )}
-              {reports.map(r => (
-                <TableRow key={r.branchId}>
-                  <TableCell className="font-medium">{r.name}{r.isMain && <Badge variant="outline" className="mr-2 text-[10px]">رئيسي</Badge>}</TableCell>
-                  <TableCell>{r.salesCount}</TableCell>
-                  <TableCell>{formatCurrency(r.totalSales)}</TableCell>
-                  <TableCell className="text-emerald-600">{formatCurrency(r.totalProfit)}</TableCell>
-                  <TableCell>{r.productCount}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="cards" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="cards">بطاقات الفروع</TabsTrigger>
+          <TabsTrigger value="report">تقرير الأداء</TabsTrigger>
+        </TabsList>
 
+        {/* Cards view */}
+        <TabsContent value="cards" className="space-y-0">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-56" />
+              ))
+            ) : branches.length === 0 ? (
+              <div className="md:col-span-2 xl:col-span-3">
+                <Card>
+                  <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                    <Building2 className="mb-3 size-12 text-muted-foreground/40" />
+                    <p className="text-sm text-muted-foreground">لا توجد فروع بعد</p>
+                    <Button className="mt-4" onClick={openNew}>
+                      <Plus className="ml-1 size-4" />
+                      إنشاء أول فرع
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              branches.map(b => {
+                const r = reportMap.get(b.id)
+                return (
+                  <Card key={b.id} className={b.isMain ? 'border-primary/40 ring-1 ring-primary/20' : ''}>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center justify-between text-base">
+                        <span className="flex items-center gap-2">
+                          <div className={`flex size-9 items-center justify-center rounded-lg ${b.isMain ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                            {b.isMain ? <Crown className="size-4" /> : <Building2 className="size-4" />}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              {b.name}
+                              {b.isMain && (
+                                <Badge variant="outline" className="border-primary/30 bg-primary/5 px-1 text-[10px] text-primary">
+                                  <Star className="ml-0.5 size-2.5" />
+                                  رئيسي
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-xs font-normal text-muted-foreground">
+                              أُنشئ {new Date(b.createdAt).toLocaleDateString('ar-EG')}
+                            </div>
+                          </div>
+                        </span>
+                        {!b.active && (
+                          <Badge variant="destructive" className="text-[10px]">موقوف</Badge>
+                        )}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        {b.address ? (
+                          <p className="flex items-center gap-1.5">
+                            <MapPin className="size-3" />
+                            {b.address}
+                          </p>
+                        ) : (
+                          <p className="flex items-center gap-1.5 opacity-60">
+                            <MapPin className="size-3" />
+                            لا يوجد عنوان
+                          </p>
+                        )}
+                        {b.phone ? (
+                          <p className="flex items-center gap-1.5" dir="ltr">
+                            <Phone className="size-3" />
+                            {b.phone}
+                          </p>
+                        ) : (
+                          <p className="flex items-center gap-1.5 opacity-60" dir="ltr">
+                            <Phone className="size-3" />
+                            لا يوجد هاتف
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Mini stats */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="rounded-lg bg-muted/50 p-2 text-center">
+                          <div className="text-[10px] text-muted-foreground">مبيعات</div>
+                          <div className="text-xs font-bold">{formatCurrency(r?.totalSales ?? 0)}</div>
+                        </div>
+                        <div className="rounded-lg bg-emerald-50 p-2 text-center dark:bg-emerald-950/30">
+                          <div className="text-[10px] text-muted-foreground">أرباح</div>
+                          <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                            {formatCurrency(r?.totalProfit ?? 0)}
+                          </div>
+                        </div>
+                        <div className="rounded-lg bg-muted/50 p-2 text-center">
+                          <div className="text-[10px] text-muted-foreground">أصناف</div>
+                          <div className="text-xs font-bold">{r?.productCount ?? 0}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 border-t pt-3">
+                        <Button variant="outline" size="sm" className="flex-1" onClick={() => openEdit(b)}>
+                          <Pencil className="ml-1 size-3" />
+                          تعديل
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                          onClick={() => remove(b)}
+                          disabled={b.isMain}
+                          title={b.isMain ? 'لا يمكن حذف الفرع الرئيسي' : 'حذف الفرع'}
+                        >
+                          <Trash2 className="size-3" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Report table */}
+        <TabsContent value="report" className="space-y-0">
+          <Card>
+            <CardHeader className="border-b pb-3">
+              <CardTitle className="text-base">تقرير أداء الفروع</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>الفرع</TableHead>
+                      <TableHead className="text-center">عدد الفواتير</TableHead>
+                      <TableHead>إجمالي المبيعات</TableHead>
+                      <TableHead>الأرباح</TableHead>
+                      <TableHead className="text-center">عدد المنتجات</TableHead>
+                      <TableHead>متوسط الفاتورة</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {reports.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                          <Building2 className="mx-auto mb-2 size-8 opacity-40" />
+                          لا يوجد بيانات بعد
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      reports.map(r => {
+                        const avg = r.salesCount > 0 ? r.totalSales / r.salesCount : 0
+                        return (
+                          <TableRow key={r.branchId} className={r.isMain ? 'bg-primary/5' : ''}>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                {r.isMain && <Crown className="size-3.5 text-primary" />}
+                                {r.name}
+                                {r.isMain && (
+                                  <Badge variant="outline" className="border-primary/30 bg-primary/5 px-1 text-[10px] text-primary">
+                                    رئيسي
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">{r.salesCount}</TableCell>
+                            <TableCell className="font-medium">{formatCurrency(r.totalSales)}</TableCell>
+                            <TableCell className="font-medium text-emerald-600 dark:text-emerald-400">
+                              {formatCurrency(r.totalProfit)}
+                            </TableCell>
+                            <TableCell className="text-center">{r.productCount}</TableCell>
+                            <TableCell className="text-muted-foreground">{formatCurrency(avg)}</TableCell>
+                          </TableRow>
+                        )
+                      })
+                    )}
+                  </TableBody>
+                  {reports.length > 0 && (
+                    <tfoot className="bg-muted/50 font-medium">
+                      <TableRow>
+                        <TableCell className="font-bold">الإجمالي</TableCell>
+                        <TableCell className="text-center font-bold">{totals.count}</TableCell>
+                        <TableCell className="font-bold">{formatCurrency(totals.sales)}</TableCell>
+                        <TableCell className="font-bold text-emerald-600 dark:text-emerald-400">
+                          {formatCurrency(totals.profit)}
+                        </TableCell>
+                        <TableCell className="text-center font-bold">{totals.products}</TableCell>
+                        <TableCell></TableCell>
+                      </TableRow>
+                    </tfoot>
+                  )}
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editing ? 'تعديل فرع' : 'فرع جديد'}</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="size-5 text-primary" />
+              {editing ? 'تعديل فرع' : 'فرع جديد'}
+            </DialogTitle>
+          </DialogHeader>
           <div className="space-y-3">
-            <div>
-              <Label>الاسم</Label>
-              <Input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} placeholder="فرع وسط البلد"/>
+            <div className="space-y-1.5">
+              <Label>اسم الفرع <span className="text-destructive">*</span></Label>
+              <Input
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="مثال: فرع وسط البلد"
+                autoFocus
+              />
             </div>
-            <div>
+            <div className="space-y-1.5">
               <Label>العنوان</Label>
-              <Input value={form.address} onChange={e => setForm(f => ({...f, address: e.target.value}))}/>
+              <Input
+                value={form.address}
+                onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+                placeholder="العنوان التفصيلي..."
+              />
             </div>
-            <div>
-              <Label>الهاتف</Label>
-              <Input value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))}/>
+            <div className="space-y-1.5">
+              <Label>رقم الهاتف</Label>
+              <Input
+                value={form.phone}
+                onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                placeholder="01xxxxxxxxx"
+                dir="ltr"
+              />
             </div>
-            <div className="flex items-center justify-between">
-              <Label>مُفعّل</Label>
-              <Switch checked={form.active} onCheckedChange={v => setForm(f => ({...f, active: v}))}/>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <Label className="cursor-pointer">الفرع مُفعّل</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  الفروع الموقوفة لا تظهر في الاختيارات الجديدة
+                </p>
+              </div>
+              <Switch
+                checked={form.active}
+                onCheckedChange={v => setForm(f => ({ ...f, active: v }))}
+              />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
-            <Button onClick={save} disabled={saving}>{saving && <Loader2 className="size-4 ml-1 animate-spin"/>}حفظ</Button>
+            <Button onClick={save} disabled={saving}>
+              {saving && <Loader2 className="ml-1 size-4 animate-spin" />}
+              {editing ? 'حفظ التعديلات' : 'إنشاء الفرع'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+function StatCard({
+  icon,
+  label,
+  value,
+  tone = 'default',
+  loading,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  tone?: 'default' | 'primary' | 'emerald'
+  loading?: boolean
+}) {
+  const toneClasses =
+    tone === 'primary'
+      ? 'bg-primary/10 text-primary'
+      : tone === 'emerald'
+      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+      : 'bg-muted text-muted-foreground'
+  return (
+    <Card>
+      <CardContent className="flex items-center gap-3 p-3">
+        <div className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${toneClasses}`}>
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[11px] text-muted-foreground">{label}</div>
+          {loading ? (
+            <Skeleton className="mt-1 h-5 w-20" />
+          ) : (
+            <div className="truncate text-base font-bold">{value}</div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   )
 }

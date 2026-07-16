@@ -212,9 +212,9 @@ export function ProductDialog({
           </div>
 
           {/* branch */}
-          {branches.length > 0 && (
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label>الفرع</Label>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>الفرع</Label>
+            {branches.length > 0 ? (
               <Select value={branchId || 'none'} onValueChange={(v) => setBranchId(v === 'none' ? '' : v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="اختر الفرع" />
@@ -222,12 +222,21 @@ export function ProductDialog({
                 <SelectContent>
                   <SelectItem value="none">بدون فرع محدد</SelectItem>
                   {branches.map((b) => (
-                    <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                    <SelectItem key={b.id} value={String(b.id)}>
+                      {b.name}{(b as any).isMain ? ' ★' : ''}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          )}
+            ) : (
+              <div className="rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                لم يتم إنشاء أي فرع بعد — يمكنك إضافة الفروع من قسم «الفروع».
+              </div>
+            )}
+            <p className="text-[11px] text-muted-foreground">
+              حدد الفرع الذي ينتمي إليه المنتج. الموظفون مرتبطون بفرع يرون فقط منتجاته.
+            </p>
+          </div>
 
           {/* 4. price */}
           <div className="space-y-1.5">

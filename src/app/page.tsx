@@ -346,7 +346,7 @@ function MainApp() {
 
       <div className="flex flex-1">
         {/* Desktop sidebar */}
-        <div className="hidden lg:block">
+        <div className="sticky top-0 hidden h-screen lg:block">
           <Sidebar />
         </div>
 

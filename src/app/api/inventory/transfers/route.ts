@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
   const fromBranchId = parseInt(b?.fromBranchId, 10)
   const toBranchId = parseInt(b?.toBranchId, 10)
   const items = Array.isArray(b?.items) ? b.items : []
+  const mode = b?.mode === 'pending' ? 'pending' : 'completed' // default: execute immediately
   if (!fromBranchId || !toBranchId || fromBranchId === toBranchId) return NextResponse.json({ error: 'اختر فرعين مختلفين' }, { status: 400 })
   if (items.length === 0) return NextResponse.json({ error: 'أضف منتجات للتحويل' }, { status: 400 })
   if (s.branchId && s.branchId !== fromBranchId) return NextResponse.json({ error: 'يمكنك التحويل من فرعك فقط' }, { status: 403 })
@@ -43,19 +44,32 @@ export async function POST(req: NextRequest) {
   if (!fb || fb.tenantId !== s.tenantId || !tb || tb.tenantId !== s.tenantId)
     return NextResponse.json({ error: 'فرع غير صالح' }, { status: 400 })
 
+  // Validate quantities first (only when about to execute)
+  if (mode === 'completed') {
+    for (const it of items) {
+      const pid = parseInt(it.productId, 10)
+      const qty = parseInt(it.quantity, 10)
+      if (!pid || !qty || qty <= 0) return NextResponse.json({ error: 'بيانات أصناف غير صالحة' }, { status: 400 })
+      const p = await db.product.findUnique({ where: { id: pid } })
+      if (!p || p.tenantId !== s.tenantId) return NextResponse.json({ error: 'منتج غير صالح' }, { status: 400 })
+      if (p.quantity < qty) return NextResponse.json({ error: `الكمية غير متوفرة (${p.name} — متاح: ${p.quantity})` }, { status: 400 })
+    }
+  }
+
   const created = await db.$transaction(async (tx) => {
     const t = await tx.transfer.create({
       data: {
         tenantId: s.tenantId,
         fromBranchId, toBranchId,
-        status: 'completed',
+        status: mode,
         note: b?.note ? String(b.note) : null,
         createdBy: s.userId,
-        completedAt: new Date(),
+        completedAt: mode === 'completed' ? new Date() : null,
         items: { create: items.map((it: any) => ({ productId: parseInt(it.productId,10), quantity: parseInt(it.quantity,10) })) },
       },
       include: { items: true },
     })
+    if (mode === 'pending') return t // just save the draft; no stock movement yet
     for (const it of t.items) {
       const srcProduct = await tx.product.findUnique({ where: { id: it.productId } })
       if (!srcProduct || srcProduct.tenantId !== s.tenantId) throw new Error('منتج غير صالح')
