@@ -301,15 +301,15 @@ export function AdminSubscriptionsView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-10">#</TableHead>
+                    <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead>المحل</TableHead>
                     <TableHead className="w-28">الباقة</TableHead>
-                    <TableHead className="w-24">الفترة</TableHead>
+                    <TableHead className="w-24 text-center">الفترة</TableHead>
                     <TableHead className="w-32">البداية</TableHead>
                     <TableHead className="w-32">النهاية</TableHead>
-                    <TableHead className="w-28">المبلغ</TableHead>
+                    <TableHead className="w-28 text-center">المبلغ</TableHead>
                     <TableHead className="w-32">طريقة الدفع</TableHead>
-                    <TableHead className="w-28">الحالة</TableHead>
+                    <TableHead className="w-28 text-center">الحالة</TableHead>
                     <TableHead className="w-32 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -323,17 +323,17 @@ export function AdminSubscriptionsView() {
                   ) : (
                     rows.map((r, i) => (
                       <TableRow key={r.id}>
-                        <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                        <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
                         <TableCell className="font-medium">{r.shopName}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-[10px]">{r.planName}</Badge>
                         </TableCell>
-                        <TableCell className="text-xs">{PERIOD_LABEL[r.period] ?? r.period}</TableCell>
+                        <TableCell className="text-center text-xs">{PERIOD_LABEL[r.period] ?? r.period}</TableCell>
                         <TableCell className="text-xs">{formatShortDate(r.startDate)}</TableCell>
                         <TableCell className="text-xs">{formatShortDate(r.endDate)}</TableCell>
-                        <TableCell className="text-xs">{formatCurrency(r.amountPaid)}</TableCell>
+                        <TableCell className="text-center text-xs">{formatCurrency(r.amountPaid)}</TableCell>
                         <TableCell className="text-xs">{r.paymentMethod ? (METHOD_LABEL[r.paymentMethod] ?? r.paymentMethod) : '-'}</TableCell>
-                        <TableCell><StatusBadge status={r.status} /></TableCell>
+                        <TableCell className="text-center"><StatusBadge status={r.status} /></TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1">
                             <Button

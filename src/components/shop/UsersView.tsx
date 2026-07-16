@@ -112,11 +112,11 @@ export function UsersView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">الرقم</TableHead>
+                    <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead>الاسم</TableHead>
                     <TableHead>البريد الإلكتروني</TableHead>
-                    <TableHead className="w-28">الدور</TableHead>
-                    <TableHead className="w-24">الحالة</TableHead>
+                    <TableHead className="w-28 text-center">الدور</TableHead>
+                    <TableHead className="w-24 text-center">الحالة</TableHead>
                     <TableHead className="w-36">تاريخ الإنشاء</TableHead>
                     <TableHead className="w-32 text-center">إجراءات</TableHead>
                   </TableRow>
@@ -134,14 +134,14 @@ export function UsersView() {
                   ) : (
                     users.map((u, index) => (
                       <TableRow key={u.id}>
-                        <TableCell className="font-mono text-xs">
+                        <TableCell className="text-center font-mono text-xs">
                           {index + 1}
                         </TableCell>
                         <TableCell className="font-medium">{u.name}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">
                           {u.email}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           {u.role === 'ADMIN' ? (
                             <Badge className="bg-primary/10 text-primary">
                               <ShieldCheck className="ml-1 size-3" />
@@ -154,7 +154,7 @@ export function UsersView() {
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           {u.active ? (
                             <Badge className="bg-emerald-100 text-emerald-700">
                               نشط

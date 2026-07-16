@@ -468,18 +468,18 @@ export function DashboardView() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-12">الرقم</TableHead>
-                  <TableHead>الفاتورة</TableHead>
+                  <TableHead className="w-10 text-center">#</TableHead>
+                  <TableHead className="w-28">الفاتورة</TableHead>
                   <TableHead className="w-36">الوقت</TableHead>
-                  <TableHead className="w-32">الإجمالي</TableHead>
-                  <TableHead className="w-28">الحالة</TableHead>
+                  <TableHead className="w-32 text-center">الإجمالي</TableHead>
+                  <TableHead className="w-28 text-center">الحالة</TableHead>
                 </TableRow>
               </TableHeader>
                 <TableBody>
                   {data?.last10Sales?.length ? (
                     data.last10Sales.map((s, index) => (
                       <TableRow key={s.id}>
-                        <TableCell className="font-mono text-xs">
+                        <TableCell className="text-center font-mono text-xs">
                           {index + 1}
                         </TableCell>
                         <TableCell className="font-medium">
@@ -488,10 +488,10 @@ export function DashboardView() {
                         <TableCell className="text-muted-foreground text-xs">
                           {formatDate(s.createdAt)}
                         </TableCell>
-                        <TableCell className="font-semibold tabular-nums">
+                        <TableCell className="text-center font-semibold tabular-nums">
                           {formatCurrency(s.total)}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           <Badge
                             variant={
                               s.status === 'مرتجعة' ? 'destructive' : 'secondary'

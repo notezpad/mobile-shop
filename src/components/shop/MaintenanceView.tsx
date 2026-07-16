@@ -143,12 +143,12 @@ export function MaintenanceView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">الرقم</TableHead>
+                    <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead>العميل</TableHead>
                     <TableHead className="w-36">الهاتف</TableHead>
                     <TableHead>الجهاز</TableHead>
-                    <TableHead className="w-28">الحالة</TableHead>
-                    <TableHead className="w-28">التكلفة</TableHead>
+                    <TableHead className="w-28 text-center">الحالة</TableHead>
+                    <TableHead className="w-28 text-center">التكلفة</TableHead>
                     <TableHead className="w-36">تاريخ الاستلام</TableHead>
                     <TableHead className="w-32 text-center">إجراءات</TableHead>
                   </TableRow>
@@ -166,13 +166,13 @@ export function MaintenanceView() {
                   ) : (
                     orders.map((o, index) => (
                       <TableRow key={o.id}>
-                        <TableCell className="font-mono text-xs">{index + 1}</TableCell>
+                        <TableCell className="text-center font-mono text-xs">{index + 1}</TableCell>
                         <TableCell className="font-medium">{o.customerName}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">
                           {o.phone ?? '—'}
                         </TableCell>
                         <TableCell>{o.device}</TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           <Badge
                             variant="outline"
                             className={statusVariant(o.status)}
@@ -180,7 +180,7 @@ export function MaintenanceView() {
                             {o.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className="tabular-nums">
+                        <TableCell className="text-center tabular-nums">
                           {formatCurrency(o.cost)}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">

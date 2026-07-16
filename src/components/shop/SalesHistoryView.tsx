@@ -138,14 +138,14 @@ export function SalesHistoryView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">الرقم</TableHead>
-                    <TableHead className="w-32">رقم الفاتورة</TableHead>
+                    <TableHead className="w-10 text-center">#</TableHead>
+                    <TableHead className="w-28">رقم الفاتورة</TableHead>
                     <TableHead className="w-36">التاريخ</TableHead>
                     <TableHead>العميل</TableHead>
-                    <TableHead className="w-28">الإجمالي</TableHead>
-                    <TableHead className="w-28">المدفوع</TableHead>
-                    <TableHead className="w-24">الحالة</TableHead>
-                    <TableHead className="w-24 text-center">إجراءات</TableHead>
+                    <TableHead className="w-28 text-center">الإجمالي</TableHead>
+                    <TableHead className="w-28 text-center">المدفوع</TableHead>
+                    <TableHead className="w-24 text-center">الحالة</TableHead>
+                    <TableHead className="w-20 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -161,7 +161,7 @@ export function SalesHistoryView() {
                   ) : (
                     filtered.map((s, index) => (
                       <TableRow key={s.id}>
-                        <TableCell className="font-mono text-xs">
+                        <TableCell className="text-center font-mono text-xs">
                           {index + 1}
                         </TableCell>
                         <TableCell className="font-medium">
@@ -179,13 +179,13 @@ export function SalesHistoryView() {
                             </span>
                           )}
                         </TableCell>
-                        <TableCell className="font-semibold tabular-nums">
+                        <TableCell className="text-center font-semibold tabular-nums">
                           {formatCurrency(s.total)}
                         </TableCell>
-                        <TableCell className="tabular-nums">
+                        <TableCell className="text-center tabular-nums">
                           {formatCurrency(s.paid)}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           <Badge
                             variant={
                               s.status === 'مرتجعة' ? 'destructive' : 'secondary'

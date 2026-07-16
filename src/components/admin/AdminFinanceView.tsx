@@ -253,13 +253,13 @@ export function AdminFinanceView() {
               <Table>
                 <TableHeader className="sticky top-0 bg-card z-10">
                   <TableRow>
-                    <TableHead className="w-10">#</TableHead>
+                    <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead className="w-32">التاريخ</TableHead>
                     <TableHead>المحل</TableHead>
                     <TableHead className="w-32">الباقة</TableHead>
-                    <TableHead className="w-28">المبلغ</TableHead>
+                    <TableHead className="w-28 text-center">المبلغ</TableHead>
                     <TableHead className="w-32">طريقة الدفع</TableHead>
-                    <TableHead className="w-28">الحالة</TableHead>
+                    <TableHead className="w-28 text-center">الحالة</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -272,13 +272,13 @@ export function AdminFinanceView() {
                   ) : (
                     (data?.transactions ?? []).map((t, i) => (
                       <TableRow key={t.id}>
-                        <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                        <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
                         <TableCell className="text-xs">{formatShortDate(t.date)}</TableCell>
                         <TableCell className="font-medium">{t.shopName}</TableCell>
                         <TableCell className="text-xs">{t.planName}</TableCell>
-                        <TableCell className="text-xs font-medium">{formatCurrency(t.amount)}</TableCell>
+                        <TableCell className="text-xs font-medium text-center">{formatCurrency(t.amount)}</TableCell>
                         <TableCell className="text-xs">{METHOD_LABEL[t.method] ?? t.method}</TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           <Badge variant="outline" className="text-[10px]">{t.status}</Badge>
                         </TableCell>
                       </TableRow>

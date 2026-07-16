@@ -355,11 +355,11 @@ export function AdminDashboardView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-10">#</TableHead>
+                    <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead>المحل</TableHead>
                     <TableHead className="w-32">الباقة</TableHead>
                     <TableHead className="w-36">تاريخ الانتهاء</TableHead>
-                    <TableHead className="w-32">الأيام المتبقية</TableHead>
+                    <TableHead className="w-32 text-center">الأيام المتبقية</TableHead>
                     <TableHead className="w-36 text-center">إجراء</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -373,11 +373,11 @@ export function AdminDashboardView() {
                   ) : (
                     (stats?.expiringSoon ?? []).map((s, i) => (
                       <TableRow key={s.subscriptionId}>
-                        <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                        <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
                         <TableCell className="font-medium">{s.shopName}</TableCell>
                         <TableCell>{s.planName}</TableCell>
                         <TableCell>{formatShortDate(s.endDate)}</TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30">
                             {s.daysLeft} يوم
                           </Badge>
@@ -421,11 +421,11 @@ export function AdminDashboardView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-10">#</TableHead>
+                    <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead>اسم المحل</TableHead>
                     <TableHead className="w-32">الباقة</TableHead>
                     <TableHead className="w-36">تاريخ التسجيل</TableHead>
-                    <TableHead className="w-28">الحالة</TableHead>
+                    <TableHead className="w-28 text-center">الحالة</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -438,11 +438,11 @@ export function AdminDashboardView() {
                   ) : (
                     (stats?.recentTenants ?? []).map((t, i) => (
                       <TableRow key={t.id}>
-                        <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                        <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
                         <TableCell className="font-medium">{t.shopName}</TableCell>
                         <TableCell>{t.planName}</TableCell>
                         <TableCell>{formatShortDate(t.createdAt)}</TableCell>
-                        <TableCell><StatusBadge status={t.status} /></TableCell>
+                        <TableCell className="text-center"><StatusBadge status={t.status} /></TableCell>
                       </TableRow>
                     ))
                   )}

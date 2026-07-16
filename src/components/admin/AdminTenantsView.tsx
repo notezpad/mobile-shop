@@ -270,11 +270,11 @@ export function AdminTenantsView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-10">#</TableHead>
+                    <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead>اسم المحل</TableHead>
                     <TableHead>البريد</TableHead>
                     <TableHead className="w-28">الباقة</TableHead>
-                    <TableHead className="w-24">الحالة</TableHead>
+                    <TableHead className="w-24 text-center">الحالة</TableHead>
                     <TableHead className="w-32">تاريخ التسجيل</TableHead>
                     <TableHead className="w-32">آخر دخول</TableHead>
                     <TableHead className="w-44 text-center">إجراءات</TableHead>
@@ -290,13 +290,13 @@ export function AdminTenantsView() {
                   ) : (
                     rows.map((r, i) => (
                       <TableRow key={r.id}>
-                        <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                        <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
                         <TableCell className="font-medium">{r.shopName}</TableCell>
                         <TableCell className="text-xs text-muted-foreground" dir="ltr">{r.ownerEmail ?? '-'}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-[10px]">{r.planName}</Badge>
                         </TableCell>
-                        <TableCell><StatusBadge status={r.status} /></TableCell>
+                        <TableCell className="text-center"><StatusBadge status={r.status} /></TableCell>
                         <TableCell className="text-xs">{formatShortDate(r.createdAt)}</TableCell>
                         <TableCell className="text-xs">{r.lastLoginAt ? formatShortDate(r.lastLoginAt) : '-'}</TableCell>
                         <TableCell className="text-center">

@@ -268,11 +268,11 @@ export function AdminCodesView() {
               <Table>
                 <TableHeader className="sticky top-0 bg-card z-10">
                   <TableRow>
-                    <TableHead className="w-10">#</TableHead>
+                    <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead>الكود</TableHead>
                     <TableHead className="w-32">الباقة</TableHead>
-                    <TableHead className="w-24">الفترة</TableHead>
-                    <TableHead className="w-24">الحالة</TableHead>
+                    <TableHead className="w-24 text-center">الفترة</TableHead>
+                    <TableHead className="w-24 text-center">الحالة</TableHead>
                     <TableHead className="w-32">تاريخ الإنشاء</TableHead>
                     <TableHead className="w-32">تاريخ الاستخدام</TableHead>
                     <TableHead className="w-36">المحل المستخدم</TableHead>
@@ -289,7 +289,7 @@ export function AdminCodesView() {
                   ) : (
                     rows.map((r, i) => (
                       <TableRow key={r.id}>
-                        <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                        <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs" dir="ltr">
@@ -305,8 +305,8 @@ export function AdminCodesView() {
                           </div>
                         </TableCell>
                         <TableCell className="text-xs">{r.planName}</TableCell>
-                        <TableCell className="text-xs">{PERIOD_LABEL[r.period] ?? r.period}</TableCell>
-                        <TableCell>
+                        <TableCell className="text-center text-xs">{PERIOD_LABEL[r.period] ?? r.period}</TableCell>
+                        <TableCell className="text-center">
                           {r.status === 'available' ? (
                             <Badge variant="outline" className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
                               متاح

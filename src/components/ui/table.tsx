@@ -128,8 +128,12 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        // `text-start` instead of `text-left` — respects inherited direction
-        "text-foreground h-10 px-2 text-start align-middle font-medium whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        // `text-start` instead of `text-left` — respects inherited direction.
+        // `px-3 py-2.5` (12px / 10px) gives tight, balanced padding that
+        // matches modern dashboards (Stripe, Vercel, Linear). The previous
+        // `px-2` was too cramped for header text and caused apparent
+        // misalignment between header and cell content.
+        "text-foreground h-11 px-3 py-2.5 text-start align-middle font-medium whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className
       )}
       {...props}
@@ -142,7 +146,10 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     <td
       data-slot="table-cell"
       className={cn(
-        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        // `px-3 py-2.5` matches the header padding so cells align cleanly
+        // under their headers. Combined with `table-fixed` and explicit
+        // `w-XX` on <th>, this produces balanced, dashboard-grade tables.
+        "p-2.5 px-3 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className
       )}
       {...props}

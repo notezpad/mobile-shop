@@ -195,14 +195,14 @@ export function ProductsView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">الرقم</TableHead>
-                    <TableHead className="w-16">الصورة</TableHead>
+                    <TableHead className="w-10 text-center">#</TableHead>
+                    <TableHead className="w-14 text-center">الصورة</TableHead>
                     <TableHead>الاسم</TableHead>
-                    <TableHead className="w-32">التصنيف</TableHead>
-                    <TableHead className="w-32">الباركود</TableHead>
-                    <TableHead className="w-28">السعر</TableHead>
-                    <TableHead className="w-24">الكمية</TableHead>
-                    <TableHead className="w-24 text-center">إجراءات</TableHead>
+                    <TableHead className="w-28">التصنيف</TableHead>
+                    <TableHead className="w-36">الباركود</TableHead>
+                    <TableHead className="w-28 text-center">السعر</TableHead>
+                    <TableHead className="w-16 text-center">الكمية</TableHead>
+                    <TableHead className="w-20 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -220,11 +220,11 @@ export function ProductsView() {
                       const low = p.quantity <= p.minQuantity
                       return (
                         <TableRow key={p.id}>
-                          <TableCell className="font-mono text-xs">
+                          <TableCell className="text-center font-mono text-xs">
                             {index + 1}
                           </TableCell>
-                          <TableCell>
-                            <div className="flex size-10 items-center justify-center overflow-hidden rounded-md border bg-muted">
+                          <TableCell className="text-center">
+                            <div className="flex size-10 items-center justify-center overflow-hidden rounded-md border bg-muted mx-auto">
                               {p.imagePath ? (
                                 <img
                                   src={p.imagePath}
@@ -249,10 +249,10 @@ export function ProductsView() {
                           <TableCell className="text-muted-foreground text-xs">
                             {p.barcode ?? '—'}
                           </TableCell>
-                          <TableCell className="font-semibold tabular-nums">
+                          <TableCell className="text-center font-semibold tabular-nums">
                             {formatCurrency(p.price)}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="text-center">
                             <span
                               className={cn(
                                 'font-semibold tabular-nums',

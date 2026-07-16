@@ -111,10 +111,10 @@ export function CashView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">الرقم</TableHead>
+                    <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead className="w-36">التاريخ</TableHead>
                     <TableHead className="w-36">المصدر</TableHead>
-                    <TableHead className="w-32">المبلغ</TableHead>
+                    <TableHead className="w-32 text-center">المبلغ</TableHead>
                     <TableHead>ملاحظات</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -131,7 +131,7 @@ export function CashView() {
                   ) : (
                     data?.entries.map((e, index) => (
                       <TableRow key={e.id}>
-                        <TableCell className="font-mono text-xs">{index + 1}</TableCell>
+                        <TableCell className="text-center font-mono text-xs">{index + 1}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">
                           {formatDate(e.createdAt)}
                         </TableCell>
@@ -140,7 +140,7 @@ export function CashView() {
                         </TableCell>
                         <TableCell
                           className={cn(
-                            'font-semibold tabular-nums',
+                            'text-center font-semibold tabular-nums',
                             e.amount >= 0 ? 'text-primary' : 'text-destructive'
                           )}
                         >

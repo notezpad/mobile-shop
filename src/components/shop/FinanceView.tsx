@@ -222,12 +222,12 @@ export function FinanceView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">الرقم</TableHead>
+                    <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead className="w-36">التاريخ</TableHead>
                     <TableHead className="w-32">الوسيلة</TableHead>
-                    <TableHead className="w-24">النوع</TableHead>
-                    <TableHead className="w-32">المبلغ</TableHead>
-                    <TableHead className="w-28">العمولة</TableHead>
+                    <TableHead className="w-24 text-center">النوع</TableHead>
+                    <TableHead className="w-32 text-center">المبلغ</TableHead>
+                    <TableHead className="w-28 text-center">العمولة</TableHead>
                     <TableHead>ملاحظات</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -244,20 +244,20 @@ export function FinanceView() {
                   ) : (
                     rows.map((t, index) => (
                       <TableRow key={t.id}>
-                        <TableCell className="font-mono text-xs">{index + 1}</TableCell>
+                        <TableCell className="text-center font-mono text-xs">{index + 1}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">
                           {formatDate(t.createdAt)}
                         </TableCell>
                         <TableCell>
                           {METHOD_LABEL[t.method] ?? t.method}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           {t.kind === 'deposit' ? 'إيداع' : 'سحب'}
                         </TableCell>
-                        <TableCell className="font-semibold tabular-nums">
+                        <TableCell className="text-center font-semibold tabular-nums">
                           {formatCurrency(t.amount)}
                         </TableCell>
-                        <TableCell className="tabular-nums text-primary">
+                        <TableCell className="text-center tabular-nums text-primary">
                           {formatCurrency(t.commission)}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">

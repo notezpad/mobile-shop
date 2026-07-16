@@ -204,11 +204,11 @@ export function CustomersView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">الرقم</TableHead>
+                    <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead>الاسم</TableHead>
                     <TableHead className="w-36">الهاتف</TableHead>
-                    <TableHead className="w-32">الرصيد</TableHead>
-                    <TableHead className="w-28">عدد المبيعات</TableHead>
+                    <TableHead className="w-32 text-center">الرصيد</TableHead>
+                    <TableHead className="w-24 text-center">عدد المبيعات</TableHead>
                     <TableHead className="w-32 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -225,14 +225,14 @@ export function CustomersView() {
                   ) : (
                     customers.map((c, index) => (
                       <TableRow key={c.id}>
-                        <TableCell className="font-mono text-xs">
+                        <TableCell className="text-center font-mono text-xs">
                           {index + 1}
                         </TableCell>
                         <TableCell className="font-medium">{c.name}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">
                           {c.phone ?? '—'}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           <Badge
                             variant="outline"
                             className={
@@ -244,7 +244,7 @@ export function CustomersView() {
                             {formatCurrency(c.balance)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="tabular-nums">
+                        <TableCell className="text-center tabular-nums">
                           {c._count?.sales ?? 0}
                         </TableCell>
                         <TableCell className="text-center">
