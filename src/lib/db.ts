@@ -11,11 +11,20 @@ import { readDatabaseUrl } from './env'
 // driver adapter with node-postgres (`pg`) over Workers' TCP sockets. The
 // pg-cloudflare import above patches pg to use Workers-compatible sockets.
 // The DB URL should be the pooled connection string (Supabase port 6543).
-
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
-
+//
+// IMPORTANT: we intentionally do NOT cache the PrismaClient/pg connection in
+// a module-level global across requests. Cloudflare Workers forbids reusing
+// an I/O object (like a TCP socket opened by `pg`) that was created during
+// one request inside a *different* request — even if the same Worker
+// isolate happens to be reused for both. Doing so either hangs the request
+// forever (until the runtime force-cancels it: "the Workers runtime
+// canceled this request because it detected that your Worker's code had
+// hung") or throws immediately on the next request once the stale socket is
+// touched. We saw exactly this pattern in production: a request would
+// succeed, then the next one on the same warm isolate would hang or 500.
+//
+// The fix is to open a fresh, single connection for every request instead.
+// It costs a bit of extra connect latency per request, but it's correct.
 function createPrismaClient() {
   const connectionString = readDatabaseUrl()
 
@@ -25,22 +34,16 @@ function createPrismaClient() {
     )
   }
 
-  const adapter = new PrismaPg({ connectionString })
+  // max: 1 — each PrismaClient instance here lives for a single request, so
+  // there's no benefit to a multi-connection pool, and keeping it at 1 avoids
+  // needlessly eating into Supabase's pooled-connection budget.
+  const adapter = new PrismaPg({ connectionString, max: 1 })
   return new PrismaClient({ adapter })
-}
-
-// Lazily create the client on first actual use (request time), so build/module
-// import does not require the database secret.
-function getPrismaClient(): PrismaClient {
-  if (!globalForPrisma.prisma) {
-    globalForPrisma.prisma = createPrismaClient()
-  }
-  return globalForPrisma.prisma
 }
 
 export const db = new Proxy({} as PrismaClient, {
   get(_target, prop, receiver) {
-    const client = getPrismaClient()
+    const client = createPrismaClient()
     return Reflect.get(client as object, prop, receiver)
   },
 })
