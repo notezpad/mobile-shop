@@ -270,7 +270,7 @@ export function SuperAdminApp() {
         </div>
 
         {/* Main content */}
-        <main className="flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950">
+        <main className="flex flex-1 flex-col bg-slate-50 dark:bg-slate-950">
           {/* Desktop header */}
           <header className="sticky top-0 z-20 hidden h-14 items-center justify-between border-b border-slate-200 bg-white/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:border-slate-800 dark:bg-slate-900/95 lg:flex">
             <div>
@@ -286,7 +286,7 @@ export function SuperAdminApp() {
             </div>
           </header>
 
-          <div className="min-w-0 flex-1 p-4 sm:p-6">
+          <div className="flex-1 p-4 sm:p-6">
             <AnimatePresence mode="wait">
               <motion.div
                 key={active}

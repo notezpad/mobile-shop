@@ -351,7 +351,7 @@ function MainApp() {
         </div>
 
         {/* Main content */}
-        <main className="flex min-w-0 flex-1 flex-col">
+        <main className="flex flex-1 flex-col">
           {/* Desktop header */}
           <header className="sticky top-0 z-20 hidden h-14 items-center justify-between border-b bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60 lg:flex">
             <div>
@@ -366,7 +366,7 @@ function MainApp() {
             </div>
           </header>
 
-          <div className="min-w-0 flex-1 p-4 sm:p-6">
+          <div className="flex-1 p-4 sm:p-6">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeView}

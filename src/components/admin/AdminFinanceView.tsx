@@ -254,12 +254,12 @@ export function AdminFinanceView() {
                 <TableHeader className="sticky top-0 bg-card z-10">
                   <TableRow>
                     <TableHead className="w-10">#</TableHead>
-                    <TableHead>التاريخ</TableHead>
+                    <TableHead className="w-32">التاريخ</TableHead>
                     <TableHead>المحل</TableHead>
-                    <TableHead>الباقة</TableHead>
-                    <TableHead>المبلغ</TableHead>
-                    <TableHead>طريقة الدفع</TableHead>
-                    <TableHead>الحالة</TableHead>
+                    <TableHead className="w-32">الباقة</TableHead>
+                    <TableHead className="w-28">المبلغ</TableHead>
+                    <TableHead className="w-32">طريقة الدفع</TableHead>
+                    <TableHead className="w-28">الحالة</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

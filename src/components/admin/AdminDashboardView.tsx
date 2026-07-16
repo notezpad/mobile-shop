@@ -357,10 +357,10 @@ export function AdminDashboardView() {
                   <TableRow>
                     <TableHead className="w-10">#</TableHead>
                     <TableHead>المحل</TableHead>
-                    <TableHead>الباقة</TableHead>
-                    <TableHead>تاريخ الانتهاء</TableHead>
-                    <TableHead>الأيام المتبقية</TableHead>
-                    <TableHead className="text-left">إجراء</TableHead>
+                    <TableHead className="w-32">الباقة</TableHead>
+                    <TableHead className="w-36">تاريخ الانتهاء</TableHead>
+                    <TableHead className="w-32">الأيام المتبقية</TableHead>
+                    <TableHead className="w-36 text-center">إجراء</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -382,7 +382,7 @@ export function AdminDashboardView() {
                             {s.daysLeft} يوم
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-left">
+                        <TableCell className="text-center">
                           <Button
                             size="sm"
                             variant="outline"
@@ -423,9 +423,9 @@ export function AdminDashboardView() {
                   <TableRow>
                     <TableHead className="w-10">#</TableHead>
                     <TableHead>اسم المحل</TableHead>
-                    <TableHead>الباقة</TableHead>
-                    <TableHead>تاريخ التسجيل</TableHead>
-                    <TableHead>الحالة</TableHead>
+                    <TableHead className="w-32">الباقة</TableHead>
+                    <TableHead className="w-36">تاريخ التسجيل</TableHead>
+                    <TableHead className="w-28">الحالة</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

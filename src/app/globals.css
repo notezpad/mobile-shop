@@ -143,6 +143,17 @@
   text-align: start;
 }
 
+/* Fixed-layout tables: ensure the table can grow beyond 100% of its container
+ * when the sum of explicit column widths exceeds the container width (e.g., on
+ * small screens). This allows horizontal scrolling via the parent's
+ * `overflow-x-auto` instead of squishing columns and clipping cell content.
+ * `width: 100%` still applies so the table fills the container on wide screens
+ * where the column widths sum to less than 100%. */
+table[data-slot="table"].table-fixed {
+  width: auto;
+  min-width: 100%;
+}
+
 /* Hide number input spinners for cleaner Arabic UI */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {

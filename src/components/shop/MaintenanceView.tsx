@@ -139,18 +139,18 @@ export function MaintenanceView() {
               ))}
             </div>
           ) : (
-            <div className="min-w-0 overflow-x-auto">
+            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12">الرقم</TableHead>
                     <TableHead>العميل</TableHead>
-                    <TableHead>الهاتف</TableHead>
+                    <TableHead className="w-36">الهاتف</TableHead>
                     <TableHead>الجهاز</TableHead>
-                    <TableHead>الحالة</TableHead>
-                    <TableHead>التكلفة</TableHead>
-                    <TableHead>تاريخ الاستلام</TableHead>
-                    <TableHead className="text-left">إجراءات</TableHead>
+                    <TableHead className="w-28">الحالة</TableHead>
+                    <TableHead className="w-28">التكلفة</TableHead>
+                    <TableHead className="w-36">تاريخ الاستلام</TableHead>
+                    <TableHead className="w-32 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -186,8 +186,8 @@ export function MaintenanceView() {
                         <TableCell className="text-muted-foreground text-xs">
                           {formatDate(o.receivedAt)}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1">
                             <Button
                               variant="ghost"
                               size="icon"

@@ -191,18 +191,18 @@ export function ProductsView() {
               ))}
             </div>
           ) : (
-            <div className="min-w-0 overflow-x-auto">
+            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12">الرقم</TableHead>
-                    <TableHead className="w-12">الصورة</TableHead>
+                    <TableHead className="w-16">الصورة</TableHead>
                     <TableHead>الاسم</TableHead>
-                    <TableHead>التصنيف</TableHead>
-                    <TableHead>الباركود</TableHead>
-                    <TableHead>السعر</TableHead>
-                    <TableHead>الكمية</TableHead>
-                    <TableHead className="text-left">إجراءات</TableHead>
+                    <TableHead className="w-32">التصنيف</TableHead>
+                    <TableHead className="w-32">الباركود</TableHead>
+                    <TableHead className="w-28">السعر</TableHead>
+                    <TableHead className="w-24">الكمية</TableHead>
+                    <TableHead className="w-24 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -267,8 +267,8 @@ export function ProductsView() {
                               </span>
                             )}
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-1">
                               <Button
                                 variant="ghost"
                                 size="icon"

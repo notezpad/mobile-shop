@@ -465,17 +465,16 @@ export function DashboardView() {
               ))}
             </div>
           ) : (
-            <div className="min-w-0 overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">الرقم</TableHead>
-                    <TableHead>الفاتورة</TableHead>
-                    <TableHead>الوقت</TableHead>
-                    <TableHead>الإجمالي</TableHead>
-                    <TableHead>الحالة</TableHead>
-                  </TableRow>
-                </TableHeader>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">الرقم</TableHead>
+                  <TableHead>الفاتورة</TableHead>
+                  <TableHead className="w-36">الوقت</TableHead>
+                  <TableHead className="w-32">الإجمالي</TableHead>
+                  <TableHead className="w-28">الحالة</TableHead>
+                </TableRow>
+              </TableHeader>
                 <TableBody>
                   {data?.last10Sales?.length ? (
                     data.last10Sales.map((s, index) => (
@@ -520,7 +519,6 @@ export function DashboardView() {
                   )}
                 </TableBody>
               </Table>
-            </div>
           )}
         </CardContent>
       </Card>

@@ -273,11 +273,11 @@ export function AdminTenantsView() {
                     <TableHead className="w-10">#</TableHead>
                     <TableHead>اسم المحل</TableHead>
                     <TableHead>البريد</TableHead>
-                    <TableHead>الباقة</TableHead>
-                    <TableHead>الحالة</TableHead>
-                    <TableHead>تاريخ التسجيل</TableHead>
-                    <TableHead>آخر دخول</TableHead>
-                    <TableHead className="text-left">إجراءات</TableHead>
+                    <TableHead className="w-28">الباقة</TableHead>
+                    <TableHead className="w-24">الحالة</TableHead>
+                    <TableHead className="w-32">تاريخ التسجيل</TableHead>
+                    <TableHead className="w-32">آخر دخول</TableHead>
+                    <TableHead className="w-44 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -299,8 +299,8 @@ export function AdminTenantsView() {
                         <TableCell><StatusBadge status={r.status} /></TableCell>
                         <TableCell className="text-xs">{formatShortDate(r.createdAt)}</TableCell>
                         <TableCell className="text-xs">{r.lastLoginAt ? formatShortDate(r.lastLoginAt) : '-'}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-end gap-1">
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1">
                             <Button
                               size="icon"
                               variant="ghost"
@@ -513,12 +513,12 @@ function TenantDetailDialog({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>الباقة</TableHead>
-                      <TableHead>الفترة</TableHead>
-                      <TableHead>البداية</TableHead>
-                      <TableHead>النهاية</TableHead>
-                      <TableHead>المبلغ</TableHead>
-                      <TableHead>الحالة</TableHead>
+                      <TableHead className="w-32">الباقة</TableHead>
+                      <TableHead className="w-24">الفترة</TableHead>
+                      <TableHead className="w-32">البداية</TableHead>
+                      <TableHead className="w-32">النهاية</TableHead>
+                      <TableHead className="w-28">المبلغ</TableHead>
+                      <TableHead className="w-24">الحالة</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -554,7 +554,7 @@ function TenantDetailDialog({
                     <TableRow>
                       <TableHead>الاسم</TableHead>
                       <TableHead>البريد</TableHead>
-                      <TableHead>الدور</TableHead>
+                      <TableHead className="w-28">الدور</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

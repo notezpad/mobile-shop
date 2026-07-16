@@ -328,15 +328,15 @@ export function CustomerDetailDialog({
 
                 <Card>
                   <CardContent className="p-0">
-                    <div className="min-w-0 overflow-x-auto">
+                    <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
                             <TableHead className="w-32">التاريخ</TableHead>
                             <TableHead className="w-20">النوع</TableHead>
                             <TableHead>التفاصيل</TableHead>
-                            <TableHead className="text-center">مدين</TableHead>
-                            <TableHead className="text-center">دائن</TableHead>
+                            <TableHead className="w-28 text-center">مدين</TableHead>
+                            <TableHead className="w-28 text-center">دائن</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -443,16 +443,16 @@ export function CustomerDetailDialog({
               <TabsContent value="sales">
                 <Card>
                   <CardContent className="p-0">
-                    <div className="min-w-0 overflow-x-auto">
+                    <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
                             <TableHead>الفاتورة</TableHead>
-                            <TableHead>التاريخ</TableHead>
-                            <TableHead className="text-center">عدد الأصناف</TableHead>
-                            <TableHead className="text-center">الإجمالي</TableHead>
-                            <TableHead className="text-center">المدفوع</TableHead>
-                            <TableHead className="text-center">الحالة</TableHead>
+                            <TableHead className="w-36">التاريخ</TableHead>
+                            <TableHead className="w-28 text-center">عدد الأصناف</TableHead>
+                            <TableHead className="w-28 text-center">الإجمالي</TableHead>
+                            <TableHead className="w-28 text-center">المدفوع</TableHead>
+                            <TableHead className="w-24 text-center">الحالة</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -531,15 +531,15 @@ export function CustomerDetailDialog({
                 </div>
                 <Card>
                   <CardContent className="p-0">
-                    <div className="min-w-0 overflow-x-auto">
+                    <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>التاريخ</TableHead>
-                            <TableHead className="text-center">المبلغ</TableHead>
-                            <TableHead className="text-center">الطريقة</TableHead>
+                            <TableHead className="w-36">التاريخ</TableHead>
+                            <TableHead className="w-28 text-center">المبلغ</TableHead>
+                            <TableHead className="w-28 text-center">الطريقة</TableHead>
                             <TableHead>ملاحظات</TableHead>
-                            <TableHead className="text-center">إجراء</TableHead>
+                            <TableHead className="w-20 text-center">إجراء</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>

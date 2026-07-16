@@ -270,13 +270,13 @@ export function AdminCodesView() {
                   <TableRow>
                     <TableHead className="w-10">#</TableHead>
                     <TableHead>الكود</TableHead>
-                    <TableHead>الباقة</TableHead>
-                    <TableHead>الفترة</TableHead>
-                    <TableHead>الحالة</TableHead>
-                    <TableHead>تاريخ الإنشاء</TableHead>
-                    <TableHead>تاريخ الاستخدام</TableHead>
-                    <TableHead>المحل المستخدم</TableHead>
-                    <TableHead className="text-left">إجراءات</TableHead>
+                    <TableHead className="w-32">الباقة</TableHead>
+                    <TableHead className="w-24">الفترة</TableHead>
+                    <TableHead className="w-24">الحالة</TableHead>
+                    <TableHead className="w-32">تاريخ الإنشاء</TableHead>
+                    <TableHead className="w-32">تاريخ الاستخدام</TableHead>
+                    <TableHead className="w-36">المحل المستخدم</TableHead>
+                    <TableHead className="w-20 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -320,7 +320,7 @@ export function AdminCodesView() {
                         <TableCell className="text-xs">{formatShortDate(r.createdAt)}</TableCell>
                         <TableCell className="text-xs">{r.redeemedAt ? formatShortDate(r.redeemedAt) : '-'}</TableCell>
                         <TableCell className="text-xs">{r.tenantName ?? '-'}</TableCell>
-                        <TableCell className="text-left">
+                        <TableCell className="text-center">
                           {r.status === 'available' && (
                             <Button
                               size="icon"

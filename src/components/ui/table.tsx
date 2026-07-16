@@ -24,19 +24,38 @@ import { cn } from "@/lib/utils"
  *   2. Replace `text-left` on `<th>` with `text-start` so the alignment
  *      respects the inherited direction (right in RTL, left in LTR).
  *
- * This is safe in LTR contexts too — `dir="rtl"` is only applied when the
- * document is RTL (detected via the `dir` attribute on `<html>`).
+ * Layout strategy:
+ *   `table-layout: fixed` is now the DEFAULT. This is critical for responsive
+ *   tables — without it, `table-layout: auto` distributes extra horizontal
+ *   space to ALL columns based on content, which on wide screens causes:
+ *     - Short-content columns (numbers, badges, actions) to stretch wide,
+ *       leaving huge empty space inside cells (visually "empty space on the
+ *       left" in RTL because text-align is start = right).
+ *     - Header text to misalign with cell content.
+ *   With `table-fixed`, columns honor the explicit `w-XX` widths set on
+ *   `<th>` elements, and any remaining width is distributed equally among
+ *   the unspecified columns. This produces balanced, predictable layouts on
+ *   both small and large screens.
+ *
+ *   Pass `auto` prop to opt out of fixed layout (rarely needed).
  */
 
 function Table({
   className,
-  fixed,
+  fixed = true,
+  auto = false,
   ...props
-}: React.ComponentProps<"table"> & { fixed?: boolean }) {
+}: React.ComponentProps<"table"> & {
+  /** Default: true. Use table-layout: fixed for predictable column widths. */
+  fixed?: boolean
+  /** Opt out of fixed layout and use table-layout: auto. */
+  auto?: boolean
+}) {
+  const useFixed = fixed && !auto
   return (
     <div
       data-slot="table-container"
-      className="relative w-full min-w-0 overflow-x-auto"
+      className="relative w-full overflow-x-auto"
       dir="rtl"
     >
       <table
@@ -44,12 +63,12 @@ function Table({
         dir="rtl"
         className={cn(
           "w-full caption-bottom text-sm",
-          // `fixed` enables `table-layout: fixed` — combined with explicit
-          // `w-XX` on <th>, this prevents columns from stretching on wide
-          // screens. Without it, `table-layout: auto` distributes extra space
-          // to ALL columns, making short columns (actions, numbers) look
-          // stretched with the header text misaligned from the cell content.
-          fixed && "table-fixed",
+          // `table-fixed` (default) — combined with explicit `w-XX` on <th>,
+          // this prevents columns from stretching on wide screens. Without
+          // it, `table-layout: auto` distributes extra space to ALL columns,
+          // making short columns (actions, numbers) look stretched with the
+          // header text misaligned from the cell content.
+          useFixed && "table-fixed",
           className
         )}
         {...props}
@@ -149,8 +168,8 @@ export {
   TableHeader,
   TableBody,
   TableFooter,
-  TableHead,
   TableRow,
+  TableHead,
   TableCell,
   TableCaption,
 }

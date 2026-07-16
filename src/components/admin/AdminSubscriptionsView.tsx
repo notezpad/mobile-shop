@@ -303,14 +303,14 @@ export function AdminSubscriptionsView() {
                   <TableRow>
                     <TableHead className="w-10">#</TableHead>
                     <TableHead>المحل</TableHead>
-                    <TableHead>الباقة</TableHead>
-                    <TableHead>الفترة</TableHead>
-                    <TableHead>البداية</TableHead>
-                    <TableHead>النهاية</TableHead>
-                    <TableHead>المبلغ</TableHead>
-                    <TableHead>طريقة الدفع</TableHead>
-                    <TableHead>الحالة</TableHead>
-                    <TableHead className="text-left">إجراءات</TableHead>
+                    <TableHead className="w-28">الباقة</TableHead>
+                    <TableHead className="w-24">الفترة</TableHead>
+                    <TableHead className="w-32">البداية</TableHead>
+                    <TableHead className="w-32">النهاية</TableHead>
+                    <TableHead className="w-28">المبلغ</TableHead>
+                    <TableHead className="w-32">طريقة الدفع</TableHead>
+                    <TableHead className="w-28">الحالة</TableHead>
+                    <TableHead className="w-32 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -334,8 +334,8 @@ export function AdminSubscriptionsView() {
                         <TableCell className="text-xs">{formatCurrency(r.amountPaid)}</TableCell>
                         <TableCell className="text-xs">{r.paymentMethod ? (METHOD_LABEL[r.paymentMethod] ?? r.paymentMethod) : '-'}</TableCell>
                         <TableCell><StatusBadge status={r.status} /></TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-end gap-1">
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1">
                             <Button
                               size="icon"
                               variant="ghost"

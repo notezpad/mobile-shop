@@ -200,16 +200,16 @@ export function CustomersView() {
               ))}
             </div>
           ) : (
-            <div className="min-w-0 overflow-x-auto">
+            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12">الرقم</TableHead>
                     <TableHead>الاسم</TableHead>
-                    <TableHead>الهاتف</TableHead>
-                    <TableHead>الرصيد</TableHead>
-                    <TableHead>عدد المبيعات</TableHead>
-                    <TableHead className="text-left">إجراءات</TableHead>
+                    <TableHead className="w-36">الهاتف</TableHead>
+                    <TableHead className="w-32">الرصيد</TableHead>
+                    <TableHead className="w-28">عدد المبيعات</TableHead>
+                    <TableHead className="w-32 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -247,8 +247,8 @@ export function CustomersView() {
                         <TableCell className="tabular-nums">
                           {c._count?.sales ?? 0}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1">
                             <Button
                               variant="ghost"
                               size="icon"

@@ -339,7 +339,7 @@ export function POSView() {
                   السلة فارغة — ابحث وأضف منتجات للبدء
                 </p>
               ) : (
-                <div className="min-w-0 overflow-x-auto">
+                <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">

@@ -108,17 +108,17 @@ export function UsersView() {
               ))}
             </div>
           ) : (
-            <div className="min-w-0 overflow-x-auto">
+            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12">الرقم</TableHead>
                     <TableHead>الاسم</TableHead>
                     <TableHead>البريد الإلكتروني</TableHead>
-                    <TableHead>الدور</TableHead>
-                    <TableHead>الحالة</TableHead>
-                    <TableHead>تاريخ الإنشاء</TableHead>
-                    <TableHead className="text-left">إجراءات</TableHead>
+                    <TableHead className="w-28">الدور</TableHead>
+                    <TableHead className="w-24">الحالة</TableHead>
+                    <TableHead className="w-36">تاريخ الإنشاء</TableHead>
+                    <TableHead className="w-32 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -168,8 +168,8 @@ export function UsersView() {
                         <TableCell className="text-muted-foreground text-xs">
                           {formatDate(u.createdAt)}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1">
                             <Button
                               variant="ghost"
                               size="icon"

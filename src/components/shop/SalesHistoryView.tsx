@@ -134,18 +134,18 @@ export function SalesHistoryView() {
               ))}
             </div>
           ) : (
-            <div className="min-w-0 overflow-x-auto">
+            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12">الرقم</TableHead>
-                    <TableHead>رقم الفاتورة</TableHead>
-                    <TableHead>التاريخ</TableHead>
+                    <TableHead className="w-32">رقم الفاتورة</TableHead>
+                    <TableHead className="w-36">التاريخ</TableHead>
                     <TableHead>العميل</TableHead>
-                    <TableHead>الإجمالي</TableHead>
-                    <TableHead>المدفوع</TableHead>
-                    <TableHead>الحالة</TableHead>
-                    <TableHead className="text-left">إجراءات</TableHead>
+                    <TableHead className="w-28">الإجمالي</TableHead>
+                    <TableHead className="w-28">المدفوع</TableHead>
+                    <TableHead className="w-24">الحالة</TableHead>
+                    <TableHead className="w-24 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -199,8 +199,8 @@ export function SalesHistoryView() {
                             {s.status}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1">
                             <Button
                               variant="ghost"
                               size="icon"
