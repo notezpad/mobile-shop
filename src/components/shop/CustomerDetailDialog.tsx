@@ -328,7 +328,7 @@ export function CustomerDetailDialog({
 
                 <Card>
                   <CardContent className="p-0">
-                    <div className="overflow-x-auto">
+                    <div className="min-w-0 overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -443,7 +443,7 @@ export function CustomerDetailDialog({
               <TabsContent value="sales">
                 <Card>
                   <CardContent className="p-0">
-                    <div className="overflow-x-auto">
+                    <div className="min-w-0 overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -531,7 +531,7 @@ export function CustomerDetailDialog({
                 </div>
                 <Card>
                   <CardContent className="p-0">
-                    <div className="overflow-x-auto">
+                    <div className="min-w-0 overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>

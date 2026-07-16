@@ -139,7 +139,7 @@ export function MaintenanceView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="min-w-0 overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
