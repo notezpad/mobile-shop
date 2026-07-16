@@ -31,12 +31,29 @@ export function LandingPage({ onAuthed }: LandingPageProps) {
   // null = show landing page, 'login'/'signup' = show auth page
   const [authView, setAuthView] = React.useState<AuthMode | null>(null)
 
+  // Sync URL with auth view so the browser address bar reflects the current page
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (authView) {
+      window.history.pushState({ authView }, '', `/${authView}`)
+    }
+    const onPopState = (e: PopStateEvent) => {
+      setAuthView(e.state?.authView ?? null)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [authView])
+
   const openAuth = React.useCallback((mode: AuthMode) => {
     setAuthView(mode)
   }, [])
 
   const closeAuth = React.useCallback(() => {
     setAuthView(null)
+    // Go back to root URL
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', '/')
+    }
   }, [])
 
   // Show full-page auth when triggered
