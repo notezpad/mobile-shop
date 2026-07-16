@@ -1,11 +1,36 @@
 import bcrypt from 'bcryptjs'
 import { cookies } from 'next/headers'
 import { SignJWT, jwtVerify } from 'jose'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { db } from './db'
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'dev-secret-change-in-production'
-)
+// Read secrets lazily. On Cloudflare Workers, process.env may not carry
+// runtime bindings even with nodejs_compat_populate_process_env, so we
+// prefer the OpenNext Cloudflare context (bindings) and fall back to
+// process.env for local dev.
+function readEnv(name: string): string | undefined {
+  try {
+    const ctx = getCloudflareContext()
+    const v = (ctx?.env as Record<string, unknown> | undefined)?.[name]
+    if (typeof v === 'string' && v.length > 0) return v
+  } catch {
+    // outside a request scope — fall through
+  }
+  const p = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process?.env?.[name]
+  if (typeof p === 'string' && p.length > 0) return p
+  return undefined
+}
+
+function getJwtSecret(): Uint8Array {
+  const s = readEnv('JWT_SECRET') || 'dev-secret-change-in-production'
+  return new TextEncoder().encode(s)
+}
+
+function isProduction(): boolean {
+  return (readEnv('NODE_ENV') || 'development') === 'production'
+}
+
 const PLATFORM_TENANT_ID = 'platform-tenant'
 
 export type Session = {
@@ -43,11 +68,11 @@ export async function createSession(user: {
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('7d')
-    .sign(JWT_SECRET)
+    .sign(getJwtSecret())
   const cookieStore = await cookies()
   cookieStore.set('shop_session', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProduction(),
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7, // 7 days
     path: '/',
@@ -59,7 +84,7 @@ export async function getSession(): Promise<Session | null> {
   const token = cookieStore.get('shop_session')?.value
   if (!token) return null
   try {
-    const { payload: decoded } = await jwtVerify(token, JWT_SECRET)
+    const { payload: decoded } = await jwtVerify(token, getJwtSecret())
     return {
       userId: decoded.userId as string,
       tenantId: decoded.tenantId as string,
@@ -214,7 +239,7 @@ export async function startImpersonation(tenantId: string) {
   const cookieStore = await cookies()
   cookieStore.set('impersonate_tenant', tenantId, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProduction(),
     sameSite: 'lax',
     maxAge: 60 * 60 * 4, // 4 hours
     path: '/',
