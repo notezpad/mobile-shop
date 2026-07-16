@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { SignJWT, jwtVerify } from 'jose'
 import { db } from './db'
 import { isProductionRuntime, readEnv } from './env'
@@ -17,6 +17,35 @@ function getJwtSecret(): Uint8Array {
 }
 
 const PLATFORM_TENANT_ID = 'platform-tenant'
+
+/**
+ * Whether the current request actually arrived over HTTPS.
+ *
+ * We used to set the session cookie's `secure` flag from NODE_ENV alone.
+ * That breaks in any "production-configured" environment that isn't
+ * actually served over HTTPS yet — e.g. `wrangler dev` (http://localhost:8787)
+ * with `NODE_ENV=production` in wrangler.jsonc's vars. Browsers silently
+ * drop `Secure` cookies on non-HTTPS responses, so the login call would
+ * "succeed" but no cookie would ever be stored, and every subsequent
+ * request would look logged-out (constant redirect back to login).
+ *
+ * We now check the real request protocol (via the standard
+ * `x-forwarded-proto` header, which Cloudflare/most proxies set) and only
+ * mark the cookie secure when we're confident it's HTTPS. If the header is
+ * missing (e.g. plain `next dev`), we fall back to NODE_ENV as before.
+ */
+async function isRequestSecure(): Promise<boolean> {
+  try {
+    const h = await headers()
+    const proto = h.get('x-forwarded-proto')
+    if (proto) {
+      return proto.split(',')[0].trim().toLowerCase() === 'https'
+    }
+  } catch {
+    /* headers() unavailable outside request scope — fall through */
+  }
+  return isProductionRuntime()
+}
 
 export type Session = {
   userId: string
@@ -57,7 +86,7 @@ export async function createSession(user: {
   const cookieStore = await cookies()
   cookieStore.set('shop_session', token, {
     httpOnly: true,
-    secure: isProductionRuntime(),
+    secure: await isRequestSecure(),
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7, // 7 days
     path: '/',
@@ -224,7 +253,7 @@ export async function startImpersonation(tenantId: string) {
   const cookieStore = await cookies()
   cookieStore.set('impersonate_tenant', tenantId, {
     httpOnly: true,
-    secure: isProductionRuntime(),
+    secure: await isRequestSecure(),
     sameSite: 'lax',
     maxAge: 60 * 60 * 4, // 4 hours
     path: '/',
