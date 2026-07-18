@@ -55,7 +55,21 @@ export async function GET(req: NextRequest) {
     where,
     orderBy: { id: 'desc' },
   })
-  return NextResponse.json(products)
+
+  // إجمالي عدد الوحدات المباعة لكل منتج (من عناصر الفواتير)
+  const salesAgg = await db.saleItem.groupBy({
+    by: ['productId'],
+    where: { productId: { in: products.map((p) => p.id) } },
+    _sum: { quantity: true },
+  })
+  const soldMap = new Map(salesAgg.map((s) => [s.productId, s._sum.quantity ?? 0]))
+
+  const withSales = products.map((p) => ({
+    ...p,
+    soldQuantity: soldMap.get(p.id) ?? 0,
+  }))
+
+  return NextResponse.json(withSales)
 }
 
 export async function POST(req: NextRequest) {

@@ -42,8 +42,19 @@ function createPrismaClient() {
 }
 
 export const db = new Proxy({} as PrismaClient, {
-  get(_target, prop, receiver) {
+  get(_target, prop) {
     const client = createPrismaClient()
-    return Reflect.get(client as object, prop, receiver)
+    // IMPORTANT: pass `client` (not the Proxy) as the receiver so that any
+    // internal getters resolve against the real client. Additionally, if the
+    // resolved value is a function (e.g. `$transaction`, or any model method
+    // like `sale.create`), we must bind it to `client`. Without this,
+    // `db.$transaction(cb)` would invoke `$transaction` with `this` set to
+    // the Proxy (because it's called as `db.$transaction(...)`), causing any
+    // internal `this.*` access inside Prisma's implementation to hit the
+    // Proxy's `get` trap again and spin up a *second*, unrelated
+    // PrismaClient/connection mid-transaction. That mismatch is exactly what
+    // produced the intermittent "Transaction not found" 500s in production.
+    const value = Reflect.get(client as object, prop, client)
+    return typeof value === 'function' ? value.bind(client) : value
   },
 })

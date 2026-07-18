@@ -42,6 +42,7 @@ export async function GET() {
     last30DaysSales,
     customersCount,
     customersWithBalance,
+    suppliersWithBalance,
   ] = await Promise.all([
     db.sale.findMany({
       where: { ...tenantFilter, createdAt: { gte: todayStart }, status: 'مكتملة' },
@@ -84,6 +85,10 @@ export async function GET() {
       where: tenantFilter,
       select: { balance: true },
     }),
+    db.supplier.findMany({
+      where: tenantFilter,
+      select: { balance: true },
+    }),
   ])
 
   const todaySalesTotal = todaySales.reduce((s, x) => s + x.total, 0)
@@ -111,6 +116,11 @@ export async function GET() {
   // Total outstanding debt = sum of all positive customer balances in the tenant
   const totalOutstandingDebt = customersWithBalance.reduce(
     (s, c) => s + (c.balance > 0 ? c.balance : 0),
+    0
+  )
+  // Total we owe suppliers = sum of all positive supplier balances in the tenant
+  const totalSupplierDebt = suppliersWithBalance.reduce(
+    (s, sup) => s + (sup.balance > 0 ? sup.balance : 0),
     0
   )
 
@@ -205,6 +215,8 @@ export async function GET() {
     activeMaintenance,
     // Customer debt
     totalOutstandingDebt,
+    // Supplier debt (what we owe suppliers)
+    totalSupplierDebt,
     // Stock value
     stockValueCost,
     stockValuePrice,

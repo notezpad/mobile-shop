@@ -30,7 +30,10 @@ import { ProductsView } from '@/components/shop/ProductsView'
 import { SalesHistoryView } from '@/components/shop/SalesHistoryView'
 import { MaintenanceView } from '@/components/shop/MaintenanceView'
 import { CustomersView } from '@/components/shop/CustomersView'
+import { SuppliersView } from '@/components/shop/SuppliersView'
+import { PurchaseOrdersView } from '@/components/shop/PurchaseOrdersView'
 import { FinanceView } from '@/components/shop/FinanceView'
+import { ExpensesView } from '@/components/shop/ExpensesView'
 import { CashView } from '@/components/shop/CashView'
 import { ReportsView } from '@/components/shop/ReportsView'
 import { SettingsView } from '@/components/shop/SettingsView'
@@ -51,7 +54,10 @@ const VIEW_TITLES: Record<string, string> = {
   sales: 'سجل المبيعات',
   maintenance: 'الصيانة',
   customers: 'العملاء',
+  suppliers: 'الموردين',
+  purchases: 'المشتريات',
   finance: 'المعاملات المالية',
+  expenses: 'المصروفات',
   cash: 'الخزنة',
   reports: 'التقارير',
   settings: 'الإعدادات',
@@ -269,7 +275,7 @@ function MainApp() {
     // Guard: employees can't see admin-only views
     if (
       !isAdmin &&
-      ['finance', 'cash', 'reports', 'settings', 'users', 'branches'].includes(activeView)
+      ['finance', 'expenses', 'cash', 'reports', 'settings', 'users', 'branches'].includes(activeView)
     ) {
       return <DashboardView />
     }
@@ -286,8 +292,14 @@ function MainApp() {
         return <MaintenanceView />
       case 'customers':
         return <CustomersView />
+      case 'suppliers':
+        return <SuppliersView />
+      case 'purchases':
+        return <PurchaseOrdersView />
       case 'finance':
         return <FinanceView />
+      case 'expenses':
+        return <ExpensesView />
       case 'cash':
         return <CashView />
       case 'reports':

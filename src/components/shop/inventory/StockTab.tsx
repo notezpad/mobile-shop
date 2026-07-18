@@ -45,6 +45,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
+import { Barcode } from '../Barcode'
 import type { Branch, InventoryProduct } from '../InventoryView'
 
 interface Props {
@@ -160,7 +161,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
               <TableHeader className="sticky top-0 bg-muted/50 backdrop-blur">
                 <TableRow>
                   <TableHead>الصنف</TableHead>
-                  <TableHead className="w-36">الباركود</TableHead>
+                  <TableHead className="w-44">الباركود</TableHead>
                   <TableHead className="w-28">الفرع</TableHead>
                   <TableHead className="w-20 text-center">الكمية</TableHead>
                   <TableHead className="w-24 text-center">الحد الأدنى</TableHead>
@@ -184,8 +185,8 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                     return (
                       <TableRow key={p.id} className={out ? 'bg-rose-50/50' : low ? 'bg-amber-50/40' : ''}>
                         <TableCell className="font-medium">{p.name}</TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground" dir="ltr">
-                          {p.barcode || '—'}
+                        <TableCell>
+                          <Barcode value={p.barcode} height={26} fontSize={10} />
                         </TableCell>
                         <TableCell>
                           {branchName(p.branchId) ?? (
