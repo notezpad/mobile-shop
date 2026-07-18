@@ -38,11 +38,16 @@ interface Entry {
 
 const SOURCE_LABEL: Record<string, string> = {
   sale: 'بيع',
-  refund: 'مرتجع',
+  refund: 'مرتجع بيع',
   maintenance: 'صيانة',
   transaction: 'معاملة مالية',
   manual: 'يدوي',
-  payment: 'دفعة',
+  payment: 'دفعة عميل',
+  commission: 'عمولة',
+  purchase: 'شراء',
+  purchase_refund: 'مرتجع شراء',
+  supplier_payment: 'دفعة لمورد',
+  expense: 'مصروف',
 }
 
 export function CashView() {

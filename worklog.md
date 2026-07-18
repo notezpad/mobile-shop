@@ -209,3 +209,54 @@ Stage Summary:
   • Pricing toggle: monthly 99/299/999 → yearly 1,090/3,290/10,990 (with savings badge)
   • Smooth scroll: nav links scroll to #features/#how-it-works/#pricing/#testimonials/#faq with scroll-mt-24 offset for sticky header
 - Auth flow: LandingPage CTAs → openAuth(mode) → AuthModal (Dialog) → apiSignup/apiLogin → onAuthed(user) → setBootState('authed') → MainApp (ADMIN/EMPLOYEE) or SuperAdminApp (SUPER_ADMIN). AuthModal state resets on close.
+
+---
+Task: Add Suppliers + Purchase Orders (closing the buy -> sell cycle) with credit-purchase support
+
+Work Log:
+- Read existing patterns: Customer/Payment models + APIs, CustomersView/CustomerDetailDialog/PaymentDialog, POSView cart logic, SalesHistoryView, Sidebar, page.tsx routing, dashboard route/view, CashView source labels
+- Schema: added Supplier (balance = amount WE owe), SupplierPayment (our payments to suppliers), PurchaseOrder + PurchaseOrderItem models; wired relations on Tenant/Branch/Product
+- API routes: /api/suppliers (+[id]), /api/supplier-payments (+[id]), /api/purchase-orders (+[id])
+  - POST purchase-orders: increments product stock + updates product.cost, creates StockMovement(in, refType purchase), requires a supplierId when paid < total (credit purchase), increments supplier.balance by the unpaid amount, creates a negative CashEntry(source purchase) for any cash paid out
+  - DELETE purchase-orders/[id]: marks order as returned (status مرتجعة), pulls stock back out, reverses supplier balance, restores paid cash via CashEntry(source purchase_refund) — mirrors the sales refund pattern
+  - POST supplier-payments: decrements supplier.balance, negative CashEntry(source supplier_payment); DELETE reverses both
+- Dashboard API/UI: added totalSupplierDebt aggregate + a 5th stat card (إجمالي المستحق للموردين)
+- CashView: added source labels for purchase / purchase_refund / supplier_payment / commission
+- New UI: SuppliersView (list + CRUD, mirrors CustomersView), SupplierDetailDialog (كشف حساب / أوامر الشراء / الدفعات tabs, mirrors CustomerDetailDialog), SupplierPaymentDialog (mirrors PaymentDialog), PurchaseOrderDialog (product-search cart with editable cost price + qty, supplier select, paid/credit toggle — mirrors POSView cart), PurchaseOrdersView (history + return action, mirrors SalesHistoryView)
+- Sidebar: added الموردين (Truck icon) and المشتريات (PackagePlus icon) nav items; store.ts ViewKey extended; page.tsx wired imports/switch/titles
+- Verified with a full `npm install` + `npx eslint` pass on all new/modified files (0 real errors — the only findings were a pre-existing react-hooks/set-state-in-effect pattern already present throughout the original codebase, e.g. CustomerDetailDialog.tsx/PaymentDialog.tsx, so not a regression)
+- Could NOT run `prisma generate` / `prisma db push` in this sandbox: the schema-engine binary download from binaries.prisma.sh is blocked by network egress rules here. Run `bun run db:push` (or `npm run db:push`) after unzipping to sync the new tables before starting the app.
+
+Stage Summary:
+- 4 new Prisma models (Supplier, SupplierPayment, PurchaseOrder, PurchaseOrderItem)
+- 6 new API route files, 5 new shop components, Sidebar/store/page.tsx/DashboardView/CashView updated
+- Purchase cycle now mirrors the sales cycle: POS -> Sales/Customers/CashEntry becomes PurchaseOrderDialog -> Purchases/Suppliers/CashEntry, including full آجل (credit) support on the buy side just like the existing credit-sale support
+
+---
+Task: Add المصروفات (Expenses) page — admin-only
+
+Work Log:
+- Added Expense model (category, amount, note, branchId, userId) + Tenant/Branch relations
+- API: /api/expenses (GET with from/to/category filters + total/byCategory summary, POST) and /api/expenses/[id] (DELETE) — both use requireAdmin() so EMPLOYEE gets 403 FORBIDDEN server-side, not just hidden in UI
+- POST creates a negative CashEntry(source expense); DELETE reverses it with a positive CashEntry — same pattern as purchases/supplier payments
+- CashView: added expense source label
+- New ExpensesView.tsx: summary cards (total + top categories), inline add form (category select + amount + note), date/category filters, table with delete
+- Sidebar: added المصروفات to MANAGE_GROUP (already only rendered when isAdmin, same as المعاملات المالية/الخزنة/التقارير/الإعدادات) — so it never appears for EMPLOYEE
+- page.tsx: added expenses to the client-side admin-only view guard array (falls back to dashboard if a non-admin ever lands on activeView===expenses), wired import/case/title
+- Verified with npm install + eslint (0 real errors)
+
+Stage Summary:
+- Expenses is double-gated: hidden from the EMPLOYEE sidebar, redirected away client-side if reached directly, and rejected 403 server-side by every expenses API route
+
+---
+Bugfix: /api/upload endpoint was completely missing
+
+Work Log:
+- Root cause of "Unexpected token 'S', \"Server act\"... is not valid JSON" on product-image upload: ProductDialog.tsx and SettingsView.tsx both fetch(\"/api/upload\", ...) and call res.json() on the response, but no src/app/api/upload/route.ts existed anywhere in the project — the fetch was hitting a route that 404s, and Next/Workers returns a non-JSON body, which JSON.parse() then chokes on client-side
+- Since this app is deployed to Cloudflare Workers (no writable filesystem, no R2 bucket bound in wrangler.jsonc), disk-based upload was never going to work here anyway
+- Created src/app/api/upload/route.ts: requireAuth-gated POST handler that reads the multipart file, validates type (png/jpeg/webp/gif) and size (<=2MB), converts it to a base64 data URL with Buffer.from(...).toString(\"base64\"), and returns { url: \"data:<mime>;base64,...\" } — matches the { url } shape both callers already expect, so no client-side changes were needed
+- imagePath/logoPath are both unbounded Prisma String (TEXT) columns and are rendered directly as <img src={...}>, so a data URL renders exactly like a normal file URL with zero extra Cloudflare setup (no R2, no CDN)
+- Verified with npm install + eslint on the new route — 0 errors
+
+Stage Summary:
+- Product image upload (ProductDialog) and shop logo upload (SettingsView) now both work end-to-end against the same fixed endpoint

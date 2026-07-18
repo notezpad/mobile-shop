@@ -15,6 +15,7 @@ import {
   Trophy,
   AlertCircle,
   Boxes,
+  Truck,
 } from 'lucide-react'
 import {
   Bar,
@@ -55,6 +56,7 @@ interface DashboardData {
   stockValueCost: number
   stockValuePrice: number
   totalOutstandingDebt: number
+  totalSupplierDebt: number
   last7DaysSales: { date: string; total: number; profit: number }[]
   topProducts: { name: string; quantity: number; total: number }[]
   last10Sales: Array<{
@@ -424,7 +426,7 @@ export function DashboardView() {
       </div>
 
       {/* Stock value summary */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           icon={Boxes}
           label="قيمة المخزون (تكلفة)"
@@ -447,6 +449,13 @@ export function DashboardView() {
           icon={AlertTriangle}
           label="إجمالي ديون العملاء"
           value={formatCurrency(data?.totalOutstandingDebt ?? 0)}
+          tone="warning"
+          loading={loading}
+        />
+        <StatCard
+          icon={Truck}
+          label="إجمالي المستحق للموردين"
+          value={formatCurrency(data?.totalSupplierDebt ?? 0)}
           tone="warning"
           loading={loading}
         />

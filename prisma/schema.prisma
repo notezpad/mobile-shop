@@ -46,6 +46,10 @@ model Tenant {
   stockMovements    StockMovement[]
   transfers         Transfer[]
   stocktakes        Stocktake[]
+  suppliers         Supplier[]
+  purchaseOrders    PurchaseOrder[]
+  supplierPayments  SupplierPayment[]
+  expenses          Expense[]
 }
 
 model Plan {
@@ -125,6 +129,8 @@ model Branch {
   transfersFrom  Transfer[]      @relation("TransferFrom")
   transfersTo    Transfer[]      @relation("TransferTo")
   stocktakes     Stocktake[]
+  purchaseOrders PurchaseOrder[]
+  expenses       Expense[]
 
   @@index([tenantId])
 }
@@ -163,10 +169,11 @@ model Product {
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   branch         Branch?         @relation(fields: [branchId], references: [id])
-  saleItems      SaleItem[]
-  stockMovements StockMovement[]
-  transferItems  TransferItem[]
-  stocktakeItems StocktakeItem[]
+  saleItems          SaleItem[]
+  stockMovements     StockMovement[]
+  transferItems      TransferItem[]
+  stocktakeItems     StocktakeItem[]
+  purchaseOrderItems PurchaseOrderItem[]
 
   @@index([tenantId])
   @@index([tenantId, name])
@@ -217,6 +224,79 @@ model Payment {
   @@index([tenantId])
   @@index([tenantId, customerId])
   @@index([tenantId, createdAt])
+}
+
+// ================= Suppliers & Purchasing =================
+
+model Supplier {
+  id        Int      @id @default(autoincrement())
+  tenantId  String
+  name      String
+  phone     String?
+  balance   Float    @default(0) // amount the shop OWES this supplier (credit purchases)
+  createdAt DateTime @default(now())
+
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrders PurchaseOrder[]
+  payments       SupplierPayment[]
+
+  @@index([tenantId])
+  @@index([tenantId, name])
+  @@index([tenantId, phone])
+}
+
+model SupplierPayment {
+  id         Int      @id @default(autoincrement())
+  tenantId   String
+  supplierId Int
+  amount     Float
+  method     String   @default("cash")
+  note       String?
+  createdAt  DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, supplierId])
+  @@index([tenantId, createdAt])
+}
+
+model PurchaseOrder {
+  id         Int      @id @default(autoincrement())
+  tenantId   String
+  branchId   Int?
+  orderNo    String?
+  supplierId Int?
+  userId     String?
+  total      Float    @default(0)
+  paid       Float    @default(0)
+  status     String   @default("مكتملة") // مكتملة | مرتجعة
+  createdAt  DateTime @default(now())
+
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch   Branch?             @relation(fields: [branchId], references: [id])
+  supplier Supplier?           @relation(fields: [supplierId], references: [id])
+  items    PurchaseOrderItem[]
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@index([branchId])
+}
+
+model PurchaseOrderItem {
+  id              Int    @id @default(autoincrement())
+  purchaseOrderId Int
+  productId       Int
+  name            String
+  cost            Float
+  quantity        Int
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
+
+  @@index([purchaseOrderId])
+  @@index([productId])
 }
 
 model Sale {
@@ -321,6 +401,26 @@ model CashEntry {
 
   @@index([tenantId])
   @@index([tenantId, createdAt])
+}
+
+// Shop running costs (rent, electricity, salaries, etc.) — admin-only.
+model Expense {
+  id        Int      @id @default(autoincrement())
+  tenantId  String
+  branchId  Int?
+  category  String
+  amount    Float
+  note      String?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, category])
+  @@index([branchId])
 }
 
 model PlatformSetting {

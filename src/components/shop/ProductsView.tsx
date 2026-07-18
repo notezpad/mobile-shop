@@ -35,6 +35,7 @@ import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { ProductDialog, type ProductFormValues } from './ProductDialog'
 import { CategoryManagerDialog } from './CategoryManagerDialog'
+import { Barcode } from './Barcode'
 import { useShopStore } from '@/lib/store'
 
 interface Product {
@@ -47,6 +48,7 @@ interface Product {
   quantity: number
   minQuantity: number
   imagePath: string | null
+  soldQuantity?: number
 }
 
 export function ProductsView() {
@@ -199,11 +201,12 @@ export function ProductsView() {
                     <TableHead className="w-14 text-center">الصورة</TableHead>
                     <TableHead>الاسم</TableHead>
                     <TableHead className="w-28">التصنيف</TableHead>
-                    <TableHead className="w-36">الباركود</TableHead>
+                    <TableHead className="w-44">الباركود</TableHead>
                     <TableHead className="w-28 text-center">التكلفة</TableHead>
                     <TableHead className="w-28 text-center">السعر</TableHead>
                     <TableHead className="w-16 text-center">الكمية</TableHead>
                     <TableHead className="w-20 text-center">الحد الأدنى</TableHead>
+                    <TableHead className="w-24 text-center">عدد المبيعات</TableHead>
                     <TableHead className="w-20 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -211,7 +214,7 @@ export function ProductsView() {
                   {products.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={10}
+                        colSpan={11}
                         className="py-8 text-center text-muted-foreground"
                       >
                         لا توجد منتجات
@@ -248,8 +251,8 @@ export function ProductsView() {
                               </span>
                             )}
                           </TableCell>
-                          <TableCell className="text-muted-foreground text-xs">
-                            {p.barcode ?? '—'}
+                          <TableCell>
+                            <Barcode value={p.barcode} height={26} fontSize={10} />
                           </TableCell>
                           <TableCell className="text-center tabular-nums text-muted-foreground">
                             {formatCurrency(p.cost)}
@@ -274,6 +277,9 @@ export function ProductsView() {
                           </TableCell>
                           <TableCell className="text-center tabular-nums text-muted-foreground">
                             {p.minQuantity}
+                          </TableCell>
+                          <TableCell className="text-center font-semibold tabular-nums text-blue-600">
+                            {p.soldQuantity ?? 0}
                           </TableCell>
                           <TableCell className="text-center">
                             <div className="flex items-center justify-center gap-1">

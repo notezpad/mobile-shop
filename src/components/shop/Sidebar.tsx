@@ -8,7 +8,10 @@ import {
   Receipt,
   Wrench,
   Users,
+  Truck,
+  PackagePlus,
   Wallet,
+  ReceiptText,
   Banknote,
   Warehouse,
   Building2,
@@ -35,11 +38,14 @@ const MAIN_GROUP: NavItem[] = [
   { key: 'sales', label: 'سجل المبيعات', icon: Receipt },
   { key: 'maintenance', label: 'الصيانة', icon: Wrench },
   { key: 'customers', label: 'العملاء', icon: Users },
+  { key: 'suppliers', label: 'الموردين', icon: Truck },
+  { key: 'purchases', label: 'المشتريات', icon: PackagePlus },
   { key: 'inventory', label: 'المخزون', icon: Warehouse },
 ]
 
 const MANAGE_GROUP: NavItem[] = [
   { key: 'finance', label: 'المعاملات المالية', icon: Wallet },
+  { key: 'expenses', label: 'المصروفات', icon: ReceiptText },
   { key: 'cash', label: 'الخزنة', icon: Banknote },
   { key: 'reports', label: 'التقارير', icon: BarChart3 },
   { key: 'settings', label: 'الإعدادات', icon: SettingsIcon },
