@@ -41,7 +41,7 @@ interface Props {
   onOpenChange: (o: boolean) => void
   initial?: Partial<ProductFormValues> | null
   categories: { id: number; name: string }[]
-  onSaved: () => void
+  onSaved: (saved?: ProductFormValues) => void
 }
 
 function generateEan13(): string {
@@ -140,11 +140,15 @@ export function ProductDialog({
       if (initial?.id) {
         await api(`/api/products/${initial.id}`, { method: 'PUT', body: payload })
         toast.success('تم تحديث المنتج')
+        onSaved({ ...payload, id: initial.id })
       } else {
-        await api('/api/products', { method: 'POST', body: payload })
+        const created = await api<ProductFormValues>('/api/products', {
+          method: 'POST',
+          body: payload,
+        })
         toast.success('تمت إضافة المنتج')
+        onSaved(created)
       }
-      onSaved()
       onOpenChange(false)
     } catch (e: any) {
       toast.error(e?.message || 'فشل الحفظ')

@@ -34,6 +34,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { ProductDialog, type ProductFormValues } from './ProductDialog'
 
 interface ProductLite {
   id: number
@@ -79,6 +80,10 @@ export function PurchaseOrderDialog({
   const [paidFull, setPaidFull] = React.useState(true)
   const [paidAmount, setPaidAmount] = React.useState(0)
   const [submitting, setSubmitting] = React.useState(false)
+  const [categories, setCategories] = React.useState<{ id: number; name: string }[]>([])
+  const [newProductOpen, setNewProductOpen] = React.useState(false)
+  const [newProductSeed, setNewProductSeed] = React.useState('')
+  const [pendingToday, setPendingToday] = React.useState<ProductLite[]>([])
 
   React.useEffect(() => {
     if (!open) return
@@ -91,6 +96,12 @@ export function PurchaseOrderDialog({
     api<SupplierLite[]>('/api/suppliers')
       .then(setSuppliers)
       .catch(() => {})
+    api<{ id: number; name: string }[]>('/api/categories')
+      .then(setCategories)
+      .catch(() => {})
+    api<ProductLite[]>('/api/products/pending-today')
+      .then(setPendingToday)
+      .catch(() => setPendingToday([]))
   }, [open, defaultSupplierId])
 
   // debounced product search
@@ -122,6 +133,20 @@ export function PurchaseOrderDialog({
   const selectedSupplier =
     supplierId !== 'none' ? suppliers.find((s) => String(s.id) === supplierId) : null
 
+  // منتجات النهاردة اللي لسه معملهاش دخول فعلي للمخزون ولا اتحطت في السلة
+  const visiblePendingToday = pendingToday.filter(
+    (p) => !cart.some((c) => c.product.id === p.id)
+  )
+
+  const addAllPendingToday = () => {
+    setCart((prev) => {
+      const toAdd = visiblePendingToday.filter(
+        (p) => !prev.some((c) => c.product.id === p.id)
+      )
+      return [...prev, ...toAdd.map((p) => ({ product: p, cost: p.cost, quantity: 1 }))]
+    })
+  }
+
   const addToCart = (p: ProductLite) => {
     setCart((prev) => {
       const existing = prev.find((i) => i.product.id === p.id)
@@ -151,6 +176,23 @@ export function PurchaseOrderDialog({
   }
   const removeItem = (id: number) => {
     setCart((prev) => prev.filter((i) => i.product.id !== id))
+  }
+
+  // بعد ما نضيف منتج جديد من نافذة "إضافة منتج جديد" المدمجة، بنضيفه للسلة على طول
+  // بستخدام المنتج المرجّع فعليًا من الـ API (مش بالتخمين عن طريق البحث بالاسم)
+  const handleNewProductSaved = (saved?: ProductFormValues) => {
+    setNewProductOpen(false)
+    setNewProductSeed('')
+    if (saved?.id) {
+      addToCart({
+        id: saved.id,
+        name: saved.name,
+        barcode: saved.barcode ?? null,
+        cost: saved.cost,
+        quantity: saved.quantity,
+      })
+      toast.success('تم إضافة المنتج الجديد للسلة')
+    }
   }
 
   const submit = async () => {
@@ -245,9 +287,24 @@ export function PurchaseOrderDialog({
                       جارِ البحث...
                     </p>
                   ) : results.length === 0 ? (
-                    <p className="p-3 text-center text-xs text-muted-foreground">
-                      لا توجد نتائج
-                    </p>
+                    <div className="p-3 text-center">
+                      <p className="mb-2 text-xs text-muted-foreground">
+                        لا توجد نتائج — لازم يكون المنتج مسجّل في الكتالوج الأول
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setNewProductSeed(query.trim())
+                          setNewProductOpen(true)
+                          setSearchOpen(false)
+                        }}
+                      >
+                        <Plus className="size-4" />
+                        إضافة منتج جديد باسم &quot;{query.trim()}&quot;
+                      </Button>
+                    </div>
                   ) : (
                     results.map((p) => (
                       <button
@@ -267,6 +324,26 @@ export function PurchaseOrderDialog({
               </Card>
             )}
           </div>
+
+          {/* بانر: منتجات جديدة النهاردة لسه معملهاش دخول فعلي للمخزون */}
+          {visiblePendingToday.length > 0 && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
+              <p className="text-sm text-blue-700">
+                في <span className="font-semibold">{visiblePendingToday.length}</span> منتج
+                جديد اتضاف النهاردة ولسه ملهمش أمر شراء
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="shrink-0 border-blue-300 bg-white hover:bg-blue-100"
+                onClick={addAllPendingToday}
+              >
+                <Plus className="size-4" />
+                إضافة الكل للسلة
+              </Button>
+            </div>
+          )}
 
           {/* Cart */}
           <Card className="overflow-hidden py-0">
@@ -401,6 +478,14 @@ export function PurchaseOrderDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <ProductDialog
+        open={newProductOpen}
+        onOpenChange={setNewProductOpen}
+        initial={{ name: newProductSeed, barcode: newProductSeed }}
+        categories={categories}
+        onSaved={handleNewProductSaved}
+      />
     </Dialog>
   )
 }
