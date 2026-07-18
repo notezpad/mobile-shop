@@ -37,7 +37,21 @@ export async function GET() {
       customer: true,
     },
   })
-  return NextResponse.json(sales)
+  // `userId` on Sale is a plain string (no Prisma relation defined),
+  // so resolve names with a separate lookup instead of `include`.
+  const userIds = [...new Set(sales.map((s) => s.userId).filter(Boolean))] as string[]
+  const users = userIds.length
+    ? await db.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true },
+      })
+    : []
+  const userNameById = new Map(users.map((u) => [u.id, u.name]))
+  const result = sales.map((s) => ({
+    ...s,
+    userName: s.userId ? (userNameById.get(s.userId) ?? null) : null,
+  }))
+  return NextResponse.json(result)
 }
 
 export async function POST(req: NextRequest) {
@@ -151,6 +165,7 @@ export async function POST(req: NextRequest) {
         branchId: session.branchId ?? null,
         invoiceNo,
         customerId,
+        userId: session.userId,
         total,
         paid,
         status: 'مكتملة',
@@ -196,6 +211,7 @@ export async function POST(req: NextRequest) {
           refId: created.id,
           amount: paid,
           note: `بيع فاتورة ${invoiceNo}`,
+          userId: session.userId,
         },
       })
     }

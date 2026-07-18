@@ -66,6 +66,7 @@ export async function PUT(
           refId: oid,
           amount: ord.cost,
           note: `صيانة - ${ord.customerName} (${ord.device})`,
+          userId: session.userId,
         },
       })
     }

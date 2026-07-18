@@ -368,14 +368,16 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                   <TableHead className="w-24 text-center">الأصناف</TableHead>
                   <TableHead className="w-24 text-center">الفرق</TableHead>
                   <TableHead className="w-28 text-center">الحالة</TableHead>
-                  <TableHead className="w-40">التاريخ</TableHead>
+                  <TableHead className="w-28">المنشئ</TableHead>
+                  <TableHead className="w-36">تاريخ الإنشاء</TableHead>
+                  <TableHead className="w-36">تاريخ الاعتماد</TableHead>
                   <TableHead className="w-16 text-center"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {stocktakes.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                       <ClipboardList className="mx-auto mb-2 size-8 opacity-40" />
                       لا توجد عمليات جرد بعد
                     </TableCell>
@@ -400,8 +402,14 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                             <Badge className="bg-amber-100 text-amber-800">مسودة</Badge>
                           )}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-center text-xs text-muted-foreground" dir="ltr">
-                          {formatDate(st.committedAt ?? st.createdAt)}
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                          {st.createdByName ?? '—'}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground" dir="ltr">
+                          {formatDate(st.createdAt)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground" dir="ltr">
+                          {st.committedAt ? formatDate(st.committedAt) : '—'}
                         </TableCell>
                         <TableCell className="text-center">
                           <Button size="sm" variant="ghost" className="size-8 p-0">

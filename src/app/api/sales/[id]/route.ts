@@ -83,6 +83,7 @@ export async function DELETE(
         refId: sid,
         amount: -sale.total,
         note: `مرتجع فاتورة ${sale.invoiceNo ?? sid}`,
+        userId: session.userId,
       },
     })
     // if customer had balance increase for unpaid, decrease back

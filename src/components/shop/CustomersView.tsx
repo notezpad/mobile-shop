@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/table'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { formatCurrency } from '@/lib/format'
+import { formatCurrency, formatDate } from '@/lib/format'
 import { CustomerDetailDialog } from './CustomerDetailDialog'
 
 interface Customer {
@@ -42,6 +42,8 @@ interface Customer {
   phone: string | null
   balance: number
   _count?: { sales: number }
+  totalPurchases?: number
+  lastSaleAt?: string | null
 }
 
 export function CustomersView() {
@@ -191,7 +193,7 @@ export function CustomersView() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="overflow-hidden py-0">
         <CardContent className="p-0">
           {loading ? (
             <div className="space-y-2 p-4">
@@ -208,7 +210,9 @@ export function CustomersView() {
                     <TableHead>الاسم</TableHead>
                     <TableHead className="w-36">الهاتف</TableHead>
                     <TableHead className="w-32 text-center">الرصيد</TableHead>
+                    <TableHead className="w-32 text-center">إجمالي المشتريات</TableHead>
                     <TableHead className="w-24 text-center">عدد المبيعات</TableHead>
+                    <TableHead className="w-36">آخر تعامل</TableHead>
                     <TableHead className="w-32 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -216,7 +220,7 @@ export function CustomersView() {
                   {customers.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={6}
+                        colSpan={8}
                         className="py-8 text-center text-muted-foreground"
                       >
                         لا يوجد عملاء
@@ -245,7 +249,13 @@ export function CustomersView() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center tabular-nums">
+                          {formatCurrency(c.totalPurchases ?? 0)}
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums">
                           {c._count?.sales ?? 0}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {c.lastSaleAt ? formatDate(c.lastSaleAt) : '—'}
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1">

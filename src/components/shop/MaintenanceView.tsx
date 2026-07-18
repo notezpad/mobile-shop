@@ -130,7 +130,7 @@ export function MaintenanceView() {
         </Button>
       </div>
 
-      <Card>
+      <Card className="overflow-hidden py-0">
         <CardContent className="p-0">
           {loading ? (
             <div className="space-y-2 p-4">
@@ -147,9 +147,11 @@ export function MaintenanceView() {
                     <TableHead>العميل</TableHead>
                     <TableHead className="w-36">الهاتف</TableHead>
                     <TableHead>الجهاز</TableHead>
+                    <TableHead>العطل</TableHead>
                     <TableHead className="w-28 text-center">الحالة</TableHead>
                     <TableHead className="w-28 text-center">التكلفة</TableHead>
                     <TableHead className="w-36">تاريخ الاستلام</TableHead>
+                    <TableHead className="w-36">تاريخ التسليم</TableHead>
                     <TableHead className="w-32 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -157,7 +159,7 @@ export function MaintenanceView() {
                   {orders.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={8}
+                        colSpan={10}
                         className="py-8 text-center text-muted-foreground"
                       >
                         لا توجد أوامر صيانة
@@ -172,6 +174,9 @@ export function MaintenanceView() {
                           {o.phone ?? '—'}
                         </TableCell>
                         <TableCell>{o.device}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs max-w-[220px] truncate" title={o.issue}>
+                          {o.issue || '—'}
+                        </TableCell>
                         <TableCell className="text-center">
                           <Badge
                             variant="outline"
@@ -185,6 +190,9 @@ export function MaintenanceView() {
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">
                           {formatDate(o.receivedAt)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {o.deliveredAt ? formatDate(o.deliveredAt) : '—'}
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1">

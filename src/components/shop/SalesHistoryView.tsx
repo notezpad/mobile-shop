@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { printSale } from '@/lib/print-client'
 import { useShopStore } from '@/lib/store'
 
@@ -35,6 +36,7 @@ interface Sale {
   paid: number
   status: string
   createdAt: string
+  userName?: string | null
   customer: { name: string; phone?: string | null } | null
   items: SaleItem[]
 }
@@ -125,7 +127,7 @@ export function SalesHistoryView() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="overflow-hidden py-0">
         <CardContent className="p-0">
           {loading ? (
             <div className="space-y-2 p-4">
@@ -142,8 +144,11 @@ export function SalesHistoryView() {
                     <TableHead className="w-28">رقم الفاتورة</TableHead>
                     <TableHead className="w-36">التاريخ</TableHead>
                     <TableHead>العميل</TableHead>
+                    <TableHead className="w-28">البائع</TableHead>
                     <TableHead className="w-28 text-center">الإجمالي</TableHead>
                     <TableHead className="w-28 text-center">المدفوع</TableHead>
+                    <TableHead className="w-24 text-center">الباقي</TableHead>
+                    <TableHead className="w-20 text-center">الأصناف</TableHead>
                     <TableHead className="w-24 text-center">الحالة</TableHead>
                     <TableHead className="w-20 text-center">إجراءات</TableHead>
                   </TableRow>
@@ -152,7 +157,7 @@ export function SalesHistoryView() {
                   {filtered.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={8}
+                        colSpan={11}
                         className="py-8 text-center text-muted-foreground"
                       >
                         لا توجد مبيعات
@@ -179,11 +184,25 @@ export function SalesHistoryView() {
                             </span>
                           )}
                         </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {s.userName ?? '—'}
+                        </TableCell>
                         <TableCell className="text-center font-semibold tabular-nums">
                           {formatCurrency(s.total)}
                         </TableCell>
                         <TableCell className="text-center tabular-nums">
                           {formatCurrency(s.paid)}
+                        </TableCell>
+                        <TableCell
+                          className={cn(
+                            'text-center tabular-nums font-semibold',
+                            s.total - s.paid > 0 && 'text-destructive'
+                          )}
+                        >
+                          {formatCurrency(s.total - s.paid)}
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums text-muted-foreground">
+                          {s.items.reduce((sum, it) => sum + it.quantity, 0)}
                         </TableCell>
                         <TableCell className="text-center">
                           <Badge

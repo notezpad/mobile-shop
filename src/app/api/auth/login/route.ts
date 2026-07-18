@@ -52,6 +52,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Update last login timestamp on the user themselves
+    try {
+      await db.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      })
+    } catch {
+      /* ignore */
+    }
+
     await createSession({
       id: user.id,
       tenantId: user.tenantId,

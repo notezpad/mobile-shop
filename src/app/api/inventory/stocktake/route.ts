@@ -19,7 +19,21 @@ export async function GET() {
       items: { include: { product: { select: { name: true, barcode: true } } } },
     },
   })
-  return NextResponse.json(rows)
+  // `createdBy` on Stocktake is a plain string (no Prisma relation defined),
+  // so resolve names with a separate lookup instead of `include`.
+  const userIds = [...new Set(rows.map((r) => r.createdBy).filter(Boolean))] as string[]
+  const users = userIds.length
+    ? await db.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true },
+      })
+    : []
+  const userNameById = new Map(users.map((u) => [u.id, u.name]))
+  const result = rows.map((r) => ({
+    ...r,
+    createdByName: r.createdBy ? (userNameById.get(r.createdBy) ?? null) : null,
+  }))
+  return NextResponse.json(result)
 }
 
 export async function POST(req: NextRequest) {

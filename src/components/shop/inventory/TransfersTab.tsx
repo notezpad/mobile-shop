@@ -342,14 +342,16 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
                   <TableHead className="w-40">إلى</TableHead>
                   <TableHead>الأصناف</TableHead>
                   <TableHead className="w-28 text-center">الحالة</TableHead>
-                  <TableHead className="w-40">التاريخ</TableHead>
+                  <TableHead className="w-28">المنشئ</TableHead>
+                  <TableHead className="w-36">تاريخ الإنشاء</TableHead>
+                  <TableHead className="w-36">تاريخ الإتمام</TableHead>
                   <TableHead className="w-16 text-center"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {transfers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={10} className="py-10 text-center text-muted-foreground">
                       <ArrowLeftRight className="mx-auto mb-2 size-8 opacity-40" />
                       لا توجد تحويلات بعد
                     </TableCell>
@@ -376,8 +378,14 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
                             {STATUS_LABELS[t.status] ?? t.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-center text-xs text-muted-foreground" dir="ltr">
-                          {formatDate(t.completedAt ?? t.createdAt)}
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                          {t.createdByName ?? '—'}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground" dir="ltr">
+                          {formatDate(t.createdAt)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground" dir="ltr">
+                          {t.completedAt ? formatDate(t.completedAt) : '—'}
                         </TableCell>
                         <TableCell className="text-center">
                           <Button size="sm" variant="ghost" className="size-8 p-0">

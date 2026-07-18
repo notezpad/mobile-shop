@@ -24,6 +24,8 @@ export async function GET() {
       active: true,
       branchId: true,
       createdAt: true,
+      lastLoginAt: true,
+      branch: { select: { name: true } },
     },
   })
   return NextResponse.json(users)

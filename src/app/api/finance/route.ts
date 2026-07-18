@@ -38,7 +38,21 @@ export async function GET(req: NextRequest) {
     where,
     orderBy: { id: 'desc' },
   })
-  return NextResponse.json(rows)
+  // `userId` on Transaction is a plain string (no Prisma relation defined),
+  // so resolve names with a separate lookup instead of `include`.
+  const userIds = [...new Set(rows.map((r) => r.userId).filter(Boolean))] as string[]
+  const users = userIds.length
+    ? await db.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true },
+      })
+    : []
+  const userNameById = new Map(users.map((u) => [u.id, u.name]))
+  const result = rows.map((r) => ({
+    ...r,
+    userName: r.userId ? (userNameById.get(r.userId) ?? null) : null,
+  }))
+  return NextResponse.json(result)
 }
 
 export async function POST(req: NextRequest) {
@@ -96,6 +110,7 @@ export async function POST(req: NextRequest) {
         amount,
         commission,
         note,
+        userId: session.userId,
       },
     })
     // principal cash entry (signed by kind)
@@ -112,6 +127,7 @@ export async function POST(req: NextRequest) {
               ? 'انستاباي'
               : 'فوري'
         } - ${amount}`,
+        userId: session.userId,
       },
     })
     // commission always positive (shop earns it)
@@ -129,6 +145,7 @@ export async function POST(req: NextRequest) {
                 ? 'انستاباي'
                 : 'فوري'
           } - ${amount}`,
+          userId: session.userId,
         },
       })
     }

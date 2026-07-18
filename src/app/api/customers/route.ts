@@ -22,12 +22,31 @@ export async function GET(req: NextRequest) {
       { phone: { contains: search } },
     ]
   }
-  const customers = await db.customer.findMany({
-    where,
-    orderBy: { id: 'desc' },
-    include: { _count: { select: { sales: true } } },
-  })
-  return NextResponse.json(customers)
+  const [customers, salesAgg] = await Promise.all([
+    db.customer.findMany({
+      where,
+      orderBy: { id: 'desc' },
+      include: { _count: { select: { sales: true } } },
+    }),
+    db.sale.groupBy({
+      by: ['customerId'],
+      where: { tenantId: session.tenantId, customerId: { not: null } },
+      _sum: { total: true },
+      _max: { createdAt: true },
+    }),
+  ])
+  const aggByCustomer = new Map(
+    salesAgg.map((a) => [
+      a.customerId,
+      { totalPurchases: a._sum.total ?? 0, lastSaleAt: a._max.createdAt },
+    ])
+  )
+  const result = customers.map((c) => ({
+    ...c,
+    totalPurchases: aggByCustomer.get(c.id)?.totalPurchases ?? 0,
+    lastSaleAt: aggByCustomer.get(c.id)?.lastSaleAt ?? null,
+  }))
+  return NextResponse.json(result)
 }
 
 export async function POST(req: NextRequest) {

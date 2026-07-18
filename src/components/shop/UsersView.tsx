@@ -41,7 +41,9 @@ interface UserRow {
   role: string
   active: boolean
   createdAt: string
+  lastLoginAt?: string | null
   branchId?: number | null
+  branch?: { name: string } | null
 }
 
 export function UsersView() {
@@ -99,7 +101,7 @@ export function UsersView() {
         </Button>
       </div>
 
-      <Card>
+      <Card className="overflow-hidden py-0">
         <CardContent className="p-0">
           {loading ? (
             <div className="space-y-2 p-4">
@@ -117,7 +119,9 @@ export function UsersView() {
                     <TableHead>البريد الإلكتروني</TableHead>
                     <TableHead className="w-28 text-center">الدور</TableHead>
                     <TableHead className="w-24 text-center">الحالة</TableHead>
+                    <TableHead className="w-28">الفرع</TableHead>
                     <TableHead className="w-36">تاريخ الإنشاء</TableHead>
+                    <TableHead className="w-36">آخر دخول</TableHead>
                     <TableHead className="w-32 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -125,7 +129,7 @@ export function UsersView() {
                   {users.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={7}
+                        colSpan={9}
                         className="py-8 text-center text-muted-foreground"
                       >
                         لا يوجد مستخدمون
@@ -166,7 +170,13 @@ export function UsersView() {
                           )}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">
+                          {u.branch?.name ?? 'كل الفروع'}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
                           {formatDate(u.createdAt)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {u.lastLoginAt ? formatDate(u.lastLoginAt) : 'لم يسجل دخول بعد'}
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1">

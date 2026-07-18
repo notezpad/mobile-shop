@@ -48,6 +48,7 @@ export interface Movement {
   branchId: number | null
   product: { name: string; barcode: string | null }
   branch: { name: string } | null
+  userName?: string | null
 }
 export interface Transfer {
   id: number
@@ -60,6 +61,7 @@ export interface Transfer {
   fromBranch: { name: string }
   toBranch: { name: string }
   items: { productId: number; quantity: number; product: { name: string; barcode: string | null } }[]
+  createdByName?: string | null
 }
 export interface Stocktake {
   id: number
@@ -69,6 +71,7 @@ export interface Stocktake {
   note: string | null
   branchId: number | null
   branch: { name: string } | null
+  createdByName?: string | null
   items: {
     productId: number
     systemQty: number

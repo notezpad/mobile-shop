@@ -326,7 +326,7 @@ export function CustomerDetailDialog({
                   />
                 </div>
 
-                <Card>
+                <Card className="overflow-hidden py-0">
                   <CardContent className="p-0">
                     <div className="overflow-x-auto">
                       <Table>
@@ -441,7 +441,7 @@ export function CustomerDetailDialog({
 
               {/* ===== Sales Tab ===== */}
               <TabsContent value="sales">
-                <Card>
+                <Card className="overflow-hidden py-0">
                   <CardContent className="p-0">
                     <div className="overflow-x-auto">
                       <Table>
@@ -529,7 +529,7 @@ export function CustomerDetailDialog({
                     تسجيل دفعة
                   </Button>
                 </div>
-                <Card>
+                <Card className="overflow-hidden py-0">
                   <CardContent className="p-0">
                     <div className="overflow-x-auto">
                       <Table>

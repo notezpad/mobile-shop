@@ -154,6 +154,7 @@ export async function POST(req: NextRequest) {
         refId: payment.id,
         amount,
         note: `دفعة من ${customerName} - ${methodName}`,
+        userId: session.userId,
       },
     })
 
@@ -166,6 +167,7 @@ export async function POST(req: NextRequest) {
           refId: payment.id,
           amount: -commission,
           note: `عمولة ${methodName} على دفعة ${customerName}`,
+          userId: session.userId,
         },
       })
     }

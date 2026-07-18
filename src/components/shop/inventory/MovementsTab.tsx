@@ -235,13 +235,14 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId, on
                   <TableHead className="w-32">الفرع</TableHead>
                   <TableHead className="w-32">النوع</TableHead>
                   <TableHead className="w-24 text-center">الكمية</TableHead>
+                  <TableHead className="w-28">بواسطة</TableHead>
                   <TableHead className="w-48">الملاحظة</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                       <RefreshCw className="mx-auto mb-2 size-8 opacity-40" />
                       لا توجد حركات مطابقة
                     </TableCell>
@@ -265,6 +266,9 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId, on
                         <span className={`font-bold ${m.quantity < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                           {m.quantity > 0 ? '+' : ''}{m.quantity}
                         </span>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {m.userName ?? '—'}
                       </TableCell>
                       <TableCell className="max-w-xs truncate text-xs text-muted-foreground">
                         {m.note || '—'}

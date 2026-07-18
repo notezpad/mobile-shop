@@ -32,6 +32,7 @@ interface Entry {
   source: string
   amount: number
   note: string | null
+  userName?: string | null
   createdAt: string
 }
 
@@ -64,6 +65,21 @@ export function CashView() {
   React.useEffect(() => {
     load()
   }, [load])
+
+  // Entries come newest-first from the API, and `data.balance` is the
+  // authoritative running total (sum of ALL entries, not just the visible
+  // page). To get a correct "balance after this row" per row even when
+  // there are more than the fetched 200 entries, walk backwards from the
+  // known-correct current balance, subtracting each row's amount as we go.
+  const runningBalances = React.useMemo(() => {
+    if (!data) return []
+    let running = data.balance
+    return data.entries.map((e) => {
+      const after = running
+      running -= e.amount
+      return after
+    })
+  }, [data])
 
   return (
     <div className="space-y-4">
@@ -98,7 +114,7 @@ export function CashView() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="overflow-hidden py-0">
         <CardContent className="p-0">
           {loading ? (
             <div className="space-y-2 p-4">
@@ -114,7 +130,9 @@ export function CashView() {
                     <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead className="w-36">التاريخ</TableHead>
                     <TableHead className="w-36">المصدر</TableHead>
+                    <TableHead className="w-28">بواسطة</TableHead>
                     <TableHead className="w-32 text-center">المبلغ</TableHead>
+                    <TableHead className="w-32 text-center">الرصيد بعد الحركة</TableHead>
                     <TableHead>ملاحظات</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -122,7 +140,7 @@ export function CashView() {
                   {data?.entries.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={5}
+                        colSpan={7}
                         className="py-8 text-center text-muted-foreground"
                       >
                         لا توجد حركات
@@ -138,6 +156,9 @@ export function CashView() {
                         <TableCell>
                           {SOURCE_LABEL[e.source] ?? e.source}
                         </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {e.userName ?? '—'}
+                        </TableCell>
                         <TableCell
                           className={cn(
                             'text-center font-semibold tabular-nums',
@@ -146,6 +167,9 @@ export function CashView() {
                         >
                           {e.amount >= 0 ? '+' : ''}
                           {formatCurrency(e.amount)}
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums text-muted-foreground">
+                          {formatCurrency(runningBalances[index] ?? 0)}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">
                           {e.note ?? '—'}

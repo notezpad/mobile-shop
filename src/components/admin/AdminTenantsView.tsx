@@ -257,7 +257,7 @@ export function AdminTenantsView() {
       </Card>
 
       {/* Table */}
-      <Card>
+      <Card className="overflow-hidden py-0">
         <CardContent className="p-0">
           {loading ? (
             <div className="p-6 space-y-2">

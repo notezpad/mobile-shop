@@ -130,15 +130,16 @@ model Branch {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  tenantId  String
-  branchId  Int?
-  name      String
-  email     String   @unique
-  password  String
-  role      String   @default("EMPLOYEE")
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id          String    @id @default(cuid())
+  tenantId    String
+  branchId    Int?
+  name        String
+  email       String    @unique
+  password    String
+  role        String    @default("EMPLOYEE")
+  active      Boolean   @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
 
   tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   branch Branch? @relation(fields: [branchId], references: [id])
@@ -224,6 +225,7 @@ model Sale {
   branchId   Int?
   invoiceNo  String?
   customerId Int?
+  userId     String?
   total      Float    @default(0)
   paid       Float    @default(0)
   status     String   @default("مكتملة")
@@ -296,6 +298,7 @@ model Transaction {
   amount     Float
   commission Float    @default(0)
   note       String?
+  userId     String?
   createdAt  DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -311,6 +314,7 @@ model CashEntry {
   refId     Int?
   amount    Float
   note      String?
+  userId    String?
   createdAt DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)

@@ -68,6 +68,7 @@ export async function DELETE(
           refId: pid,
           amount: -entry.amount, // opposite sign cancels the original
           note: `إلغاء ${entry.source === 'commission' ? 'عمولة' : 'دفعة'} - ${customerName} - ${methodName}`,
+          userId: session.userId,
         },
       })
     }

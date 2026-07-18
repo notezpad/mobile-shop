@@ -24,9 +24,23 @@ export async function GET() {
       _sum: { amount: true },
     }),
   ])
+  // `userId` on CashEntry is a plain string (no Prisma relation defined),
+  // so resolve names with a separate lookup instead of `include`.
+  const userIds = [...new Set(entries.map((e) => e.userId).filter(Boolean))] as string[]
+  const users = userIds.length
+    ? await db.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true },
+      })
+    : []
+  const userNameById = new Map(users.map((u) => [u.id, u.name]))
+  const entriesWithNames = entries.map((e) => ({
+    ...e,
+    userName: e.userId ? (userNameById.get(e.userId) ?? null) : null,
+  }))
   return NextResponse.json({
     balance: agg._sum.amount ?? 0,
-    entries,
+    entries: entriesWithNames,
   })
 }
 
@@ -53,6 +67,7 @@ export async function POST(req: NextRequest) {
       source: 'manual',
       amount,
       note: body.note ? String(body.note) : null,
+      userId: session.userId,
     },
   })
   return NextResponse.json(created, { status: 201 })

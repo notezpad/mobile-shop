@@ -182,7 +182,7 @@ export function ProductsView() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="overflow-hidden py-0">
         <CardContent className="p-0">
           {loading ? (
             <div className="space-y-2 p-4">
@@ -200,8 +200,10 @@ export function ProductsView() {
                     <TableHead>الاسم</TableHead>
                     <TableHead className="w-28">التصنيف</TableHead>
                     <TableHead className="w-36">الباركود</TableHead>
+                    <TableHead className="w-28 text-center">التكلفة</TableHead>
                     <TableHead className="w-28 text-center">السعر</TableHead>
                     <TableHead className="w-16 text-center">الكمية</TableHead>
+                    <TableHead className="w-20 text-center">الحد الأدنى</TableHead>
                     <TableHead className="w-20 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -209,7 +211,7 @@ export function ProductsView() {
                   {products.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={8}
+                        colSpan={10}
                         className="py-8 text-center text-muted-foreground"
                       >
                         لا توجد منتجات
@@ -249,6 +251,9 @@ export function ProductsView() {
                           <TableCell className="text-muted-foreground text-xs">
                             {p.barcode ?? '—'}
                           </TableCell>
+                          <TableCell className="text-center tabular-nums text-muted-foreground">
+                            {formatCurrency(p.cost)}
+                          </TableCell>
                           <TableCell className="text-center font-semibold tabular-nums">
                             {formatCurrency(p.price)}
                           </TableCell>
@@ -266,6 +271,9 @@ export function ProductsView() {
                                 (تنبيه)
                               </span>
                             )}
+                          </TableCell>
+                          <TableCell className="text-center tabular-nums text-muted-foreground">
+                            {p.minQuantity}
                           </TableCell>
                           <TableCell className="text-center">
                             <div className="flex items-center justify-center gap-1">

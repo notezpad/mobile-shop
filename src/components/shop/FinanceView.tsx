@@ -33,6 +33,7 @@ interface Txn {
   amount: number
   commission: number
   note: string | null
+  userName?: string | null
   createdAt: string
 }
 
@@ -209,7 +210,7 @@ export function FinanceView() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="overflow-hidden py-0">
         <CardContent className="p-0">
           {loading ? (
             <div className="space-y-2 p-4">
@@ -225,9 +226,11 @@ export function FinanceView() {
                     <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead className="w-36">التاريخ</TableHead>
                     <TableHead className="w-32">الوسيلة</TableHead>
+                    <TableHead className="w-28">بواسطة</TableHead>
                     <TableHead className="w-24 text-center">النوع</TableHead>
                     <TableHead className="w-32 text-center">المبلغ</TableHead>
                     <TableHead className="w-28 text-center">العمولة</TableHead>
+                    <TableHead className="w-32 text-center">الصافي</TableHead>
                     <TableHead>ملاحظات</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -235,7 +238,7 @@ export function FinanceView() {
                   {rows.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={7}
+                        colSpan={9}
                         className="py-8 text-center text-muted-foreground"
                       >
                         لا توجد معاملات
@@ -251,6 +254,9 @@ export function FinanceView() {
                         <TableCell>
                           {METHOD_LABEL[t.method] ?? t.method}
                         </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {t.userName ?? '—'}
+                        </TableCell>
                         <TableCell className="text-center">
                           {t.kind === 'deposit' ? 'إيداع' : 'سحب'}
                         </TableCell>
@@ -259,6 +265,12 @@ export function FinanceView() {
                         </TableCell>
                         <TableCell className="text-center tabular-nums text-primary">
                           {formatCurrency(t.commission)}
+                        </TableCell>
+                        <TableCell className="text-center font-semibold tabular-nums">
+                          {formatCurrency(
+                            (t.kind === 'deposit' ? t.amount : -t.amount) +
+                              t.commission
+                          )}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">
                           {t.note ?? '—'}
