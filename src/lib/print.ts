@@ -115,6 +115,140 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
 </html>`
 }
 
+export interface LabelItem {
+  name: string
+  barcode: string
+  price?: number
+  quantity: number
+}
+
+export interface LabelOptions {
+  showPrice?: boolean
+  columns?: number
+  /** 'sheet' = grid of labels on a normal A4 page (cut by hand or use pre-cut sticker paper).
+   *  'roll'  = one label per printed page, sized exactly to the label — for thermal label
+   *            printers (Xprinter/TSC/Zebra-type) that are installed as a normal Windows
+   *            printer and just need the page size to match the sticker exactly. */
+  mode?: 'sheet' | 'roll'
+  /** Physical label size in mm, only used when mode === 'roll'. */
+  rollSize?: { widthMm: number; heightMm: number }
+}
+
+/** Builds a self-contained printable HTML page of barcode labels.
+ *  Barcodes are rendered client-side (inside the print window itself) via JsBarcode
+ *  loaded from a CDN, since this HTML is opened in a brand-new window/document that
+ *  has no access to the app's React tree or bundled JS. */
+export function printBarcodeLabelsHtml(items: LabelItem[], opts: LabelOptions = {}): string {
+  const { showPrice = true, columns = 3, mode = 'sheet', rollSize = { widthMm: 40, heightMm: 30 } } = opts
+
+  const flat: { name: string; barcode: string; price?: number }[] = []
+  items.forEach((it) => {
+    const copies = Math.max(1, Math.floor(it.quantity) || 1)
+    for (let i = 0; i < copies; i++) {
+      flat.push({ name: it.name, barcode: it.barcode, price: it.price })
+    }
+  })
+
+  const labelsHtml = flat
+    .map(
+      (f) => `
+    <div class="label">
+      <div class="lbl-name">${escapeHtml(f.name)}</div>
+      <svg class="lbl-barcode" data-barcode="${escapeHtml(f.barcode)}"></svg>
+      ${showPrice && f.price != null ? `<div class="lbl-price">${fmt(f.price)} ج.م</div>` : ''}
+    </div>`
+    )
+    .join('')
+
+  const pageCss =
+    mode === 'roll'
+      ? `
+  @page { size: ${rollSize.widthMm}mm ${rollSize.heightMm}mm; margin: 0; }
+  body { margin: 0; padding: 0; }
+  .sheet { display: block; }
+  .label {
+    width: ${rollSize.widthMm}mm;
+    height: ${rollSize.heightMm}mm;
+    border: none;
+    border-radius: 0;
+    break-after: page;
+    page-break-after: always;
+  }
+  .label:last-child { break-after: auto; page-break-after: auto; }
+  `
+      : `
+  body { margin: 0; padding: 6mm; }
+  .sheet { display: grid; grid-template-columns: repeat(${columns}, 1fr); gap: 3mm; }
+  .label { border: 1px dashed #bbb; border-radius: 2mm; height: 26mm; }
+  @media print {
+    body { padding: 3mm; }
+    .label { border: none; }
+    @page { margin: 6mm; }
+  }
+  `
+
+  return `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<title>طباعة ملصقات الباركود</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/JsBarcode/3.11.5/JsBarcode.all.min.js"></script>
+<style>
+  * { font-family: 'Tahoma', sans-serif; box-sizing: border-box; }
+  .label {
+    padding: 1mm;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .lbl-name {
+    font-size: 9px;
+    font-weight: 700;
+    margin-bottom: 1mm;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .lbl-barcode { width: 92%; }
+  .lbl-price { font-size: 10px; font-weight: 800; margin-top: 1mm; }
+  .empty-msg { padding: 40px; text-align: center; color: #888; font-size: 14px; }
+  ${pageCss}
+</style>
+</head>
+<body>
+  ${
+    flat.length > 0
+      ? `<div class="sheet">${labelsHtml}</div>`
+      : `<div class="empty-msg">لا توجد ملصقات لطباعتها</div>`
+  }
+  <script>
+    window.addEventListener('load', function () {
+      document.querySelectorAll('.lbl-barcode').forEach(function (svg) {
+        var val = svg.getAttribute('data-barcode')
+        try {
+          JsBarcode(svg, val, {
+            format: 'CODE128',
+            height: 30,
+            width: 1.3,
+            fontSize: 10,
+            displayValue: true,
+            margin: 2,
+          })
+        } catch (e) { /* invalid value for this format — leave blank */ }
+      })
+      setTimeout(function () { window.print() }, 200)
+    })
+  </script>
+</body>
+</html>`
+}
+
 function escapeHtml(s: string): string {
   return String(s ?? '')
     .replace(/&/g, '&amp;')

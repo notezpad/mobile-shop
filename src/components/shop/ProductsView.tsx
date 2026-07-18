@@ -6,6 +6,7 @@ import {
   ImageOff,
   Pencil,
   Plus,
+  Printer,
   Search,
   Trash2,
 } from 'lucide-react'
@@ -13,6 +14,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select,
@@ -35,6 +37,7 @@ import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { ProductDialog, type ProductFormValues } from './ProductDialog'
 import { CategoryManagerDialog } from './CategoryManagerDialog'
+import { PrintLabelsDialog } from './PrintLabelsDialog'
 import { Barcode } from './Barcode'
 import { useShopStore } from '@/lib/store'
 
@@ -61,6 +64,9 @@ export function ProductsView() {
   const [initial, setInitial] = React.useState<Partial<ProductFormValues> | null>(null)
   const [catDialogOpen, setCatDialogOpen] = React.useState(false)
   const [confirmId, setConfirmId] = React.useState<number | null>(null)
+  const [selectedIds, setSelectedIds] = React.useState<Set<number>>(new Set())
+  const [labelsDialogOpen, setLabelsDialogOpen] = React.useState(false)
+  const [singlePrintProduct, setSinglePrintProduct] = React.useState<Product | null>(null)
   const quickAdd = useShopStore((s) => s.quickAddProduct)
   const closeQuickAdd = useShopStore((s) => s.closeQuickAddProduct)
 
@@ -138,6 +144,31 @@ export function ProductsView() {
     }
   }
 
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) =>
+      prev.size === products.length ? new Set() : new Set(products.map((p) => p.id))
+    )
+  }
+  const printOneLabel = (p: Product) => {
+    setSinglePrintProduct(p)
+    setLabelsDialogOpen(true)
+  }
+  const openBulkLabels = () => {
+    setSinglePrintProduct(null)
+    setLabelsDialogOpen(true)
+  }
+  const labelProducts = singlePrintProduct
+    ? [singlePrintProduct]
+    : products.filter((p) => selectedIds.has(p.id))
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -177,6 +208,14 @@ export function ProductsView() {
             <FolderOpen className="size-4" />
             التصنيفات
           </Button>
+          <Button
+            variant="outline"
+            onClick={openBulkLabels}
+            disabled={selectedIds.size === 0}
+          >
+            <Printer className="size-4" />
+            طباعة ملصقات {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+          </Button>
           <Button onClick={openAdd}>
             <Plus className="size-4" />
             منتج جديد
@@ -197,6 +236,12 @@ export function ProductsView() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10 text-center">
+                      <Checkbox
+                        checked={products.length > 0 && selectedIds.size === products.length}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
                     <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead className="w-14 text-center">الصورة</TableHead>
                     <TableHead>الاسم</TableHead>
@@ -214,7 +259,7 @@ export function ProductsView() {
                   {products.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={11}
+                        colSpan={12}
                         className="py-8 text-center text-muted-foreground"
                       >
                         لا توجد منتجات
@@ -225,6 +270,12 @@ export function ProductsView() {
                       const low = p.quantity <= p.minQuantity
                       return (
                         <TableRow key={p.id}>
+                          <TableCell className="text-center">
+                            <Checkbox
+                              checked={selectedIds.has(p.id)}
+                              onCheckedChange={() => toggleSelect(p.id)}
+                            />
+                          </TableCell>
                           <TableCell className="text-center font-mono text-xs">
                             {index + 1}
                           </TableCell>
@@ -287,6 +338,15 @@ export function ProductsView() {
                                 variant="ghost"
                                 size="icon"
                                 className="size-8"
+                                title="طباعة ملصق باركود"
+                                onClick={() => printOneLabel(p)}
+                              >
+                                <Printer className="size-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8"
                                 onClick={() => openEdit(p)}
                               >
                                 <Pencil className="size-4" />
@@ -329,6 +389,14 @@ export function ProductsView() {
           loadCats()
           loadProducts()
         }}
+      />
+      <PrintLabelsDialog
+        open={labelsDialogOpen}
+        onOpenChange={(v) => {
+          setLabelsDialogOpen(v)
+          if (!v) setSinglePrintProduct(null)
+        }}
+        products={labelProducts}
       />
 
       {/* simple inline confirm */}

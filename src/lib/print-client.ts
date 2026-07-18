@@ -1,6 +1,6 @@
 'use client'
 
-import { printInvoiceHtml, type PrintableSale } from '@/lib/print'
+import { printInvoiceHtml, printBarcodeLabelsHtml, type PrintableSale, type LabelItem, type LabelOptions } from '@/lib/print'
 
 /** Open a print window with the given HTML and trigger print dialog. */
 export function printHtml(html: string, title = 'طباعة') {
@@ -27,4 +27,21 @@ export function printSale(sale: PrintableSale, shop?: {
   logo?: string
 }) {
   printHtml(printInvoiceHtml(sale, shop), `فاتورة ${sale.invoiceNo ?? sale.id}`)
+}
+
+/** Opens the barcode-label sheet in its own window. Unlike printHtml, this does NOT
+ *  call w.print() itself — the label page renders barcodes via a CDN script and
+ *  triggers window.print() on its own once that's done, so we don't print a blank/
+ *  half-rendered sheet on a slow connection. */
+export function printBarcodeLabels(items: LabelItem[], opts?: LabelOptions) {
+  const html = printBarcodeLabelsHtml(items, opts)
+  const w = window.open('', '_blank', 'width=900,height=700')
+  if (!w) {
+    alert('الرجاء السماح بالنوافذ المنبثقة للطباعة')
+    return
+  }
+  w.document.open()
+  w.document.write(html)
+  w.document.close()
+  w.document.title = 'طباعة ملصقات الباركود'
 }

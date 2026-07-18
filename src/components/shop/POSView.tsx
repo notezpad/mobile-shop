@@ -135,17 +135,40 @@ export function POSView() {
     setOpen(false)
   }
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
+  const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (searchLoading) return
-    if (results.length === 0 && query.trim()) {
-      // no product found - keep input open; user can click add new
-      return
-    }
-    if (results.length > 0) {
-      // pick first match (barcode exact or first)
-      const exact = results.find((r) => r.barcode === query.trim()) ?? results[0]
-      addToCart(exact)
+    const q = query.trim()
+    if (!q) return
+
+    // Barcode scanners type + hit Enter almost instantly, often faster than
+    // the 250ms debounce above can resolve — so instead of trusting whatever
+    // is currently in `results` (which may be stale or still empty), fetch
+    // fresh right now using the exact text that was submitted.
+    setSearchLoading(true)
+    try {
+      const data = await api<ProductLite[]>(
+        `/api/products?search=${encodeURIComponent(q)}`
+      )
+      const exact = data.find((r) => r.barcode === q)
+      if (exact) {
+        // exact barcode match -> add immediately, no ambiguity
+        addToCart(exact)
+      } else if (data.length === 1) {
+        // single match (e.g. typed a unique name) -> add it
+        addToCart(data[0])
+      } else if (data.length > 1) {
+        // multiple name matches -> show the list, let the person pick
+        setResults(data)
+        setOpen(true)
+      } else {
+        toast.error('لا يوجد منتج بهذا الاسم أو الباركود')
+        setResults([])
+        setOpen(false)
+      }
+    } catch {
+      toast.error('فشل البحث عن المنتج')
+    } finally {
+      setSearchLoading(false)
     }
   }
 

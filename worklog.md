@@ -260,3 +260,43 @@ Work Log:
 
 Stage Summary:
 - Product image upload (ProductDialog) and shop logo upload (SettingsView) now both work end-to-end against the same fixed endpoint
+
+---
+Bugfix + Feature: POS barcode-scan race condition, and new barcode label printing
+
+Work Log:
+- BUGFIX: src/components/shop/POSView.tsx — handleSearchSubmit relied on the debounced
+  `results` state (250ms delay) when the search form was submitted. A barcode scanner
+  types the full code and fires Enter almost instantly, faster than the debounce could
+  resolve, so the submit often ran against stale/empty results and silently failed to
+  add the scanned item. Fixed by making the submit handler fetch fresh directly against
+  the exact submitted text: exact barcode match or a single result auto-adds to the
+  cart; multiple name matches show the picker list; no matches shows a clear error
+  toast instead of doing nothing.
+- Verified src/components/shop/inventory/StocktakeTab.tsx does NOT have this problem —
+  it matches scanned codes against an already-loaded in-memory product list, so there's
+  no network race there.
+- Feature: barcode label printing (src/lib/print.ts, src/lib/print-client.ts,
+  src/components/shop/PrintLabelsDialog.tsx, src/components/shop/ProductsView.tsx)
+  - printBarcodeLabelsHtml() builds a self-contained print document; barcodes are
+    rendered client-side inside the print window via JsBarcode loaded from a CDN
+    (the print window is a fresh document with no access to the app's bundled JS).
+    The window triggers window.print() itself once barcodes finish rendering, instead
+    of the opener guessing a fixed timeout, to avoid printing a half-rendered sheet.
+  - Two print modes:
+    - 'sheet' — grid of labels on a normal A4 page (existing behavior), for regular
+      printers / pre-cut sticker paper, cut by hand.
+    - 'roll' — one label per printed page, @page sized to match the physical label
+      exactly (mm), for thermal label printers (Xprinter/TSC/Zebra-type) installed as
+      a normal system printer. Ships with 3 common size presets (40×30, 50×30, 30×20mm)
+      plus a custom width/height option.
+  - ProductsView.tsx: added a selection checkbox column + "select all", a per-row quick
+    "print this product's label" button, and a toolbar "طباعة ملصقات (n)" button for
+    bulk printing the current selection. PrintLabelsDialog lets the user set a copy
+    count per product, toggle price visibility, and pick sheet vs roll mode + label
+    size before printing. Products without a barcode are excluded with a warning
+    listing their names (existing "generate barcode" button in ProductDialog covers
+    assigning one first).
+- Verified with eslint + tsc --noEmit on all touched files — 0 new errors (one
+  pre-existing set-state-in-effect pattern already used throughout the codebase, same
+  as noted in earlier stages — not a regression).
