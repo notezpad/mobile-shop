@@ -21,20 +21,89 @@ export interface ShopInfo {
   phone?: string
   address?: string
   logo?: string
+  invoicePrefix?: string
 }
 
-function fmt(n: number) {
+export function fmt(n: number) {
   return n.toLocaleString('ar-EG', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
 }
 
-function fmtDate(d: string | Date) {
+export function fmtDate(d: string | Date) {
   const date = typeof d === 'string' ? new Date(d) : d
   if (isNaN(date.getTime())) return ''
   const pad = (x: number) => String(x).padStart(2, '0')
   return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+/** Shared brand tokens so every printed/exported document (invoice, report,
+ *  labels) looks like it came from the same professional design system. */
+export const BRAND = {
+  primary: '#17843f',
+  primaryDark: '#0f5c2b',
+  primaryLight: '#e8f6ec',
+  ink: '#16211a',
+  sub: '#6b7a70',
+  border: '#e3e8e4',
+  amber: '#b8860b',
+  amberBg: '#fdf3d9',
+  red: '#c0392b',
+  redBg: '#fbe9e7',
+  fontStack: "'Cairo','Tahoma','Segoe UI',sans-serif",
+}
+
+/** Shared print-safe base styles (A4 page setup, brand header/footer,
+ *  table + badge primitives) reused by the invoice template and, via
+ *  export, by the reports export builder — keeping every exported
+ *  document visually consistent. */
+export function baseDocStyles(): string {
+  return `
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: ${BRAND.fontStack};
+      color: ${BRAND.ink};
+      background: #f4f6f4;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 780px; margin: 0 auto; background: #fff; padding: 30px 34px 26px; }
+    .brand-bar { height: 6px; background: linear-gradient(90deg, ${BRAND.primary}, ${BRAND.primaryDark}); }
+    .doc-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      gap: 16px; padding: 20px 0 16px; border-bottom: 2px solid ${BRAND.primaryLight};
+      margin-bottom: 18px;
+    }
+    .shop-block { display: flex; align-items: center; gap: 12px; }
+    .shop-logo { height: 52px; width: 52px; object-fit: contain; border-radius: 10px; border: 1px solid ${BRAND.border}; background: #fff; }
+    .shop-name { font-size: 20px; font-weight: 800; color: ${BRAND.ink}; }
+    .shop-meta { font-size: 11.5px; color: ${BRAND.sub}; margin-top: 3px; line-height: 1.6; }
+    .doc-meta { text-align: left; font-size: 12px; color: ${BRAND.sub}; }
+    .doc-meta .doc-title { font-size: 13px; font-weight: 700; color: ${BRAND.primary}; text-transform: uppercase; letter-spacing: .04em; }
+    .doc-meta .doc-no { font-size: 19px; font-weight: 800; color: ${BRAND.ink}; margin-top: 2px; }
+    .doc-meta .doc-date { margin-top: 6px; }
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 11px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .badge-green { background: ${BRAND.primaryLight}; color: ${BRAND.primaryDark}; }
+    .badge-amber { background: ${BRAND.amberBg}; color: ${BRAND.amber}; }
+    .badge-red { background: ${BRAND.redBg}; color: ${BRAND.red}; }
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    thead th { background: ${BRAND.primaryDark}; color: #fff; font-weight: 700; padding: 9px 8px; text-align: center; }
+    thead th:first-child { border-radius: 6px 0 0 0; }
+    thead th:last-child { border-radius: 0 6px 0 0; }
+    tbody td { padding: 8px; text-align: center; border-bottom: 1px solid ${BRAND.border}; }
+    tbody tr:nth-child(even) { background: #fafbfa; }
+    .doc-footer {
+      margin-top: 26px; padding-top: 14px; border-top: 1px dashed ${BRAND.border};
+      text-align: center; font-size: 11px; color: ${BRAND.sub};
+    }
+    .doc-footer .thanks { font-size: 13px; font-weight: 700; color: ${BRAND.primary}; margin-bottom: 3px; }
+    @media print {
+      body { background: #fff; }
+      .page { max-width: none; padding: 0 6mm; }
+      @page { size: A4; margin: 10mm 8mm; }
+    }
+  `
 }
 
 export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
@@ -42,74 +111,108 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
     .map(
       (it, i) => `
         <tr>
-          <td>${i + 1}</td>
-          <td style="text-align:right">${escapeHtml(it.name)}</td>
+          <td style="color:${BRAND.sub}">${i + 1}</td>
+          <td style="text-align:right;font-weight:600">${escapeHtml(it.name)}</td>
           <td>${it.quantity}</td>
           <td>${fmt(it.price)}</td>
-          <td>${fmt(it.price * it.quantity)}</td>
+          <td style="font-weight:700">${fmt(it.price * it.quantity)}</td>
         </tr>`
     )
     .join('')
   const remaining = sale.total - sale.paid
+  const prefix = shop?.invoicePrefix || 'INV'
+  const invoiceNo = sale.invoiceNo ?? `${prefix}-${String(sale.id).padStart(6, '0')}`
+
+  let statusBadge = `<span class="badge badge-green">مدفوعة بالكامل</span>`
+  if (remaining > 0.009 && sale.paid > 0.009) statusBadge = `<span class="badge badge-amber">مدفوعة جزئياً</span>`
+  else if (remaining > 0.009) statusBadge = `<span class="badge badge-red">غير مدفوعة</span>`
+
   return `<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8" />
-<title>فاتورة ${sale.invoiceNo ?? sale.id}</title>
+<title>فاتورة ${escapeHtml(invoiceNo)}</title>
 <style>
-  * { font-family: 'Cairo', 'Tahoma', sans-serif; box-sizing: border-box; }
-  body { margin: 0; padding: 20px; color: #111; }
-  .invoice { max-width: 720px; margin: 0 auto; border: 1px solid #ddd; padding: 24px; border-radius: 8px; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #2f9e44; padding-bottom: 16px; margin-bottom: 16px; gap: 12px; }
-  .shop .name { font-size: 22px; font-weight: 800; color: #2f9e44; }
-  .shop .meta { font-size: 12px; color: #555; margin-top: 4px; }
-  .inv-info { text-align: left; font-size: 13px; }
-  .inv-info .no { font-weight: 800; font-size: 18px; color: #111; }
-  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
-  th, td { padding: 8px 6px; border-bottom: 1px solid #eee; text-align: center; }
-  th { background: #f5f5f5; color: #333; }
-  .totals { margin-top: 16px; margin-inline-start: auto; width: 280px; font-size: 14px; }
-  .totals .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #ddd; }
-  .totals .grand { font-weight: 800; font-size: 18px; color: #2f9e44; border-bottom: 2px solid #2f9e44; padding: 10px 0; }
-  .footer { margin-top: 24px; text-align: center; font-size: 12px; color: #888; border-top: 1px solid #eee; padding-top: 12px; }
-  .badge { display: inline-block; padding: 4px 10px; background: #2f9e44; color: #fff; border-radius: 4px; font-size: 11px; }
-  @media print { body { padding: 0; } .invoice { border: none; } }
+  ${baseDocStyles()}
+  .invoice-shell { position: relative; }
+  ${
+    remaining > 0.009
+      ? `.watermark {
+        position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+        pointer-events: none; z-index: 0; overflow: hidden;
+      }
+      .watermark span {
+        font-size: 78px; font-weight: 800; color: ${BRAND.red}; opacity: .06; transform: rotate(-28deg);
+        white-space: nowrap;
+      }`
+      : ''
+  }
+  .customer-line { font-size: 12.5px; margin-bottom: 12px; background: ${BRAND.primaryLight}; border-radius: 8px; padding: 9px 12px; }
+  .customer-line b { color: ${BRAND.primaryDark}; }
+  .totals-wrap { display: flex; justify-content: flex-start; margin-top: 18px; }
+  .totals { width: 300px; font-size: 13.5px; }
+  .totals .row { display: flex; justify-content: space-between; padding: 7px 2px; border-bottom: 1px dashed ${BRAND.border}; }
+  .totals .row span:last-child { font-weight: 700; }
+  .totals .grand {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 8px; padding: 12px 14px; border-radius: 8px;
+    background: ${BRAND.primaryDark}; color: #fff; font-weight: 800; font-size: 16px;
+  }
 </style>
 </head>
 <body>
-  <div class="invoice">
-    <div class="header">
-      <div class="shop">
-        ${shop?.logo ? `<img src="${shop.logo}" style="height:48px;margin-bottom:6px" />` : ''}
-        <div class="name">${escapeHtml(shop?.name || 'محل الاتصالات')}</div>
-        ${shop?.phone ? `<div class="meta">تليفون: ${escapeHtml(shop.phone)}</div>` : ''}
-        ${shop?.address ? `<div class="meta">${escapeHtml(shop.address)}</div>` : ''}
-      </div>
-      <div class="inv-info">
-        <div>فاتورة رقم</div>
-        <div class="no">${escapeHtml(sale.invoiceNo ?? String(sale.id))}</div>
-        <div style="margin-top:6px">${fmtDate(sale.createdAt)}</div>
-        ${sale.status ? `<div style="margin-top:6px"><span class="badge">${escapeHtml(sale.status)}</span></div>` : ''}
+  <div class="brand-bar"></div>
+  <div class="page">
+    <div class="invoice-shell">
+      ${remaining > 0.009 ? `<div class="watermark"><span>غير مسدد بالكامل</span></div>` : ''}
+      <div style="position:relative;z-index:1">
+        <div class="doc-header">
+          <div class="shop-block">
+            ${shop?.logo ? `<img src="${shop.logo}" class="shop-logo" />` : ''}
+            <div>
+              <div class="shop-name">${escapeHtml(shop?.name || 'محل الاتصالات')}</div>
+              <div class="shop-meta">
+                ${shop?.phone ? `<div>تليفون: ${escapeHtml(shop.phone)}</div>` : ''}
+                ${shop?.address ? `<div>${escapeHtml(shop.address)}</div>` : ''}
+              </div>
+            </div>
+          </div>
+          <div class="doc-meta">
+            <div class="doc-title">فاتورة مبيعات</div>
+            <div class="doc-no">${escapeHtml(invoiceNo)}</div>
+            <div class="doc-date">${fmtDate(sale.createdAt)}</div>
+            <div style="margin-top:8px">${statusBadge}</div>
+          </div>
+        </div>
+
+        ${
+          sale.customer
+            ? `<div class="customer-line"><b>العميل:</b> ${escapeHtml(sale.customer.name)}${sale.customer.phone ? `&nbsp;&nbsp;|&nbsp;&nbsp; ${escapeHtml(sale.customer.phone)}` : ''}</div>`
+            : ''
+        }
+
+        <table>
+          <thead>
+            <tr><th>#</th><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr>
+          </thead>
+          <tbody>${itemsRows}</tbody>
+        </table>
+
+        <div class="totals-wrap">
+          <div class="totals">
+            <div class="row"><span>الإجمالي</span><span>${fmt(sale.total)} ج.م</span></div>
+            <div class="row"><span>المدفوع</span><span>${fmt(sale.paid)} ج.م</span></div>
+            ${remaining > 0.009 ? `<div class="row"><span>المتبقي</span><span style="color:${BRAND.red}">${fmt(remaining)} ج.م</span></div>` : ''}
+            <div class="grand"><span>الإجمالي النهائي</span><span>${fmt(sale.total)} ج.م</span></div>
+          </div>
+        </div>
+
+        <div class="doc-footer">
+          <div class="thanks">شكراً لتعاملكم معنا</div>
+          <div>${escapeHtml(shop?.name || 'محل الاتصالات')} — تم إصدار الفاتورة إلكترونياً</div>
+        </div>
       </div>
     </div>
-    ${
-      sale.customer
-        ? `<div style="font-size:13px;margin-bottom:8px"><strong>العميل:</strong> ${escapeHtml(sale.customer.name)} ${sale.customer.phone ? `&nbsp;|&nbsp; ${escapeHtml(sale.customer.phone)}` : ''}</div>`
-        : ''
-    }
-    <table>
-      <thead>
-        <tr><th>#</th><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr>
-      </thead>
-      <tbody>${itemsRows}</tbody>
-    </table>
-    <div class="totals">
-      <div class="row"><span>الإجمالي</span><span>${fmt(sale.total)} ج.م</span></div>
-      <div class="row"><span>المدفوع</span><span>${fmt(sale.paid)} ج.م</span></div>
-      ${remaining > 0 ? `<div class="row"><span>المتبقي</span><span>${fmt(remaining)} ج.م</span></div>` : ''}
-      <div class="row grand"><span>الإجمالي النهائي</span><span>${fmt(sale.total)} ج.م</span></div>
-    </div>
-    <div class="footer">شكراً لتعاملكم معنا — ${escapeHtml(shop?.name || 'محل الاتصالات')}</div>
   </div>
 </body>
 </html>`

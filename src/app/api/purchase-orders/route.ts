@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
   const products = await db.product.findMany({
     where: { id: { in: ids }, tenantId: session.tenantId },
   })
-  const productMap = new Map(products.map((p) => [p.id, p]))
+  const productMap = new Map<number, (typeof products)[number]>(products.map((p) => [p.id, p]))
 
   // validate items & compute total
   let total = 0

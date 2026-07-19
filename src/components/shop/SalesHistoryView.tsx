@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Printer, RotateCcw, Search } from 'lucide-react'
+import { FileSpreadsheet, Printer, RotateCcw, Search } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import { printSale } from '@/lib/print-client'
 import { useShopStore } from '@/lib/store'
 import { DateTimeCell } from './DateTimeCell'
+import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 
 interface SaleItem {
   id: number
@@ -48,6 +49,7 @@ export function SalesHistoryView() {
   const [query, setQuery] = React.useState('')
   const [refundId, setRefundId] = React.useState<number | null>(null)
   const shopName = useShopStore((s) => s.shopName)
+  const shopBranding = useShopStore((s) => s.branding)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -89,8 +91,47 @@ export function SalesHistoryView() {
           ? { name: s.customer.name, phone: s.customer.phone }
           : null,
       },
-      { name: shopName }
+      { name: shopName, phone: shopBranding.phone || undefined, address: shopBranding.address || undefined, logo: shopBranding.logoPath || undefined, invoicePrefix: shopBranding.invoicePrefix }
     )
+  }
+
+  const exportExcel = () => {
+    if (filtered.length === 0) return
+    exportSimpleExcel({
+      fileName: excelFileName('سجل-المبيعات'),
+      shop: {
+        name: shopName,
+        phone: shopBranding.phone || undefined,
+        address: shopBranding.address || undefined,
+      },
+      documentTitle: 'سجل المبيعات',
+      sheetName: 'الفواتير',
+      columns: [
+        { header: 'رقم الفاتورة', key: 'invoiceNo', format: 'text' },
+        { header: 'التاريخ', key: 'date', format: 'text' },
+        { header: 'العميل', key: 'customer', format: 'text' },
+        { header: 'عدد الأصناف', key: 'itemsCount', format: 'int' },
+        { header: 'الإجمالي', key: 'total', format: 'currency' },
+        { header: 'المدفوع', key: 'paid', format: 'currency' },
+        { header: 'الحالة', key: 'status', format: 'text' },
+        { header: 'الكاشير', key: 'userName', format: 'text' },
+      ],
+      rows: filtered.map((s) => ({
+        invoiceNo: s.invoiceNo || `#${s.id}`,
+        date: new Date(s.createdAt).toLocaleString('ar-EG'),
+        customer: s.customer?.name || 'عميل نقدي',
+        itemsCount: s.items.length,
+        total: s.total,
+        paid: s.paid,
+        status: s.status,
+        userName: s.userName || '-',
+      })),
+      totals: {
+        invoiceNo: 'الإجمالي',
+        total: filtered.reduce((sum, s) => sum + s.total, 0),
+        paid: filtered.reduce((sum, s) => sum + s.paid, 0),
+      },
+    })
   }
 
   const doRefund = async (id: number) => {
@@ -107,11 +148,17 @@ export function SalesHistoryView() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">سجل المبيعات</h1>
-        <p className="text-sm text-muted-foreground">
-          استعراض الفواتير وإعادة الطباعة والإرجاع
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold">سجل المبيعات</h1>
+          <p className="text-sm text-muted-foreground">
+            استعراض الفواتير وإعادة الطباعة والإرجاع
+          </p>
+        </div>
+        <Button variant="outline" onClick={exportExcel} disabled={filtered.length === 0}>
+          <FileSpreadsheet className="size-4" />
+          تصدير Excel
+        </Button>
       </div>
 
       <Card>

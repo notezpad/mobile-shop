@@ -407,6 +407,7 @@ export default function Home() {
   const [bootState, setBootState] = React.useState<'loading' | 'authed' | 'guest'>('loading')
   const setUser = useShopStore((s) => s.setUser)
   const setShopName = useShopStore((s) => s.setShopName)
+  const setBranding = useShopStore((s) => s.setBranding)
   const user = useShopStore((s) => s.user)
 
   React.useEffect(() => {
@@ -420,10 +421,22 @@ export default function Home() {
           // Super admin (not impersonating) — no shop name needed
           setBootState('authed')
         } else {
-          // load tenant shop name
+          // load tenant shop name + branding (logo/phone/address/invoice prefix)
           try {
-            const t = await api<{ shopName?: string }>('/api/tenant')
+            const t = await api<{
+              shopName?: string
+              phone?: string | null
+              address?: string | null
+              logoPath?: string | null
+              invoicePrefix?: string
+            }>('/api/tenant')
             if (t?.shopName) setShopName(t.shopName)
+            setBranding({
+              phone: t?.phone ?? null,
+              address: t?.address ?? null,
+              logoPath: t?.logoPath ?? null,
+              invoicePrefix: t?.invoicePrefix || 'INV',
+            })
           } catch {
             /* ignore — maybe expired */
           }
@@ -436,7 +449,7 @@ export default function Home() {
     return () => {
       alive = false
     }
-  }, [setUser, setShopName])
+  }, [setUser, setShopName, setBranding])
 
   // The logout button clears `user` in the store directly (see store.ts's
   // `logout` action) without going through this component. Without this
@@ -459,13 +472,24 @@ export default function Home() {
     }
     if (name) {
       setShopName(name)
-    } else {
-      try {
-        const t = await api<{ shopName?: string }>('/api/tenant')
-        if (t?.shopName) setShopName(t.shopName)
-      } catch {
-        /* ignore */
-      }
+    }
+    try {
+      const t = await api<{
+        shopName?: string
+        phone?: string | null
+        address?: string | null
+        logoPath?: string | null
+        invoicePrefix?: string
+      }>('/api/tenant')
+      if (!name && t?.shopName) setShopName(t.shopName)
+      setBranding({
+        phone: t?.phone ?? null,
+        address: t?.address ?? null,
+        logoPath: t?.logoPath ?? null,
+        invoicePrefix: t?.invoicePrefix || 'INV',
+      })
+    } catch {
+      /* ignore */
     }
     setBootState('authed')
   }

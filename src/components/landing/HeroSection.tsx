@@ -13,7 +13,7 @@ import {
   AlertTriangle,
   CheckCircle2,
 } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { motion, type Variants } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import type { AuthMode } from './AuthModal'
 
@@ -21,12 +21,12 @@ interface HeroSectionProps {
   onOpenAuth: (mode: AuthMode) => void
 }
 
-const fadeUp = {
+const fadeUp: Variants = {
   hidden: { opacity: 0, y: 18 },
   visible: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { duration: 0.5, delay: i * 0.08, ease: [0.22, 1, 0.36, 1] },
+    transition: { duration: 0.5, delay: i * 0.08, ease: [0.22, 1, 0.36, 1] as const },
   }),
 }
 

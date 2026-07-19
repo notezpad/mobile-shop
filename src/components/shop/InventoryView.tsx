@@ -12,11 +12,14 @@ import {
   TrendingDown,
   Loader2,
   Search,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useShopStore } from '@/lib/store'
+import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { StockTab } from './inventory/StockTab'
 import { MovementsTab } from './inventory/MovementsTab'
 import { TransfersTab } from './inventory/TransfersTab'
@@ -83,6 +86,8 @@ export interface Stocktake {
 
 export function InventoryView() {
   const user = useShopStore((s) => s.user)
+  const shopName = useShopStore((s) => s.shopName)
+  const shopBranding = useShopStore((s) => s.branding)
   const isEmployee = user?.role === 'EMPLOYEE'
   const userBranchId = user?.branchId ?? null
 
@@ -123,6 +128,111 @@ export function InventoryView() {
     return { totalItems, lowStock, outOfStock, totalValueCost, totalValuePrice, pendingTransfers, draftStocktakes }
   }, [products, transfers, stocktakes])
 
+  const TYPE_LABELS: Record<string, string> = {
+    in: 'وارد', out: 'صادر', adjust: 'تعديل يدوي', sale: 'بيع', return: 'مرتجع',
+    transfer_in: 'تحويل وارد', transfer_out: 'تحويل صادر', stocktake: 'تسوية جرد',
+  }
+  const TRANSFER_STATUS_LABELS: Record<string, string> = { pending: 'معلّق', completed: 'مكتمل', cancelled: 'ملغي' }
+  const STOCKTAKE_STATUS_LABELS: Record<string, string> = { draft: 'مسودة', committed: 'معتمد' }
+  const branchName = (id: number | null) => (id ? branches.find((b) => b.id === id)?.name ?? '-' : 'كل الفروع')
+
+  const exportExcel = () => {
+    const shop = { name: shopName, phone: shopBranding.phone || undefined, address: shopBranding.address || undefined }
+    if (tab === 'stock') {
+      if (products.length === 0) return
+      exportSimpleExcel({
+        fileName: excelFileName('حالة-المخزون'),
+        shop,
+        documentTitle: 'حالة المخزون',
+        sheetName: 'المخزون',
+        columns: [
+          { header: 'المنتج', key: 'name', format: 'text' },
+          { header: 'الباركود', key: 'barcode', format: 'text' },
+          { header: 'التصنيف', key: 'category', format: 'text' },
+          { header: 'الفرع', key: 'branch', format: 'text' },
+          { header: 'الكمية', key: 'quantity', format: 'int' },
+          { header: 'الحد الأدنى', key: 'minQuantity', format: 'int' },
+          { header: 'التكلفة', key: 'cost', format: 'currency' },
+          { header: 'سعر البيع', key: 'price', format: 'currency' },
+          { header: 'قيمة المخزون (تكلفة)', key: 'stockValue', format: 'currency' },
+        ],
+        rows: products.map((p) => ({
+          name: p.name, barcode: p.barcode || '-', category: p.category || '-',
+          branch: branchName(p.branchId), quantity: p.quantity, minQuantity: p.minQuantity,
+          cost: p.cost, price: p.price, stockValue: p.quantity * p.cost,
+        })),
+        totals: { name: 'الإجمالي', quantity: products.reduce((s, p) => s + p.quantity, 0), stockValue: products.reduce((s, p) => s + p.quantity * p.cost, 0) },
+      })
+    } else if (tab === 'movements') {
+      if (movements.length === 0) return
+      exportSimpleExcel({
+        fileName: excelFileName('حركات-المخزون'),
+        shop,
+        documentTitle: 'سجل حركات المخزون',
+        sheetName: 'الحركات',
+        columns: [
+          { header: 'التاريخ', key: 'date', format: 'text' },
+          { header: 'المنتج', key: 'product', format: 'text' },
+          { header: 'النوع', key: 'type', format: 'text' },
+          { header: 'الكمية', key: 'quantity', format: 'int' },
+          { header: 'الفرع', key: 'branch', format: 'text' },
+          { header: 'ملاحظة', key: 'note', format: 'text' },
+          { header: 'بواسطة', key: 'user', format: 'text' },
+        ],
+        rows: movements.map((m) => ({
+          date: new Date(m.createdAt).toLocaleString('ar-EG'),
+          product: m.product.name, type: TYPE_LABELS[m.type] ?? m.type, quantity: m.quantity,
+          branch: m.branch?.name || '-', note: m.note || '-', user: m.userName || '-',
+        })),
+      })
+    } else if (tab === 'transfers') {
+      if (transfers.length === 0) return
+      exportSimpleExcel({
+        fileName: excelFileName('تحويلات-المخزون'),
+        shop,
+        documentTitle: 'سجل التحويلات بين الفروع',
+        sheetName: 'التحويلات',
+        columns: [
+          { header: 'التاريخ', key: 'date', format: 'text' },
+          { header: 'من فرع', key: 'from', format: 'text' },
+          { header: 'إلى فرع', key: 'to', format: 'text' },
+          { header: 'عدد الأصناف', key: 'itemsCount', format: 'int' },
+          { header: 'إجمالي الكمية', key: 'totalQty', format: 'int' },
+          { header: 'الحالة', key: 'status', format: 'text' },
+          { header: 'بواسطة', key: 'user', format: 'text' },
+        ],
+        rows: transfers.map((t) => ({
+          date: new Date(t.createdAt).toLocaleString('ar-EG'),
+          from: t.fromBranch.name, to: t.toBranch.name, itemsCount: t.items.length,
+          totalQty: t.items.reduce((s, i) => s + i.quantity, 0),
+          status: TRANSFER_STATUS_LABELS[t.status] ?? t.status, user: t.createdByName || '-',
+        })),
+      })
+    } else {
+      if (stocktakes.length === 0) return
+      exportSimpleExcel({
+        fileName: excelFileName('عمليات-الجرد'),
+        shop,
+        documentTitle: 'سجل عمليات الجرد',
+        sheetName: 'الجرد',
+        columns: [
+          { header: 'التاريخ', key: 'date', format: 'text' },
+          { header: 'الفرع', key: 'branch', format: 'text' },
+          { header: 'عدد الأصناف', key: 'itemsCount', format: 'int' },
+          { header: 'فروقات الكمية', key: 'diffTotal', format: 'int' },
+          { header: 'الحالة', key: 'status', format: 'text' },
+          { header: 'بواسطة', key: 'user', format: 'text' },
+        ],
+        rows: stocktakes.map((s) => ({
+          date: new Date(s.createdAt).toLocaleString('ar-EG'),
+          branch: s.branch?.name || 'كل الفروع', itemsCount: s.items.length,
+          diffTotal: s.items.reduce((sum, i) => sum + i.diff, 0),
+          status: STOCKTAKE_STATUS_LABELS[s.status] ?? s.status, user: s.createdByName || '-',
+        })),
+      })
+    }
+  }
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -144,6 +254,10 @@ export function InventoryView() {
             {branches.find(b => b.id === userBranchId)?.name ?? '—'}
           </div>
         )}
+        <Button variant="outline" onClick={exportExcel}>
+          <FileSpreadsheet className="size-4" />
+          تصدير Excel
+        </Button>
       </div>
 
       {/* Quick stats */}

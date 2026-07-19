@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
   const productIds = items.map((it: any) => parseInt(it.productId, 10)).filter(Boolean)
   const products = await db.product.findMany({ where: { id: { in: productIds }, tenantId: s.tenantId } })
-  const pMap = new Map(products.map(p => [p.id, p]))
+  const pMap = new Map<number, (typeof products)[number]>(products.map((p) => [p.id, p]))
 
   const created = await db.$transaction(async (tx) => {
     const st = await tx.stocktake.create({

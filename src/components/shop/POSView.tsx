@@ -62,6 +62,8 @@ export function POSView() {
   const [submitting, setSubmitting] = React.useState(false)
   const [customersVersion, setCustomersVersion] = React.useState(0)
   const openQuickAddProduct = useShopStore((s) => s.openQuickAddProduct)
+  const shopName = useShopStore((s) => s.shopName)
+  const shopBranding = useShopStore((s) => s.branding)
 
   // load customers (re-load after each successful sale so balances stay fresh)
   React.useEffect(() => {
@@ -239,7 +241,13 @@ export function POSView() {
             ? { name: sale.customer.name, phone: sale.customer.phone }
             : null,
         },
-        { name: customerName || undefined }
+        {
+          name: shopName || undefined,
+          phone: shopBranding.phone || undefined,
+          address: shopBranding.address || undefined,
+          logo: shopBranding.logoPath || undefined,
+          invoicePrefix: shopBranding.invoicePrefix,
+        }
       )
       // reset
       setCart([])

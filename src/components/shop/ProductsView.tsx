@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import {
+  FileSpreadsheet,
   FolderOpen,
   ImageOff,
   Pencil,
@@ -40,6 +41,7 @@ import { CategoryManagerDialog } from './CategoryManagerDialog'
 import { PrintLabelsDialog } from './PrintLabelsDialog'
 import { Barcode } from './Barcode'
 import { useShopStore } from '@/lib/store'
+import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 
 interface Product {
   id: number
@@ -69,6 +71,8 @@ export function ProductsView() {
   const [singlePrintProduct, setSinglePrintProduct] = React.useState<Product | null>(null)
   const quickAdd = useShopStore((s) => s.quickAddProduct)
   const closeQuickAdd = useShopStore((s) => s.closeQuickAddProduct)
+  const shopName = useShopStore((s) => s.shopName)
+  const shopBranding = useShopStore((s) => s.branding)
 
   const loadCats = React.useCallback(async () => {
     try {
@@ -161,6 +165,46 @@ export function ProductsView() {
     setSinglePrintProduct(p)
     setLabelsDialogOpen(true)
   }
+  const exportExcel = () => {
+    if (products.length === 0) return
+    exportSimpleExcel({
+      fileName: excelFileName('قائمة-المنتجات'),
+      shop: {
+        name: shopName,
+        phone: shopBranding.phone || undefined,
+        address: shopBranding.address || undefined,
+      },
+      documentTitle: 'قائمة المنتجات',
+      periodLabel: category !== 'all' ? `التصنيف: ${category}` : undefined,
+      sheetName: 'المنتجات',
+      columns: [
+        { header: 'المنتج', key: 'name', format: 'text' },
+        { header: 'التصنيف', key: 'category', format: 'text' },
+        { header: 'الباركود', key: 'barcode', format: 'text' },
+        { header: 'سعر البيع', key: 'price', format: 'currency' },
+        { header: 'التكلفة', key: 'cost', format: 'currency' },
+        { header: 'الكمية المتاحة', key: 'quantity', format: 'int' },
+        { header: 'الحد الأدنى', key: 'minQuantity', format: 'int' },
+        { header: 'الكمية المباعة', key: 'soldQuantity', format: 'int' },
+      ],
+      rows: products.map((p) => ({
+        name: p.name,
+        category: p.category || '-',
+        barcode: p.barcode || '-',
+        price: p.price,
+        cost: p.cost,
+        quantity: p.quantity,
+        minQuantity: p.minQuantity,
+        soldQuantity: p.soldQuantity ?? 0,
+      })),
+      totals: {
+        name: 'الإجمالي',
+        quantity: products.reduce((s, p) => s + p.quantity, 0),
+        soldQuantity: products.reduce((s, p) => s + (p.soldQuantity ?? 0), 0),
+      },
+    })
+  }
+
   const openBulkLabels = () => {
     setSinglePrintProduct(null)
     setLabelsDialogOpen(true)
@@ -207,6 +251,10 @@ export function ProductsView() {
           <Button variant="outline" onClick={() => setCatDialogOpen(true)}>
             <FolderOpen className="size-4" />
             التصنيفات
+          </Button>
+          <Button variant="outline" onClick={exportExcel} disabled={products.length === 0}>
+            <FileSpreadsheet className="size-4" />
+            تصدير Excel
           </Button>
           <Button
             variant="outline"

@@ -54,6 +54,9 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useShopStore } from '@/lib/store'
+import { BRAND, baseDocStyles, fmt as fmtMoney } from '@/lib/print'
+import { exportStyledExcel, excelFileName, type ExcelSheet } from '@/lib/excel'
 
 interface Branch {
   id: number
@@ -122,6 +125,8 @@ function shortDate(iso: string) {
 }
 
 export function ReportsView() {
+  const shopName = useShopStore((s) => s.shopName)
+  const shopBranding = useShopStore((s) => s.branding)
   const [from, setFrom] = React.useState('')
   const [to, setTo] = React.useState('')
   const [branchId, setBranchId] = React.useState<string>('all')
@@ -177,7 +182,12 @@ export function ReportsView() {
       toast.error('الرجاء السماح بالنوافذ المنبثقة')
       return
     }
-    const html = buildReportHtml(report, from, to)
+    const html = buildReportHtml(report, from, to, {
+      name: shopName,
+      phone: shopBranding.phone || undefined,
+      address: shopBranding.address || undefined,
+      logo: shopBranding.logoPath || undefined,
+    })
     w.document.open()
     w.document.write(html)
     w.document.close()
@@ -187,47 +197,140 @@ export function ReportsView() {
     }, 250)
   }
 
-  const exportCsv = () => {
+  const exportExcel = () => {
     if (!report) return
-    const rows = [
-      ['البيان', 'القيمة'],
-      ['إجمالي المبيعات', report.totalSales.toFixed(2)],
-      ['هامش الربح من المبيعات', report.totalProfit.toFixed(2)],
-      ['نسبة هامش الربح', `${report.profitMargin.toFixed(1)}%`],
-      ['عدد الفواتير', String(report.salesCount)],
-      ['متوسط قيمة الفاتورة', report.avgOrderValue.toFixed(2)],
-      ['إيراد الصيانة', report.maintenanceRevenue.toFixed(2)],
-      ['إجمالي المصروفات', report.totalExpenses.toFixed(2)],
-      ['صافي الربح', report.netProfit.toFixed(2)],
-      ['إيداعات مالية', report.financeIn.toFixed(2)],
-      ['سحوبات مالية', report.financeOut.toFixed(2)],
-      ['رصيد الخزنة', report.cashBalance.toFixed(2)],
-      ['مستحقات على العملاء', report.customersReceivable.toFixed(2)],
-      ['مستحقات للموردين', report.suppliersPayable.toFixed(2)],
-      ['قيمة المخزون (تكلفة)', report.stockValueCost.toFixed(2)],
-      ['قيمة المخزون (بيع)', report.stockValuePrice.toFixed(2)],
-      ['تنبيهات نقص المخزون', String(report.lowStockCount)],
-      ['إجمالي المشتريات', report.totalPurchases.toFixed(2)],
-      ['', ''],
-      ['أفضل المنتجات', 'الكمية', 'الإيراد', 'الربح'],
-      ...report.topProducts.map((p) => [p.name, String(p.qty), p.total.toFixed(2), p.profit.toFixed(2)]),
-      ['', ''],
-      ['أفضل العملاء', 'إجمالي المشتريات', 'عدد الفواتير'],
-      ...report.topCustomers.map((c) => [c.name, c.total.toFixed(2), String(c.salesCount)]),
-      ['', ''],
-      ['المصروفات حسب التصنيف', ''],
-      ...report.expensesByCategory.map((e) => [e.category, e.amount.toFixed(2)]),
-    ]
-    const csv = rows
-      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
-      .join('\n')
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `report-${from || 'all'}_${to || 'now'}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+
+    const periodLabel = from || to
+      ? `الفترة: من ${from || 'البداية'} إلى ${to || 'اليوم'}`
+      : 'الفترة: كل الفترات'
+
+    const shop = {
+      name: shopName,
+      phone: shopBranding.phone || undefined,
+      address: shopBranding.address || undefined,
+    }
+
+    const summarySheet: ExcelSheet = {
+      name: 'ملخص التقرير',
+      title: 'اتجاه المبيعات اليومي',
+      kpis: [
+        { label: 'إجمالي المبيعات', value: report.totalSales, format: 'currency' },
+        { label: 'هامش الربح من المبيعات', value: report.totalProfit, format: 'currency' },
+        { label: 'نسبة هامش الربح', value: report.profitMargin / 100, format: 'percent' },
+        { label: 'عدد الفواتير', value: report.salesCount, format: 'int' },
+        { label: 'متوسط قيمة الفاتورة', value: report.avgOrderValue, format: 'currency' },
+        { label: 'إيراد الصيانة', value: report.maintenanceRevenue, format: 'currency' },
+        { label: 'إجمالي المصروفات', value: report.totalExpenses, format: 'currency' },
+        { label: 'صافي الربح', value: report.netProfit, format: 'currency' },
+        { label: 'إيداعات مالية', value: report.financeIn, format: 'currency' },
+        { label: 'سحوبات مالية', value: report.financeOut, format: 'currency' },
+        { label: 'رصيد الخزنة', value: report.cashBalance, format: 'currency' },
+        { label: 'مستحقات على العملاء', value: report.customersReceivable, format: 'currency' },
+        { label: 'مستحقات للموردين', value: report.suppliersPayable, format: 'currency' },
+        { label: 'قيمة المخزون (تكلفة)', value: report.stockValueCost, format: 'currency' },
+        { label: 'قيمة المخزون (بيع)', value: report.stockValuePrice, format: 'currency' },
+        { label: 'تنبيهات نقص المخزون', value: report.lowStockCount, format: 'int' },
+        { label: 'إجمالي المشتريات', value: report.totalPurchases, format: 'currency' },
+        { label: 'عدد أوامر الشراء', value: report.purchasesCount, format: 'int' },
+      ],
+      columns: [
+        { header: 'اليوم', key: 'date', format: 'text' },
+        { header: 'المبيعات', key: 'total', format: 'currency' },
+        { header: 'الربح', key: 'profit', format: 'currency' },
+      ],
+      rows: report.salesTrend.map((t) => ({ date: t.date, total: t.total, profit: t.profit })),
+    }
+
+    const topProductsSheet: ExcelSheet = {
+      name: 'أفضل المنتجات',
+      title: 'أفضل المنتجات مبيعاً',
+      columns: [
+        { header: 'المنتج', key: 'name', format: 'text' },
+        { header: 'الكمية المباعة', key: 'qty', format: 'int' },
+        { header: 'الإيراد', key: 'total', format: 'currency' },
+        { header: 'الربح', key: 'profit', format: 'currency' },
+      ],
+      rows: report.topProducts.map((p) => ({ name: p.name, qty: p.qty, total: p.total, profit: p.profit })),
+      totals: report.topProducts.length
+        ? {
+            name: 'الإجمالي',
+            qty: report.topProducts.reduce((s, p) => s + p.qty, 0),
+            total: report.topProducts.reduce((s, p) => s + p.total, 0),
+            profit: report.topProducts.reduce((s, p) => s + p.profit, 0),
+          }
+        : undefined,
+    }
+
+    const topCustomersSheet: ExcelSheet = {
+      name: 'أفضل العملاء',
+      title: 'أفضل العملاء',
+      columns: [
+        { header: 'العميل', key: 'name', format: 'text' },
+        { header: 'إجمالي المشتريات', key: 'total', format: 'currency' },
+        { header: 'عدد الفواتير', key: 'salesCount', format: 'int' },
+      ],
+      rows: report.topCustomers.map((c) => ({ name: c.name, total: c.total, salesCount: c.salesCount })),
+    }
+
+    const categorySheet: ExcelSheet = {
+      name: 'التصنيفات والمصروفات',
+      title: 'المبيعات حسب التصنيف',
+      columns: [
+        { header: 'التصنيف', key: 'category', format: 'text' },
+        { header: 'الإجمالي', key: 'total', format: 'currency' },
+      ],
+      rows: report.categoryBreakdown.map((c) => ({ category: c.category, total: c.total })),
+    }
+
+    const paymentSheet: ExcelSheet = {
+      name: 'طرق الدفع',
+      title: 'المبيعات حسب طريقة الدفع',
+      columns: [
+        { header: 'طريقة الدفع', key: 'method', format: 'text' },
+        { header: 'المبلغ', key: 'amount', format: 'currency' },
+      ],
+      rows: report.paymentMethods.map((m) => ({ method: METHOD_LABELS[m.method] || m.method, amount: m.amount })),
+    }
+
+    const expensesSheet: ExcelSheet = {
+      name: 'المصروفات حسب التصنيف',
+      title: 'المصروفات حسب التصنيف',
+      columns: [
+        { header: 'التصنيف', key: 'category', format: 'text' },
+        { header: 'المبلغ', key: 'amount', format: 'currency' },
+      ],
+      rows: report.expensesByCategory.map((e) => ({ category: e.category, amount: e.amount })),
+      totals: report.expensesByCategory.length
+        ? { category: 'الإجمالي', amount: report.expensesByCategory.reduce((s, e) => s + e.amount, 0) }
+        : undefined,
+    }
+
+    const lowStockSheet: ExcelSheet = {
+      name: 'تنبيهات المخزون',
+      title: 'منتجات أوشكت على النفاد',
+      columns: [
+        { header: 'المنتج', key: 'name', format: 'text' },
+        { header: 'الكمية الحالية', key: 'quantity', format: 'int' },
+        { header: 'الحد الأدنى', key: 'minQuantity', format: 'int' },
+      ],
+      rows: report.lowStockProducts.map((p) => ({ name: p.name, quantity: p.quantity, minQuantity: p.minQuantity })),
+    }
+
+    exportStyledExcel({
+      fileName: excelFileName(`تقرير-${shopName || 'المحل'}`),
+      shop,
+      documentTitle: 'تقرير الأداء الشامل',
+      periodLabel,
+      sheets: [
+        summarySheet,
+        topProductsSheet,
+        topCustomersSheet,
+        categorySheet,
+        paymentSheet,
+        expensesSheet,
+        ...(report.lowStockProducts.length ? [lowStockSheet] : []),
+      ],
+    })
   }
 
   const maxCategory = Math.max(1, ...(report?.categoryBreakdown.map((c) => c.total) ?? [1]))
@@ -248,7 +351,7 @@ export function ReportsView() {
             <FileText className="size-4" />
             تصدير PDF
           </Button>
-          <Button variant="outline" onClick={exportCsv} disabled={loading || !report}>
+          <Button variant="outline" onClick={exportExcel} disabled={loading || !report}>
             <FileSpreadsheet className="size-4" />
             تصدير Excel
           </Button>
@@ -832,56 +935,246 @@ function FormulaRow({ label, value, negative }: { label: string; value: number; 
   )
 }
 
-function buildReportHtml(r: Report, from: string, to: string): string {
-  const range = `${from || 'البداية'} ← ${to || 'الآن'}`
-  const topProductsRows = r.topProducts
-    .map(
-      (p) =>
-        `<tr><td>${p.name}</td><td>${p.qty}</td><td>${formatCurrency(p.total)}</td><td>${formatCurrency(p.profit)}</td></tr>`
-    )
-    .join('')
-  const expenseRows = r.expensesByCategory
-    .map((e) => `<tr><td>${e.category}</td><td>${formatCurrency(e.amount)}</td></tr>`)
-    .join('')
+function section(title: string, inner: string, accent?: string) {
+  return `
+    <div class="rpt-section">
+      <div class="rpt-section-title" ${accent ? `style="border-inline-start-color:${accent}"` : ''}>${title}</div>
+      ${inner}
+    </div>
+  `
+}
+
+function kpi(label: string, value: string, big?: boolean) {
+  return `
+    <div class="kpi-card ${big ? 'kpi-card-big' : ''}">
+      <div class="kpi-label">${label}</div>
+      <div class="kpi-value">${value}</div>
+    </div>
+  `
+}
+
+function emptyRow(colspan: number, text: string) {
+  return `<tr><td colspan="${colspan}" style="color:${BRAND.sub};padding:16px">${text}</td></tr>`
+}
+
+function barRow(label: string, value: number, max: number, formatted: string, tone?: 'destructive') {
+  const pct = Math.max(4, Math.round((value / max) * 100))
+  const color = tone === 'destructive' ? BRAND.red : BRAND.primary
+  return `
+    <div class="bar-row">
+      <div class="bar-row-top"><span>${label}</span><span>${formatted}</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+    </div>
+  `
+}
+
+function buildReportHtml(
+  r: Report,
+  from: string,
+  to: string,
+  shop?: { name?: string; phone?: string; address?: string; logo?: string }
+): string {
+  const range = `${from || 'بداية النشاط'}  ←  ${to || 'الآن'}`
+  const generatedAt = fmtDateTime(new Date())
+
+  const maxCategory = Math.max(1, ...(r.categoryBreakdown.map((c) => c.total) || [1]))
+  const maxMethod = Math.max(1, ...(r.paymentMethods.map((m) => m.amount) || [1]))
+  const maxExpense = Math.max(1, ...(r.expensesByCategory.map((e) => e.amount) || [1]))
+
+  const topProductsRows = r.topProducts.length
+    ? r.topProducts
+        .map(
+          (p, i) => `
+        <tr>
+          <td style="color:${BRAND.sub}">${i + 1}</td>
+          <td style="text-align:right;font-weight:600">${escapeHtml(p.name)}</td>
+          <td>${formatNumber(p.qty)}</td>
+          <td>${fmtMoney(p.total)}</td>
+          <td style="font-weight:700;color:${BRAND.primaryDark}">${fmtMoney(p.profit)}</td>
+        </tr>`
+        )
+        .join('')
+    : emptyRow(5, 'لا توجد مبيعات في هذه الفترة')
+
+  const topCustomersRows = r.topCustomers.length
+    ? r.topCustomers
+        .map(
+          (c, i) => `
+        <tr>
+          <td style="color:${BRAND.sub}">${i + 1}</td>
+          <td style="text-align:right;font-weight:600">${escapeHtml(c.name)}</td>
+          <td>${formatNumber(c.salesCount)}</td>
+          <td style="font-weight:700">${fmtMoney(c.total)}</td>
+        </tr>`
+        )
+        .join('')
+    : emptyRow(4, 'لا توجد مبيعات مرتبطة بعملاء في هذه الفترة')
+
+  const lowStockRows = r.lowStockProducts.length
+    ? r.lowStockProducts
+        .map(
+          (p) => `
+        <tr>
+          <td style="text-align:right;font-weight:600">${escapeHtml(p.name)}</td>
+          <td style="font-weight:700;color:${p.quantity === 0 ? BRAND.red : BRAND.amber}">${formatNumber(p.quantity)}</td>
+          <td style="color:${BRAND.sub}">${formatNumber(p.minQuantity)}</td>
+        </tr>`
+        )
+        .join('')
+    : emptyRow(3, 'كل المنتجات فوق الحد الأدنى للمخزون 👍')
+
+  const expenseRows = r.expensesByCategory.length
+    ? r.expensesByCategory
+        .map((e) => `<tr><td style="text-align:right;font-weight:600">${escapeHtml(e.category)}</td><td style="font-weight:700;color:${BRAND.red}">${fmtMoney(e.amount)}</td></tr>`)
+        .join('')
+    : emptyRow(2, 'لا توجد مصروفات مسجلة في هذه الفترة')
+
+  const categoryBars = r.categoryBreakdown.length
+    ? r.categoryBreakdown.map((c) => barRow(escapeHtml(c.category), c.total, maxCategory, fmtMoney(c.total))).join('')
+    : `<p style="color:${BRAND.sub};font-size:12.5px">لا توجد بيانات</p>`
+
+  const methodBars = r.paymentMethods.length
+    ? r.paymentMethods
+        .map((m) => barRow(escapeHtml(METHOD_LABELS[m.method] ?? m.method), m.amount, maxMethod, fmtMoney(m.amount)))
+        .join('')
+    : `<p style="color:${BRAND.sub};font-size:12.5px">لا توجد بيانات</p>`
+
   return `<!doctype html>
-<html lang="ar" dir="rtl"><head><meta charset="utf-8" />
-<title>تقرير ${range}</title>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<title>تقرير المحل ${range}</title>
 <style>
-  body { font-family: 'Cairo','Tahoma',sans-serif; padding: 24px; color: #111; }
-  h1 { color: #2f9e44; margin: 0 0 4px; }
-  h2 { font-size: 15px; margin: 24px 0 8px; }
-  .range { color: #666; margin-bottom: 24px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 640px; }
-  .item { border: 1px solid #ddd; padding: 12px; border-radius: 8px; }
-  .item .lbl { color: #666; font-size: 12px; }
-  .item .val { font-size: 18px; font-weight: 800; color: #2f9e44; }
-  table { border-collapse: collapse; width: 100%; max-width: 640px; font-size: 13px; }
-  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: right; }
-  th { background: #f5f5f5; }
-  @media print { body { padding: 0; } }
-</style></head>
+  ${baseDocStyles()}
+  .cover {
+    background: linear-gradient(135deg, ${BRAND.primaryDark}, ${BRAND.primary});
+    color: #fff; border-radius: 12px; padding: 22px 26px; margin-bottom: 22px;
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  }
+  .cover .shop-logo { height: 50px; width: 50px; object-fit: contain; border-radius: 10px; background: #fff; border: none; }
+  .cover-title { font-size: 21px; font-weight: 800; }
+  .cover-sub { font-size: 12px; opacity: .9; margin-top: 4px; }
+  .cover-meta { text-align: left; font-size: 12px; opacity: .95; }
+  .cover-meta b { font-size: 14px; display: block; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 22px; }
+  .kpi-card { border: 1px solid ${BRAND.border}; border-radius: 10px; padding: 12px 13px; background: #fafcfa; }
+  .kpi-card-big { background: ${BRAND.primaryLight}; border-color: ${BRAND.primary}; }
+  .kpi-label { font-size: 10.5px; color: ${BRAND.sub}; margin-bottom: 5px; }
+  .kpi-value { font-size: 16.5px; font-weight: 800; color: ${BRAND.ink}; }
+  .kpi-card-big .kpi-value { color: ${BRAND.primaryDark}; }
+  .rpt-section { margin-bottom: 20px; break-inside: avoid; }
+  .rpt-section-title {
+    font-size: 13.5px; font-weight: 800; color: ${BRAND.ink}; margin-bottom: 10px;
+    padding-inline-start: 10px; border-inline-start: 4px solid ${BRAND.primary};
+  }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .bar-row { margin-bottom: 9px; }
+  .bar-row-top { display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 3px; }
+  .bar-track { height: 7px; border-radius: 99px; background: ${BRAND.border}; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 99px; }
+  .formula-box { border: 1px solid ${BRAND.border}; border-radius: 10px; padding: 14px 16px; font-size: 12.5px; }
+  .formula-row { display: flex; justify-content: space-between; padding: 5px 0; }
+  .formula-row.total { border-top: 2px solid ${BRAND.primaryLight}; margin-top: 4px; padding-top: 9px; font-weight: 800; font-size: 14px; color: ${BRAND.primaryDark}; }
+  @media print {
+    .rpt-section { page-break-inside: avoid; }
+    .doc-footer::after {
+      content: "صفحة " counter(page) " من " counter(pages);
+      display: block; margin-top: 4px; font-size: 10px;
+    }
+  }
+</style>
+</head>
 <body>
-  <h1>تقرير المحل</h1>
-  <div class="range">الفترة: ${range}</div>
-  <div class="grid">
-    <div class="item"><div class="lbl">إجمالي المبيعات</div><div class="val">${formatCurrency(r.totalSales)}</div></div>
-    <div class="item"><div class="lbl">صافي الربح</div><div class="val">${formatCurrency(r.netProfit)}</div></div>
-    <div class="item"><div class="lbl">عدد الفواتير</div><div class="val">${r.salesCount}</div></div>
-    <div class="item"><div class="lbl">متوسط الفاتورة</div><div class="val">${formatCurrency(r.avgOrderValue)}</div></div>
-    <div class="item"><div class="lbl">إيراد الصيانة</div><div class="val">${formatCurrency(r.maintenanceRevenue)}</div></div>
-    <div class="item"><div class="lbl">إجمالي المصروفات</div><div class="val">${formatCurrency(r.totalExpenses)}</div></div>
-    <div class="item"><div class="lbl">رصيد الخزنة</div><div class="val">${formatCurrency(r.cashBalance)}</div></div>
-    <div class="item"><div class="lbl">قيمة المخزون (تكلفة)</div><div class="val">${formatCurrency(r.stockValueCost)}</div></div>
+  <div class="brand-bar"></div>
+  <div class="page">
+    <div class="cover">
+      <div style="display:flex;align-items:center;gap:12px">
+        ${shop?.logo ? `<img src="${shop.logo}" class="shop-logo" />` : ''}
+        <div>
+          <div class="cover-title">تقرير أداء المحل</div>
+          <div class="cover-sub">${escapeHtml(shop?.name || 'محل الاتصالات')}${shop?.phone ? ` — ${escapeHtml(shop.phone)}` : ''}</div>
+        </div>
+      </div>
+      <div class="cover-meta">
+        <b>${escapeHtml(range)}</b>
+        تم إنشاؤه: ${generatedAt}
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      ${kpi('إجمالي المبيعات', fmtMoney(r.totalSales) + ' ج.م')}
+      ${kpi('صافي الربح', fmtMoney(r.netProfit) + ' ج.م', true)}
+      ${kpi('عدد الفواتير', formatNumber(r.salesCount))}
+      ${kpi('متوسط الفاتورة', fmtMoney(r.avgOrderValue) + ' ج.م')}
+      ${kpi('إيراد الصيانة', fmtMoney(r.maintenanceRevenue) + ' ج.م')}
+      ${kpi('إجمالي المصروفات', fmtMoney(r.totalExpenses) + ' ج.م')}
+      ${kpi('رصيد الخزنة', fmtMoney(r.cashBalance) + ' ج.م', true)}
+      ${kpi('إجمالي المشتريات', fmtMoney(r.totalPurchases) + ' ج.م')}
+    </div>
+
+    ${section(
+      'أفضل المنتجات مبيعاً',
+      `<table><thead><tr><th>#</th><th>المنتج</th><th>الكمية</th><th>الإيراد</th><th>الربح</th></tr></thead><tbody>${topProductsRows}</tbody></table>`
+    )}
+
+    <div class="two-col">
+      ${section(
+        'أفضل العملاء',
+        `<table><thead><tr><th>#</th><th>العميل</th><th>الفواتير</th><th>الإجمالي</th></tr></thead><tbody>${topCustomersRows}</tbody></table>`
+      )}
+      ${section('المبيعات حسب التصنيف', `<div style="padding-top:2px">${categoryBars}</div>`)}
+    </div>
+
+    <div class="two-col">
+      ${section('طرق الدفع (المقبوضات)', `<div style="padding-top:2px">${methodBars}</div>`)}
+      ${section(
+        'المصروفات حسب التصنيف',
+        `<table><thead><tr><th>التصنيف</th><th>المبلغ</th></tr></thead><tbody>${expenseRows}</tbody></table>`
+      )}
+    </div>
+
+    ${section(
+      'تنبيهات نقص المخزون',
+      `<table><thead><tr><th>المنتج</th><th>الكمية الحالية</th><th>الحد الأدنى</th></tr></thead><tbody>${lowStockRows}</tbody></table>`,
+      BRAND.amber
+    )}
+
+    ${section(
+      'الملخص المالي',
+      `<div class="two-col">
+        <div class="formula-box">
+          <div class="formula-row"><span>هامش ربح المبيعات</span><span>${fmtMoney(r.totalProfit)} ج.م</span></div>
+          <div class="formula-row"><span>+ إيراد الصيانة</span><span>${fmtMoney(r.maintenanceRevenue)} ج.م</span></div>
+          <div class="formula-row"><span>− المصروفات</span><span style="color:${BRAND.red}">${fmtMoney(r.totalExpenses)} ج.م</span></div>
+          <div class="formula-row total"><span>= صافي الربح</span><span>${fmtMoney(r.netProfit)} ج.م</span></div>
+        </div>
+        <div class="formula-box">
+          <div class="formula-row"><span>إيداعات مالية</span><span>${fmtMoney(r.financeIn)} ج.م</span></div>
+          <div class="formula-row"><span>سحوبات مالية</span><span>${fmtMoney(r.financeOut)} ج.م</span></div>
+          <div class="formula-row"><span>مستحقات على العملاء</span><span>${fmtMoney(r.customersReceivable)} ج.م</span></div>
+          <div class="formula-row"><span>مستحقات للموردين</span><span style="color:${BRAND.red}">${fmtMoney(r.suppliersPayable)} ج.م</span></div>
+        </div>
+      </div>`
+    )}
+
+    <div class="doc-footer">
+      <div class="thanks">${escapeHtml(shop?.name || 'محل الاتصالات')}</div>
+      <div>تقرير آلي تم إصداره بواسطة نظام إدارة المحل — ${generatedAt}</div>
+    </div>
   </div>
-  ${
-    r.topProducts.length
-      ? `<h2>أفضل المنتجات</h2><table><tr><th>المنتج</th><th>الكمية</th><th>الإيراد</th><th>الربح</th></tr>${topProductsRows}</table>`
-      : ''
-  }
-  ${
-    r.expensesByCategory.length
-      ? `<h2>المصروفات حسب التصنيف</h2><table><tr><th>التصنيف</th><th>المبلغ</th></tr>${expenseRows}</table>`
-      : ''
-  }
-</body></html>`
+</body>
+</html>`
+}
+
+function fmtDateTime(d: Date) {
+  const pad = (x: number) => String(x).padStart(2, '0')
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function escapeHtml(s: string): string {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }

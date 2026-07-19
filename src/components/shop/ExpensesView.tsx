@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Loader2, Plus, Trash2, ReceiptText, TrendingDown } from 'lucide-react'
+import { Loader2, Plus, Trash2, ReceiptText, TrendingDown, FileSpreadsheet } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,6 +35,8 @@ import {
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/format'
+import { useShopStore } from '@/lib/store'
+import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 
 const CATEGORIES = [
   'إيجار',
@@ -65,6 +67,8 @@ interface ExpensesResponse {
 export function ExpensesView() {
   const [data, setData] = React.useState<ExpensesResponse | null>(null)
   const [loading, setLoading] = React.useState(true)
+  const shopName = useShopStore((s) => s.shopName)
+  const shopBranding = useShopStore((s) => s.branding)
 
   // add form
   const [category, setCategory] = React.useState(CATEGORIES[0])
@@ -142,13 +146,49 @@ export function ExpensesView() {
     ? Object.entries(data.byCategory).sort((a, b) => b[1] - a[1])
     : []
 
+  const exportExcel = () => {
+    if (!data || data.expenses.length === 0) return
+    exportSimpleExcel({
+      fileName: excelFileName('سجل-المصروفات'),
+      shop: {
+        name: shopName,
+        phone: shopBranding.phone || undefined,
+        address: shopBranding.address || undefined,
+      },
+      documentTitle: 'سجل المصروفات',
+      periodLabel: from || to ? `من ${from || 'البداية'} إلى ${to || 'اليوم'}` : undefined,
+      sheetName: 'المصروفات',
+      columns: [
+        { header: 'التاريخ', key: 'date', format: 'text' },
+        { header: 'التصنيف', key: 'category', format: 'text' },
+        { header: 'المبلغ', key: 'amount', format: 'currency' },
+        { header: 'ملاحظة', key: 'note', format: 'text' },
+        { header: 'بواسطة', key: 'user', format: 'text' },
+      ],
+      rows: data.expenses.map((e) => ({
+        date: new Date(e.createdAt).toLocaleString('ar-EG'),
+        category: e.category,
+        amount: e.amount,
+        note: e.note || '-',
+        user: e.userName || '-',
+      })),
+      totals: { date: 'الإجمالي', amount: data.total },
+    })
+  }
+
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">المصروفات</h1>
-        <p className="text-sm text-muted-foreground">
-          مصاريف تشغيل المحل — إيجار، مرتبات، فواتير، وغيرها
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold">المصروفات</h1>
+          <p className="text-sm text-muted-foreground">
+            مصاريف تشغيل المحل — إيجار، مرتبات، فواتير، وغيرها
+          </p>
+        </div>
+        <Button variant="outline" onClick={exportExcel} disabled={!data || data.expenses.length === 0}>
+          <FileSpreadsheet className="size-4" />
+          تصدير Excel
+        </Button>
       </div>
 
       {/* Summary cards */}

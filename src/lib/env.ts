@@ -59,8 +59,8 @@ function readFromCloudflareContext(name: string): string | undefined {
     // Newer @opennextjs/cloudflare returns the context synchronously for route
     // handlers. Older/SSG async mode returns a Promise, which cannot be read from
     // this synchronous Prisma factory, so we deliberately fall through.
-    if (maybeContext && typeof (maybeContext as Promise<unknown>).then !== 'function') {
-      return readFromObject((maybeContext as { env?: EnvRecord }).env, name)
+    if (maybeContext && typeof (maybeContext as unknown as Promise<unknown>).then !== 'function') {
+      return readFromObject((maybeContext as unknown as { env?: EnvRecord }).env, name)
     }
   } catch {
     // Outside request scope or unsupported runtime — try the other sources.

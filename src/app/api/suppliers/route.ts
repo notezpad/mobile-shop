@@ -35,9 +35,9 @@ export async function GET(req: NextRequest) {
       _max: { createdAt: true },
     }),
   ])
-  const aggBySupplier = new Map(
+  const aggBySupplier = new Map<number, { totalPurchases: number; lastPurchaseAt: Date | null }>(
     purchasesAgg.map((a) => [
-      a.supplierId,
+      a.supplierId as number,
       { totalPurchases: a._sum.total ?? 0, lastPurchaseAt: a._max.createdAt },
     ])
   )

@@ -25,6 +25,7 @@ export function printSale(sale: PrintableSale, shop?: {
   phone?: string
   address?: string
   logo?: string
+  invoicePrefix?: string
 }) {
   printHtml(printInvoiceHtml(sale, shop), `فاتورة ${sale.invoiceNo ?? sale.id}`)
 }

@@ -9,6 +9,7 @@ import {
   Trash2,
   Eye,
   TrendingDown,
+  FileSpreadsheet,
 } from 'lucide-react'
 import {
   Dialog,
@@ -35,6 +36,8 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { CustomerDetailDialog } from './CustomerDetailDialog'
+import { useShopStore } from '@/lib/store'
+import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 
 interface Customer {
   id: number
@@ -55,6 +58,8 @@ export function CustomersView() {
   const [detailCustomer, setDetailCustomer] = React.useState<Customer | null>(
     null
   )
+  const shopName = useShopStore((s) => s.shopName)
+  const shopBranding = useShopStore((s) => s.branding)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -75,6 +80,41 @@ export function CustomersView() {
     const t = setTimeout(load, 250)
     return () => clearTimeout(t)
   }, [load])
+
+  const exportExcel = () => {
+    if (customers.length === 0) return
+    exportSimpleExcel({
+      fileName: excelFileName('قائمة-العملاء'),
+      shop: {
+        name: shopName,
+        phone: shopBranding.phone || undefined,
+        address: shopBranding.address || undefined,
+      },
+      documentTitle: 'قائمة العملاء',
+      sheetName: 'العملاء',
+      columns: [
+        { header: 'الاسم', key: 'name', format: 'text' },
+        { header: 'الهاتف', key: 'phone', format: 'text' },
+        { header: 'عدد الفواتير', key: 'salesCount', format: 'int' },
+        { header: 'إجمالي المشتريات', key: 'totalPurchases', format: 'currency' },
+        { header: 'الرصيد المستحق', key: 'balance', format: 'currency' },
+        { header: 'آخر عملية شراء', key: 'lastSaleAt', format: 'text' },
+      ],
+      rows: customers.map((c) => ({
+        name: c.name,
+        phone: c.phone || '-',
+        salesCount: c._count?.sales ?? 0,
+        totalPurchases: c.totalPurchases ?? 0,
+        balance: c.balance,
+        lastSaleAt: c.lastSaleAt ? new Date(c.lastSaleAt).toLocaleDateString('ar-EG') : '-',
+      })),
+      totals: {
+        name: 'الإجمالي',
+        totalPurchases: customers.reduce((s, c) => s + (c.totalPurchases ?? 0), 0),
+        balance: customers.reduce((s, c) => s + c.balance, 0),
+      },
+    })
+  }
 
   const remove = async (id: number) => {
     if (!confirm('حذف العميل؟')) return
@@ -106,15 +146,21 @@ export function CustomersView() {
             سجل العملاء وأرصدتهم والدفعات
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setEditing(null)
-            setDialogOpen(true)
-          }}
-        >
-          <Plus className="size-4" />
-          عميل جديد
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={exportExcel} disabled={customers.length === 0}>
+            <FileSpreadsheet className="size-4" />
+            تصدير Excel
+          </Button>
+          <Button
+            onClick={() => {
+              setEditing(null)
+              setDialogOpen(true)
+            }}
+          >
+            <Plus className="size-4" />
+            عميل جديد
+          </Button>
+        </div>
       </div>
 
       {/* Summary card */}

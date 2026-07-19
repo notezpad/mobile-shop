@@ -30,6 +30,7 @@ export function SettingsView() {
   const [uploading, setUploading] = React.useState(false)
   const fileRef = React.useRef<HTMLInputElement>(null)
   const setShopName = useShopStore((s) => s.setShopName)
+  const setBranding = useShopStore((s) => s.setBranding)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -81,6 +82,12 @@ export function SettingsView() {
       })
       setData(out)
       setShopName(out.shopName)
+      setBranding({
+        phone: out.phone,
+        address: out.address,
+        logoPath: out.logoPath,
+        invoicePrefix: out.invoicePrefix,
+      })
       toast.success('تم حفظ الإعدادات')
     } catch (e: any) {
       toast.error(e?.message || 'فشل الحفظ')

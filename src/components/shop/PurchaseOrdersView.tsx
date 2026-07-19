@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Plus, RotateCcw, Search } from 'lucide-react'
+import { FileSpreadsheet, Plus, RotateCcw, Search } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,6 +21,8 @@ import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PurchaseOrderDialog } from './PurchaseOrderDialog'
 import { DateTimeCell } from './DateTimeCell'
+import { useShopStore } from '@/lib/store'
+import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 
 interface OrderItem {
   id: number
@@ -46,6 +48,8 @@ export function PurchaseOrdersView() {
   const [query, setQuery] = React.useState('')
   const [returnId, setReturnId] = React.useState<number | null>(null)
   const [newOpen, setNewOpen] = React.useState(false)
+  const shopName = useShopStore((s) => s.shopName)
+  const shopBranding = useShopStore((s) => s.branding)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -79,6 +83,45 @@ export function PurchaseOrdersView() {
     }
   }
 
+  const exportExcel = () => {
+    if (filtered.length === 0) return
+    exportSimpleExcel({
+      fileName: excelFileName('سجل-المشتريات'),
+      shop: {
+        name: shopName,
+        phone: shopBranding.phone || undefined,
+        address: shopBranding.address || undefined,
+      },
+      documentTitle: 'سجل أوامر الشراء',
+      sheetName: 'أوامر الشراء',
+      columns: [
+        { header: 'رقم الأمر', key: 'orderNo', format: 'text' },
+        { header: 'التاريخ', key: 'date', format: 'text' },
+        { header: 'المورد', key: 'supplier', format: 'text' },
+        { header: 'عدد الأصناف', key: 'itemsCount', format: 'int' },
+        { header: 'الإجمالي', key: 'total', format: 'currency' },
+        { header: 'المدفوع', key: 'paid', format: 'currency' },
+        { header: 'الحالة', key: 'status', format: 'text' },
+        { header: 'بواسطة', key: 'userName', format: 'text' },
+      ],
+      rows: filtered.map((o) => ({
+        orderNo: o.orderNo || `#${o.id}`,
+        date: new Date(o.createdAt).toLocaleString('ar-EG'),
+        supplier: o.supplier?.name || '-',
+        itemsCount: o.items.length,
+        total: o.total,
+        paid: o.paid,
+        status: o.status,
+        userName: o.userName || '-',
+      })),
+      totals: {
+        orderNo: 'الإجمالي',
+        total: filtered.reduce((s, o) => s + o.total, 0),
+        paid: filtered.reduce((s, o) => s + o.paid, 0),
+      },
+    })
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -88,10 +131,16 @@ export function PurchaseOrdersView() {
             سجل أوامر الشراء من الموردين — كاش أو آجل
           </p>
         </div>
-        <Button onClick={() => setNewOpen(true)}>
-          <Plus className="size-4" />
-          أمر شراء جديد
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={exportExcel} disabled={filtered.length === 0}>
+            <FileSpreadsheet className="size-4" />
+            تصدير Excel
+          </Button>
+          <Button onClick={() => setNewOpen(true)}>
+            <Plus className="size-4" />
+            أمر شراء جديد
+          </Button>
+        </div>
       </div>
 
       <Card>

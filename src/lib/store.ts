@@ -21,11 +21,20 @@ export type ViewKey =
   | 'inventory'
   | 'branches'
 
+export interface ShopBranding {
+  phone: string | null
+  address: string | null
+  logoPath: string | null
+  invoicePrefix: string
+}
+
 interface ShopState {
   activeView: ViewKey
   setActiveView: (v: ViewKey) => void
   shopName: string
   setShopName: (n: string) => void
+  branding: ShopBranding
+  setBranding: (b: Partial<ShopBranding>) => void
   user: AuthUser | null
   setUser: (u: AuthUser | null) => void
   logout: () => void
@@ -39,6 +48,8 @@ export const useShopStore = create<ShopState>((set) => ({
   setActiveView: (v) => set({ activeView: v }),
   shopName: 'محل الاتصالات',
   setShopName: (n) => set({ shopName: n }),
+  branding: { phone: null, address: null, logoPath: null, invoicePrefix: 'INV' },
+  setBranding: (b) => set((s) => ({ branding: { ...s.branding, ...b } })),
   user: null,
   setUser: (u) => set({ user: u }),
   logout: () => {

@@ -53,5 +53,5 @@ export function Barcode({ value, height = 32, width = 1.4, fontSize = 11, classN
     )
   }
 
-  return <svg ref={svgRef} className={className} dir="ltr" />
+  return <svg ref={svgRef} className={className} {...({ dir: 'ltr' } as React.SVGProps<SVGSVGElement>)} />
 }

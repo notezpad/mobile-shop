@@ -9,6 +9,7 @@ import {
   Trash2,
   Eye,
   TrendingDown,
+  FileSpreadsheet,
 } from 'lucide-react'
 import {
   Dialog,
@@ -35,6 +36,8 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { SupplierDetailDialog } from './SupplierDetailDialog'
+import { useShopStore } from '@/lib/store'
+import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 
 interface Supplier {
   id: number
@@ -55,6 +58,8 @@ export function SuppliersView() {
   const [detailSupplier, setDetailSupplier] = React.useState<Supplier | null>(
     null
   )
+  const shopName = useShopStore((s) => s.shopName)
+  const shopBranding = useShopStore((s) => s.branding)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -75,6 +80,41 @@ export function SuppliersView() {
     const t = setTimeout(load, 250)
     return () => clearTimeout(t)
   }, [load])
+
+  const exportExcel = () => {
+    if (suppliers.length === 0) return
+    exportSimpleExcel({
+      fileName: excelFileName('قائمة-الموردين'),
+      shop: {
+        name: shopName,
+        phone: shopBranding.phone || undefined,
+        address: shopBranding.address || undefined,
+      },
+      documentTitle: 'قائمة الموردين',
+      sheetName: 'الموردين',
+      columns: [
+        { header: 'الاسم', key: 'name', format: 'text' },
+        { header: 'الهاتف', key: 'phone', format: 'text' },
+        { header: 'عدد أوامر الشراء', key: 'ordersCount', format: 'int' },
+        { header: 'إجمالي المشتريات', key: 'totalPurchases', format: 'currency' },
+        { header: 'الرصيد المستحق للمورد', key: 'balance', format: 'currency' },
+        { header: 'آخر عملية شراء', key: 'lastPurchaseAt', format: 'text' },
+      ],
+      rows: suppliers.map((s) => ({
+        name: s.name,
+        phone: s.phone || '-',
+        ordersCount: s._count?.purchaseOrders ?? 0,
+        totalPurchases: s.totalPurchases ?? 0,
+        balance: s.balance,
+        lastPurchaseAt: s.lastPurchaseAt ? new Date(s.lastPurchaseAt).toLocaleDateString('ar-EG') : '-',
+      })),
+      totals: {
+        name: 'الإجمالي',
+        totalPurchases: suppliers.reduce((sum, s) => sum + (s.totalPurchases ?? 0), 0),
+        balance: suppliers.reduce((sum, s) => sum + s.balance, 0),
+      },
+    })
+  }
 
   const remove = async (id: number) => {
     if (!confirm('حذف المورد؟')) return
@@ -103,15 +143,21 @@ export function SuppliersView() {
             سجل الموردين وأرصدتهم والدفعات الآجلة
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setEditing(null)
-            setDialogOpen(true)
-          }}
-        >
-          <Plus className="size-4" />
-          مورد جديد
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={exportExcel} disabled={suppliers.length === 0}>
+            <FileSpreadsheet className="size-4" />
+            تصدير Excel
+          </Button>
+          <Button
+            onClick={() => {
+              setEditing(null)
+              setDialogOpen(true)
+            }}
+          >
+            <Plus className="size-4" />
+            مورد جديد
+          </Button>
+        </div>
       </div>
 
       {/* Summary card */}
