@@ -236,7 +236,7 @@ export function ProductsView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-10 text-center">
+                    <TableHead className="w-10 text-center" style={{ paddingRight: '0.75rem' }}>
                       <Checkbox
                         checked={products.length > 0 && selectedIds.size === products.length}
                         onCheckedChange={toggleSelectAll}
@@ -270,7 +270,7 @@ export function ProductsView() {
                       const low = p.quantity <= p.minQuantity
                       return (
                         <TableRow key={p.id}>
-                          <TableCell className="text-center">
+                          <TableCell className="text-center" style={{ paddingRight: '0.75rem' }}>
                             <Checkbox
                               checked={selectedIds.has(p.id)}
                               onCheckedChange={() => toggleSelect(p.id)}

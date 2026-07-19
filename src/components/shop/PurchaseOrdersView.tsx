@@ -17,9 +17,10 @@ import {
 } from '@/components/ui/table'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PurchaseOrderDialog } from './PurchaseOrderDialog'
+import { DateTimeCell } from './DateTimeCell'
 
 interface OrderItem {
   id: number
@@ -128,7 +129,7 @@ export function PurchaseOrdersView() {
                     <TableHead className="w-28 text-center">الإجمالي</TableHead>
                     <TableHead className="w-28 text-center">المدفوع</TableHead>
                     <TableHead className="w-24 text-center">الآجل</TableHead>
-                    <TableHead className="w-20 text-center">الأصناف</TableHead>
+                    <TableHead className="w-20 text-center">الكمية</TableHead>
                     <TableHead className="w-24 text-center">الحالة</TableHead>
                     <TableHead className="w-20 text-center">إجراءات</TableHead>
                   </TableRow>
@@ -153,7 +154,7 @@ export function PurchaseOrdersView() {
                           {o.orderNo ?? `#${o.id}`}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">
-                          {formatDate(o.createdAt)}
+                          <DateTimeCell date={o.createdAt} />
                         </TableCell>
                         <TableCell>
                           {o.supplier ? (

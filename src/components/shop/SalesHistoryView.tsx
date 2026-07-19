@@ -17,10 +17,11 @@ import {
 } from '@/components/ui/table'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { printSale } from '@/lib/print-client'
 import { useShopStore } from '@/lib/store'
+import { DateTimeCell } from './DateTimeCell'
 
 interface SaleItem {
   id: number
@@ -148,7 +149,7 @@ export function SalesHistoryView() {
                     <TableHead className="w-28 text-center">الإجمالي</TableHead>
                     <TableHead className="w-28 text-center">المدفوع</TableHead>
                     <TableHead className="w-24 text-center">الباقي</TableHead>
-                    <TableHead className="w-20 text-center">الأصناف</TableHead>
+                    <TableHead className="w-20 text-center">الكمية</TableHead>
                     <TableHead className="w-24 text-center">الحالة</TableHead>
                     <TableHead className="w-20 text-center">إجراءات</TableHead>
                   </TableRow>
@@ -173,7 +174,7 @@ export function SalesHistoryView() {
                           {s.invoiceNo ?? `#${s.id}`}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">
-                          {formatDate(s.createdAt)}
+                          <DateTimeCell date={s.createdAt} />
                         </TableCell>
                         <TableCell>
                           {s.customer ? (

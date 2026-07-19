@@ -300,3 +300,71 @@ Work Log:
 - Verified with eslint + tsc --noEmit on all touched files — 0 new errors (one
   pre-existing set-state-in-effect pattern already used throughout the codebase, same
   as noted in earlier stages — not a regression).
+
+---
+Fixes: mislabeled quantity column, checkbox centering, cluttered date/time cell
+
+Work Log:
+- SalesHistoryView.tsx / PurchaseOrdersView.tsx: the "الأصناف" (item types) column
+  header was actually displaying the SUM of item quantities (items.reduce(sum + qty)),
+  not a count of distinct products — mislabeled. Renamed the header to "الكمية" to
+  match what's actually shown, no calculation change (POSView's own "عدد الأصناف" in
+  the cart summary was already correct — cart.length — so only these two list views
+  needed the label fix).
+- New: src/components/shop/DateTimeCell.tsx — a single "2026/07/18 22:18" string
+  inside an RTL table cell gets visually reordered by the browser's bidi algorithm,
+  reading as jumbled. Replaced with a small component that isolates the block with
+  dir="ltr" and stacks date (regular weight) over time (smaller, muted) — fixes the
+  ordering and gives clear hierarchy without extra visual noise. Wired into both
+  SalesHistoryView and PurchaseOrdersView date columns.
+- ProductsView.tsx: the bulk-select checkbox (header + rows) looked pushed toward the
+  right edge of its cell instead of centered. Root cause: the shared Table component
+  has a global rule `[&:has([role=checkbox])]:pr-0` that zeroes the right-side padding
+  on any cell containing a checkbox (intentional for edge-hugging row-select checkboxes
+  in other tables), which made `text-center` center within an asymmetric padding box.
+  Fixed locally with an inline `style={{ paddingRight: '0.75rem' }}` on just these two
+  cells (inline style always wins over the class, and it doesn't touch the shared Table
+  component so other tables using that edge-hugging behavior are unaffected).
+- Verified with eslint + tsc --noEmit — 0 new errors (same pre-existing
+  set-state-in-effect pattern already present throughout the codebase, not a
+  regression).
+
+---
+Feature: full professional restructure of the Reports page
+
+Work Log:
+- src/app/api/reports/route.ts — rewritten from a single flat totals payload into a
+  much richer dataset:
+  - Added period-over-period comparison (% change vs. an equal-length previous period,
+    only computed when the person picked a bounded date range).
+  - Added a daily sales+profit trend series for charting.
+  - Added top products (now includes profit per product, not just qty/revenue),
+    category revenue breakdown, top customers by spend, and payment-method breakdown
+    (from Transaction deposits).
+  - Added real finance data: expenses by category, total expenses, netProfit
+    (sales profit + maintenance revenue − expenses) instead of just gross sales
+    profit, customer receivables and supplier payables (outstanding balances).
+  - Added low-stock as an actual product list (name/qty/min), not just a count.
+  - Added purchases summary (total + count) from PurchaseOrder.
+  - Added optional branchId filter + branches list in the response (frontend only
+    shows the branch selector when the tenant actually has more than one branch).
+- src/components/shop/ReportsView.tsx — full rebuild:
+  - KPI row with 4 headline metrics, each showing a vs-previous-period delta badge.
+  - Tabbed layout (نظرة عامة / المبيعات / المخزون / المالية) instead of one long
+    scroll of everything — matches "professional restructuring" ask for a system
+    this size.
+  - Overview: sales+profit trend chart (ComposedChart: bar for revenue, line for
+    profit) using the same recharts/oklch styling as DashboardView, plus quick
+    stats (maintenance, purchases, low-stock alert).
+  - Sales tab: top-products table (now with profit column), top-customers list,
+    category breakdown and payment-method breakdown as proportional bar lists.
+  - Inventory tab: stock value KPIs + an actual low-stock table (not just a count)
+    so the person can act on it directly instead of going to Inventory to look it up.
+  - Finance tab: cash/deposits/withdrawals/expenses KPIs, a net-profit formula
+    breakdown (sales profit + maintenance − expenses = net), receivables/payables
+    cards, and expenses-by-category bar list.
+  - Kept CSV/PDF export, expanded both to cover the new metrics (net profit,
+    expenses, top customers) instead of just the original flat KPI set.
+- Verified with eslint + tsc --noEmit — 0 new errors (same pre-existing
+  set-state-in-effect pattern already present throughout the codebase; fixed one
+  incidental Map<> type-inference ambiguity in the new route while at it).
