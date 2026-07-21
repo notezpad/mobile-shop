@@ -6,7 +6,6 @@ import {
   ArrowUpRight,
   Banknote,
   CalendarDays,
-  FileSpreadsheet,
   FileText,
   Package,
   PackageX,
@@ -55,8 +54,7 @@ import { api } from '@/lib/api'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
-import { BRAND, baseDocStyles, fmt as fmtMoney } from '@/lib/print'
-import { exportStyledExcel, excelFileName, type ExcelSheet } from '@/lib/excel'
+import { BRAND, baseDocStyles, fmt as fmtMoney, openPrintWindow } from '@/lib/print'
 
 interface Branch {
   id: number
@@ -127,6 +125,8 @@ function shortDate(iso: string) {
 export function ReportsView() {
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
+  const enabledModules = useShopStore((s) => s.plan.enabledModules)
+  const hasFinance = enabledModules.includes('finance')
   const [from, setFrom] = React.useState('')
   const [to, setTo] = React.useState('')
   const [branchId, setBranchId] = React.useState<string>('all')
@@ -177,160 +177,13 @@ export function ReportsView() {
 
   const exportPdf = () => {
     if (!report) return
-    const w = window.open('', '_blank', 'width=800,height=600')
-    if (!w) {
-      toast.error('الرجاء السماح بالنوافذ المنبثقة')
-      return
-    }
     const html = buildReportHtml(report, from, to, {
       name: shopName,
       phone: shopBranding.phone || undefined,
       address: shopBranding.address || undefined,
       logo: shopBranding.logoPath || undefined,
     })
-    w.document.open()
-    w.document.write(html)
-    w.document.close()
-    setTimeout(() => {
-      w.focus()
-      w.print()
-    }, 250)
-  }
-
-  const exportExcel = () => {
-    if (!report) return
-
-    const periodLabel = from || to
-      ? `الفترة: من ${from || 'البداية'} إلى ${to || 'اليوم'}`
-      : 'الفترة: كل الفترات'
-
-    const shop = {
-      name: shopName,
-      phone: shopBranding.phone || undefined,
-      address: shopBranding.address || undefined,
-    }
-
-    const summarySheet: ExcelSheet = {
-      name: 'ملخص التقرير',
-      title: 'اتجاه المبيعات اليومي',
-      kpis: [
-        { label: 'إجمالي المبيعات', value: report.totalSales, format: 'currency' },
-        { label: 'هامش الربح من المبيعات', value: report.totalProfit, format: 'currency' },
-        { label: 'نسبة هامش الربح', value: report.profitMargin / 100, format: 'percent' },
-        { label: 'عدد الفواتير', value: report.salesCount, format: 'int' },
-        { label: 'متوسط قيمة الفاتورة', value: report.avgOrderValue, format: 'currency' },
-        { label: 'إيراد الصيانة', value: report.maintenanceRevenue, format: 'currency' },
-        { label: 'إجمالي المصروفات', value: report.totalExpenses, format: 'currency' },
-        { label: 'صافي الربح', value: report.netProfit, format: 'currency' },
-        { label: 'إيداعات مالية', value: report.financeIn, format: 'currency' },
-        { label: 'سحوبات مالية', value: report.financeOut, format: 'currency' },
-        { label: 'رصيد الخزنة', value: report.cashBalance, format: 'currency' },
-        { label: 'مستحقات على العملاء', value: report.customersReceivable, format: 'currency' },
-        { label: 'مستحقات للموردين', value: report.suppliersPayable, format: 'currency' },
-        { label: 'قيمة المخزون (تكلفة)', value: report.stockValueCost, format: 'currency' },
-        { label: 'قيمة المخزون (بيع)', value: report.stockValuePrice, format: 'currency' },
-        { label: 'تنبيهات نقص المخزون', value: report.lowStockCount, format: 'int' },
-        { label: 'إجمالي المشتريات', value: report.totalPurchases, format: 'currency' },
-        { label: 'عدد أوامر الشراء', value: report.purchasesCount, format: 'int' },
-      ],
-      columns: [
-        { header: 'اليوم', key: 'date', format: 'text' },
-        { header: 'المبيعات', key: 'total', format: 'currency' },
-        { header: 'الربح', key: 'profit', format: 'currency' },
-      ],
-      rows: report.salesTrend.map((t) => ({ date: t.date, total: t.total, profit: t.profit })),
-    }
-
-    const topProductsSheet: ExcelSheet = {
-      name: 'أفضل المنتجات',
-      title: 'أفضل المنتجات مبيعاً',
-      columns: [
-        { header: 'المنتج', key: 'name', format: 'text' },
-        { header: 'الكمية المباعة', key: 'qty', format: 'int' },
-        { header: 'الإيراد', key: 'total', format: 'currency' },
-        { header: 'الربح', key: 'profit', format: 'currency' },
-      ],
-      rows: report.topProducts.map((p) => ({ name: p.name, qty: p.qty, total: p.total, profit: p.profit })),
-      totals: report.topProducts.length
-        ? {
-            name: 'الإجمالي',
-            qty: report.topProducts.reduce((s, p) => s + p.qty, 0),
-            total: report.topProducts.reduce((s, p) => s + p.total, 0),
-            profit: report.topProducts.reduce((s, p) => s + p.profit, 0),
-          }
-        : undefined,
-    }
-
-    const topCustomersSheet: ExcelSheet = {
-      name: 'أفضل العملاء',
-      title: 'أفضل العملاء',
-      columns: [
-        { header: 'العميل', key: 'name', format: 'text' },
-        { header: 'إجمالي المشتريات', key: 'total', format: 'currency' },
-        { header: 'عدد الفواتير', key: 'salesCount', format: 'int' },
-      ],
-      rows: report.topCustomers.map((c) => ({ name: c.name, total: c.total, salesCount: c.salesCount })),
-    }
-
-    const categorySheet: ExcelSheet = {
-      name: 'التصنيفات والمصروفات',
-      title: 'المبيعات حسب التصنيف',
-      columns: [
-        { header: 'التصنيف', key: 'category', format: 'text' },
-        { header: 'الإجمالي', key: 'total', format: 'currency' },
-      ],
-      rows: report.categoryBreakdown.map((c) => ({ category: c.category, total: c.total })),
-    }
-
-    const paymentSheet: ExcelSheet = {
-      name: 'طرق الدفع',
-      title: 'المبيعات حسب طريقة الدفع',
-      columns: [
-        { header: 'طريقة الدفع', key: 'method', format: 'text' },
-        { header: 'المبلغ', key: 'amount', format: 'currency' },
-      ],
-      rows: report.paymentMethods.map((m) => ({ method: METHOD_LABELS[m.method] || m.method, amount: m.amount })),
-    }
-
-    const expensesSheet: ExcelSheet = {
-      name: 'المصروفات حسب التصنيف',
-      title: 'المصروفات حسب التصنيف',
-      columns: [
-        { header: 'التصنيف', key: 'category', format: 'text' },
-        { header: 'المبلغ', key: 'amount', format: 'currency' },
-      ],
-      rows: report.expensesByCategory.map((e) => ({ category: e.category, amount: e.amount })),
-      totals: report.expensesByCategory.length
-        ? { category: 'الإجمالي', amount: report.expensesByCategory.reduce((s, e) => s + e.amount, 0) }
-        : undefined,
-    }
-
-    const lowStockSheet: ExcelSheet = {
-      name: 'تنبيهات المخزون',
-      title: 'منتجات أوشكت على النفاد',
-      columns: [
-        { header: 'المنتج', key: 'name', format: 'text' },
-        { header: 'الكمية الحالية', key: 'quantity', format: 'int' },
-        { header: 'الحد الأدنى', key: 'minQuantity', format: 'int' },
-      ],
-      rows: report.lowStockProducts.map((p) => ({ name: p.name, quantity: p.quantity, minQuantity: p.minQuantity })),
-    }
-
-    exportStyledExcel({
-      fileName: excelFileName(`تقرير-${shopName || 'المحل'}`),
-      shop,
-      documentTitle: 'تقرير الأداء الشامل',
-      periodLabel,
-      sheets: [
-        summarySheet,
-        topProductsSheet,
-        topCustomersSheet,
-        categorySheet,
-        paymentSheet,
-        expensesSheet,
-        ...(report.lowStockProducts.length ? [lowStockSheet] : []),
-      ],
-    })
+    openPrintWindow(html, () => toast.error('الرجاء السماح بالنوافذ المنبثقة'))
   }
 
   const maxCategory = Math.max(1, ...(report?.categoryBreakdown.map((c) => c.total) ?? [1]))
@@ -350,10 +203,6 @@ export function ReportsView() {
           <Button onClick={exportPdf} disabled={loading || !report}>
             <FileText className="size-4" />
             تصدير PDF
-          </Button>
-          <Button variant="outline" onClick={exportExcel} disabled={loading || !report}>
-            <FileSpreadsheet className="size-4" />
-            تصدير Excel
           </Button>
         </div>
       </div>
@@ -459,7 +308,7 @@ export function ReportsView() {
           <TabsTrigger value="overview">نظرة عامة</TabsTrigger>
           <TabsTrigger value="sales">المبيعات</TabsTrigger>
           <TabsTrigger value="inventory">المخزون</TabsTrigger>
-          <TabsTrigger value="finance">المالية</TabsTrigger>
+          {hasFinance && <TabsTrigger value="finance">المالية</TabsTrigger>}
         </TabsList>
 
         {/* ===================== Overview ===================== */}
@@ -541,7 +390,7 @@ export function ReportsView() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <Trophy className="size-4 text-amber-500" />
+                  <Trophy className="size-4 text-accent2-500" />
                   أفضل المنتجات مبيعاً
                 </CardTitle>
               </CardHeader>
@@ -823,30 +672,42 @@ function KpiCard({
   tone?: 'primary'
 }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">{label}</p>
-          <Icon className="size-4 text-muted-foreground" />
-        </div>
-        {loading ? (
-          <Skeleton className="mt-2 h-7 w-28" />
-        ) : (
-          <div className="mt-1 flex items-baseline gap-2">
-            <p className={cn('text-xl font-bold tabular-nums', tone === 'primary' && 'text-primary')}>
-              {value}
-            </p>
-            {change != null && (
-              <span
-                className={cn(
-                  'flex items-center gap-0.5 text-xs font-medium tabular-nums',
-                  change >= 0 ? 'text-primary' : 'text-destructive'
-                )}
-              >
-                {change >= 0 ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
-                {Math.abs(change).toFixed(0)}%
-              </span>
+    <Card variant="bento">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="space-y-1 min-w-0">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
+            {loading ? (
+              <Skeleton className="h-7 w-28" />
+            ) : (
+              <p className={cn('text-xl font-bold tabular-nums truncate', tone === 'primary' && 'text-primary')}>
+                {value}
+              </p>
             )}
+          </div>
+          {Icon && (
+            <div className={cn(
+              'flex size-9 shrink-0 items-center justify-center rounded-lg',
+              tone === 'primary' ? 'bg-primary-subtle text-primary-subtle-foreground' : 'bg-muted text-muted-foreground'
+            )}>
+              <Icon className="size-4" />
+            </div>
+          )}
+        </div>
+        {change != null && !loading && (
+          <div className="mt-3 flex items-center gap-1.5 text-xs">
+            <span
+              className={cn(
+                'inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-semibold',
+                change >= 0
+                  ? 'bg-success-subtle text-success-subtle-foreground'
+                  : 'bg-destructive-subtle text-destructive-subtle-foreground'
+              )}
+            >
+              {change >= 0 ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
+              {Math.abs(change).toFixed(0)}%
+            </span>
+            <span className="text-muted-foreground">عن الفترة السابقة</span>
           </div>
         )}
       </CardContent>
@@ -868,19 +729,19 @@ function MiniStat({
   tone?: 'primary' | 'warn'
 }) {
   return (
-    <Card>
+    <Card variant="bento">
       <CardContent className="flex items-center gap-3 p-4">
         <div
           className={cn(
-            'flex size-9 shrink-0 items-center justify-center rounded-lg',
-            tone === 'primary' && 'bg-primary/10 text-primary',
-            tone === 'warn' && 'bg-amber-500/10 text-amber-600',
+            'flex size-10 shrink-0 items-center justify-center rounded-lg [&_svg]:size-5',
+            tone === 'primary' && 'bg-primary-subtle text-primary-subtle-foreground',
+            tone === 'warn' && 'bg-warning-subtle text-warning-subtle-foreground',
             !tone && 'bg-muted text-muted-foreground'
           )}
         >
-          <Icon className="size-4.5" />
+          <Icon />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-xs text-muted-foreground">{label}</p>
           {loading ? (
             <Skeleton className="mt-1 h-5 w-20" />

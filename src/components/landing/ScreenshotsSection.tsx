@@ -145,12 +145,12 @@ function BrowserFrame({ children }: { children: React.ReactNode }) {
     <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xl shadow-primary/10">
       <div className="flex items-center gap-2 border-b bg-muted/60 px-4 py-3">
         <div className="flex gap-1.5">
-          <span className="size-3 rounded-full bg-rose-400" />
-          <span className="size-3 rounded-full bg-amber-400" />
-          <span className="size-3 rounded-full bg-emerald-400" />
+          <span className="size-3 rounded-full bg-destructive" />
+          <span className="size-3 rounded-full bg-accent2-400" />
+          <span className="size-3 rounded-full bg-brand-400" />
         </div>
         <div className="mx-auto flex items-center gap-1.5 rounded-md bg-background px-3 py-1 text-[10px] text-muted-foreground" dir="ltr">
-          <span className="size-2 rounded-full bg-emerald-500" />
+          <span className="size-2 rounded-full bg-brand-500" />
           app.shop-system.eg/{''}
         </div>
       </div>
@@ -181,7 +181,7 @@ function DashboardMockup() {
           <p className="text-xs text-muted-foreground">أهلاً، أحمد 👋</p>
           <p className="text-base font-bold">محل الاتصالات</p>
         </div>
-        <div className="flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-600">
+        <div className="flex items-center gap-1.5 rounded-md bg-success-subtle px-2 py-1 text-xs font-medium text-success-subtle-foreground">
           <TrendingUp className="size-3.5" />
           +12.5% هذا الشهر
         </div>
@@ -231,7 +231,7 @@ function POSMockup() {
             <div key={i} className="rounded-lg border bg-card p-2 text-center">
               <div className="mb-1 size-12 mx-auto rounded bg-gradient-to-br from-muted to-muted/60" />
               <p className="truncate text-[11px] font-medium">{p.n}</p>
-              <p className="text-[11px] font-bold text-emerald-600">{p.p} ج.م</p>
+              <p className="text-[11px] font-bold text-success-subtle-foreground">{p.p} ج.م</p>
             </div>
           ))}
         </div>
@@ -257,7 +257,7 @@ function POSMockup() {
         <div className="border-t bg-muted/30 p-2.5">
           <div className="flex items-center justify-between text-sm font-bold">
             <span>الإجمالي</span>
-            <span className="text-emerald-600">1,330 ج.م</span>
+            <span className="text-success-subtle-foreground">1,330 ج.م</span>
           </div>
           <button className="mt-2 w-full rounded-md bg-primary py-2 text-xs font-semibold text-primary-foreground">
             إتمام البيع
@@ -308,9 +308,9 @@ function ProductsMockup() {
               className={
                 'col-span-2 text-center font-semibold ' +
                 (r.s === 0
-                  ? 'text-rose-600'
+                  ? 'text-destructive-subtle-foreground'
                   : r.s <= 2
-                    ? 'text-amber-600'
+                    ? 'text-warning-subtle-foreground'
                     : 'text-foreground')
               }
             >
@@ -322,7 +322,7 @@ function ProductsMockup() {
             <span className="col-span-2 text-center font-semibold text-foreground">
               {r.p} ج.م
             </span>
-            <span className="col-span-1 text-left font-semibold text-emerald-600">
+            <span className="col-span-1 text-left font-semibold text-success-subtle-foreground">
               {r.p - r.co}
             </span>
           </div>
@@ -366,9 +366,9 @@ function CustomersMockup() {
                 className={
                   'text-xs font-bold ' +
                   (c.b > 0
-                    ? 'text-amber-600'
+                    ? 'text-warning-subtle-foreground'
                     : c.b < 0
-                      ? 'text-emerald-600'
+                      ? 'text-success-subtle-foreground'
                       : 'text-foreground')
                 }
               >
@@ -398,7 +398,7 @@ function CustomersMockup() {
           </div>
           <div className="rounded-md bg-muted/40 p-2">
             <p className="text-[10px] text-muted-foreground">الرصيد الحالي</p>
-            <p className="text-sm font-bold text-emerald-600">0 ج.م</p>
+            <p className="text-sm font-bold text-success-subtle-foreground">0 ج.م</p>
           </div>
         </div>
 
@@ -421,7 +421,7 @@ function CustomersMockup() {
                 <span className="text-muted-foreground">{r.d}</span>
                 <span
                   className={
-                    'font-bold ' + (r.a.startsWith('-') ? 'text-foreground' : 'text-emerald-600')
+                    'font-bold ' + (r.a.startsWith('-') ? 'text-foreground' : 'text-success-subtle-foreground')
                   }
                 >
                   {r.a} ج.م
@@ -447,10 +447,10 @@ function MockStat({
   tone: 'emerald' | 'primary' | 'amber' | 'rose'
 }) {
   const toneMap = {
-    emerald: 'bg-emerald-50 text-emerald-600',
+    emerald: 'bg-success-subtle text-success-subtle-foreground',
     primary: 'bg-primary/10 text-primary',
-    amber: 'bg-amber-50 text-amber-600',
-    rose: 'bg-rose-50 text-rose-600',
+    amber: 'bg-warning-subtle text-warning-subtle-foreground',
+    rose: 'bg-destructive-subtle text-destructive-subtle-foreground',
   }
   return (
     <div className="rounded-lg border bg-card p-2.5">

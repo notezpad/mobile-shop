@@ -28,6 +28,22 @@ export interface ShopBranding {
   invoicePrefix: string
 }
 
+export interface PlanContext {
+  businessType: 'electronics' | 'fashion'
+  enabledModules: string[]
+  capabilities: string[]
+}
+
+const DEFAULT_PLAN: PlanContext = {
+  businessType: 'electronics',
+  enabledModules: [
+    'dashboard','pos','products','sales','maintenance','customers','suppliers',
+    'purchases','finance','expenses','cash','reports','settings','users',
+    'inventory','branches',
+  ],
+  capabilities: [],
+}
+
 interface ShopState {
   activeView: ViewKey
   setActiveView: (v: ViewKey) => void
@@ -37,6 +53,8 @@ interface ShopState {
   setBranding: (b: Partial<ShopBranding>) => void
   user: AuthUser | null
   setUser: (u: AuthUser | null) => void
+  plan: PlanContext
+  setPlan: (p: Partial<PlanContext>) => void
   logout: () => void
   quickAddProduct: { open: boolean; seed?: string }
   openQuickAddProduct: (seed?: string) => void
@@ -52,9 +70,11 @@ export const useShopStore = create<ShopState>((set) => ({
   setBranding: (b) => set((s) => ({ branding: { ...s.branding, ...b } })),
   user: null,
   setUser: (u) => set({ user: u }),
+  plan: DEFAULT_PLAN,
+  setPlan: (p) => set((s) => ({ plan: { ...s.plan, ...p } })),
   logout: () => {
     fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
-    set({ user: null, activeView: 'dashboard' })
+    set({ user: null, activeView: 'dashboard', plan: DEFAULT_PLAN })
   },
   quickAddProduct: { open: false },
   openQuickAddProduct: (seed) =>

@@ -46,6 +46,7 @@ import {
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/format'
+import { DateTimeCell } from '../DateTimeCell'
 import type { Branch, InventoryProduct, Stocktake } from '../InventoryView'
 
 interface Props {
@@ -249,7 +250,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                     {items.map(it => {
                       const diff = it.countedQty - it.systemQty
                       return (
-                        <TableRow key={it.productId} className={diff !== 0 ? 'bg-amber-50/40' : ''}>
+                        <TableRow key={it.productId} className={diff !== 0 ? 'bg-warning-subtle/40' : ''}>
                           <TableCell className="font-medium">{it.name}</TableCell>
                           <TableCell className="font-mono text-xs text-muted-foreground" dir="ltr">
                             {it.barcode || '—'}
@@ -284,7 +285,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                             </div>
                           </TableCell>
                           <TableCell className="text-center">
-                            <span className={`font-bold ${diff === 0 ? 'text-muted-foreground' : diff > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            <span className={`font-bold ${diff === 0 ? 'text-muted-foreground' : diff > 0 ? 'text-success-subtle-foreground' : 'text-destructive-subtle-foreground'}`}>
                               {diff > 0 ? '+' : ''}{diff}
                             </span>
                           </TableCell>
@@ -292,7 +293,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="size-7 p-0 text-rose-600 hover:bg-rose-50"
+                              className="size-7 p-0 text-destructive-subtle-foreground hover:bg-destructive-subtle"
                               onClick={() => removeItem(it.productId)}
                             >
                               <Trash2 className="size-3.5" />
@@ -311,14 +312,14 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                   <span>
                     إجمالي الأصناف: <span className="font-bold">{items.length}</span>
                   </span>
-                  <span className="text-emerald-600">
+                  <span className="text-success-subtle-foreground">
                     مطابق: <span className="font-bold">{matchedCount}</span>
                   </span>
-                  <span className="text-amber-600">
+                  <span className="text-warning-subtle-foreground">
                     اختلاف: <span className="font-bold">{diffCount}</span>
                   </span>
                   <span>
-                    صافي الفرق: <span className={`font-bold ${totalDiff === 0 ? '' : totalDiff > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    صافي الفرق: <span className={`font-bold ${totalDiff === 0 ? '' : totalDiff > 0 ? 'text-success-subtle-foreground' : 'text-destructive-subtle-foreground'}`}>
                       {totalDiff > 0 ? '+' : ''}{totalDiff}
                     </span>
                   </span>
@@ -329,7 +330,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                     {saving ? <Loader2 className="ml-1 size-4 animate-spin" /> : <Save className="ml-1 size-4" />}
                     حفظ كمسودة
                   </Button>
-                  <Button onClick={() => submit(true)} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">
+                  <Button onClick={() => submit(true)} disabled={saving} variant="gradient">
                     {saving ? <Loader2 className="ml-1 size-4 animate-spin" /> : <CheckCircle2 className="ml-1 size-4" />}
                     اعتماد وتسوية
                   </Button>
@@ -391,25 +392,25 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                         <TableCell className="font-medium">{st.branch?.name ?? 'كل الفروع'}</TableCell>
                         <TableCell className="text-center">{st.items.length}</TableCell>
                         <TableCell className="text-center">
-                          <span className={`font-bold ${totalD === 0 ? '' : totalD > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          <span className={`font-bold ${totalD === 0 ? '' : totalD > 0 ? 'text-success-subtle-foreground' : 'text-destructive-subtle-foreground'}`}>
                             {totalD > 0 ? '+' : ''}{totalD}
                           </span>
                         </TableCell>
                         <TableCell className="text-center">
                           {st.status === 'committed' ? (
-                            <Badge className="bg-emerald-100 text-emerald-800">معتمد</Badge>
+                            <Badge className="bg-success-subtle text-success-subtle-foreground">معتمد</Badge>
                           ) : (
-                            <Badge className="bg-amber-100 text-amber-800">مسودة</Badge>
+                            <Badge className="bg-warning-subtle text-warning-subtle-foreground">مسودة</Badge>
                           )}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                           {st.createdByName ?? '—'}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground" dir="ltr">
-                          {formatDate(st.createdAt)}
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                          <DateTimeCell date={st.createdAt} />
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground" dir="ltr">
-                          {st.committedAt ? formatDate(st.committedAt) : '—'}
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                          {st.committedAt ? <DateTimeCell date={st.committedAt} /> : '—'}
                         </TableCell>
                         <TableCell className="text-center">
                           <Button size="sm" variant="ghost" className="size-8 p-0">
@@ -479,7 +480,7 @@ function StocktakeDetailDialog({
           <DialogDescription>
             الفرع: {stocktake.branch?.name ?? 'كل الفروع'}
             <br />
-            التاريخ: <span dir="ltr">{formatDate(stocktake.committedAt ?? stocktake.createdAt)}</span>
+            التاريخ: <DateTimeCell date={stocktake.committedAt ?? stocktake.createdAt} />
             {stocktake.note && <><br />ملاحظة: {stocktake.note}</>}
           </DialogDescription>
         </DialogHeader>
@@ -487,13 +488,13 @@ function StocktakeDetailDialog({
         <div className="space-y-3">
           <div className="flex items-center gap-3">
             {stocktake.status === 'committed' ? (
-              <Badge className="bg-emerald-100 text-emerald-800">معتمد</Badge>
+              <Badge className="bg-success-subtle text-success-subtle-foreground">معتمد</Badge>
             ) : (
-              <Badge className="bg-amber-100 text-amber-800">مسودة</Badge>
+              <Badge className="bg-warning-subtle text-warning-subtle-foreground">مسودة</Badge>
             )}
             <span className="text-sm text-muted-foreground">
               {stocktake.items.length} صنف — صافي الفرق:{' '}
-              <span className={`font-bold ${totalD === 0 ? '' : totalD > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              <span className={`font-bold ${totalD === 0 ? '' : totalD > 0 ? 'text-success-subtle-foreground' : 'text-destructive-subtle-foreground'}`}>
                 {totalD > 0 ? '+' : ''}{totalD}
               </span>
             </span>
@@ -512,7 +513,7 @@ function StocktakeDetailDialog({
               </TableHeader>
               <TableBody>
                 {stocktake.items.map((it, idx) => (
-                  <TableRow key={idx} className={it.diff !== 0 ? 'bg-amber-50/40' : ''}>
+                  <TableRow key={idx} className={it.diff !== 0 ? 'bg-warning-subtle/40' : ''}>
                     <TableCell className="font-medium">{it.product?.name}</TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground" dir="ltr">
                       {it.product?.barcode || '—'}
@@ -520,7 +521,7 @@ function StocktakeDetailDialog({
                     <TableCell className="text-center text-muted-foreground">{it.systemQty}</TableCell>
                     <TableCell className="text-center font-bold">{it.countedQty}</TableCell>
                     <TableCell className="text-center">
-                      <span className={`font-bold ${it.diff === 0 ? 'text-muted-foreground' : it.diff > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      <span className={`font-bold ${it.diff === 0 ? 'text-muted-foreground' : it.diff > 0 ? 'text-success-subtle-foreground' : 'text-destructive-subtle-foreground'}`}>
                         {it.diff > 0 ? '+' : ''}{it.diff}
                       </span>
                     </TableCell>
@@ -534,11 +535,11 @@ function StocktakeDetailDialog({
         <DialogFooter className="gap-2">
           {stocktake.status === 'draft' && (
             <>
-              <div className="mr-auto flex items-center gap-1.5 text-xs text-amber-600">
+              <div className="mr-auto flex items-center gap-1.5 text-xs text-warning-subtle-foreground">
                 <AlertCircle className="size-3.5" />
                 سيتم تعديل كميات المخزون عند الاعتماد
               </div>
-              <Button onClick={onCommit} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">
+              <Button onClick={onCommit} disabled={saving} variant="gradient">
                 {saving && <Loader2 className="ml-1 size-4 animate-spin" />}
                 <CheckCircle2 className="ml-1 size-4" />
                 اعتماد وتسوية

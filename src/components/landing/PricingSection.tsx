@@ -223,7 +223,7 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
             >
               سنوي
             </span>
-            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+            <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-bold text-primary">
               وفّر شهرين
             </span>
           </div>
@@ -343,7 +343,7 @@ function PlanCard({
         <span
           className={
             'text-4xl font-extrabold tracking-tight ' +
-            (isTrial ? 'text-emerald-600' : 'text-foreground')
+            (isTrial ? 'text-primary' : 'text-foreground')
           }
         >
           {priceDisplay}
@@ -356,7 +356,7 @@ function PlanCard({
         <p className="mb-1 text-xs text-muted-foreground">لمدة {periodLabel}</p>
       )}
       {yearly && !isTrial && (
-        <p className="mb-3 text-[10px] text-emerald-600">
+        <p className="mb-3 text-[10px] text-primary">
           يوفّر{' '}
           {(plan.priceMonthly * 12 - plan.priceYearly).toLocaleString('ar-EG', {
             maximumFractionDigits: 0,

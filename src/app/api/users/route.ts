@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin, authErrorResponse, hashPassword } from '@/lib/auth'
+import { requireModule, featureErrorResponse } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,6 +12,9 @@ export async function GET() {
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+  try { await requireModule(session, 'users') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   const users = await db.user.findMany({
@@ -38,6 +42,9 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+  try { await requireModule(session, 'users') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   const body = await req.json().catch(() => null)

@@ -1,8 +1,18 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { ALL_MODULES } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
+
+function parseArr(raw: string | null | undefined): string[] | null {
+  if (!raw) return null
+  try {
+    const v = JSON.parse(raw)
+    if (Array.isArray(v)) return v.map(String)
+  } catch { /* ignore */ }
+  return null
+}
 
 export async function GET() {
   let session
@@ -11,11 +21,10 @@ export async function GET() {
   } catch (e) {
     const err = authErrorResponse(e)
     if (err) return NextResponse.json(err.body, { status: err.status })
-    // For other errors, still return unauthorized-ish
     return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 })
   }
 
-  // Super admin has no subscription
+  // Super admin has no subscription — full access.
   if (session.role === 'SUPER_ADMIN') {
     return NextResponse.json({
       ok: true,
@@ -27,6 +36,9 @@ export async function GET() {
       period: 'permanent',
       expired: false,
       expiringSoon: false,
+      businessType: 'electronics',
+      enabledModules: [...ALL_MODULES],
+      capabilities: ['collections', 'multi_unit'],
     })
   }
 
@@ -55,6 +67,9 @@ export async function GET() {
       period: '-',
       expired: tenant.status === 'expired',
       expiringSoon: false,
+      businessType: 'electronics',
+      enabledModules: [...ALL_MODULES],
+      capabilities: [],
     })
   }
 
@@ -64,6 +79,12 @@ export async function GET() {
   )
   const expired = latestSub.endDate < now || tenant.status === 'expired'
   const expiringSoon = !expired && daysLeft >= 0 && daysLeft <= 7
+
+  const enabledModules =
+    parseArr(latestSub.plan.enabledModules) ?? [...ALL_MODULES]
+  const capabilities = parseArr(latestSub.plan.capabilities) ?? []
+  const businessType =
+    latestSub.plan.businessType === 'fashion' ? 'fashion' : 'electronics'
 
   return NextResponse.json({
     ok: true,
@@ -75,5 +96,8 @@ export async function GET() {
     period: latestSub.period,
     expired,
     expiringSoon,
+    businessType,
+    enabledModules,
+    capabilities,
   })
 }

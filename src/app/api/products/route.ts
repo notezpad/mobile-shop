@@ -32,8 +32,14 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const search = searchParams.get('search')?.trim() || ''
   const category = searchParams.get('category')?.trim() || ''
+  // status: 'active' (default — used by POS/purchasing so disabled products
+  // can't be sold or re-ordered), 'inactive', or 'all' (used by the products
+  // management screen so disabled products can still be reviewed/reactivated).
+  const status = searchParams.get('status') || 'active'
 
   const where: any = { tenantId: session.tenantId, AND: [] as any[] }
+  if (status === 'active') where.active = true
+  else if (status === 'inactive') where.active = false
   const branchIdParam = searchParams.get('branchId')
   if (session.branchId) {
     where.AND.push({ OR: [{ branchId: session.branchId }, { branchId: null }] })

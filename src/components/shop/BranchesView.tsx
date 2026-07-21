@@ -15,6 +15,7 @@ import {
   Package,
   ShoppingCart,
   Crown,
+  FileText,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -47,6 +48,10 @@ import {
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
+import { DateTimeCell } from './DateTimeCell'
+import { printListReportHtml, openPrintWindow } from '@/lib/print'
+import { useShopStore } from '@/lib/store'
+import { useConfirm } from './ConfirmDialogProvider'
 
 interface Branch {
   id: number
@@ -69,6 +74,9 @@ interface BranchReport {
 }
 
 export function BranchesView() {
+  const confirm = useConfirm()
+  const shopName = useShopStore((s) => s.shopName)
+  const shopBranding = useShopStore((s) => s.branding)
   const [branches, setBranches] = React.useState<Branch[]>([])
   const [reports, setReports] = React.useState<BranchReport[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -129,7 +137,10 @@ export function BranchesView() {
       toast.error('لا يمكن حذف الفرع الرئيسي — عيّن فرعاً آخر كرئيسي أولاً')
       return
     }
-    if (!confirm(`حذف الفرع "${b.name}"؟\nسيتم فك ارتباط منتجاته وموظفيه به.`)) return
+    if (!(await confirm({
+      title: `حذف الفرع "${b.name}"؟`,
+      description: 'سيتم فك ارتباط منتجاته وموظفيه به.',
+    }))) return
     try {
       await api(`/api/branches/${b.id}`, { method: 'DELETE' })
       toast.success('تم الحذف')
@@ -151,6 +162,47 @@ export function BranchesView() {
     }), { sales: 0, profit: 0, count: 0, products: 0 })
   }, [reports])
 
+  const exportPdf = () => {
+    const html = printListReportHtml(
+      {
+        title: 'إدارة الفروع',
+        subtitle: 'أداء كل فرع: مبيعات، أرباح، أصناف',
+        columns: [
+          { header: '#' },
+          { header: 'الفرع', align: 'right' },
+          { header: 'الحالة' },
+          { header: 'عدد الفواتير' },
+          { header: 'إجمالي المبيعات' },
+          { header: 'إجمالي الأرباح' },
+          { header: 'عدد الأصناف' },
+        ],
+        rows: reports.map((r, i) => [
+          String(i + 1),
+          r.name + (r.isMain ? ' (رئيسي)' : ''),
+          branches.find((b) => b.id === r.branchId)?.active === false ? 'موقوف' : 'نشط',
+          String(r.salesCount),
+          formatCurrency(r.totalSales),
+          formatCurrency(r.totalProfit),
+          String(r.productCount),
+        ]),
+        kpis: [
+          { label: 'عدد الفروع', value: String(branches.length) },
+          { label: 'إجمالي المبيعات', value: formatCurrency(totals.sales) },
+          { label: 'إجمالي الأرباح', value: formatCurrency(totals.profit), emphasize: true },
+          { label: 'إجمالي الفواتير', value: String(totals.count) },
+        ],
+        emptyMessage: 'لا توجد فروع',
+      },
+      {
+        name: shopName,
+        phone: shopBranding.phone || undefined,
+        address: shopBranding.address || undefined,
+        logo: shopBranding.logoPath || undefined,
+      }
+    )
+    openPrintWindow(html, () => toast.error('الرجاء السماح بالنوافذ المنبثقة'))
+  }
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -166,10 +218,16 @@ export function BranchesView() {
             أنشئ فروع متجرك وتابع أداء كل فرع على حدة (مبيعات، أرباح، أصناف).
           </p>
         </div>
-        <Button onClick={openNew}>
-          <Plus className="ml-1 size-4" />
-          فرع جديد
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={exportPdf} disabled={loading}>
+            <FileText className="size-4" />
+            تصدير PDF
+          </Button>
+          <Button onClick={openNew}>
+            <Plus className="ml-1 size-4" />
+            فرع جديد
+          </Button>
+        </div>
       </div>
 
       {/* Aggregate stats */}
@@ -252,7 +310,7 @@ export function BranchesView() {
                               )}
                             </div>
                             <div className="text-xs font-normal text-muted-foreground">
-                              أُنشئ {new Date(b.createdAt).toLocaleDateString('ar-EG')}
+                              أُنشئ <DateTimeCell date={b.createdAt} showTime={false} className="align-middle" />
                             </div>
                           </div>
                         </span>
@@ -293,9 +351,9 @@ export function BranchesView() {
                           <div className="text-[10px] text-muted-foreground">مبيعات</div>
                           <div className="text-xs font-bold">{formatCurrency(r?.totalSales ?? 0)}</div>
                         </div>
-                        <div className="rounded-lg bg-emerald-50 p-2 text-center dark:bg-emerald-950/30">
+                        <div className="rounded-lg bg-success-subtle p-2 text-center dark:bg-success-subtle/30">
                           <div className="text-[10px] text-muted-foreground">أرباح</div>
-                          <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                          <div className="text-xs font-bold text-success-subtle-foreground dark:text-success-subtle-foreground">
                             {formatCurrency(r?.totalProfit ?? 0)}
                           </div>
                         </div>
@@ -313,7 +371,7 @@ export function BranchesView() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                          className="text-destructive-subtle-foreground hover:bg-destructive-subtle hover:text-destructive-subtle-foreground"
                           onClick={() => remove(b)}
                           disabled={b.isMain}
                           title={b.isMain ? 'لا يمكن حذف الفرع الرئيسي' : 'حذف الفرع'}
@@ -374,7 +432,7 @@ export function BranchesView() {
                             </TableCell>
                             <TableCell className="text-center">{r.salesCount}</TableCell>
                             <TableCell className="text-center font-medium">{formatCurrency(r.totalSales)}</TableCell>
-                            <TableCell className="text-center font-medium text-emerald-600 dark:text-emerald-400">
+                            <TableCell className="text-center font-medium text-success-subtle-foreground dark:text-success-subtle-foreground">
                               {formatCurrency(r.totalProfit)}
                             </TableCell>
                             <TableCell className="text-center">{r.productCount}</TableCell>
@@ -390,7 +448,7 @@ export function BranchesView() {
                         <TableCell className="font-bold">الإجمالي</TableCell>
                         <TableCell className="text-center font-bold">{totals.count}</TableCell>
                         <TableCell className="text-center font-bold">{formatCurrency(totals.sales)}</TableCell>
-                        <TableCell className="text-center font-bold text-emerald-600 dark:text-emerald-400">
+                        <TableCell className="text-center font-bold text-success-subtle-foreground dark:text-success-subtle-foreground">
                           {formatCurrency(totals.profit)}
                         </TableCell>
                         <TableCell className="text-center font-bold">{totals.products}</TableCell>
@@ -484,7 +542,7 @@ function StatCard({
     tone === 'primary'
       ? 'bg-primary/10 text-primary'
       : tone === 'emerald'
-      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+      ? 'bg-success-subtle text-success-subtle-foreground dark:bg-success-subtle/30 dark:text-success-subtle-foreground'
       : 'bg-muted text-muted-foreground'
   return (
     <Card>

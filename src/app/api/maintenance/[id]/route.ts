@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireModule, featureErrorResponse } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,7 +14,10 @@ export async function PUT(
   let session
   try {
     session = await requireAuth()
+    await requireModule(session, 'maintenance')
   } catch (e) {
+    const fErr = featureErrorResponse(e)
+    if (fErr) return NextResponse.json(fErr.body, { status: fErr.status })
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
   }
@@ -83,7 +87,10 @@ export async function DELETE(
   let session
   try {
     session = await requireAuth()
+    await requireModule(session, 'maintenance')
   } catch (e) {
+    const fErr = featureErrorResponse(e)
+    if (fErr) return NextResponse.json(fErr.body, { status: fErr.status })
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
   }

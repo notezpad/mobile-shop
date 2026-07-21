@@ -74,7 +74,7 @@ function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon"
-      className="size-9 text-slate-300 hover:bg-slate-700/50 hover:text-white"
+      className="size-9 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
       onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
       title="تبديل السمة"
     >
@@ -102,19 +102,19 @@ function AdminSidebar({
   return (
     <aside
       className={cn(
-        'flex h-full flex-col bg-slate-900 text-slate-100',
+        'flex h-full flex-col bg-sidebar text-sidebar-foreground',
         'w-[260px]',
         className
       )}
     >
       {/* Brand */}
-      <div className="flex items-center gap-3 border-b border-slate-800 px-4 py-5">
+      <div className="flex items-center gap-3 border-b border-sidebar-border px-4 py-5">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
           <Shield className="size-6" />
         </div>
         <div className="min-w-0">
           <p className="truncate text-sm font-bold">منصة إدارة المحلات</p>
-          <Badge className="mt-0.5 bg-amber-500/20 text-amber-300 hover:bg-amber-500/20 hover:text-amber-300 px-1.5 py-0 text-[10px]">
+          <Badge className="mt-0.5 bg-warning-subtle text-warning-subtle-foreground hover:bg-warning-subtle hover:text-warning-subtle-foreground px-1.5 py-0 text-[10px]">
             لوحة الأدمن
           </Badge>
         </div>
@@ -138,7 +138,7 @@ function AdminSidebar({
                 'min-h-[44px] text-right mb-1',
                 isActive
                   ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
               )}
             >
               <Icon className="size-5 shrink-0" />
@@ -161,14 +161,14 @@ function AdminSidebar({
       </nav>
 
       {/* User footer */}
-      <div className="border-t border-slate-800 px-3 py-3">
+      <div className="border-t border-sidebar-border px-3 py-3">
         <div className="flex items-center gap-2">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-300 text-sm font-bold">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-warning-subtle text-warning-subtle-foreground text-sm font-bold">
             {user?.name?.trim()?.charAt(0) ?? 'A'}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-white">{user?.name}</p>
-            <p className="truncate text-[11px] text-slate-400" dir="ltr">
+            <p className="truncate text-[11px] text-muted-foreground" dir="ltr">
               {user?.email}
             </p>
           </div>
@@ -176,7 +176,7 @@ function AdminSidebar({
             type="button"
             onClick={logout}
             title="تسجيل الخروج"
-            className="flex size-9 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-destructive/20 hover:text-destructive"
+            className="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/20 hover:text-destructive"
           >
             <LogOut className="size-4" />
           </button>
@@ -231,13 +231,13 @@ export function SuperAdminApp() {
   void user
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950">
+    <div className="flex min-h-screen flex-col bg-background">
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-slate-800 bg-slate-900 px-3 text-slate-100 lg:hidden">
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground lg:hidden">
         <Button
           variant="ghost"
           size="icon"
-          className="size-9 text-slate-300 hover:bg-slate-800"
+          className="size-9 text-muted-foreground hover:bg-sidebar-accent"
           onClick={() => setMobileOpen(true)}
         >
           <Menu className="size-5" />
@@ -248,7 +248,7 @@ export function SuperAdminApp() {
 
       {/* Mobile sidebar */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="right" className="w-[280px] border-0 bg-slate-900 p-0">
+        <SheetContent side="right" className="w-[280px] border-0 bg-sidebar p-0">
           <SheetTitle className="sr-only">قائمة الأدمن</SheetTitle>
           <AdminSidebar
             active={active}
@@ -270,15 +270,15 @@ export function SuperAdminApp() {
         </div>
 
         {/* Main content */}
-        <main className="flex flex-1 flex-col bg-slate-50 dark:bg-slate-950">
+        <main className="flex flex-1 flex-col bg-background">
           {/* Desktop header */}
-          <header className="sticky top-0 z-20 hidden h-14 items-center justify-between border-b border-slate-200 bg-white/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:border-slate-800 dark:bg-slate-900/95 lg:flex">
+          <header className="sticky top-0 z-20 hidden h-14 items-center justify-between border-b border-border bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:border-sidebar-border dark:bg-background/95 lg:flex">
             <div>
               <h2 className="text-sm font-bold">{VIEW_TITLES[active]}</h2>
               <p className="text-xs text-muted-foreground">منصة إدارة المحلات</p>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="gap-1 border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+              <Badge variant="outline" className="gap-1 border-warning-subtle bg-warning-subtle text-warning-subtle-foreground dark:text-warning-subtle-foreground">
                 <Shield className="size-3" />
                 أدمن أعلى
               </Badge>
@@ -300,7 +300,7 @@ export function SuperAdminApp() {
             </AnimatePresence>
           </div>
 
-          <footer className="mt-auto border-t border-slate-200 bg-white px-4 py-3 text-center text-xs text-muted-foreground dark:border-slate-800 dark:bg-slate-900 lg:px-6">
+          <footer className="mt-auto border-t border-border bg-white px-4 py-3 text-center text-xs text-muted-foreground dark:border-sidebar-border dark:bg-sidebar lg:px-6">
             © {new Date().getFullYear()} منصة إدارة المحلات — لوحة الأدمن الأعلى
           </footer>
         </main>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireModule, featureErrorResponse } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +17,7 @@ async function nextOrderNo(tenantId: string): Promise<string> {
   return `PO-${year}-${seq}`
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -24,11 +25,28 @@ export async function GET() {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
   }
+  try { await requireModule(session, 'purchases') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
+  }
+
+  const { searchParams } = new URL(req.url)
+  const from = searchParams.get('from')
+  const to = searchParams.get('to')
+
+  const createdAt: { gte?: Date; lte?: Date } = {}
+  if (from) createdAt.gte = new Date(`${from}T00:00:00`)
+  if (to) createdAt.lte = new Date(`${to}T23:59:59.999`)
 
   const orders = await db.purchaseOrder.findMany({
-    where: { tenantId: session.tenantId },
+    where: {
+      tenantId: session.tenantId,
+      ...(from || to ? { createdAt } : {}),
+    },
     orderBy: { id: 'desc' },
     include: { items: true, supplier: true },
+    // Without a date filter (initial page load) cap the result so a shop
+    // with years of history doesn't pull every order on every visit.
+    ...(from || to ? {} : { take: 500 }),
   })
   const userIds = [...new Set(orders.map((o) => o.userId).filter(Boolean))] as string[]
   const users = userIds.length
@@ -52,6 +70,9 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+  try { await requireModule(session, 'purchases') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   const body = await req.json().catch(() => null)

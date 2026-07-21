@@ -35,6 +35,8 @@ import {
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/format'
+import { DateTimeCell } from './DateTimeCell'
+import { useConfirm } from './ConfirmDialogProvider'
 import { SupplierDetailDialog } from './SupplierDetailDialog'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
@@ -50,6 +52,7 @@ interface Supplier {
 }
 
 export function SuppliersView() {
+  const confirm = useConfirm()
   const [suppliers, setSuppliers] = React.useState<Supplier[]>([])
   const [loading, setLoading] = React.useState(true)
   const [search, setSearch] = React.useState('')
@@ -117,7 +120,7 @@ export function SuppliersView() {
   }
 
   const remove = async (id: number) => {
-    if (!confirm('حذف المورد؟')) return
+    if (!(await confirm('حذف المورد؟'))) return
     try {
       await api(`/api/suppliers/${id}`, { method: 'DELETE' })
       toast.success('تم الحذف')
@@ -192,7 +195,7 @@ export function SuppliersView() {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-green-50 text-green-600">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-success-subtle text-success-subtle-foreground">
               <Badge variant="outline" className="border-0 bg-transparent p-0 text-sm">
                 ✓
               </Badge>
@@ -285,7 +288,7 @@ export function SuppliersView() {
                             className={
                               c.balance > 0
                                 ? 'border-destructive/20 bg-destructive/5 text-destructive tabular-nums'
-                                : 'border-green-200 bg-green-50 text-green-700 tabular-nums'
+                                : 'border-success-subtle bg-success-subtle text-success-subtle-foreground tabular-nums'
                             }
                           >
                             {formatCurrency(c.balance)}
@@ -298,7 +301,7 @@ export function SuppliersView() {
                           {c._count?.purchaseOrders ?? 0}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">
-                          {c.lastPurchaseAt ? formatDate(c.lastPurchaseAt) : '—'}
+                          {c.lastPurchaseAt ? <DateTimeCell date={c.lastPurchaseAt} /> : '—'}
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1">

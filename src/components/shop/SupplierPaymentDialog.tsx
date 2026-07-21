@@ -126,7 +126,7 @@ export function SupplierPaymentDialog({
               className={
                 currentBalance > 0
                   ? 'bg-muted/40 font-semibold text-destructive tabular-nums'
-                  : 'bg-muted/40 font-semibold text-green-600 tabular-nums'
+                  : 'bg-muted/40 font-semibold text-success-subtle-foreground tabular-nums'
               }
             />
           </div>

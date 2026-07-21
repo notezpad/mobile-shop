@@ -31,6 +31,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatDate, formatCurrency } from '@/lib/format'
+import { DateTimeCell } from '../DateTimeCell'
 import type { Branch, Movement } from '../InventoryView'
 
 interface Props {
@@ -187,23 +188,23 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId, on
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Card>
           <CardContent className="flex items-center gap-3 p-3">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-success-subtle text-success-subtle-foreground">
               <ArrowDownToLine className="size-4" />
             </div>
             <div>
               <div className="text-[11px] text-muted-foreground">إجمالي الوارد</div>
-              <div className="text-base font-bold text-emerald-700">+{summary.inTotal}</div>
+              <div className="text-base font-bold text-success-subtle-foreground">+{summary.inTotal}</div>
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-3">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-rose-100 text-rose-700">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-destructive-subtle text-destructive-subtle-foreground">
               <ArrowUpFromLine className="size-4" />
             </div>
             <div>
               <div className="text-[11px] text-muted-foreground">إجمالي الصادر</div>
-              <div className="text-base font-bold text-rose-700">-{summary.outTotal}</div>
+              <div className="text-base font-bold text-destructive-subtle-foreground">-{summary.outTotal}</div>
             </div>
           </CardContent>
         </Card>
@@ -250,8 +251,8 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId, on
                 ) : (
                   filtered.map(m => (
                     <TableRow key={m.id}>
-                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground" dir="ltr">
-                        {formatDate(m.createdAt)}
+                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                        <DateTimeCell date={m.createdAt} />
                       </TableCell>
                       <TableCell className="font-medium">{m.product?.name ?? '—'}</TableCell>
                       <TableCell className="text-muted-foreground">
@@ -263,7 +264,7 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId, on
                         </Badge>
                       </TableCell>
                       <TableCell className="text-center">
-                        <span className={`font-bold ${m.quantity < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        <span className={`font-bold ${m.quantity < 0 ? 'text-destructive-subtle-foreground' : 'text-success-subtle-foreground'}`}>
                           {m.quantity > 0 ? '+' : ''}{m.quantity}
                         </span>
                       </TableCell>

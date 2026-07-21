@@ -53,20 +53,27 @@ model Tenant {
 }
 
 model Plan {
-  id           Int      @id @default(autoincrement())
-  code         String   @unique
-  name         String
-  description  String?
-  priceMonthly Float    @default(0)
-  priceYearly  Float    @default(0)
-  maxUsers     Int      @default(1)
-  maxProducts  Int      @default(50)
-  maxBranches  Int      @default(1)
-  trialDays    Int      @default(0)
-  features     String?
-  isActive     Boolean  @default(true)
-  sortOrder    Int      @default(0)
-  createdAt    DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  code           String   @unique
+  name           String
+  description    String?
+  priceMonthly   Float    @default(0)
+  priceYearly    Float    @default(0)
+  maxUsers       Int      @default(1)
+  maxProducts    Int      @default(50)
+  maxBranches    Int      @default(1)
+  trialDays      Int      @default(0)
+  features       String?
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  // Vertical axis: "electronics" (mobile/computer) | "fashion" (clothing/shoes)
+  businessType   String   @default("electronics")
+  // JSON string[] of ViewKey values — null means all modules (legacy plans)
+  enabledModules String?
+  // JSON string[] of fine-grained capabilities (e.g. "multi_unit","collections")
+  capabilities   String?
 
   subscriptions   Subscription[]
   activationCodes ActivationCode[]
@@ -165,7 +172,11 @@ model Product {
   quantity    Int      @default(0)
   minQuantity Int      @default(1)
   imagePath   String?
+  active      Boolean  @default(true)
   createdAt   DateTime @default(now())
+
+  // Fashion: collection field only (used for bulk collection discounts).
+  collection String?
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   branch         Branch?         @relation(fields: [branchId], references: [id])
@@ -174,11 +185,32 @@ model Product {
   transferItems      TransferItem[]
   stocktakeItems     StocktakeItem[]
   purchaseOrderItems PurchaseOrderItem[]
+  units              ProductUnit[]
 
   @@index([tenantId])
   @@index([tenantId, name])
   @@index([tenantId, category])
+  @@index([tenantId, collection])
   @@index([branchId])
+}
+
+// Wholesale unit (e.g. "قطعة" / "نص دستة" / "دستة" / "كرتونة").
+// Simple factor-based unit only: 1 unit = factor pieces of the same product.
+model ProductUnit {
+  id        Int    @id @default(autoincrement())
+  productId Int
+  name      String
+  price     Float?
+  barcode   String? @unique
+  factor    Int
+  active    Boolean @default(true)
+  createdAt DateTime @default(now())
+
+  product Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  saleItems SaleItem[]
+
+  @@unique([productId, name])
+  @@index([productId])
 }
 
 model Category {
@@ -193,12 +225,12 @@ model Category {
 }
 
 model Customer {
-  id        Int      @id @default(autoincrement())
-  tenantId  String
-  name      String
-  phone     String?
-  balance   Float    @default(0)
-  createdAt DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  tenantId      String
+  name          String
+  phone         String?
+  balance       Float    @default(0)
+  createdAt     DateTime @default(now())
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   sales    Sale[]
@@ -328,14 +360,21 @@ model SaleItem {
   productId Int
   name      String
   price     Float
-  quantity  Int
+  quantity  Int         // total pieces (kept for legacy reports)
   cost      Float  @default(0)
 
-  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id])
+  // Optional wholesale-unit metadata — for invoice display
+  unitId       Int?
+  unitLabel    String?
+  unitQuantity Int?
+
+  sale    Sale         @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product      @relation(fields: [productId], references: [id])
+  unit    ProductUnit? @relation(fields: [unitId], references: [id])
 
   @@index([saleId])
   @@index([productId])
+  @@index([unitId])
 }
 
 model SalePayment {

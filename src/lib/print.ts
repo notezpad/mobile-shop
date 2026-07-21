@@ -352,6 +352,153 @@ export function printBarcodeLabelsHtml(items: LabelItem[], opts: LabelOptions = 
 </html>`
 }
 
+/** Opens a new browser window, writes the given HTML into it, and triggers the
+ *  print dialog once it's rendered. Shared by every "طباعة PDF" button in the app
+ *  so the open/print behavior (and popup-blocked handling) is consistent everywhere. */
+export function openPrintWindow(html: string, onPopupBlocked?: () => void): void {
+  const w = window.open('', '_blank', 'width=800,height=600')
+  if (!w) {
+    onPopupBlocked?.()
+    return
+  }
+  w.document.open()
+  w.document.write(html)
+  w.document.close()
+  setTimeout(() => {
+    w.focus()
+    w.print()
+  }, 250)
+}
+
+export interface ListReportColumn {
+  header: string
+  /** 'right' for text columns (names, notes), 'center' (default) for numbers/dates/badges. */
+  align?: 'right' | 'center'
+}
+
+export interface ListReportKpi {
+  label: string
+  value: string
+  /** Highlights the KPI card with the brand color, for the single most important figure. */
+  emphasize?: boolean
+}
+
+export interface ListReportOptions {
+  /** Page title shown in the cover band, e.g. "المعاملات المالية". */
+  title: string
+  /** Short subtitle under the title, e.g. "سجل الإيداعات والسحوبات". */
+  subtitle?: string
+  columns: ListReportColumn[]
+  /** Each row is pre-formatted display strings/HTML, one per column, in order. */
+  rows: string[][]
+  /** Optional summary cards shown under the cover band (totals, counts, balances). */
+  kpis?: ListReportKpi[]
+  /** Optional free-text note shown under the KPI row, e.g. active filter/date range. */
+  note?: string
+  emptyMessage?: string
+}
+
+/** Builds a branded, print-ready HTML report for any list-style screen (finance,
+ *  cash log, maintenance, branches, users, ...). Reuses the exact same header/footer/
+ *  table styling as the flagship reports export so every printed document in the app
+ *  looks like it belongs to the same professional design system. */
+export function printListReportHtml(opts: ListReportOptions, shop?: ShopInfo): string {
+  const generatedAt = fmtDate(new Date())
+
+  const headCells = opts.columns.map((c) => `<th>${escapeHtml(c.header)}</th>`).join('')
+  const bodyRows = opts.rows.length
+    ? opts.rows
+        .map((row) => {
+          const cells = row
+            .map((cell, i) => {
+              const align = opts.columns[i]?.align === 'right' ? 'right' : 'center'
+              return `<td style="text-align:${align}${align === 'right' ? ';font-weight:600' : ''}">${cell}</td>`
+            })
+            .join('')
+          return `<tr>${cells}</tr>`
+        })
+        .join('')
+    : emptyRow(opts.columns.length, opts.emptyMessage || 'لا توجد بيانات لعرضها')
+
+  const kpiHtml = opts.kpis?.length
+    ? `<div class="kpi-grid">${opts.kpis
+        .map(
+          (k) => `
+      <div class="kpi-card${k.emphasize ? ' kpi-card-big' : ''}">
+        <div class="kpi-label">${escapeHtml(k.label)}</div>
+        <div class="kpi-value">${escapeHtml(k.value)}</div>
+      </div>`
+        )
+        .join('')}</div>`
+    : ''
+
+  return `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtml(opts.title)}</title>
+<style>
+  ${baseDocStyles()}
+  .cover {
+    background: linear-gradient(135deg, ${BRAND.primaryDark}, ${BRAND.primary});
+    color: #fff; border-radius: 12px; padding: 22px 26px; margin-bottom: 20px;
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  }
+  .cover .shop-logo { height: 50px; width: 50px; object-fit: contain; border-radius: 10px; background: #fff; border: none; }
+  .cover-title { font-size: 21px; font-weight: 800; }
+  .cover-sub { font-size: 12px; opacity: .9; margin-top: 4px; }
+  .cover-meta { text-align: left; font-size: 12px; opacity: .95; }
+  .cover-meta b { font-size: 14px; display: block; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(${Math.min(4, Math.max(1, opts.kpis?.length || 1))}, 1fr); gap: 10px; margin-bottom: 16px; }
+  .kpi-card { border: 1px solid ${BRAND.border}; border-radius: 10px; padding: 12px 13px; background: #fafcfa; }
+  .kpi-card-big { background: ${BRAND.primaryLight}; border-color: ${BRAND.primary}; }
+  .kpi-label { font-size: 10.5px; color: ${BRAND.sub}; margin-bottom: 5px; }
+  .kpi-value { font-size: 16.5px; font-weight: 800; color: ${BRAND.ink}; }
+  .kpi-card-big .kpi-value { color: ${BRAND.primaryDark}; }
+  .rpt-note { font-size: 11.5px; color: ${BRAND.sub}; background: ${BRAND.primaryLight}; border-radius: 8px; padding: 8px 12px; margin-bottom: 18px; }
+  @media print {
+    .doc-footer::after {
+      content: "صفحة " counter(page) " من " counter(pages);
+      display: block; margin-top: 4px; font-size: 10px;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="brand-bar"></div>
+  <div class="page">
+    <div class="cover">
+      <div style="display:flex;align-items:center;gap:12px">
+        ${shop?.logo ? `<img src="${shop.logo}" class="shop-logo" />` : ''}
+        <div>
+          <div class="cover-title">${escapeHtml(opts.title)}</div>
+          <div class="cover-sub">${escapeHtml(shop?.name || 'محل الاتصالات')}${shop?.phone ? ` — ${escapeHtml(shop.phone)}` : ''}</div>
+        </div>
+      </div>
+      <div class="cover-meta">
+        ${opts.subtitle ? `<b>${escapeHtml(opts.subtitle)}</b>` : ''}
+        تم إنشاؤه: ${generatedAt}
+      </div>
+    </div>
+
+    ${kpiHtml}
+    ${opts.note ? `<div class="rpt-note">${escapeHtml(opts.note)}</div>` : ''}
+
+    <table><thead><tr>${headCells}</tr></thead><tbody>${bodyRows}</tbody></table>
+
+    <div class="doc-footer">
+      <div class="thanks">${escapeHtml(shop?.name || 'محل الاتصالات')}</div>
+      <div>تقرير آلي تم إصداره بواسطة نظام إدارة المحل — ${generatedAt}</div>
+    </div>
+  </div>
+</body>
+</html>`
+}
+
+function emptyRow(colspan: number, message: string): string {
+  return `<tr><td colspan="${colspan}" style="text-align:center;color:${BRAND.sub};padding:22px 8px">${escapeHtml(message)}</td></tr>`
+}
+
 function escapeHtml(s: string): string {
   return String(s ?? '')
     .replace(/&/g, '&amp;')

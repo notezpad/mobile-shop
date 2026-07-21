@@ -46,6 +46,8 @@ import {
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/format'
+import { DateTimeCell } from '../DateTimeCell'
+import { useConfirm } from '../ConfirmDialogProvider'
 import type { Branch, InventoryProduct, Transfer } from '../InventoryView'
 
 interface Props {
@@ -63,12 +65,13 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 const STATUS_BADGES: Record<string, string> = {
-  pending: 'bg-amber-100 text-amber-800',
-  completed: 'bg-emerald-100 text-emerald-800',
-  cancelled: 'bg-rose-100 text-rose-800',
+  pending: 'bg-warning-subtle text-warning-subtle-foreground',
+  completed: 'bg-success-subtle text-success-subtle-foreground',
+  cancelled: 'bg-destructive-subtle text-destructive-subtle-foreground',
 }
 
 export function TransfersTab({ transfers, branches, products, userBranchId, onChanged }: Props) {
+  const confirm = useConfirm()
   const [from, setFrom] = React.useState<string>(userBranchId ? String(userBranchId) : '')
   const [to, setTo] = React.useState<string>('')
   const [items, setItems] = React.useState<{ productId: number; name: string; quantity: number; available: number }[]>([])
@@ -164,7 +167,11 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
   }
 
   const cancelTransfer = async (t: Transfer) => {
-    if (!confirm(`إلغاء التحويل #${t.id}؟`)) return
+    if (!(await confirm({
+      title: `إلغاء التحويل #${t.id}؟`,
+      confirmText: 'إلغاء التحويل',
+      cancelText: 'تراجع',
+    }))) return
     try {
       await api(`/api/inventory/transfers/${t.id}`, { method: 'DELETE' })
       toast.success('تم إلغاء التحويل')
@@ -271,7 +278,7 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="size-8 p-0 text-rose-600 hover:bg-rose-50"
+                          className="size-8 p-0 text-destructive-subtle-foreground hover:bg-destructive-subtle"
                           onClick={() => removeItem(idx)}
                         >
                           <Trash2 className="size-3.5" />
@@ -381,11 +388,11 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
                         <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                           {t.createdByName ?? '—'}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground" dir="ltr">
-                          {formatDate(t.createdAt)}
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                          <DateTimeCell date={t.createdAt} />
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground" dir="ltr">
-                          {t.completedAt ? formatDate(t.completedAt) : '—'}
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                          {t.completedAt ? <DateTimeCell date={t.completedAt} /> : '—'}
                         </TableCell>
                         <TableCell className="text-center">
                           <Button size="sm" variant="ghost" className="size-8 p-0">
@@ -445,7 +452,7 @@ function TransferDetailDialog({
           <DialogDescription>
             {transfer.fromBranch?.name} ← {transfer.toBranch?.name}
             <br />
-            <span dir="ltr">{formatDate(transfer.completedAt ?? transfer.createdAt)}</span>
+            <DateTimeCell date={transfer.completedAt ?? transfer.createdAt} />
           </DialogDescription>
         </DialogHeader>
 
@@ -486,11 +493,11 @@ function TransferDetailDialog({
         <DialogFooter className="gap-2">
           {transfer.status === 'pending' && (
             <>
-              <Button variant="outline" onClick={onCancel} disabled={saving} className="text-rose-600 hover:bg-rose-50">
+              <Button variant="outline" onClick={onCancel} disabled={saving} className="text-destructive-subtle-foreground hover:bg-destructive-subtle">
                 <XCircle className="ml-1 size-4" />
                 إلغاء التحويل
               </Button>
-              <Button onClick={onCommit} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">
+              <Button onClick={onCommit} disabled={saving} variant="gradient">
                 {saving && <Loader2 className="ml-1 size-4 animate-spin" />}
                 <CheckCircle2 className="ml-1 size-4" />
                 تنفيذ التحويل

@@ -40,6 +40,9 @@ export async function GET() {
     isActive: p.isActive,
     sortOrder: p.sortOrder,
     subscribersCount: p.subscriptions.length,
+    businessType: (p as any).businessType ?? null,
+    enabledModules: (p as any).enabledModules ?? null,
+    capabilities: (p as any).capabilities ?? null,
   }))
 
   return NextResponse.json({ items: rows })
@@ -94,7 +97,15 @@ export async function POST(req: NextRequest) {
       features,
       isActive: body.isActive !== false,
       sortOrder: Number(body.sortOrder ?? 0) || 0,
-    },
+      ...(body.businessType ? { businessType: String(body.businessType) } : {}),
+      ...(body.capabilities !== undefined ? {
+        capabilities: typeof body.capabilities === 'string'
+          ? body.capabilities
+          : Array.isArray(body.capabilities)
+            ? JSON.stringify(body.capabilities)
+            : null
+      } : {}),
+    } as any,
   })
 
   return NextResponse.json({ ok: true, plan })

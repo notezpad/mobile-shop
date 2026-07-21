@@ -72,23 +72,23 @@ interface Stats {
 }
 
 const PLAN_COLORS: Record<string, string> = {
-  trial: '#94a3b8',
-  pro: '#22c55e',
-  business: '#0ea5e9',
-  enterprise: '#a855f7',
+  trial: 'var(--chart-2)',
+  pro: 'var(--chart-1)',
+  business: 'var(--chart-3)',
+  enterprise: 'var(--chart-4)',
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; className: string }> = {
-    active: { label: 'نشط', className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30' },
-    suspended: { label: 'موقوف', className: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30' },
-    expired: { label: 'منتهي', className: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30' },
-    cancelled: { label: 'ملغي', className: 'bg-slate-500/15 text-slate-700 dark:text-slate-400 border-slate-500/30' },
-    trial: { label: 'تجريبي', className: 'bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30' },
+  const map: Record<string, { label: string; variant: 'success' | 'warning' | 'danger' | 'secondary' | 'info' }> = {
+    active: { label: 'نشط', variant: 'success' },
+    suspended: { label: 'موقوف', variant: 'warning' },
+    expired: { label: 'منتهي', variant: 'danger' },
+    cancelled: { label: 'ملغي', variant: 'secondary' },
+    trial: { label: 'تجريبي', variant: 'info' },
   }
-  const cfg = map[status] ?? { label: status, className: '' }
+  const cfg = map[status] ?? { label: status, variant: 'outline' as const }
   return (
-    <Badge variant="outline" className={`text-[11px] ${cfg.className}`}>
+    <Badge variant={cfg.variant} size="sm">
       {cfg.label}
     </Badge>
   )
@@ -106,30 +106,29 @@ function KpiCard({
   label: string
   value: string
   hint?: string
-  tone?: 'default' | 'green' | 'primary' | 'destructive' | 'red' | 'blue' | 'purple'
+  tone?: 'default' | 'primary' | 'success' | 'danger' | 'info' | 'purple'
   loading?: boolean
 }) {
   const toneClass: Record<string, string> = {
-    default: 'bg-slate-500/15 text-slate-700 dark:text-slate-300',
-    green: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
-    primary: 'bg-primary/15 text-primary',
-    destructive: 'bg-destructive/15 text-destructive',
-    red: 'bg-rose-500/15 text-rose-700 dark:text-rose-400',
-    blue: 'bg-sky-500/15 text-sky-700 dark:text-sky-400',
-    purple: 'bg-violet-500/15 text-violet-700 dark:text-violet-400',
+    default: 'bg-muted text-muted-foreground',
+    primary: 'bg-primary-subtle text-primary-subtle-foreground',
+    success: 'bg-success-subtle text-success-subtle-foreground',
+    danger: 'bg-destructive-subtle text-destructive-subtle-foreground',
+    info: 'bg-info-subtle text-info-subtle-foreground',
+    purple: 'bg-chart-4/15 text-chart-4',
   }
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="flex items-start gap-4 p-4 sm:p-5">
-        <div className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${toneClass[tone]}`}>
-          <Icon className="size-5" />
+    <Card variant="bento">
+      <CardContent className="flex items-start gap-3 p-5">
+        <div className={`flex size-10 shrink-0 items-center justify-center rounded-lg [&_svg]:size-5 ${toneClass[tone]}`}>
+          <Icon />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-muted-foreground">{label}</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
           {loading ? (
             <Skeleton className="mt-1.5 h-7 w-24" />
           ) : (
-            <p className="mt-0.5 text-xl font-bold tracking-tight truncate">{value}</p>
+            <p className="mt-0.5 text-xl font-bold tracking-tight tabular-nums truncate">{value}</p>
           )}
           {hint && <p className="text-[11px] text-muted-foreground mt-0.5">{hint}</p>}
         </div>
@@ -190,7 +189,7 @@ export function AdminDashboardView() {
           icon={Bell}
           label="الاشتراكات النشطة"
           value={stats ? String(stats.activeSubscriptions) : '—'}
-          tone="green"
+          tone="success"
           loading={loading}
         />
         <KpiCard
@@ -204,7 +203,7 @@ export function AdminDashboardView() {
           icon={AlertTriangle}
           label="تنبيهات الانتهاء (7 أيام)"
           value={stats ? String(stats.expiringWithin7Days) : '—'}
-          tone="destructive"
+          tone="danger"
           loading={loading}
         />
       </div>
@@ -215,14 +214,14 @@ export function AdminDashboardView() {
           icon={PauseCircle}
           label="محلات موقوفة"
           value={stats ? String(stats.suspendedCount) : '—'}
-          tone="red"
+          tone="danger"
           loading={loading}
         />
         <KpiCard
           icon={FlaskConical}
           label="طلبات تجريبية نشطة"
           value={stats ? String(stats.activeTrials) : '—'}
-          tone="blue"
+          tone="info"
           loading={loading}
         />
         <KpiCard
@@ -236,7 +235,7 @@ export function AdminDashboardView() {
           icon={Repeat}
           label="معدل الاحتفاظ"
           value={stats ? `${stats.retentionRate}%` : '—'}
-          tone="green"
+          tone="success"
           loading={loading}
         />
       </div>
@@ -378,7 +377,7 @@ export function AdminDashboardView() {
                         <TableCell>{s.planName}</TableCell>
                         <TableCell>{formatShortDate(s.endDate)}</TableCell>
                         <TableCell className="text-center">
-                          <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30">
+                          <Badge variant="outline" className="bg-warning-subtle text-warning-subtle-foreground dark:text-warning-subtle-foreground border-warning-subtle">
                             {s.daysLeft} يوم
                           </Badge>
                         </TableCell>

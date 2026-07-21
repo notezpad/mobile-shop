@@ -121,7 +121,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors",
+        "hover:bg-muted/50 data-[state=selected]:bg-primary-subtle/40 border-b transition-colors duration-fast",
         className
       )}
       {...props}
@@ -163,7 +163,12 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
         // A faint `border-e` (lighter than the header's) keeps every column
         // visually separated all the way down the table, matching the
         // divider that starts in the header instead of stopping at it.
-        "p-2.5 px-3 align-middle text-sm whitespace-nowrap border-e border-border/30 last:border-e-0 [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        // `overflow-hidden` + `max-w-0` is a CSS trick that clips overflowing
+        // content (e.g. barcodes, long URLs) inside fixed-layout cells without
+        // breaking the table's column widths. The `max-w-0` resets the
+        // default `max-w: none` so the cell respects its `w-XX` width and
+        // the inner content's `truncate` / `overflow-hidden` can engage.
+        "p-2.5 px-3 align-middle text-sm whitespace-nowrap border-e border-border/30 last:border-e-0 overflow-hidden [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className
       )}
       {...props}

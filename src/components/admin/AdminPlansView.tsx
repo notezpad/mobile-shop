@@ -28,6 +28,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -56,6 +63,9 @@ interface PlanRow {
   isActive: boolean
   sortOrder: number
   subscribersCount: number
+  businessType?: string | null
+  capabilities?: string | null
+  enabledModules?: string | null
 }
 
 function parseFeatures(raw: string | null | undefined): string {
@@ -69,11 +79,35 @@ function parseFeatures(raw: string | null | undefined): string {
   }
 }
 
+const CAPABILITIES_META: { key: string; label: string; desc: string }[] = [
+  { key: 'multi_unit',       label: 'وحدات الجملة (دستة)',    desc: 'بيع بالجملة — نص دستة / دستة' },
+  { key: 'collections',      label: 'الكوليكشن',              desc: 'تجميع المنتجات في كوليكشنات وخصم جماعي' },
+]
+
+function parseCaps(raw: string | null | undefined): string[] {
+  if (!raw) return []
+  try {
+    const v = JSON.parse(raw)
+    if (Array.isArray(v)) return v.map(String)
+  } catch { /* ignore */ }
+  return []
+}
+
 const PLAN_TONES: Record<string, string> = {
   trial: 'border-sky-500/40',
   pro: 'border-emerald-500/40',
   business: 'border-violet-500/40',
-  enterprise: 'border-amber-500/40',
+  enterprise: 'border-warning-subtle',
+  // vertical plans
+  'electronics-basic': 'border-emerald-500/40',
+  'electronics-pro': 'border-violet-500/40',
+  'fashion-basic': 'border-destructive-subtle',
+  'fashion-pro': 'border-warning-subtle',
+}
+
+const BUSINESS_TYPE_LABEL: Record<string, string> = {
+  electronics: '📱 موبايل وكمبيوتر',
+  fashion: '👗 ملابس وأحذية',
 }
 
 export function AdminPlansView() {
@@ -147,13 +181,18 @@ export function AdminPlansView() {
                       <p className="mt-0.5 text-[11px] text-muted-foreground" dir="ltr">
                         {p.code}
                       </p>
+                      {p.businessType && (
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          {BUSINESS_TYPE_LABEL[p.businessType] ?? p.businessType}
+                        </p>
+                      )}
                     </div>
                     {p.isActive ? (
-                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
+                      <Badge variant="outline" className="bg-success-subtle text-success-subtle-foreground border-success-subtle">
                         مفعّلة
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="bg-slate-500/10 text-slate-500 border-slate-500/30">
+                      <Badge variant="outline" className="bg-muted text-muted-foreground border-border">
                         معطّلة
                       </Badge>
                     )}
@@ -166,7 +205,7 @@ export function AdminPlansView() {
                   {/* Pricing */}
                   <div className="rounded-md bg-muted/40 p-3 text-center">
                     {p.priceMonthly === 0 && p.priceYearly === 0 ? (
-                      <p className="text-xl font-bold text-emerald-600">مجاناً</p>
+                      <p className="text-xl font-bold text-success-subtle-foreground">مجاناً</p>
                     ) : (
                       <>
                         <p className="text-xl font-bold">{formatCurrency(p.priceMonthly)}</p>
@@ -206,7 +245,7 @@ export function AdminPlansView() {
                     <ul className="space-y-1 text-xs">
                       {features.map((f, i) => (
                         <li key={i} className="flex items-start gap-1.5">
-                          <CheckCircle2 className="mt-0.5 size-3 shrink-0 text-emerald-600" />
+                          <CheckCircle2 className="mt-0.5 size-3 shrink-0 text-success-subtle-foreground" />
                           <span>{f}</span>
                         </li>
                       ))}
@@ -293,6 +332,7 @@ function PlanDialog({
   const [code, setCode] = React.useState('')
   const [name, setName] = React.useState('')
   const [description, setDescription] = React.useState('')
+  const [businessType, setBusinessType] = React.useState<'electronics' | 'fashion'>('electronics')
   const [priceMonthly, setPriceMonthly] = React.useState('0')
   const [priceYearly, setPriceYearly] = React.useState('0')
   const [maxUsers, setMaxUsers] = React.useState('1')
@@ -300,6 +340,7 @@ function PlanDialog({
   const [maxBranches, setMaxBranches] = React.useState('1')
   const [trialDays, setTrialDays] = React.useState('0')
   const [features, setFeatures] = React.useState('')
+  const [capabilities, setCapabilities] = React.useState<string[]>([])
   const [sortOrder, setSortOrder] = React.useState('0')
   const [isActive, setIsActive] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
@@ -309,6 +350,7 @@ function PlanDialog({
       setCode(plan.code)
       setName(plan.name)
       setDescription(plan.description ?? '')
+      setBusinessType((plan.businessType as any) === 'fashion' ? 'fashion' : 'electronics')
       setPriceMonthly(String(plan.priceMonthly))
       setPriceYearly(String(plan.priceYearly))
       setMaxUsers(String(plan.maxUsers))
@@ -316,12 +358,14 @@ function PlanDialog({
       setMaxBranches(String(plan.maxBranches))
       setTrialDays(String(plan.trialDays))
       setFeatures(parseFeatures(plan.features))
+      setCapabilities(parseCaps(plan.capabilities))
       setSortOrder(String(plan.sortOrder))
       setIsActive(plan.isActive)
     } else {
       setCode('')
       setName('')
       setDescription('')
+      setBusinessType('electronics')
       setPriceMonthly('0')
       setPriceYearly('0')
       setMaxUsers('1')
@@ -329,6 +373,7 @@ function PlanDialog({
       setMaxBranches('1')
       setTrialDays('0')
       setFeatures('')
+      setCapabilities([])
       setSortOrder('0')
       setIsActive(true)
     }
@@ -345,6 +390,8 @@ function PlanDialog({
         code,
         name,
         description,
+        businessType,
+        capabilities: JSON.stringify(capabilities),
         priceMonthly: Number(priceMonthly) || 0,
         priceYearly: Number(priceYearly) || 0,
         maxUsers: Number(maxUsers) || 1,
@@ -381,13 +428,25 @@ function PlanDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>نوع النشاط التجاري</Label>
+            <Select value={businessType} onValueChange={(v: any) => setBusinessType(v)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="electronics">📱 موبايل وكمبيوتر</SelectItem>
+                <SelectItem value="fashion">👗 ملابس وأحذية</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>الكود *</Label>
               <Input
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="pro"
+                placeholder="electronics-pro"
                 dir="ltr"
               />
             </div>
@@ -485,6 +544,36 @@ function PlanDialog({
               rows={5}
               placeholder="حتى 500 منتج&#10;5 مستخدمين&#10;تقارير متقدمة"
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label>الصلاحيات المتاحة (Capabilities)</Label>
+            <div className="rounded-md border p-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {CAPABILITIES_META.map((cap) => {
+                const checked = capabilities.includes(cap.key)
+                return (
+                  <label
+                    key={cap.key}
+                    className={`flex items-start gap-2 rounded-md border p-2 cursor-pointer transition-colors ${
+                      checked ? 'bg-success-subtle border-success-subtle' : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    <Switch
+                      checked={checked}
+                      onCheckedChange={(on) =>
+                        setCapabilities((prev) =>
+                          on ? [...prev, cap.key] : prev.filter((c) => c !== cap.key)
+                        )
+                      }
+                      className="mt-0.5 shrink-0"
+                    />
+                    <div>
+                      <p className="text-sm font-medium leading-tight">{cap.label}</p>
+                      <p className="text-[11px] text-muted-foreground">{cap.desc}</p>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Switch checked={isActive} onCheckedChange={setIsActive} id="plan-active" />

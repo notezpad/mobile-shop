@@ -92,11 +92,11 @@ interface Plan {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
-    active: { label: 'نشط', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30' },
-    suspended: { label: 'موقوف', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30' },
-    expired: { label: 'منتهي', cls: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30' },
-    cancelled: { label: 'ملغي', cls: 'bg-slate-500/15 text-slate-700 dark:text-slate-400 border-slate-500/30' },
-    trial: { label: 'تجريبي', cls: 'bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30' },
+    active: { label: 'نشط', cls: 'bg-success-subtle text-success-subtle-foreground border-success-subtle' },
+    suspended: { label: 'موقوف', cls: 'bg-warning-subtle text-warning-subtle-foreground dark:text-warning-subtle-foreground border-warning-subtle' },
+    expired: { label: 'منتهي', cls: 'bg-destructive-subtle text-destructive-subtle-foreground dark:text-destructive-subtle-foreground border-destructive-subtle' },
+    cancelled: { label: 'ملغي', cls: 'bg-muted text-muted-foreground border-border' },
+    trial: { label: 'تجريبي', cls: 'bg-info-subtle text-info-subtle-foreground border-info-subtle' },
   }
   const cfg = map[status] ?? { label: status, cls: '' }
   return (
@@ -328,7 +328,7 @@ export function AdminTenantsView() {
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="size-8 text-amber-600 hover:text-amber-700"
+                              className="size-8 text-warning-subtle-foreground hover:text-warning-subtle-foreground"
                               title="دخول كمالك"
                               disabled={busyId === r.id}
                               onClick={() => handleImpersonate(r.id)}
@@ -788,7 +788,13 @@ function AddTenantDialog({
       setShopName('')
       setOwnerEmail('')
       setOwnerPhone('')
-      setPlanId(plans.find((p) => p.code === 'pro')?.id?.toString() ?? '')
+      // Try: electronics-pro → electronics-basic → pro → first available
+      const defaultPlan =
+        plans.find((p) => p.code === 'electronics-pro') ??
+        plans.find((p) => p.code === 'electronics-basic') ??
+        plans.find((p) => p.code === 'pro') ??
+        plans[0]
+      setPlanId(defaultPlan?.id?.toString() ?? '')
       setPeriod('monthly')
       setResult(null)
     }
@@ -842,8 +848,8 @@ function AddTenantDialog({
         </DialogHeader>
         {result ? (
           <div className="space-y-4">
-            <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-4">
-              <p className="mb-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+            <div className="rounded-md border border-success-subtle bg-success-subtle p-4">
+              <p className="mb-2 text-sm font-semibold text-success-subtle-foreground dark:text-success-subtle-foreground">
                 ✅ تم إنشاء المحل بنجاح
               </p>
               <div className="space-y-1 text-sm">

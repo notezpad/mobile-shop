@@ -183,10 +183,10 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                     const out = p.quantity <= 0
                     const low = !out && p.quantity <= p.minQuantity
                     return (
-                      <TableRow key={p.id} className={out ? 'bg-rose-50/50' : low ? 'bg-amber-50/40' : ''}>
+                      <TableRow key={p.id} className={out ? 'bg-destructive-subtle/50' : low ? 'bg-warning-subtle/40' : ''}>
                         <TableCell className="font-medium">{p.name}</TableCell>
                         <TableCell>
-                          <Barcode value={p.barcode} height={26} fontSize={10} />
+                          <Barcode value={p.barcode} height={26} fontSize={10} fitContainer />
                         </TableCell>
                         <TableCell>
                           {branchName(p.branchId) ?? (
@@ -197,7 +197,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                           {out ? (
                             <Badge variant="destructive">نفد</Badge>
                           ) : low ? (
-                            <Badge className="bg-amber-100 text-amber-800">{p.quantity}</Badge>
+                            <Badge className="bg-warning-subtle text-warning-subtle-foreground">{p.quantity}</Badge>
                           ) : (
                             <Badge variant="secondary">{p.quantity}</Badge>
                           )}
@@ -210,7 +210,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                             <Button
                               size="sm"
                               variant="outline"
-                              className="size-8 p-0 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                              className="size-8 p-0 text-success-subtle-foreground hover:bg-success-subtle hover:text-success-subtle-foreground"
                               onClick={() => setAdjOpen({ product: p, type: 'in' })}
                               title="إضافة كمية (وارد)"
                             >
@@ -219,7 +219,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                             <Button
                               size="sm"
                               variant="outline"
-                              className="size-8 p-0 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                              className="size-8 p-0 text-destructive-subtle-foreground hover:bg-destructive-subtle hover:text-destructive-subtle-foreground"
                               onClick={() => setAdjOpen({ product: p, type: 'out' })}
                               disabled={p.quantity <= 0}
                               title="خصم كمية (صادر)"
@@ -313,9 +313,9 @@ function AdjustDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isIn ? (
-              <ArrowDownToLine className="size-5 text-emerald-600" />
+              <ArrowDownToLine className="size-5 text-success-subtle-foreground" />
             ) : (
-              <ArrowUpFromLine className="size-5 text-rose-600" />
+              <ArrowUpFromLine className="size-5 text-destructive-subtle-foreground" />
             )}
             {isIn ? 'إضافة كمية واردة' : 'خصم كمية صادرة'}
           </DialogTitle>
@@ -374,7 +374,7 @@ function AdjustDialog({
           <Button
             onClick={submit}
             disabled={saving}
-            className={isIn ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}
+            className={isIn ? 'bg-primary hover:bg-primary-hover' : 'bg-destructive hover:bg-destructive/90'}
           >
             {saving && <Loader2 className="ml-1 size-4 animate-spin" />}
             {isIn ? 'تأكيد الإضافة' : 'تأكيد الخصم'}

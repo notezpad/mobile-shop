@@ -410,7 +410,7 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
             <div className="rounded-2xl bg-white/10 p-6 backdrop-blur-md ring-1 ring-white/20">
               <div className="mb-3 flex gap-1">
                 {Array.from({ length: TESTIMONIAL.rating }).map((_, i) => (
-                  <Star key={i} className="size-4 fill-amber-300 text-amber-300" />
+                  <Star key={i} className="size-4 fill-amber-300 text-warning-subtle-foreground" />
                 ))}
               </div>
               <p className="mb-4 text-sm leading-relaxed text-primary-foreground">

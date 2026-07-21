@@ -1,10 +1,11 @@
 'use client'
 
 import * as React from 'react'
-import { FileSpreadsheet, Printer, RotateCcw, Search } from 'lucide-react'
+import { FileSpreadsheet, Printer, RotateCcw, Search, X } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -23,6 +24,7 @@ import { printSale } from '@/lib/print-client'
 import { useShopStore } from '@/lib/store'
 import { DateTimeCell } from './DateTimeCell'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
+import { getLocalDateStr } from '@/lib/dateUtils'
 
 interface SaleItem {
   id: number
@@ -30,6 +32,8 @@ interface SaleItem {
   price: number
   quantity: number
   cost: number
+  unitLabel?: string | null
+  unitQuantity?: number | null
 }
 interface Sale {
   id: number
@@ -47,14 +51,24 @@ export function SalesHistoryView() {
   const [sales, setSales] = React.useState<Sale[]>([])
   const [loading, setLoading] = React.useState(true)
   const [query, setQuery] = React.useState('')
+  const [from, setFrom] = React.useState('')
+  const [to, setTo] = React.useState('')
   const [refundId, setRefundId] = React.useState<number | null>(null)
+
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (f?: string, t?: string) => {
     setLoading(true)
     try {
-      const data = await api<Sale[]>('/api/sales')
+      const params = new URLSearchParams()
+      if (f) params.set('from', f)
+      if (t) params.set('to', t)
+      // ✅ نبعت timezone offset للسيرفر عشان يحسب نطاق UTC الصح
+      // مثال: القاهرة UTC+3 → offset = -180 (getTimezoneOffset بترجع العكس)
+      params.set('tzOffset', String(new Date().getTimezoneOffset()))
+      const qs = params.toString()
+      const data = await api<Sale[]>(`/api/sales${qs ? `?${qs}` : ''}`)
       setSales(data)
     } catch (e: any) {
       toast.error(e?.message || 'فشل تحميل المبيعات')
@@ -64,8 +78,36 @@ export function SalesHistoryView() {
   }, [])
 
   React.useEffect(() => {
-    load()
-  }, [load])
+    load(from, to)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const applyRange = (f: string, t: string) => {
+    setFrom(f)
+    setTo(t)
+    load(f, t)
+  }
+
+  // ✅ getLocalDateStr من dateUtils بتستخدم getFullYear/getMonth/getDate
+  //    اللي بترجع التوقيت المحلي للمتصفح تلقائياً (مش UTC)
+  //    مش زي toISOString() اللي كانت بترجع UTC وبتعمل مشكلة للمستخدمين خارج UTC
+
+  const quickToday = () => {
+    const today = getLocalDateStr(new Date())
+    applyRange(today, today)
+  }
+  const quickLast7Days = () => {
+    const end = new Date()
+    const start = new Date()
+    start.setDate(start.getDate() - 6)
+    applyRange(getLocalDateStr(start), getLocalDateStr(end))
+  }
+  const quickThisMonth = () => {
+    const now = new Date()
+    const start = new Date(now.getFullYear(), now.getMonth(), 1)
+    applyRange(getLocalDateStr(start), getLocalDateStr(now))
+  }
+  const clearRange = () => applyRange('', '')
 
   const filtered = query.trim()
     ? sales.filter((s) =>
@@ -82,11 +124,20 @@ export function SalesHistoryView() {
         paid: s.paid,
         status: s.status,
         createdAt: s.createdAt,
-        items: s.items.map((it) => ({
-          name: it.name,
-          price: it.price,
-          quantity: it.quantity,
-        })),
+        items: s.items.map((it) => {
+          // Same conversion as POSView: it.price/it.quantity are stored PER PIECE,
+          // so when a wholesale unit (دستة/كرتون...) was used, show the unit's
+          // quantity and its full price, not the piece price times unit count.
+          const hasUnit = it.unitQuantity != null && it.unitQuantity > 0
+          const displayQty = hasUnit ? it.unitQuantity! : it.quantity
+          const displayPrice = hasUnit ? (it.price * it.quantity) / it.unitQuantity! : it.price
+          const unitSuffix = it.unitLabel ? ` (${displayQty} ${it.unitLabel})` : ''
+          return {
+            name: it.name + unitSuffix,
+            price: displayPrice,
+            quantity: displayQty,
+          }
+        }),
         customer: s.customer
           ? { name: s.customer.name, phone: s.customer.phone }
           : null,
@@ -138,7 +189,7 @@ export function SalesHistoryView() {
     try {
       await api(`/api/sales/${id}`, { method: 'DELETE' })
       toast.success('تم ارتجاع الفاتورة')
-      load()
+      load(from, to)
     } catch (e: any) {
       toast.error(e?.message || 'فشل الإرجاع')
     } finally {
@@ -162,18 +213,64 @@ export function SalesHistoryView() {
       </div>
 
       <Card>
-        <CardContent className="p-3">
-          <div className="relative max-w-sm">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+        <CardContent className="flex flex-wrap items-end gap-2 p-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">بحث</Label>
+            <div className="relative w-[220px]">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="بحث برقم الفاتورة..."
+                className="pr-9"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">من تاريخ</Label>
             <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="بحث برقم الفاتورة..."
-              className="pr-9"
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              className="w-[160px]"
             />
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">إلى تاريخ</Label>
+            <Input
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="w-[160px]"
+            />
+          </div>
+          <Button variant="outline" onClick={() => load(from, to)}>
+            تصفية
+          </Button>
+          <div className="mx-1 h-8 w-px bg-border" />
+          <Button variant="ghost" size="sm" onClick={quickToday}>
+            اليوم
+          </Button>
+          <Button variant="ghost" size="sm" onClick={quickLast7Days}>
+            آخر 7 أيام
+          </Button>
+          <Button variant="ghost" size="sm" onClick={quickThisMonth}>
+            هذا الشهر
+          </Button>
+          {(from || to) && (
+            <Button variant="ghost" size="sm" onClick={clearRange}>
+              <X className="size-3.5" />
+              مسح
+            </Button>
+          )}
         </CardContent>
       </Card>
+
+      {(from || to) && (
+        <p className="text-xs text-muted-foreground">
+          عرض المبيعات من {from || 'البداية'} إلى {to || 'اليوم'} — {filtered.length} فاتورة
+        </p>
+      )}
 
       <Card className="overflow-hidden py-0">
         <CardContent className="p-0">
@@ -283,7 +380,7 @@ export function SalesHistoryView() {
                                 size="icon"
                                 className="size-8 text-destructive hover:text-destructive"
                                 onClick={() => setRefundId(s.id)}
-                                title="مرتجع"
+                                title="مرتجع الفاتورة كاملة"
                               >
                                 <RotateCcw className="size-4" />
                               </Button>

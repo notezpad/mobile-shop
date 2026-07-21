@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Loader2, Plus, Search } from 'lucide-react'
+import { FileText, Loader2, Plus, Search } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,7 +24,10 @@ import {
 } from '@/components/ui/table'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrency, formatArabicDateTime } from '@/lib/format'
+import { DateTimeCell } from './DateTimeCell'
+import { printListReportHtml, openPrintWindow } from '@/lib/print'
+import { useShopStore } from '@/lib/store'
 
 interface Txn {
   id: number
@@ -44,6 +47,8 @@ const METHOD_LABEL: Record<string, string> = {
 }
 
 export function FinanceView() {
+  const shopName = useShopStore((s) => s.shopName)
+  const shopBranding = useShopStore((s) => s.branding)
   const [rows, setRows] = React.useState<Txn[]>([])
   const [loading, setLoading] = React.useState(true)
   const [method, setMethod] = React.useState('vodafone_cash')
@@ -99,13 +104,72 @@ export function FinanceView() {
     }
   }
 
+  const exportPdf = () => {
+    const totalDeposit = rows.filter((t) => t.kind === 'deposit').reduce((s, t) => s + t.amount, 0)
+    const totalWithdraw = rows.filter((t) => t.kind === 'withdraw').reduce((s, t) => s + t.amount, 0)
+    const totalCommission = rows.reduce((s, t) => s + t.commission, 0)
+
+    const html = printListReportHtml(
+      {
+        title: 'المعاملات المالية',
+        subtitle: 'فودافون كاش — انستاباي — فوري',
+        columns: [
+          { header: '#' },
+          { header: 'التاريخ' },
+          { header: 'الوسيلة' },
+          { header: 'بواسطة' },
+          { header: 'النوع' },
+          { header: 'المبلغ' },
+          { header: 'العمولة' },
+          { header: 'الصافي' },
+          { header: 'ملاحظات', align: 'right' },
+        ],
+        rows: rows.map((t, i) => [
+          String(i + 1),
+          formatArabicDateTime(t.createdAt),
+          METHOD_LABEL[t.method] ?? t.method,
+          t.userName ?? '—',
+          t.kind === 'deposit' ? 'إيداع' : 'سحب',
+          formatCurrency(t.amount),
+          formatCurrency(t.commission),
+          formatCurrency((t.kind === 'deposit' ? t.amount : -t.amount) + t.commission),
+          t.note ?? '—',
+        ]),
+        kpis: [
+          { label: 'إجمالي الإيداعات', value: formatCurrency(totalDeposit) },
+          { label: 'إجمالي السحوبات', value: formatCurrency(totalWithdraw) },
+          { label: 'إجمالي العمولات', value: formatCurrency(totalCommission), emphasize: true },
+          { label: 'عدد المعاملات', value: String(rows.length) },
+        ],
+        note:
+          from || to
+            ? `الفترة: من ${from || 'البداية'} إلى ${to || 'اليوم'}`
+            : 'الفترة: كل الفترات',
+        emptyMessage: 'لا توجد معاملات',
+      },
+      {
+        name: shopName,
+        phone: shopBranding.phone || undefined,
+        address: shopBranding.address || undefined,
+        logo: shopBranding.logoPath || undefined,
+      }
+    )
+    openPrintWindow(html, () => toast.error('الرجاء السماح بالنوافذ المنبثقة'))
+  }
+
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">المعاملات المالية</h1>
-        <p className="text-sm text-muted-foreground">
-          فودافون كاش — انستاباي — فوري
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold">المعاملات المالية</h1>
+          <p className="text-sm text-muted-foreground">
+            فودافون كاش — انستاباي — فوري
+          </p>
+        </div>
+        <Button variant="outline" onClick={exportPdf} disabled={loading}>
+          <FileText className="size-4" />
+          تصدير PDF
+        </Button>
       </div>
 
       <Card>
@@ -249,7 +313,7 @@ export function FinanceView() {
                       <TableRow key={t.id}>
                         <TableCell className="text-center font-mono text-xs">{index + 1}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">
-                          {formatDate(t.createdAt)}
+                          <DateTimeCell date={t.createdAt} />
                         </TableCell>
                         <TableCell>
                           {METHOD_LABEL[t.method] ?? t.method}

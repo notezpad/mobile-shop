@@ -1,10 +1,11 @@
 'use client'
 
 import * as React from 'react'
-import { FileSpreadsheet, Plus, RotateCcw, Search } from 'lucide-react'
+import { FileSpreadsheet, Plus, RotateCcw, Search, X } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -46,15 +47,21 @@ export function PurchaseOrdersView() {
   const [orders, setOrders] = React.useState<PurchaseOrder[]>([])
   const [loading, setLoading] = React.useState(true)
   const [query, setQuery] = React.useState('')
+  const [from, setFrom] = React.useState('')
+  const [to, setTo] = React.useState('')
   const [returnId, setReturnId] = React.useState<number | null>(null)
   const [newOpen, setNewOpen] = React.useState(false)
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (f?: string, t?: string) => {
     setLoading(true)
     try {
-      const data = await api<PurchaseOrder[]>('/api/purchase-orders')
+      const params = new URLSearchParams()
+      if (f) params.set('from', f)
+      if (t) params.set('to', t)
+      const qs = params.toString()
+      const data = await api<PurchaseOrder[]>(`/api/purchase-orders${qs ? `?${qs}` : ''}`)
       setOrders(data)
     } catch (e: any) {
       toast.error(e?.message || 'فشل تحميل المشتريات')
@@ -64,8 +71,34 @@ export function PurchaseOrdersView() {
   }, [])
 
   React.useEffect(() => {
-    load()
-  }, [load])
+    load(from, to)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const applyRange = (f: string, t: string) => {
+    setFrom(f)
+    setTo(t)
+    load(f, t)
+  }
+
+  const toISODate = (d: Date) => d.toISOString().slice(0, 10)
+
+  const quickToday = () => {
+    const today = toISODate(new Date())
+    applyRange(today, today)
+  }
+  const quickLast7Days = () => {
+    const end = new Date()
+    const start = new Date()
+    start.setDate(start.getDate() - 6)
+    applyRange(toISODate(start), toISODate(end))
+  }
+  const quickThisMonth = () => {
+    const now = new Date()
+    const start = new Date(now.getFullYear(), now.getMonth(), 1)
+    applyRange(toISODate(start), toISODate(now))
+  }
+  const clearRange = () => applyRange('', '')
 
   const filtered = query.trim()
     ? orders.filter((o) => (o.orderNo ?? String(o.id)).includes(query.trim()))
@@ -75,7 +108,7 @@ export function PurchaseOrdersView() {
     try {
       await api(`/api/purchase-orders/${id}`, { method: 'DELETE' })
       toast.success('تم ارتجاع أمر الشراء')
-      load()
+      load(from, to)
     } catch (e: any) {
       toast.error(e?.message || 'فشل الإرجاع')
     } finally {
@@ -144,18 +177,64 @@ export function PurchaseOrdersView() {
       </div>
 
       <Card>
-        <CardContent className="p-3">
-          <div className="relative max-w-sm">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+        <CardContent className="flex flex-wrap items-end gap-2 p-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">بحث</Label>
+            <div className="relative w-[220px]">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="بحث برقم أمر الشراء..."
+                className="pr-9"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">من تاريخ</Label>
             <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="بحث برقم أمر الشراء..."
-              className="pr-9"
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              className="w-[160px]"
             />
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">إلى تاريخ</Label>
+            <Input
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="w-[160px]"
+            />
+          </div>
+          <Button variant="outline" onClick={() => load(from, to)}>
+            تصفية
+          </Button>
+          <div className="mx-1 h-8 w-px bg-border" />
+          <Button variant="ghost" size="sm" onClick={quickToday}>
+            اليوم
+          </Button>
+          <Button variant="ghost" size="sm" onClick={quickLast7Days}>
+            آخر 7 أيام
+          </Button>
+          <Button variant="ghost" size="sm" onClick={quickThisMonth}>
+            هذا الشهر
+          </Button>
+          {(from || to) && (
+            <Button variant="ghost" size="sm" onClick={clearRange}>
+              <X className="size-3.5" />
+              مسح
+            </Button>
+          )}
         </CardContent>
       </Card>
+
+      {(from || to) && (
+        <p className="text-xs text-muted-foreground">
+          عرض المشتريات من {from || 'البداية'} إلى {to || 'اليوم'} — {filtered.length} أمر
+        </p>
+      )}
 
       <Card className="overflow-hidden py-0">
         <CardContent className="p-0">
@@ -295,7 +374,7 @@ export function PurchaseOrdersView() {
       <PurchaseOrderDialog
         open={newOpen}
         onOpenChange={setNewOpen}
-        onSaved={load}
+        onSaved={() => load(from, to)}
       />
     </div>
   )

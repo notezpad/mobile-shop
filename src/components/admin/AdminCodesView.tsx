@@ -174,7 +174,7 @@ export function AdminCodesView() {
       <div className="grid grid-cols-3 gap-3">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-slate-500/15 text-slate-700 dark:text-slate-400">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
               <Ticket className="size-5" />
             </div>
             <div>
@@ -185,7 +185,7 @@ export function AdminCodesView() {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-success-subtle text-success-subtle-foreground">
               <CheckCircle2 className="size-5" />
             </div>
             <div>
@@ -196,7 +196,7 @@ export function AdminCodesView() {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-warning-subtle text-warning-subtle-foreground dark:text-warning-subtle-foreground">
               <CheckCircle2 className="size-5" />
             </div>
             <div>
@@ -308,11 +308,11 @@ export function AdminCodesView() {
                         <TableCell className="text-center text-xs">{PERIOD_LABEL[r.period] ?? r.period}</TableCell>
                         <TableCell className="text-center">
                           {r.status === 'available' ? (
-                            <Badge variant="outline" className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
+                            <Badge variant="outline" className="bg-success-subtle text-success-subtle-foreground border-emerald-500/30">
                               متاح
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">
+                            <Badge variant="outline" className="bg-warning-subtle text-warning-subtle-foreground dark:text-warning-subtle-foreground border-warning-subtle">
                               مستخدم
                             </Badge>
                           )}
@@ -460,7 +460,7 @@ function GenerateCodesDialog({
         {generated ? (
           <div className="space-y-3">
             <div className="rounded-md border bg-muted/40 p-3">
-              <p className="mb-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+              <p className="mb-2 text-sm font-semibold text-success-subtle-foreground dark:text-success-subtle-foreground">
                 ✅ تم توليد {generated.length} كود
               </p>
               <div className="max-h-48 overflow-y-auto">

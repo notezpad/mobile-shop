@@ -57,6 +57,15 @@ export async function PUT(
   if (body.trialDays !== undefined) data.trialDays = Number(body.trialDays) || 0
   if (body.isActive !== undefined) data.isActive = !!body.isActive
   if (body.sortOrder !== undefined) data.sortOrder = Number(body.sortOrder) || 0
+  if (body.businessType !== undefined) data.businessType = String(body.businessType)
+  if (body.capabilities !== undefined) {
+    data.capabilities =
+      typeof body.capabilities === 'string'
+        ? body.capabilities
+        : Array.isArray(body.capabilities)
+          ? JSON.stringify(body.capabilities)
+          : null
+  }
   if (body.features !== undefined) {
     data.features =
       typeof body.features === 'string'

@@ -97,6 +97,38 @@ export async function PUT(
   return NextResponse.json(updated)
 }
 
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  let session
+  try {
+    session = await requireAuth()
+  } catch (e) {
+    const err = authErrorResponse(e)
+    return NextResponse.json(err?.body, { status: err?.status })
+  }
+
+  const { id } = await params
+  const pid = parseInt(id, 10)
+  if (isNaN(pid)) {
+    return NextResponse.json({ error: 'معرف غير صالح' }, { status: 400 })
+  }
+  const body = await req.json().catch(() => null)
+  if (!body || typeof body !== 'object' || typeof body.active !== 'boolean') {
+    return NextResponse.json({ error: 'بيانات غير صالحة' }, { status: 400 })
+  }
+  const existing = await db.product.findUnique({ where: { id: pid } })
+  if (!existing || existing.tenantId !== session.tenantId) {
+    return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
+  }
+  const updated = await db.product.update({
+    where: { id: pid },
+    data: { active: body.active },
+  })
+  return NextResponse.json(updated)
+}
+
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

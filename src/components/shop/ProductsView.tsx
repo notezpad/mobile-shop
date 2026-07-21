@@ -7,6 +7,7 @@ import {
   ImageOff,
   Pencil,
   Plus,
+  Power,
   Printer,
   Search,
   Trash2,
@@ -39,6 +40,9 @@ import { cn } from '@/lib/utils'
 import { ProductDialog, type ProductFormValues } from './ProductDialog'
 import { CategoryManagerDialog } from './CategoryManagerDialog'
 import { PrintLabelsDialog } from './PrintLabelsDialog'
+import { ProductUnitsDialog } from './ProductUnitsDialog'
+import { CollectionDiscountDialog } from './CollectionDiscountDialog'
+import { Package, Percent } from 'lucide-react'
 import { Barcode } from './Barcode'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
@@ -53,6 +57,7 @@ interface Product {
   quantity: number
   minQuantity: number
   imagePath: string | null
+  active: boolean
   soldQuantity?: number
 }
 
@@ -62,12 +67,16 @@ export function ProductsView() {
   const [loading, setLoading] = React.useState(true)
   const [search, setSearch] = React.useState('')
   const [category, setCategory] = React.useState('all')
+  const [status, setStatus] = React.useState('all')
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [initial, setInitial] = React.useState<Partial<ProductFormValues> | null>(null)
   const [catDialogOpen, setCatDialogOpen] = React.useState(false)
   const [confirmId, setConfirmId] = React.useState<number | null>(null)
   const [selectedIds, setSelectedIds] = React.useState<Set<number>>(new Set())
   const [labelsDialogOpen, setLabelsDialogOpen] = React.useState(false)
+  const [unitsFor, setUnitsFor] = React.useState<{id:number;name:string}|null>(null)
+  const [collectionDlg, setCollectionDlg] = React.useState(false)
+  const capabilities = useShopStore((st) => st.plan.capabilities)
   const [singlePrintProduct, setSinglePrintProduct] = React.useState<Product | null>(null)
   const quickAdd = useShopStore((s) => s.quickAddProduct)
   const closeQuickAdd = useShopStore((s) => s.closeQuickAddProduct)
@@ -89,6 +98,7 @@ export function ProductsView() {
       const params = new URLSearchParams()
       if (search.trim()) params.set('search', search.trim())
       if (category && category !== 'all') params.set('category', category)
+      params.set('status', status)
       const data = await api<Product[]>(`/api/products?${params.toString()}`)
       setProducts(data)
     } catch (e: any) {
@@ -96,7 +106,7 @@ export function ProductsView() {
     } finally {
       setLoading(false)
     }
-  }, [search, category])
+  }, [search, category, status])
 
   React.useEffect(() => {
     loadCats()
@@ -145,6 +155,19 @@ export function ProductsView() {
       toast.error(e?.message || 'فشل الحذف')
     } finally {
       setConfirmId(null)
+    }
+  }
+
+  const toggleActive = async (p: Product) => {
+    try {
+      await api(`/api/products/${p.id}`, {
+        method: 'PATCH',
+        body: { active: !p.active },
+      })
+      toast.success(p.active ? 'تم تعطيل المنتج' : 'تم تفعيل المنتج')
+      loadProducts()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل التحديث')
     }
   }
 
@@ -248,6 +271,16 @@ export function ProductsView() {
               ))}
             </SelectContent>
           </Select>
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="الحالة" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الحالات</SelectItem>
+              <SelectItem value="active">مفعّل فقط</SelectItem>
+              <SelectItem value="inactive">معطّل فقط</SelectItem>
+            </SelectContent>
+          </Select>
           <Button variant="outline" onClick={() => setCatDialogOpen(true)}>
             <FolderOpen className="size-4" />
             التصنيفات
@@ -264,6 +297,12 @@ export function ProductsView() {
             <Printer className="size-4" />
             طباعة ملصقات {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
           </Button>
+          {capabilities.includes('collections') && (
+            <Button variant="outline" onClick={() => setCollectionDlg(true)}>
+              <Percent className="size-4" />
+              خصم كوليكشن
+            </Button>
+          )}
           <Button onClick={openAdd}>
             <Plus className="size-4" />
             منتج جديد
@@ -284,7 +323,7 @@ export function ProductsView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-10 text-center" style={{ paddingRight: '0.75rem' }}>
+                    <TableHead className="w-10 text-center pr-3">
                       <Checkbox
                         checked={products.length > 0 && selectedIds.size === products.length}
                         onCheckedChange={toggleSelectAll}
@@ -294,7 +333,7 @@ export function ProductsView() {
                     <TableHead className="w-14 text-center">الصورة</TableHead>
                     <TableHead>الاسم</TableHead>
                     <TableHead className="w-28">التصنيف</TableHead>
-                    <TableHead className="w-44">الباركود</TableHead>
+                    <TableHead className="w-52">الباركود</TableHead>
                     <TableHead className="w-28 text-center">التكلفة</TableHead>
                     <TableHead className="w-28 text-center">السعر</TableHead>
                     <TableHead className="w-16 text-center">الكمية</TableHead>
@@ -317,8 +356,8 @@ export function ProductsView() {
                     products.map((p, index) => {
                       const low = p.quantity <= p.minQuantity
                       return (
-                        <TableRow key={p.id}>
-                          <TableCell className="text-center" style={{ paddingRight: '0.75rem' }}>
+                        <TableRow key={p.id} className={!p.active ? 'opacity-50' : ''}>
+                          <TableCell className="text-center pr-3">
                             <Checkbox
                               checked={selectedIds.has(p.id)}
                               onCheckedChange={() => toggleSelect(p.id)}
@@ -340,7 +379,16 @@ export function ProductsView() {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="font-medium">{p.name}</TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-1.5">
+                              {p.name}
+                              {!p.active && (
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+                                  معطل
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell>
                             {p.category ? (
                               <Badge variant="secondary">{p.category}</Badge>
@@ -351,7 +399,7 @@ export function ProductsView() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Barcode value={p.barcode} height={26} fontSize={10} />
+                            <Barcode value={p.barcode} height={26} fontSize={10} fitContainer />
                           </TableCell>
                           <TableCell className="text-center tabular-nums text-muted-foreground">
                             {formatCurrency(p.cost)}
@@ -377,7 +425,7 @@ export function ProductsView() {
                           <TableCell className="text-center tabular-nums text-muted-foreground">
                             {p.minQuantity}
                           </TableCell>
-                          <TableCell className="text-center font-semibold tabular-nums text-blue-600">
+                          <TableCell className="text-center font-semibold tabular-nums text-info-subtle-foreground">
                             {p.soldQuantity ?? 0}
                           </TableCell>
                           <TableCell className="text-center">
@@ -391,6 +439,17 @@ export function ProductsView() {
                               >
                                 <Printer className="size-4" />
                               </Button>
+                              {capabilities.includes('multi_unit') && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8"
+                                  title="وحدات الجملة"
+                                  onClick={() => setUnitsFor({ id: p.id, name: p.name })}
+                                >
+                                  <Package className="size-4" />
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -402,7 +461,17 @@ export function ProductsView() {
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                className="size-8"
+                                title={p.active ? 'تعطيل المنتج' : 'تفعيل المنتج'}
+                                onClick={() => toggleActive(p)}
+                              >
+                                <Power className={`size-4 ${p.active ? 'text-muted-foreground' : 'text-success-subtle-foreground'}`} />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
                                 className="size-8 text-destructive hover:text-destructive"
+                                title="حذف نهائي"
                                 onClick={() => setConfirmId(p.id)}
                               >
                                 <Trash2 className="size-4" />
@@ -446,12 +515,24 @@ export function ProductsView() {
         }}
         products={labelProducts}
       />
+      <ProductUnitsDialog
+        open={!!unitsFor}
+        onOpenChange={(o) => !o && setUnitsFor(null)}
+        product={unitsFor}
+        onChanged={loadProducts}
+      />
+      <CollectionDiscountDialog
+        open={collectionDlg}
+        onOpenChange={setCollectionDlg}
+        collections={Array.from(new Set(products.map((p:any) => p.collection).filter(Boolean)))}
+        onDone={loadProducts}
+      />
 
       {/* simple inline confirm */}
       {confirmId !== null && (
         <ConfirmDialog
           title="حذف المنتج"
-          message="هل أنت متأكد من حذف هذا المنتج؟"
+          message="هل أنت متأكد من حذف هذا المنتج نهائياً؟ لو المنتج له مبيعات سابقة، استخدم زر التعطيل بدلاً من الحذف."
           onConfirm={() => removeProduct(confirmId)}
           onCancel={() => setConfirmId(null)}
         />

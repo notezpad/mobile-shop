@@ -126,7 +126,7 @@ export function PaymentDialog({
               className={
                 currentBalance > 0
                   ? 'bg-muted/40 font-semibold text-destructive tabular-nums'
-                  : 'bg-muted/40 font-semibold text-green-600 tabular-nums'
+                  : 'bg-muted/40 font-semibold text-success-subtle-foreground tabular-nums'
               }
             />
           </div>
@@ -183,7 +183,7 @@ export function PaymentDialog({
           <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
             💡 المبلغ سيُضاف للخزنة ويخصم من رصيد العميل
             {method !== 'cash' && (
-              <span className="mt-0.5 block text-amber-600">
+              <span className="mt-0.5 block text-warning-subtle-foreground">
                 سيُحتسب عمولة على هذه الدفعة حسب إعدادات المحل
               </span>
             )}

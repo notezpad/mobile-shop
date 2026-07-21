@@ -48,6 +48,7 @@ import {
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/format'
+import { DateTimeCell } from './DateTimeCell'
 import { SupplierPaymentDialog } from './SupplierPaymentDialog'
 import { PurchaseOrderDialog } from './PurchaseOrderDialog'
 
@@ -61,13 +62,13 @@ const METHOD_LABELS: Record<string, string> = {
 function methodBadgeClass(method: string): string {
   switch (method) {
     case 'cash':
-      return 'bg-green-100 text-green-700 border-green-200'
+      return 'bg-success-subtle text-success-subtle-foreground border-success-subtle'
     case 'vodafone_cash':
-      return 'bg-red-100 text-red-700 border-red-200'
+      return 'bg-destructive-subtle text-destructive-subtle-foreground border-red-200'
     case 'instapay':
-      return 'bg-purple-100 text-purple-700 border-purple-200'
+      return 'bg-info-subtle text-info-subtle-foreground border-info-subtle'
     case 'fawry':
-      return 'bg-amber-100 text-amber-700 border-amber-200'
+      return 'bg-warning-subtle text-warning-subtle-foreground border-warning-subtle'
     default:
       return 'bg-muted text-muted-foreground'
   }
@@ -150,7 +151,7 @@ function StatBox({
 }) {
   const toneClass =
     tone === 'success'
-      ? 'text-green-600 bg-green-50 border-green-100'
+      ? 'text-success-subtle-foreground bg-success-subtle border-success-subtle'
       : tone === 'danger'
         ? 'text-destructive bg-destructive/5 border-destructive/20'
         : 'text-foreground bg-muted/40 border-border'
@@ -203,7 +204,7 @@ export function SupplierDetailDialog({
 
   const balance = detail?.balance ?? 0
   const balanceTone =
-    balance > 0 ? 'text-destructive' : balance < 0 ? 'text-green-600' : 'text-foreground'
+    balance > 0 ? 'text-destructive' : balance < 0 ? 'text-success-subtle-foreground' : 'text-foreground'
 
   const timeline: TimelineRow[] = React.useMemo(() => {
     if (!detail) return []
@@ -268,7 +269,7 @@ export function SupplierDetailDialog({
               {balance > 0 ? (
                 <span className="text-[11px] text-destructive">لنا آجل عليه</span>
               ) : balance < 0 ? (
-                <span className="text-[11px] text-green-600">دفعنا زيادة</span>
+                <span className="text-[11px] text-success-subtle-foreground">دفعنا زيادة</span>
               ) : (
                 <span className="text-[11px] text-muted-foreground">مسوّى</span>
               )}
@@ -360,12 +361,12 @@ export function SupplierDetailDialog({
                                 return (
                                   <TableRow key={`o-${row.orderId}-${i}`}>
                                     <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                                      {formatDate(row.date)}
+                                      <DateTimeCell date={row.date} />
                                     </TableCell>
                                     <TableCell>
                                       <Badge
                                         variant="outline"
-                                        className="bg-blue-50 text-blue-700 border-blue-100"
+                                        className="bg-info-subtle text-info-subtle-foreground border-info-subtle"
                                       >
                                         شراء
                                       </Badge>
@@ -379,7 +380,7 @@ export function SupplierDetailDialog({
                                         — {itemsText}
                                       </span>
                                       {row.paid > 0 && (
-                                        <span className="text-xs text-green-600">
+                                        <span className="text-xs text-success-subtle-foreground">
                                           {' '}
                                           (دفعنا كاش: {formatCurrency(row.paid)})
                                         </span>
@@ -398,12 +399,12 @@ export function SupplierDetailDialog({
                               return (
                                 <TableRow key={`p-${i}`}>
                                   <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                                    {formatDate(row.date)}
+                                    <DateTimeCell date={row.date} />
                                   </TableCell>
                                   <TableCell>
                                     <Badge
                                       variant="outline"
-                                      className="bg-green-50 text-green-700 border-green-100"
+                                      className="bg-success-subtle text-success-subtle-foreground border-success-subtle"
                                     >
                                       دفعة
                                     </Badge>
@@ -426,7 +427,7 @@ export function SupplierDetailDialog({
                                   <TableCell className="text-center tabular-nums text-muted-foreground">
                                     —
                                   </TableCell>
-                                  <TableCell className="text-center font-semibold tabular-nums text-green-600">
+                                  <TableCell className="text-center font-semibold tabular-nums text-success-subtle-foreground">
                                     {formatCurrency(row.amount)}
                                   </TableCell>
                                 </TableRow>
@@ -479,7 +480,7 @@ export function SupplierDetailDialog({
                                   {o.orderNo ?? `#${o.id}`}
                                 </TableCell>
                                 <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                                  {formatDate(o.createdAt)}
+                                  <DateTimeCell date={o.createdAt} />
                                 </TableCell>
                                 <TableCell className="text-center tabular-nums">
                                   {o.items.length}
@@ -487,7 +488,7 @@ export function SupplierDetailDialog({
                                 <TableCell className="text-center font-semibold tabular-nums">
                                   {formatCurrency(o.total)}
                                 </TableCell>
-                                <TableCell className="text-center tabular-nums text-green-600">
+                                <TableCell className="text-center tabular-nums text-success-subtle-foreground">
                                   {formatCurrency(o.paid)}
                                 </TableCell>
                                 <TableCell className="text-center">
@@ -517,7 +518,7 @@ export function SupplierDetailDialog({
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-muted-foreground">
                     إجمالي الدفعات:{' '}
-                    <span className="font-semibold text-green-600 tabular-nums">
+                    <span className="font-semibold text-success-subtle-foreground tabular-nums">
                       {formatCurrency(
                         detail.payments.reduce((s, p) => s + p.amount, 0)
                       )}
@@ -555,9 +556,9 @@ export function SupplierDetailDialog({
                             detail.payments.map((p) => (
                               <TableRow key={p.id}>
                                 <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                                  {formatDate(p.createdAt)}
+                                  <DateTimeCell date={p.createdAt} />
                                 </TableCell>
-                                <TableCell className="text-center font-semibold tabular-nums text-green-600">
+                                <TableCell className="text-center font-semibold tabular-nums text-success-subtle-foreground">
                                   {formatCurrency(p.amount)}
                                 </TableCell>
                                 <TableCell className="text-center">

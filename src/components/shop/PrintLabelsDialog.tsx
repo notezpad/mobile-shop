@@ -103,7 +103,7 @@ export function PrintLabelsDialog({ open, onOpenChange, products }: Props) {
         </DialogHeader>
 
         {withoutBarcode.length > 0 && (
-          <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+          <div className="rounded-md border border-warning-subtle bg-warning-subtle p-2.5 text-xs text-warning-subtle-foreground">
             المنتجات دي مالهاش باركود فمش هتتطبعلها ملصقات: {withoutBarcode.map((p) => p.name).join('، ')}
             <br />
             افتحي المنتج ودوسي على زرار توليد الباركود الأول لو عايزة تطبعيله ملصق.

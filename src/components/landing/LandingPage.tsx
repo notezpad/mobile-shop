@@ -21,10 +21,10 @@ interface LandingPageProps {
 }
 
 const STATS = [
-  { icon: Store, label: 'محل نشط', value: '50+', color: 'text-emerald-600' },
-  { icon: Users, label: 'مستخدم نشط', value: '1,000+', color: 'text-sky-600' },
-  { icon: Star, label: 'تقييم العملاء', value: '4.9', color: 'text-amber-500' },
-  { icon: TrendingUp, label: 'نمو شهري', value: '15%', color: 'text-violet-600' },
+  { icon: Store, label: 'محل نشط', value: '50+', color: 'text-success-subtle-foreground' },
+  { icon: Users, label: 'مستخدم نشط', value: '1,000+', color: "text-info-subtle-foreground" },
+  { icon: Star, label: 'تقييم العملاء', value: '4.9', color: 'text-accent2-500' },
+  { icon: TrendingUp, label: 'نمو شهري', value: '15%', color: "text-chart-4" },
 ]
 
 export function LandingPage({ onAuthed }: LandingPageProps) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireModule, featureErrorResponse } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,7 +9,10 @@ export async function GET() {
   let session
   try {
     session = await requireAuth()
+    await requireModule(session, 'maintenance')
   } catch (e) {
+    const fErr = featureErrorResponse(e)
+    if (fErr) return NextResponse.json(fErr.body, { status: fErr.status })
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
   }
@@ -16,6 +20,7 @@ export async function GET() {
   const orders = await db.maintenanceOrder.findMany({
     where: { tenantId: session.tenantId },
     orderBy: { id: 'desc' },
+    take: 500,
   })
   return NextResponse.json(orders)
 }
@@ -24,7 +29,10 @@ export async function POST(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
+    await requireModule(session, 'maintenance')
   } catch (e) {
+    const fErr = featureErrorResponse(e)
+    if (fErr) return NextResponse.json(fErr.body, { status: fErr.status })
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
   }

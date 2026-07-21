@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Banknote, Loader2, Plus } from 'lucide-react'
+import { Banknote, FileText, Loader2, Plus } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -24,8 +24,11 @@ import {
 } from '@/components/ui/table'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrency, formatArabicDateTime } from '@/lib/format'
+import { DateTimeCell } from './DateTimeCell'
 import { cn } from '@/lib/utils'
+import { printListReportHtml, openPrintWindow } from '@/lib/print'
+import { useShopStore } from '@/lib/store'
 
 interface Entry {
   id: number
@@ -51,6 +54,8 @@ const SOURCE_LABEL: Record<string, string> = {
 }
 
 export function CashView() {
+  const shopName = useShopStore((s) => s.shopName)
+  const shopBranding = useShopStore((s) => s.branding)
   const [data, setData] = React.useState<{ balance: number; entries: Entry[] } | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [dialogOpen, setDialogOpen] = React.useState(false)
@@ -86,6 +91,51 @@ export function CashView() {
     })
   }, [data])
 
+  const exportPdf = () => {
+    if (!data) return
+    const totalIn = data.entries.filter((e) => e.amount >= 0).reduce((s, e) => s + e.amount, 0)
+    const totalOut = data.entries.filter((e) => e.amount < 0).reduce((s, e) => s + Math.abs(e.amount), 0)
+
+    const html = printListReportHtml(
+      {
+        title: 'الخزنة',
+        subtitle: 'حركات النقدية والرصيد الحالي',
+        columns: [
+          { header: '#' },
+          { header: 'التاريخ' },
+          { header: 'المصدر' },
+          { header: 'بواسطة' },
+          { header: 'المبلغ' },
+          { header: 'الرصيد بعد الحركة' },
+          { header: 'ملاحظات', align: 'right' },
+        ],
+        rows: data.entries.map((e, index) => [
+          String(index + 1),
+          formatArabicDateTime(e.createdAt),
+          SOURCE_LABEL[e.source] ?? e.source,
+          e.userName ?? '—',
+          `${e.amount >= 0 ? '+' : ''}${formatCurrency(e.amount)}`,
+          formatCurrency(runningBalances[index] ?? 0),
+          e.note ?? '—',
+        ]),
+        kpis: [
+          { label: 'رصيد الخزنة الحالي', value: formatCurrency(data.balance), emphasize: true },
+          { label: 'إجمالي الوارد', value: formatCurrency(totalIn) },
+          { label: 'إجمالي الصادر', value: formatCurrency(totalOut) },
+          { label: 'عدد الحركات', value: String(data.entries.length) },
+        ],
+        emptyMessage: 'لا توجد حركات',
+      },
+      {
+        name: shopName,
+        phone: shopBranding.phone || undefined,
+        address: shopBranding.address || undefined,
+        logo: shopBranding.logoPath || undefined,
+      }
+    )
+    openPrintWindow(html, () => toast.error('الرجاء السماح بالنوافذ المنبثقة'))
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -95,10 +145,16 @@ export function CashView() {
             حركات النقدية والرصيد الحالي
           </p>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="size-4" />
-          حركة يدوية
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={exportPdf} disabled={loading}>
+            <FileText className="size-4" />
+            تصدير PDF
+          </Button>
+          <Button onClick={() => setDialogOpen(true)}>
+            <Plus className="size-4" />
+            حركة يدوية
         </Button>
+        </div>
       </div>
 
       <Card className="bg-primary text-primary-foreground">
@@ -156,7 +212,7 @@ export function CashView() {
                       <TableRow key={e.id}>
                         <TableCell className="text-center font-mono text-xs">{index + 1}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">
-                          {formatDate(e.createdAt)}
+                          <DateTimeCell date={e.createdAt} />
                         </TableCell>
                         <TableCell>
                           {SOURCE_LABEL[e.source] ?? e.source}

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { useConfirm } from './ConfirmDialogProvider'
 
 interface CategoryRow {
   id: number
@@ -26,6 +27,7 @@ interface Props {
 }
 
 export function CategoryManagerDialog({ open, onOpenChange, onChanged }: Props) {
+  const confirm = useConfirm()
   const [cats, setCats] = React.useState<CategoryRow[]>([])
   const [loading, setLoading] = React.useState(false)
   const [newName, setNewName] = React.useState('')
@@ -90,7 +92,10 @@ export function CategoryManagerDialog({ open, onOpenChange, onChanged }: Props) 
   }
 
   const remove = async (id: number, name: string) => {
-    if (!confirm(`حذف تصنيف "${name}"؟ سيتم فك ارتباط المنتجات به.`)) return
+    if (!(await confirm({
+      title: `حذف تصنيف "${name}"؟`,
+      description: 'سيتم فك ارتباط المنتجات به.',
+    }))) return
     setBusyId(id)
     try {
       await api(`/api/categories?id=${id}`, { method: 'DELETE' })

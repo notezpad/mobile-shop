@@ -20,7 +20,7 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -bottom-20 -left-16 size-72 rounded-full bg-emerald-300/20 blur-3xl"
+        className="pointer-events-none absolute -bottom-20 -left-16 size-72 rounded-full bg-brand-300/20 blur-3xl"
       />
       {/* Dot pattern */}
       <div

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireModule, featureErrorResponse } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +12,10 @@ export async function GET(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
+    await requireModule(session, 'finance')
   } catch (e) {
+    const fErr = featureErrorResponse(e)
+    if (fErr) return NextResponse.json(fErr.body, { status: fErr.status })
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
   }
@@ -37,6 +41,7 @@ export async function GET(req: NextRequest) {
   const rows = await db.transaction.findMany({
     where,
     orderBy: { id: 'desc' },
+    take: 500,
   })
   // `userId` on Transaction is a plain string (no Prisma relation defined),
   // so resolve names with a separate lookup instead of `include`.
@@ -59,7 +64,10 @@ export async function POST(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
+    await requireModule(session, 'finance')
   } catch (e) {
+    const fErr = featureErrorResponse(e)
+    if (fErr) return NextResponse.json(fErr.body, { status: fErr.status })
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
   }

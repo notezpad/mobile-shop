@@ -1,37 +1,38 @@
 'use client'
 
+import { Clock } from 'lucide-react'
+import { formatArabicDate, formatArabicDateTime } from '@/lib/format'
+
 /**
- * Renders a date + time pair as two stacked lines instead of one inline
- * string. A single "2026/07/18 22:18" string inside an RTL table cell gets
- * visually reordered by the browser's bidi algorithm (the two number groups
- * can swap places depending on context), which is what reads as "متداخل" /
- * jumbled to the user. Isolating the block with dir="ltr" and splitting date
- * from time onto their own lines fixes the ordering and gives a clear,
- * low-distraction visual hierarchy: the date is the primary fact (regular
- * weight), the time is secondary (smaller, muted).
+ * Displays a date/time as a single-line Arabic badge, e.g.
+ * "18 يوليو 2026 - 4:19 م". Replaces the old two-line numeric layout so
+ * every date in the app reads consistently and doesn't rely on splitting
+ * lines / dir="ltr" tricks to avoid bidi reordering — the Arabic month name
+ * plus a fixed "day month year - h:mm period" order reads correctly in RTL
+ * without any special isolation.
  */
 export function DateTimeCell({
   date,
+  showTime = true,
+  className = '',
 }: {
   date: string | Date | null | undefined
+  showTime?: boolean
+  className?: string
 }) {
   if (!date) return <span className="text-muted-foreground text-xs">—</span>
 
   const d = typeof date === 'string' ? new Date(date) : date
   if (isNaN(d.getTime())) return <span className="text-muted-foreground text-xs">—</span>
 
-  const pad = (x: number) => String(x).padStart(2, '0')
-  const dateStr = `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`
-  const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const label = showTime ? formatArabicDateTime(d) : formatArabicDate(d)
 
   return (
-    <div dir="ltr" className="text-right leading-tight">
-      <div className="text-xs font-medium tabular-nums text-foreground">
-        {dateStr}
-      </div>
-      <div className="text-[11px] tabular-nums text-muted-foreground">
-        {timeStr}
-      </div>
-    </div>
+    <span
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-success-subtle bg-success-subtle px-2.5 py-1 text-xs font-medium text-success dark:border-success-subtle/40 dark:bg-success-subtle/20 dark:text-success-subtle-foreground ${className}`}
+    >
+      <Clock className="h-3.5 w-3.5 shrink-0 text-success dark:text-success-subtle-foreground" />
+      <span className="tabular-nums">{label}</span>
+    </span>
   )
 }

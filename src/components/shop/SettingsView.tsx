@@ -31,6 +31,8 @@ export function SettingsView() {
   const fileRef = React.useRef<HTMLInputElement>(null)
   const setShopName = useShopStore((s) => s.setShopName)
   const setBranding = useShopStore((s) => s.setBranding)
+  const enabledModules = useShopStore((s) => s.plan.enabledModules)
+  const hasFinance = enabledModules.includes('finance')
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -200,54 +202,56 @@ export function SettingsView() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">عمولات الخدمات المالية (%)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Field label="عمولة فودافون كاش %">
-              <Input
-                type="number"
-                step="0.1"
-                value={String(data?.commissionVodafoneCash ?? 0)}
-                onChange={(e) =>
-                  update(
-                    'commissionVodafoneCash',
-                    parseFloat(e.target.value) || 0
-                  )
-                }
-              />
-            </Field>
-            <Field label="عمولة انستاباي %">
-              <Input
-                type="number"
-                step="0.1"
-                value={String(data?.commissionInstapay ?? 0)}
-                onChange={(e) =>
-                  update(
-                    'commissionInstapay',
-                    parseFloat(e.target.value) || 0
-                  )
-                }
-              />
-            </Field>
-            <Field label="عمولة فوري %">
-              <Input
-                type="number"
-                step="0.1"
-                value={String(data?.commissionFawry ?? 0)}
-                onChange={(e) =>
-                  update(
-                    'commissionFawry',
-                    parseFloat(e.target.value) || 0
-                  )
-                }
-              />
-            </Field>
-          </div>
-        </CardContent>
-      </Card>
+      {hasFinance && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">عمولات الخدمات المالية (%)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Field label="عمولة فودافون كاش %">
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={String(data?.commissionVodafoneCash ?? 0)}
+                  onChange={(e) =>
+                    update(
+                      'commissionVodafoneCash',
+                      parseFloat(e.target.value) || 0
+                    )
+                  }
+                />
+              </Field>
+              <Field label="عمولة انستاباي %">
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={String(data?.commissionInstapay ?? 0)}
+                  onChange={(e) =>
+                    update(
+                      'commissionInstapay',
+                      parseFloat(e.target.value) || 0
+                    )
+                  }
+                />
+              </Field>
+              <Field label="عمولة فوري %">
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={String(data?.commissionFawry ?? 0)}
+                  onChange={(e) =>
+                    update(
+                      'commissionFawry',
+                      parseFloat(e.target.value) || 0
+                    )
+                  }
+                />
+              </Field>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex justify-end">
         <Button size="lg" onClick={save} disabled={saving}>

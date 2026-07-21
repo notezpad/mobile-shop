@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { FileText, Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -26,7 +26,11 @@ import {
 } from '@/components/ui/table'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrency, formatArabicDateTime } from '@/lib/format'
+import { DateTimeCell } from './DateTimeCell'
+import { printListReportHtml, openPrintWindow } from '@/lib/print'
+import { useShopStore } from '@/lib/store'
+import { useConfirm } from './ConfirmDialogProvider'
 
 interface Order {
   id: number
@@ -46,11 +50,11 @@ type Status = (typeof STATUSES)[number]
 function statusVariant(s: string): string {
   switch (s) {
     case 'مستلم':
-      return 'bg-blue-100 text-blue-700 border-blue-200'
+      return 'bg-info-subtle text-info-subtle-foreground border-info-subtle'
     case 'قيد العمل':
-      return 'bg-yellow-100 text-yellow-700 border-yellow-200'
+      return 'bg-warning-subtle text-warning-subtle-foreground border-yellow-200'
     case 'مكتمل':
-      return 'bg-purple-100 text-purple-700 border-purple-200'
+      return 'bg-info-subtle text-info-subtle-foreground border-info-subtle'
     case 'مُسلَّم':
       return 'bg-primary/15 text-primary border-primary/20'
     default:
@@ -59,6 +63,9 @@ function statusVariant(s: string): string {
 }
 
 export function MaintenanceView() {
+  const confirm = useConfirm()
+  const shopName = useShopStore((s) => s.shopName)
+  const shopBranding = useShopStore((s) => s.branding)
   const [orders, setOrders] = React.useState<Order[]>([])
   const [loading, setLoading] = React.useState(true)
   const [dialogOpen, setDialogOpen] = React.useState(false)
@@ -100,7 +107,7 @@ export function MaintenanceView() {
   }
 
   const remove = async (id: number) => {
-    if (!confirm('حذف أمر الصيانة؟')) return
+    if (!(await confirm('حذف أمر الصيانة؟'))) return
     try {
       await api(`/api/maintenance/${id}`, { method: 'DELETE' })
       toast.success('تم الحذف')
@@ -108,6 +115,53 @@ export function MaintenanceView() {
     } catch (e: any) {
       toast.error(e?.message || 'فشل الحذف')
     }
+  }
+
+  const exportPdf = () => {
+    const totalCost = orders.reduce((s, o) => s + o.cost, 0)
+    const pending = orders.filter((o) => o.status !== 'مُسلَّم').length
+
+    const html = printListReportHtml(
+      {
+        title: 'الصيانة',
+        subtitle: 'أوامر استلام الأجهزة وإصلاحها',
+        columns: [
+          { header: '#' },
+          { header: 'العميل', align: 'right' },
+          { header: 'الهاتف' },
+          { header: 'الجهاز', align: 'right' },
+          { header: 'العطل', align: 'right' },
+          { header: 'الحالة' },
+          { header: 'التكلفة' },
+          { header: 'تاريخ الاستلام' },
+          { header: 'تاريخ التسليم' },
+        ],
+        rows: orders.map((o, i) => [
+          String(i + 1),
+          o.customerName,
+          o.phone ?? '—',
+          o.device,
+          o.issue || '—',
+          o.status,
+          formatCurrency(o.cost),
+          formatArabicDateTime(o.receivedAt),
+          o.deliveredAt ? formatArabicDateTime(o.deliveredAt) : '—',
+        ]),
+        kpis: [
+          { label: 'إجمالي أوامر الصيانة', value: String(orders.length) },
+          { label: 'قيد التنفيذ / لم تُسلَّم', value: String(pending) },
+          { label: 'إجمالي التكلفة', value: formatCurrency(totalCost), emphasize: true },
+        ],
+        emptyMessage: 'لا توجد أوامر صيانة',
+      },
+      {
+        name: shopName,
+        phone: shopBranding.phone || undefined,
+        address: shopBranding.address || undefined,
+        logo: shopBranding.logoPath || undefined,
+      }
+    )
+    openPrintWindow(html, () => toast.error('الرجاء السماح بالنوافذ المنبثقة'))
   }
 
   return (
@@ -119,15 +173,21 @@ export function MaintenanceView() {
             أوامر استلام الأجهاز وإصلاحها
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setEditing(null)
-            setDialogOpen(true)
-          }}
-        >
-          <Plus className="size-4" />
-          أوردر صيانة جديد
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={exportPdf} disabled={loading}>
+            <FileText className="size-4" />
+            تصدير PDF
+          </Button>
+          <Button
+            onClick={() => {
+              setEditing(null)
+              setDialogOpen(true)
+            }}
+          >
+            <Plus className="size-4" />
+            أوردر صيانة جديد
+          </Button>
+        </div>
       </div>
 
       <Card className="overflow-hidden py-0">
@@ -189,10 +249,10 @@ export function MaintenanceView() {
                           {formatCurrency(o.cost)}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">
-                          {formatDate(o.receivedAt)}
+                          <DateTimeCell date={o.receivedAt} />
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">
-                          {o.deliveredAt ? formatDate(o.deliveredAt) : '—'}
+                          {o.deliveredAt ? <DateTimeCell date={o.deliveredAt} /> : '—'}
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1">

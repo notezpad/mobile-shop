@@ -62,7 +62,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -bottom-24 left-1/4 size-72 rounded-full bg-emerald-300/20 blur-3xl"
+        className="pointer-events-none absolute -bottom-24 left-1/4 size-72 rounded-full bg-brand-300/20 blur-3xl"
       />
 
       <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:gap-8 lg:px-8 lg:py-24">
@@ -206,27 +206,27 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
           <motion.div
             animate={{ y: [0, -8, 0] }}
             transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-            className="absolute -top-4 right-0 z-20 flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 shadow-lg sm:right-4"
+            className="absolute -top-4 right-0 z-20 flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-success-subtle-foreground shadow-lg sm:right-4"
           >
-            <DollarSign className="size-4 text-emerald-600" />
+            <DollarSign className="size-4 text-success-subtle-foreground" />
             +5,420 ج.م اليوم
           </motion.div>
 
           <motion.div
             animate={{ y: [0, 8, 0] }}
             transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
-            className="absolute -bottom-4 left-0 z-20 flex items-center gap-1.5 rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-700 shadow-lg sm:left-4"
+            className="absolute -bottom-4 left-0 z-20 flex items-center gap-1.5 rounded-xl border border-warning-subtle bg-white px-3 py-2 text-xs font-semibold text-warning-subtle-foreground shadow-lg sm:left-4"
           >
-            <AlertTriangle className="size-4 text-amber-500" />
+            <AlertTriangle className="size-4 text-accent2-500" />
             3 تنبيهات مخزون
           </motion.div>
 
           <motion.div
             animate={{ y: [0, -6, 0] }}
             transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-            className="absolute -top-4 left-0 z-20 hidden items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 shadow-lg sm:left-8 sm:flex"
+            className="absolute -top-4 left-0 z-20 hidden items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-success-subtle-foreground shadow-lg sm:left-8 sm:flex"
           >
-            <CheckCircle2 className="size-4 text-emerald-600" />
+            <CheckCircle2 className="size-4 text-success-subtle-foreground" />
             بيع جديد
           </motion.div>
 
@@ -235,12 +235,12 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
             {/* Top bar */}
             <div className="flex items-center gap-2 border-b bg-muted/60 px-4 py-3">
               <div className="flex gap-1.5">
-                <span className="size-3 rounded-full bg-rose-400" />
-                <span className="size-3 rounded-full bg-amber-400" />
-                <span className="size-3 rounded-full bg-emerald-400" />
+                <span className="size-3 rounded-full bg-destructive" />
+                <span className="size-3 rounded-full bg-accent2-400" />
+                <span className="size-3 rounded-full bg-brand-400" />
               </div>
               <div className="mx-auto flex items-center gap-1.5 rounded-md bg-background px-3 py-1 text-[10px] text-muted-foreground" dir="ltr">
-                <span className="size-2 rounded-full bg-emerald-500" />
+                <span className="size-2 rounded-full bg-brand-500" />
                 app.shop-system.eg/dashboard
               </div>
             </div>
@@ -337,7 +337,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                   >
                     <span className="truncate">{r.n}</span>
                     <span className="text-center text-muted-foreground">{r.q}</span>
-                    <span className="text-left font-semibold text-emerald-600">
+                    <span className="text-left font-semibold text-success-subtle-foreground">
                       {r.p} ج.م
                     </span>
                   </div>
@@ -364,10 +364,10 @@ function MiniStat({
   color: 'emerald' | 'primary' | 'amber' | 'rose'
 }) {
   const colorMap = {
-    emerald: 'bg-emerald-50 text-emerald-600',
+    emerald: 'bg-success-subtle text-success-subtle-foreground',
     primary: 'bg-primary/10 text-primary',
-    amber: 'bg-amber-50 text-amber-600',
-    rose: 'bg-rose-50 text-rose-600',
+    amber: 'bg-warning-subtle text-warning-subtle-foreground',
+    rose: 'bg-destructive-subtle text-destructive-subtle-foreground',
   }
   return (
     <div className="rounded-lg border bg-card p-2.5">

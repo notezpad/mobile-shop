@@ -409,15 +409,15 @@ function StatCard({
 }) {
   const toneClasses =
     tone === 'warn'
-      ? 'border-amber-200 bg-amber-50 text-amber-700'
+      ? 'border-warning-subtle bg-warning-subtle text-warning-subtle-foreground'
       : tone === 'danger'
-      ? 'border-rose-200 bg-rose-50 text-rose-700'
+      ? 'border-destructive-subtle bg-destructive-subtle text-destructive-subtle-foreground'
       : 'border-border bg-card text-foreground'
   const iconBg =
     tone === 'warn'
-      ? 'bg-amber-100 text-amber-700'
+      ? 'bg-warning-subtle text-warning-subtle-foreground'
       : tone === 'danger'
-      ? 'bg-rose-100 text-rose-700'
+      ? 'bg-destructive-subtle text-destructive-subtle-foreground'
       : 'bg-primary/10 text-primary'
   return (
     <Card className={toneClasses}>

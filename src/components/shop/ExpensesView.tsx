@@ -35,6 +35,7 @@ import {
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/format'
+import { DateTimeCell } from './DateTimeCell'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 
@@ -383,7 +384,7 @@ export function ExpensesView() {
                           {index + 1}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {formatDate(e.createdAt)}
+                          <DateTimeCell date={e.createdAt} />
                         </TableCell>
                         <TableCell className="font-medium">{e.category}</TableCell>
                         <TableCell className="text-center font-semibold tabular-nums text-destructive">

@@ -66,6 +66,68 @@ const VIEW_TITLES: Record<string, string> = {
   branches: 'الفروع',
 }
 
+const ARABIC_DAYS = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت']
+const ARABIC_MONTHS_SHORT = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
+
+function LiveClock() {
+  // نفس نمط الـ mounted-guard المستخدم في ThemeToggle تحت — بيمنع أي فرق بين
+  // وقت السيرفر ووقت المتصفح لحظة الـ hydration (كان ممكن يعمل وميض/mismatch).
+  const [mounted, setMounted] = React.useState(false)
+  const [now, setNow] = React.useState(new Date())
+
+  React.useEffect(() => {
+    setMounted(true)
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  if (!mounted) {
+    return <div className="h-10 w-[190px] shrink-0 rounded-full bg-muted/60" />
+  }
+
+  const pad = (n: number) => String(n).padStart(2, '0')
+  let h = now.getHours()
+  const period = h >= 12 ? 'م' : 'ص'
+  h = h % 12 || 12
+  const m = pad(now.getMinutes())
+  const s = pad(now.getSeconds())
+
+  const dayName = ARABIC_DAYS[now.getDay()]
+  const day = now.getDate()
+  const month = ARABIC_MONTHS_SHORT[now.getMonth()]
+  const year = now.getFullYear()
+
+  return (
+    <div
+      className="inline-flex h-10 shrink-0 items-center gap-3 rounded-full border border-border bg-muted/60 px-4"
+      aria-label={`الساعة الآن ${pad(h)}:${m}:${s} ${period}، ${dayName} ${day} ${month} ${year}`}
+    >
+      {/* نقطة "مباشر" */}
+      <span className="relative flex size-2 shrink-0" aria-hidden="true">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+        <span className="relative inline-flex size-2 rounded-full bg-primary" />
+      </span>
+
+      {/* الوقت — dir + flex صريحين عشان حرف الصباح/المساء (حرف عربي) يفضل
+         مكانه صراحةً بدل ما يتحدد بخوارزمية الـ bidi. الحرف (م/ص) أول عنصر
+         في الـ DOM هنا فيظهر على شمال الرقم */}
+      <span dir="ltr" className="inline-flex items-baseline gap-1">
+        <span className="text-xs font-semibold text-muted-foreground">{period}</span>
+        <span className="text-base font-bold tabular-nums leading-none text-foreground">
+          {pad(h)}:{m}:{s}
+        </span>
+      </span>
+
+      {/* فاصل */}
+      <span className="h-4 w-px shrink-0 bg-border" aria-hidden="true" />
+
+      {/* التاريخ */}
+      <span className="whitespace-nowrap text-xs font-medium text-muted-foreground">
+        {dayName}، {day} {month} {year}
+      </span>
+    </div>
+  )
+}
 function ThemeToggle() {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = React.useState(false)
@@ -243,10 +305,26 @@ function SubscriptionWarningBanner() {
 
 /* ---------------- Main App ---------------- */
 
+function ModuleLockedView({ label }: { label: string }) {
+  return (
+    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-center">
+      <div className="rounded-full bg-amber-100 p-4 text-amber-600 dark:bg-amber-900/30">
+        <Shield className="size-8" />
+      </div>
+      <h2 className="text-xl font-bold">{label} — غير متاحة في باقتك</h2>
+      <p className="max-w-md text-sm text-muted-foreground">
+        الميزة دي متاحة في باقة أعلى. يمكنك ترقية اشتراكك من إعدادات الحساب لتفعيلها.
+      </p>
+    </div>
+  )
+}
+
 function MainApp() {
   const activeView = useShopStore((s) => s.activeView)
   const user = useShopStore((s) => s.user)
   const shopName = useShopStore((s) => s.shopName)
+  const setPlan = useShopStore((s) => s.setPlan)
+  const enabledModules = useShopStore((s) => s.plan.enabledModules)
   const [mobileOpen, setMobileOpen] = React.useState(false)
   const [subState, setSubState] = React.useState<{ loading: boolean; expired: boolean }> ({
     loading: true,
@@ -255,21 +333,27 @@ function MainApp() {
 
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN'
 
-  // Check subscription status for admin/employee
+  // Check subscription status + hydrate plan context (enabledModules/capabilities/businessType).
   React.useEffect(() => {
-    if (user?.role === 'ADMIN' || user?.role === 'EMPLOYEE') {
+    if (user?.role === 'ADMIN' || user?.role === 'EMPLOYEE' || user?.role === 'SUPER_ADMIN') {
       api<any>('/api/subscription')
         .then((d) => {
+          if (Array.isArray(d?.enabledModules)) {
+            setPlan({
+              businessType: d.businessType === 'fashion' ? 'fashion' : 'electronics',
+              enabledModules: d.enabledModules,
+              capabilities: Array.isArray(d.capabilities) ? d.capabilities : [],
+            })
+          }
           setSubState({ loading: false, expired: !!d.expired })
         })
         .catch(() => {
-          // 402 means expired
           setSubState({ loading: false, expired: true })
         })
     } else {
       setSubState({ loading: false, expired: false })
     }
-  }, [user])
+  }, [user, setPlan])
 
   const ActiveView = React.useMemo(() => {
     // Guard: employees can't see admin-only views
@@ -278,6 +362,10 @@ function MainApp() {
       ['finance', 'expenses', 'cash', 'reports', 'settings', 'users', 'branches'].includes(activeView)
     ) {
       return <DashboardView />
+    }
+    // Defence-in-depth: even if a user manually flips activeView, block modules not in plan.
+    if (!enabledModules.includes(activeView) && activeView !== 'dashboard') {
+      return <ModuleLockedView label={VIEW_TITLES[activeView] ?? activeView} />
     }
     switch (activeView) {
       case 'dashboard':
@@ -315,7 +403,7 @@ function MainApp() {
       default:
         return <DashboardView />
     }
-  }, [activeView, isAdmin])
+  }, [activeView, isAdmin, enabledModules])
 
   if (subState.loading) {
     return (
@@ -330,7 +418,7 @@ function MainApp() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="flex h-screen flex-col bg-background overflow-hidden">
       <ImpersonationBanner />
       <SubscriptionWarningBanner />
 
@@ -356,29 +444,36 @@ function MainApp() {
         </SheetContent>
       </Sheet>
 
-      <div className="flex flex-1">
-        {/* Desktop sidebar */}
-        <div className="sticky top-0 hidden h-screen lg:block">
-          <Sidebar />
-        </div>
+      {/*
+        ✅ نفس أسلوب WorkerOS:
+        - السايدبار: position fixed على اليمين — خارج الـ flex flow
+        - الـ main: margin-right بعرض السايدبار + overflow-y-auto
+        - النتيجة: شريط التمرير على أقصى اليسار (RTL طبيعي) ✅
+      */}
 
-        {/* Main content */}
-        <main className="flex flex-1 flex-col">
-          {/* Desktop header */}
-          <header className="sticky top-0 z-20 hidden h-14 items-center justify-between border-b bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60 lg:flex">
-            <div>
-              <h2 className="text-sm font-semibold">{VIEW_TITLES[activeView]}</h2>
-              <p className="text-xs text-muted-foreground">{shopName}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {user && (
-                <span className="text-xs text-muted-foreground">مرحباً، {user.name}</span>
-              )}
-              <ThemeToggle />
-            </div>
-          </header>
+      {/* Desktop sidebar — fixed right */}
+      <div className="fixed right-0 top-0 hidden h-screen lg:block z-40">
+        <Sidebar />
+      </div>
 
-          <div className="flex-1 p-4 sm:p-6">
+      {/* Right side layout — header fixed, content scrolls */}
+      <div className="flex flex-1 flex-col min-h-0 lg:mr-[260px]">
+
+        {/* Desktop header — خارج منطقة الـ scroll ✅ */}
+        <header className="sticky top-0 z-20 hidden h-14 shrink-0 items-center justify-between border-b bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60 lg:flex">
+          {/* الساعة والتاريخ الحيّين — مقاسها مضبوط على ارتفاع التولبار (h-14) */}
+          <LiveClock />
+          <div className="flex items-center gap-2">
+            {user && (
+              <span className="text-xs text-muted-foreground">مرحباً، {user.name}</span>
+            )}
+            <ThemeToggle />
+          </div>
+        </header>
+
+        {/* منطقة الـ scroll — بس المحتوى يتمرر، الهيدر ما يتأثرش ✅ */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="p-4 sm:p-6">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeView}
@@ -392,10 +487,11 @@ function MainApp() {
             </AnimatePresence>
           </div>
 
-          <footer className="mt-auto border-t px-4 py-3 text-center text-xs text-muted-foreground lg:px-6">
+          <footer className="border-t px-4 py-3 text-center text-xs text-muted-foreground lg:px-6">
             © {new Date().getFullYear()} {shopName} — نظام إدارة المحل
           </footer>
-        </main>
+        </div>
+
       </div>
     </div>
   )

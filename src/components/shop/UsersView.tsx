@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Loader2, Pencil, Plus, ShieldCheck, User, UserCog } from 'lucide-react'
+import { FileText, Loader2, Pencil, Plus, ShieldCheck, User, UserCog } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -32,7 +32,10 @@ import {
 } from '@/components/ui/table'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { formatDate } from '@/lib/format'
+import { formatArabicDateTime } from '@/lib/format'
+import { DateTimeCell } from './DateTimeCell'
+import { printListReportHtml, openPrintWindow } from '@/lib/print'
+import { useShopStore } from '@/lib/store'
 
 interface UserRow {
   id: string
@@ -47,6 +50,8 @@ interface UserRow {
 }
 
 export function UsersView() {
+  const shopName = useShopStore((s) => s.shopName)
+  const shopBranding = useShopStore((s) => s.branding)
   const [users, setUsers] = React.useState<UserRow[]>([])
   const [loading, setLoading] = React.useState(true)
   const [dialogOpen, setDialogOpen] = React.useState(false)
@@ -81,6 +86,51 @@ export function UsersView() {
     }
   }
 
+  const exportPdf = () => {
+    const admins = users.filter((u) => u.role === 'ADMIN').length
+    const active = users.filter((u) => u.active).length
+
+    const html = printListReportHtml(
+      {
+        title: 'المستخدمين',
+        subtitle: 'إدارة حسابات المدراء والموظفين',
+        columns: [
+          { header: '#' },
+          { header: 'الاسم', align: 'right' },
+          { header: 'البريد الإلكتروني' },
+          { header: 'الدور' },
+          { header: 'الحالة' },
+          { header: 'الفرع' },
+          { header: 'تاريخ الإنشاء' },
+          { header: 'آخر دخول' },
+        ],
+        rows: users.map((u, i) => [
+          String(i + 1),
+          u.name,
+          u.email,
+          u.role === 'ADMIN' ? 'المدير' : 'الموظف',
+          u.active ? 'نشط' : 'موقوف',
+          u.branch?.name ?? 'كل الفروع',
+          formatArabicDateTime(u.createdAt),
+          u.lastLoginAt ? formatArabicDateTime(u.lastLoginAt) : 'لم يسجل دخول بعد',
+        ]),
+        kpis: [
+          { label: 'إجمالي المستخدمين', value: String(users.length) },
+          { label: 'المدراء', value: String(admins) },
+          { label: 'الحسابات النشطة', value: String(active), emphasize: true },
+        ],
+        emptyMessage: 'لا يوجد مستخدمين',
+      },
+      {
+        name: shopName,
+        phone: shopBranding.phone || undefined,
+        address: shopBranding.address || undefined,
+        logo: shopBranding.logoPath || undefined,
+      }
+    )
+    openPrintWindow(html, () => toast.error('الرجاء السماح بالنوافذ المنبثقة'))
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -90,15 +140,21 @@ export function UsersView() {
             إدارة حسابات المدراء والموظفين
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setEditing(null)
-            setDialogOpen(true)
-          }}
-        >
-          <Plus className="size-4" />
-          مستخدم جديد
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={exportPdf} disabled={loading}>
+            <FileText className="size-4" />
+            تصدير PDF
+          </Button>
+          <Button
+            onClick={() => {
+              setEditing(null)
+              setDialogOpen(true)
+            }}
+          >
+            <Plus className="size-4" />
+            مستخدم جديد
+          </Button>
+        </div>
       </div>
 
       <Card className="overflow-hidden py-0">
@@ -160,7 +216,7 @@ export function UsersView() {
                         </TableCell>
                         <TableCell className="text-center">
                           {u.active ? (
-                            <Badge className="bg-emerald-100 text-emerald-700">
+                            <Badge className="bg-success-subtle text-success">
                               نشط
                             </Badge>
                           ) : (
@@ -173,10 +229,10 @@ export function UsersView() {
                           {u.branch?.name ?? 'كل الفروع'}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">
-                          {formatDate(u.createdAt)}
+                          <DateTimeCell date={u.createdAt} />
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">
-                          {u.lastLoginAt ? formatDate(u.lastLoginAt) : 'لم يسجل دخول بعد'}
+                          {u.lastLoginAt ? <DateTimeCell date={u.lastLoginAt} /> : 'لم يسجل دخول بعد'}
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1">

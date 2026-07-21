@@ -86,10 +86,10 @@ interface PlanLite {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
-    active: { label: 'نشط', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30' },
-    expired: { label: 'منتهي', cls: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30' },
-    cancelled: { label: 'ملغي', cls: 'bg-slate-500/15 text-slate-700 dark:text-slate-400 border-slate-500/30' },
-    grace: { label: 'سماح', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30' },
+    active: { label: 'نشط', cls: 'bg-success-subtle text-success-subtle-foreground border-success-subtle' },
+    expired: { label: 'منتهي', cls: 'bg-destructive-subtle text-destructive-subtle-foreground dark:text-destructive-subtle-foreground border-destructive-subtle' },
+    cancelled: { label: 'ملغي', cls: 'bg-muted text-muted-foreground border-border' },
+    grace: { label: 'سماح', cls: 'bg-warning-subtle text-warning-subtle-foreground dark:text-warning-subtle-foreground border-warning-subtle' },
   }
   const cfg = map[status] ?? { label: status, cls: '' }
   return (
@@ -204,7 +204,7 @@ export function AdminSubscriptionsView() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-success-subtle text-success-subtle-foreground">
               <Calendar className="size-5" />
             </div>
             <div>
@@ -215,7 +215,7 @@ export function AdminSubscriptionsView() {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-sky-500/15 text-sky-700 dark:text-sky-400">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-info-subtle text-info-subtle-foreground">
               <Calendar className="size-5" />
             </div>
             <div>
@@ -226,7 +226,7 @@ export function AdminSubscriptionsView() {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-rose-500/15 text-rose-700 dark:text-rose-400">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-destructive-subtle text-destructive-subtle-foreground dark:text-destructive-subtle-foreground">
               <Calendar className="size-5" />
             </div>
             <div>
@@ -237,7 +237,7 @@ export function AdminSubscriptionsView() {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-slate-500/15 text-slate-700 dark:text-slate-400">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
               <Calendar className="size-5" />
             </div>
             <div>
@@ -339,7 +339,7 @@ export function AdminSubscriptionsView() {
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="size-8 text-emerald-600 hover:text-emerald-700"
+                              className="size-8 text-success-subtle-foreground hover:text-success-subtle-foreground"
                               title="تمديد"
                               disabled={busyId === r.id}
                               onClick={() => setExtendRow(r)}
@@ -349,7 +349,7 @@ export function AdminSubscriptionsView() {
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="size-8 text-amber-600 hover:text-amber-700"
+                              className="size-8 text-warning-subtle-foreground hover:text-warning-subtle-foreground"
                               title="إيقاف"
                               disabled={busyId === r.id}
                               onClick={() => handlePause(r)}
@@ -546,7 +546,13 @@ function AddSubscriptionDialog({
       api<{ items: TenantLite[] }>(`/api/admin/tenants`).then((d) => {
         setTenants(d.items)
       }).catch(() => {})
-      setPlanId(plans.find((p) => p.code === 'pro')?.id?.toString() ?? '')
+      // Try: electronics-pro → electronics-basic → pro → first available
+      const defaultPlan =
+        plans.find((p) => p.code === 'electronics-pro') ??
+        plans.find((p) => p.code === 'electronics-basic') ??
+        plans.find((p) => p.code === 'pro') ??
+        plans[0]
+      setPlanId(defaultPlan?.id?.toString() ?? '')
       setTenantId('')
       setPeriod('monthly')
       setAmountPaid('')

@@ -261,7 +261,7 @@ export function PurchaseOrderDialog({
               </SelectContent>
             </Select>
             {selectedSupplier && selectedSupplier.balance > 0 && (
-              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              <p className="rounded-md border border-warning-subtle bg-warning-subtle px-3 py-2 text-xs text-warning-subtle-foreground">
                 ⚠ يوجد مستحق سابق لهذا المورد: {formatCurrency(selectedSupplier.balance)}
               </p>
             )}
@@ -327,8 +327,8 @@ export function PurchaseOrderDialog({
 
           {/* بانر: منتجات جديدة النهاردة لسه معملهاش دخول فعلي للمخزون */}
           {visiblePendingToday.length > 0 && (
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
-              <p className="text-sm text-blue-700">
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-info-subtle bg-info-subtle px-3 py-2.5">
+              <p className="text-sm text-info-subtle-foreground">
                 في <span className="font-semibold">{visiblePendingToday.length}</span> منتج
                 جديد اتضاف النهاردة ولسه ملهمش أمر شراء
               </p>
@@ -336,7 +336,7 @@ export function PurchaseOrderDialog({
                 type="button"
                 size="sm"
                 variant="outline"
-                className="shrink-0 border-blue-300 bg-white hover:bg-blue-100"
+                className="shrink-0 border-info-subtle bg-white hover:bg-info-subtle"
                 onClick={addAllPendingToday}
               >
                 <Plus className="size-4" />

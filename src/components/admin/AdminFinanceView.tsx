@@ -114,7 +114,7 @@ export function AdminFinanceView() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-success-subtle text-success-subtle-foreground">
               <Calendar className="size-5" />
             </div>
             <div className="min-w-0">
@@ -136,7 +136,7 @@ export function AdminFinanceView() {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-violet-500/15 text-violet-700 dark:text-violet-400">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-chart-4/15 text-chart-4">
               <CalendarRange className="size-5" />
             </div>
             <div className="min-w-0">
@@ -147,7 +147,7 @@ export function AdminFinanceView() {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-warning-subtle text-warning-subtle-foreground dark:text-warning-subtle-foreground">
               <TrendingUp className="size-5" />
             </div>
             <div className="min-w-0">

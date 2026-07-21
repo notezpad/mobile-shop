@@ -2,12 +2,34 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+/* Card variants 2026:
+ * - default: standard flat card with subtle border + shadow-xs
+ * - bento:   premium card with hover lift + brand border hint (for KPI/dashboard cells)
+ * - elevated: heavy shadow for dialogs, popovers
+ * - subtle:  muted background (for inactive panels, disabled blocks)
+ */
+function Card({
+  className,
+  variant = "default",
+  glow = false,
+  ...props
+}: React.ComponentProps<"div"> & {
+  variant?: "default" | "bento" | "elevated" | "subtle"
+  glow?: boolean
+}) {
   return (
     <div
       data-slot="card"
       className={cn(
-        "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm",
+        "flex flex-col gap-6 rounded-xl py-6 transition-all duration-base ease-out",
+        variant === "default" &&
+          "bg-card text-card-foreground border border-border shadow-xs",
+        variant === "bento" &&
+          "bg-card text-card-foreground border border-border shadow-sm hover:shadow-md hover:border-brand-200 dark:hover:border-brand-800 hover:-translate-y-0.5",
+        variant === "elevated" &&
+          "bg-card text-card-foreground border border-border shadow-lg hover:shadow-xl",
+        variant === "subtle" && "bg-card-muted text-card-foreground border border-transparent",
+        glow && "glow-emerald relative",
         className
       )}
       {...props}
@@ -32,7 +54,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-title"
-      className={cn("leading-none font-semibold", className)}
+      className={cn("leading-none font-semibold tracking-tight", className)}
       {...props}
     />
   )
@@ -42,7 +64,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-description"
-      className={cn("text-muted-foreground text-sm", className)}
+      className={cn("text-muted-foreground text-sm leading-relaxed", className)}
       {...props}
     />
   )
