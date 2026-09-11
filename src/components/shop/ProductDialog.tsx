@@ -15,6 +15,8 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { CategoryCombobox } from './CategoryCombobox'
 import { api } from '@/lib/api'
+import { useShopStore } from '@/lib/store'
+import { generateEan13 } from '@/lib/barcode'
 import {
   Select,
   SelectContent,
@@ -34,6 +36,7 @@ export interface ProductFormValues {
   minQuantity: number
   imagePath: string | null
   branchId?: number | null
+  collection?: string | null
 }
 
 interface Props {
@@ -42,22 +45,6 @@ interface Props {
   initial?: Partial<ProductFormValues> | null
   categories: { id: number; name: string }[]
   onSaved: (saved?: ProductFormValues) => void
-}
-
-function generateEan13(): string {
-  // EAN-13 starting with "20" (in-store range)
-  const digits = [2, 0]
-  for (let i = 0; i < 10; i++) {
-    digits.push(Math.floor(Math.random() * 10))
-  }
-  // checksum
-  let sum = 0
-  for (let i = 0; i < 12; i++) {
-    sum += digits[i] * (i % 2 === 0 ? 1 : 3)
-  }
-  const checksum = (10 - (sum % 10)) % 10
-  digits.push(checksum)
-  return digits.join('')
 }
 
 export function ProductDialog({
@@ -79,7 +66,10 @@ export function ProductDialog({
   const [saving, setSaving] = React.useState(false)
   const [branchId, setBranchId] = React.useState<string>('')
   const [branches, setBranches] = React.useState<{ id: number; name: string }[]>([])
+  const [collection, setCollection] = React.useState<string>('')
   const fileRef = React.useRef<HTMLInputElement>(null)
+  const capabilities = useShopStore((s) => s.plan.capabilities)
+  const hasCollections = capabilities.includes('collections')
 
   // sync when opening / initial changes
   React.useEffect(() => {
@@ -93,6 +83,7 @@ export function ProductDialog({
       setMinQuantity(initial?.minQuantity != null ? String(initial.minQuantity) : '1')
       setImagePath(initial?.imagePath ?? null)
       setBranchId(initial?.branchId != null ? String(initial.branchId) : '')
+      setCollection((initial as any)?.collection ?? '')
       fetch('/api/branches').then(r => r.ok ? r.json() : []).then(setBranches).catch(() => setBranches([]))
     }
   }, [open, initial])
@@ -136,6 +127,7 @@ export function ProductDialog({
         minQuantity: parseInt(minQuantity, 10) || 1,
         imagePath,
         branchId: branchId ? parseInt(branchId, 10) : null,
+        collection: collection.trim() || null,
       }
       if (initial?.id) {
         await api(`/api/products/${initial.id}`, { method: 'PUT', body: payload })
@@ -180,8 +172,8 @@ export function ProductDialog({
             />
           </div>
 
-          {/* 2. category combobox */}
-          <div className="space-y-1.5 sm:col-span-2">
+          {/* 2. category + collection (inline row) */}
+          <div className="space-y-1.5">
             <Label>التصنيف</Label>
             <CategoryCombobox
               value={category}
@@ -189,11 +181,28 @@ export function ProductDialog({
               placeholder="اختر أو اكتب تصنيف جديد..."
             />
             <p className="text-[11px] text-muted-foreground">
-              يمكنك كتابة اسم تصنيف جديد وسيتم إنشاؤه تلقائياً عند الحفظ
+              يمكنك كتابة تصنيف جديد وسيتم إنشاؤه تلقائياً
             </p>
           </div>
 
-          {/* 3. barcode */}
+          {hasCollections ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="p-collection">الكوليكشن</Label>
+              <Input
+                id="p-collection"
+                value={collection}
+                onChange={(e) => setCollection(e.target.value)}
+                placeholder="مثال: صيف 2026"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                لتجميع المنتجات وتطبيق خصم جماعي عليها
+              </p>
+            </div>
+          ) : (
+            <div />
+          )}
+
+          {/* 4. barcode */}
           <div className="space-y-1.5 sm:col-span-2">
             <Label>الباركود</Label>
             <div className="flex gap-2">

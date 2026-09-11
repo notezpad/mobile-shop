@@ -5,6 +5,8 @@ import {
   FileSpreadsheet,
   FolderOpen,
   ImageOff,
+  MoreVertical,
+  Palette,
   Pencil,
   Plus,
   Power,
@@ -17,6 +19,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select,
@@ -41,6 +50,7 @@ import { ProductDialog, type ProductFormValues } from './ProductDialog'
 import { CategoryManagerDialog } from './CategoryManagerDialog'
 import { PrintLabelsDialog } from './PrintLabelsDialog'
 import { ProductUnitsDialog } from './ProductUnitsDialog'
+import { ProductVariantsDialog } from './ProductVariantsDialog'
 import { CollectionDiscountDialog } from './CollectionDiscountDialog'
 import { Package, Percent } from 'lucide-react'
 import { Barcode } from './Barcode'
@@ -75,6 +85,7 @@ export function ProductsView() {
   const [selectedIds, setSelectedIds] = React.useState<Set<number>>(new Set())
   const [labelsDialogOpen, setLabelsDialogOpen] = React.useState(false)
   const [unitsFor, setUnitsFor] = React.useState<{id:number;name:string}|null>(null)
+  const [variantsFor, setVariantsFor] = React.useState<{id:number;name:string}|null>(null)
   const [collectionDlg, setCollectionDlg] = React.useState(false)
   const capabilities = useShopStore((st) => st.plan.capabilities)
   const [singlePrintProduct, setSinglePrintProduct] = React.useState<Product | null>(null)
@@ -319,11 +330,21 @@ export function ProductsView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
+            <div className="hidden overflow-x-auto lg:block" dir="ltr">
+              {/*
+                من lg فما فوق: نعرض الجدول العادي بكل أعمدته. تحته نسخة
+                كروت (خارج هذا الشرط) مخصصة للشاشات الأصغر من lg، بدل ما
+                نسيب سكرول أفقي على الشاشات الصغيرة/اللابتوبات صغيرة الدقة.
+                السبب: جدول بهذا العدد من الأعمدة (12 عمود) لازم مساحة
+                عرض كبيرة عشان يتقرأ صح، وعلى الشاشات الضيقة السكرول
+                الأفقي بيدي تجربة استخدام مزعجة (المستخدم بيحتاج يسكرول
+                يمين وشمال عشان يشوف صف واحد كامل). الكروت بتحل المشكلة
+                دي جذريًا بعرض كل بيانات المنتج رأسيًا بدل أفقيًا.
+              */}
+              <Table className="min-w-[1220px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-10 text-center pr-3">
+                    <TableHead className="w-14 text-center pr-4">
                       <Checkbox
                         checked={products.length > 0 && selectedIds.size === products.length}
                         onCheckedChange={toggleSelectAll}
@@ -332,14 +353,14 @@ export function ProductsView() {
                     <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead className="w-14 text-center">الصورة</TableHead>
                     <TableHead>الاسم</TableHead>
-                    <TableHead className="w-28">التصنيف</TableHead>
+                    <TableHead className="w-24">التصنيف</TableHead>
                     <TableHead className="w-52">الباركود</TableHead>
                     <TableHead className="w-28 text-center">التكلفة</TableHead>
                     <TableHead className="w-28 text-center">السعر</TableHead>
                     <TableHead className="w-16 text-center">الكمية</TableHead>
                     <TableHead className="w-20 text-center">الحد الأدنى</TableHead>
                     <TableHead className="w-24 text-center">عدد المبيعات</TableHead>
-                    <TableHead className="w-20 text-center">إجراءات</TableHead>
+                    <TableHead className="w-24 text-center pl-4">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -357,7 +378,7 @@ export function ProductsView() {
                       const low = p.quantity <= p.minQuantity
                       return (
                         <TableRow key={p.id} className={!p.active ? 'opacity-50' : ''}>
-                          <TableCell className="text-center pr-3">
+                          <TableCell className="text-center pr-4">
                             <Checkbox
                               checked={selectedIds.has(p.id)}
                               onCheckedChange={() => toggleSelect(p.id)}
@@ -399,7 +420,7 @@ export function ProductsView() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Barcode value={p.barcode} height={26} fontSize={10} fitContainer />
+                            <Barcode value={p.barcode} height={20} fontSize={8} fitContainer />
                           </TableCell>
                           <TableCell className="text-center tabular-nums text-muted-foreground">
                             {formatCurrency(p.cost)}
@@ -428,54 +449,65 @@ export function ProductsView() {
                           <TableCell className="text-center font-semibold tabular-nums text-info-subtle-foreground">
                             {p.soldQuantity ?? 0}
                           </TableCell>
-                          <TableCell className="text-center">
-                            <div className="flex items-center justify-center gap-1">
+                          <TableCell className="text-center pl-4">
+                            <div className="flex items-center justify-center gap-1.5">
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 className="size-8"
-                                title="طباعة ملصق باركود"
-                                onClick={() => printOneLabel(p)}
-                              >
-                                <Printer className="size-4" />
-                              </Button>
-                              {capabilities.includes('multi_unit') && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-8"
-                                  title="وحدات الجملة"
-                                  onClick={() => setUnitsFor({ id: p.id, name: p.name })}
-                                >
-                                  <Package className="size-4" />
-                                </Button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8"
+                                title="تعديل المنتج"
                                 onClick={() => openEdit(p)}
                               >
                                 <Pencil className="size-4" />
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8"
-                                title={p.active ? 'تعطيل المنتج' : 'تفعيل المنتج'}
-                                onClick={() => toggleActive(p)}
-                              >
-                                <Power className={`size-4 ${p.active ? 'text-muted-foreground' : 'text-success-subtle-foreground'}`} />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8 text-destructive hover:text-destructive"
-                                title="حذف نهائي"
-                                onClick={() => setConfirmId(p.id)}
-                              >
-                                <Trash2 className="size-4" />
-                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-8"
+                                    title="المزيد من الإجراءات"
+                                  >
+                                    <MoreVertical className="size-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => printOneLabel(p)}>
+                                    <Printer className="size-4" />
+                                    طباعة ملصق باركود
+                                  </DropdownMenuItem>
+                                  {capabilities.includes('multi_unit') && (
+                                    <DropdownMenuItem
+                                      onClick={() => setUnitsFor({ id: p.id, name: p.name })}
+                                    >
+                                      <Package className="size-4" />
+                                      وحدات الجملة
+                                    </DropdownMenuItem>
+                                  )}
+                                  {capabilities.includes('variants') && (
+                                    <DropdownMenuItem
+                                      onClick={() => setVariantsFor({ id: p.id, name: p.name })}
+                                    >
+                                      <Palette className="size-4" />
+                                      الألوان والمقاسات
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem onClick={() => toggleActive(p)}>
+                                    <Power
+                                      className={`size-4 ${p.active ? 'text-muted-foreground' : 'text-success-subtle-foreground'}`}
+                                    />
+                                    {p.active ? 'تعطيل المنتج' : 'تفعيل المنتج'}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    variant="destructive"
+                                    onClick={() => setConfirmId(p.id)}
+                                  >
+                                    <Trash2 className="size-4" />
+                                    حذف نهائي
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -484,6 +516,194 @@ export function ProductsView() {
                   )}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {/*
+            نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg (لابتوبات صغيرة
+            الدقة، تابلت، موبايل). كل منتج بقى كارت مستقل تُعرض فيه كل
+            البيانات رأسيًا (صورة + اسم فوق، وتحته Grid صغير بالأرقام
+            المهمة)، بدل صف عريض في جدول يحتاج سكرول أفقي ليُقرأ كاملًا.
+          */}
+          {!loading && (
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+              {products.length === 0 ? (
+                <p className="col-span-full py-8 text-center text-muted-foreground">
+                  لا توجد منتجات
+                </p>
+              ) : (
+                products.map((p, index) => {
+                  const low = p.quantity <= p.minQuantity
+                  return (
+                    <div
+                      key={p.id}
+                      className={cn(
+                        'rounded-lg border bg-card p-3',
+                        !p.active && 'opacity-50'
+                      )}
+                    >
+                      {/* رأس الكارت: تحديد + صورة + اسم + تصنيف */}
+                      <div className="flex items-start gap-3">
+                        <Checkbox
+                          checked={selectedIds.has(p.id)}
+                          onCheckedChange={() => toggleSelect(p.id)}
+                          className="mt-1"
+                        />
+                        <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
+                          {p.imagePath ? (
+                            <img
+                              src={p.imagePath}
+                              alt={p.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <ImageOff className="size-4 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <p className="font-medium leading-tight">{p.name}</p>
+                            {!p.active && (
+                              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+                                معطل
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            {p.category ? (
+                              <Badge variant="secondary" className="text-[10px]">
+                                {p.category}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                بدون تصنيف
+                              </span>
+                            )}
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              #{index + 1}
+                            </span>
+                          </div>
+                        </div>
+                        {/* إجراءات: نفس أزرار الجدول */}
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            title="تعديل المنتج"
+                            onClick={() => openEdit(p)}
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8"
+                                title="المزيد من الإجراءات"
+                              >
+                                <MoreVertical className="size-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => printOneLabel(p)}>
+                                <Printer className="size-4" />
+                                طباعة ملصق باركود
+                              </DropdownMenuItem>
+                              {capabilities.includes('multi_unit') && (
+                                <DropdownMenuItem
+                                  onClick={() => setUnitsFor({ id: p.id, name: p.name })}
+                                >
+                                  <Package className="size-4" />
+                                  وحدات الجملة
+                                </DropdownMenuItem>
+                              )}
+                              {capabilities.includes('variants') && (
+                                <DropdownMenuItem
+                                  onClick={() => setVariantsFor({ id: p.id, name: p.name })}
+                                >
+                                  <Palette className="size-4" />
+                                  الألوان والمقاسات
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem onClick={() => toggleActive(p)}>
+                                <Power
+                                  className={`size-4 ${p.active ? 'text-muted-foreground' : 'text-success-subtle-foreground'}`}
+                                />
+                                {p.active ? 'تعطيل المنتج' : 'تفعيل المنتج'}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => setConfirmId(p.id)}
+                              >
+                                <Trash2 className="size-4" />
+                                حذف نهائي
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+
+                      {/* الباركود (لو موجود) */}
+                      {p.barcode && (
+                        <div className="mt-2 flex justify-center rounded-md border bg-muted/30 py-1.5">
+                          <Barcode value={p.barcode} height={24} fontSize={9} fitContainer />
+                        </div>
+                      )}
+
+                      {/* شبكة البيانات: تكلفة/سعر/كمية/حد أدنى/مبيعات */}
+                      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-2 text-center">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">التكلفة</p>
+                          <p className="tabular-nums text-muted-foreground">
+                            {formatCurrency(p.cost)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">السعر</p>
+                          <p className="font-semibold tabular-nums">
+                            {formatCurrency(p.price)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">المبيعات</p>
+                          <p className="font-semibold tabular-nums text-info-subtle-foreground">
+                            {p.soldQuantity ?? 0}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">الكمية</p>
+                          <p
+                            className={cn(
+                              'font-semibold tabular-nums',
+                              low && 'text-destructive'
+                            )}
+                          >
+                            {p.quantity}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">الحد الأدنى</p>
+                          <p className="tabular-nums text-muted-foreground">{p.minQuantity}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">الحالة</p>
+                          <p
+                            className={cn(
+                              'text-xs font-medium',
+                              low ? 'text-destructive' : 'text-success'
+                            )}
+                          >
+                            {low ? 'منخفض' : 'جيدة'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
             </div>
           )}
         </CardContent>
@@ -519,6 +739,12 @@ export function ProductsView() {
         open={!!unitsFor}
         onOpenChange={(o) => !o && setUnitsFor(null)}
         product={unitsFor}
+        onChanged={loadProducts}
+      />
+      <ProductVariantsDialog
+        open={!!variantsFor}
+        onOpenChange={(o) => !o && setVariantsFor(null)}
+        product={variantsFor}
         onChanged={loadProducts}
       />
       <CollectionDiscountDialog

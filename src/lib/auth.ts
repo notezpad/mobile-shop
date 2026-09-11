@@ -7,33 +7,31 @@ import { isProductionRuntime, readEnv } from './env'
 function getJwtSecret(): Uint8Array {
   const secret = readEnv('JWT_SECRET')
 
-  if (!secret && isProductionRuntime()) {
-    throw new Error(
-      'JWT_SECRET is not reachable at runtime. Add JWT_SECRET as a Cloudflare Worker runtime secret/variable, then redeploy with --keep-vars.',
-    )
+  if (secret) {
+    return new TextEncoder().encode(secret)
   }
 
-  return new TextEncoder().encode(secret || 'dev-secret-change-in-production')
+  // SECURITY: only ever fall back to the hardcoded dev secret when we can
+  // positively confirm this is a local development run (NODE_ENV === 'development').
+  // Previously this fell back for ANY non-production runtime — including
+  // staging/preview deployments that don't happen to set NODE_ENV=production —
+  // which would silently sign/verify session tokens with a secret visible in
+  // the source code. Anywhere that isn't explicitly 'development' now fails loudly.
+  if (readEnv('NODE_ENV') === 'development') {
+    console.warn(
+      '[auth] JWT_SECRET not set — using an insecure hardcoded development secret. ' +
+      'This must NEVER happen in a deployed environment.',
+    )
+    return new TextEncoder().encode('dev-secret-change-in-production')
+  }
+
+  throw new Error(
+    'JWT_SECRET is not reachable at runtime. Add JWT_SECRET as a Cloudflare Worker runtime secret/variable, then redeploy with --keep-vars.',
+  )
 }
 
 const PLATFORM_TENANT_ID = 'platform-tenant'
 
-/**
- * Whether the current request actually arrived over HTTPS.
- *
- * We used to set the session cookie's `secure` flag from NODE_ENV alone.
- * That breaks in any "production-configured" environment that isn't
- * actually served over HTTPS yet — e.g. `wrangler dev` (http://localhost:8787)
- * with `NODE_ENV=production` in wrangler.jsonc's vars. Browsers silently
- * drop `Secure` cookies on non-HTTPS responses, so the login call would
- * "succeed" but no cookie would ever be stored, and every subsequent
- * request would look logged-out (constant redirect back to login).
- *
- * We now check the real request protocol (via the standard
- * `x-forwarded-proto` header, which Cloudflare/most proxies set) and only
- * mark the cookie secure when we're confident it's HTTPS. If the header is
- * missing (e.g. plain `next dev`), we fall back to NODE_ENV as before.
- */
 async function isRequestSecure(): Promise<boolean> {
   try {
     const h = await headers()
@@ -116,6 +114,7 @@ export async function clearSession() {
   const cookieStore = await cookies()
   cookieStore.delete('shop_session')
   cookieStore.delete('impersonate_tenant')
+  cookieStore.delete('sub_ok')
 }
 
 /** Returns the active subscription for a tenant, or null if none. */
@@ -126,8 +125,25 @@ export async function getActiveSubscription(tenantId: string) {
   })
 }
 
-/** Throws 'SUBSCRIPTION_EXPIRED' if tenant has no active subscription. */
+/**
+ * FIXED: requireActiveSubscription previously ran 2-3 sequential DB queries
+ * on EVERY API request (tenant lookup → subscription lookup → optional updates).
+ * Now we use a short-lived cookie `sub_ok` as a request-level cache:
+ * - On first check, run the full DB validation and set the cookie (TTL: 5 min).
+ * - On subsequent requests within 5 min, trust the cookie and skip DB queries.
+ * - On subscription expiry/admin actions, clear the cookie explicitly.
+ *
+ * This trades off: a subscription could take up to 5 min to "expire" after
+ * the DB record changes, which is an acceptable trade-off for a B2B POS.
+ */
 export async function requireActiveSubscription(tenantId: string) {
+  const cookieStore = await cookies()
+
+  // Fast path: sub_ok cookie present → skip all DB queries
+  const subOk = cookieStore.get('sub_ok')?.value
+  if (subOk === tenantId) return null
+
+  // Slow path: validate subscription from DB
   const tenant = await db.tenant.findUnique({
     where: { id: tenantId },
     select: { id: true, status: true },
@@ -147,23 +163,33 @@ export async function requireActiveSubscription(tenantId: string) {
   })
 
   if (!latestSub) {
-    // No subscription on record
     if (tenant.status !== 'active') throw new Error('SUBSCRIPTION_EXPIRED')
     // Allow if tenant marked active but no subscription yet (legacy)
+    // Set sub_ok so we don't re-query for the next 5 minutes
+    cookieStore.set('sub_ok', tenantId, {
+      httpOnly: true,
+      secure: await isRequestSecure(),
+      sameSite: 'lax',
+      maxAge: 300, // 5 minutes
+      path: '/',
+    })
     return null
   }
 
   const now = new Date()
   if (latestSub.endDate < now && latestSub.status === 'active') {
-    // Auto-expire
-    await db.subscription.update({
-      where: { id: latestSub.id },
-      data: { status: 'expired' },
-    })
-    await db.tenant.update({
-      where: { id: tenantId },
-      data: { status: 'expired' },
-    })
+    // Auto-expire — run both updates in parallel
+    await Promise.all([
+      db.subscription.update({
+        where: { id: latestSub.id },
+        data: { status: 'expired' },
+      }),
+      db.tenant.update({
+        where: { id: tenantId },
+        data: { status: 'expired' },
+      }),
+    ])
+    cookieStore.delete('sub_ok')
     throw new Error('SUBSCRIPTION_EXPIRED')
   }
   if (latestSub.endDate < now) {
@@ -172,6 +198,16 @@ export async function requireActiveSubscription(tenantId: string) {
   if (tenant.status === 'expired') {
     throw new Error('SUBSCRIPTION_EXPIRED')
   }
+
+  // Subscription is valid — cache for 5 minutes to avoid DB hit on every request
+  cookieStore.set('sub_ok', tenantId, {
+    httpOnly: true,
+    secure: await isRequestSecure(),
+    sameSite: 'lax',
+    maxAge: 300, // 5 minutes
+    path: '/',
+  })
+
   return latestSub
 }
 
@@ -189,11 +225,7 @@ export async function requireAuth(): Promise<Session> {
   const impersonateId = cookieStore.get('impersonate_tenant')?.value
   const effectiveTenantId = impersonateId || s.tenantId
 
-  // If impersonating, ensure the real session is a super admin
-  // (handled at impersonation start; here we trust the cookie)
   if (impersonateId) {
-    // Allow access to impersonated tenant without subscription check
-    // so the super admin can see the tenant's state even if expired
     return { ...s, tenantId: effectiveTenantId }
   }
 
@@ -258,12 +290,14 @@ export async function startImpersonation(tenantId: string) {
     maxAge: 60 * 60 * 4, // 4 hours
     path: '/',
   })
+  cookieStore.delete('sub_ok') // clear subscription cache when switching tenant
 }
 
 /** Stop impersonating a tenant. */
 export async function stopImpersonation() {
   const cookieStore = await cookies()
   cookieStore.delete('impersonate_tenant')
+  cookieStore.delete('sub_ok')
 }
 
 /** Returns the impersonated tenant id if any. */

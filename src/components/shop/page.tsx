@@ -3,8 +3,6 @@
 import * as React from 'react'
 import {
   Menu,
-  Moon,
-  Sun,
   Loader2,
   Shield,
   LogOut,
@@ -15,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { motion, AnimatePresence } from 'framer-motion'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -129,21 +128,122 @@ function LiveClock() {
     </div>
   )
 }
+/* ThemeToggle — glass sun/moon switch.
+ *
+ * A frosted-glass capsule that holds a custom-drawn sun (gold, radiating,
+ * gently spinning) in light mode and a glowing crescent moon with two
+ * soft stars in dark mode. The two glyphs cross-fade + rotate with
+ * framer-motion instead of an abrupt icon swap, and the glass itself
+ * picks up a warm or cool glow to match whichever is showing. */
 function ThemeToggle() {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
-  if (!mounted) return <div className="size-9" />
+  const uid = React.useId()
+  const isDark = mounted && theme === 'dark'
+
+  if (!mounted) return <div className="size-10" />
+
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="size-9"
-      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-      title="تبديل السمة"
+    <button
+      type="button"
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      title={isDark ? 'الوضع النهاري' : 'الوضع الليلي'}
+      aria-label={isDark ? 'تفعيل الوضع النهاري' : 'تفعيل الوضع الليلي'}
+      className={cn(
+        'relative flex size-10 shrink-0 items-center justify-center rounded-full overflow-hidden',
+        'border backdrop-blur-md transition-[box-shadow,border-color,background-color] duration-500 ease-out',
+        'active:scale-95',
+        isDark
+          ? 'border-indigo-300/25 bg-white/5 shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset,0_2px_10px_-2px_rgba(99,102,241,0.45)]'
+          : 'border-amber-300/50 bg-white/40 shadow-[0_0_0_1px_rgba(255,255,255,0.5)_inset,0_2px_10px_-2px_rgba(245,158,11,0.4)]'
+      )}
     >
-      {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
-    </Button>
+      {/* glass sheen */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/25 via-transparent to-transparent"
+      />
+
+      <AnimatePresence mode="wait" initial={false}>
+        {isDark ? (
+          <motion.svg
+            key="moon"
+            viewBox="0 0 24 24"
+            className="relative size-5"
+            initial={{ rotate: -70, scale: 0.3, opacity: 0 }}
+            animate={{ rotate: 0, scale: 1, opacity: 1 }}
+            exit={{ rotate: 70, scale: 0.3, opacity: 0 }}
+            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <defs>
+              <radialGradient id={`${uid}-moon`} cx="35%" cy="30%" r="75%">
+                <stop offset="0%" stopColor="#eef2ff" />
+                <stop offset="55%" stopColor="#c7d2fe" />
+                <stop offset="100%" stopColor="#818cf8" />
+              </radialGradient>
+              <filter id={`${uid}-moonGlow`} x="-60%" y="-60%" width="220%" height="220%">
+                <feGaussianBlur stdDeviation="1.1" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+            <path
+              d="M15.5 3.5a8.5 8.5 0 1 0 5 15.4A9.5 9.5 0 0 1 15.5 3.5Z"
+              fill={`url(#${uid}-moon)`}
+              filter={`url(#${uid}-moonGlow)`}
+            />
+            <motion.circle
+              cx="6.2" cy="6.5" r="0.6" fill="#eef2ff"
+              animate={{ opacity: [0.25, 1, 0.25] }}
+              transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <motion.circle
+              cx="4.3" cy="11" r="0.4" fill="#eef2ff"
+              animate={{ opacity: [1, 0.3, 1] }}
+              transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut', delay: 0.6 }}
+            />
+          </motion.svg>
+        ) : (
+          <motion.svg
+            key="sun"
+            viewBox="0 0 24 24"
+            className="relative size-5"
+            initial={{ rotate: 70, scale: 0.3, opacity: 0 }}
+            animate={{ rotate: 0, scale: 1, opacity: 1 }}
+            exit={{ rotate: -70, scale: 0.3, opacity: 0 }}
+            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <defs>
+              <radialGradient id={`${uid}-sun`} cx="40%" cy="35%" r="65%">
+                <stop offset="0%" stopColor="#fffbeb" />
+                <stop offset="45%" stopColor="#fcd34d" />
+                <stop offset="100%" stopColor="#f59e0b" />
+              </radialGradient>
+            </defs>
+            <motion.g
+              stroke="#f59e0b"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 22, repeat: Infinity, ease: 'linear' }}
+              style={{ transformOrigin: '12px 12px' }}
+            >
+              {[0, 45, 90, 135, 180, 225, 270, 315].map((a) => (
+                <line
+                  key={a}
+                  x1="12" y1="2.4" x2="12" y2="4.2"
+                  transform={`rotate(${a} 12 12)`}
+                />
+              ))}
+            </motion.g>
+            <circle cx="12" cy="12" r="5.6" fill={`url(#${uid}-sun)`} />
+          </motion.svg>
+        )}
+      </AnimatePresence>
+    </button>
   )
 }
 
@@ -304,6 +404,34 @@ function SubscriptionWarningBanner() {
   )
 }
 
+/**
+ * بيرجع نسبة تصغير (scale) للشاشات الصغيرة، وارتفاع الـ viewport الحقيقي
+ * بالبكسل (مش 100vh). الهدف: نطبّق `transform: scale()` بس على حاوية
+ * محددة (مش على الـ <html> كله زي ما كنا بنعمل بـ CSS `zoom`)، ونحسب
+ * ارتفاعها بالبكسل الحقيقي مباشرة، فمفيش أي تعارض بين 100vh و zoom
+ * ممكن يسيب شريط فاضي أو يقطع حاجة — لأن مفيش 100vh مستخدمة أصلًا هنا،
+ * كل حاجة بتتحسب بالبكسل الفعلي مباشرة من window.innerWidth/innerHeight.
+ */
+function useAppScale() {
+  const [dims, setDims] = React.useState({ width: 0, height: 0, scale: 1 })
+
+  React.useEffect(() => {
+    const compute = () => {
+      const width = window.innerWidth
+      const height = window.innerHeight
+      let scale = 1
+      if (width <= 1280) scale = 0.8
+      else if (width <= 1536) scale = 0.9
+      setDims({ width, height, scale })
+    }
+    compute()
+    window.addEventListener('resize', compute)
+    return () => window.removeEventListener('resize', compute)
+  }, [])
+
+  return dims
+}
+
 /* ---------------- Main App ---------------- */
 
 function MainApp() {
@@ -315,6 +443,7 @@ function MainApp() {
     loading: true,
     expired: false,
   })
+  const { width: viewportWidth, height: viewportHeight, scale } = useAppScale()
 
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN'
 
@@ -407,8 +536,28 @@ function MainApp() {
     return <SubscriptionExpiredScreen />
   }
 
+  // بيولّد أنماط الحاوية الخارجية (بتاخد حجم الشاشة الحقيقي بالبكسل، وتقص
+  // أي حاجة زايدة بعد التصغير) والحاوية الداخلية (بتاخد حجم أكبر
+  // بمقدار 1/scale، وبعدين تتصغر بـ transform عشان ترجع تملى بالظبط حجم
+  // الحاوية الخارجية — من غير أي استخدام لـ 100vh أو zoom خالص، فمفيش
+  // فرصة لتعارض الوحدات اللي كان بيسبب القطع/الشريط الفاضي قبل كده).
+  const outerStyle: React.CSSProperties =
+    viewportWidth > 0
+      ? { width: viewportWidth, height: viewportHeight, overflow: 'hidden' }
+      : {}
+  const innerStyle: React.CSSProperties =
+    viewportWidth > 0 && scale !== 1
+      ? {
+          width: viewportWidth / scale,
+          height: viewportHeight / scale,
+          transform: `scale(${scale})`,
+          transformOrigin: 'top right',
+        }
+      : {}
+
   return (
-    <div className="flex h-screen flex-col bg-background overflow-hidden">
+    <div style={outerStyle}>
+    <div className="flex h-screen flex-col bg-background overflow-hidden" style={innerStyle}>
       <ImpersonationBanner />
       <SubscriptionWarningBanner />
 
@@ -454,9 +603,6 @@ function MainApp() {
           {/* الساعة والتاريخ الحيّين — مقاسها مضبوط على ارتفاع التولبار (h-14) */}
           <LiveClock />
           <div className="flex items-center gap-2">
-            {user && (
-              <span className="text-xs text-muted-foreground">مرحباً، {user.name}</span>
-            )}
             <ThemeToggle />
           </div>
         </header>
@@ -483,6 +629,7 @@ function MainApp() {
         </div>
 
       </div>
+    </div>
     </div>
   )
 }

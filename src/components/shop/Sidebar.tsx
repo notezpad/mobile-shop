@@ -20,11 +20,8 @@ import {
   UserCog,
   LogOut,
   Store,
-  Sun,
-  Moon,
   type LucideIcon,
 } from 'lucide-react'
-import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
 import { useShopStore, type ViewKey } from '@/lib/store'
 
@@ -146,43 +143,6 @@ function ShopAvatar({ logoPath }: { logoPath?: string | null }) {
   )
 }
 
-/* ThemeToggle — light/dark switch.
- *
- * Reads/writes the `class` strategy via next-themes. Renders both icons
- * with CSS-based crossfade so there's no hydration mismatch. */
-function ThemeToggle({ collapsed }: { collapsed?: boolean }) {
-  const { theme, setTheme } = useTheme()
-  const [mounted, setMounted] = React.useState(false)
-  React.useEffect(() => setMounted(true), [])
-
-  const toggle = () => setTheme(theme === 'dark' ? 'light' : 'dark')
-  const isDark = mounted && theme === 'dark'
-
-  if (collapsed) {
-    return (
-      <button
-        type="button"
-        onClick={toggle}
-        title={isDark ? 'الوضع النهاري' : 'الوضع الليلي'}
-        className="size-11 self-center flex items-center justify-center rounded-lg text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-      >
-        {isDark ? <Sun className="size-5" /> : <Moon className="size-5" />}
-      </button>
-    )
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={toggle}
-      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-    >
-      {isDark ? <Sun className="size-5" /> : <Moon className="size-5" />}
-      <span>{isDark ? 'الوضع النهاري' : 'الوضع الليلي'}</span>
-    </button>
-  )
-}
-
 function Brand({ collapsed }: { collapsed?: boolean }) {
   const shopName = useShopStore((s) => s.shopName)
   const logoPath = useShopStore((s) => s.branding?.logoPath)
@@ -196,10 +156,10 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
       <ShopAvatar logoPath={logoPath} />
       {!collapsed && (
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sidebar-foreground font-bold leading-tight tracking-tight">
+          <p className="truncate text-[20px] font-black tracking-wide text-sidebar-foreground">
             {shopName}
           </p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">نظام إدارة المحل</p>
+          <div className="mt-1.5 h-[3px] w-[65%] rounded-full bg-brand-600" />
         </div>
       )}
     </div>
@@ -210,8 +170,6 @@ function SidebarFooter({ collapsed }: { collapsed?: boolean }) {
   const logout = useShopStore((s) => s.logout)
   return (
     <div className="flex flex-col gap-2 px-3 py-3 border-t border-sidebar-border">
-      <ThemeToggle collapsed={collapsed} />
-
       {/* Logout button — destructive tonal, no inline styles.
           Uses destructive-subtle for low-emphasis danger (footer action). */}
       <button

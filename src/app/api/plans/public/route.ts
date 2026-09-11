@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, withDb } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +39,7 @@ export async function GET() {
         trialDays: p.trialDays,
         features: featuresList,
         sortOrder: p.sortOrder,
+        businessType: p.businessType,
       }
     })
 

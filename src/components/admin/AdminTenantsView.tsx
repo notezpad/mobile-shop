@@ -266,7 +266,7 @@ export function AdminTenantsView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" dir="ltr">
               <Table>
                 <TableHeader>
                   <TableRow>

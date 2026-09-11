@@ -21,6 +21,8 @@ interface TenantData {
   commissionVodafoneCash: number
   commissionInstapay: number
   commissionFawry: number
+  wholesaleEnabled: boolean
+  retailEnabled: boolean
 }
 
 export function SettingsView() {
@@ -252,6 +254,45 @@ export function SettingsView() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>خطة الأسعار (جملة / قطاعي)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1 size-4"
+                checked={!!data?.wholesaleEnabled}
+                onChange={(e) => update('wholesaleEnabled', e.target.checked)}
+              />
+              <div>
+                <div className="font-medium">تفعيل البيع بالجملة</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  عند التفعيل يظهر اختيار الوحدة (ربع/نص/دستة/ونص دستة) في نقطة البيع.
+                  عند التعطيل تُخفى الوحدات ويُستخدم سعر القطاعي فقط.
+                </div>
+              </div>
+            </label>
+            <label className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1 size-4"
+                checked={!!data?.retailEnabled}
+                onChange={(e) => update('retailEnabled', e.target.checked)}
+              />
+              <div>
+                <div className="font-medium">تفعيل البيع بالقطاعي</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  السعر القطاعي (price في المنتج) يظهر كسعر بيع القطعة الواحدة.
+                </div>
+              </div>
+            </label>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="flex justify-end">
         <Button size="lg" onClick={save} disabled={saving}>

@@ -82,6 +82,9 @@ function parseFeatures(raw: string | null | undefined): string {
 const CAPABILITIES_META: { key: string; label: string; desc: string }[] = [
   { key: 'multi_unit',       label: 'وحدات الجملة (دستة)',    desc: 'بيع بالجملة — نص دستة / دستة' },
   { key: 'collections',      label: 'الكوليكشن',              desc: 'تجميع المنتجات في كوليكشنات وخصم جماعي' },
+  { key: 'variants',         label: 'الأشكال/المقاسات (Variants)', desc: 'إدارة منتجات بأشكال أو مقاسات متعددة' },
+  { key: 'returns_exchange', label: 'المرتجعات والاستبدال',    desc: 'تسجيل مرتجعات واستبدال الفواتير' },
+  { key: 'loyalty',          label: 'نقاط الولاء',            desc: 'تجميع واستبدال نقاط ولاء العملاء' },
 ]
 
 function parseCaps(raw: string | null | undefined): string[] {

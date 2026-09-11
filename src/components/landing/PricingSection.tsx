@@ -1,14 +1,15 @@
 'use client'
 
 import * as React from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Check, Sparkles, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { AuthMode } from './AuthModal'
 import { api } from '@/lib/api'
+import { useVertical, VERTICAL_META, FALLBACK_PLANS, type LandingPlan, type Vertical } from './vertical-context'
 
-interface PublicPlan {
+interface ApiPlan {
   id: number
   code: string
   name: string
@@ -21,141 +22,59 @@ interface PublicPlan {
   trialDays: number
   features: string[]
   sortOrder: number
+  businessType?: string
 }
-
-/* Static fallback so the page always looks great even if DB is empty */
-const FALLBACK_PLANS: PublicPlan[] = [
-  {
-    id: 0,
-    code: 'trial',
-    name: 'الباقة التجريبية',
-    description: 'جرّب كل المزايا مجاناً',
-    priceMonthly: 0,
-    priceYearly: 0,
-    maxUsers: 1,
-    maxProducts: 50,
-    maxBranches: 1,
-    trialDays: 14,
-    features: ['حتى 50 منتج', 'مستخدم واحد', 'كل المزايا الأساسية', 'دعم عبر البريد'],
-    sortOrder: 0,
-  },
-  {
-    id: 0,
-    code: 'pro',
-    name: 'الباقة الاحترافية',
-    description: 'مثالية للمحلات الصغيرة والمتوسطة',
-    priceMonthly: 99,
-    priceYearly: 1090,
-    maxUsers: 5,
-    maxProducts: 500,
-    maxBranches: 1,
-    trialDays: 0,
-    features: [
-      'حتى 500 منتج',
-      '5 مستخدمين',
-      'تقارير متقدمة',
-      'دعم فني بالبريد',
-      'نقطة بيع + صيانة + عملاء',
-    ],
-    sortOrder: 1,
-  },
-  {
-    id: 0,
-    code: 'business',
-    name: 'باقة الأعمال',
-    description: 'للمحلات متعددة الفروع',
-    priceMonthly: 299,
-    priceYearly: 3290,
-    maxUsers: 20,
-    maxProducts: 5000,
-    maxBranches: 3,
-    trialDays: 0,
-    features: [
-      'حتى 5000 منتج',
-      '20 مستخدم',
-      '3 فروع',
-      'دعم أولوية',
-      'تقارير مخصصة',
-    ],
-    sortOrder: 2,
-  },
-  {
-    id: 0,
-    code: 'enterprise',
-    name: 'باقة المؤسسات',
-    description: 'للشركات والسلاسل الكبيرة',
-    priceMonthly: 999,
-    priceYearly: 10990,
-    maxUsers: 999,
-    maxProducts: 999999,
-    maxBranches: 10,
-    trialDays: 0,
-    features: [
-      'منتجات غير محدودة',
-      'مستخدمين غير محدودين',
-      '10 فروع',
-      'دعم مخصص 24/7',
-      'API وتكاملات',
-    ],
-    sortOrder: 3,
-  },
-]
 
 interface PricingSectionProps {
   onOpenAuth: (mode: AuthMode) => void
 }
 
 export function PricingSection({ onOpenAuth }: PricingSectionProps) {
+  const { vertical } = useVertical()
+  const meta = VERTICAL_META[vertical]
   const [yearly, setYearly] = React.useState(false)
-  const [plans, setPlans] = React.useState<PublicPlan[] | null>(null)
-  const [loading, setLoading] = React.useState(true)
+  const [plans, setPlans] = React.useState<LandingPlan[]>(FALLBACK_PLANS)
 
   React.useEffect(() => {
     let alive = true
-    api<{ items: PublicPlan[] }>('/api/plans/public')
+    api<{ items: ApiPlan[] }>('/api/plans/public')
       .then((data) => {
         if (!alive) return
         const items = data?.items
-        if (Array.isArray(items) && items.length > 0) {
-          // Merge with fallback to ensure all 4 standard codes exist
-          const merged: PublicPlan[] = []
-          for (const fb of FALLBACK_PLANS) {
-            const fromApi = items.find((p) => p.code === fb.code)
-            if (fromApi) {
-              merged.push({
-                ...fromApi,
-                features:
-                  fromApi.features && fromApi.features.length > 0
-                    ? fromApi.features
-                    : fb.features,
-              })
-            } else {
-              merged.push(fb)
-            }
+        if (!Array.isArray(items) || items.length === 0) return
+        // Merge live DB data over the fallback, matched by `code`, so the
+        // page always shows the correct 4 plans even if the DB is missing one.
+        const merged = FALLBACK_PLANS.map((fb) => {
+          const fromApi = items.find((p) => p.code === fb.code)
+          if (!fromApi) return fb
+          return {
+            ...fb,
+            name: fromApi.name || fb.name,
+            description: fromApi.description || fb.description,
+            priceMonthly: fromApi.priceMonthly ?? fb.priceMonthly,
+            priceYearly: fromApi.priceYearly ?? fb.priceYearly,
+            maxUsers: fromApi.maxUsers ?? fb.maxUsers,
+            maxProducts: fromApi.maxProducts ?? fb.maxProducts,
+            maxBranches: fromApi.maxBranches ?? fb.maxBranches,
+            features: fromApi.features?.length ? fromApi.features : fb.features,
+            businessType: (fromApi.businessType as Vertical) || fb.businessType,
           }
-          setPlans(merged)
-        } else {
-          setPlans(FALLBACK_PLANS)
-        }
+        })
+        setPlans(merged)
       })
       .catch(() => {
-        if (alive) setPlans(FALLBACK_PLANS)
-      })
-      .finally(() => {
-        if (alive) setLoading(false)
+        /* keep fallback plans — page always looks complete */
       })
     return () => {
       alive = false
     }
   }, [])
 
-  const handleContact = () => {
-    window.location.href = 'mailto:sales@shop-system.eg?subject=' + encodeURIComponent('استفسار عن باقة المؤسسات')
-  }
+  const visiblePlans = plans.filter((p) => p.businessType === vertical)
 
   return (
-    <section id="pricing" className="scroll-mt-24 border-y bg-muted/30 py-20 sm:py-24">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <section id="pricing" className="landing-dark relative scroll-mt-24 border-y border-white/5 py-20 sm:py-24">
+      <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">
           <motion.span
@@ -163,38 +82,34 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.4 }}
-            className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"
+            className="lg-eyebrow justify-center"
           >
-            الأسعار
+            الأسعار · {meta.label}
           </motion.span>
           <motion.h2
             initial={{ opacity: 0, y: 14 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mt-4 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl lg:text-5xl"
+            className="mt-4 font-black tracking-tight text-white"
+            style={{ fontSize: 'clamp(1.6rem, 3.4vw, 2.9rem)', lineHeight: 1.2 }}
           >
-            باقات تناسب كل المحلات
+            باقتان تناسبان كل حجم محل
           </motion.h2>
           <motion.p
             initial={{ opacity: 0, y: 14 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="mt-4 text-base text-muted-foreground sm:text-lg"
+            className="mx-auto mt-4 max-w-xl text-lg leading-[1.7] lg-muted"
           >
-            ابدأ مجاناً، اختر الباقة المناسبة عند نموّك. بدون عقود، ألغِ في أي وقت.
+            ابدأ مجاناً 14 يوم، اختر الباقة المناسبة عند نموّك. بدون عقود، ألغِ في أي وقت.
           </motion.p>
         </div>
 
         {/* Billing toggle */}
         <div className="mb-10 flex items-center justify-center gap-3">
-          <span
-            className={
-              'text-sm font-medium transition-colors ' +
-              (!yearly ? 'text-foreground' : 'text-muted-foreground')
-            }
-          >
+          <span className={'text-sm font-medium transition-colors ' + (!yearly ? 'text-white' : 'lg-muted')}>
             شهري
           </span>
           <button
@@ -204,57 +119,53 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
             onClick={() => setYearly((v) => !v)}
             className={
               'relative h-7 w-12 rounded-full transition-colors ' +
-              (yearly ? 'bg-primary' : 'bg-muted-foreground/30')
+              (yearly ? 'bg-gradient-to-l from-brand-500 to-brand-700' : 'bg-white/15')
             }
           >
             <span
               className={
-                'absolute top-1 size-5 rounded-full bg-background shadow transition-all ' +
+                'absolute top-1 size-5 rounded-full bg-white shadow transition-all ' +
                 (yearly ? 'left-1' : 'right-1')
               }
             />
           </button>
           <div className="flex items-center gap-2">
-            <span
-              className={
-                'text-sm font-medium transition-colors ' +
-                (yearly ? 'text-foreground' : 'text-muted-foreground')
-              }
-            >
+            <span className={'text-sm font-medium transition-colors ' + (yearly ? 'text-white' : 'lg-muted')}>
               سنوي
             </span>
-            <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-bold text-primary">
+            <span className="rounded-full bg-brand-500/15 px-2 py-0.5 text-[10px] font-bold text-brand-300">
               وفّر شهرين
             </span>
           </div>
         </div>
 
-        {/* Plans grid */}
-        {loading ? (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-[420px] rounded-2xl" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {(plans ?? FALLBACK_PLANS).map((plan, i) => (
-              <PlanCard
-                key={plan.code}
-                plan={plan}
-                yearly={yearly}
-                onOpenAuth={onOpenAuth}
-                onContact={handleContact}
-                index={i}
-              />
-            ))}
-          </div>
-        )}
+        {/* Plans grid — always 2 plans per vertical (basic / pro) */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={vertical}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mx-auto grid max-w-3xl grid-cols-1 gap-6 sm:grid-cols-2"
+          >
+            {visiblePlans.length === 0
+              ? [0, 1].map((i) => <Skeleton key={i} className="h-[420px] rounded-2xl" />)
+              : visiblePlans.map((plan, i) => (
+                  <PlanCard
+                    key={plan.code}
+                    plan={plan}
+                    yearly={yearly}
+                    onOpenAuth={onOpenAuth}
+                    index={i}
+                  />
+                ))}
+          </motion.div>
+        </AnimatePresence>
 
         {/* Below grid note */}
-        <p className="mt-10 text-center text-xs text-muted-foreground sm:text-sm">
-          كل الباقات تشمل: تحديثات مجانية | نسخ احتياطي يومي | أمان عالي | بدون رسوم
-          خفية
+        <p className="mt-10 text-center text-xs lg-muted sm:text-sm">
+          كل الباقات تشمل: تحديثات مجانية · نسخ احتياطي يومي · أمان عالي · بدون رسوم خفية
         </p>
       </div>
     </section>
@@ -265,43 +176,17 @@ function PlanCard({
   plan,
   yearly,
   onOpenAuth,
-  onContact,
   index,
 }: {
-  plan: PublicPlan
+  plan: LandingPlan
   yearly: boolean
   onOpenAuth: (mode: AuthMode) => void
-  onContact: () => void
   index: number
 }) {
-  const isTrial = plan.code === 'trial'
-  const isPro = plan.code === 'pro'
-  const isEnterprise = plan.code === 'enterprise'
-
   const price = yearly ? plan.priceYearly : plan.priceMonthly
-  const periodLabel = isTrial
-    ? '14 يوم'
-    : yearly
-      ? 'ج.م/سنة'
-      : 'ج.م/شهر'
-
-  const priceDisplay = isTrial
-    ? 'مجاناً'
-    : price.toLocaleString('ar-EG', { maximumFractionDigits: 0 })
-
-  const handleCTA = () => {
-    if (isEnterprise) {
-      onContact()
-    } else {
-      onOpenAuth('signup')
-    }
-  }
-
-  const ctaLabel = isTrial
-    ? 'ابدأ مجاناً'
-    : isEnterprise
-      ? 'تواصل معنا'
-      : 'اشترك الآن'
+  const periodLabel = yearly ? 'ج.م/سنة' : 'ج.م/شهر'
+  const priceDisplay = price.toLocaleString('ar-EG', { maximumFractionDigits: 0 })
+  const savings = plan.priceMonthly * 12 - plan.priceYearly
 
   return (
     <motion.div
@@ -310,97 +195,64 @@ function PlanCard({
       viewport={{ once: true, margin: '-60px' }}
       transition={{ duration: 0.45, delay: index * 0.08 }}
       className={
-        'relative flex flex-col rounded-2xl border bg-card p-6 transition-all duration-300 ' +
-        (isPro
-          ? 'border-primary shadow-xl shadow-primary/15 lg:scale-[1.04] lg:-translate-y-2'
-          : 'border-border/70 shadow-sm hover:border-primary/40 hover:shadow-md')
+        'relative flex flex-col rounded-2xl p-7 transition-all duration-300 ' +
+        (plan.isPro
+          ? 'glass-panel-strong shadow-xl shadow-brand-600/10 sm:scale-[1.03]'
+          : 'glass-card')
       }
     >
-      {/* Ribbon for Pro */}
-      {isPro && (
-        <div className="absolute -top-3 right-1/2 flex translate-x-1/2 items-center gap-1 rounded-full bg-gradient-to-l from-primary to-emerald-600 px-3 py-1 text-[10px] font-bold text-primary-foreground shadow-md">
-          <Star className="size-3 fill-current" />
-          🔥 الأكثر شعبية
+      {plan.isPro && (
+        <div className="absolute -top-3 right-1/2 flex translate-x-1/2 items-center gap-1 rounded-full bg-gradient-to-l from-brand-500 to-brand-700 px-3.5 py-1.5 text-xs font-bold text-white shadow-md">
+          <Star className="size-3.5 fill-current" />
+          🔥 الأكثر طلباً
         </div>
       )}
 
-      {/* Plan header */}
       <div className="mb-4">
-        <h3
-          className={
-            'text-lg font-bold ' + (isPro ? 'text-primary' : 'text-foreground')
-          }
-        >
-          {plan.name}
+        <h3 className={'text-xl font-extrabold ' + (plan.isPro ? 'text-brand-300' : 'text-white')}>
+          باقة {plan.name}
         </h3>
-        {plan.description && (
-          <p className="mt-1 text-xs text-muted-foreground">{plan.description}</p>
-        )}
+        <p className="mt-1.5 text-sm lg-muted">{plan.description}</p>
       </div>
 
-      {/* Price */}
       <div className="mb-1 flex items-end gap-1">
-        <span
-          className={
-            'text-4xl font-extrabold tracking-tight ' +
-            (isTrial ? 'text-primary' : 'text-foreground')
-          }
-        >
-          {priceDisplay}
-        </span>
-        {!isTrial && (
-          <span className="mb-1 text-xs text-muted-foreground">{periodLabel}</span>
-        )}
+        <span className="text-5xl font-black tracking-tight text-white">{priceDisplay}</span>
+        <span className="mb-1.5 text-sm lg-muted">{periodLabel}</span>
       </div>
-      {isTrial && (
-        <p className="mb-1 text-xs text-muted-foreground">لمدة {periodLabel}</p>
-      )}
-      {yearly && !isTrial && (
-        <p className="mb-3 text-[10px] text-primary">
-          يوفّر{' '}
-          {(plan.priceMonthly * 12 - plan.priceYearly).toLocaleString('ar-EG', {
-            maximumFractionDigits: 0,
-          })}{' '}
-          ج.م سنوياً
+      {yearly && savings > 0 && (
+        <p className="mb-3 text-xs font-semibold text-brand-300">
+          يوفّر {savings.toLocaleString('ar-EG', { maximumFractionDigits: 0 })} ج.م سنوياً
         </p>
       )}
 
-      {/* CTA */}
       <Button
-        onClick={handleCTA}
-        variant={isTrial || isEnterprise ? 'outline' : 'default'}
+        onClick={() => onOpenAuth('signup')}
         className={
-          'mb-5 mt-3 w-full gap-1.5 ' +
-          (isPro ? 'shadow-md shadow-primary/30' : '')
+          'mb-5 mt-3 h-12 w-full gap-1.5 rounded-xl text-base font-bold text-white ' +
+          (plan.isPro
+            ? 'bg-gradient-to-l from-brand-500 to-brand-700 shadow-md shadow-brand-600/30 hover:from-brand-400 hover:to-brand-600'
+            : 'border border-white/15 bg-white/5 hover:bg-white/10')
         }
       >
-        {!isTrial && !isEnterprise && <Sparkles className="size-4" />}
-        {ctaLabel}
+        <Sparkles className="size-4" />
+        ابدأ تجربتك المجانية
       </Button>
 
-      {/* Features */}
-      <ul className="mt-auto space-y-2.5">
-        {plan.features.map((f, i) => (
-          <li key={i} className="flex items-start gap-2 text-xs">
-            <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-              <Check className="size-3" />
+      <ul className="mt-auto space-y-3">
+        {plan.features.map((f) => (
+          <li key={f} className="flex items-start gap-2.5 text-sm">
+            <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-300">
+              <Check className="size-3.5" />
             </span>
-            <span className="text-foreground/85">{f}</span>
+            <span className="text-white/85">{f}</span>
           </li>
         ))}
       </ul>
 
-      {/* Plan limits footer */}
-      <div className="mt-5 flex flex-wrap gap-2 border-t pt-4 text-[10px] text-muted-foreground">
-        <span className="rounded-md bg-muted/60 px-2 py-0.5">
-          {plan.maxUsers === 999 ? '∞' : plan.maxUsers} مستخدم
-        </span>
-        <span className="rounded-md bg-muted/60 px-2 py-0.5">
-          {plan.maxProducts >= 999999 ? '∞' : plan.maxProducts} منتج
-        </span>
-        <span className="rounded-md bg-muted/60 px-2 py-0.5">
-          {plan.maxBranches >= 10 ? '10+' : plan.maxBranches} فرع
-        </span>
+      <div className="mt-5 flex flex-wrap gap-2 border-t border-white/10 pt-4 text-xs lg-muted">
+        <span className="rounded-md bg-white/5 px-2.5 py-1">{plan.maxUsers} مستخدم</span>
+        <span className="rounded-md bg-white/5 px-2.5 py-1">{plan.maxProducts.toLocaleString('ar-EG')} منتج</span>
+        <span className="rounded-md bg-white/5 px-2.5 py-1">{plan.maxBranches} فرع</span>
       </div>
     </motion.div>
   )

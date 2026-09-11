@@ -283,12 +283,12 @@ export function FinanceView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" dir="ltr">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10 text-center">#</TableHead>
-                    <TableHead className="w-36">التاريخ</TableHead>
+                    <TableHead className="w-52">التاريخ</TableHead>
                     <TableHead className="w-32">الوسيلة</TableHead>
                     <TableHead className="w-28">بواسطة</TableHead>
                     <TableHead className="w-24 text-center">النوع</TableHead>

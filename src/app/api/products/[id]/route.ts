@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { ensureCategory } from '../route'
 
@@ -92,8 +92,30 @@ export async function PUT(
             ? parseInt(body.branchId, 10) || null
             : null
           : existing.branchId,
+      // collection — اسم الكوليكشن لميزة الخصم الجماعي (فاشون فقط)
+      collection:
+        body.collection !== undefined
+          ? body.collection
+            ? String(body.collection).trim() || null
+            : null
+          : existing.collection,
     },
   })
+  // عند تغيير سعر البيع: إعادة حساب أسعار الوحدات تلقائياً (سعر × factor).
+  // يمكن تعطيلها بإرسال recomputeUnitPrices=false.
+  const shouldRecompute =
+    price !== existing.price && body.recomputeUnitPrices !== false
+  if (shouldRecompute) {
+    const units = await db.productUnit.findMany({ where: { productId: pid } })
+    await Promise.all(
+      units.map((u) =>
+        db.productUnit.update({
+          where: { id: u.id },
+          data: { price: Number((price * u.factor).toFixed(2)) },
+        }),
+      ),
+    )
+  }
   return NextResponse.json(updated)
 }
 

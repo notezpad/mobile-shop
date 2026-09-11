@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
@@ -25,6 +25,8 @@ export async function GET() {
       commissionVodafoneCash: true,
       commissionInstapay: true,
       commissionFawry: true,
+      wholesaleEnabled: true,
+      retailEnabled: true,
     },
   })
   if (!tenant) {
@@ -63,6 +65,10 @@ export async function PUT(req: NextRequest) {
     data.commissionInstapay = Number(body.commissionInstapay) || 0
   if (body.commissionFawry !== undefined)
     data.commissionFawry = Number(body.commissionFawry) || 0
+  if (body.wholesaleEnabled !== undefined)
+    data.wholesaleEnabled = Boolean(body.wholesaleEnabled)
+  if (body.retailEnabled !== undefined)
+    data.retailEnabled = Boolean(body.retailEnabled)
 
   const updated = await db.tenant.update({
     where: { id: session.tenantId },
@@ -77,6 +83,8 @@ export async function PUT(req: NextRequest) {
       commissionVodafoneCash: true,
       commissionInstapay: true,
       commissionFawry: true,
+      wholesaleEnabled: true,
+      retailEnabled: true,
     },
   })
   return NextResponse.json(updated)

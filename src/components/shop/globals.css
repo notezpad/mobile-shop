@@ -1,0 +1,845 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================
+   نظام المحل — Design System 2026
+   Style: Emerald Premium (Bento Modern)
+   Palette: Emerald (primary) + Amber (accent) + Zinc (neutral)
+   Verticals: Electronics + Fashion (wholesale + retail)
+   ============================================================ */
+
+@theme inline {
+  /* === Fonts === */
+  --font-sans: var(--font-cairo);
+  --font-mono: var(--font-cairo);
+
+  /* === Brand Scale — Emerald (11 stops) ===
+     Used for: primary actions, active states, success indicators,
+     chart primary series, brand gradients. The emerald hue (162°)
+     conveys growth + trust + Egyptian market familiarity. */
+  --color-brand-50: oklch(0.97 0.02 162);
+  --color-brand-100: oklch(0.94 0.04 162);
+  --color-brand-200: oklch(0.89 0.08 162);
+  --color-brand-300: oklch(0.83 0.12 162);
+  --color-brand-400: oklch(0.74 0.16 162);
+  --color-brand-500: oklch(0.65 0.17 162);
+  --color-brand-600: oklch(0.57 0.18 162);
+  --color-brand-700: oklch(0.48 0.16 162);
+  --color-brand-800: oklch(0.40 0.14 162);
+  --color-brand-900: oklch(0.33 0.11 162);
+  --color-brand-950: oklch(0.26 0.07 162);
+
+  /* === Accent Scale — Amber/Gold (5 stops) ===
+     Used for: highlights, premium badges, wholesale tags,
+     secondary chart series, B2B accents. Provides warm contrast
+     against emerald's cool tone. */
+  --color-accent-50: oklch(0.97 0.03 80);
+  --color-accent-100: oklch(0.94 0.06 80);
+  --color-accent-200: oklch(0.89 0.10 80);
+  --color-accent-300: oklch(0.83 0.14 80);
+  --color-accent-400: oklch(0.78 0.16 80);
+  --color-accent-500: oklch(0.72 0.17 70);
+  --color-accent-600: oklch(0.63 0.17 60);
+
+  /* === Status Colors ===
+     These now point at plain --success/--warning/--info/--danger variables
+     (defined per-mode below in :root and .dark), the same indirection
+     pattern already used for --destructive. Previously these were
+     hardcoded oklch values right here in @theme — a single value shared
+     by both light AND dark mode — so status badges, KPI icons, and the
+     "الوقت" time pill on the dashboard used light-mode-tuned dark text on
+     a light-mode-tuned pale background, which reads as invisible/near-
+     black-on-black once the page switches to the dark background. */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-subtle-foreground: var(--success-subtle-foreground);
+
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-subtle-foreground: var(--warning-subtle-foreground);
+
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-danger-subtle-foreground: var(--danger-subtle-foreground);
+
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-subtle-foreground: var(--info-subtle-foreground);
+
+  /* === Accent2 scale — alias of the amber "accent" scale ===
+     Lots of components (rank badges, gradient buttons/badges, star
+     ratings) use accent2-50..600 utility classes, but this project's
+     Tailwind v4 setup only reads tokens from this @theme block (the old
+     tailwind.config.ts "accent2" entry is dead — nothing wires it in
+     without an @config directive). With no --color-accent2-* variables
+     defined, every accent2-* class silently resolved to nothing, which
+     is why the gold/silver/bronze rank badges and some buttons showed up
+     uncolored/blank instead of amber. */
+  --color-accent2-50: var(--color-accent-50);
+  --color-accent2-100: var(--color-accent-100);
+  --color-accent2-200: var(--color-accent-200);
+  --color-accent2-300: var(--color-accent-300);
+  --color-accent2-400: var(--color-accent-400);
+  --color-accent2-500: var(--color-accent-500);
+  --color-accent2-600: var(--color-accent-600);
+
+  /* === Radius Scale (7 levels) === */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-3xl: 32px;
+
+  /* === Motion Tokens ===
+     Spring easing for tactile interactions (cards, dialogs).
+     Out easing for state transitions (hover, focus).
+     InOut for layout shifts. */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --duration-slow: 380ms;
+
+  /* === Shadow Tokens (Bento Layered) ===
+     Five levels for depth hierarchy:
+     xs: borders-only cards
+     sm: standard cards
+     md: bento cards on hover
+     lg: dropdowns, popovers
+     xl: dialogs, sheets
+     glow: primary-action focus halo */
+  --shadow-xs: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+  --shadow-sm: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.06);
+  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 6px -2px rgb(15 23 42 / 0.05);
+  --shadow-lg: 0 12px 32px -4px rgb(15 23 42 / 0.10), 0 4px 12px -2px rgb(15 23 42 / 0.06);
+  --shadow-xl: 0 24px 56px -8px rgb(15 23 42 / 0.14), 0 8px 24px -4px rgb(15 23 42 / 0.08);
+  --shadow-glow: 0 0 0 1px oklch(0.57 0.18 162 / 0.10), 0 8px 24px -6px oklch(0.57 0.18 162 / 0.25);
+
+  /* === Map semantic tokens to Tailwind color utilities === */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-card-muted: var(--card-muted);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-subtle-foreground: var(--primary-subtle-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-subtle: var(--destructive-subtle);
+  --color-destructive-subtle-foreground: var(--destructive-subtle-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-input-hover: var(--input-hover);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Radius aliases for tailwind utilities */
+  --radius-sm: var(--radius-xs);
+  --radius-md: var(--radius-sm);
+  --radius-lg: var(--radius-md);
+  --radius-xl: var(--radius-lg);
+}
+
+/* ============================================================
+   LIGHT THEME — Emerald Premium
+   Background: warm off-white (slight yellow undertone for warmth)
+   Foreground: deep emerald-tinted dark
+   Primary: brand-600 (vibrant emerald, works on both verticals)
+   ============================================================ */
+:root {
+  --radius: 0.75rem;
+
+  --background: oklch(0.99 0.003 95);
+  --background-subtle: oklch(0.97 0.005 95);
+  --background-muted: oklch(0.94 0.007 95);
+  --foreground: oklch(0.21 0.02 162);
+  --foreground-muted: oklch(0.45 0.015 162);
+  --foreground-subtle: oklch(0.62 0.01 162);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.02 162);
+  --card-muted: oklch(0.97 0.005 95);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.02 162);
+
+  --primary: oklch(0.57 0.18 162);
+  --primary-foreground: oklch(0.99 0 0);
+  --primary-hover: oklch(0.48 0.16 162);
+  --primary-subtle: oklch(0.95 0.04 162);
+  --primary-subtle-foreground: oklch(0.42 0.14 162);
+
+  --secondary: oklch(0.96 0.005 95);
+  --secondary-foreground: oklch(0.28 0.015 162);
+
+  --muted: oklch(0.96 0.005 95);
+  --muted-foreground: oklch(0.52 0.012 162);
+
+  --accent: oklch(0.95 0.05 80);
+  --accent-foreground: oklch(0.40 0.13 70);
+
+  --destructive: oklch(0.60 0.22 27);
+  --destructive-foreground: oklch(0.99 0 0);
+  --destructive-subtle: oklch(0.95 0.04 27);
+  --destructive-subtle-foreground: oklch(0.50 0.20 27);
+
+  /* Status colors — light mode (same values the old hardcoded
+     @theme block used, just moved here so .dark can override them) */
+  --success: oklch(0.62 0.17 152);
+  --success-foreground: oklch(0.99 0 0);
+  --success-subtle: oklch(0.95 0.04 152);
+  --success-subtle-foreground: oklch(0.42 0.14 152);
+
+  --warning: oklch(0.75 0.16 70);
+  --warning-foreground: oklch(0.20 0.02 70);
+  --warning-subtle: oklch(0.95 0.06 80);
+  --warning-subtle-foreground: oklch(0.50 0.16 70);
+
+  --danger: oklch(0.60 0.22 27);
+  --danger-foreground: oklch(0.99 0 0);
+  --danger-subtle: oklch(0.95 0.04 27);
+  --danger-subtle-foreground: oklch(0.50 0.20 27);
+
+  --info: oklch(0.62 0.16 240);
+  --info-foreground: oklch(0.99 0 0);
+  --info-subtle: oklch(0.95 0.04 240);
+  --info-subtle-foreground: oklch(0.45 0.16 240);
+
+  --border: oklch(0.92 0.005 95);
+  --border-strong: oklch(0.86 0.008 95);
+  --input: oklch(0.92 0.005 95);
+  --input-hover: oklch(0.86 0.008 95);
+  --ring: oklch(0.57 0.18 162 / 0.5);
+
+  /* Chart palette — 6 colors for multi-series data viz */
+  --chart-1: oklch(0.57 0.18 162);
+  --chart-2: oklch(0.72 0.17 70);
+  --chart-3: oklch(0.62 0.16 240);
+  --chart-4: oklch(0.70 0.15 320);
+  --chart-5: oklch(0.60 0.22 27);
+  --chart-6: oklch(0.70 0.15 200);
+
+  /* Sidebar — slightly tinted with primary for warmth */
+  --sidebar: oklch(0.985 0.005 95);
+  --sidebar-foreground: oklch(0.21 0.02 162);
+  --sidebar-primary: oklch(0.57 0.18 162);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.95 0.04 162);
+  --sidebar-accent-foreground: oklch(0.42 0.14 162);
+  --sidebar-border: oklch(0.92 0.005 95);
+  --sidebar-ring: oklch(0.57 0.18 162 / 0.5);
+}
+
+/* ============================================================
+   DARK THEME — Neutral Dark (Zinc-based)
+   Backgrounds and surfaces are NEUTRAL (no green tint) so the
+   emerald primary reads as an accent, not as the entire palette.
+   The previous version tinted everything green which felt "off"
+   — a proper dark mode uses neutral grays and reserves color
+   for primary actions and status indicators only.
+   ============================================================ */
+.dark {
+  /* Neutral backgrounds (chroma 0.003 ≈ perceptually gray) */
+  --background: oklch(0.16 0.003 264);
+  --background-subtle: oklch(0.19 0.004 264);
+  --background-muted: oklch(0.22 0.005 264);
+  --foreground: oklch(0.96 0.003 264);
+  --foreground-muted: oklch(0.72 0.008 264);
+  --foreground-subtle: oklch(0.55 0.008 264);
+
+  --card: oklch(0.20 0.004 264);
+  --card-foreground: oklch(0.96 0.003 264);
+  --card-muted: oklch(0.23 0.005 264);
+
+  --popover: oklch(0.20 0.004 264);
+  --popover-foreground: oklch(0.96 0.003 264);
+
+  /* Primary stays emerald — this is the ONLY green in dark mode */
+  --primary: oklch(0.74 0.16 162);
+  --primary-foreground: oklch(0.16 0.02 162);
+  --primary-hover: oklch(0.80 0.14 162);
+  --primary-subtle: oklch(0.28 0.04 162);
+  --primary-subtle-foreground: oklch(0.80 0.14 162);
+
+  --secondary: oklch(0.26 0.005 264);
+  --secondary-foreground: oklch(0.93 0.005 264);
+
+  --muted: oklch(0.26 0.005 264);
+  --muted-foreground: oklch(0.65 0.008 264);
+
+  /* Accent (amber) — also a real color, used sparingly */
+  --accent: oklch(0.32 0.05 70);
+  --accent-foreground: oklch(0.85 0.13 70);
+
+  /* Status colors — brighter base + dark "subtle" bg + light "subtle"
+     text, so pills/badges keep proper contrast on the dark background
+     instead of reusing the light-mode dark-green-on-pale-green combo. */
+  --destructive: oklch(0.68 0.22 27);
+  --destructive-foreground: oklch(0.99 0 0);
+  --destructive-subtle: oklch(0.30 0.06 27);
+  --destructive-subtle-foreground: oklch(0.80 0.16 27);
+
+  --success: oklch(0.70 0.16 152);
+  --success-foreground: oklch(0.16 0.02 152);
+  --success-subtle: oklch(0.30 0.06 152);
+  --success-subtle-foreground: oklch(0.80 0.14 152);
+
+  --warning: oklch(0.78 0.15 70);
+  --warning-foreground: oklch(0.20 0.02 70);
+  --warning-subtle: oklch(0.32 0.07 70);
+  --warning-subtle-foreground: oklch(0.82 0.14 70);
+
+  --info: oklch(0.72 0.15 240);
+  --info-foreground: oklch(0.16 0.02 240);
+  --info-subtle: oklch(0.30 0.06 240);
+  --info-subtle-foreground: oklch(0.80 0.14 240);
+
+  /* Borders neutral */
+  --border: oklch(0.28 0.005 264 / 0.7);
+  --border-strong: oklch(0.36 0.006 264);
+  --input: oklch(0.26 0.005 264);
+  --input-hover: oklch(0.32 0.006 264);
+  --ring: oklch(0.74 0.16 162 / 0.5);
+
+  /* Chart palette — keep colors vivid for data viz on dark bg */
+  --chart-1: oklch(0.74 0.16 162);
+  --chart-2: oklch(0.82 0.14 70);
+  --chart-3: oklch(0.72 0.16 240);
+  --chart-4: oklch(0.78 0.15 320);
+  --chart-5: oklch(0.72 0.20 27);
+  --chart-6: oklch(0.78 0.14 200);
+
+  /* Sidebar — also neutral dark, NOT green-tinted.
+     The green only appears in active states via primary-subtle. */
+  --sidebar: oklch(0.14 0.003 264);
+  --sidebar-foreground: oklch(0.96 0.003 264);
+  --sidebar-primary: oklch(0.74 0.16 162);
+  --sidebar-primary-foreground: oklch(0.16 0.02 162);
+  --sidebar-accent: oklch(0.24 0.005 264);
+  --sidebar-accent-foreground: oklch(0.93 0.005 264);
+  --sidebar-border: oklch(0.26 0.005 264 / 0.7);
+  --sidebar-ring: oklch(0.74 0.16 162 / 0.5);
+}
+
+/* ============================================================
+   BASE LAYER
+   ============================================================ */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "kern" 1, "ss01" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* RTL safety net — force tables and tab panels to inherit the document's
+   * direction. Without this, shadcn/ui's <Table> (which sets text-left on <th>)
+   * and Radix's <TabsContent> (which toggles dir internally) can render LTR
+   * even inside an RTL <html dir="rtl"> document. This causes column headers
+   * to misalign with their data cells. */
+  [dir="rtl"] table,
+  [dir="rtl"] [data-slot="tabs-content"],
+  [dir="rtl"] [data-slot="table-container"] {
+    direction: rtl;
+  }
+
+  /* Replace shadcn's hardcoded `text-left` on <th> with `text-start` so the
+   * header text aligns to the right in RTL contexts. */
+  [dir="rtl"] th:not([class*="text-center"]):not([class*="text-right"]) {
+    text-align: start;
+  }
+
+  /* Fixed-layout tables: ensure the table can grow beyond 100% of its container
+   * when the sum of explicit column widths exceeds the container width. */
+  table[data-slot="table"].table-fixed {
+    width: auto;
+    min-width: 100%;
+  }
+
+  /* Hide number input spinners for cleaner Arabic UI */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  /* Selection */
+  ::selection {
+    background: oklch(0.57 0.18 162 / 0.20);
+    color: var(--foreground);
+  }
+
+  /* Focus visible (Bento ring) */
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+    border-radius: var(--radius-sm);
+  }
+}
+
+/* ============================================================
+   COMPONENTS LAYER — Bento utilities & reusable patterns
+   ============================================================ */
+@layer components {
+  /* === Bento Card Surface ===
+     Used by KPI cards, dashboard cells, premium cards.
+     Adds hover lift + border highlight. */
+  .bento-surface {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-xs);
+    transition: all var(--duration-base) var(--ease-out);
+  }
+  .bento-surface:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--border-strong);
+  }
+
+  /* === Gradient Text ===
+     For hero headings, premium badges, landing CTAs.
+     Uses brand scale 600→400 for an emerald sheen. */
+  .gradient-text {
+    background: linear-gradient(
+      135deg,
+      var(--color-brand-700) 0%,
+      var(--color-brand-500) 50%,
+      var(--color-accent-500) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+
+  /* === Gradient Brand Background ===
+     For hero sections, top promo bars, premium CTA buttons.
+     Diagonal emerald with amber accent at the end. */
+  .gradient-brand {
+    background: linear-gradient(
+      135deg,
+      oklch(0.48 0.16 162) 0%,
+      oklch(0.57 0.18 162) 50%,
+      oklch(0.65 0.17 162) 100%
+    );
+  }
+  .gradient-brand-warm {
+    background: linear-gradient(
+      135deg,
+      oklch(0.48 0.16 162) 0%,
+      oklch(0.57 0.18 162) 40%,
+      oklch(0.72 0.17 70) 100%
+    );
+  }
+
+  /* === Subtle grid background ===
+     For hero sections, auth pages, landing dividers. */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, var(--border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  /* === Glow halo behind cards ===
+     For premium KPI cards on hover.
+     Tracks mouse position via --x, --y CSS vars (set by JS). */
+  .glow-emerald {
+    position: relative;
+  }
+  .glow-emerald::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    background: radial-gradient(
+      400px circle at var(--x, 50%) var(--y, 50%),
+      oklch(0.57 0.18 162 / 0.15),
+      transparent 40%
+    );
+    pointer-events: none;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity var(--duration-slow) var(--ease-out);
+  }
+  .glow-emerald:hover::before {
+    opacity: 1;
+  }
+
+  /* === Animated gradient border ===
+     For premium cards, featured pricing plans, highlight blocks. */
+  .gradient-border {
+    position: relative;
+    background: var(--card);
+    border-radius: var(--radius-lg);
+  }
+  .gradient-border::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    background: linear-gradient(
+      135deg,
+      var(--color-brand-500),
+      transparent 30%,
+      transparent 70%,
+      var(--color-accent-400)
+    );
+    border-radius: inherit;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* === Shimmer skeleton ===
+     For loading states, replaces default shadcn skeleton. */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--muted) 0%,
+      var(--card-muted) 50%,
+      var(--muted) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s infinite;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* === Tabular numbers ===
+     For KPI values, prices, quantities, invoice totals.
+     Prevents digit width jitter when values update. */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  /* === RTL icon flip ===
+     For directional icons (arrows, chevrons) that should
+     mirror in RTL context. */
+  [dir="rtl"] .rtl-flip {
+    transform: scaleX(-1);
+  }
+}
+
+/* ============================================================
+   UTILITIES LAYER — Animation helpers
+   ============================================================ */
+@layer utilities {
+  .animate-in-up {
+    animation: animate-in-up var(--duration-base) var(--ease-out) both;
+  }
+  @keyframes animate-in-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .animate-scale-in {
+    animation: scale-in var(--duration-base) var(--ease-spring) both;
+  }
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .animate-fade {
+    animation: fade var(--duration-slow) var(--ease-out) both;
+  }
+  @keyframes fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Stagger delays for list/card entrance animations */
+  .stagger-1 { animation-delay: 50ms; }
+  .stagger-2 { animation-delay: 100ms; }
+  .stagger-3 { animation-delay: 150ms; }
+  .stagger-4 { animation-delay: 200ms; }
+  .stagger-5 { animation-delay: 250ms; }
+  .stagger-6 { animation-delay: 300ms; }
+}
+
+/* ============================================================
+   CUSTOM SCROLLBAR — Refined 2026
+   Hidden by default, appears on hover with emerald gradient
+   ============================================================ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+}
+
+*:hover,
+*:focus-within {
+  scrollbar-color: oklch(0.57 0.18 162 / 0.4) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background: transparent;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  background-image: none;
+  border-radius: 100px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition:
+    background-color 0.3s ease,
+    background-image 0.3s ease;
+}
+*:hover::-webkit-scrollbar-thumb {
+  background-color: oklch(0.57 0.18 162 / 0.3);
+  background-image: linear-gradient(
+    180deg,
+    oklch(0.65 0.17 162 / 0.4),
+    oklch(0.48 0.16 162 / 0.3)
+  );
+}
+*:hover::-webkit-scrollbar-thumb:hover {
+  background-image: linear-gradient(
+    180deg,
+    oklch(0.65 0.17 162),
+    oklch(0.48 0.16 162)
+  );
+}
+*:hover::-webkit-scrollbar-thumb:active {
+  background-image: linear-gradient(
+    180deg,
+    oklch(0.57 0.18 162),
+    oklch(0.40 0.14 162)
+  );
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ============================================================
+   LANDING PAGE — Solid 2026 (WorkerOS-inspired / Emerald)
+   Scoped utilities used only by the marketing landing + auth
+   pages. Deep solid slate surfaces (no glass/blur), gradient
+   top-borders on cards, punchy emerald brand accents, bigger
+   type scale. Independent of the app's light/dark theme toggle.
+   ============================================================ */
+.landing-dark {
+  color-scheme: dark;
+  font-size: 1.0625rem; /* ↑ base rem bump — everything using rem/em scales up */
+  --lg-bg: #0c0e14;
+  --lg-bg-2: #0f1119;
+  --lg-surface: #1a1d28;
+  --lg-surface-2: #151823;
+  --lg-border: #252836;
+  --lg-border-strong: #3a3d50;
+  --lg-fg: oklch(0.97 0.01 250);
+  --lg-fg-muted: #6b7089;
+  --lg-fg-muted-2: #9da2b5;
+  background: var(--lg-bg);
+  color: var(--lg-fg);
+}
+
+.lg-aurora {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.lg-aurora::before,
+.lg-aurora::after {
+  content: '';
+  position: absolute;
+  width: 60vw;
+  height: 60vw;
+  max-width: 720px;
+  max-height: 720px;
+  border-radius: 999px;
+  filter: blur(90px);
+  opacity: 0.28;
+  animation: lg-pulse 10s ease-in-out infinite;
+}
+.lg-aurora::before {
+  top: -18%;
+  right: -10%;
+  background: radial-gradient(circle, oklch(0.57 0.18 162) 0%, transparent 70%);
+}
+.lg-aurora::after {
+  bottom: -22%;
+  left: -8%;
+  background: radial-gradient(circle, oklch(0.75 0.15 80) 0%, transparent 70%);
+  opacity: 0.18;
+  animation-direction: reverse;
+  animation-duration: 13s;
+}
+@keyframes lg-pulse {
+  0%, 100% { transform: scale(1) translate(0, 0); }
+  50% { transform: scale(1.15) translate(20px, -15px); }
+}
+
+.lg-grid-mask {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle at 1px 1px, oklch(1 0 0 / 0.14) 1px, transparent 0);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 20%, black, transparent);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 20%, black, transparent);
+}
+
+/* === Solid panels (replaces old glass-panel) === */
+.glass-panel {
+  background: linear-gradient(135deg, var(--lg-surface), var(--lg-surface-2));
+  border: 1px solid var(--lg-border);
+}
+.glass-panel-strong {
+  background: linear-gradient(135deg, #21242f, #181b26);
+  border: 1px solid var(--lg-border-strong);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+/* === Solid card (WorkerOS lp-feat-card style) ===
+   Gradient dark surface, subtle border, lifts + glows emerald
+   on hover, top accent line reveals on hover. */
+.glass-card {
+  position: relative;
+  background: linear-gradient(145deg, var(--lg-surface), var(--lg-surface-2));
+  border: 1px solid var(--lg-border);
+  overflow: hidden;
+  transition: border-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+}
+.glass-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, oklch(0.74 0.16 162), oklch(0.74 0.16 162 / 0.3));
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+.glass-card:hover {
+  border-color: var(--lg-border-strong);
+  transform: translateY(-4px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+.glass-pill {
+  display: inline-flex;
+  align-items: center;
+  background: oklch(0.65 0.17 162 / 0.08);
+  border: 1px solid oklch(0.65 0.17 162 / 0.28);
+}
+.glass-nav {
+  background: rgba(12, 14, 20, 0.85);
+  border-bottom: 1px solid var(--lg-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.lg-muted {
+  color: var(--lg-fg-muted-2);
+}
+.lg-border {
+  border-color: var(--lg-border);
+}
+.lg-grad-text {
+  display: inline-block;
+  background: linear-gradient(120deg, oklch(0.83 0.12 162), oklch(0.74 0.16 162), oklch(0.57 0.18 162));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  /* Chromium can corrupt background-clip:text glyphs into broken/invisible
+     shapes when the element sits under a parent with overflow:hidden and
+     is animated via transform (framer-motion). Forcing a dedicated GPU
+     layer + isolating transforms keeps the clipped gradient stable. */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform;
+}
+
+/* === Eyebrow label (small caps line-flanked label above section titles) === */
+.lg-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: oklch(0.74 0.16 162);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+.lg-eyebrow::before,
+.lg-eyebrow::after {
+  content: "";
+  width: 28px;
+  height: 1px;
+  background: oklch(0.74 0.16 162);
+  opacity: 0.5;
+}
+
+/* === Pulsing badge dot (status/live indicator inside pills) === */
+.lg-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: oklch(0.74 0.16 162);
+  animation: lg-blink 1.8s ease-in-out infinite;
+}
+@keyframes lg-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}

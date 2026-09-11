@@ -252,7 +252,7 @@ export function CustomersView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" dir="ltr">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -262,7 +262,7 @@ export function CustomersView() {
                     <TableHead className="w-32 text-center">الرصيد</TableHead>
                     <TableHead className="w-32 text-center">إجمالي المشتريات</TableHead>
                     <TableHead className="w-24 text-center">عدد المبيعات</TableHead>
-                    <TableHead className="w-36">آخر تعامل</TableHead>
+                    <TableHead className="w-52">آخر تعامل</TableHead>
                     <TableHead className="w-32 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>

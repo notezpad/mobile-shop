@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse, hashPassword } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'

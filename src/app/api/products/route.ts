@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { buildDefaultUnitsData } from '@/lib/default-units'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,6 +52,10 @@ export async function GET(req: NextRequest) {
     where.AND.push({ OR: [
       { name: { contains: search } },
       { barcode: { contains: search } },
+      // A scanned/typed code that belongs to a specific color/size (variant
+      // barcode) must still surface the parent product here — otherwise
+      // scanning a variant's own label at the POS finds nothing at all.
+      { variants: { some: { barcode: { contains: search } } } },
     ]})
   }
   if (category && category !== 'all') {
@@ -61,6 +66,24 @@ export async function GET(req: NextRequest) {
     where,
     orderBy: { id: 'desc' },
   })
+
+  // If the search term is an EXACT match for one of this product's variant
+  // barcodes (i.e. someone scanned a specific color/size's own label), tell
+  // the client which variant that is so the POS can add that exact one
+  // straight to the cart instead of asking the cashier to pick again.
+  let matchedVariantByProduct = new Map<number, { id: number; label: string }>()
+  if (search && products.length > 0) {
+    const matchingVariants = await db.productVariant.findMany({
+      where: { productId: { in: products.map((p) => p.id) }, barcode: search },
+      select: { id: true, productId: true, size: true, color: true },
+    })
+    matchedVariantByProduct = new Map(
+      matchingVariants.map((v) => [
+        v.productId,
+        { id: v.id, label: [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}` },
+      ])
+    )
+  }
 
   // إجمالي عدد الوحدات المباعة لكل منتج (من عناصر الفواتير)
   const salesAgg = await db.saleItem.groupBy({
@@ -73,6 +96,8 @@ export async function GET(req: NextRequest) {
   const withSales = products.map((p) => ({
     ...p,
     soldQuantity: soldMap.get(p.id) ?? 0,
+    matchedVariantId: matchedVariantByProduct.get(p.id)?.id ?? null,
+    matchedVariantLabel: matchedVariantByProduct.get(p.id)?.label ?? null,
   }))
 
   return NextResponse.json(withSales)
@@ -127,8 +152,18 @@ export async function POST(req: NextRequest) {
       minQuantity: parseInt(body.minQuantity ?? 1, 10) || 1,
       imagePath: body.imagePath ? String(body.imagePath) : null,
       branchId: session.branchId ?? (body.branchId ? parseInt(body.branchId, 10) : null),
+      collection: body.collection ? String(body.collection).trim() || null : null,
     },
   })
+  // إنشاء الوحدات تلقائياً فور حفظ المنتج (ربع/نص/دستة/ونص دستة).
+  // سعر كل وحدة = سعر البيع × factor. بدون تدخل يدوي.
+  try {
+    await db.productUnit.createMany({
+      data: buildDefaultUnitsData(created.id, price),
+    })
+  } catch {
+    // تجاهل إذا كانت الوحدات موجودة مسبقاً لأي سبب
+  }
   // stock in movement on initial quantity
   const initialQty = parseInt(body.quantity ?? 0, 10) || 0
   if (initialQty > 0) {

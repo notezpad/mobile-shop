@@ -348,7 +348,7 @@ export function PurchaseOrderDialog({
           {/* Cart */}
           <Card className="overflow-hidden py-0">
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto" dir="ltr">
                 <Table>
                   <TableHeader>
                     <TableRow>

@@ -53,10 +53,19 @@ function Table({
 }) {
   const useFixed = fixed && !auto
   return (
+    // ملحوظة مهمة عن RTL + overflow-x-auto:
+    // لو حطينا dir="rtl" على الـ div اللي عليه overflow-x-auto (حاوية السكرول)،
+    // المتصفح بيخلي نقطة السكرول 0 تبدأ من أقصى اليمين، والمحتوى الزيادة
+    // (لما الجدول أعرض من الشاشة) بيتحسب ناحية الشمال. ده اللي بيسبب ظاهرة
+    // "الأعمدة داخلة من جوه ناحية اليمين" على الشاشات الصغيرة: حافة الجدول
+    // اليمنى بتتثبت مع يمين الحاوية بدل ما تبان كامل، وسلوكه بيختلف شوية
+    // بين المتصفحات. الحل: نخلي حاوية السكرول نفسها dir="ltr" (سكرول بمنطق
+    // قياسي ومتوقع)، والجدول اللي جواها يفضل dir="rtl" علشان الأعمدة
+    // والمحاذاة تفضل صح.
     <div
       data-slot="table-container"
       className="relative w-full overflow-x-auto"
-      dir="rtl"
+      dir="ltr"
     >
       <table
         data-slot="table"
@@ -121,7 +130,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "hover:bg-muted/50 data-[state=selected]:bg-primary-subtle/40 border-b transition-colors duration-fast",
+        "hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors",
         className
       )}
       {...props}
@@ -163,12 +172,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
         // A faint `border-e` (lighter than the header's) keeps every column
         // visually separated all the way down the table, matching the
         // divider that starts in the header instead of stopping at it.
-        // `overflow-hidden` + `max-w-0` is a CSS trick that clips overflowing
-        // content (e.g. barcodes, long URLs) inside fixed-layout cells without
-        // breaking the table's column widths. The `max-w-0` resets the
-        // default `max-w: none` so the cell respects its `w-XX` width and
-        // the inner content's `truncate` / `overflow-hidden` can engage.
-        "p-2.5 px-3 align-middle text-sm whitespace-nowrap border-e border-border/30 last:border-e-0 overflow-hidden [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        "p-2.5 px-3 align-middle text-sm whitespace-nowrap border-e border-border/30 last:border-e-0 [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className
       )}
       {...props}

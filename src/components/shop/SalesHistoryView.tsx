@@ -281,14 +281,14 @@ export function SalesHistoryView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" dir="ltr">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead className="w-28">رقم الفاتورة</TableHead>
-                    <TableHead className="w-36">التاريخ</TableHead>
-                    <TableHead>العميل</TableHead>
+                    <TableHead className="w-52">التاريخ</TableHead>
+                    <TableHead className="w-40">العميل</TableHead>
                     <TableHead className="w-28">البائع</TableHead>
                     <TableHead className="w-28 text-center">الإجمالي</TableHead>
                     <TableHead className="w-28 text-center">المدفوع</TableHead>

@@ -9,11 +9,15 @@ import { PrismaClient } from '@prisma/client'
 
 const db = new PrismaClient()
 
+// Electronics (mobile / computer) — basic and pro both get every module.
+// The two tiers differ only in limits (maxUsers/maxProducts/maxBranches/price),
+// not in which pages/cards are visible.
 const ELECTRONICS_BASIC = [
   'dashboard','pos','products','sales','maintenance','customers','suppliers',
-  'purchases','inventory','finance','expenses','cash','settings',
+  'purchases','inventory','finance','expenses','cash','reports','settings',
+  'users','branches',
 ]
-const ELECTRONICS_PRO = [...ELECTRONICS_BASIC, 'reports','branches','users']
+const ELECTRONICS_PRO = [...ELECTRONICS_BASIC]
 
 // Fashion basic — NO maintenance, NO finance (per spec). Settings stays visible.
 const FASHION_BASIC = [

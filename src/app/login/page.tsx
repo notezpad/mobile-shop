@@ -101,28 +101,24 @@ export default function LoginPage() {
       </div>
 
       {/* Visual side */}
-      <div className="hidden lg:flex relative items-center justify-center bg-gradient-to-br from-brand-600 via-brand-700 to-brand-900 overflow-hidden">
-        {/* Decorative shapes */}
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute top-12 right-12 size-72 rounded-full bg-white/5 blur-3xl" />
-          <div className="absolute bottom-12 left-12 size-96 rounded-full bg-accent-500/20 blur-3xl" />
-          <div className="absolute inset-0 bg-grid opacity-[0.03]" />
-        </div>
+      <div className="landing-dark relative hidden items-center justify-center overflow-hidden lg:flex">
+        <div className="lg-aurora" aria-hidden />
+        <div className="lg-grid-mask" aria-hidden />
 
         <div className="relative z-10 max-w-lg p-12 text-white space-y-8">
-          <Badge variant="gradient" className="bg-white/10 backdrop-blur text-white border-white/20">
+          <Badge variant="gradient" className="glass-pill text-white border-0">
             <CheckCircle2 className="size-3" />
-            منصة SaaS متكاملة
+            منصة SaaS متكاملة — موبايل وكمبيوتر · ملابس وأحذية
           </Badge>
 
           <h2 className="text-4xl font-bold leading-tight">
             أدِر محلك بالكامل
             <br />
-            من مكان واحد
+            من <span className="lg-grad-text">مكان واحد</span>
           </h2>
 
           <p className="text-lg text-white/80 leading-relaxed">
-            نظام شامل لإدارة المبيعات والمخزون والعملاء والصيانة والمالية —
+            نظام شامل لإدارة المبيعات والمخزون والعملاء والصيانة والمالية، وبيع الجملة والقطاعي —
             مع لوحة معلومات متطورة وتقارير لحظية.
           </p>
 
@@ -132,10 +128,11 @@ export default function LoginPage() {
               { icon: "🛒", title: "نقطة بيع سريعة", desc: "بيع بالباركود + فواتير + طباعة" },
               { icon: "📦", title: "إدارة مخزون ذكية", desc: "تنبيهات تلقائية + جرد + تحويلات" },
               { icon: "💰", title: "إدارة مالية متكاملة", desc: "خزنة + فودافون كاش + انستاباي + فوري" },
+              { icon: "🏷️", title: "جملة ونص جملة", desc: "وحدات بيع متعددة بسعر مختلف لكل وحدة" },
             ].map((f, i) => (
               <div
                 key={i}
-                className="flex items-start gap-3 rounded-xl bg-white/5 backdrop-blur border border-white/10 p-4 animate-in"
+                className="glass-card flex items-start gap-3 rounded-xl p-4 animate-in"
                 style={{ animationDelay: `${i * 80}ms` }}
               >
                 <div className="size-10 rounded-lg bg-white/10 flex items-center justify-center text-xl shrink-0">
@@ -149,8 +146,8 @@ export default function LoginPage() {
             ))}
           </div>
 
-          <div className="pt-4 text-xs text-white/60">
-            © 2026 Mobile Shop System · جميع الحقوق محفوظة
+          <div className="pt-4 text-xs text-white/50">
+            © 2026 نظام المحل · جميع الحقوق محفوظة
           </div>
         </div>
       </div>

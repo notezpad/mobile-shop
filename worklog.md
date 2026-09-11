@@ -368,3 +368,164 @@ Work Log:
 - Verified with eslint + tsc --noEmit — 0 new errors (same pre-existing
   set-state-in-effect pattern already present throughout the codebase; fixed one
   incidental Map<> type-inference ambiguity in the new route while at it).
+
+## 2026-07-24 — wholesale/retail toggles finalized
+- Added `wholesaleEnabled` (default `false`) and `retailEnabled` (default `true`) to `Tenant` in `prisma/schema.prisma`.
+- New migration: `prisma/migrations/20260724_add_wholesale_retail_toggles/migration.sql` — additive `ALTER TABLE` with `IF NOT EXISTS`, safe to re-run.
+- API surface already wired: `GET/PUT /api/tenant` returns/accepts both flags; `GET /api/products/[id]/units` returns `[]` when `wholesaleEnabled=false` so POS/product screens hide wholesale automatically.
+- Settings UI (`SettingsView.tsx`) already exposes both switches; no UI change required.
+- Run `bun prisma migrate deploy` (or `bun prisma db push`) to apply.
+
+---
+Feature: POS now sells specific variants (color/size), stock stays in sync
+
+Work Log:
+- Root cause: the POS (`POSView.tsx`) added products to the cart by name only
+  and always deducted from `Product.quantity` (`deductStock` in
+  `deduct-stock.ts`) — even for products that already had `ProductVariant`
+  rows (size/color) from the variants feature. The cashier had no way to
+  pick which color/size was actually sold, and the aggregate
+  `Product.quantity` never matched the real per-variant stock, so e.g. a
+  "قميص أبيض L" with 0 left could still be sold as long as some *other*
+  size of the same product had stock.
+- `src/lib/sync-product-quantity.ts` (new): recomputes `Product.quantity` as
+  the sum of all its `ProductVariant.quantity` rows. No-ops for products
+  with zero variants, so non-variant products are untouched.
+- `src/lib/deduct-stock.ts`: `deductStock()` now accepts an optional
+  `variantId`. When present, it decrements that variant's own `quantity`
+  (checked against ITS stock, not the product's) and then calls
+  `syncProductQuantityFromVariants` so the aggregate never drifts. Falls
+  back to the original product-level deduction when no variant is given —
+  zero behavior change for electronics/no-variant tenants.
+- `src/app/api/sales/route.ts`: cart items can now carry `variantId`,
+  batch-validated in one query (same N+1-avoiding pattern as `unitId`).
+  Stock-availability checks use the variant's own quantity as the ceiling
+  when one is selected. `variantId` is persisted on the created `SaleItem`
+  (column already existed, was just never populated) and passed through to
+  `deductStock`. Gated behind the existing `variants` capability, same
+  pattern as `multi_unit`. `sale.items` now include their `variant` relation
+  so the client can print the sold color/size.
+- `src/app/api/products/[id]/variants/route.ts` and `.../[vid]/route.ts`:
+  every variant create/update(quantity)/delete now calls
+  `syncProductQuantityFromVariants` right after, so `Product.quantity` (used
+  by the products list, low-stock alerts, and reports) is always the live
+  sum of its variants from the moment the first variant is added.
+- `src/components/shop/POSView.tsx`:
+  - Selecting a product that has variants (checked via
+    `GET /api/products/:id/variants`, gated on the `variants` capability)
+    now opens a "اختار اللون/المقاس" picker dialog instead of adding it to
+    the cart directly; out-of-stock variants are shown disabled ("نفد").
+  - Each cart line for such a product gets its own color/size `<select>`
+    (mirroring the existing wholesale-unit selector) so the cashier can
+    switch variants without re-searching; the line's max quantity always
+    reflects the selected variant's own stock.
+  - Checkout sends `variantId` alongside the existing `unitId`/`quantity`
+    payload; the printed invoice line now shows the sold color/size.
+- Verified with `npm install` + `eslint` + `tsc --noEmit` on all touched
+  files — 0 new errors (same pre-existing set-state-in-effect pattern in
+  POSView's search debounce, and unrelated pre-existing broken imports in
+  `src/components/shop/inventory/*Tab.tsx` from a stray duplicate-folder
+  issue — neither is a regression from this change).
+
+Stage Summary:
+- POS now requires picking a specific color/size for any product that has
+  variants, sells against that variant's real stock instead of the
+  product's stale aggregate, and `Product.quantity` is kept auto-synced to
+  the sum of its variants on every variant edit and every sale — closing
+  the gap between the variants feature and the point of sale.
+
+---
+Feature: scanning a variant's own barcode at the POS finds it directly
+
+Work Log:
+- Gap from the previous stage: `ProductVariant.barcode` (used by the label
+  printer to give each color/size its own sticker) was never searched by
+  `GET /api/products` — that route only matched a product's own `name`/
+  `barcode`. Scanning a variant-specific label at the POS returned nothing,
+  even though the printed sticker came straight from this same app.
+- `src/app/api/products/route.ts`:
+  - The search `where` clause now also matches `variants.some.barcode`, so
+    a product surfaces in results as soon as any of its variants' barcodes
+    matches — not just its own.
+  - Added a second, exact-match-only lookup (`barcode: search`, no
+    `contains`) against `ProductVariant` for the returned products, and
+    attached `matchedVariantId`/`matchedVariantLabel` to each product in the
+    response. `contains` is intentionally NOT used here — this flag exists
+    to auto-select a variant for the client, and a partial/live-typed match
+    isn't reliable enough to skip the picker.
+- `src/components/shop/POSView.tsx`:
+  - `ProductLite` carries the new optional `matchedVariantId`/
+    `matchedVariantLabel`.
+  - `handleProductSelect` takes an optional `preselectedVariantId`: when set
+    and it's one of the product's real variants, that variant is added to
+    the cart directly (skipping the "اختار اللون/المقاس" picker) since
+    scanning its own barcode already answers that question.
+  - `handleSearchSubmit` (the scanner/Enter path) now checks for a
+    `matchedVariantId` result and passes it through, right after the
+    existing exact-product-barcode check (which still takes priority and
+    still opens the picker, since a scan of the product's *main* barcode
+    doesn't say which color/size).
+  - Clicking a result in the live-search dropdown does the same.
+  - The dropdown also shows "مطابقة: <لون/مقاس>" under a result that only
+    matched because of one of its variants, so the cashier isn't confused
+    about why that product showed up for a code that isn't its own.
+- Verified with `npm install` + `eslint` + `tsc --noEmit` — 0 new errors
+  (same pre-existing set-state-in-effect and unrelated `inventory/*Tab.tsx`
+  import issues as before).
+
+Stage Summary:
+- Barcode labels printed per color/size (from the earlier label-printing
+  feature) now actually work at the point of sale: scanning one finds the
+  right product AND jumps straight to that exact variant, instead of
+  either failing to match anything or requiring a manual re-pick.
+
+---
+Bugfix/Feature: variants had no barcode at all unless typed in by hand
+
+Work Log:
+- Root cause (user screenshot): the "مساعد الإدخال الذكي" bulk variant
+  assistant (`ProductVariantsDialog.tsx` → `addAllPreviewRows`) always sent
+  `barcode: null` for every row it created — there was never an
+  auto-generation path for variants, unlike products, which already had a
+  "توليد" (generate) button next to the barcode field in `ProductDialog.tsx`
+  (a client-side EAN-13 generator, `generateEan13()`, local to that file).
+  So every variant added through the bulk assistant — which is the main way
+  people add variants — ended up with an empty barcode ("—" in the table),
+  which is exactly what the previous stage's variant-barcode-scanning
+  feature needs populated to do anything useful.
+- `src/lib/barcode.ts` (new): pulled `generateEan13()` out of
+  `ProductDialog.tsx` into a shared helper, plus a new
+  `generateUniqueEan13(existing)` that retries against a given set of
+  already-used codes — needed because generating several barcodes in one
+  bulk batch (e.g. 7 variants at once) could otherwise hand out the same
+  random code twice before the server ever gets a chance to reject the
+  duplicate.
+- `src/components/shop/ProductDialog.tsx`: now imports `generateEan13` from
+  the shared helper instead of defining its own copy — no behavior change.
+- `src/components/shop/ProductVariantsDialog.tsx`:
+  - `addAllPreviewRows` (bulk smart-text add) now generates a unique
+    barcode for every row automatically — this is the fix for the
+    screenshot's exact scenario going forward.
+  - Manual "add one variant" form gets the same "توليد" button next to its
+    barcode field as the product dialog, for consistency.
+  - Each row in the variants table that still has no barcode (e.g. ones
+    added before this fix) shows a small dice icon-button instead of "—" to
+    generate one for just that row.
+  - A "توليد الباركودات الناقصة" button appears above the table whenever
+    any variant is missing a barcode, to fix a whole product's variants —
+    like the 7 in the screenshot — in one click.
+- Verified with `npm install` + `eslint` + `tsc --noEmit` — 0 new errors
+  (same pre-existing set-state-in-effect pattern already present in both
+  dialogs before this change, and the same unrelated `inventory/*Tab.tsx`
+  import issue as before).
+
+Stage Summary:
+- Yes, it was expected given the old code — the bulk variant assistant
+  never generated barcodes and nothing else did either. Now every path that
+  creates a variant (manual add, bulk smart-text add) gets one
+  automatically, and there's a one-click way to backfill any variant that
+  was created before this fix — so every color/size ends up with a real,
+  scannable, unique barcode instead of "—".
+
+
+

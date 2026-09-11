@@ -25,6 +25,9 @@ export type ModuleKey = (typeof ALL_MODULES)[number]
 export const ALL_CAPABILITIES = [
   'collections',
   'multi_unit',
+  'variants',
+  'returns_exchange',
+  'loyalty',
 ] as const
 
 export type Capability = (typeof ALL_CAPABILITIES)[number]

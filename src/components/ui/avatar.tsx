@@ -5,15 +5,28 @@ import * as AvatarPrimitive from "@radix-ui/react-avatar"
 
 import { cn } from "@/lib/utils"
 
+const avatarSizeClasses = {
+  sm: "size-6",
+  default: "size-8",
+  lg: "size-12",
+} as const
+
+type AvatarSize = keyof typeof avatarSizeClasses
+
 function Avatar({
   className,
+  size = "default",
   ...props
-}: React.ComponentProps<typeof AvatarPrimitive.Root>) {
+}: React.ComponentProps<typeof AvatarPrimitive.Root> & {
+  /** Preset avatar size. Default matches the previous hardcoded size-8. */
+  size?: AvatarSize
+}) {
   return (
     <AvatarPrimitive.Root
       data-slot="avatar"
       className={cn(
-        "relative flex size-8 shrink-0 overflow-hidden rounded-full",
+        "relative flex shrink-0 overflow-hidden rounded-full",
+        avatarSizeClasses[size],
         className
       )}
       {...props}

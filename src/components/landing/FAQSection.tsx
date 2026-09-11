@@ -1,15 +1,16 @@
 'use client'
 
 import * as React from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
+import { useVertical } from './vertical-context'
 
-const FAQS = [
+const COMMON_FAQS = [
   {
     q: 'هل التجربة المجانية تحتاج بطاقة ائتمان؟',
     a: 'لا، التجربة مجانية تماماً 14 يوم بدون أي بيانات دفع. في نهاية المدة تختار الباقة المناسبة أو توقف بدون أي التزام.',
@@ -20,11 +21,7 @@ const FAQS = [
   },
   {
     q: 'أقدر أغير الباقة في أي وقت؟',
-    a: 'نعم، تقدر تترقى أو تنزل في أي وقت من لوحة التحكم. الفرق يُحسب تلقائياً.',
-  },
-  {
-    q: 'إيه اللي يحصل لو خلصت التجربة وملحقتش أشترك؟',
-    a: 'بياناتك تفضل محفوظة 90 يوم، تقدر ترجع وتشترك في أي وقت وتلاقي كل حاجة مكانها.',
+    a: 'نعم، تقدر تترقى من الباقة الأساسية للاحترافية في أي وقت من لوحة التحكم. الفرق يُحسب تلقائياً.',
   },
   {
     q: 'هل المنصة تشتغل على الموبايل؟',
@@ -34,23 +31,46 @@ const FAQS = [
     q: 'هل تدعم الطباعة الحرارية للفواتير؟',
     a: 'نعم، الفواتير تُطبع على طابعات A5 حرارية أو عادية، مع دعم الباركود.',
   },
-  {
-    q: 'أقدر أحصل على دعم فني؟',
-    a: 'نعم، باقة التجربة فيها دعم بالبريد. الباقات المدفوعة فيها دعم أولوية عبر الهاتف والواتساب.',
-  },
-  {
-    q: 'هل فيه رسوم خفية؟',
-    a: 'مفيش أي رسوم خفية. السعر اللي تشوفه هو اللي تدفعه، شامل كل المزايا والتحديثات.',
-  },
 ]
 
+const VERTICAL_FAQS = {
+  electronics: [
+    {
+      q: 'هل النظام يتابع أجهزة الصيانة؟',
+      a: 'نعم، تقدر تسجّل كل جهاز بحالته (مستلم، قيد الفحص، جاهز للتسليم) وتتابعه لحظة بلحظة من أي شاشة.',
+    },
+    {
+      q: 'هل يدعم فودافون كاش وفوري وإنستاباي؟',
+      a: 'نعم، كل معاملات الدفع الإلكتروني مسجّلة تلقائياً في الخزنة مع تسوية يومية دقيقة.',
+    },
+    {
+      q: 'هل أقدر أبيع بالجملة لتجار الإكسسوارات؟',
+      a: 'نعم، الباقة الاحترافية تدعم وحدات بيع متعددة (قطاعة، دستة، كرتونة) بسعر مختلف لكل وحدة.',
+    },
+  ],
+  fashion: [
+    {
+      q: 'هل النظام يدعم المقاسات والألوان؟',
+      a: 'نعم، كل منتج بمقاساته وألوانه كمتغيرات مستقلة، مع مخزون دقيق ومنفصل لكل متغير.',
+    },
+    {
+      q: 'إزاي يشتغل البيع بالجملة ونص الجملة؟',
+      a: 'الباقة الاحترافية بتديك وحدات بيع متعددة — قطعة، نص دستة، دستة — وكل وحدة سعرها يتحسب تلقائياً.',
+    },
+    {
+      q: 'هل أقدر أنظّم منتجاتي في كوليكشنات؟',
+      a: 'نعم، تقدر تجمّع منتجاتك في كوليكشنات موسمية وتطبّق خصم موحّد على الكوليكشن كله بضغطة واحدة.',
+    },
+  ],
+} as const
+
 export function FAQSection() {
+  const { vertical } = useVertical()
+  const faqs = [...VERTICAL_FAQS[vertical], ...COMMON_FAQS]
+
   return (
-    <section
-      id="faq"
-      className="scroll-mt-24 border-t bg-muted/30 py-20 sm:py-24"
-    >
-      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+    <section id="faq" className="landing-dark relative scroll-mt-24 border-t border-white/5 py-20 sm:py-24">
+      <div className="relative mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">
           <motion.span
@@ -58,7 +78,7 @@ export function FAQSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.4 }}
-            className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"
+            className="lg-eyebrow justify-center"
           >
             الأسئلة الشائعة
           </motion.span>
@@ -67,36 +87,40 @@ export function FAQSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mt-4 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl lg:text-5xl"
+            className="mt-4 font-black tracking-tight text-white"
+            style={{ fontSize: 'clamp(1.6rem, 3.4vw, 2.9rem)', lineHeight: 1.2 }}
           >
             عندك سؤال؟ عندنا الإجابة
           </motion.h2>
         </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-60px' }}
-          transition={{ duration: 0.5 }}
-          className="overflow-hidden rounded-2xl border border-border/70 bg-card px-5 shadow-sm sm:px-6"
-        >
-          <Accordion type="single" collapsible className="w-full">
-            {FAQS.map((item, i) => (
-              <AccordionItem
-                key={i}
-                value={`item-${i}`}
-                className={i === FAQS.length - 1 ? 'border-b-0' : ''}
-              >
-                <AccordionTrigger className="text-right text-sm font-semibold text-foreground hover:no-underline sm:text-base">
-                  {item.q}
-                </AccordionTrigger>
-                <AccordionContent className="text-right text-sm leading-relaxed text-muted-foreground sm:text-[15px]">
-                  {item.a}
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        </motion.div>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={vertical}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+            className="glass-card overflow-hidden rounded-2xl px-6 sm:px-7"
+          >
+            <Accordion type="single" collapsible className="w-full">
+              {faqs.map((item, i) => (
+                <AccordionItem
+                  key={i}
+                  value={`item-${i}`}
+                  className={'border-white/10 ' + (i === faqs.length - 1 ? 'border-b-0' : '')}
+                >
+                  <AccordionTrigger className="text-right text-base font-bold text-white hover:no-underline sm:text-lg">
+                    {item.q}
+                  </AccordionTrigger>
+                  <AccordionContent className="text-right text-base leading-relaxed lg-muted">
+                    {item.a}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </motion.div>
+        </AnimatePresence>
       </div>
     </section>
   )

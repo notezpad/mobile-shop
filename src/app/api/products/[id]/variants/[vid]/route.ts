@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireCapability, featureErrorResponse } from '@/lib/features'
+import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,6 +43,9 @@ export async function PUT(
 
   try {
     const updated = await db.productVariant.update({ where: { id: vId }, data })
+    if (data.quantity !== undefined) {
+      await syncProductQuantityFromVariants(db, pid)
+    }
     return NextResponse.json(updated)
   } catch (e: any) {
     if (e?.code === 'P2002') {
@@ -71,5 +75,6 @@ export async function DELETE(
   const owned = await loadOwned(session.tenantId, pid, vId)
   if (!owned) return NextResponse.json({ error: 'غير موجود' }, { status: 404 })
   await db.productVariant.delete({ where: { id: vId } })
+  await syncProductQuantityFromVariants(db, pid)
   return NextResponse.json({ ok: true })
 }

@@ -354,33 +354,24 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
       </div>
 
       {/* ===== Left side: Marketing panel (RTL: appears on the left) ===== */}
-      <div className="relative hidden overflow-hidden bg-gradient-to-br from-primary to-primary/80 lg:flex lg:w-1/2 lg:flex-col lg:justify-between lg:p-12">
-        {/* Decorative shapes */}
-        <div className="absolute -right-20 -top-20 size-80 rounded-full bg-white/10 blur-2xl" />
-        <div className="absolute -left-20 -bottom-20 size-80 rounded-full bg-white/5 blur-2xl" />
-        <div
-          className="absolute inset-0 opacity-10"
-          style={{
-            backgroundImage:
-              'radial-gradient(circle at 1px 1px, white 1px, transparent 0)',
-            backgroundSize: '32px 32px',
-          }}
-        />
+      <div className="landing-dark relative hidden overflow-hidden lg:flex lg:w-1/2 lg:flex-col lg:justify-between lg:p-12">
+        <div className="lg-aurora" aria-hidden />
+        <div className="lg-grid-mask" aria-hidden />
 
         {/* Top content */}
         <div className="relative z-10">
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-xs font-medium text-primary-foreground backdrop-blur">
-            <Star className="size-3.5 fill-current" />
-            منصة إدارة المحلات #1 في مصر
+          <div className="glass-pill mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium text-white">
+            <Star className="size-3.5 fill-current text-amber-300" />
+            منصة إدارة المحلات والجملة #1 في مصر
           </div>
-          <h2 className="text-3xl font-bold leading-tight text-primary-foreground xl:text-4xl">
-            أدر محلك باحترافية
+          <h2 className="text-3xl font-bold leading-tight text-white xl:text-4xl">
+            أدِر محلك باحترافية
             <br />
-            في مكان واحد
+            في <span className="lg-grad-text">مكان واحد</span>
           </h2>
-          <p className="mt-3 max-w-md text-sm leading-relaxed text-primary-foreground/80">
-            نظام متكامل لإدارة المبيعات والمخزون والصيانة والعملاء — مصمم خصيصاً لمحلات الموبايل
-            والإكسسوارات في السوق المصري.
+          <p className="mt-3 max-w-md text-sm leading-relaxed lg-muted">
+            نظام متكامل لإدارة المبيعات والمخزون والصيانة والعملاء والجملة — مصمم خصيصاً لمحلات
+            الموبايل والكمبيوتر، والملابس والأحذية في السوق المصري.
           </p>
         </div>
 
@@ -388,9 +379,7 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
         <div className="relative z-10">
           {mode === 'signup' ? (
             <div>
-              <p className="mb-4 text-sm font-semibold text-primary-foreground">
-                لماذا تنضم إلينا؟
-              </p>
+              <p className="mb-4 text-sm font-semibold text-white">لماذا تنضم إلينا؟</p>
               <ul className="space-y-2.5">
                 {SIGNUP_BENEFITS.map((b, i) => (
                   <motion.li
@@ -398,47 +387,43 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.3, delay: 0.1 + i * 0.06 }}
-                    className="flex items-center gap-2.5 text-sm text-primary-foreground/90"
+                    className="flex items-center gap-2.5 text-sm text-white/90"
                   >
-                    <CheckCircle2 className="size-4 shrink-0 text-primary-foreground" />
+                    <CheckCircle2 className="size-4 shrink-0 text-brand-400" />
                     {b}
                   </motion.li>
                 ))}
               </ul>
             </div>
           ) : (
-            <div className="rounded-2xl bg-white/10 p-6 backdrop-blur-md ring-1 ring-white/20">
+            <div className="glass-panel-strong rounded-2xl p-6">
               <div className="mb-3 flex gap-1">
                 {Array.from({ length: TESTIMONIAL.rating }).map((_, i) => (
-                  <Star key={i} className="size-4 fill-amber-300 text-warning-subtle-foreground" />
+                  <Star key={i} className="size-4 fill-amber-300 text-amber-300" />
                 ))}
               </div>
-              <p className="mb-4 text-sm leading-relaxed text-primary-foreground">
-                "{TESTIMONIAL.quote}"
-              </p>
+              <p className="mb-4 text-sm leading-relaxed text-white">"{TESTIMONIAL.quote}"</p>
               <div>
-                <p className="text-sm font-semibold text-primary-foreground">
-                  {TESTIMONIAL.name}
-                </p>
-                <p className="text-xs text-primary-foreground/70">{TESTIMONIAL.shop}</p>
+                <p className="text-sm font-semibold text-white">{TESTIMONIAL.name}</p>
+                <p className="text-xs lg-muted">{TESTIMONIAL.shop}</p>
               </div>
             </div>
           )}
         </div>
 
         {/* Bottom stats */}
-        <div className="relative z-10 grid grid-cols-3 gap-4 border-t border-white/20 pt-6">
+        <div className="relative z-10 grid grid-cols-3 gap-4 border-t border-white/10 pt-6">
           <div>
-            <p className="text-2xl font-bold text-primary-foreground">+50</p>
-            <p className="text-[11px] text-primary-foreground/70">محل نشط</p>
+            <p className="text-2xl font-bold text-white">+50</p>
+            <p className="text-[11px] lg-muted">محل نشط</p>
           </div>
           <div>
-            <p className="text-2xl font-bold text-primary-foreground">+1,000</p>
-            <p className="text-[11px] text-primary-foreground/70">مستخدم</p>
+            <p className="text-2xl font-bold text-white">+1,000</p>
+            <p className="text-[11px] lg-muted">مستخدم</p>
           </div>
           <div>
-            <p className="text-2xl font-bold text-primary-foreground">4.9★</p>
-            <p className="text-[11px] text-primary-foreground/70">تقييم العملاء</p>
+            <p className="text-2xl font-bold text-white">4.9★</p>
+            <p className="text-[11px] lg-muted">تقييم العملاء</p>
           </div>
         </div>
       </div>

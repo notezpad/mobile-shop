@@ -330,11 +330,11 @@ export function SupplierDetailDialog({
 
                 <Card className="overflow-hidden py-0">
                   <CardContent className="p-0">
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto" dir="ltr">
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="w-32">التاريخ</TableHead>
+                            <TableHead className="w-52">التاريخ</TableHead>
                             <TableHead className="w-20">النوع</TableHead>
                             <TableHead>التفاصيل</TableHead>
                             <TableHead className="w-28 text-center">علينا</TableHead>
@@ -451,12 +451,12 @@ export function SupplierDetailDialog({
                 </div>
                 <Card className="overflow-hidden py-0">
                   <CardContent className="p-0">
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto" dir="ltr">
                       <Table>
                         <TableHeader>
                           <TableRow>
                             <TableHead>الأمر</TableHead>
-                            <TableHead className="w-36">التاريخ</TableHead>
+                            <TableHead className="w-52">التاريخ</TableHead>
                             <TableHead className="w-28 text-center">عدد الأصناف</TableHead>
                             <TableHead className="w-28 text-center">الإجمالي</TableHead>
                             <TableHead className="w-28 text-center">المدفوع</TableHead>
@@ -531,11 +531,11 @@ export function SupplierDetailDialog({
                 </div>
                 <Card className="overflow-hidden py-0">
                   <CardContent className="p-0">
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto" dir="ltr">
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="w-36">التاريخ</TableHead>
+                            <TableHead className="w-52">التاريخ</TableHead>
                             <TableHead className="w-28 text-center">المبلغ</TableHead>
                             <TableHead className="w-28 text-center">الطريقة</TableHead>
                             <TableHead>ملاحظات</TableHead>

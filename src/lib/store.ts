@@ -28,6 +28,12 @@ export interface ShopBranding {
   invoicePrefix: string
 }
 
+export const ALL_MODULES = [
+  'dashboard','pos','products','sales','maintenance','customers','suppliers',
+  'purchases','finance','expenses','cash','reports','settings','users',
+  'inventory','branches',
+] as const
+
 export interface PlanContext {
   businessType: 'electronics' | 'fashion'
   enabledModules: string[]
@@ -36,11 +42,7 @@ export interface PlanContext {
 
 const DEFAULT_PLAN: PlanContext = {
   businessType: 'electronics',
-  enabledModules: [
-    'dashboard','pos','products','sales','maintenance','customers','suppliers',
-    'purchases','finance','expenses','cash','reports','settings','users',
-    'inventory','branches',
-  ],
+  enabledModules: [...ALL_MODULES],
   capabilities: [],
 }
 
@@ -55,6 +57,10 @@ interface ShopState {
   setUser: (u: AuthUser | null) => void
   plan: PlanContext
   setPlan: (p: Partial<PlanContext>) => void
+  /** Shortcut لتحديث enabledModules فقط داخل plan بدون لمس باقي الحقول. */
+  setEnabledModules: (modules: string[]) => void
+  /** Shortcut لتحديث capabilities فقط داخل plan بدون لمس باقي الحقول. */
+  setCapabilities: (capabilities: string[]) => void
   logout: () => void
   quickAddProduct: { open: boolean; seed?: string }
   openQuickAddProduct: (seed?: string) => void
@@ -72,6 +78,10 @@ export const useShopStore = create<ShopState>((set) => ({
   setUser: (u) => set({ user: u }),
   plan: DEFAULT_PLAN,
   setPlan: (p) => set((s) => ({ plan: { ...s.plan, ...p } })),
+  setEnabledModules: (modules) =>
+    set((s) => ({ plan: { ...s.plan, enabledModules: modules } })),
+  setCapabilities: (capabilities) =>
+    set((s) => ({ plan: { ...s.plan, capabilities } })),
   logout: () => {
     fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
     set({ user: null, activeView: 'dashboard', plan: DEFAULT_PLAN })

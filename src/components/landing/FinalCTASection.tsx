@@ -12,26 +12,9 @@ interface FinalCTASectionProps {
 
 export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary to-emerald-700 py-20 sm:py-24">
-      {/* Decorative shapes */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-16 -top-16 size-72 rounded-full bg-white/10 blur-3xl"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -bottom-20 -left-16 size-72 rounded-full bg-brand-300/20 blur-3xl"
-      />
-      {/* Dot pattern */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-30"
-        style={{
-          backgroundImage:
-            'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.15) 1px, transparent 0)',
-          backgroundSize: '28px 28px',
-        }}
-      />
+    <section className="landing-dark relative overflow-hidden py-20 sm:py-24">
+      <div className="lg-aurora" aria-hidden />
+      <div className="lg-grid-mask" aria-hidden />
 
       <div className="relative mx-auto max-w-3xl px-4 text-center sm:px-6 lg:px-8">
         <motion.h2
@@ -39,7 +22,8 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-80px' }}
           transition={{ duration: 0.5 }}
-          className="text-3xl font-extrabold tracking-tight text-primary-foreground sm:text-4xl lg:text-5xl"
+          className="font-black tracking-tight text-white"
+          style={{ fontSize: 'clamp(1.8rem, 3.8vw, 3.2rem)', lineHeight: 1.2 }}
         >
           جاهز تبدأ؟
         </motion.h2>
@@ -49,7 +33,7 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-80px' }}
           transition={{ duration: 0.5, delay: 0.08 }}
-          className="mx-auto mt-4 max-w-xl text-base text-primary-foreground/85 sm:text-lg"
+          className="mx-auto mt-4 max-w-xl text-lg lg-muted"
         >
           انضم لأكثر من 50 محل نشط على منصتنا. تجربتك المجانية تبدأ الآن.
         </motion.p>
@@ -64,7 +48,7 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
           <Button
             size="lg"
             onClick={() => onOpenAuth('signup')}
-            className="h-12 gap-2 bg-primary-foreground px-7 text-base text-primary shadow-xl hover:bg-primary-foreground/90"
+            className="h-14 gap-2 rounded-xl bg-gradient-to-l from-brand-500 to-brand-700 px-8 text-lg font-extrabold text-white shadow-xl shadow-brand-600/30 hover:from-brand-400 hover:to-brand-600"
           >
             <Rocket className="size-5" />
             ابدأ تجربتك المجانية لمدة 14 يوم
@@ -76,18 +60,18 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-80px' }}
           transition={{ duration: 0.5, delay: 0.24 }}
-          className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-primary-foreground/80 sm:text-sm"
+          className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs lg-muted sm:text-sm"
         >
           <span className="flex items-center gap-1">
-            <Check className="size-3.5" />
+            <Check className="size-3.5 text-brand-400" />
             بدون بطاقة ائتمان
           </span>
           <span className="flex items-center gap-1">
-            <Check className="size-3.5" />
+            <Check className="size-3.5 text-brand-400" />
             إلغاء في أي وقت
           </span>
           <span className="flex items-center gap-1">
-            <Check className="size-3.5" />
+            <Check className="size-3.5 text-brand-400" />
             دعم مجاني
           </span>
         </motion.div>

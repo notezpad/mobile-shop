@@ -56,9 +56,9 @@ export function ScreenshotsSection() {
   return (
     <section
       id="screenshots"
-      className="scroll-mt-24 bg-background py-20 sm:py-24"
+      className="landing-dark relative scroll-mt-24 border-y border-white/5 py-20 sm:py-24"
     >
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-16">
           <motion.span
@@ -66,7 +66,7 @@ export function ScreenshotsSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.4 }}
-            className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"
+            className="glass-pill inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-brand-300"
           >
             لمحة
           </motion.span>
@@ -75,7 +75,7 @@ export function ScreenshotsSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mt-4 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl lg:text-5xl"
+            className="mt-4 text-3xl font-extrabold tracking-tight text-white sm:text-4xl lg:text-5xl"
           >
             شاهد المنصة من الداخل
           </motion.h2>
@@ -84,7 +84,7 @@ export function ScreenshotsSection() {
         {/* Tabs */}
         <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="w-full">
           <div className="flex justify-center">
-            <TabsList className="flex h-auto flex-wrap gap-1 rounded-xl border bg-muted/50 p-1.5">
+            <TabsList className="glass-pill flex h-auto flex-wrap gap-1 rounded-xl p-1.5 [&_[data-state=active]]:bg-white/15 [&_[data-state=active]]:text-white [&_button]:text-white/60">
               {TABS.map((t) => {
                 const Icon = t.icon
                 return (
@@ -122,10 +122,10 @@ export function ScreenshotsSection() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.3, delay: i * 0.08 }}
-                        className="flex items-start gap-2 rounded-lg border bg-card p-3 text-sm"
+                        className="glass-card flex items-start gap-2 rounded-lg p-3 text-sm"
                       >
-                        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
-                        <span className="text-foreground/90">{h}</span>
+                        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-brand-400" />
+                        <span className="text-white/90">{h}</span>
                       </motion.div>
                     ))}
                   </div>
@@ -142,7 +142,7 @@ export function ScreenshotsSection() {
 /* ---------------- Browser frame wrapper ---------------- */
 function BrowserFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xl shadow-primary/10">
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-card shadow-2xl shadow-black/40 ring-1 ring-white/5">
       <div className="flex items-center gap-2 border-b bg-muted/60 px-4 py-3">
         <div className="flex gap-1.5">
           <span className="size-3 rounded-full bg-destructive" />

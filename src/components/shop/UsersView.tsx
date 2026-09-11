@@ -166,7 +166,7 @@ export function UsersView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" dir="ltr">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -176,8 +176,8 @@ export function UsersView() {
                     <TableHead className="w-28 text-center">الدور</TableHead>
                     <TableHead className="w-24 text-center">الحالة</TableHead>
                     <TableHead className="w-28">الفرع</TableHead>
-                    <TableHead className="w-36">تاريخ الإنشاء</TableHead>
-                    <TableHead className="w-36">آخر دخول</TableHead>
+                    <TableHead className="w-52">تاريخ الإنشاء</TableHead>
+                    <TableHead className="w-52">آخر دخول</TableHead>
                     <TableHead className="w-32 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>

@@ -1,19 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, withDb } from '@/lib/db'
 import { computeEndDate } from '@/lib/admin-utils'
+import { getSession } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
+  // NOTE: we intentionally use getSession() here instead of requireAuth().
+  // requireAuth() enforces an active subscription, which would make it
+  // impossible for a tenant with an EXPIRED subscription to ever redeem a
+  // new code — exactly the situation this endpoint exists to resolve.
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'غير مصرح — يرجى تسجيل الدخول' }, { status: 401 })
+  }
+  // Super admins have no tenant of their own and should manage tenant
+  // subscriptions from the admin panel, not this self-service endpoint.
+  if (session.role === 'SUPER_ADMIN') {
+    return NextResponse.json({ error: 'استخدم لوحة الأدمن لإدارة اشتراكات المحلات' }, { status: 403 })
+  }
+
   const body = await req.json().catch(() => null)
   if (!body || typeof body !== 'object') {
     return NextResponse.json({ error: 'بيانات غير صالحة' }, { status: 400 })
   }
   const code = String(body.code ?? '').trim().toUpperCase()
-  const tenantId = String(body.tenantId ?? '').trim()
+  // SECURITY: tenantId always comes from the authenticated session, never
+  // from the request body. Previously it was read from `body.tenantId`,
+  // which let anyone with a valid activation code redeem it against an
+  // arbitrary tenant of their choosing.
+  const tenantId = session.tenantId
 
   if (!code || !tenantId) {
-    return NextResponse.json({ error: 'الكود والمعرّف مطلوبان' }, { status: 400 })
+    return NextResponse.json({ error: 'الكود مطلوب' }, { status: 400 })
   }
 
   const ac = await db.activationCode.findUnique({

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireCapability, featureErrorResponse } from '@/lib/features'
 
@@ -14,7 +14,6 @@ export const dynamic = 'force-dynamic'
  *   quantity: number,          // pieces returned (must be <= original quantity)
  *   exchange?: {               // optional replacement — if present, must be same tenant
  *     productId: number,
- *     variantId?: number,
  *     price: number,
  *     quantity: number,
  *   },
@@ -22,7 +21,7 @@ export const dynamic = 'force-dynamic'
  * }
  *
  * Effect:
- * - Restore stock for the returned SaleItem (variant-aware).
+ * - Restore stock for the returned SaleItem.
  * - If exchange provided → deduct exchange stock, create a NEW positive-amount Sale
  *   line-set flagged as an exchange.
  * - Cash entry equal to cashDelta (can be negative = refund).
@@ -63,13 +62,7 @@ export async function POST(req: NextRequest) {
   }
 
   const result = await db.$transaction(async (tx) => {
-    // Restore stock (variant-aware)
-    if (item.variantId) {
-      await tx.productVariant.update({
-        where: { id: item.variantId },
-        data: { quantity: { increment: quantity } },
-      })
-    }
+    // Restore stock
     await tx.product.update({
       where: { id: item.productId },
       data: { quantity: { increment: quantity } },
@@ -107,19 +100,10 @@ export async function POST(req: NextRequest) {
       const exProductId = parseInt(ex.productId, 10)
       const exQty = parseInt(ex.quantity, 10) || 1
       const exPrice = Number(ex.price ?? 0) || 0
-      const exVariantId = ex.variantId ? parseInt(ex.variantId, 10) : null
       const p = await tx.product.findUnique({ where: { id: exProductId } })
       if (!p || p.tenantId !== session.tenantId) throw new Error('منتج الاستبدال غير موجود')
 
-      if (exVariantId) {
-        const v = await tx.productVariant.findUnique({ where: { id: exVariantId } })
-        if (!v || v.productId !== exProductId) throw new Error('متغير غير صالح')
-        if (v.quantity < exQty) throw new Error('مخزون الاستبدال غير كافي')
-        await tx.productVariant.update({
-          where: { id: exVariantId },
-          data: { quantity: { decrement: exQty } },
-        })
-      } else if (p.quantity < exQty) {
+      if (p.quantity < exQty) {
         throw new Error('مخزون الاستبدال غير كافي')
       }
       await tx.product.update({
@@ -148,7 +132,6 @@ export async function POST(req: NextRequest) {
           price: exPrice,
           quantity: exQty,
           cost: p.cost,
-          variantId: exVariantId,
         },
       })
       await tx.sale.update({

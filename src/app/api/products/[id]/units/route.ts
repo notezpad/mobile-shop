@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireCapability, featureErrorResponse } from '@/lib/features'
 
@@ -27,6 +27,15 @@ export async function GET(
   if (isNaN(pid)) return NextResponse.json({ error: 'معرف غير صالح' }, { status: 400 })
   const prod = await loadTenantProduct(session.tenantId, pid)
   if (!prod) return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
+
+  // إذا كان البيع بالجملة معطَّلاً من الإعدادات، نُخفي الوحدات في كل الواجهات.
+  const tenant = await db.tenant.findUnique({
+    where: { id: session.tenantId },
+    select: { wholesaleEnabled: true },
+  })
+  if (tenant && tenant.wholesaleEnabled === false) {
+    return NextResponse.json([])
+  }
 
   const { searchParams } = new URL(_req.url)
   const status = searchParams.get('status') || 'active'

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireCapability, featureErrorResponse } from '@/lib/features'
+import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +68,8 @@ export async function POST(
     const created = await db.productVariant.create({
       data: { productId: pid, size, color, barcode, quantity },
     })
+    // Keep Product.quantity as the sum of all its variants from here on.
+    await syncProductQuantityFromVariants(db, pid)
     return NextResponse.json(created, { status: 201 })
   } catch (e: any) {
     if (e?.code === 'P2002') {

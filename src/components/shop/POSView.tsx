@@ -15,6 +15,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
@@ -28,6 +34,11 @@ interface ProductLite {
   barcode: string | null
   price: number
   quantity: number
+  // Set by the API when the search term exactly matched one of this
+  // product's variant (color/size) barcodes, so we know which specific
+  // variant a scanned code refers to.
+  matchedVariantId?: number | null
+  matchedVariantLabel?: string | null
 }
 
 interface CustomerLite {
@@ -44,7 +55,19 @@ interface PosUnit {
   factor: number
 }
 
-// Each cart line is uniquely identified by cartKey = productId + unitId
+// A specific size/color of a product — its own stock, sold as a distinct line.
+interface PosVariant {
+  id: number
+  size: string | null
+  color: string | null
+  quantity: number
+}
+
+function variantLabelOf(v: PosVariant): string {
+  return [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`
+}
+
+// Each cart line is uniquely identified by cartKey = productId + unitId + variantId
 interface CartItem {
   cartKey: string
   product: ProductLite
@@ -55,6 +78,9 @@ interface CartItem {
   unitLabel: string | null
   unitFactor: number      // pieces per unit; 1 when no wholesale unit is selected
   availableUnits: PosUnit[]
+  variantId: number | null
+  variantLabel: string | null
+  availableVariants: PosVariant[]  // the specific color/size sold, if this product has variants
 }
 
 export function POSView() {
@@ -75,12 +101,20 @@ export function POSView() {
   const [customersVersion, setCustomersVersion] = React.useState(0)
   const [addingProduct, setAddingProduct] = React.useState(false)
 
+  // Variant (color/size) picker — shown before adding a product that has
+  // variants to the cart, so the cashier always sells a specific one.
+  const [variantPickerOpen, setVariantPickerOpen] = React.useState(false)
+  const [variantPickerProduct, setVariantPickerProduct] = React.useState<ProductLite | null>(null)
+  const [variantPickerVariants, setVariantPickerVariants] = React.useState<PosVariant[]>([])
+  const [variantPickerUnits, setVariantPickerUnits] = React.useState<PosUnit[]>([])
+
   const openQuickAddProduct = useShopStore((s) => s.openQuickAddProduct)
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
   const capabilities = useShopStore((s) => s.plan.capabilities)
 
   const hasUnitsCap = capabilities.includes('multi_unit')
+  const hasVariantsCap = capabilities.includes('variants')
 
   // load customers
   React.useEffect(() => {
@@ -134,8 +168,11 @@ export function POSView() {
     unitLabel: string | null,
     maxQuantity: number,
     availableUnits: PosUnit[],
+    variantId: number | null = null,
+    variantLabel: string | null = null,
+    availableVariants: PosVariant[] = [],
   ) => {
-    const cartKey = `${product.id}-${unitId ?? 'x'}`
+    const cartKey = `${product.id}-${unitId ?? 'x'}-${variantId ?? 'x'}`
     const unit = unitId ? availableUnits.find((u) => u.id === unitId) : null
     const factor = unit?.factor ?? 1
     // Per-piece price: if unit has its own price, spread it across factor pieces.
@@ -154,33 +191,70 @@ export function POSView() {
         )
       }
       if (maxQuantity <= 0) {
-        toast.error('الكمية غير متوفرة لهذا المنتج')
+        toast.error(
+          variantLabel
+            ? `الكمية غير متوفرة لهذا اللون/المقاس (${variantLabel})`
+            : 'الكمية غير متوفرة لهذا المنتج'
+        )
         return prev
       }
       return [...prev, {
         cartKey, product, price: perPiecePrice, quantity: Math.min(startQty, maxQuantity), maxQuantity,
         unitId, unitLabel, unitFactor: factor, availableUnits,
+        variantId, variantLabel, availableVariants,
       }]
     })
   }
 
-  const handleProductSelect = async (p: ProductLite) => {
+  const handleProductSelect = async (p: ProductLite, preselectedVariantId?: number | null) => {
     setQuery('')
     setResults([])
     setOpen(false)
     if (addingProduct) return
     setAddingProduct(true)
     try {
-      const unitData = hasUnitsCap
-        ? await api<any[]>(`/api/products/${p.id}/units`).then((d) =>
-            d.map((u: any) => ({
-              id: u.id,
-              name: u.name,
-              price: u.price,
-              factor: u.factor,
-            }))
-          ).catch(() => [])
-        : []
+      const [unitData, variantData] = await Promise.all([
+        hasUnitsCap
+          ? api<any[]>(`/api/products/${p.id}/units`).then((d) =>
+              d.map((u: any) => ({
+                id: u.id,
+                name: u.name,
+                price: u.price,
+                factor: u.factor,
+              }))
+            ).catch(() => [])
+          : Promise.resolve([]),
+        hasVariantsCap
+          ? api<any[]>(`/api/products/${p.id}/variants`).then((d) =>
+              d.map((v: any) => ({
+                id: v.id,
+                size: v.size,
+                color: v.color,
+                quantity: v.quantity,
+              }))
+            ).catch(() => [])
+          : Promise.resolve([]),
+      ])
+
+      if (variantData.length > 0) {
+        // Scanning a variant's own barcode already tells us exactly which
+        // color/size was sold — skip the picker and add it straight away.
+        if (preselectedVariantId) {
+          const v = variantData.find((v: PosVariant) => v.id === preselectedVariantId)
+          if (v) {
+            addToCartDirect(p, null, null, v.quantity, unitData, v.id, variantLabelOf(v), variantData)
+            return
+          }
+        }
+        // This product has colors/sizes — the cashier must pick exactly which
+        // one is being sold before it goes in the cart, so stock is deducted
+        // from the right variant instead of the product's stale aggregate.
+        setVariantPickerProduct(p)
+        setVariantPickerUnits(unitData)
+        setVariantPickerVariants(variantData)
+        setVariantPickerOpen(true)
+        return
+      }
 
       addToCartDirect(p, null, null, p.quantity, unitData)
     } catch (e: any) {
@@ -188,6 +262,24 @@ export function POSView() {
     } finally {
       setAddingProduct(false)
     }
+  }
+
+  const handleVariantPick = (variant: PosVariant) => {
+    if (!variantPickerProduct) return
+    addToCartDirect(
+      variantPickerProduct,
+      null,
+      null,
+      variant.quantity,
+      variantPickerUnits,
+      variant.id,
+      variantLabelOf(variant),
+      variantPickerVariants,
+    )
+    setVariantPickerOpen(false)
+    setVariantPickerProduct(null)
+    setVariantPickerVariants([])
+    setVariantPickerUnits([])
   }
 
   const handleSearchSubmit = async (e: React.FormEvent) => {
@@ -198,8 +290,13 @@ export function POSView() {
     try {
       const data = await api<ProductLite[]>(`/api/products?search=${encodeURIComponent(q)}`)
       const exact = data.find((r) => r.barcode === q)
+      // Scanned/typed code matched a specific variant's own barcode (not the
+      // product's main barcode) — go straight to that color/size.
+      const variantExact = data.find((r) => r.matchedVariantId != null)
       if (exact) {
         await handleProductSelect(exact)
+      } else if (variantExact) {
+        await handleProductSelect(variantExact, variantExact.matchedVariantId)
       } else if (data.length === 1) {
         await handleProductSelect(data[0])
       } else if (data.length > 1) {
@@ -247,14 +344,19 @@ export function POSView() {
       prev.map((i) => {
         if (i.cartKey !== cartKey) return i
         const newUnitId = unit?.id ?? null
-        const newKey = `${i.product.id}-${newUnitId ?? 'x'}`
+        const newKey = `${i.product.id}-${newUnitId ?? 'x'}-${i.variantId ?? 'x'}`
         const factor = unit?.factor ?? 1
         const perPiecePrice = unit
           ? (unit.price != null ? unit.price / factor : i.product.price)
           : i.product.price
-        const newMax = unit?.factor
-          ? Math.floor(i.product.quantity / unit.factor) * unit.factor
+        // Base ceiling: the selected variant's own stock if this line is a
+        // specific color/size, otherwise the product's aggregate stock.
+        const baseStock = i.variantId
+          ? (i.availableVariants.find((v) => v.id === i.variantId)?.quantity ?? 0)
           : i.product.quantity
+        const newMax = unit?.factor
+          ? Math.floor(baseStock / unit.factor) * unit.factor
+          : baseStock
         return {
           ...i,
           cartKey: newKey,
@@ -263,6 +365,29 @@ export function POSView() {
           unitFactor: factor,
           price: perPiecePrice,
           quantity: Math.min(factor, newMax),
+          maxQuantity: newMax,
+        }
+      })
+    )
+  }
+
+  // Change the specific color/size for a cart line without re-searching
+  const updateVariant = (cartKey: string, variant: PosVariant | null) => {
+    setCart((prev) =>
+      prev.map((i) => {
+        if (i.cartKey !== cartKey) return i
+        const newVariantId = variant?.id ?? null
+        const newKey = `${i.product.id}-${i.unitId ?? 'x'}-${newVariantId ?? 'x'}`
+        const baseStock = variant ? variant.quantity : i.product.quantity
+        const newMax = i.unitFactor > 1
+          ? Math.floor(baseStock / i.unitFactor) * i.unitFactor
+          : baseStock
+        return {
+          ...i,
+          cartKey: newKey,
+          variantId: newVariantId,
+          variantLabel: variant ? variantLabelOf(variant) : null,
+          quantity: Math.min(i.unitFactor, newMax),
           maxQuantity: newMax,
         }
       })
@@ -291,6 +416,7 @@ export function POSView() {
               quantity: unitsEntered,
               price: pricePerEntered,
               ...(i.unitId ? { unitId: i.unitId } : {}),
+              ...(i.variantId ? { variantId: i.variantId } : {}),
             }
           }),
           customerId,
@@ -317,8 +443,11 @@ export function POSView() {
             const displayQty = hasUnit ? it.unitQuantity : it.quantity
             const displayPrice = hasUnit ? (it.price * it.quantity) / it.unitQuantity : it.price
             const unitSuffix = it.unitLabel ? ` (${displayQty} ${it.unitLabel})` : ''
+            const variantSuffix = it.variant
+              ? ` — ${[it.variant.color, it.variant.size].filter(Boolean).join(' / ')}`
+              : ''
             return {
-              name: it.name + unitSuffix,
+              name: it.name + variantSuffix + unitSuffix,
               price: displayPrice,
               quantity: displayQty,
             }
@@ -397,13 +526,18 @@ export function POSView() {
                           <button
                             type="button"
                             onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => void handleProductSelect(p)}
+                            onClick={() => void handleProductSelect(p, p.matchedVariantId)}
                             className="flex w-full items-center justify-between gap-2 px-3 py-2 text-right text-sm hover:bg-accent"
                           >
                             <div>
                               <p className="font-medium">{p.name}</p>
                               {p.barcode && (
                                 <p className="text-xs text-muted-foreground">{p.barcode}</p>
+                              )}
+                              {p.matchedVariantLabel && (
+                                <p className="text-xs text-primary">
+                                  مطابقة: {p.matchedVariantLabel}
+                                </p>
                               )}
                             </div>
                             <div className="text-left text-xs">
@@ -456,7 +590,7 @@ export function POSView() {
                   السلة فارغة — ابحث وأضف منتجات للبدء
                 </p>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto" dir="ltr">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">
@@ -472,6 +606,29 @@ export function POSView() {
                         <tr key={it.cartKey} className="border-b last:border-0">
                           <td className="py-2 pr-1">
                             <p className="font-medium">{it.product.name}</p>
+                            {/* Variant (color/size) selector */}
+                            {it.availableVariants.length > 0 && (
+                              <div className="mt-1">
+                                <select
+                                  value={it.variantId ?? ''}
+                                  onChange={(e) => {
+                                    const vid = e.target.value ? parseInt(e.target.value, 10) : null
+                                    const variant = vid
+                                      ? it.availableVariants.find((v) => v.id === vid) ?? null
+                                      : null
+                                    updateVariant(it.cartKey, variant)
+                                  }}
+                                  className="rounded border bg-background px-2 py-0.5 text-xs"
+                                >
+                                  <option value="" disabled>اختار اللون/المقاس</option>
+                                  {it.availableVariants.map((v) => (
+                                    <option key={v.id} value={v.id} disabled={v.quantity <= 0}>
+                                      {variantLabelOf(v)} {v.quantity <= 0 ? '(نفد)' : `(متاح ${v.quantity})`}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
                             {/* Unit selector */}
                             {it.availableUnits.length > 0 && (
                               <div className="mt-1">
@@ -716,6 +873,53 @@ export function POSView() {
           </Card>
         </div>
       </div>
+
+      {/* Variant (color/size) picker — shown before a variant-product is added to the cart */}
+      <Dialog open={variantPickerOpen} onOpenChange={(o) => {
+        setVariantPickerOpen(o)
+        if (!o) {
+          setVariantPickerProduct(null)
+          setVariantPickerVariants([])
+          setVariantPickerUnits([])
+        }
+      }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>اختار اللون/المقاس — {variantPickerProduct?.name}</DialogTitle>
+          </DialogHeader>
+          {variantPickerVariants.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              لا يوجد ألوان/مقاسات مسجلة لهذا المنتج
+            </p>
+          ) : (
+            <ul className="max-h-72 space-y-1 overflow-y-auto">
+              {variantPickerVariants.map((v) => (
+                <li key={v.id}>
+                  <button
+                    type="button"
+                    disabled={v.quantity <= 0}
+                    onClick={() => handleVariantPick(v)}
+                    className={cn(
+                      'flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-right text-sm hover:bg-accent',
+                      v.quantity <= 0 && 'cursor-not-allowed opacity-50 hover:bg-transparent'
+                    )}
+                  >
+                    <span className="font-medium">{variantLabelOf(v)}</span>
+                    <span
+                      className={cn(
+                        'text-xs',
+                        v.quantity <= 0 ? 'text-destructive font-medium' : 'text-muted-foreground'
+                      )}
+                    >
+                      {v.quantity <= 0 ? 'نفد' : `متاح ${v.quantity}`}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

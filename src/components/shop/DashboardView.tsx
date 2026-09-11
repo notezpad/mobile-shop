@@ -502,7 +502,7 @@ export function DashboardView() {
                 <TableRow>
                   <TableHead className="w-10 text-center">#</TableHead>
                   <TableHead className="w-28">الفاتورة</TableHead>
-                  <TableHead className="w-36">الوقت</TableHead>
+                  <TableHead className="w-52">الوقت</TableHead>
                   <TableHead className="w-32 text-center">الإجمالي</TableHead>
                   <TableHead className="w-28 text-center">الحالة</TableHead>
                 </TableRow>

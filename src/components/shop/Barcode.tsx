@@ -15,31 +15,32 @@ interface BarcodeProps {
 }
 
 /**
- * يعرض الباركود كصورة خطوط حقيقية بدل ما يكون رقم نصي فقط.
+ * ستايل باركود 2026 — مضغوط ومميز.
  *
- * مشكلة الـ Overflow:
- * - JsBarcode بيرسم SVG بعرض ثابت حسب قيمة الـ barcode (كل digit بـ ~7px × count).
- * - في الـ table columns الضيقة (زي w-44 = 176px) الباركود بيتجاوز الخلية.
- * - الحل: لما `fitContainer=true` نحط الـ SVG جوّه div بـ `overflow-hidden` + `max-w-full`
- *   + `preserveAspectRatio="xMidYMid meet"` عشان الباركود يتقلّص (scale down) لحد ما يدخل.
- *
- * لو الباركود لسه أعرض من الخلية حتى بعد التقلّص، الـ overflow-hidden بيقطّعه
- * بدل ما يكسر layout الجدول.
+ * الفكرة:
+ * - خطوط رفيعة جدًا (width≈1) بأطراف دائرية (rx) بدل المستطيلات الحادة.
+ * - إخفاء الرقم الافتراضي بتاع JsBarcode ورسم "شريحة" مونو-سبيس صغيرة تحت
+ *   الباركود مع تباعد حروف واسع (tracking) — شكل عصري وسهل القراءة.
+ * - إطار خفيف بأكواع ركنية (corner brackets) بدل بوردر كامل، يوفّر مساحة
+ *   ويدّي إحساس "ماسح ضوئي".
+ * - المكوّن كله بيتقلّص لعرض الخلية عبر preserveAspectRatio + overflow-hidden،
+ *   فالخلية بتفضل ضيقة (مش بتاخد عرض كبير زي الستايل التقليدي).
  */
 export function Barcode({
   value,
-  height = 32,
-  width = 1.4,
-  fontSize = 11,
+  height = 24,
+  width = 1,
+  fontSize = 9,
   className,
   fitContainer = false,
 }: BarcodeProps) {
   const svgRef = React.useRef<SVGSVGElement | null>(null)
   const [failed, setFailed] = React.useState(false)
 
-  // الارتفاع الكلي المحجوز للخلية (خطوط الباركود + مسافة الرقم تحتها + الهامش)
-  // بيتفعّل حتى لو مفيش باركود، عشان صفوف الجدول تفضل بنفس الارتفاع
-  const reservedHeight = height + fontSize + 12
+  // ارتفاع محجوز ثابت للخلية عشان الصفوف تفضل متساوية حتى بدون باركود.
+  // (خطوط + شريحة الرقم الصغيرة + هامش رفيع)
+  const chipHeight = fontSize + 6
+  const reservedHeight = height + chipHeight + 6
 
   React.useEffect(() => {
     if (!value || !svgRef.current) return
@@ -49,16 +50,21 @@ export function Barcode({
         format: 'CODE128',
         height,
         width,
-        fontSize,
-        displayValue: true,
-        margin: 4,
+        displayValue: false, // هنعرض الرقم بأنفسنا في شريحة مخصّصة
+        margin: 0,
         background: 'transparent',
       })
+      // نضيف زوايا دائرية على كل الأعمدة عشان الشكل يبقى ناعم/عصري
+      const svg = svgRef.current
+      const rx = Math.max(0.6, width * 0.55)
+      svg.querySelectorAll('rect').forEach((r) => {
+        r.setAttribute('rx', String(rx))
+        r.setAttribute('ry', String(rx))
+      })
     } catch {
-      // قيمة لا تصلح لتنسيق الباركود (نادر) — نعرض الرقم كنص بديل
       setFailed(true)
     }
-  }, [value, height, width, fontSize])
+  }, [value, height, width])
 
   if (!value) {
     return <div style={{ height: reservedHeight }} aria-hidden="true" />
@@ -74,37 +80,73 @@ export function Barcode({
     )
   }
 
-  // fitContainer mode: wrap SVG in a constrained div so it scales down
-  // instead of overflowing the parent cell. preserveAspectRatio keeps the
-  // barcode centered and proportional.
-  if (fitContainer) {
-    return (
-      <div
-        className={className}
-        style={{
-          height: reservedHeight,
-          maxWidth: '100%',
-          overflow: 'hidden',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <svg
-          ref={svgRef}
-          dir="ltr"
-          preserveAspectRatio="xMidYMid meet"
-          style={{ maxWidth: '100%', height: 'auto' }}
-        />
-      </div>
-    )
-  }
-
-  return (
-    <svg
-      ref={svgRef}
-      className={className}
-      {...({ dir: 'ltr' } as React.SVGProps<SVGSVGElement>)}
-    />
+  // شريحة الرقم أسفل الباركود — مونو، حروف متباعدة، خلفية muted خفيفة
+  const chip = (
+    <span
+      dir="ltr"
+      className="inline-flex items-center rounded-sm bg-muted/60 px-1.5 font-mono text-foreground/80"
+      style={{
+        fontSize,
+        lineHeight: `${chipHeight}px`,
+        letterSpacing: '0.14em',
+      }}
+    >
+      {value}
+    </span>
   )
+
+  // الحاوية: أكواع ركنية بدل بوردر كامل + توسيط + منع الفيضان
+  const frame = (
+    <div
+      className={className}
+      style={{
+        height: reservedHeight,
+        maxWidth: '100%',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 3,
+        position: 'relative',
+        padding: '2px 6px',
+      }}
+    >
+      {/* corner brackets */}
+      <span
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          backgroundImage: [
+            'linear-gradient(currentColor,currentColor)',
+            'linear-gradient(currentColor,currentColor)',
+            'linear-gradient(currentColor,currentColor)',
+            'linear-gradient(currentColor,currentColor)',
+            'linear-gradient(currentColor,currentColor)',
+            'linear-gradient(currentColor,currentColor)',
+            'linear-gradient(currentColor,currentColor)',
+            'linear-gradient(currentColor,currentColor)',
+          ].join(','),
+          backgroundRepeat: 'no-repeat',
+          backgroundSize:
+            '6px 1px,1px 6px,6px 1px,1px 6px,6px 1px,1px 6px,6px 1px,1px 6px',
+          backgroundPosition:
+            'left top,left top,right top,right top,left bottom,left bottom,right bottom,right bottom',
+          color: 'var(--color-muted-foreground)',
+          opacity: 0.55,
+        }}
+      />
+      <svg
+        ref={svgRef}
+        {...({ dir: 'ltr' } as React.SVGProps<SVGSVGElement>)}
+        preserveAspectRatio={fitContainer ? 'xMidYMid meet' : undefined}
+        style={{ maxWidth: '100%', height: 'auto', display: 'block' }}
+      />
+      {chip}
+    </div>
+  )
+
+  return frame
 }

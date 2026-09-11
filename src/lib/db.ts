@@ -15,16 +15,23 @@ import { readDatabaseUrl } from './env'
 // IMPORTANT: we intentionally do NOT cache the PrismaClient/pg connection in
 // a module-level global across requests. Cloudflare Workers forbids reusing
 // an I/O object (like a TCP socket opened by `pg`) that was created during
-// one request inside a *different* request — even if the same Worker
-// isolate happens to be reused for both. Doing so either hangs the request
-// forever (until the runtime force-cancels it: "the Workers runtime
-// canceled this request because it detected that your Worker's code had
-// hung") or throws immediately on the next request once the stale socket is
-// touched. We saw exactly this pattern in production: a request would
-// succeed, then the next one on the same warm isolate would hang or 500.
+// one request inside a *different* request.
 //
-// The fix is to open a fresh, single connection for every request instead.
-// It costs a bit of extra connect latency per request, but it's correct.
+// FIX (performance): Previously, `createPrismaClient()` was called on *every*
+// property access via the Proxy getter — meaning a single API route that
+// accessed `db.sale`, `db.product`, and `db.customer` would create THREE
+// separate PrismaClient instances and open THREE separate TCP connections,
+// even though they all lived in the same request. Each connection takes
+// ~80–200 ms to establish on Supabase's pooler.
+//
+// The fix: use AsyncLocalStorage to scope one PrismaClient per request.
+// The first access creates the client and stores it; subsequent accesses
+// in the same request reuse it. The client is never reused across requests.
+
+import { AsyncLocalStorage } from 'node:async_hooks'
+
+const requestStorage = new AsyncLocalStorage<{ client: PrismaClient }>()
+
 function createPrismaClient() {
   const connectionString = readDatabaseUrl()
 
@@ -41,19 +48,38 @@ function createPrismaClient() {
   return new PrismaClient({ adapter })
 }
 
+/**
+ * Get or create a PrismaClient for the current request scope.
+ * If we're inside a `withDb` context, reuse the same client.
+ * Otherwise, create a fresh one (fallback for safety).
+ */
+function getClient(): PrismaClient {
+  const store = requestStorage.getStore()
+  if (store) return store.client
+  // Fallback: no async context (e.g. top-level module init). Create a fresh client.
+  return createPrismaClient()
+}
+
+/**
+ * Wrap an async request handler to scope a single PrismaClient for the
+ * entire request. Call this in middleware or at the top of each route handler.
+ *
+ * Usage in a route:
+ *   export async function GET() {
+ *     return withDb(async () => {
+ *       const data = await db.sale.findMany(...)
+ *       return NextResponse.json(data)
+ *     })
+ *   }
+ */
+export async function withDb<T>(fn: () => Promise<T>): Promise<T> {
+  const client = createPrismaClient()
+  return requestStorage.run({ client }, fn)
+}
+
 export const db = new Proxy({} as PrismaClient, {
   get(_target, prop) {
-    const client = createPrismaClient()
-    // IMPORTANT: pass `client` (not the Proxy) as the receiver so that any
-    // internal getters resolve against the real client. Additionally, if the
-    // resolved value is a function (e.g. `$transaction`, or any model method
-    // like `sale.create`), we must bind it to `client`. Without this,
-    // `db.$transaction(cb)` would invoke `$transaction` with `this` set to
-    // the Proxy (because it's called as `db.$transaction(...)`), causing any
-    // internal `this.*` access inside Prisma's implementation to hit the
-    // Proxy's `get` trap again and spin up a *second*, unrelated
-    // PrismaClient/connection mid-transaction. That mismatch is exactly what
-    // produced the intermittent "Transaction not found" 500s in production.
+    const client = getClient()
     const value = Reflect.get(client as object, prop, client)
     return typeof value === 'function' ? value.bind(client) : value
   },

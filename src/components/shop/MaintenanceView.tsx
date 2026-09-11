@@ -199,7 +199,7 @@ export function MaintenanceView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" dir="ltr">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -210,8 +210,8 @@ export function MaintenanceView() {
                     <TableHead>العطل</TableHead>
                     <TableHead className="w-28 text-center">الحالة</TableHead>
                     <TableHead className="w-28 text-center">التكلفة</TableHead>
-                    <TableHead className="w-36">تاريخ الاستلام</TableHead>
-                    <TableHead className="w-36">تاريخ التسليم</TableHead>
+                    <TableHead className="w-52">تاريخ الاستلام</TableHead>
+                    <TableHead className="w-52">تاريخ التسليم</TableHead>
                     <TableHead className="w-32 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
