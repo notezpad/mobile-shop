@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mobileshop",
+  "name": "nezampos",
   "main": ".open-next/worker.js",
   // Fixes "Uncaught ReferenceError: __name is not defined" in the browser.
   // Wrangler's esbuild step enables `keepNames` by default; next-themes
