@@ -11,7 +11,7 @@ import { api } from '@/lib/api'
 
 type OrderStatus = 'checking' | 'paid' | 'failed' | 'pending' | 'no_order_id'
 
-export default function CheckoutCallbackPage() {
+function CheckoutCallbackContent() {
   const searchParams = useSearchParams()
   const statusParam = searchParams.get('status') as 'success' | 'failed' | null
   const merchantOrderId = searchParams.get('order')
@@ -70,6 +70,110 @@ export default function CheckoutCallbackPage() {
   }, [merchantOrderId])
 
   return (
+    <div className="cb-status-wrap">
+      {/* Checking spinner */}
+      {status === 'checking' && (
+        <>
+          <div className="cb-status-icon checking">
+            <Loader2 className="size-12 animate-spin" />
+          </div>
+          <h2 className="cb-status-title">جارٍ التحقق من الدفع...</h2>
+          <p className="cb-status-msg">
+            نتحقق من حالة الدفع مع بوابة Paymob. الرجاء الانتظار بضع ثوان.
+          </p>
+        </>
+      )}
+
+      {/* Paid — success */}
+      {status === 'paid' && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="cb-status-icon paid">
+            <CheckCircle2 className="size-12" />
+          </div>
+          <h2 className="cb-status-title">تم الدفع بنجاح 🎉</h2>
+          <p className="cb-status-msg">
+            تم تفعيل اشتراكك بنجاح. يمكنك الآن استخدام كل مزايا الباقة.
+            مبروك! 👏
+          </p>
+          <div className="cb-actions">
+            <Link href="/" className="cb-btn cb-btn--primary">
+              <Home className="size-4" />
+              الذهاب للوحة التحكم
+            </Link>
+            <Link href="/pricing" className="cb-btn cb-btn--secondary">
+              عرض الباقات
+            </Link>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Failed */}
+      {status === 'failed' && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="cb-status-icon failed">
+            <XCircle className="size-12" />
+          </div>
+          <h2 className="cb-status-title">فشل الدفع</h2>
+          <p className="cb-status-msg">
+            {reason === 'voided' ? 'تم إلغاء العملية من قبل بوابة الدفع.'
+              : reason === 'refunded' ? 'تم استرداد المبلغ من البوابة.'
+              : reason === 'declined' ? 'تم رفض الدفعة من قبل البنك/المحفظة.'
+              : reason === 'user_cancelled' ? 'ألغيت عملية الدفع.'
+              : reason === 'verification_error' ? 'حدث خطأ أثناء التحقق من العملية.'
+              : 'لم تكتمل عملية الدفع. لم يتم خصم أي مبلغ.'}
+            <br />
+            يمكنك المحاولة مرة أخرى في أي وقت.
+          </p>
+          <div className="cb-actions">
+            <Link href="/pricing" className="cb-btn cb-btn--primary">
+              <RefreshCw className="size-4" />
+              المحاولة مرة أخرى
+            </Link>
+            <Link href="/" className="cb-btn cb-btn--secondary">
+              <Home className="size-4" />
+              العودة للوحة التحكم
+            </Link>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Pending — webhook hasn't arrived yet */}
+      {status === 'pending' && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="cb-status-icon pending">
+            <Clock className="size-12" />
+          </div>
+          <h2 className="cb-status-title">الدفع قيد المعالجة</h2>
+          <p className="cb-status-msg">
+            وصلتنا عملية الدفع ولكن لا تزال قيد المعالجة. سيتم تفعيل اشتراكك
+            خلال دقائق. لو لم يحدث ذلك خلال 10 دقائق، تواصل مع الدعم.
+          </p>
+          <div className="cb-actions">
+            <Link href="/" className="cb-btn cb-btn--primary">
+              <Home className="size-4" />
+              الذهاب للوحة التحكم
+            </Link>
+            <Link href="/pricing" className="cb-btn cb-btn--secondary">
+              عرض الباقات
+            </Link>
+          </div>
+        </motion.div>
+      )}
+    </div>
+  )
+}
+
+export default function CheckoutCallbackPage() {
+  return (
     <div className="co-page landing-dark">
       <div className="co-bg-glow" aria-hidden="true" />
       <div className="co-bg-grid" aria-hidden="true" />
@@ -89,105 +193,18 @@ export default function CheckoutCallbackPage() {
         </div>
       </header>
 
-      <div className="cb-status-wrap">
-        {/* Checking spinner */}
-        {status === 'checking' && (
-          <>
+      <React.Suspense
+        fallback={
+          <div className="cb-status-wrap">
             <div className="cb-status-icon checking">
               <Loader2 className="size-12 animate-spin" />
             </div>
-            <h2 className="cb-status-title">جارٍ التحقق من الدفع...</h2>
-            <p className="cb-status-msg">
-              نتحقق من حالة الدفع مع بوابة Paymob. الرجاء الانتظار بضع ثوان.
-            </p>
-          </>
-        )}
-
-        {/* Paid — success */}
-        {status === 'paid' && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <div className="cb-status-icon paid">
-              <CheckCircle2 className="size-12" />
-            </div>
-            <h2 className="cb-status-title">تم الدفع بنجاح 🎉</h2>
-            <p className="cb-status-msg">
-              تم تفعيل اشتراكك بنجاح. يمكنك الآن استخدام كل مزايا الباقة.
-              مبروك! 👏
-            </p>
-            <div className="cb-actions">
-              <Link href="/" className="cb-btn cb-btn--primary">
-                <Home className="size-4" />
-                الذهاب للوحة التحكم
-              </Link>
-              <Link href="/pricing" className="cb-btn cb-btn--secondary">
-                عرض الباقات
-              </Link>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Failed */}
-        {status === 'failed' && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <div className="cb-status-icon failed">
-              <XCircle className="size-12" />
-            </div>
-            <h2 className="cb-status-title">فشل الدفع</h2>
-            <p className="cb-status-msg">
-              {reason === 'voided' ? 'تم إلغاء العملية من قبل بوابة الدفع.'
-                : reason === 'refunded' ? 'تم استرداد المبلغ من البوابة.'
-                : reason === 'declined' ? 'تم رفض الدفعة من قبل البنك/المحفظة.'
-                : reason === 'user_cancelled' ? 'ألغيت عملية الدفع.'
-                : reason === 'verification_error' ? 'حدث خطأ أثناء التحقق من العملية.'
-                : 'لم تكتمل عملية الدفع. لم يتم خصم أي مبلغ.'}
-              <br />
-              يمكنك المحاولة مرة أخرى في أي وقت.
-            </p>
-            <div className="cb-actions">
-              <Link href="/pricing" className="cb-btn cb-btn--primary">
-                <RefreshCw className="size-4" />
-                المحاولة مرة أخرى
-              </Link>
-              <Link href="/" className="cb-btn cb-btn--secondary">
-                <Home className="size-4" />
-                العودة للوحة التحكم
-              </Link>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Pending — webhook hasn't arrived yet */}
-        {status === 'pending' && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <div className="cb-status-icon pending">
-              <Clock className="size-12" />
-            </div>
-            <h2 className="cb-status-title">الدفع قيد المعالجة</h2>
-            <p className="cb-status-msg">
-              وصلتنا عملية الدفع ولكن لا تزال قيد المعالجة. سيتم تفعيل اشتراكك
-              خلال دقائق. لو لم يحدث ذلك خلال 10 دقائق، تواصل مع الدعم.
-            </p>
-            <div className="cb-actions">
-              <Link href="/" className="cb-btn cb-btn--primary">
-                <Home className="size-4" />
-                الذهاب للوحة التحكم
-              </Link>
-              <Link href="/pricing" className="cb-btn cb-btn--secondary">
-                عرض الباقات
-              </Link>
-            </div>
-          </motion.div>
-        )}
-      </div>
+            <h2 className="cb-status-title">جارٍ التحميل...</h2>
+          </div>
+        }
+      >
+        <CheckoutCallbackContent />
+      </React.Suspense>
     </div>
   )
 }
