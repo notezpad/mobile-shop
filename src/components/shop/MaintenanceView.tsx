@@ -76,7 +76,7 @@ export function MaintenanceView() {
     setLoading(true)
     try {
       const data = await api<Order[]>('/api/maintenance')
-      setOrders(data)
+      if (Array.isArray(data)) setOrders(data)
     } catch (e: any) {
       toast.error(e?.message || 'فشل تحميل أOrders الصيانة')
     } finally {
@@ -108,12 +108,20 @@ export function MaintenanceView() {
 
   const remove = async (id: number) => {
     if (!(await confirm('حذف أمر الصيانة؟'))) return
+    // ⚡ Optimistic
+    const removed = orders.find((o) => o.id === id)
+    setOrders((prev) => prev.filter((o) => o.id !== id))
     try {
       await api(`/api/maintenance/${id}`, { method: 'DELETE' })
       toast.success('تم الحذف')
-      load()
+      if (typeof navigator === 'undefined' || navigator.onLine) load()
     } catch (e: any) {
-      toast.error(e?.message || 'فشل الحذف')
+      if (e?.message?.includes('تم الحفظ') || e?.message?.includes('offline')) {
+        toast.success('تم الحذف (offline — سيتم المزامنة لاحقاً)')
+      } else {
+        if (removed) setOrders((prev) => [removed, ...prev])
+        toast.error(e?.message || 'فشل الحذف')
+      }
     }
   }
 
@@ -144,8 +152,8 @@ export function MaintenanceView() {
           o.issue || '—',
           o.status,
           formatCurrency(o.cost),
-          formatArabicDateTime(o.receivedAt),
-          o.deliveredAt ? formatArabicDateTime(o.deliveredAt) : '—',
+          <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatArabicDateTime(o.receivedAt)}</span>,
+          o.deliveredAt ? <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatArabicDateTime(o.deliveredAt)}</span> : '—',
         ]),
         kpis: [
           { label: 'إجمالي أوامر الصيانة', value: String(orders.length) },
@@ -199,7 +207,7 @@ export function MaintenanceView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto" dir="ltr">
+            <div className="hidden overflow-x-auto lg:block" dir="ltr">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -297,6 +305,124 @@ export function MaintenanceView() {
                   )}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {/*
+            نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
+            كل أمر صيانة بقى كارت مستقل يعرض البيانات الأساسية رأسيًا.
+          */}
+          {!loading && (
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+              {orders.length === 0 ? (
+                <p className="col-span-full py-8 text-center text-muted-foreground">
+                  لا توجد أوامر صيانة
+                </p>
+              ) : (
+                orders.map((o, index) => (
+                  <div key={o.id} className="rounded-lg border bg-card p-3 hover:bg-muted/30 dark:hover:bg-muted/20">
+                    {/* رأس الكارت: اسم العميل + شارة الحالة */}
+                    <div className="flex items-start gap-3">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-subtle text-base font-bold text-primary-subtle-foreground">
+                        {o.customerName?.charAt(0) ?? '?'}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            #{index + 1}
+                          </span>
+                          <p className="truncate font-medium leading-tight">
+                            {o.customerName}
+                          </p>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {o.phone ?? 'بدون هاتف'}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={statusVariant(o.status)}>
+                        {o.status}
+                      </Badge>
+                    </div>
+
+                    {/* الجهاز + العطل */}
+                    <div className="mt-2 space-y-1 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground">الجهاز:</span>
+                        <span className="font-medium">{o.device}</span>
+                      </div>
+                      {o.issue && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-muted-foreground">العطل:</span>
+                          <span className="truncate font-medium" title={o.issue}>
+                            {o.issue}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* شبكة البيانات: تكلفة/استلام/تسليم */}
+                    <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-2 text-center">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">التكلفة</p>
+                        <p className="text-xs font-semibold tabular-nums">
+                          {formatCurrency(o.cost)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">الاستلام</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          <DateTimeCell date={o.receivedAt} />
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">التسليم</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {o.deliveredAt ? <DateTimeCell date={o.deliveredAt} /> : '—'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* إجراءات */}
+                    <div className="mt-2 flex items-center justify-end gap-1 border-t border-border/60 pt-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        onClick={() => {
+                          setEditing(o)
+                          setDialogOpen(true)
+                        }}
+                        title="تعديل"
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        onClick={() => cycleStatus(o)}
+                        disabled={busy === o.id}
+                        title="تغيير الحالة"
+                      >
+                        {busy === o.id ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="size-4" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-destructive hover:text-destructive"
+                        onClick={() => remove(o.id)}
+                        title="حذف"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </CardContent>

@@ -215,18 +215,31 @@ export async function requireAuth(): Promise<Session> {
   const s = await getSession()
   if (!s) throw new Error('UNAUTHORIZED')
 
-  // Super admins bypass subscription checks
-  if (s.role === 'SUPER_ADMIN') {
-    return s
-  }
-
-  // Check impersonation: super admin may impersonate a tenant
+  // 🛡️ 2026-09-17 (v2): Check impersonation BEFORE the super admin bypass.
+  // Previously: the super admin bypass was BEFORE the impersonation check,
+  // so when impersonating, the session still had tenantId = 'platform-tenant'.
+  // All shop APIs (products, sales, tenant settings) were hitting against
+  // the platform-tenant (empty/locked) instead of the impersonated tenant.
+  // This also caused a security issue: PUT /api/tenant could modify the
+  // platform-tenant's own data while impersonating.
+  //
+  // Fix: read the impersonate_tenant cookie FIRST. If set, swap the
+  // tenantId in the session (for both super admin AND normal users).
+  // The super admin bypass for subscription checks still applies, but
+  // with the swapped tenantId.
   const cookieStore = await cookies()
   const impersonateId = cookieStore.get('impersonate_tenant')?.value
-  const effectiveTenantId = impersonateId || s.tenantId
 
   if (impersonateId) {
-    return { ...s, tenantId: effectiveTenantId }
+    // Swap the tenantId for this request — all subsequent API calls
+    // (db queries, tenant settings, etc.) will operate against the
+    // impersonated tenant, not the platform-tenant.
+    return { ...s, tenantId: impersonateId }
+  }
+
+  // Super admins bypass subscription checks (only when NOT impersonating)
+  if (s.role === 'SUPER_ADMIN') {
+    return s
   }
 
   // Enforce subscription for normal users
@@ -243,6 +256,35 @@ export async function requireAdmin(): Promise<Session> {
 export async function requireSuperAdmin(): Promise<Session> {
   const s = await requireAuth()
   if (s.role !== 'SUPER_ADMIN') throw new Error('FORBIDDEN')
+  return s
+}
+
+/**
+ * 🛡️ 2026-09-21 — Soft auth: returns the session without enforcing an
+ * active subscription.
+ *
+ * Use this for endpoints that the user must be able to reach EVEN WHEN
+ * their subscription is expired — e.g. /api/subscription (so the user
+ * can see their expired status), /api/tenant (so they can open the
+ * Settings page and redeem a code).
+ *
+ * Behavior:
+ *   - Throws UNAUTHORIZED (401) if not logged in
+ *   - Handles impersonation (same as requireAuth)
+ *   - Super admins bypass (same as requireAuth)
+ *   - Does NOT call requireActiveSubscription
+ */
+export async function requireAuthIgnoreSubscription(): Promise<Session> {
+  const s = await getSession()
+  if (!s) throw new Error('UNAUTHORIZED')
+
+  const cookieStore = await cookies()
+  const impersonateId = cookieStore.get('impersonate_tenant')?.value
+
+  if (impersonateId) {
+    return { ...s, tenantId: impersonateId }
+  }
+
   return s
 }
 

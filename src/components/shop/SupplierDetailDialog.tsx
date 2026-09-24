@@ -54,9 +54,9 @@ import { PurchaseOrderDialog } from './PurchaseOrderDialog'
 
 const METHOD_LABELS: Record<string, string> = {
   cash: 'كاش',
-  vodafone_cash: 'فودافون كاش',
+  vodafone_cash: 'محافظ إلكترونية',
   instapay: 'انستاباي',
-  fawry: 'فوري',
+  fawry: 'محفظة إلكترونية',
 }
 
 function methodBadgeClass(method: string): string {
@@ -246,7 +246,7 @@ export function SupplierDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-hidden p-0 sm:max-w-3xl">
+      <DialogContent className="max-h-[90vh] max-w-5xl overflow-hidden bg-background p-0 sm:max-w-5xl">
         <DialogHeader className="border-b px-6 pt-6 pb-4">
           <DialogTitle className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-col gap-1">
@@ -280,7 +280,7 @@ export function SupplierDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[calc(90vh-110px)] overflow-y-auto px-6 pb-6">
+        <div className="relative z-[1] max-h-[calc(90vh-110px)] overflow-y-auto bg-background px-6 pb-6">
           {loading ? (
             <div className="space-y-3 py-4">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -645,6 +645,13 @@ export function SupplierDetailDialog({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* 🛡️ 2026-09-13: Close button (replaces the X icon we removed). */}
+        <div className="flex justify-end border-t px-6 py-3">
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            إغلاق
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   )

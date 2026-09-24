@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useUnsavedConfirm } from '@/hooks/use-dirty-confirm'
 import { Dices, ImagePlus, Loader2, Trash2, Upload } from 'lucide-react'
 import {
   Dialog,
@@ -67,13 +68,19 @@ export function ProductDialog({
   const [branchId, setBranchId] = React.useState<string>('')
   const [branches, setBranches] = React.useState<{ id: number; name: string }[]>([])
   const [collection, setCollection] = React.useState<string>('')
+  const [dirty, setDirty] = React.useState(false)
   const fileRef = React.useRef<HTMLInputElement>(null)
   const capabilities = useShopStore((s) => s.plan.capabilities)
+  const { onOpenChange: handleOpenChange } = useUnsavedConfirm({
+    dirty,
+    onClose: () => onOpenChange(false),
+  })
   const hasCollections = capabilities.includes('collections')
 
   // sync when opening / initial changes
   React.useEffect(() => {
     if (open) {
+      setDirty(false)
       setName(initial?.name ?? '')
       setCategory(initial?.category ?? null)
       setBarcode(initial?.barcode ?? null)
@@ -150,7 +157,7 @@ export function ProductDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>
@@ -167,7 +174,7 @@ export function ProductDialog({
             <Input
               id="p-name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { setName(e.target.value); setDirty(true) }}
               placeholder="اسم المنتج"
             />
           </div>
@@ -261,7 +268,7 @@ export function ProductDialog({
               type="number"
               min={0}
               value={price}
-              onChange={(e) => setPrice(e.target.value)}
+              onChange={(e) => { setPrice(e.target.value); setDirty(true) }}
             />
           </div>
 
@@ -273,7 +280,7 @@ export function ProductDialog({
               type="number"
               min={0}
               value={cost}
-              onChange={(e) => setCost(e.target.value)}
+              onChange={(e) => { setCost(e.target.value); setDirty(true) }}
             />
           </div>
 
@@ -285,7 +292,7 @@ export function ProductDialog({
               type="number"
               min={0}
               value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
+              onChange={(e) => { setQuantity(e.target.value); setDirty(true) }}
             />
           </div>
 
@@ -297,7 +304,7 @@ export function ProductDialog({
               type="number"
               min={0}
               value={minQuantity}
-              onChange={(e) => setMinQuantity(e.target.value)}
+              onChange={(e) => { setMinQuantity(e.target.value); setDirty(true) }}
             />
           </div>
 

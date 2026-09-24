@@ -6,6 +6,19 @@ export const dynamic = 'force-dynamic'
 
 const TRIAL_DAYS = 14
 
+/**
+ * Signup — creates a new tenant + admin user + 14-day trial subscription.
+ *
+ * 🛡️ 2026-09-13 new flow:
+ *   - We NO LONGER create a fake `trial` plan with all features unlocked.
+ *   - Instead, we look up the canonical `electronics-basic` plan and grant
+ *     a 14-day trial of that plan (period='trial', amountPaid=0).
+ *   - The user gets the same full access during trial because `getPlanContext`
+ *     includes CRITICAL_MODULES on every plan.
+ *   - If the user wants a different plan (Pro or Fashion), they go to
+ *     /pricing after login and start a new trial there (or pay via Paymob
+ *     if they've already used a trial).
+ */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null)
@@ -18,6 +31,9 @@ export async function POST(req: NextRequest) {
     const phone = String(body.phone ?? '').trim()
     const password = String(body.password ?? '')
     const agree = body.agree === true || body.agree === 'true'
+    // 🆕 Optional: user can pre-select a plan code from the pricing page.
+    // Defaults to 'electronics-basic' if not provided.
+    const requestedPlanCode = String(body.planCode ?? 'electronics-basic').trim()
 
     if (!shopName) {
       return NextResponse.json({ error: 'اسم المحل مطلوب' }, { status: 400 })
@@ -51,23 +67,57 @@ export async function POST(req: NextRequest) {
 
     const hash = await hashPassword(password)
 
-    // Find or create the trial plan
-    let trialPlan = await db.plan.findUnique({ where: { code: 'trial' } })
+    // 🛡️ 2026-09-13: Find the requested paid plan (default: electronics-basic).
+    // We NO LONGER create a fake `trial` plan — we use a real paid plan and
+    // grant a 14-day trial of it (period='trial', amountPaid=0).
+    let trialPlan = await db.plan.findUnique({ where: { code: requestedPlanCode } })
+
+    // If the requested plan doesn't exist OR is a zero-price plan (trial/free/etc.),
+    // fall back to electronics-basic. This is a safety net — the pricing page
+    // only shows paid plans, but a manual API call could send anything.
+    if (!trialPlan || (trialPlan.priceMonthly === 0 && trialPlan.priceYearly === 0)) {
+      trialPlan = await db.plan.findUnique({ where: { code: 'electronics-basic' } })
+    }
+    // Last-resort fallback: if even electronics-basic is missing from DB,
+    // create it on the fly with the canonical config from seed-plans.ts.
     if (!trialPlan) {
       trialPlan = await db.plan.create({
         data: {
-          code: 'trial',
-          name: 'الباقة التجريبية',
-          description: 'تجربة مجانية لمدة 14 يوم',
-          priceMonthly: 0,
-          priceYearly: 0,
-          maxUsers: 1,
-          maxProducts: 50,
+          code: 'electronics-basic',
+          name: 'أساسية - موبايل وكمبيوتر',
+          description: 'إدارة كاملة لمحل الموبايل والكمبيوتر — POS، مخزون، صيانة، معاملات مالية',
+          priceMonthly: 299,
+          priceYearly: 2990,
+          maxUsers: 3,
+          maxProducts: 500,
           maxBranches: 1,
           trialDays: TRIAL_DAYS,
-          features: JSON.stringify(['حتى 50 منتج', 'مستخدم واحد', 'تجربة 14 يوم']),
+          businessType: 'electronics',
+          enabledModules: JSON.stringify([
+            'dashboard','pos','products','sales','maintenance','customers','suppliers',
+            'purchases','inventory','finance','expenses','cash','reports','settings',
+            'users','branches',
+          ]),
+          capabilities: JSON.stringify([]),
           isActive: true,
-          sortOrder: 0,
+          sortOrder: 10,
+        },
+      })
+      console.log(`[signup] created fallback electronics-basic plan (id=${trialPlan.id})`)
+    }
+
+    // 🛡️ Backfill: if plan exists but is missing enabledModules (legacy plans),
+    // populate it from CRITICAL_MODULES + ALL_MODULES so the user sees all pages.
+    if (trialPlan && !trialPlan.enabledModules) {
+      trialPlan = await db.plan.update({
+        where: { id: trialPlan.id },
+        data: {
+          enabledModules: JSON.stringify([
+            'dashboard','pos','products','sales','maintenance','customers','suppliers',
+            'purchases','finance','expenses','cash','reports','settings','users',
+            'inventory','branches',
+          ]),
+          capabilities: JSON.stringify(['collections','multi_unit','variants','returns_exchange','loyalty']),
         },
       })
     }

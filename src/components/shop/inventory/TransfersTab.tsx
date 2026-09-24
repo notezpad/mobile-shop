@@ -48,6 +48,8 @@ import { api } from '@/lib/api'
 import { formatDate } from '@/lib/format'
 import { DateTimeCell } from '../DateTimeCell'
 import { useConfirm } from '../ConfirmDialogProvider'
+import { ProductPickerCombobox } from '../ProductPickerCombobox'
+import { useShopStore } from '@/lib/store'
 import type { Branch, InventoryProduct, Transfer } from '../InventoryView'
 
 interface Props {
@@ -72,14 +74,38 @@ const STATUS_BADGES: Record<string, string> = {
 
 export function TransfersTab({ transfers, branches, products, userBranchId, onChanged }: Props) {
   const confirm = useConfirm()
-  const [from, setFrom] = React.useState<string>(userBranchId ? String(userBranchId) : '')
-  const [to, setTo] = React.useState<string>('')
-  const [items, setItems] = React.useState<{ productId: number; name: string; quantity: number; available: number }[]>([])
+  // 🛡️ 2026-09-14: from, to, items, note, mode live in the Zustand store with
+  // localStorage persistence — so a draft transfer stays alive across tab
+  // switches, page refreshes, and even navigation to other pages.
+  // `pick` stays as local state (transient combobox value).
+  const transfersDraft = useShopStore((s) => s.transfersDraft)
+  const setTransfersDraft = useShopStore((s) => s.setTransfersDraft)
+  const clearTransfersDraft = useShopStore((s) => s.clearTransfersDraft)
+
+  const from = transfersDraft.from
+  const to = transfersDraft.to
+  const items = transfersDraft.items
+  const note = transfersDraft.note
+  const mode = transfersDraft.mode
+
+  const setFrom = (v: string) => setTransfersDraft({ from: v })
+  const setTo = (v: string) => setTransfersDraft({ to: v })
+  const setItems = (updater: (prev: typeof items) => typeof items) =>
+    setTransfersDraft({ items: updater(items) })
+  const setNote = (v: string) => setTransfersDraft({ note: v })
+  const setMode = (v: 'completed' | 'pending') => setTransfersDraft({ mode: v })
+
   const [pick, setPick] = React.useState('')
-  const [note, setNote] = React.useState('')
-  const [mode, setMode] = React.useState<'completed' | 'pending'>('completed')
   const [saving, setSaving] = React.useState(false)
   const [viewing, setViewing] = React.useState<Transfer | null>(null)
+
+  // 🛡️ Pre-fill the source branch from the user's branch if no draft exists
+  React.useEffect(() => {
+    if (!from && userBranchId) {
+      setFrom(String(userBranchId))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userBranchId, from])
 
   const eligibleProducts = React.useMemo(() => {
     if (!from) return []
@@ -112,11 +138,10 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
   }
 
   const resetForm = () => {
-    setItems([])
-    setNote('')
+    clearTransfersDraft()
     setPick('')
-    setTo('')
-    if (!userBranchId) setFrom('')
+    // Re-apply user branch as the default source after clearing
+    if (userBranchId) setFrom(String(userBranchId))
   }
 
   const submit = async () => {
@@ -223,24 +248,27 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
             <Label className="mb-1.5 block text-xs">إضافة أصناف للتحويل</Label>
             <div className="flex items-end gap-2">
               <div className="flex-1">
-                <Select value={pick} onValueChange={setPick} disabled={!from}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={from ? 'اختر منتج من المخزون' : 'اختر فرع المصدر أولاً'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {eligibleProducts.length === 0 ? (
-                      <SelectItem value="_none" disabled>لا توجد منتجات في هذا الفرع</SelectItem>
-                    ) : (
-                      eligibleProducts.map(p => (
-                        <SelectItem key={p.id} value={String(p.id)} disabled={p.quantity <= 0}>
-                          {p.name} — متاح: {p.quantity}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+                {/* 🚀 2026-09-13: replaced plain <Select> with a searchable
+                    ProductPickerCombobox. The old dropdown was unusable for
+                    shops with many products — you had to scroll through
+                    hundreds of items with no search. Now you can type the
+                    product name or barcode to filter instantly. */}
+                <ProductPickerCombobox
+                  value={pick}
+                  onChange={setPick}
+                  items={eligibleProducts.map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                    barcode: p.barcode,
+                    quantity: p.quantity,
+                    category: p.category,
+                  }))}
+                  placeholder={from ? 'ابحث عن منتج من المخزون...' : 'اختر فرع المصدر أولاً'}
+                  disabled={!from}
+                  blockOutOfStock={false}
+                />
               </div>
-              <Button onClick={addItem} disabled={!pick || pick === '_none'}>
+              <Button onClick={addItem} disabled={!pick}>
                 <Plus className="ml-1 size-4" />
                 إضافة
               </Button>
@@ -339,7 +367,7 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="max-h-[60vh] overflow-auto">
+          <div className="hidden max-h-[60vh] overflow-auto lg:block">
             <Table fixed>
               <TableHeader className="sticky top-0 bg-muted/50 backdrop-blur">
                 <TableRow>
@@ -405,6 +433,57 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
                 )}
               </TableBody>
             </Table>
+          </div>
+
+          {/*
+            نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
+          */}
+          <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+            {transfers.length === 0 ? (
+              <p className="col-span-full py-10 text-center text-muted-foreground">
+                لا توجد تحويلات
+              </p>
+            ) : (
+              transfers.map((t, index) => (
+                <div
+                  key={t.id}
+                  onClick={() => setViewing(t)}
+                  className="cursor-pointer rounded-lg border bg-card p-3 transition-colors hover:bg-muted/50"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          #{index + 1}
+                        </span>
+                        <Badge variant={STATUS_BADGES[t.status] ?? 'secondary'} className="text-[10px]">
+                          {STATUS_LABELS[t.status] ?? t.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-xs font-medium leading-tight">
+                        {t.fromBranch?.name ?? '—'} ← {t.toBranch?.name ?? '—'}
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        <DateTimeCell date={t.createdAt} />
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      onClick={(e) => { e.stopPropagation(); setViewing(t); }}
+                      title="تفاصيل"
+                    >
+                      <Eye className="size-4" />
+                    </Button>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>الأصناف: {t.items?.length ?? 0}</span>
+                    <span>المنشئ: {t.createdByName ?? '—'}</span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

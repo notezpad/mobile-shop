@@ -88,7 +88,7 @@ export function SaleReturnDialog({ open, onOpenChange, saleInvoice, items, onDon
           </div>
         ) : (
           <div className="space-y-3">
-            <div>
+            <div className="flex flex-col gap-1.5">
               <Label>الصنف</Label>
               <select
                 value={saleItemId ?? ''}
@@ -102,7 +102,7 @@ export function SaleReturnDialog({ open, onOpenChange, saleInvoice, items, onDon
                 ))}
               </select>
             </div>
-            <div>
+            <div className="flex flex-col gap-1.5">
               <Label>الكمية المرتجعة</Label>
               <Input
                 type="number"
@@ -112,7 +112,7 @@ export function SaleReturnDialog({ open, onOpenChange, saleInvoice, items, onDon
                 onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
               />
             </div>
-            <div>
+            <div className="flex flex-col gap-1.5">
               <Label>المبلغ النقدي المسترد (سالب = رد نقدي للعميل)</Label>
               <Input
                 type="number"
@@ -125,15 +125,15 @@ export function SaleReturnDialog({ open, onOpenChange, saleInvoice, items, onDon
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            إلغاء
-          </Button>
           {enabled && (
             <Button onClick={submit} disabled={saving}>
               {saving && <Loader2 className="size-4 animate-spin" />}
               تأكيد المرتجع
             </Button>
           )}
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            إلغاء
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

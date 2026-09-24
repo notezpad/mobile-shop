@@ -115,9 +115,10 @@ export function PurchaseOrderDialog({
     setSearchLoading(true)
     const t = setTimeout(async () => {
       try {
-        const data = await api<ProductLite[]>(
+        const res = await api<{ data: ProductLite[] } | ProductLite[]>(
           `/api/products?search=${encodeURIComponent(q)}`
         )
+        const data = Array.isArray(res) ? res : (res as any)?.data ?? []
         setResults(data)
         setSearchOpen(true)
       } catch {
@@ -336,7 +337,7 @@ export function PurchaseOrderDialog({
                 type="button"
                 size="sm"
                 variant="outline"
-                className="shrink-0 border-info-subtle bg-white hover:bg-info-subtle"
+                className="shrink-0 border-info-subtle bg-background hover:bg-info-subtle"
                 onClick={addAllPendingToday}
               >
                 <Plus className="size-4" />
@@ -468,13 +469,13 @@ export function PurchaseOrderDialog({
         </div>
 
         <DialogFooter className="border-t px-6 py-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            إلغاء
-          </Button>
           <Button onClick={submit} disabled={submitting || cart.length === 0}>
             {submitting && <Loader2 className="size-4 animate-spin" />}
             <Plus className="size-4" />
             حفظ أمر الشراء
+          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            إلغاء
           </Button>
         </DialogFooter>
       </DialogContent>

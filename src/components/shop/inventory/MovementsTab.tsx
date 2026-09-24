@@ -227,7 +227,7 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId, on
           <CardTitle className="text-base">سجل الحركات</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="max-h-[60vh] overflow-auto">
+          <div className="hidden max-h-[60vh] overflow-auto lg:block">
             <Table fixed>
               <TableHeader className="sticky top-0 bg-muted/50 backdrop-blur">
                 <TableRow>
@@ -279,6 +279,58 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId, on
                 )}
               </TableBody>
             </Table>
+          </div>
+
+          {/*
+            نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
+          */}
+          <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+            {filtered.length === 0 ? (
+              <p className="col-span-full py-10 text-center text-muted-foreground">
+                لا توجد حركات
+              </p>
+            ) : (
+              filtered.map((m, index) => {
+                const incoming = m.type === 'in' || m.type === 'in_adjust' || m.type === 'transfer_in'
+                return (
+                  <div key={m.id} className="rounded-lg border bg-card p-3 hover:bg-muted/30 dark:hover:bg-muted/20">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            #{index + 1}
+                          </span>
+                          <Badge variant={incoming ? 'secondary' : 'destructive'} className="text-[10px]">
+                            {TYPE_LABELS[m.type] ?? m.type}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 truncate font-medium leading-tight">
+                          {m.product?.name ?? '—'}
+                        </p>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          <DateTimeCell date={m.createdAt} />
+                          {m.branch && <> • {m.branch.name}</>}
+                        </p>
+                      </div>
+                      <p className={
+                        incoming
+                          ? 'shrink-0 text-base font-bold tabular-nums text-success'
+                          : 'shrink-0 text-base font-bold tabular-nums text-destructive'
+                      }>
+                        {incoming ? '+' : '-'}{m.quantity}
+                      </p>
+                    </div>
+
+                    {m.note && (
+                      <p className="mt-2 text-xs text-muted-foreground">{m.note}</p>
+                    )}
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      بواسطة: {m.userName ?? '—'}
+                    </p>
+                  </div>
+                )
+              })
+            )}
           </div>
         </CardContent>
       </Card>

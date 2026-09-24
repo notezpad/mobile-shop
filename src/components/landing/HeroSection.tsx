@@ -51,7 +51,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
             className="glass-pill inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-bold text-brand-300"
           >
             <span className="lg-dot" />
-            منصة SaaS واحدة لإدارة محلات التجزئة والجملة في مصر
+            منصة SaaS واحدة لإدارة محلات التجزئة والجملة في الدول العربية
           </motion.div>
 
           <motion.div custom={1} initial="hidden" animate="visible" variants={fadeUp}>
@@ -173,7 +173,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                   className="glass-panel-strong absolute -top-4 right-0 z-20 flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white shadow-lg sm:right-4"
                 >
                   <TrendingUp className="size-4 text-brand-300" />
-                  +{meta.mockStats[0].value} ج.م اليوم
+                  +{meta.mockStats[0].value}  اليوم
                 </motion.div>
 
                 <motion.div
@@ -199,7 +199,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                       dir="ltr"
                     >
                       <span className="size-2 rounded-full bg-brand-400" />
-                      app.shop-system.eg/dashboard
+                      app.shop-system.com/dashboard
                     </div>
                   </div>
 
@@ -234,7 +234,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                     <div className="glass-card rounded-lg p-3">
                       <div className="mb-2 flex items-center justify-between">
                         <p className="text-[11px] font-semibold text-white">مبيعات الأسبوع</p>
-                        <span className="text-[10px] text-white/50">ج.م</span>
+                        <span className="text-[10px] text-white/50"></span>
                       </div>
                       <div className="flex h-24 items-end justify-between gap-1.5">
                         {[
@@ -272,7 +272,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                           <span className="truncate">{r.n}</span>
                           <span className="text-center text-white/50">{r.q}</span>
                           <span className="text-left font-semibold text-brand-300">
-                            {r.p} ج.م
+                            {r.p} 
                           </span>
                         </div>
                       ))}

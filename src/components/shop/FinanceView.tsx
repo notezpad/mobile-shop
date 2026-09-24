@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select,
@@ -41,9 +42,9 @@ interface Txn {
 }
 
 const METHOD_LABEL: Record<string, string> = {
-  vodafone_cash: 'فودافون كاش',
+  vodafone_cash: 'محافظ إلكترونية',
   instapay: 'انستاباي',
-  fawry: 'فوري',
+  fawry: 'محفظة إلكترونية',
 }
 
 export function FinanceView() {
@@ -112,7 +113,7 @@ export function FinanceView() {
     const html = printListReportHtml(
       {
         title: 'المعاملات المالية',
-        subtitle: 'فودافون كاش — انستاباي — فوري',
+        subtitle: 'محافظ إلكترونية متعددة',
         columns: [
           { header: '#' },
           { header: 'التاريخ' },
@@ -126,7 +127,7 @@ export function FinanceView() {
         ],
         rows: rows.map((t, i) => [
           String(i + 1),
-          formatArabicDateTime(t.createdAt),
+          <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatArabicDateTime(t.createdAt)}</span>,
           METHOD_LABEL[t.method] ?? t.method,
           t.userName ?? '—',
           t.kind === 'deposit' ? 'إيداع' : 'سحب',
@@ -163,7 +164,7 @@ export function FinanceView() {
         <div>
           <h1 className="text-2xl font-bold">المعاملات المالية</h1>
           <p className="text-sm text-muted-foreground">
-            فودافون كاش — انستاباي — فوري
+            محافظ إلكترونية متعددة
           </p>
         </div>
         <Button variant="outline" onClick={exportPdf} disabled={loading}>
@@ -185,7 +186,7 @@ export function FinanceView() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="vodafone_cash">فودافون كاش</SelectItem>
+                  <SelectItem value="vodafone_cash">محافظ إلكترونية</SelectItem>
                   <SelectItem value="instapay">انستاباي</SelectItem>
                   <SelectItem value="fawry">فوري</SelectItem>
                 </SelectContent>
@@ -261,7 +262,7 @@ export function FinanceView() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">الكل</SelectItem>
-                <SelectItem value="vodafone_cash">فودافون كاش</SelectItem>
+                <SelectItem value="vodafone_cash">محافظ إلكترونية</SelectItem>
                 <SelectItem value="instapay">انستاباي</SelectItem>
                 <SelectItem value="fawry">فوري</SelectItem>
               </SelectContent>
@@ -283,7 +284,7 @@ export function FinanceView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto" dir="ltr">
+            <div className="hidden overflow-x-auto lg:block" dir="ltr">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -344,6 +345,77 @@ export function FinanceView() {
                   )}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {/*
+            نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
+          */}
+          {!loading && (
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+              {rows.length === 0 ? (
+                <p className="col-span-full py-8 text-center text-muted-foreground">
+                  لا توجد معاملات
+                </p>
+              ) : (
+                rows.map((t, index) => (
+                  <div key={t.id} className="rounded-lg border bg-card p-3 hover:bg-muted/30 dark:hover:bg-muted/20">
+                    {/* رأس الكارت: الوسيلة + نوع المعاملة */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            #{index + 1}
+                          </span>
+                          <p className="font-medium leading-tight">
+                            {METHOD_LABEL[t.method] ?? t.method}
+                          </p>
+                          <Badge
+                            variant={t.kind === 'deposit' ? 'secondary' : 'destructive'}
+                            className="text-[10px]"
+                          >
+                            {t.kind === 'deposit' ? 'إيداع' : 'سحب'}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          <DateTimeCell date={t.createdAt} />
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* شبكة البيانات: مبلغ/عمولة/صافي */}
+                    <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-2 text-center">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">المبلغ</p>
+                        <p className="text-xs font-semibold tabular-nums">
+                          {formatCurrency(t.amount)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">العمولة</p>
+                        <p className="text-xs tabular-nums text-primary">
+                          {formatCurrency(t.commission)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">الصافي</p>
+                        <p className="text-xs font-semibold tabular-nums">
+                          {formatCurrency(
+                            (t.kind === 'deposit' ? t.amount : -t.amount) +
+                              t.commission
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* ملاحظة + بواسطة */}
+                    <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>بواسطة: {t.userName ?? '—'}</span>
+                      {t.note && <span className="truncate" title={t.note}>{t.note}</span>}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </CardContent>

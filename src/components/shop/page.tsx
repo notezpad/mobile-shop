@@ -57,7 +57,7 @@ const VIEW_TITLES: Record<string, string> = {
   suppliers: 'الموردين',
   purchases: 'المشتريات',
   finance: 'المعاملات المالية',
-  expenses: 'المصروفات',
+  expenses: 'الالمعاملات المالية',
   cash: 'الخزنة',
   reports: 'التقارير',
   settings: 'الإعدادات',

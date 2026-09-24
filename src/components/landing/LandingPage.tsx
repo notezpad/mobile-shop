@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Store, Users, Star, TrendingUp } from 'lucide-react'
 import { LandingHeader } from './LandingHeader'
@@ -15,12 +16,36 @@ import { TrustSection } from './TrustSection'
 import { FAQSection } from './FAQSection'
 import { FinalCTASection } from './FinalCTASection'
 import { LandingFooter } from './LandingFooter'
-import { AuthPage, type AuthMode } from './AuthPage'
 import { VerticalProvider } from './vertical-context'
 import type { AuthUser } from '@/lib/auth-client'
 
+/**
+ * 🛡️ 2026-09-17 (v3): URL-based auth routing.
+ *
+ * Removed the local `authView` state that was controlling whether to show
+ * the AuthPage overlay. Instead, when the user clicks "Login" or "Sign up"
+ * on the landing, we navigate to `/login` or `/signup` (separate routes).
+ *
+ * Why? Because the old approach stored the auth mode in React state, so:
+ *   - User on `/` → clicks "Sign up" → state = 'signup' (URL still `/`)
+ *   - Refresh → state resets to null → back to landing page (BAD UX)
+ *   - User couldn't share the signup URL with someone else
+ *   - Back button didn't work as expected
+ *
+ * With separate routes:
+ *   - User on `/` → clicks "Sign up" → navigates to `/signup` (URL changes)
+ *   - Refresh → stays on `/signup` (URL preserved) ✓
+ *   - User can share the URL ✓
+ *   - Back button goes back to `/` (landing) ✓
+ *
+ * The `onAuthed` prop is now optional because the separate `/login` and
+ * `/signup` pages handle their own post-auth redirect via router.push.
+ * The `(shop)/layout.tsx` fetches the session on mount and hydrates the
+ * Zustand store, so the store gets updated when the user lands on /dashboard.
+ */
+
 interface LandingPageProps {
-  onAuthed: (u: AuthUser, shopName?: string) => void
+  onAuthed?: (u: AuthUser, shopName?: string) => void
 }
 
 const STATS = [
@@ -30,29 +55,14 @@ const STATS = [
   { icon: TrendingUp, headline: 'تقارير لحظية', label: 'تعرف وضع محلك أول بأول' },
 ]
 
-export function LandingPage({ onAuthed }: LandingPageProps) {
-  // null = show landing page, 'login'/'signup' = show auth page
-  const [authView, setAuthView] = React.useState<AuthMode | null>(null)
+export function LandingPage({ onAuthed: _onAuthed }: LandingPageProps) {
+  const router = useRouter()
 
-  const openAuth = React.useCallback((mode: AuthMode) => {
-    setAuthView(mode)
-  }, [])
-
-  const closeAuth = React.useCallback(() => {
-    setAuthView(null)
-  }, [])
-
-  // Show full-page auth when triggered
-  if (authView) {
-    return (
-      <AuthPage
-        mode={authView}
-        onModeChange={setAuthView}
-        onAuthed={onAuthed}
-        onBack={closeAuth}
-      />
-    )
-  }
+  // 🛡️ 2026-09-17 (v3): Navigate to separate routes instead of using local state.
+  // This way the URL changes to /login or /signup, and refresh preserves the page.
+  const openAuth = React.useCallback((mode: 'login' | 'signup') => {
+    router.push(`/${mode}`)
+  }, [router])
 
   return (
     <VerticalProvider>

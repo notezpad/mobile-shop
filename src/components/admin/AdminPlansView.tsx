@@ -66,6 +66,8 @@ interface PlanRow {
   businessType?: string | null
   capabilities?: string | null
   enabledModules?: string | null
+  // 🛡️ 2026-09-17 (v3): flag to distinguish canonical vs custom plans
+  isCanonical?: boolean
 }
 
 function parseFeatures(raw: string | null | undefined): string {
@@ -80,11 +82,48 @@ function parseFeatures(raw: string | null | undefined): string {
 }
 
 const CAPABILITIES_META: { key: string; label: string; desc: string }[] = [
-  { key: 'multi_unit',       label: 'وحدات الجملة (دستة)',    desc: 'بيع بالجملة — نص دستة / دستة' },
+  { key: 'multi_unit',       label: 'وحدات الجملة (دستة)',    desc: 'بيع بالجملة — نص دستة / دستة / كرتونة. لو حاب تبيع بلقطعة، ضيف وحدة factor=1.' },
   { key: 'collections',      label: 'الكوليكشن',              desc: 'تجميع المنتجات في كوليكشنات وخصم جماعي' },
-  { key: 'variants',         label: 'الأشكال/المقاسات (Variants)', desc: 'إدارة منتجات بأشكال أو مقاسات متعددة' },
+  { key: 'variants',         label: 'الأشكال/المقاسات (Variants)', desc: 'إدارة منتجات بأشكال أو مقاسات متعددة (ألوان/مقاسات). مناسب للبيع بالقطعة (تجزئة) — مش للجملة.' },
   { key: 'returns_exchange', label: 'المرتجعات والاستبدال',    desc: 'تسجيل مرتجعات واستبدال الفواتير' },
   { key: 'loyalty',          label: 'نقاط الولاء',            desc: 'تجميع واستبدال نقاط ولاء العملاء' },
+]
+
+// 🛡️ 2026-09-15 (v2→v5): Module metadata for the per-plan module editor.
+// Lets the admin toggle which sidebar modules each plan unlocks.
+// 🛡️ 2026-09-15 (v5): `expenses` + `cash` are now available in BOTH fashion
+// and electronics plans (clothes shops have rent + cash drawer too).
+// Only `maintenance` (device repair) and `finance` (Vodafone Cash/Instapay/Fawry)
+// remain electronics-only.
+const MODULES_META: { key: string; label: string; desc: string; electronicsOnly?: boolean }[] = [
+  { key: 'dashboard',  label: 'لوحة المعلومات',   desc: 'الصفحة الرئيسية للنظام' },
+  { key: 'pos',        label: 'نقطة البيع',       desc: 'شاشة الكاشير لإنشاء الفواتير' },
+  { key: 'products',   label: 'المنتجات',         desc: 'إدارة المنتجات والباركود' },
+  { key: 'sales',      label: 'سجل المبيعات',     desc: 'الفواتير السابقة ومرتجعاتها' },
+  { key: 'customers',  label: 'العملاء',          desc: 'قاعدة بيانات العملاء وأرصدتهم' },
+  { key: 'suppliers',  label: 'الموردين',         desc: 'قائمة الموردين والمستحقات' },
+  { key: 'purchases',  label: 'المشتريات',        desc: 'أوامر الشراء من الموردين' },
+  { key: 'inventory',  label: 'المخزون',          desc: 'حركات المخزون والجرد والتحويلات' },
+  { key: 'reports',    label: 'التقارير',         desc: 'تقارير المبيعات والأرباح' },
+  { key: 'branches',   label: 'الفروع',           desc: 'إدارة الفروع المتعددة' },
+  { key: 'settings',   label: 'الإعدادات',        desc: 'إعدادات المحل (حرجة — مفعّلة دائماً)' },
+  { key: 'users',      label: 'المستخدمين',       desc: 'إدارة المستخدمين (حرجة — مفعّلة دائماً)' },
+  { key: 'maintenance', label: 'الصيانة',         desc: 'أوامر صيانة الأجهزة — إلكترونيات فقط', electronicsOnly: true },
+  { key: 'finance',    label: 'المعاملات المالية', desc: 'فودافون كاش/إنستاباي/فوري — إلكترونيات فقط', electronicsOnly: true },
+  { key: 'expenses',   label: 'المصروفات',        desc: 'مصروفات المحل (إيجار، مرتبات، كهرباء)' },
+  { key: 'cash',       label: 'الخزنة',           desc: 'حركات الخزنة (نقدية)' },
+]
+
+// Default module lists per business type. Used by the "reset to defaults" button.
+// 🛡️ 2026-09-15 (v5): fashion plans now include `expenses` + `cash`
+// (clothes shops have running costs + cash drawer too).
+const ELECTRONICS_DEFAULTS = [
+  'dashboard','pos','products','sales','maintenance','customers','suppliers',
+  'purchases','inventory','finance','expenses','cash','reports','settings','users','branches',
+]
+const FASHION_DEFAULTS = [
+  'dashboard','pos','products','sales','customers','suppliers',
+  'purchases','inventory','expenses','cash','reports','settings','users','branches',
 ]
 
 function parseCaps(raw: string | null | undefined): string[] {
@@ -190,15 +229,26 @@ export function AdminPlansView() {
                         </p>
                       )}
                     </div>
-                    {p.isActive ? (
-                      <Badge variant="outline" className="bg-success-subtle text-success-subtle-foreground border-success-subtle">
-                        مفعّلة
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="bg-muted text-muted-foreground border-border">
-                        معطّلة
-                      </Badge>
-                    )}
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      {p.isCanonical ? (
+                        <Badge variant="outline" className="bg-info-subtle text-info-subtle-foreground border-info-subtle text-[10px]">
+                          قياسي
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] dark:bg-amber-950 dark:text-amber-300">
+                          مخصّص
+                        </Badge>
+                      )}
+                      {p.isActive ? (
+                        <Badge variant="outline" className="bg-success-subtle text-success-subtle-foreground border-success-subtle">
+                          مفعّلة
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-muted text-muted-foreground border-border">
+                          معطّلة
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   <p className="text-[11px] text-muted-foreground line-clamp-2">
                     {p.description ?? ''}
@@ -344,6 +394,9 @@ function PlanDialog({
   const [trialDays, setTrialDays] = React.useState('0')
   const [features, setFeatures] = React.useState('')
   const [capabilities, setCapabilities] = React.useState<string[]>([])
+  // 🛡️ 2026-09-15 (v2): per-plan module list — controls which sidebar
+  // items show up for users on this plan.
+  const [enabledModules, setEnabledModules] = React.useState<string[]>([])
   const [sortOrder, setSortOrder] = React.useState('0')
   const [isActive, setIsActive] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
@@ -362,6 +415,7 @@ function PlanDialog({
       setTrialDays(String(plan.trialDays))
       setFeatures(parseFeatures(plan.features))
       setCapabilities(parseCaps(plan.capabilities))
+      setEnabledModules(parseCaps(plan.enabledModules))
       setSortOrder(String(plan.sortOrder))
       setIsActive(plan.isActive)
     } else {
@@ -377,6 +431,8 @@ function PlanDialog({
       setTrialDays('0')
       setFeatures('')
       setCapabilities([])
+      // 🛡️ default to electronics modules for new plans
+      setEnabledModules([...ELECTRONICS_DEFAULTS])
       setSortOrder('0')
       setIsActive(true)
     }
@@ -389,12 +445,20 @@ function PlanDialog({
     }
     setSaving(true)
     try {
+      // 🛡️ Always force-include the critical modules (settings, users)
+      // — these are required in every plan and can't be turned off.
+      const finalModules = Array.from(new Set([
+        ...enabledModules,
+        'settings',
+        'users',
+      ]))
       const payload = {
         code,
         name,
         description,
         businessType,
-        capabilities: JSON.stringify(capabilities),
+        capabilities, // send as array — API handles either form
+        enabledModules: finalModules, // send as array — API handles either form
         priceMonthly: Number(priceMonthly) || 0,
         priceYearly: Number(priceYearly) || 0,
         maxUsers: Number(maxUsers) || 1,
@@ -472,7 +536,7 @@ function PlanDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>السعر الشهري (ج.م)</Label>
+              <Label>السعر الشهري ()</Label>
               <Input
                 type="number"
                 value={priceMonthly}
@@ -481,7 +545,7 @@ function PlanDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label>السعر السنوي (ج.م)</Label>
+              <Label>السعر السنوي ()</Label>
               <Input
                 type="number"
                 value={priceYearly}
@@ -578,6 +642,73 @@ function PlanDialog({
               })}
             </div>
           </div>
+
+          {/* 🛡️ 2026-09-15 (v2): per-plan module editor */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label>الصفحات المتاحة في القائمة الجانبية (Modules)</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setEnabledModules(
+                    businessType === 'fashion' ? [...FASHION_DEFAULTS] : [...ELECTRONICS_DEFAULTS]
+                  )
+                }
+              >
+                تطبيق الإعداد الافتراضي لـ {businessType === 'fashion' ? 'ملابس' : 'موبايل'}
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              فعّل الصفحات اللي الباقة دي تفتحها للمستخدم. الإعدادات والمستخدمين مفعّلين دائماً.
+              {businessType === 'fashion' && ' عناصر موبايل/كمبيوتر (الصيانة، المعاملات المالية) غير متاحة لملابس.'}
+            </p>
+            <div className="rounded-md border p-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {MODULES_META.map((mod) => {
+                const isCritical = mod.key === 'settings' || mod.key === 'users'
+                const checked = isCritical || enabledModules.includes(mod.key)
+                // For fashion plans, disable the electronics-only toggles
+                const isElectronicsOnly = !!mod.electronicsOnly
+                const isDisabledForCurrentType = businessType === 'fashion' && isElectronicsOnly
+                const effectivelyDisabled = isCritical || isDisabledForCurrentType
+                return (
+                  <label
+                    key={mod.key}
+                    className={`flex items-start gap-2 rounded-md border p-2 transition-colors ${
+                      isCritical
+                        ? 'bg-muted/40 border-border cursor-not-allowed'
+                        : isDisabledForCurrentType
+                          ? 'opacity-50 border-border cursor-not-allowed'
+                          : checked
+                            ? 'bg-success-subtle border-success-subtle cursor-pointer'
+                            : 'hover:bg-muted/50 cursor-pointer'
+                    }`}
+                  >
+                    <Switch
+                      checked={checked}
+                      disabled={effectivelyDisabled}
+                      onCheckedChange={(on) =>
+                        setEnabledModules((prev) =>
+                          on ? [...prev, mod.key] : prev.filter((m) => m !== mod.key)
+                        )
+                      }
+                      className="mt-0.5 shrink-0"
+                    />
+                    <div>
+                      <p className="text-sm font-medium leading-tight">
+                        {mod.label}
+                        {isCritical && <span className="text-[10px] text-muted-foreground"> (إجباري)</span>}
+                        {isDisabledForCurrentType && <span className="text-[10px] text-muted-foreground"> (غير متاح لملابس)</span>}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">{mod.desc}</p>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
           <div className="flex items-center gap-2">
             <Switch checked={isActive} onCheckedChange={setIsActive} id="plan-active" />
             <Label htmlFor="plan-active">الباقة مفعّلة</Label>

@@ -23,7 +23,7 @@ export async function DELETE(
   }
   const expense = await db.expense.findUnique({ where: { id: eid } })
   if (!expense || expense.tenantId !== session.tenantId) {
-    return NextResponse.json({ error: 'المصروف غير موجود' }, { status: 404 })
+    return NextResponse.json({ error: 'الالدول العربيةوف غير موجود' }, { status: 404 })
   }
 
   await db.$transaction(async (tx) => {
@@ -34,7 +34,7 @@ export async function DELETE(
         source: 'expense',
         refId: eid,
         amount: expense.amount,
-        note: `إلغاء مصروف ${expense.category}`,
+        note: `إلغاء الدول العربيةوف ${expense.category}`,
         userId: session.userId,
       },
     })

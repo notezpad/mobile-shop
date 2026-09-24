@@ -72,9 +72,12 @@ export function CustomersView() {
         ? `?search=${encodeURIComponent(search.trim())}`
         : ''
       const data = await api<Customer[]>(`/api/customers${params}`)
-      setCustomers(data)
+      if (Array.isArray(data)) setCustomers(data)
     } catch (e: any) {
-      toast.error(e?.message || 'فشل تحميل العملاء')
+      // ⚡ Offline: don't show scary error — data stays as-is
+      if (!e?.message?.includes('لا توجد بيانات')) {
+        toast.error(e?.message || 'فشل تحميل العملاء')
+      }
     } finally {
       setLoading(false)
     }
@@ -122,12 +125,20 @@ export function CustomersView() {
 
   const remove = async (id: number) => {
     if (!(await confirm('حذف العميل؟'))) return
+    // ⚡ Optimistic: remove from list immediately
+    const removed = customers.find((c) => c.id === id)
+    setCustomers((prev) => prev.filter((c) => c.id !== id))
     try {
       await api(`/api/customers/${id}`, { method: 'DELETE' })
       toast.success('تم الحذف')
-      load()
+      if (typeof navigator === 'undefined' || navigator.onLine) load()
     } catch (e: any) {
-      toast.error(e?.message || 'فشل الحذف')
+      if (e?.message?.includes('تم الحفظ') || e?.message?.includes('offline')) {
+        toast.success('تم الحذف (offline — سيتم المزامنة لاحقاً)')
+      } else {
+        if (removed) setCustomers((prev) => [removed, ...prev])
+        toast.error(e?.message || 'فشل الحذف')
+      }
     }
   }
 
@@ -252,7 +263,7 @@ export function CustomersView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto" dir="ltr">
+            <div className="hidden overflow-x-auto lg:block" dir="ltr">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -348,6 +359,107 @@ export function CustomersView() {
               </Table>
             </div>
           )}
+          {/*
+            نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
+          */}
+          {!loading && (
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+              {customers.length === 0 ? (
+                <p className="col-span-full py-8 text-center text-muted-foreground">
+                  لا يوجد عملاء
+                </p>
+              ) : (
+                customers.map((c, index) => {
+                  const hasDebt = c.balance > 0
+                  return (
+                    <div key={c.id} className="rounded-lg border bg-card p-3 hover:bg-muted/30 dark:hover:bg-muted/20">
+                      <div className="flex items-start gap-3">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-subtle text-base font-bold text-primary-subtle-foreground">
+                          {c.name?.charAt(0) ?? '?'}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              #{index + 1}
+                            </span>
+                            <p className="truncate font-medium leading-tight">{c.name}</p>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {c.phone ?? 'بدون هاتف'}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            onClick={() => setDetailCustomer(c)}
+                            title="كشف حساب"
+                          >
+                            <Eye className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            onClick={() => {
+                              setEditing(c)
+                              setDialogOpen(true)
+                            }}
+                            title="تعديل"
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-destructive hover:text-destructive"
+                            onClick={() => remove(c.id)}
+                            title="حذف"
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-2 text-center">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">الرصيد</p>
+                          <Badge
+                            variant="outline"
+                            className={
+                              hasDebt
+                                ? 'border-destructive/20 bg-destructive/5 text-destructive tabular-nums'
+                                : 'border-success-subtle bg-success-subtle text-success-subtle-foreground tabular-nums'
+                            }
+                          >
+                            {formatCurrency(c.balance)}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">إجمالي المشتريات</p>
+                          <p className="text-xs font-semibold tabular-nums">
+                            {formatCurrency(c.totalPurchases ?? 0)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">عدد المبيعات</p>
+                          <p className="text-xs font-semibold tabular-nums">
+                            {c._count?.sales ?? 0}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                        <span>آخر تعامل:</span>
+                        <span className="font-medium">
+                          {c.lastSaleAt ? <DateTimeCell date={c.lastSaleAt} /> : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -355,7 +467,10 @@ export function CustomersView() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         initial={editing}
-        onSaved={load}
+        onSaved={() => {
+          // ⚡ Optimistic: if offline, load() will fail — but we can try
+          load()
+        }}
       />
 
       <CustomerDetailDialog

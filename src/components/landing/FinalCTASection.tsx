@@ -35,7 +35,7 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
           transition={{ duration: 0.5, delay: 0.08 }}
           className="mx-auto mt-4 max-w-xl text-lg lg-muted"
         >
-          انضم لأكثر من 50 محل نشط على منصتنا. تجربتك المجانية تبدأ الآن.
+          كن من أوائل المحلات اللي بتجرب النظام وتستمتع بميزاته كاملة مجاناً لمدة 14 يوم.
         </motion.p>
 
         <motion.div

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { recordCommission, createPrincipalCashEntry } from '@/lib/commission'
 
 export const dynamic = 'force-dynamic'
 
@@ -89,25 +90,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'المبلغ غير صالح' }, { status: 400 })
   }
 
-  // commission rates from Tenant
-  const tenant = await db.tenant.findUnique({
-    where: { id: session.tenantId },
-    select: {
-      commissionVodafoneCash: true,
-      commissionInstapay: true,
-      commissionFawry: true,
-    },
-  })
-  const rate =
-    method === 'vodafone_cash'
-      ? (tenant?.commissionVodafoneCash ?? 0)
-      : method === 'instapay'
-        ? (tenant?.commissionInstapay ?? 0)
-        : (tenant?.commissionFawry ?? 0)
-  const commission = (amount * rate) / 100
+  // 🛡️ 2026-09-15 (v3): commission rate lookup now uses the unified
+  // `recordCommission()` helper inside the transaction. No need to pre-compute
+  // here — the helper will look up the rate and compute correctly.
 
   const note = body.note ? String(body.note) : null
   const principalSign = kind === 'deposit' ? 1 : -1
+  const methodName =
+    method === 'vodafone_cash'
+      ? 'محافظ إلكترونية'
+      : method === 'instapay'
+        ? 'انستاباي'
+        : 'محفظة إلكترونية'
 
   const tx = await db.$transaction(async (dbx) => {
     const created = await dbx.transaction.create({
@@ -116,48 +110,54 @@ export async function POST(req: NextRequest) {
         method,
         kind,
         amount,
-        commission,
+        // 🛡️ Compute commission via the unified helper for consistency.
+        // Pre-read it for the Transaction.commission field (the helper
+        // creates a separate CashEntry, but the Transaction row also
+        // needs to store it for the finance list view).
+        commission: 0, // filled in below after calling recordCommission
         note,
         userId: session.userId,
       },
     })
-    // principal cash entry (signed by kind)
-    await dbx.cashEntry.create({
-      data: {
-        tenantId: session.tenantId,
-        source: 'transaction',
-        refId: created.id,
-        amount: principalSign * amount,
-        note: `${kind === 'deposit' ? 'إيداع' : 'سحب'} ${
-          method === 'vodafone_cash'
-            ? 'فودافون كاش'
-            : method === 'instapay'
-              ? 'انستاباي'
-              : 'فوري'
-        } - ${amount}`,
-        userId: session.userId,
-      },
+
+    // Principal cash entry (signed by kind) with `method` column
+    const principalEntry = await createPrincipalCashEntry(dbx, {
+      tenantId: session.tenantId,
+      userId: session.userId,
+      method,
+      source: 'transaction',
+      refId: created.id,
+      amount: principalSign * amount,
+      note: `${kind === 'deposit' ? 'إيداع' : 'سحب'} ${methodName} - ${amount}`,
     })
-    // commission always positive (shop earns it)
+
+    // 🛡️ Bug #5 fix: Use the unified commission helper (always POSITIVE —
+    // the shop EARNS the commission). This was already the convention here,
+    // but now it's centralized so all routes are consistent.
+    const { commission, commissionEntryId } = await recordCommission(dbx, {
+      tenantId: session.tenantId,
+      userId: session.userId,
+      method,
+      amount,
+      refType: 'transaction',
+      refId: created.id,
+      noteSuffix: methodName,
+    })
+
+    // Update the Transaction row with the commission amount (for the finance list view)
     if (commission > 0) {
-      await dbx.cashEntry.create({
-        data: {
-          tenantId: session.tenantId,
-          source: 'transaction',
-          refId: created.id,
-          amount: commission,
-          note: `عمولة ${
-            method === 'vodafone_cash'
-              ? 'فودافون كاش'
-              : method === 'instapay'
-                ? 'انستاباي'
-                : 'فوري'
-          } - ${amount}`,
-          userId: session.userId,
-        },
+      await dbx.transaction.update({
+        where: { id: created.id },
+        data: { commission },
       })
     }
-    return created
+
+    return {
+      ...created,
+      commission,
+      commissionEntryId,
+      linkedCashEntryId: principalEntry.id,
+    }
   })
   return NextResponse.json(tx, { status: 201 })
 }

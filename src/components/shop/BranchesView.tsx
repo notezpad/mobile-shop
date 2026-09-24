@@ -39,6 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 import {
   Tabs,
   TabsContent,
@@ -85,6 +86,14 @@ export function BranchesView() {
   const [form, setForm] = React.useState({ name: '', address: '', phone: '', active: true })
   const [saving, setSaving] = React.useState(false)
 
+  /**
+   * Load BOTH the branches list AND the per-branch reports (sales/profit).
+   * Used on initial mount to fully populate the page.
+   *
+   * 🚀 2026-09-13: After the /api/reports/branches SQL-aggregate fix, this
+   * endpoint is now ~150-300ms instead of 3-6s. So we can safely fetch both
+   * in parallel on initial load.
+   */
   const load = React.useCallback(async () => {
     setLoading(true)
     try {
@@ -100,6 +109,54 @@ export function BranchesView() {
     }
   }, [])
   React.useEffect(() => { load() }, [load])
+
+  /**
+   * Lightweight reload — fetches ONLY the branches list (single fast query).
+   * Used after save/delete when we know the reports haven't materially
+   * changed (the new branch has zero sales). Refreshes the list instantly
+   * without waiting for the (now fast but still unnecessary) reports fetch.
+   *
+   * We also patch the local `reports` array to keep the UI consistent:
+   *   - Added a branch? Append a zero-stats entry.
+   *   - Deleted a branch? Remove its entry from reports.
+   *   - Edited? Just update the name in the existing entry.
+   */
+  const reloadBranchesOnly = React.useCallback(async (opts?: {
+    added?: { id: number; name: string; isMain: boolean }
+    deletedId?: number
+    renamed?: { id: number; name: string }
+  }) => {
+    try {
+      const bs = await api<Branch[]>('/api/branches')
+      setBranches(bs)
+
+      if (opts?.added) {
+        // New branch starts with zero sales — patch the reports array so the
+        // table shows it without needing to refetch /api/reports/branches.
+        const placeholder: BranchReport = {
+          branchId: opts.added.id,
+          name: opts.added.name,
+          isMain: opts.added.isMain,
+          salesCount: 0,
+          totalSales: 0,
+          totalProfit: 0,
+          productCount: 0,
+        }
+        setReports((prev) => [...prev, placeholder])
+      } else if (opts?.deletedId !== undefined) {
+        setReports((prev) => prev.filter((r) => r.branchId !== opts.deletedId))
+      } else if (opts?.renamed) {
+        setReports((prev) =>
+          prev.map((r) =>
+            r.branchId === opts.renamed.id ? { ...r, name: opts.renamed.name } : r,
+          ),
+        )
+      }
+    } catch (e: any) {
+      // If the lightweight reload fails, fall back to a full load.
+      load()
+    }
+  }, [load])
 
   const openNew = () => {
     setEditing(null)
@@ -119,12 +176,22 @@ export function BranchesView() {
       if (editing) {
         await api(`/api/branches/${editing.id}`, { method: 'PATCH', body: form })
         toast.success('تم تحديث الفرع')
+        setOpen(false)
+        // 🚀 Only refetch branches list (fast) + patch the reports array
+        // in-place. The new branch's stats haven't changed.
+        void reloadBranchesOnly({ renamed: { id: editing.id, name: form.name.trim() } })
       } else {
-        await api('/api/branches', { method: 'POST', body: form })
+        const created = await api<Branch>('/api/branches', { method: 'POST', body: form })
         toast.success('تم إنشاء الفرع')
+        setOpen(false)
+        void reloadBranchesOnly({
+          added: {
+            id: created.id,
+            name: created.name,
+            isMain: created.isMain,
+          },
+        })
       }
-      setOpen(false)
-      load()
     } catch (e: any) {
       toast.error(e?.message || 'فشل الحفظ')
     } finally {
@@ -144,7 +211,7 @@ export function BranchesView() {
     try {
       await api(`/api/branches/${b.id}`, { method: 'DELETE' })
       toast.success('تم الحذف')
-      load()
+      void reloadBranchesOnly({ deletedId: b.id })
     } catch (e: any) {
       toast.error(e?.message || 'فشل الحذف')
     }
@@ -394,7 +461,7 @@ export function BranchesView() {
               <CardTitle className="text-base">تقرير أداء الفروع</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="overflow-auto">
+              <div className="hidden overflow-auto lg:block">
                 <Table fixed>
                   <TableHeader>
                     <TableRow>
@@ -457,6 +524,67 @@ export function BranchesView() {
                     </tfoot>
                   )}
                 </Table>
+              </div>
+
+              {/*
+                نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
+              */}
+              <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+                {reports.length === 0 ? (
+                  <p className="col-span-full py-10 text-center text-muted-foreground">
+                    <Building2 className="mx-auto mb-2 size-8 opacity-40" />
+                    لا يوجد بيانات بعد
+                  </p>
+                ) : (
+                  reports.map(r => {
+                    const avg = r.salesCount > 0 ? r.totalSales / r.salesCount : 0
+                    return (
+                      <div
+                        key={r.branchId}
+                        className={cn(
+                          'rounded-lg border bg-card p-3',
+                          r.isMain && 'bg-primary/5'
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            {r.isMain && <Crown className="size-3.5 text-primary" />}
+                            <p className="font-medium leading-tight">{r.name}</p>
+                          </div>
+                          {r.isMain && (
+                            <Badge variant="outline" className="border-primary/30 bg-primary/5 px-1 text-[10px] text-primary">
+                              رئيسي
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/60 pt-2 text-center">
+                          <div>
+                            <p className="text-[10px] text-muted-foreground">عدد الفواتير</p>
+                            <p className="text-sm font-semibold tabular-nums">{r.salesCount}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-muted-foreground">المبيعات</p>
+                            <p className="text-sm font-medium tabular-nums">{formatCurrency(r.totalSales)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-muted-foreground">الأرباح</p>
+                            <p className="text-sm font-medium tabular-nums text-success-subtle-foreground dark:text-success-subtle-foreground">
+                              {formatCurrency(r.totalProfit)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-muted-foreground">المنتجات</p>
+                            <p className="text-sm tabular-nums">{r.productCount}</p>
+                          </div>
+                          <div className="col-span-2">
+                            <p className="text-[10px] text-muted-foreground">متوسط الفاتورة</p>
+                            <p className="text-xs text-muted-foreground">{formatCurrency(avg)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
               </div>
             </CardContent>
           </Card>

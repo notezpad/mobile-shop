@@ -266,103 +266,204 @@ export function AdminTenantsView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto" dir="ltr">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10 text-center">#</TableHead>
-                    <TableHead>اسم المحل</TableHead>
-                    <TableHead>البريد</TableHead>
-                    <TableHead className="w-28">الباقة</TableHead>
-                    <TableHead className="w-24 text-center">الحالة</TableHead>
-                    <TableHead className="w-32">تاريخ التسجيل</TableHead>
-                    <TableHead className="w-32">آخر دخول</TableHead>
-                    <TableHead className="w-44 text-center">إجراءات</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.length === 0 ? (
+            <>
+              <div className="hidden overflow-x-auto lg:block" dir="ltr">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                        لا توجد محلات مطابقة
-                      </TableCell>
+                      <TableHead className="w-10 text-center">#</TableHead>
+                      <TableHead>اسم المحل</TableHead>
+                      <TableHead>البريد</TableHead>
+                      <TableHead className="w-28">الباقة</TableHead>
+                      <TableHead className="w-24 text-center">الحالة</TableHead>
+                      <TableHead className="w-32">تاريخ التسجيل</TableHead>
+                      <TableHead className="w-32">آخر دخول</TableHead>
+                      <TableHead className="w-44 text-center">إجراءات</TableHead>
                     </TableRow>
-                  ) : (
-                    rows.map((r, i) => (
-                      <TableRow key={r.id}>
-                        <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
-                        <TableCell className="font-medium">{r.shopName}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground" dir="ltr">{r.ownerEmail ?? '-'}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[10px]">{r.planName}</Badge>
-                        </TableCell>
-                        <TableCell className="text-center"><StatusBadge status={r.status} /></TableCell>
-                        <TableCell className="text-xs">{formatShortDate(r.createdAt)}</TableCell>
-                        <TableCell className="text-xs">{r.lastLoginAt ? formatShortDate(r.lastLoginAt) : '-'}</TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-8"
-                              title="عرض تفاصيل"
-                              onClick={() => {
-                                setDetailId(r.id)
-                                setDetailOpen(true)
-                              }}
-                            >
-                              <Eye className="size-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-8"
-                              title="تعديل"
-                              onClick={() => {
-                                setEditRow(r)
-                                setEditOpen(true)
-                              }}
-                            >
-                              <Pencil className="size-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-8 text-warning-subtle-foreground hover:text-warning-subtle-foreground"
-                              title="دخول كمالك"
-                              disabled={busyId === r.id}
-                              onClick={() => handleImpersonate(r.id)}
-                            >
-                              {busyId === r.id ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-8"
-                              title={r.status === 'suspended' ? 'تفعيل' : 'إيقاف'}
-                              disabled={busyId === r.id}
-                              onClick={() => handleToggleStatus(r)}
-                            >
-                              {r.status === 'suspended' ? <Play className="size-4" /> : <Pause className="size-4" />}
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-8 text-destructive hover:bg-destructive/10"
-                              title="حذف"
-                              disabled={busyId === r.id}
-                              onClick={() => setDeleteId(r.id)}
-                            >
-                              <Trash2 className="size-4" />
-                            </Button>
-                          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                          لا توجد محلات مطابقة
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                    ) : (
+                      rows.map((r, i) => (
+                        <TableRow key={r.id}>
+                          <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
+                          <TableCell className="font-medium">{r.shopName}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground" dir="ltr">{r.ownerEmail ?? '-'}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px]">{r.planName}</Badge>
+                          </TableCell>
+                          <TableCell className="text-center"><StatusBadge status={r.status} /></TableCell>
+                          <TableCell className="text-xs">{formatShortDate(r.createdAt)}</TableCell>
+                          <TableCell className="text-xs">{r.lastLoginAt ? formatShortDate(r.lastLoginAt) : '-'}</TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-8"
+                                title="عرض تفاصيل"
+                                onClick={() => {
+                                  setDetailId(r.id)
+                                  setDetailOpen(true)
+                                }}
+                              >
+                                <Eye className="size-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-8"
+                                title="تعديل"
+                                onClick={() => {
+                                  setEditRow(r)
+                                  setEditOpen(true)
+                                }}
+                              >
+                                <Pencil className="size-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-8 text-warning-subtle-foreground hover:text-warning-subtle-foreground"
+                                title="دخول كمالك"
+                                disabled={busyId === r.id}
+                                onClick={() => handleImpersonate(r.id)}
+                              >
+                                {busyId === r.id ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-8"
+                                title={r.status === 'suspended' ? 'تفعيل' : 'إيقاف'}
+                                disabled={busyId === r.id}
+                                onClick={() => handleToggleStatus(r)}
+                              >
+                                {r.status === 'suspended' ? <Play className="size-4" /> : <Pause className="size-4" />}
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-8 text-destructive hover:bg-destructive/10"
+                                title="حذف"
+                                disabled={busyId === r.id}
+                                onClick={() => setDeleteId(r.id)}
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* كروت — تظهر تحت lg */}
+              <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+                {rows.length === 0 ? (
+                  <p className="col-span-full py-8 text-center text-sm text-muted-foreground">
+                    لا توجد محلات مطابقة
+                  </p>
+                ) : (
+                  rows.map((r, i) => (
+                    <div key={r.id} className="rounded-lg border bg-card p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              #{i + 1}
+                            </span>
+                            <p className="truncate font-medium leading-tight">{r.shopName}</p>
+                          </div>
+                          <p className="mt-1 truncate text-[11px] text-muted-foreground" dir="ltr">
+                            {r.ownerEmail ?? '-'}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <StatusBadge status={r.status} />
+                          <Badge variant="outline" className="text-[10px]">{r.planName}</Badge>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/60 pt-2 text-center">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">تاريخ التسجيل</p>
+                          <p className="text-xs">{formatShortDate(r.createdAt)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">آخر دخول</p>
+                          <p className="text-xs">
+                            {r.lastLoginAt ? formatShortDate(r.lastLoginAt) : '-'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex items-center justify-end gap-1 border-t border-border/60 pt-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7"
+                          title="عرض تفاصيل"
+                          onClick={() => {
+                            setDetailId(r.id)
+                            setDetailOpen(true)
+                          }}
+                        >
+                          <Eye className="size-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7"
+                          title="تعديل"
+                          onClick={() => {
+                            setEditRow(r)
+                            setEditOpen(true)
+                          }}
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7 text-warning-subtle-foreground hover:text-warning-subtle-foreground"
+                          title="دخول كمالك"
+                          disabled={busyId === r.id}
+                          onClick={() => handleImpersonate(r.id)}
+                        >
+                          {busyId === r.id ? <Loader2 className="size-3.5 animate-spin" /> : <LogIn className="size-3.5" />}
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7"
+                          title={r.status === 'suspended' ? 'تفعيل' : 'إيقاف'}
+                          disabled={busyId === r.id}
+                          onClick={() => handleToggleStatus(r)}
+                        >
+                          {r.status === 'suspended' ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7 text-destructive hover:bg-destructive/10"
+                          title="حذف"
+                          disabled={busyId === r.id}
+                          onClick={() => setDeleteId(r.id)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

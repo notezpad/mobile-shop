@@ -59,7 +59,7 @@ export function FeaturesSection() {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="mx-auto mt-4 max-w-xl text-lg leading-[1.7] lg-muted"
           >
-            نظام متكامل صُمّم خصيصاً لواقع {meta.label} في مصر — بدون زوائد ولا تعقيدات
+            نظام متكامل صُمّم خصيصاً لواقع {meta.label} في الدول العربية — بدون زوائد ولا تعقيدات
           </motion.p>
         </div>
 

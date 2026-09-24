@@ -35,8 +35,8 @@ const HIGHLIGHTS: Record<TabKey, string[]> = {
   ],
   pos: [
     'بحث سريع بالباركود أو اسم المنتج',
-    'دعم عدة طرق دفع: نقدي، آجل، فودافون كاش',
-    'طباعة فاتورة حرارية فورية',
+    'دعم عدة طرق دفع: نقدي، آجل، محافظ إلكترونية',
+    'طباعة فاتورة حرارية بباركود',
   ],
   products: [
     'تصنيفات غير محدودة للمنتجات',
@@ -151,7 +151,7 @@ function BrowserFrame({ children }: { children: React.ReactNode }) {
         </div>
         <div className="mx-auto flex items-center gap-1.5 rounded-md bg-background px-3 py-1 text-[10px] text-muted-foreground" dir="ltr">
           <span className="size-2 rounded-full bg-brand-500" />
-          app.shop-system.eg/{''}
+          app.shop-system.com
         </div>
       </div>
       <div className="bg-background p-3 sm:p-5">{children}</div>
@@ -188,7 +188,7 @@ function DashboardMockup() {
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <MockStat icon={<DollarSign className="size-4" />} label="مبيعات اليوم" value="5,420 ج.م" tone="emerald" />
+        <MockStat icon={<DollarSign className="size-4" />} label="مبيعات اليوم" value="5,420 " tone="emerald" />
         <MockStat icon={<ShoppingCart className="size-4" />} label="الفواتير" value="38" tone="primary" />
         <MockStat icon={<Package className="size-4" />} label="المنتجات" value="247" tone="amber" />
         <MockStat icon={<AlertTriangle className="size-4" />} label="تنبيهات" value="3" tone="rose" />
@@ -231,7 +231,7 @@ function POSMockup() {
             <div key={i} className="rounded-lg border bg-card p-2 text-center">
               <div className="mb-1 size-12 mx-auto rounded bg-gradient-to-br from-muted to-muted/60" />
               <p className="truncate text-[11px] font-medium">{p.n}</p>
-              <p className="text-[11px] font-bold text-success-subtle-foreground">{p.p} ج.م</p>
+              <p className="text-[11px] font-bold text-success-subtle-foreground">{p.p} </p>
             </div>
           ))}
         </div>
@@ -250,14 +250,14 @@ function POSMockup() {
           ].map((r, i) => (
             <div key={i} className="flex items-center justify-between text-[11px]">
               <span className="truncate">{r.n} ×{r.q}</span>
-              <span className="font-semibold">{r.p} ج.م</span>
+              <span className="font-semibold">{r.p} </span>
             </div>
           ))}
         </div>
         <div className="border-t bg-muted/30 p-2.5">
           <div className="flex items-center justify-between text-sm font-bold">
             <span>الإجمالي</span>
-            <span className="text-success-subtle-foreground">1,330 ج.م</span>
+            <span className="text-success-subtle-foreground">1,330 </span>
           </div>
           <button className="mt-2 w-full rounded-md bg-primary py-2 text-xs font-semibold text-primary-foreground">
             إتمام البيع
@@ -317,10 +317,10 @@ function ProductsMockup() {
               {r.s === 0 ? 'نفد' : r.s}
             </span>
             <span className="col-span-2 text-center text-muted-foreground">
-              {r.co} ج.م
+              {r.co} 
             </span>
             <span className="col-span-2 text-center font-semibold text-foreground">
-              {r.p} ج.م
+              {r.p} 
             </span>
             <span className="col-span-1 text-left font-semibold text-success-subtle-foreground">
               {r.p - r.co}
@@ -372,7 +372,7 @@ function CustomersMockup() {
                       : 'text-foreground')
                 }
               >
-                {c.b === 0 ? '0' : c.b > 0 ? `-${c.b}` : `+${Math.abs(c.b)}`} ج.م
+                {c.b === 0 ? '0' : c.b > 0 ? `-${c.b}` : `+${Math.abs(c.b)}`} 
               </p>
             </div>
           </div>
@@ -394,11 +394,11 @@ function CustomersMockup() {
         <div className="grid grid-cols-2 gap-2 py-3">
           <div className="rounded-md bg-muted/40 p-2">
             <p className="text-[10px] text-muted-foreground">إجمالي المشتريات</p>
-            <p className="text-sm font-bold text-foreground">2,450 ج.م</p>
+            <p className="text-sm font-bold text-foreground">2,450 </p>
           </div>
           <div className="rounded-md bg-muted/40 p-2">
             <p className="text-[10px] text-muted-foreground">الرصيد الحالي</p>
-            <p className="text-sm font-bold text-success-subtle-foreground">0 ج.م</p>
+            <p className="text-sm font-bold text-success-subtle-foreground">0 </p>
           </div>
         </div>
 
@@ -424,7 +424,7 @@ function CustomersMockup() {
                     'font-bold ' + (r.a.startsWith('-') ? 'text-foreground' : 'text-success-subtle-foreground')
                   }
                 >
-                  {r.a} ج.م
+                  {r.a} 
                 </span>
               </div>
             </div>

@@ -52,6 +52,12 @@ model Tenant {
   purchaseOrders    PurchaseOrder[]
   supplierPayments  SupplierPayment[]
   expenses          Expense[]
+  notifications     Notification[]
+
+  // Notification preferences
+  notifyLowStock            Boolean @default(true)
+  notifyExpiringSubscription Boolean @default(true)
+  notifyNewSales            Boolean @default(false)
 }
 
 model Plan {
@@ -113,11 +119,33 @@ model ActivationCode {
   createdBy  String?
   notes      String?
 
+  // 🛡️ 2026-09-21 (Subscription Codes Enhancement):
+  // Custom duration in days — when set, overrides the monthly/yearly/trial
+  // period and gives the redeemed subscription a custom length.
+  // Example: durationDays=45 → subscription lasts exactly 45 days from redeem.
+  durationDays Int?
+
+  // Optional code-level expiry — when set, the code cannot be redeemed after
+  // this date. Useful for promotional codes that should expire regardless of
+  // being redeemed. Null = code never expires (only single-use).
+  expiresAt DateTime?
+
+  // Optional pre-assignment — when set, ONLY this tenant can redeem the code.
+  // Any other tenant trying to redeem gets a "not assigned to your account" error.
+  // Null = any authenticated tenant can redeem.
+  assignedTenantId String?
+
+  // Optional batch label for grouping codes by marketing campaign / month / etc.
+  // Example: "december-promo-2026" or "renewal-batch-q4"
+  batchLabel String?
+
   tenant Tenant? @relation(fields: [tenantId], references: [id])
   plan   Plan    @relation(fields: [planId], references: [id])
 
   @@index([planId])
   @@index([tenantId])
+  @@index([assignedTenantId])
+  @@index([batchLabel])
 }
 
 model Branch {
@@ -338,13 +366,16 @@ model PurchaseOrder {
 model PurchaseOrderItem {
   id              Int    @id @default(autoincrement())
   purchaseOrderId Int
-  productId       Int
+  // 🛡️ 2026-09-15 (v3): nullable so a product can be hard-deleted without
+  // losing purchase-order history. The `name`, `cost`, `quantity` are
+  // snapshot values stored at purchase time → reports stay correct.
+  productId       Int?
   name            String
   cost            Float
   quantity        Int
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  product       Product       @relation(fields: [productId], references: [id])
+  product       Product?      @relation(fields: [productId], references: [id])
 
   @@index([purchaseOrderId])
   @@index([productId])
@@ -376,7 +407,12 @@ model Sale {
 model SaleItem {
   id        Int    @id @default(autoincrement())
   saleId    Int
-  productId Int
+  // 🛡️ 2026-09-15 (v3): nullable productId so a product can be hard-deleted
+  // WITHOUT losing the sale history. When a product is deleted via the
+  // `mode=archive` flow, the FK is set to NULL but name/price/cost/quantity
+  // (snapshot values stored at sale time) remain intact → reports + cash
+  // drawer + accounting stay correct.
+  productId Int?
   name      String
   price     Float
   quantity  Int         // total pieces (kept for legacy reports)
@@ -391,7 +427,7 @@ model SaleItem {
   variantId Int?
 
   sale    Sale            @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  product Product         @relation(fields: [productId], references: [id])
+  product Product?        @relation(fields: [productId], references: [id])
   unit    ProductUnit?    @relation(fields: [unitId], references: [id])
   variant ProductVariant? @relation(fields: [variantId], references: [id])
 
@@ -406,11 +442,17 @@ model SalePayment {
   saleId    Int
   amount    Float
   note      String?
+  // 🛡️ 2026-09-15 (v2): link to the CashEntry created when this payment
+  // was recorded. This lets the DELETE sale endpoint reverse each payment's
+  // cash entry via the FK link (instead of date-range guessing).
+  cashEntryId Int?
   createdAt DateTime @default(now())
 
-  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  sale Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  cashEntry CashEntry? @relation(fields: [cashEntryId], references: [id])
 
   @@index([saleId])
+  @@index([cashEntryId])
 }
 
 model MaintenanceOrder {
@@ -458,12 +500,23 @@ model CashEntry {
   amount    Float
   note      String?
   userId    String?
+  // 🛡️ 2026-09-15 (v3): payment method for this cash entry — 'cash' |
+  // 'vodafone_cash' | 'instapay' | 'fawry' | 'card' | 'bank' | null
+  // (null = legacy entries before this column was added).
+  // This lets the drawer be aggregated per-method (e.g. "كاش فعلي" vs
+  // "فودافون كاش" vs "إنستاباي") — important for accounting because
+  // Vodafone Cash is a different asset than physical cash.
+  method    String?
   createdAt DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // 🛡️ 2026-09-15 (v2): back-reference to SalePayment (if this CashEntry
+  // was created as part of a sale payment). Nullable + optional relation.
+  salePayments SalePayment[]
 
   @@index([tenantId])
   @@index([tenantId, createdAt])
+  @@index([method])
 }
 
 // Shop running costs (rent, electricity, salaries, etc.) — admin-only.
@@ -499,7 +552,9 @@ model StockMovement {
   id        Int      @id @default(autoincrement())
   tenantId  String
   branchId  Int?
-  productId Int
+  // 🛡️ 2026-09-15 (v3): nullable so a product can be hard-deleted without
+  // losing stock-movement history (audit trail stays intact).
+  productId Int?
   type      String // in | out | adjust | sale | return | transfer_in | transfer_out | stocktake
   quantity  Int // signed: + increases, - decreases
   refType   String? // sale | transfer | stocktake | manual
@@ -508,9 +563,9 @@ model StockMovement {
   userId    String?
   createdAt DateTime @default(now())
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  branch  Branch? @relation(fields: [branchId], references: [id])
-  product Product @relation(fields: [productId], references: [id])
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch  Branch?  @relation(fields: [branchId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
 
   @@index([tenantId])
   @@index([tenantId, createdAt])
@@ -541,11 +596,13 @@ model Transfer {
 model TransferItem {
   id         Int @id @default(autoincrement())
   transferId Int
-  productId  Int
+  // 🛡️ 2026-09-15 (v3): nullable so a product can be hard-deleted without
+  // losing transfer history.
+  productId  Int?
   quantity   Int
 
-  transfer Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  product  Product  @relation(fields: [productId], references: [id])
+  transfer Transfer  @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product  Product?  @relation(fields: [productId], references: [id])
 
   @@index([transferId])
 }
@@ -570,13 +627,34 @@ model Stocktake {
 model StocktakeItem {
   id          Int @id @default(autoincrement())
   stocktakeId Int
-  productId   Int
+  // 🛡️ 2026-09-15 (v3): nullable so a product can be hard-deleted without
+  // losing stocktake history (the systemQty/countedQty/diff stay intact).
+  productId   Int?
   systemQty   Int
   countedQty  Int
   diff        Int @default(0)
 
   stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
-  product   Product   @relation(fields: [productId], references: [id])
+  product   Product?  @relation(fields: [productId], references: [id])
 
   @@index([stocktakeId])
+}
+
+model Notification {
+  id        Int       @id @default(autoincrement())
+  tenantId  String
+  userId    String?
+  type      String    @default("info")
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
 }

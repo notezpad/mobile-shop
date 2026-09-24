@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
-import { requireAuth, authErrorResponse } from '@/lib/auth'
-import { ALL_MODULES } from '@/lib/features'
+import { requireAuthIgnoreSubscription, authErrorResponse } from '@/lib/auth'
+import { ALL_MODULES, getPlanContext } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +17,13 @@ function parseArr(raw: string | null | undefined): string[] | null {
 export async function GET() {
   let session
   try {
-    session = await requireAuth()
+    // 🛡️ 2026-09-21: Use requireAuthIgnoreSubscription instead of requireAuth.
+    // Previously this endpoint returned 402 (Subscription Expired) which meant
+    // the SettingsView couldn't load the current subscription status — and
+    // the user couldn't see they needed to redeem a code. Now the endpoint
+    // always returns the subscription data (with expired: true when applicable)
+    // so the user can see their status and apply a code.
+    session = await requireAuthIgnoreSubscription()
   } catch (e) {
     const err = authErrorResponse(e)
     if (err) return NextResponse.json(err.body, { status: err.status })
@@ -80,13 +86,11 @@ export async function GET() {
   const expired = latestSub.endDate < now || tenant.status === 'expired'
   const expiringSoon = !expired && daysLeft >= 0 && daysLeft <= 7
 
-  const enabledModules =
-    parseArr(latestSub.plan.enabledModules) ?? [...ALL_MODULES]
-  const capabilities = parseArr(latestSub.plan.capabilities) ?? []
-  const businessType =
-    latestSub.plan.businessType === 'fashion' ? 'fashion' : 'electronics'
+  // 🛡️ Use getPlanContext — automatically force-includes CRITICAL_MODULES
+  // (settings, users, finance, expenses, cash, reports) regardless of plan.
+  const ctx = await getPlanContext(session.tenantId)
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     ok: true,
     tenantStatus: tenant.status,
     endDate: latestSub.endDate.toISOString(),
@@ -96,8 +100,15 @@ export async function GET() {
     period: latestSub.period,
     expired,
     expiringSoon,
-    businessType,
-    enabledModules,
-    capabilities,
+    businessType: ctx.businessType,
+    enabledModules: ctx.enabledModules,
+    capabilities: ctx.capabilities,
   })
+  // ⚡ Cache for 5 seconds only — short enough that fixes (e.g. plan
+  // module changes deployed by the developer) take effect quickly without
+  // requiring the user to hard-refresh. Previously this was 30 seconds
+  // which meant users would still see old plan config up to 30s after a
+  // deploy, leading to confusion ("I deployed but nothing changed").
+  res.headers.set('Cache-Control', 'private, max-age=5, stale-while-revalidate=10')
+  return res
 }

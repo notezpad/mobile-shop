@@ -66,6 +66,18 @@ export async function PUT(
           ? JSON.stringify(body.capabilities)
           : null
   }
+  // 🛡️ 2026-09-15 (v2): handle enabledModules — previously PUT silently
+  // ignored this field, so the admin's module-toggling in the UI never
+  // reached the DB. The admin would enable maintenance on fashion-basic
+  // but on reload it would still be off.
+  if (body.enabledModules !== undefined) {
+    data.enabledModules =
+      typeof body.enabledModules === 'string'
+        ? body.enabledModules
+        : Array.isArray(body.enabledModules)
+          ? JSON.stringify(body.enabledModules)
+          : null
+  }
   if (body.features !== undefined) {
     data.features =
       typeof body.features === 'string'
@@ -106,10 +118,33 @@ export async function DELETE(
     return NextResponse.json({ error: 'الباقة غير موجودة' }, { status: 404 })
   }
 
-  // Soft delete: deactivate instead of removing
-  await db.plan.update({
-    where: { id: planId },
-    data: { isActive: false },
-  })
-  return NextResponse.json({ ok: true })
+  // 🛡️ 2026-09-17 (v3): Canonical plans can only be soft-deleted
+  // (deactivated). Custom plans can be hard-deleted IF no subscriptions
+  // reference them.
+  const CANONICAL_CODES = ['electronics-basic', 'electronics-pro', 'fashion-basic', 'fashion-pro']
+  const isCanonical = CANONICAL_CODES.includes(existing.code)
+
+  if (isCanonical) {
+    // Canonical plan → soft-delete only (deactivate)
+    await db.plan.update({
+      where: { id: planId },
+      data: { isActive: false },
+    })
+    return NextResponse.json({ ok: true, action: 'deactivated', message: 'تم تعطيل الباقة (canonical — لا يمكن حذفها نهائياً)' })
+  }
+
+  // Custom plan → check if any subscriptions reference it
+  const subsCount = await db.subscription.count({ where: { planId } })
+  if (subsCount > 0) {
+    // Has subscriptions → soft-delete only
+    await db.plan.update({
+      where: { id: planId },
+      data: { isActive: false },
+    })
+    return NextResponse.json({ ok: true, action: 'deactivated', message: `تم تعطيل الباقة (${subsCount} اشتراك مرتبط بها — لا يمكن حذفها نهائياً)` })
+  }
+
+  // Custom plan with no subscriptions → hard delete
+  await db.plan.delete({ where: { id: planId } })
+  return NextResponse.json({ ok: true, action: 'deleted', message: 'تم حذف الباقة نهائياً' })
 }

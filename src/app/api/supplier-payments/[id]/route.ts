@@ -6,9 +6,9 @@ export const dynamic = 'force-dynamic'
 
 const METHOD_LABELS: Record<string, string> = {
   cash: 'كاش',
-  vodafone_cash: 'فودافون كاش',
+  vodafone_cash: 'محافظ إلكترونية',
   instapay: 'انستاباي',
-  fawry: 'فوري',
+  fawry: 'محفظة إلكترونية',
 }
 
 export async function DELETE(

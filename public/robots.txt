@@ -1,14 +1,71 @@
+# 🛡️ robots.txt — نظام المحل
+# https://shop-system.com/robots.txt
+
+# ── All bots allowed ──
+User-agent: *
+Allow: /
+
+# ── Specific bots ──
 User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
 Allow: /
 
 User-agent: Bingbot
 Allow: /
 
-User-agent: Twitterbot
+User-agent: Slurp
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: YandexBot
 Allow: /
 
 User-agent: facebookexternalhit
 Allow: /
 
-User-agent: *
+User-agent: Twitterbot
 Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+# ── Block AI training bots (optional — uncomment to block) ──
+# User-agent: GPTBot
+# Disallow: /
+# User-agent: CCBot
+# Disallow: /
+# User-agent: anthropic-ai
+# Disallow: /
+# User-agent: Claude-Web
+# Disallow: /
+
+# ── Block private/authenticated routes ──
+Disallow: /dashboard
+Disallow: /pos
+Disallow: /products
+Disallow: /sales
+Disallow: /maintenance
+Disallow: /customers
+Disallow: /suppliers
+Disallow: /purchases
+Disallow: /inventory
+Disallow: /finance
+Disallow: /expenses
+Disallow: /cash
+Disallow: /reports
+Disallow: /settings
+Disallow: /users
+Disallow: /branches
+Disallow: /api/
+Disallow: /checkout/callback
+Disallow: /design-system
+
+# ── Sitemaps ──
+Sitemap: https://shop-system.com/sitemap.xml

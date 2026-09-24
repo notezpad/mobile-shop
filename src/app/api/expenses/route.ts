@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
         source: 'expense',
         refId: expense.id,
         amount: -amount,
-        note: `مصروف ${category}${note ? ' - ' + note : ''}`,
+        note: `الدول العربيةوف ${category}${note ? ' - ' + note : ''}`,
         userId: session.userId,
       },
     })

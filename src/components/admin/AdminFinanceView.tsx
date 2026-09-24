@@ -61,9 +61,9 @@ interface FinanceData {
 
 const METHOD_LABEL: Record<string, string> = {
   cash: 'كاش',
-  vodafone_cash: 'فودافون كاش',
+  vodafone_cash: 'محافظ إلكترونية',
   instapay: 'إنستا باي',
-  fawry: 'فوري',
+  fawry: 'محفظة إلكترونية',
   manual: 'يدوي',
   code: 'كود',
 }

@@ -70,7 +70,14 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
     }
   }, [])
 
-  const visiblePlans = plans.filter((p) => p.businessType === vertical)
+  // 🛡️ 2026-09-14: Show ALL 4 plans on the landing page (not just 2 per vertical).
+  // Group them by vertical type so the user sees both electronics and fashion options
+  // at the same time — this matches what they see when they click "ترقية" from settings.
+  // The active vertical's plans come first (highlighted), the other vertical comes second.
+  const activeVerticalPlans = plans.filter((p) => p.businessType === vertical)
+  const otherVertical: Vertical = vertical === 'electronics' ? 'fashion' : 'electronics'
+  const otherVerticalPlans = plans.filter((p) => p.businessType === otherVertical)
+  const allVisiblePlans = [...activeVerticalPlans, ...otherVerticalPlans]
 
   return (
     <section id="pricing" className="landing-dark relative scroll-mt-24 border-y border-white/5 py-20 sm:py-24">
@@ -94,7 +101,7 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
             className="mt-4 font-black tracking-tight text-white"
             style={{ fontSize: 'clamp(1.6rem, 3.4vw, 2.9rem)', lineHeight: 1.2 }}
           >
-            باقتان تناسبان كل حجم محل
+            باقات تناسب كل حجم محل
           </motion.h2>
           <motion.p
             initial={{ opacity: 0, y: 14 }}
@@ -139,7 +146,7 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
           </div>
         </div>
 
-        {/* Plans grid — always 2 plans per vertical (basic / pro) */}
+        {/* Plans grid — show ALL 4 plans grouped by vertical */}
         <AnimatePresence mode="wait">
           <motion.div
             key={vertical}
@@ -147,17 +154,18 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="mx-auto grid max-w-3xl grid-cols-1 gap-6 sm:grid-cols-2"
+            className="mx-auto grid max-w-6xl grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4"
           >
-            {visiblePlans.length === 0
-              ? [0, 1].map((i) => <Skeleton key={i} className="h-[420px] rounded-2xl" />)
-              : visiblePlans.map((plan, i) => (
+            {allVisiblePlans.length === 0
+              ? [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[420px] rounded-2xl" />)
+              : allVisiblePlans.map((plan, i) => (
                   <PlanCard
                     key={plan.code}
                     plan={plan}
                     yearly={yearly}
                     onOpenAuth={onOpenAuth}
                     index={i}
+                    isActiveVertical={plan.businessType === vertical}
                   />
                 ))}
           </motion.div>
@@ -177,16 +185,21 @@ function PlanCard({
   yearly,
   onOpenAuth,
   index,
+  isActiveVertical,
 }: {
   plan: LandingPlan
   yearly: boolean
   onOpenAuth: (mode: AuthMode) => void
   index: number
+  isActiveVertical?: boolean
 }) {
   const price = yearly ? plan.priceYearly : plan.priceMonthly
-  const periodLabel = yearly ? 'ج.م/سنة' : 'ج.م/شهر'
+  const periodLabel = yearly ? '/سنة' : '/شهر'
   const priceDisplay = price.toLocaleString('ar-EG', { maximumFractionDigits: 0 })
   const savings = plan.priceMonthly * 12 - plan.priceYearly
+
+  // Vertical label for the badge
+  const verticalLabel = plan.businessType === 'electronics' ? '📱 موبايل وكمبيوتر' : '👗 ملابس وأحذية'
 
   return (
     <motion.div
@@ -195,40 +208,48 @@ function PlanCard({
       viewport={{ once: true, margin: '-60px' }}
       transition={{ duration: 0.45, delay: index * 0.08 }}
       className={
-        'relative flex flex-col rounded-2xl p-7 transition-all duration-300 ' +
+        'relative flex flex-col rounded-2xl p-6 transition-all duration-300 ' +
         (plan.isPro
-          ? 'glass-panel-strong shadow-xl shadow-brand-600/10 sm:scale-[1.03]'
-          : 'glass-card')
+          ? 'glass-panel-strong shadow-xl shadow-brand-600/10'
+          : 'glass-card') +
+        // Dim cards from the non-active vertical so the active vertical stands out
+        (isActiveVertical === false ? ' opacity-70' : '')
       }
     >
-      {plan.isPro && (
-        <div className="absolute -top-3 right-1/2 flex translate-x-1/2 items-center gap-1 rounded-full bg-gradient-to-l from-brand-500 to-brand-700 px-3.5 py-1.5 text-xs font-bold text-white shadow-md">
-          <Star className="size-3.5 fill-current" />
-          🔥 الأكثر طلباً
-        </div>
-      )}
+      {/* Vertical badge (top-right) */}
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="rounded-md bg-white/5 px-2 py-1 text-[10px] font-bold text-white/70">
+          {verticalLabel}
+        </span>
+        {plan.isPro && (
+          <span className="flex items-center gap-1 rounded-full bg-gradient-to-l from-brand-500 to-brand-700 px-2.5 py-1 text-[10px] font-bold text-white shadow-md">
+            <Star className="size-3 fill-current" />
+            الأكثر طلباً
+          </span>
+        )}
+      </div>
 
-      <div className="mb-4">
-        <h3 className={'text-xl font-extrabold ' + (plan.isPro ? 'text-brand-300' : 'text-white')}>
+      <div className="mb-3">
+        <h3 className={'text-lg font-extrabold ' + (plan.isPro ? 'text-brand-300' : 'text-white')}>
           باقة {plan.name}
         </h3>
-        <p className="mt-1.5 text-sm lg-muted">{plan.description}</p>
+        <p className="mt-1 text-xs lg-muted">{plan.description}</p>
       </div>
 
       <div className="mb-1 flex items-end gap-1">
-        <span className="text-5xl font-black tracking-tight text-white">{priceDisplay}</span>
-        <span className="mb-1.5 text-sm lg-muted">{periodLabel}</span>
+        <span className="text-4xl font-black tracking-tight text-white">{priceDisplay}</span>
+        <span className="mb-1 text-xs lg-muted">{periodLabel}</span>
       </div>
       {yearly && savings > 0 && (
-        <p className="mb-3 text-xs font-semibold text-brand-300">
-          يوفّر {savings.toLocaleString('ar-EG', { maximumFractionDigits: 0 })} ج.م سنوياً
+        <p className="mb-3 text-[11px] font-semibold text-brand-300">
+          يوفّر {savings.toLocaleString('ar-EG', { maximumFractionDigits: 0 })} سنوياً
         </p>
       )}
 
       <Button
         onClick={() => onOpenAuth('signup')}
         className={
-          'mb-5 mt-3 h-12 w-full gap-1.5 rounded-xl text-base font-bold text-white ' +
+          'mb-4 mt-2 h-11 w-full gap-1.5 rounded-xl text-sm font-bold text-white ' +
           (plan.isPro
             ? 'bg-gradient-to-l from-brand-500 to-brand-700 shadow-md shadow-brand-600/30 hover:from-brand-400 hover:to-brand-600'
             : 'border border-white/15 bg-white/5 hover:bg-white/10')
@@ -238,21 +259,21 @@ function PlanCard({
         ابدأ تجربتك المجانية
       </Button>
 
-      <ul className="mt-auto space-y-3">
+      <ul className="mt-auto space-y-2.5">
         {plan.features.map((f) => (
-          <li key={f} className="flex items-start gap-2.5 text-sm">
-            <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-300">
-              <Check className="size-3.5" />
+          <li key={f} className="flex items-start gap-2 text-xs">
+            <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-300">
+              <Check className="size-3" />
             </span>
             <span className="text-white/85">{f}</span>
           </li>
         ))}
       </ul>
 
-      <div className="mt-5 flex flex-wrap gap-2 border-t border-white/10 pt-4 text-xs lg-muted">
-        <span className="rounded-md bg-white/5 px-2.5 py-1">{plan.maxUsers} مستخدم</span>
-        <span className="rounded-md bg-white/5 px-2.5 py-1">{plan.maxProducts.toLocaleString('ar-EG')} منتج</span>
-        <span className="rounded-md bg-white/5 px-2.5 py-1">{plan.maxBranches} فرع</span>
+      <div className="mt-4 flex flex-wrap gap-1.5 border-t border-white/10 pt-3 text-[10px] lg-muted">
+        <span className="rounded-md bg-white/5 px-2 py-0.5">{plan.maxUsers} مستخدم</span>
+        <span className="rounded-md bg-white/5 px-2 py-0.5">{plan.maxProducts.toLocaleString('ar-EG')} منتج</span>
+        <span className="rounded-md bg-white/5 px-2 py-0.5">{plan.maxBranches} فرع</span>
       </div>
     </motion.div>
   )

@@ -111,8 +111,8 @@ export function UsersView() {
           u.role === 'ADMIN' ? 'المدير' : 'الموظف',
           u.active ? 'نشط' : 'موقوف',
           u.branch?.name ?? 'كل الفروع',
-          formatArabicDateTime(u.createdAt),
-          u.lastLoginAt ? formatArabicDateTime(u.lastLoginAt) : 'لم يسجل دخول بعد',
+          <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatArabicDateTime(u.createdAt)}</span>,
+          u.lastLoginAt ? <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatArabicDateTime(u.lastLoginAt)}</span> : 'لم يسجل دخول بعد',
         ]),
         kpis: [
           { label: 'إجمالي المستخدمين', value: String(users.length) },
@@ -166,7 +166,7 @@ export function UsersView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto" dir="ltr">
+            <div className="hidden overflow-x-auto lg:block" dir="ltr">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -264,6 +264,114 @@ export function UsersView() {
                   )}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {/*
+            نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
+            كل مستخدم بقى كارت مستقل يعرض البيانات الأساسية رأسيًا.
+          */}
+          {!loading && (
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+              {users.length === 0 ? (
+                <p className="col-span-full py-8 text-center text-muted-foreground">
+                  لا يوجد مستخدمون
+                </p>
+              ) : (
+                users.map((u, index) => (
+                  <div key={u.id} className="rounded-lg border bg-card p-3 hover:bg-muted/30 dark:hover:bg-muted/20">
+                    {/* رأس الكارت: اسم + شارة الحالة */}
+                    <div className="flex items-start gap-3">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-subtle text-base font-bold text-primary-subtle-foreground">
+                        {u.name?.charAt(0) ?? '?'}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            #{index + 1}
+                          </span>
+                          <p className="truncate font-medium leading-tight">{u.name}</p>
+                        </div>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                          {u.email}
+                        </p>
+                      </div>
+                      {u.active ? (
+                        <Badge className="bg-success-subtle text-success">نشط</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">
+                          معطّل
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* شبكة البيانات: دور/فرع/إنشاء/آخر دخول */}
+                    <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/60 pt-2 text-center">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">الدور</p>
+                        {u.role === 'ADMIN' ? (
+                          <Badge className="bg-primary/10 text-primary">
+                            <ShieldCheck className="ml-1 size-3" />
+                            المدير
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">
+                            <User className="ml-1 size-3" />
+                            الموظف
+                          </Badge>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">الفرع</p>
+                        <p className="text-xs font-medium">
+                          {u.branch?.name ?? 'كل الفروع'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">تاريخ الإنشاء</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          <DateTimeCell date={u.createdAt} />
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">آخر دخول</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {u.lastLoginAt ? (
+                            <DateTimeCell date={u.lastLoginAt} />
+                          ) : (
+                            'لم يسجل دخول بعد'
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* إجراءات */}
+                    <div className="mt-2 flex items-center justify-end gap-1 border-t border-border/60 pt-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8"
+                        onClick={() => {
+                          setEditing(u)
+                          setDialogOpen(true)
+                        }}
+                        title="تعديل"
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => toggleActive(u)}
+                        title={u.active ? 'تعطيل' : 'تفعيل'}
+                      >
+                        {u.active ? 'تعطيل' : 'تفعيل'}
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </CardContent>

@@ -5,6 +5,7 @@ import { Check, FolderTree, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -40,7 +41,8 @@ export function CategoryManagerDialog({ open, onOpenChange, onChanged }: Props) 
     try {
       const data = await api<{ id: number; name: string }[]>('/api/categories')
       // also fetch products to compute usage counts
-      const products = await api<{ category: string | null }[]>('/api/products?category=all')
+      const _rawProd = await api<{ data: { category: string | null }[] } | { category: string | null }[]>('/api/products?category=all&limit=1000')
+      const products = Array.isArray(_rawProd) ? _rawProd : (_rawProd as any)?.data ?? []
       const counts = new Map<string, number>()
       for (const p of products) {
         if (p.category) counts.set(p.category, (counts.get(p.category) ?? 0) + 1)
@@ -206,6 +208,12 @@ export function CategoryManagerDialog({ open, onOpenChange, onChanged }: Props) 
             </ul>
           )}
         </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            إلغاء
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

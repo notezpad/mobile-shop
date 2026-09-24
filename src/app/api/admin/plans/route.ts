@@ -12,6 +12,18 @@ export async function GET() {
     return NextResponse.json(err?.body, { status: err?.status })
   }
 
+  // 🛡️ 2026-09-17 (v3): Show ALL plans (canonical + custom) in the admin
+  // UI. Previously filtered to canonical-only, which meant any custom plan
+  // created by the admin would "disappear" after creation (POST saves it
+  // but GET doesn't return it). Now we show everything and let the admin
+  // manage all plans.
+  const CANONICAL_PLAN_CODES = [
+    'electronics-basic',
+    'electronics-pro',
+    'fashion-basic',
+    'fashion-pro',
+  ]
+
   const plans = await db.plan.findMany({
     orderBy: { sortOrder: 'asc' },
     include: {
@@ -43,6 +55,8 @@ export async function GET() {
     businessType: (p as any).businessType ?? null,
     enabledModules: (p as any).enabledModules ?? null,
     capabilities: (p as any).capabilities ?? null,
+    // 🛡️ 2026-09-17 (v3): flag to distinguish canonical vs custom plans
+    isCanonical: CANONICAL_PLAN_CODES.includes(p.code),
   }))
 
   return NextResponse.json({ items: rows })
@@ -103,6 +117,16 @@ export async function POST(req: NextRequest) {
           ? body.capabilities
           : Array.isArray(body.capabilities)
             ? JSON.stringify(body.capabilities)
+            : null
+      } : {}),
+      // 🛡️ 2026-09-15 (v2): handle enabledModules — previously POST silently
+      // ignored this field, so the admin couldn't change which modules a
+      // plan unlocks.
+      ...(body.enabledModules !== undefined ? {
+        enabledModules: typeof body.enabledModules === 'string'
+          ? body.enabledModules
+          : Array.isArray(body.enabledModules)
+            ? JSON.stringify(body.enabledModules)
             : null
       } : {}),
     } as any,

@@ -1,34 +1,25 @@
 'use client'
 
 /**
- * Tiny fetch wrapper used by all client views.
- * Always sends JSON, parses JSON, throws on non-2xx.
+ * Offline-aware API wrapper.
+ *
+ * GET requests:
+ *   - Online: fetch from server + cache in IndexedDB
+ *   - Offline: return cached response from IndexedDB
+ *
+ * Write requests (POST/PUT/PATCH/DELETE):
+ *   - Online: fetch directly from server
+ *   - Offline: queue in outbox (IndexedDB) + return optimistic success
+ *
+ * When the network comes back, the sync engine flushes the outbox
+ * and pulls fresh data from the server.
  */
+
+import { offlineFetch } from './offline/api-offline'
+
 export async function api<T = any>(
   url: string,
   options?: { method?: string; body?: any; signal?: AbortSignal }
 ): Promise<T> {
-  const res = await fetch(url, {
-    method: options?.method ?? 'GET',
-    headers:
-      options?.body !== undefined ? { 'Content-Type': 'application/json' } : {},
-    body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
-    signal: options?.signal,
-  })
-  const text = await res.text()
-  let data: any = null
-  if (text) {
-    try {
-      data = JSON.parse(text)
-    } catch {
-      data = text
-    }
-  }
-  if (!res.ok) {
-    const msg =
-      (data && typeof data === 'object' && (data.error || data.message)) ||
-      `طلب فاشل (${res.status})`
-    throw new Error(typeof msg === 'string' ? msg : 'طلب فاشل')
-  }
-  return data as T
+  return offlineFetch<T>(url, options)
 }

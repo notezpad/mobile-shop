@@ -1,13 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
-import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
+import {
+  requireAuthIgnoreSubscription,
+  requireAdmin,
+  authErrorResponse,
+} from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   let session
   try {
-    session = await requireAuth()
+    // 🛡️ 2026-09-21: Use requireAuthIgnoreSubscription instead of requireAuth.
+    // This lets a tenant with an EXPIRED subscription still load their shop
+    // info (shop name, logo, commission rates) on the Settings page — so they
+    // can see their settings AND apply a redeem code. Previously this endpoint
+    // returned 402 on expired subs, which made the Settings page unusable
+    // (the user couldn't even see the redeem form).
+    session = await requireAuthIgnoreSubscription()
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
@@ -32,7 +42,10 @@ export async function GET() {
   if (!tenant) {
     return NextResponse.json({ error: 'المحل غير موجود' }, { status: 404 })
   }
-  return NextResponse.json(tenant)
+  const res = NextResponse.json(tenant)
+  // ⚡ Cache for 60 seconds — tenant data rarely changes
+  res.headers.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+  return res
 }
 
 export async function PUT(req: NextRequest) {

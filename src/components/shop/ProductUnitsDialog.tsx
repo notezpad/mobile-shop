@@ -29,9 +29,16 @@ interface ProductUnit {
 interface Props {
   open: boolean
   onOpenChange: (o: boolean) => void
-  product: { id: number; name: string } | null
+  product: { id: number; name: string; price: number } | null
   onChanged?: () => void
 }
+
+const DOSE_PRESETS = [
+  { name: 'ربع دستة',  factor: 3  },
+  { name: 'نص دستة',   factor: 6  },
+  { name: 'دستة',      factor: 12 },
+  { name: 'دستة و نص', factor: 18 },
+]
 
 export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: Props) {
   const [units, setUnits] = React.useState<ProductUnit[]>([])
@@ -58,8 +65,42 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
     if (open) load()
   }, [open, load])
 
+  const [bulkSaving, setBulkSaving] = React.useState(false)
+
   const reset = () => {
     setForm({ name: '', price: '', barcode: '', factor: '' })
+  }
+
+  const addPresets = async () => {
+    if (!product) return
+    const basePrice = product.price ?? 0
+    setBulkSaving(true)
+    try {
+      const existingNames = new Set(units.map((u) => u.name))
+      const toAdd = DOSE_PRESETS.filter((p) => !existingNames.has(p.name))
+      if (toAdd.length === 0) {
+        toast.info('وحدات الدستة موجودة بالفعل')
+        return
+      }
+      for (const preset of toAdd) {
+        await api(`/api/products/${product.id}/units`, {
+          method: 'POST',
+          body: {
+            name: preset.name,
+            price: basePrice > 0 ? Math.round(basePrice * preset.factor * 100) / 100 : null,
+            barcode: null,
+            factor: preset.factor,
+          },
+        })
+      }
+      toast.success(`تم إضافة ${toAdd.length} وحدة تلقائياً`)
+      await load()
+      onChanged?.()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل الإضافة')
+    } finally {
+      setBulkSaving(false)
+    }
   }
 
   const addUnit = async () => {
@@ -135,18 +176,18 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
           </div>
         ) : (
           <>
-            <div className="rounded-md border p-3">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-                <div>
-                  <Label className="text-xs">الاسم</Label>
+            <div className="rounded-md border p-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_1fr_1fr_1.4fr]">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground">الاسم</Label>
                   <Input
                     placeholder="دستة / نص دستة / كرتونة"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
                   />
                 </div>
-                <div>
-                  <Label className="text-xs">السعر (اختياري)</Label>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground">السعر (اختياري)</Label>
                   <Input
                     type="number"
                     step="0.01"
@@ -154,15 +195,15 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
                     onChange={(e) => setForm({ ...form, price: e.target.value })}
                   />
                 </div>
-                <div>
-                  <Label className="text-xs">باركود (اختياري)</Label>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground">باركود (اختياري)</Label>
                   <Input
                     value={form.barcode}
                     onChange={(e) => setForm({ ...form, barcode: e.target.value })}
                   />
                 </div>
-                <div>
-                  <Label className="text-xs">عدد القطع في الوحدة</Label>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground">عدد القطع في الوحدة</Label>
                   <Input
                     type="number"
                     min={1}
@@ -172,10 +213,21 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
                 </div>
               </div>
 
-              <Button onClick={addUnit} disabled={saving} className="mt-3">
-                {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                إضافة الوحدة
-              </Button>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <Button onClick={addUnit} disabled={saving || bulkSaving}>
+                  {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                  إضافة الوحدة
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={addPresets}
+                  disabled={saving || bulkSaving}
+                  title="يضيف: ربع دستة (3) • نص دستة (6) • دستة (12) • دستة و نص (18)"
+                >
+                  {bulkSaving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                  إضافة وحدات الدستة تلقائياً
+                </Button>
+              </div>
             </div>
 
             <div className="max-h-72 overflow-y-auto">

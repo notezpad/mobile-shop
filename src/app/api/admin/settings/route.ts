@@ -51,7 +51,7 @@ export async function PUT(req: NextRequest) {
   if (body.changePassword) {
     const session = await getSession()
     if (!session) {
-      return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
+      return NextResponse.json({ error: 'غير مسموح' }, { status: 401 })
     }
     const newPassword = String(body.newPassword ?? '')
     if (newPassword.length < 6) {

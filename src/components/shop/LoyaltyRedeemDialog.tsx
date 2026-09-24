@@ -76,7 +76,7 @@ export function LoyaltyRedeemDialog({ open, onOpenChange, customer, onDone }: Pr
                 {customer?.loyaltyPoints ?? 0} نقطة
               </span>
             </p>
-            <div>
+            <div className="flex flex-col gap-1.5">
               <Label>عدد النقاط للاستبدال (1 نقطة = 1 جنيه)</Label>
               <Input
                 type="number"
@@ -89,15 +89,15 @@ export function LoyaltyRedeemDialog({ open, onOpenChange, customer, onDone }: Pr
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            إلغاء
-          </Button>
           {enabled && (
             <Button onClick={submit} disabled={saving || points <= 0}>
               {saving && <Loader2 className="size-4 animate-spin" />}
               استبدال
             </Button>
           )}
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            إلغاء
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

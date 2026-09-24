@@ -111,7 +111,7 @@ export function CashView() {
         ],
         rows: data.entries.map((e, index) => [
           String(index + 1),
-          formatArabicDateTime(e.createdAt),
+          <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatArabicDateTime(e.createdAt)}</span>,
           SOURCE_LABEL[e.source] ?? e.source,
           e.userName ?? '—',
           `${e.amount >= 0 ? '+' : ''}${formatCurrency(e.amount)}`,
@@ -184,7 +184,7 @@ export function CashView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto" dir="ltr">
+            <div className="hidden overflow-x-auto lg:block" dir="ltr">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -240,6 +240,60 @@ export function CashView() {
                   )}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {/*
+            نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
+          */}
+          {!loading && data && (
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+              {data.entries.length === 0 ? (
+                <p className="col-span-full py-8 text-center text-muted-foreground">
+                  لا توجد حركات
+                </p>
+              ) : (
+                data.entries.map((e, index) => (
+                  <div key={e.id} className="rounded-lg border bg-card p-3 hover:bg-muted/30 dark:hover:bg-muted/20">
+                    {/* رأس الكارت: المصدر + المبلغ */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            #{index + 1}
+                          </span>
+                          <p className="font-medium leading-tight">
+                            {SOURCE_LABEL[e.source] ?? e.source}
+                          </p>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          <DateTimeCell date={e.createdAt} />
+                        </p>
+                      </div>
+                      <p
+                        className={cn(
+                          'shrink-0 text-base font-bold tabular-nums',
+                          e.amount >= 0 ? 'text-primary' : 'text-destructive'
+                        )}
+                      >
+                        {e.amount >= 0 ? '+' : ''}
+                        {formatCurrency(e.amount)}
+                      </p>
+                    </div>
+
+                    {/* ملاحظة + بواسطة + رصيد بعد الحركة */}
+                    <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                      {e.note && <p>{e.note}</p>}
+                      <div className="flex items-center justify-between gap-2">
+                        <span>بواسطة: {e.userName ?? '—'}</span>
+                        <span className="font-semibold">
+                          الرصيد: {formatCurrency(runningBalances[index] ?? 0)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </CardContent>

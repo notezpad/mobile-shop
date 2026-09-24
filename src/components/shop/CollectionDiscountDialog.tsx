@@ -63,7 +63,7 @@ export function CollectionDiscountDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
-        <DialogHeader>
+        <DialogHeader className="pb-2">
           <DialogTitle className="flex items-center gap-2">
             <Percent className="size-4" />
             خصم جماعي على كوليكشن
@@ -75,8 +75,8 @@ export function CollectionDiscountDialog({
           </div>
         ) : (
           <div className="space-y-3">
-            <div>
-              <Label>الكوليكشن</Label>
+            <div className="flex flex-col gap-1.5">
+              <Label className="mb-1.5 block">الكوليكشن</Label>
               <Input
                 list="collections-list"
                 value={collection}
@@ -89,8 +89,8 @@ export function CollectionDiscountDialog({
                 ))}
               </datalist>
             </div>
-            <div>
-              <Label>نسبة الخصم %</Label>
+            <div className="flex flex-col gap-1.5">
+              <Label className="mb-1.5 block">نسبة الخصم %</Label>
               <Input
                 type="number"
                 min={1}
@@ -105,15 +105,15 @@ export function CollectionDiscountDialog({
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            إلغاء
-          </Button>
           {enabled && (
             <Button onClick={submit} disabled={saving}>
               {saving && <Loader2 className="size-4 animate-spin" />}
               تطبيق الخصم
             </Button>
           )}
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            إلغاء
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

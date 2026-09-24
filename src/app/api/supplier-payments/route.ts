@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { recordCommission, createPrincipalCashEntry } from '@/lib/commission'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,9 +10,9 @@ const VALID_METHODS = new Set(['cash', 'vodafone_cash', 'instapay', 'fawry'])
 
 const METHOD_LABELS: Record<string, string> = {
   cash: 'كاش',
-  vodafone_cash: 'فودافون كاش',
+  vodafone_cash: 'محافظ إلكترونية',
   instapay: 'انستاباي',
-  fawry: 'فوري',
+  fawry: 'محفظة إلكترونية',
 }
 
 export async function GET(req: NextRequest) {
@@ -119,19 +120,40 @@ export async function POST(req: NextRequest) {
       data: { balance: { decrement: amount } },
     })
 
-    // 3. CashEntry — money leaving the till, so amount is negative
-    await tx.cashEntry.create({
-      data: {
-        tenantId: session.tenantId,
-        source: 'supplier_payment',
-        refId: payment.id,
-        amount: -amount,
-        note: `دفعة لمورد ${supplierName} - ${methodName}`,
-        userId: session.userId,
-      },
+    // 3. 🛡️ 2026-09-15 (v3): CashEntry with `method` column (Bug #22)
+    //    money leaving the drawer, so amount is NEGATIVE
+    const principalEntry = await createPrincipalCashEntry(tx, {
+      tenantId: session.tenantId,
+      userId: session.userId,
+      method,
+      source: 'supplier_payment',
+      refId: payment.id,
+      amount: -amount,
+      note: `دفعة لمورد ${supplierName} - ${methodName}`,
     })
 
-    return { ...payment, supplier: updatedSupplier }
+    // 4. 🛡️ 2026-09-15 (v3): Record commission (Bug #9 fix — was missing
+    //    entirely from this route, but customer payments had it. Now both
+    //    use the unified helper. The shop EARNS the commission even when
+    //    paying a supplier via Vodafone Cash — it's a service fee from
+    //    Vodafone to the shop.)
+    const { commission, commissionEntryId } = await recordCommission(tx, {
+      tenantId: session.tenantId,
+      userId: session.userId,
+      method,
+      amount,
+      refType: 'supplier_payment',
+      refId: payment.id,
+      noteSuffix: supplierName,
+    })
+
+    return {
+      ...payment,
+      supplier: updatedSupplier,
+      commission,
+      commissionEntryId,
+      linkedCashEntryId: principalEntry.id,
+    }
   })
 
   return NextResponse.json(created, { status: 201 })

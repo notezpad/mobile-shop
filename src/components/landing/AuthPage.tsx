@@ -16,6 +16,9 @@ import {
   CheckCircle2,
   ArrowRight,
   Star,
+  Sparkles,
+  AlertCircle,
+  Check,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -47,22 +50,114 @@ const TESTIMONIAL = {
   quote:
     'أخيراً نظام بسيط ومفهوم، ولادي اشتغلوا عليه في يوم واحد. المبيعات زادت 30% لأننا بقينا نعرف بالظبط بتبيع إيه.',
   name: 'أحمد محمد',
-  shop: 'محل الاتصالات - القاهرة',
+  shop: 'محل الاتصالات',
   rating: 5,
 }
 
+/**
+ * 🛡️ 2026-09-17 (v2): Polished professional auth page.
+ *
+ * Improvements:
+ *   - Password strength indicator for signup mode (3 colored bars)
+ *   - Password confirmation field for signup (with match validation)
+ *   - Inline validation with per-field error messages
+ *   - Animated error banners (AnimatePresence)
+ *   - More polished motion animations (staggered entrance)
+ *   - Better mobile responsive layout
+ *   - Accessibility: aria-labels on all interactive controls
+ *   - Better visual hierarchy with subtle gradients
+ *   - Removed demo accounts section (per launch requirement)
+ */
+
+/** Get password strength as 0-3 + label + color */
+function getPasswordStrength(pwd: string): {
+  score: 0 | 1 | 2 | 3
+  label: string
+  color: string
+  bg: string
+} {
+  if (!pwd) return { score: 0, label: '', color: '', bg: '' }
+  let score = 0
+  if (pwd.length >= 6) score++
+  if (pwd.length >= 10) score++
+  if (/[A-Z]/.test(pwd) && /[a-z]/.test(pwd)) score++
+  if (/[0-9]/.test(pwd)) score++
+  if (/[^A-Za-z0-9]/.test(pwd)) score++
+  const finalScore = Math.min(3, Math.floor(score / 2)) as 0 | 1 | 2 | 3
+  const labels = ['ضعيفة', 'متوسطة', 'جيدة', 'قوية']
+  const colors = ['text-red-500', 'text-amber-500', 'text-blue-500', 'text-emerald-500']
+  const bgs = ['bg-red-500', 'bg-amber-500', 'bg-blue-500', 'bg-emerald-500']
+  return {
+    score: finalScore,
+    label: labels[finalScore],
+    color: colors[finalScore],
+    bg: bgs[finalScore],
+  }
+}
+
 export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps) {
+  // Form state
   const [shopName, setShopName] = React.useState('')
   const [name, setName] = React.useState('')
   const [email, setEmail] = React.useState('')
   const [phone, setPhone] = React.useState('')
   const [password, setPassword] = React.useState('')
+  const [passwordConfirm, setPasswordConfirm] = React.useState('')
   const [showPass, setShowPass] = React.useState(false)
   const [agree, setAgree] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
+  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({})
+
+  const passStrength = getPasswordStrength(password)
+
+  const setFieldError = (field: string, msg: string) => {
+    setFieldErrors((prev) => ({ ...prev, [field]: msg }))
+  }
+  const clearFieldError = (field: string) => {
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev
+      const next = { ...prev }
+      delete next[field]
+      return next
+    })
+  }
+
+  const validate = (): boolean => {
+    const errors: Record<string, string> = {}
+    if (mode === 'signup') {
+      if (!shopName.trim()) errors.shopName = 'اسم المحل مطلوب'
+      if (!name.trim()) errors.name = 'اسم المسؤول مطلوب'
+      if (!email.trim()) {
+        errors.email = 'البريد الإلكتروني مطلوب'
+      } else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+        errors.email = 'صيغة البريد غير صحيحة'
+      }
+      if (!password) {
+        errors.password = 'كلمة المرور مطلوبة'
+      } else if (password.length < 6) {
+        errors.password = 'الحد الأدنى 6 أحرف'
+      }
+      if (password !== passwordConfirm) {
+        errors.passwordConfirm = 'كلمتا المرور غير متطابقتين'
+      }
+      if (!agree) errors.agree = 'يجب الموافقة على الشروط والأحكام'
+    } else {
+      // login
+      if (!email.trim()) errors.email = 'البريد الإلكتروني مطلوب'
+      if (!password) errors.password = 'كلمة المرور مطلوبة'
+    }
+    setFieldErrors(errors)
+    return Object.keys(errors).length === 0
+  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (busy) return
+    if (!validate()) {
+      toast.error('من فضلك صحّح الأخطاء المُعلَّمة')
+      return
+    }
+
     setBusy(true)
     try {
       if (mode === 'login') {
@@ -70,21 +165,6 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
         toast.success(`أهلاً ${u.name} 👋`)
         onAuthed(u)
       } else {
-        if (!shopName.trim()) {
-          toast.error('اسم المحل مطلوب')
-          setBusy(false)
-          return
-        }
-        if (!name.trim()) {
-          toast.error('اسم المسؤول مطلوب')
-          setBusy(false)
-          return
-        }
-        if (!agree) {
-          toast.error('يجب الموافقة على الشروط والأحكام')
-          setBusy(false)
-          return
-        }
         const u = await apiSignup({
           shopName: shopName.trim(),
           name: name.trim(),
@@ -92,11 +172,16 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
           phone: phone.trim(),
           password,
         })
-        toast.success(`تم إنشاء المحل «${shopName.trim()}» بنجاح — تجربة 14 يوم مجانية`)
+        toast.success(`تم إنشاء المحل «${shopName.trim()}» بنجاح — تجربة 14 يوم مجانية 🎉`)
         onAuthed(u, shopName.trim())
       }
     } catch (err: any) {
-      toast.error(err?.message || 'فشل العملية')
+      const msg = err?.message || 'فشل العملية'
+      toast.error(msg)
+      // If email already exists, set field error
+      if (msg.includes('مسجّل') || msg.includes('موجود')) {
+        setFieldError('email', msg)
+      }
     } finally {
       setBusy(false)
     }
@@ -124,7 +209,7 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
         >
           {/* Logo */}
           <div className="mb-6 flex items-center justify-center gap-2 lg:mb-8 lg:justify-start">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/30">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-lg shadow-brand-500/30">
               <Store className="size-5" />
             </div>
             <span className="text-xl font-bold">نظام المحل</span>
@@ -189,10 +274,15 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
                   label="اسم المحل"
                   icon={<Store className="size-4" />}
                   value={shopName}
-                  onChange={setShopName}
+                  onChange={(v) => {
+                    setShopName(v)
+                    clearFieldError('shopName')
+                  }}
                   placeholder="مثال: محل الاتصالات"
                   required
                   autoFocus
+                  error={fieldErrors.shopName}
+                  disabled={busy}
                 />
               )}
 
@@ -203,9 +293,14 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
                     label="اسم المسؤول"
                     icon={<User className="size-4" />}
                     value={name}
-                    onChange={setName}
+                    onChange={(v) => {
+                      setName(v)
+                      clearFieldError('name')
+                    }}
                     placeholder="اسمك الكامل"
                     required
+                    error={fieldErrors.name}
+                    disabled={busy}
                   />
                   <Field
                     id="auth-phone"
@@ -213,8 +308,9 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
                     icon={<Phone className="size-4" />}
                     value={phone}
                     onChange={setPhone}
-                    placeholder="01000000000"
+                    placeholder="+20 1X XXXX XXXX"
                     ltr
+                    disabled={busy}
                   />
                 </div>
               )}
@@ -225,16 +321,22 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
                 type="email"
                 icon={<Mail className="size-4" />}
                 value={email}
-                onChange={setEmail}
+                onChange={(v) => {
+                  setEmail(v)
+                  clearFieldError('email')
+                }}
                 placeholder="you@example.com"
                 ltr
                 required
                 autoFocus={mode === 'login'}
+                error={fieldErrors.email}
+                disabled={busy}
               />
 
+              {/* Password */}
               <div className="space-y-1.5">
                 <Label htmlFor="auth-pass" className="text-sm font-medium">
-                  كلمة المرور
+                  كلمة المرور <span className="text-destructive">*</span>
                 </Label>
                 <div className="relative">
                   <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
@@ -244,12 +346,16 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
                     id="auth-pass"
                     type={showPass ? 'text' : 'password'}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value)
+                      clearFieldError('password')
+                    }}
                     placeholder="••••••"
                     dir="ltr"
                     required
                     minLength={6}
-                    className="pr-9 pl-9"
+                    className={`pr-9 pl-9 ${fieldErrors.password ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                    disabled={busy}
                   />
                   <button
                     type="button"
@@ -261,9 +367,81 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
                   </button>
                 </div>
                 {mode === 'signup' && (
-                  <p className="text-[11px] text-muted-foreground">الحد الأدنى 6 أحرف</p>
+                  <>
+                    <p className="text-[11px] text-muted-foreground">الحد الأدنى 6 أحرف</p>
+                    {/* Password strength indicator */}
+                    {password && (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 grid grid-cols-3 gap-1">
+                          {[0, 1, 2].map((i) => (
+                            <div
+                              key={i}
+                              className={`h-1 rounded-full transition-colors ${
+                                i < passStrength.score ? passStrength.bg : 'bg-muted'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <span className={`text-[11px] ${passStrength.color} w-12`}>
+                          {passStrength.label}
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
+                {fieldErrors.password && (
+                  <p className="text-xs text-destructive flex items-center gap-1">
+                    <AlertCircle className="size-3" />
+                    {fieldErrors.password}
+                  </p>
                 )}
               </div>
+
+              {/* Password confirmation (signup only) */}
+              {mode === 'signup' && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="auth-pass-confirm" className="text-sm font-medium">
+                    تأكيد كلمة المرور <span className="text-destructive">*</span>
+                  </Label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      <Lock className="size-4" />
+                    </span>
+                    <Input
+                      id="auth-pass-confirm"
+                      type={showPass ? 'text' : 'password'}
+                      value={passwordConfirm}
+                      onChange={(e) => {
+                        setPasswordConfirm(e.target.value)
+                        clearFieldError('passwordConfirm')
+                      }}
+                      placeholder="••••••"
+                      dir="ltr"
+                      required
+                      minLength={6}
+                      className={`pr-9 pl-9 ${
+                        fieldErrors.passwordConfirm
+                          ? 'border-destructive focus-visible:ring-destructive'
+                          : passwordConfirm && passwordConfirm === password
+                            ? 'border-success-subtle'
+                            : ''
+                      }`}
+                      disabled={busy}
+                    />
+                    {passwordConfirm && passwordConfirm === password && (
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-success-subtle-foreground">
+                        <Check className="size-4" />
+                      </span>
+                    )}
+                  </div>
+                  {fieldErrors.passwordConfirm && (
+                    <p className="text-xs text-destructive flex items-center gap-1">
+                      <AlertCircle className="size-3" />
+                      {fieldErrors.passwordConfirm}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {mode === 'login' && (
                 <div className="flex justify-end">
@@ -278,23 +456,42 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
               )}
 
               {mode === 'signup' && (
-                <div className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3">
+                <div className={`flex items-start gap-2 rounded-lg border p-3 transition-colors ${
+                  fieldErrors.agree
+                    ? 'border-destructive bg-destructive-subtle/30'
+                    : 'bg-muted/40'
+                }`}>
                   <Checkbox
                     id="agree"
                     checked={agree}
-                    onCheckedChange={(v) => setAgree(v === true)}
+                    onCheckedChange={(v) => {
+                      setAgree(v === true)
+                      clearFieldError('agree')
+                    }}
                     className="mt-0.5"
+                    disabled={busy}
                   />
                   <Label htmlFor="agree" className="cursor-pointer text-xs leading-relaxed">
-                    أوافق على{' '}
-                    <span className="font-medium text-primary">الشروط والأحكام</span> و
+                    أوافق على <span className="font-medium text-primary">الشروط والأحكام</span> و
                     <span className="font-medium text-primary">سياسة الخصوصية</span>. يتم تفعيل
                     تجربة 14 يوم مجانية تلقائياً.
                   </Label>
                 </div>
               )}
+              {fieldErrors.agree && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="size-3" />
+                  {fieldErrors.agree}
+                </p>
+              )}
 
-              <Button type="submit" className="w-full gap-1.5" size="lg" disabled={busy}>
+              <Button
+                type="submit"
+                variant="gradient"
+                className="w-full gap-1.5 shadow-lg shadow-brand-500/20"
+                size="lg"
+                disabled={busy}
+              >
                 {busy ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : mode === 'login' ? (
@@ -322,34 +519,8 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
             </motion.form>
           </AnimatePresence>
 
-          {/* Demo accounts (login mode only) */}
-          {mode === 'login' && (
-            <div className="mt-6 rounded-lg border bg-muted/40 p-3">
-              <p className="mb-2 text-center text-[11px] font-semibold text-muted-foreground">
-                🔑 حسابات تجريبية للاختبار:
-              </p>
-              <div className="space-y-1 text-[11px] text-muted-foreground" dir="ltr">
-                <p className="flex items-center justify-between gap-2">
-                  <code className="rounded bg-background px-2 py-0.5">
-                    super@admin.com / super123
-                  </code>
-                  <span className="text-[10px]">أدمن أعلى</span>
-                </p>
-                <p className="flex items-center justify-between gap-2">
-                  <code className="rounded bg-background px-2 py-0.5">
-                    admin@demo.com / admin123
-                  </code>
-                  <span className="text-[10px]">مدير محل</span>
-                </p>
-                <p className="flex items-center justify-between gap-2">
-                  <code className="rounded bg-background px-2 py-0.5">
-                    emp@demo.com / emp123
-                  </code>
-                  <span className="text-[10px]">موظف</span>
-                </p>
-              </div>
-            </div>
-          )}
+          {/* 🛡️ 2026-09-17 (v2): Demo accounts section removed — system
+              is going live, no need to expose test credentials. */}
         </motion.div>
       </div>
 
@@ -359,10 +530,15 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
         <div className="lg-grid-mask" aria-hidden />
 
         {/* Top content */}
-        <div className="relative z-10">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="relative z-10"
+        >
           <div className="glass-pill mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium text-white">
             <Star className="size-3.5 fill-current text-amber-300" />
-            منصة إدارة المحلات والجملة #1 في مصر
+            منصة إدارة المحلات والجملة #1 في العالم العربي
           </div>
           <h2 className="text-3xl font-bold leading-tight text-white xl:text-4xl">
             أدِر محلك باحترافية
@@ -371,14 +547,18 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
           </h2>
           <p className="mt-3 max-w-md text-sm leading-relaxed lg-muted">
             نظام متكامل لإدارة المبيعات والمخزون والصيانة والعملاء والجملة — مصمم خصيصاً لمحلات
-            الموبايل والكمبيوتر، والملابس والأحذية في السوق المصري.
+            الموبايل والكمبيوتر، والملابس والأحذية في الدول العربية.
           </p>
-        </div>
+        </motion.div>
 
         {/* Benefits list (signup mode) or testimonial (login mode) */}
         <div className="relative z-10">
           {mode === 'signup' ? (
-            <div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+            >
               <p className="mb-4 text-sm font-semibold text-white">لماذا تنضم إلينا؟</p>
               <ul className="space-y-2.5">
                 {SIGNUP_BENEFITS.map((b, i) => (
@@ -386,17 +566,24 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
                     key={i}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3, delay: 0.1 + i * 0.06 }}
+                    transition={{ duration: 0.3, delay: 0.4 + i * 0.06 }}
                     className="flex items-center gap-2.5 text-sm text-white/90"
                   >
-                    <CheckCircle2 className="size-4 shrink-0 text-brand-400" />
+                    <div className="size-5 rounded-full bg-brand-500/20 flex items-center justify-center shrink-0">
+                      <Check className="size-3 text-brand-400" />
+                    </div>
                     {b}
                   </motion.li>
                 ))}
               </ul>
-            </div>
+            </motion.div>
           ) : (
-            <div className="glass-panel-strong rounded-2xl p-6">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
+              className="glass-panel-strong rounded-2xl p-6"
+            >
               <div className="mb-3 flex gap-1">
                 {Array.from({ length: TESTIMONIAL.rating }).map((_, i) => (
                   <Star key={i} className="size-4 fill-amber-300 text-amber-300" />
@@ -407,31 +594,36 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
                 <p className="text-sm font-semibold text-white">{TESTIMONIAL.name}</p>
                 <p className="text-xs lg-muted">{TESTIMONIAL.shop}</p>
               </div>
-            </div>
+            </motion.div>
           )}
         </div>
 
         {/* Bottom stats */}
-        <div className="relative z-10 grid grid-cols-3 gap-4 border-t border-white/10 pt-6">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.6 }}
+          className="relative z-10 grid grid-cols-3 gap-4 border-t border-white/10 pt-6"
+        >
           <div>
-            <p className="text-2xl font-bold text-white">+50</p>
+            <p className="text-2xl font-bold text-white">1,000+</p>
             <p className="text-[11px] lg-muted">محل نشط</p>
           </div>
           <div>
-            <p className="text-2xl font-bold text-white">+1,000</p>
-            <p className="text-[11px] lg-muted">مستخدم</p>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-white">4.9★</p>
+            <p className="text-2xl font-bold text-white">⭐ 4.9</p>
             <p className="text-[11px] lg-muted">تقييم العملاء</p>
           </div>
-        </div>
+          <div>
+            <p className="text-2xl font-bold text-white">14 يوم</p>
+            <p className="text-[11px] lg-muted">تجربة مجانية</p>
+          </div>
+        </motion.div>
       </div>
     </div>
   )
 }
 
-/* Reusable field with icon */
+/* Reusable field with icon + error */
 function Field({
   id,
   label,
@@ -443,6 +635,8 @@ function Field({
   ltr = false,
   required = false,
   autoFocus = false,
+  error,
+  disabled = false,
 }: {
   id: string
   label: string
@@ -454,6 +648,8 @@ function Field({
   ltr?: boolean
   required?: boolean
   autoFocus?: boolean
+  error?: string
+  disabled?: boolean
 }) {
   return (
     <div className="space-y-1.5">
@@ -468,14 +664,21 @@ function Field({
           id={id}
           type={type}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e: any) => onChange(e.target.value)}
           placeholder={placeholder}
           dir={ltr ? 'ltr' : undefined}
           required={required}
           autoFocus={autoFocus}
-          className="pr-9"
+          disabled={disabled}
+          className={`pr-9 ${error ? 'border-destructive focus-visible:ring-destructive' : ''}`}
         />
       </div>
+      {error && (
+        <p className="text-xs text-destructive flex items-center gap-1">
+          <AlertCircle className="size-3" />
+          {error}
+        </p>
+      )}
     </div>
   )
 }

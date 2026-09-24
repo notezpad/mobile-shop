@@ -26,9 +26,9 @@ import { formatCurrency } from '@/lib/format'
 
 const METHOD_OPTIONS: { value: string; label: string }[] = [
   { value: 'cash', label: 'كاش' },
-  { value: 'vodafone_cash', label: 'فودافون كاش' },
+  { value: 'vodafone_cash', label: 'محافظ إلكترونية' },
   { value: 'instapay', label: 'انستاباي' },
-  { value: 'fawry', label: 'فوري' },
+  { value: 'fawry', label: 'محفظة إلكترونية' },
 ]
 
 interface Props {
@@ -186,12 +186,12 @@ export function SupplierPaymentDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            إلغاء
-          </Button>
           <Button onClick={submit} disabled={saving || !supplierId}>
             {saving && <Loader2 className="size-4 animate-spin" />}
             💾 حفظ الدفعة
+          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            إلغاء
           </Button>
         </DialogFooter>
       </DialogContent>

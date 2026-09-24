@@ -9,13 +9,30 @@ const PRODUCT_LINKS = [
   { label: 'الأسعار', href: '#pricing' },
   { label: 'العرض التوضيحي', href: '#screenshots' },
 ]
-const COMPANY_LINKS = ['من نحن', 'المدونة', 'الوظائف', 'تواصل معنا']
-const SUPPORT_LINKS = ['مركز المساعدة', 'الأسئلة الشائعة', 'الشروط والأحكام', 'سياسة الخصوصية']
+const COMPANY_LINKS = [
+  { label: 'من نحن', href: '/about-us' },
+  { label: 'المدونة', href: '#' },
+  { label: 'سياسة الكوكيز', href: '/cookies-policy' },
+  { label: 'تواصل معنا', href: '/contact-us' },
+]
+const SUPPORT_LINKS = [
+  { label: 'سياسة الاسترجاع', href: '/refund-policy' },
+  { label: 'الأسئلة الشائعة', href: '/#faq' },
+  { label: 'الشروط والأحكام', href: '/terms-and-conditions' },
+  { label: 'سياسة الخصوصية', href: '/privacy-policy' },
+]
 
 export function LandingFooter() {
   const handleNav = (href: string) => {
+    // If the hash target exists on the current page (landing page only), scroll to it.
+    // Otherwise, navigate to the landing page with the hash so it can scroll there.
     const el = document.querySelector(href)
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else if (href.startsWith('#')) {
+      // We're on a non-landing page — go to landing page with the hash
+      window.location.href = '/' + href
+    }
   }
 
   return (
@@ -35,16 +52,18 @@ export function LandingFooter() {
             </p>
             <div className="flex items-center gap-2">
               {[
-                { icon: Facebook, label: 'فيسبوك' },
-                { icon: Instagram, label: 'انستجرام' },
-                { icon: Twitter, label: 'تويتر' },
-                { icon: MessageCircle, label: 'واتساب' },
+                { icon: Facebook, label: 'فيسبوك', href: '#' },
+                { icon: Instagram, label: 'انستجرام', href: '#' },
+                { icon: Twitter, label: 'تويتر', href: '#' },
+                { icon: MessageCircle, label: 'واتساب', href: 'https://wa.me/201010328471' },
               ].map((s, i) => {
                 const Icon = s.icon
+                const isExternal = s.href.startsWith('http')
                 return (
                   <a
                     key={i}
-                    href="#"
+                    href={s.href}
+                    {...(isExternal ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
                     aria-label={s.label}
                     className="glass-card flex size-9 items-center justify-center rounded-lg lg-muted transition-colors hover:text-white"
                   >
@@ -66,7 +85,7 @@ export function LandingFooter() {
         {/* Bottom bar */}
         <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-center text-xs lg-muted sm:flex-row sm:text-right">
           <p>© {new Date().getFullYear()} نظام المحل. جميع الحقوق محفوظة.</p>
-          <p>صُنع بحب في مصر 🇪🇬</p>
+          <p>صُنع للعالم العربي 🌍</p>
         </div>
       </div>
     </footer>
@@ -101,18 +120,37 @@ function FooterLinkColumn({
   )
 }
 
-function FooterColumn({ title, links }: { title: string; links: string[] }) {
+function FooterColumn({ title, links }: { title: string; links: { label: string; href: string }[] }) {
   return (
     <div>
       <h4 className="mb-4 text-sm font-bold text-white">{title}</h4>
       <ul className="space-y-2.5">
-        {links.map((l) => (
-          <li key={l}>
-            <a href="#" className="text-sm lg-muted transition-colors hover:text-brand-300">
-              {l}
-            </a>
-          </li>
-        ))}
+        {links.map((l) => {
+          const isInternal = l.href.startsWith('/')
+          const isHash = l.href.startsWith('#')
+          return (
+            <li key={l.label}>
+              {isInternal ? (
+                <a href={l.href} className="text-sm lg-muted transition-colors hover:text-brand-300">
+                  {l.label}
+                </a>
+              ) : isHash ? (
+                <a href={l.href} className="text-sm lg-muted transition-colors hover:text-brand-300">
+                  {l.label}
+                </a>
+              ) : (
+                <a
+                  href={l.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm lg-muted transition-colors hover:text-brand-300"
+                >
+                  {l.label}
+                </a>
+              )}
+            </li>
+          )
+        })}
       </ul>
     </div>
   )

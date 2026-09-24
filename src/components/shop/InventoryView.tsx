@@ -104,12 +104,13 @@ export function InventoryView() {
     try {
       const [bs, ps, mv, tf, st] = await Promise.all([
         apiSafe<Branch[]>('/api/branches', []),
-        apiSafe<InventoryProduct[]>('/api/products', []),
+        apiSafe<{ data: InventoryProduct[] } | InventoryProduct[]>('/api/products?limit=1000&status=all', []),
         apiSafe<Movement[]>('/api/inventory/movements', []),
         apiSafe<Transfer[]>('/api/inventory/transfers', []),
         apiSafe<Stocktake[]>('/api/inventory/stocktake', []),
       ])
-      setBranches(bs); setProducts(ps); setMovements(mv); setTransfers(tf); setStocktakes(st)
+      const productsArr = Array.isArray(ps) ? ps : (ps as any)?.data ?? []
+      setBranches(bs); setProducts(productsArr); setMovements(mv); setTransfers(tf); setStocktakes(st)
     } finally {
       setLoading(false)
     }
@@ -334,7 +335,17 @@ export function InventoryView() {
           </div>
         ) : (
           <>
-            <TabsContent value="stock" className="space-y-0">
+            {/*
+              🛡️ 2026-09-14: `forceMount` on every TabsContent so the components
+              stay mounted (and keep their local state) when switching tabs.
+
+              Previously, switching to another tab unmounted the active one,
+              which wiped any in-progress draft (e.g. stocktake items you'd
+              scanned in, transfer items you'd added). With forceMount, the
+              inactive tabs are kept in the DOM and hidden via CSS (see the
+              `data-[state=inactive]:hidden` rule in src/components/ui/tabs.tsx).
+            */}
+            <TabsContent value="stock" forceMount className="space-y-0">
               <StockTab
                 products={products}
                 branches={branches}
@@ -343,7 +354,7 @@ export function InventoryView() {
                 onChanged={load}
               />
             </TabsContent>
-            <TabsContent value="movements" className="space-y-0">
+            <TabsContent value="movements" forceMount className="space-y-0">
               <MovementsTab
                 movements={movements}
                 branches={branches}
@@ -352,7 +363,7 @@ export function InventoryView() {
                 onChanged={load}
               />
             </TabsContent>
-            <TabsContent value="transfers" className="space-y-0">
+            <TabsContent value="transfers" forceMount className="space-y-0">
               <TransfersTab
                 transfers={transfers}
                 branches={branches}
@@ -361,7 +372,7 @@ export function InventoryView() {
                 onChanged={load}
               />
             </TabsContent>
-            <TabsContent value="stocktake" className="space-y-0">
+            <TabsContent value="stocktake" forceMount className="space-y-0">
               <StocktakeTab
                 stocktakes={stocktakes}
                 branches={branches}
@@ -391,7 +402,7 @@ async function apiSafe<T>(url: string, fallback: T): Promise<T> {
 }
 
 function formatEGP(n: number): string {
-  return `${n.toLocaleString('ar-EG', { maximumFractionDigits: 0 })} ج.م`
+  return `${n.toLocaleString('ar-EG', { maximumFractionDigits: 0 })} `
 }
 
 function StatCard({

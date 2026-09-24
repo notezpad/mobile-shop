@@ -53,9 +53,9 @@ import { PaymentDialog } from './PaymentDialog'
 
 const METHOD_LABELS: Record<string, string> = {
   cash: 'كاش',
-  vodafone_cash: 'فودافون كاش',
+  vodafone_cash: 'محافظ إلكترونية',
   instapay: 'انستاباي',
-  fawry: 'فوري',
+  fawry: 'محفظة إلكترونية',
 }
 
 function methodBadgeClass(method: string): string {
@@ -245,8 +245,8 @@ export function CustomerDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-hidden p-0 sm:max-w-3xl">
-        <DialogHeader className="border-b px-6 pt-6 pb-4">
+      <DialogContent className="max-h-[90vh] max-w-4xl overflow-hidden bg-background p-0 sm:max-w-4xl">
+        <DialogHeader className="border-b bg-background px-6 pt-6 pb-4">
           <DialogTitle className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-col gap-1">
               <span className="text-xl font-bold">
@@ -279,7 +279,10 @@ export function CustomerDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[calc(90vh-110px)] overflow-y-auto px-6 pb-6">
+        {/* 🛡️ 2026-09-15: Added relative + z-[1] to ensure content stays
+            above background page elements (fixes "items inside each other"
+            visual bug where background table text bleeds through). */}
+        <div className="relative z-[1] max-h-[calc(90vh-110px)] overflow-y-auto bg-background px-6 pb-6">
           {loading ? (
             <div className="space-y-3 py-4">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -327,117 +330,101 @@ export function CustomerDetailDialog({
                   />
                 </div>
 
-                <Card className="overflow-hidden py-0">
-                  <CardContent className="p-0">
-                    <div className="overflow-x-auto" dir="ltr">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-52">التاريخ</TableHead>
-                            <TableHead className="w-20">النوع</TableHead>
-                            <TableHead>التفاصيل</TableHead>
-                            <TableHead className="w-28 text-center">مدين</TableHead>
-                            <TableHead className="w-28 text-center">دائن</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {timeline.length === 0 ? (
-                            <TableRow>
-                              <TableCell
-                                colSpan={5}
-                                className="py-8 text-center text-muted-foreground"
+                {/* 🛡️ 2026-09-15: Card-based timeline instead of table —
+                    prevents column overlap on narrow dialogs. */}
+                <div className="space-y-2">
+                  {timeline.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">لا توجد حركات</p>
+                  ) : (
+                    timeline.map((row, i) => {
+                      if (row.kind === 'sale') {
+                        const itemsText = row.items
+                          .map((it) => `${it.name}×${it.quantity}`)
+                          .join('، ')
+                        const debt = Math.max(0, row.total - row.paid)
+                        return (
+                          <div
+                            key={`s-${row.saleId}-${i}`}
+                            className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3"
+                          >
+                            {/* Type badge */}
+                            <Badge
+                              variant="outline"
+                              className="mt-0.5 shrink-0 bg-info-subtle text-info-subtle-foreground border-info-subtle"
+                            >
+                              بيع
+                            </Badge>
+                            {/* Details */}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm">
+                                <span className="font-medium">{row.invoiceNo ?? `#${row.saleId}`}</span>
+                                <span className="text-muted-foreground"> — {itemsText}</span>
+                              </p>
+                              {row.paid > 0 && (
+                                <p className="mt-0.5 text-xs text-success-subtle-foreground">
+                                  دفع كاش: {formatCurrency(row.paid)}
+                                </p>
+                              )}
+                              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                <DateTimeCell date={row.date} />
+                              </p>
+                            </div>
+                            {/* Amount — right side, never overlaps */}
+                            <div className="shrink-0 text-left">
+                              {debt > 0 ? (
+                                <span className="inline-block rounded-md bg-destructive/10 px-2 py-1 text-sm font-bold tabular-nums text-destructive whitespace-nowrap">
+                                  {formatCurrency(debt)}
+                                </span>
+                              ) : (
+                                <span className="inline-block rounded-md bg-muted px-2 py-1 text-sm font-medium tabular-nums text-muted-foreground whitespace-nowrap">
+                                  مسوّى
+                                </span>
+                              )}
+                              <p className="mt-1 text-[10px] text-muted-foreground">مدين</p>
+                            </div>
+                          </div>
+                        )
+                      }
+                      // payment row
+                      return (
+                        <div
+                          key={`p-${i}`}
+                          className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3"
+                        >
+                          <Badge
+                            variant="outline"
+                            className="mt-0.5 shrink-0 bg-success-subtle text-success-subtle-foreground border-success-subtle"
+                          >
+                            دفعة
+                          </Badge>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm">
+                              <span
+                                className={`inline-block rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${methodBadgeClass(
+                                  row.method
+                                )}`}
                               >
-                                لا توجد حركات
-                              </TableCell>
-                            </TableRow>
-                          ) : (
-                            timeline.map((row, i) => {
-                              if (row.kind === 'sale') {
-                                const itemsText = row.items
-                                  .map((it) => `${it.name}×${it.quantity}`)
-                                  .join('، ')
-                                const debt = Math.max(0, row.total - row.paid)
-                                return (
-                                  <TableRow key={`s-${row.saleId}-${i}`}>
-                                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                                      <DateTimeCell date={row.date} />
-                                    </TableCell>
-                                    <TableCell>
-                                      <Badge
-                                        variant="outline"
-                                        className="bg-info-subtle text-info-subtle-foreground border-info-subtle"
-                                      >
-                                        بيع
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-sm">
-                                      <span className="font-medium">
-                                        {row.invoiceNo ?? `#${row.saleId}`}
-                                      </span>
-                                      <span className="text-muted-foreground">
-                                        {' '}
-                                        — {itemsText}
-                                      </span>
-                                      {row.paid > 0 && (
-                                        <span className="text-xs text-success-subtle-foreground">
-                                          {' '}
-                                          (دفع كاش: {formatCurrency(row.paid)})
-                                        </span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell className="text-center font-semibold tabular-nums text-destructive">
-                                      {formatCurrency(debt)}
-                                    </TableCell>
-                                    <TableCell className="text-center tabular-nums text-muted-foreground">
-                                      —
-                                    </TableCell>
-                                  </TableRow>
-                                )
-                              }
-                              // payment row
-                              return (
-                                <TableRow key={`p-${i}`}>
-                                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                                    <DateTimeCell date={row.date} />
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge
-                                      variant="outline"
-                                      className="bg-success-subtle text-success-subtle-foreground border-success-subtle"
-                                    >
-                                      دفعة
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="text-sm">
-                                    <span
-                                      className={`inline-block rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${methodBadgeClass(
-                                        row.method
-                                      )}`}
-                                    >
-                                      {METHOD_LABELS[row.method] || row.method}
-                                    </span>
-                                    {row.note && (
-                                      <span className="text-muted-foreground">
-                                        {' '}
-                                        — {row.note}
-                                      </span>
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="text-center tabular-nums text-muted-foreground">
-                                    —
-                                  </TableCell>
-                                  <TableCell className="text-center font-semibold tabular-nums text-success-subtle-foreground">
-                                    {formatCurrency(row.amount)}
-                                  </TableCell>
-                                </TableRow>
-                              )
-                            })
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
+                                {METHOD_LABELS[row.method] || row.method}
+                              </span>
+                              {row.note && (
+                                <span className="text-muted-foreground"> — {row.note}</span>
+                              )}
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-muted-foreground">
+                              <DateTimeCell date={row.date} />
+                            </p>
+                          </div>
+                          <div className="shrink-0 text-left">
+                            <span className="inline-block rounded-md bg-success-subtle px-2 py-1 text-sm font-bold tabular-nums text-success-subtle-foreground whitespace-nowrap">
+                              {formatCurrency(row.amount)}
+                            </span>
+                            <p className="mt-1 text-[10px] text-muted-foreground">دائن</p>
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
               </TabsContent>
 
               {/* ===== Sales Tab ===== */}
@@ -448,12 +435,12 @@ export function CustomerDetailDialog({
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>الفاتورة</TableHead>
-                            <TableHead className="w-52">التاريخ</TableHead>
-                            <TableHead className="w-28 text-center">عدد الأصناف</TableHead>
-                            <TableHead className="w-28 text-center">الإجمالي</TableHead>
-                            <TableHead className="w-28 text-center">المدفوع</TableHead>
-                            <TableHead className="w-24 text-center">الحالة</TableHead>
+                            <TableHead className="min-w-[80px] w-[80px]">الفاتورة</TableHead>
+                            <TableHead className="min-w-[180px] w-[180px] whitespace-nowrap">التاريخ</TableHead>
+                            <TableHead className="min-w-[80px] w-[80px] text-center whitespace-nowrap">الأصناف</TableHead>
+                            <TableHead className="min-w-[90px] w-[90px] text-center whitespace-nowrap">الإجمالي</TableHead>
+                            <TableHead className="min-w-[90px] w-[90px] text-center whitespace-nowrap">المدفوع</TableHead>
+                            <TableHead className="min-w-[80px] w-[80px] text-center">الحالة</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -536,11 +523,11 @@ export function CustomerDetailDialog({
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="w-52">التاريخ</TableHead>
-                            <TableHead className="w-28 text-center">المبلغ</TableHead>
-                            <TableHead className="w-28 text-center">الطريقة</TableHead>
-                            <TableHead>ملاحظات</TableHead>
-                            <TableHead className="w-20 text-center">إجراء</TableHead>
+                            <TableHead className="min-w-[160px] w-[160px] whitespace-nowrap">التاريخ</TableHead>
+                            <TableHead className="min-w-[90px] w-[90px] text-center whitespace-nowrap">المبلغ</TableHead>
+                            <TableHead className="min-w-[90px] w-[90px] text-center whitespace-nowrap">الطريقة</TableHead>
+                            <TableHead className="min-w-[100px] w-[100px]">ملاحظات</TableHead>
+                            <TableHead className="min-w-[60px] w-[60px] text-center">إجراء</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -636,6 +623,13 @@ export function CustomerDetailDialog({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* 🛡️ 2026-09-13: Close button (replaces the X icon we removed). */}
+        <div className="flex justify-end border-t px-6 py-3">
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            إغلاق
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   )

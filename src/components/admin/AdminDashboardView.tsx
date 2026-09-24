@@ -350,59 +350,110 @@ export function AdminDashboardView() {
           {loading ? (
             <Skeleton className="h-40 w-full" />
           ) : (
-            <div className="overflow-x-auto" dir="ltr">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10 text-center">#</TableHead>
-                    <TableHead>المحل</TableHead>
-                    <TableHead className="w-32">الباقة</TableHead>
-                    <TableHead className="w-36">تاريخ الانتهاء</TableHead>
-                    <TableHead className="w-32 text-center">الأيام المتبقية</TableHead>
-                    <TableHead className="w-36 text-center">إجراء</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(stats?.expiringSoon ?? []).length === 0 ? (
+            <>
+              <div className="hidden overflow-x-auto lg:block" dir="ltr">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                        لا توجد اشتراكات منتهية قريباً
-                      </TableCell>
+                      <TableHead className="w-10 text-center">#</TableHead>
+                      <TableHead>المحل</TableHead>
+                      <TableHead className="w-32">الباقة</TableHead>
+                      <TableHead className="w-36">تاريخ الانتهاء</TableHead>
+                      <TableHead className="w-32 text-center">الأيام المتبقية</TableHead>
+                      <TableHead className="w-36 text-center">إجراء</TableHead>
                     </TableRow>
-                  ) : (
-                    (stats?.expiringSoon ?? []).map((s, i) => (
-                      <TableRow key={s.subscriptionId}>
-                        <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
-                        <TableCell className="font-medium">{s.shopName}</TableCell>
-                        <TableCell>{s.planName}</TableCell>
-                        <TableCell>{formatShortDate(s.endDate)}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="outline" className="bg-warning-subtle text-warning-subtle-foreground dark:text-warning-subtle-foreground border-warning-subtle">
-                            {s.daysLeft} يوم
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-1"
-                            disabled={extending === s.subscriptionId}
-                            onClick={() => handleQuickExtend(s.subscriptionId)}
-                          >
-                            {extending === s.subscriptionId ? (
-                              <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                              <Zap className="size-3.5" />
-                            )}
-                            تمديد سريع
-                          </Button>
+                  </TableHeader>
+                  <TableBody>
+                    {(stats?.expiringSoon ?? []).length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                          لا توجد اشتراكات منتهية قريباً
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                    ) : (
+                      (stats?.expiringSoon ?? []).map((s, i) => (
+                        <TableRow key={s.subscriptionId}>
+                          <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
+                          <TableCell className="font-medium">{s.shopName}</TableCell>
+                          <TableCell>{s.planName}</TableCell>
+                          <TableCell>{formatShortDate(s.endDate)}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="outline" className="bg-warning-subtle text-warning-subtle-foreground dark:text-warning-subtle-foreground border-warning-subtle">
+                              {s.daysLeft} يوم
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1"
+                              disabled={extending === s.subscriptionId}
+                              onClick={() => handleQuickExtend(s.subscriptionId)}
+                            >
+                              {extending === s.subscriptionId ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <Zap className="size-3.5" />
+                              )}
+                              تمديد سريع
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* كروت — تظهر تحت lg */}
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:hidden">
+                {(stats?.expiringSoon ?? []).length === 0 ? (
+                  <p className="col-span-full py-8 text-center text-sm text-muted-foreground">
+                    لا توجد اشتراكات منتهية قريباً
+                  </p>
+                ) : (
+                  (stats?.expiringSoon ?? []).map((s, i) => (
+                    <div key={s.subscriptionId} className="rounded-lg border bg-card p-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              #{i + 1}
+                            </span>
+                            <p className="truncate text-sm font-medium leading-tight">
+                              {s.shopName}
+                            </p>
+                          </div>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">
+                            الباقة: {s.planName}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="shrink-0 bg-warning-subtle text-warning-subtle-foreground dark:text-warning-subtle-foreground border-warning-subtle text-[10px]">
+                          {s.daysLeft} يوم
+                        </Badge>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>النهاية: {formatShortDate(s.endDate)}</span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 px-2"
+                          disabled={extending === s.subscriptionId}
+                          onClick={() => handleQuickExtend(s.subscriptionId)}
+                        >
+                          {extending === s.subscriptionId ? (
+                            <Loader2 className="size-3 animate-spin" />
+                          ) : (
+                            <Zap className="size-3" />
+                          )}
+                          تمديد
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -416,38 +467,68 @@ export function AdminDashboardView() {
           {loading ? (
             <Skeleton className="h-40 w-full" />
           ) : (
-            <div className="overflow-x-auto" dir="ltr">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10 text-center">#</TableHead>
-                    <TableHead>اسم المحل</TableHead>
-                    <TableHead className="w-32">الباقة</TableHead>
-                    <TableHead className="w-36">تاريخ التسجيل</TableHead>
-                    <TableHead className="w-28 text-center">الحالة</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(stats?.recentTenants ?? []).length === 0 ? (
+            <>
+              <div className="hidden overflow-x-auto lg:block" dir="ltr">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        لا توجد محلات مسجلة بعد
-                      </TableCell>
+                      <TableHead className="w-10 text-center">#</TableHead>
+                      <TableHead>اسم المحل</TableHead>
+                      <TableHead className="w-32">الباقة</TableHead>
+                      <TableHead className="w-36">تاريخ التسجيل</TableHead>
+                      <TableHead className="w-28 text-center">الحالة</TableHead>
                     </TableRow>
-                  ) : (
-                    (stats?.recentTenants ?? []).map((t, i) => (
-                      <TableRow key={t.id}>
-                        <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
-                        <TableCell className="font-medium">{t.shopName}</TableCell>
-                        <TableCell>{t.planName}</TableCell>
-                        <TableCell>{formatShortDate(t.createdAt)}</TableCell>
-                        <TableCell className="text-center"><StatusBadge status={t.status} /></TableCell>
+                  </TableHeader>
+                  <TableBody>
+                    {(stats?.recentTenants ?? []).length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          لا توجد محلات مسجلة بعد
+                        </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                    ) : (
+                      (stats?.recentTenants ?? []).map((t, i) => (
+                        <TableRow key={t.id}>
+                          <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
+                          <TableCell className="font-medium">{t.shopName}</TableCell>
+                          <TableCell>{t.planName}</TableCell>
+                          <TableCell>{formatShortDate(t.createdAt)}</TableCell>
+                          <TableCell className="text-center"><StatusBadge status={t.status} /></TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* كروت — تظهر تحت lg */}
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:hidden">
+                {(stats?.recentTenants ?? []).length === 0 ? (
+                  <p className="col-span-full py-8 text-center text-sm text-muted-foreground">
+                    لا توجد محلات مسجلة بعد
+                  </p>
+                ) : (
+                  (stats?.recentTenants ?? []).map((t, i) => (
+                    <div key={t.id} className="flex items-center justify-between gap-2 rounded-lg border bg-card p-2.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            #{i + 1}
+                          </span>
+                          <p className="truncate text-sm font-medium leading-tight">
+                            {t.shopName}
+                          </p>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          {t.planName} • {formatShortDate(t.createdAt)}
+                        </p>
+                      </div>
+                      <StatusBadge status={t.status} />
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

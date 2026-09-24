@@ -245,12 +245,12 @@ export function PurchaseOrdersView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto" dir="ltr">
+            <div className="hidden overflow-x-auto lg:block" dir="ltr">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10 text-center">#</TableHead>
-                    <TableHead className="w-28">رقم الأمر</TableHead>
+                    <TableHead className="w-[132px]">رقم الأمر</TableHead>
                     <TableHead className="w-52">التاريخ</TableHead>
                     <TableHead>المورد</TableHead>
                     <TableHead className="w-28">بواسطة</TableHead>
@@ -341,6 +341,106 @@ export function PurchaseOrdersView() {
                   )}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {/*
+            نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
+          */}
+          {!loading && (
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+              {filtered.length === 0 ? (
+                <p className="col-span-full py-8 text-center text-muted-foreground">
+                  لا توجد مشتريات
+                </p>
+              ) : (
+                filtered.map((o, index) => {
+                  const due = o.total - o.paid
+                  const itemCount = o.items.reduce((sum, it) => sum + it.quantity, 0)
+                  const isReturned = o.status === 'مرتجعة'
+                  return (
+                    <div key={o.id} className={cn('rounded-lg border bg-card p-3', isReturned && 'opacity-60')}>
+                      {/* رأس الكارت: رقم الأمر + شارة الحالة */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              #{index + 1}
+                            </span>
+                            <p className="font-medium leading-tight">
+                              {o.orderNo ?? `#${o.id}`}
+                            </p>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            <DateTimeCell date={o.createdAt} />
+                          </p>
+                        </div>
+                        <Badge
+                          variant={isReturned ? 'destructive' : 'secondary'}
+                          className={o.status === 'مكتملة' ? 'bg-primary/10 text-primary' : ''}
+                        >
+                          {o.status}
+                        </Badge>
+                      </div>
+
+                      {/* المورد + بواسطة */}
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                        <span className="text-muted-foreground">المورد:</span>
+                        <span className="font-medium">
+                          {o.supplier ? o.supplier.name : 'بدون مورد'}
+                        </span>
+                        {o.userName && (
+                          <>
+                            <span className="text-muted-foreground">بواسطة:</span>
+                            <span className="font-medium">{o.userName}</span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* شبكة البيانات: إجمالي/مدفوع/آجل */}
+                      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-2 text-center">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">الإجمالي</p>
+                          <p className="font-semibold tabular-nums">
+                            {formatCurrency(o.total)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">المدفوع</p>
+                          <p className="tabular-nums">{formatCurrency(o.paid)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">الآجل</p>
+                          <p
+                            className={cn(
+                              'font-semibold tabular-nums',
+                              due > 0 && 'text-destructive'
+                            )}
+                          >
+                            {formatCurrency(due)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* الكمية + إجراء */}
+                      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                        <span>الكمية: {itemCount}</span>
+                        {!isReturned && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 text-destructive hover:text-destructive"
+                            onClick={() => setReturnId(o.id)}
+                            title="مرتجع للمورد"
+                          >
+                            <RotateCcw className="size-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })
+              )}
             </div>
           )}
         </CardContent>

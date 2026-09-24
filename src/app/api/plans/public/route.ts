@@ -5,12 +5,27 @@ export const dynamic = 'force-dynamic'
 
 /**
  * Public endpoint — returns all active subscription plans.
- * No auth required. Used by the public landing page PricingSection.
+ * No auth required. Used by the public landing page PricingSection
+ * and the /pricing page.
+ *
+ * 🛡️ Filtering rules (2026-09-13):
+ *   - Only paid plans (priceMonthly > 0 OR priceYearly > 0) are returned.
+ *   - Zero-price plans (`trial`, `free`, etc.) are hidden from public view
+ *     because the new flow auto-grants a 14-day trial of the chosen paid
+ *     plan on signup, so a generic "trial" plan card is redundant.
+ *   - Inactive plans are also hidden (isActive = false).
  */
 export async function GET() {
   try {
     const plans = await db.plan.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        // ⚡ Hide zero-price plans (trial / free / etc.) from public listing
+        OR: [
+          { priceMonthly: { gt: 0 } },
+          { priceYearly: { gt: 0 } },
+        ],
+      },
       orderBy: { sortOrder: 'asc' },
     })
 

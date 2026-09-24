@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { checkLowStockAndNotify, checkExpiringSubscriptions } from '@/lib/notifications'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +17,7 @@ function startOfMonth(d: Date) {
   return x
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   let session
   try {
     session = await requireAuth()
@@ -25,14 +26,21 @@ export async function GET() {
     return NextResponse.json(err?.body, { status: err?.status })
   }
 
+  // ?days=7|14|30 — controls the chart period (default 7)
+  const url = new URL(req.url)
+  const rawDays = parseInt(url.searchParams.get('days') ?? '7', 10)
+  const chartDays = [7, 14, 30].includes(rawDays) ? rawDays : 7
+
   return withDb(async () => {
     const tenantFilter = { tenantId: session.tenantId }
     const now = new Date()
     const todayStart = startOfDay(now)
     const monthStart = startOfMonth(now)
     const last30Start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-    const last7Start = new Date(todayStart)
-    last7Start.setDate(last7Start.getDate() - 6) // 7 days back including today
+    const lastNStart = new Date(todayStart)
+    lastNStart.setDate(lastNStart.getDate() - (chartDays - 1))
+    // keep last7Start alias for backward compat with existing references below
+    const last7Start = lastNStart
 
     const [
       todaySales,
@@ -137,8 +145,8 @@ export async function GET() {
     // FIXED: Build last7DaysSales from single-query result using in-memory grouping
     const pad = (x: number) => String(x).padStart(2, '0')
     const dayMap = new Map<string, { total: number; profit: number }>()
-    // Pre-populate all 7 days with zeros so days without sales still appear
-    for (let i = 6; i >= 0; i--) {
+    // Pre-populate all N days with zeros so days without sales still appear
+    for (let i = chartDays - 1; i >= 0; i--) {
       const d = new Date(todayStart)
       d.setDate(d.getDate() - i)
       const key = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`
@@ -205,6 +213,30 @@ export async function GET() {
       status: o.status,
       receivedAt: o.receivedAt.toISOString(),
     }))
+
+    // 🔔 2026-09-14: Trigger notification checks (fire-and-forget).
+    // We use `void` so these run in the background without blocking the
+    // dashboard response. The helpers internally check tenant preferences
+    // (notifyLowStock / notifyExpiringSubscription) and dedupe against
+    // existing unread notifications of the same type — so calling them
+    // on every dashboard load is safe (no duplicate notifications).
+    //
+    // The await Promise.allSettled lets both finish before the response
+    // is sent. This adds ~50-150ms to the dashboard load but ensures the
+    // user sees fresh notifications on dashboard open. If you'd rather
+    // have it purely fire-and-forget (faster response, notifications show
+    // up on the NEXT poll), replace with:
+    //   void checkLowStockAndNotify(db, session.tenantId).catch(() => {})
+    //   void checkExpiringSubscriptions(db, session.tenantId).catch(() => {})
+    try {
+      await Promise.allSettled([
+        checkLowStockAndNotify(db, session.tenantId),
+        checkExpiringSubscriptions(db, session.tenantId),
+      ])
+    } catch {
+      // 🛡️ Never let notification failures break the dashboard.
+      // The dashboard response is more important than notifications.
+    }
 
     return NextResponse.json({
       todaySales: todaySalesTotal,

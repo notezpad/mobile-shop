@@ -17,7 +17,7 @@ export async function GET() {
       impersonating = true
     }
   }
-  return NextResponse.json({
+  const res = NextResponse.json({
     ok: true,
     user: {
       userId: s.userId,
@@ -29,4 +29,7 @@ export async function GET() {
       impersonating,
     },
   })
+  // ⚡ Cache for 60 seconds — user session data rarely changes
+  res.headers.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+  return res
 }

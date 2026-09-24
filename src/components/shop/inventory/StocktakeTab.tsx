@@ -47,6 +47,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/format'
 import { DateTimeCell } from '../DateTimeCell'
+import { useShopStore } from '@/lib/store'
 import type { Branch, InventoryProduct, Stocktake } from '../InventoryView'
 
 interface Props {
@@ -66,16 +67,43 @@ interface CountItem {
 }
 
 export function StocktakeTab({ stocktakes, branches, products, userBranchId, onChanged }: Props) {
-  const [branchId, setBranchId] = React.useState<string>(userBranchId ? String(userBranchId) : '')
+  // 🛡️ 2026-09-14: branchId, items, note live in the Zustand store with
+  // localStorage persistence — so a draft stays alive across tab switches,
+  // page refreshes, and even navigation to other pages. The `scan` input
+  // stays as local state (it's transient typing, not worth persisting).
+  const stocktakeDraft = useShopStore((s) => s.stocktakeDraft)
+  const setStocktakeDraft = useShopStore((s) => s.setStocktakeDraft)
+  const clearStocktakeDraft = useShopStore((s) => s.clearStocktakeDraft)
+
+  // Pull these from the persisted draft instead of local useState.
+  const branchId = stocktakeDraft.branchId
+  const items = stocktakeDraft.items
+  const note = stocktakeDraft.note
+
+  // Helpers that update the draft instead of local state.
+  const setBranchId = (v: string) => setStocktakeDraft({ branchId: v })
+  const setItems = (updater: (prev: typeof items) => typeof items) =>
+    setStocktakeDraft({ items: updater(items) })
+  const setNote = (v: string) => setStocktakeDraft({ note: v })
+
   const [scan, setScan] = React.useState('')
-  const [items, setItems] = React.useState<CountItem[]>([])
-  const [note, setNote] = React.useState('')
   const [saving, setSaving] = React.useState(false)
   const [viewing, setViewing] = React.useState<Stocktake | null>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
 
   // Use derived default — when branches load and no branch is selected yet, fall back to first
   const effectiveBranchId = branchId || (branches.length > 0 ? String(branches[0].id) : '')
+
+  // 🛡️ 2026-09-14: If this is the first time the user opens the stocktake
+  // tab and they're locked to a branch (employee), pre-fill the branchId
+  // in the draft. Otherwise the form would start empty every time the
+  // draft is cleared.
+  React.useEffect(() => {
+    if (!branchId && userBranchId) {
+      setBranchId(String(userBranchId))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userBranchId, branchId])
 
   // Focus scan input when branch changes or after each scan
   React.useEffect(() => {
@@ -127,8 +155,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
   }
 
   const resetForm = () => {
-    setItems([])
-    setNote('')
+    clearStocktakeDraft()
     setScan('')
     inputRef.current?.focus()
   }
@@ -370,8 +397,8 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                   <TableHead className="w-24 text-center">الفرق</TableHead>
                   <TableHead className="w-28 text-center">الحالة</TableHead>
                   <TableHead className="w-28">المنشئ</TableHead>
-                  <TableHead className="w-36">تاريخ الإنشاء</TableHead>
-                  <TableHead className="w-36">تاريخ الاعتماد</TableHead>
+                  <TableHead className="w-52">تاريخ الإنشاء</TableHead>
+                  <TableHead className="w-52">تاريخ الاعتماد</TableHead>
                   <TableHead className="w-16 text-center"></TableHead>
                 </TableRow>
               </TableHeader>

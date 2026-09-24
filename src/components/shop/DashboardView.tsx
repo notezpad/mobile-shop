@@ -124,24 +124,38 @@ function rankBadgeStyle(rank: number): string {
 export function DashboardView() {
   const [data, setData] = React.useState<DashboardData | null>(null)
   const [loading, setLoading] = React.useState(true)
+  const [chartDays, setChartDays] = React.useState<7 | 14 | 30>(7)
   const user = useShopStore((s) => s.user)
   const enabledModules = useShopStore((s) => s.plan.enabledModules)
   const hasMaintenance = enabledModules.includes('maintenance')
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (days = chartDays) => {
     setLoading(true)
     try {
-      const d = await api<DashboardData>('/api/dashboard')
+      const d = await api<DashboardData>(`/api/dashboard?days=${days}`)
       setData(d)
     } catch (e: any) {
       console.error(e)
     } finally {
       setLoading(false)
     }
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartDays])
 
   React.useEffect(() => {
     load()
+
+    // Auto-refresh every 5 minutes
+    const interval = setInterval(load, 5 * 60 * 1000)
+
+    // Refresh when user returns to tab
+    const onVisible = () => { if (document.visibilityState === 'visible') load() }
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [load])
 
   // Build sparkline data from last7DaysSales — fallback to flat array if loading
@@ -257,11 +271,31 @@ export function DashboardView() {
       <BentoGrid cols={3}>
         <BentoCell colSpan={2} className="animate-in-up stagger-2">
           <Card variant="bento" className="h-full">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Activity className="size-4 text-primary" />
-                مبيعات آخر 7 أيام
+                مبيعات آخر {chartDays} أيام
               </CardTitle>
+              <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/40 p-0.5">
+                {([7, 14, 30] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => {
+                      setChartDays(d)
+                      load(d)
+                    }}
+                    className={cn(
+                      'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                      chartDays === d
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {d}ي
+                  </button>
+                ))}
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -336,9 +370,11 @@ export function DashboardView() {
                   ))}
                 </ol>
               ) : (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  لا توجد مبيعات خلال آخر 30 يوماً
-                </p>
+                <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+                  <span className="text-3xl">🛍️</span>
+                  <p className="text-sm font-medium text-muted-foreground">لا توجد مبيعات خلال آخر 30 يوماً</p>
+                  <a href="/pos" className="text-xs text-primary hover:underline">ابدأ البيع من نقطة البيع</a>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -376,9 +412,11 @@ export function DashboardView() {
                   ))}
                 </ul>
               ) : (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  لا توجد تنبيهات
-                </p>
+                <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+                  <span className="text-3xl">✅</span>
+                  <p className="text-sm font-medium text-muted-foreground">المخزون في مستوى جيد</p>
+                  <p className="text-xs text-muted-foreground/70">لا توجد منتجات تحت الحد الأدنى</p>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -425,9 +463,11 @@ export function DashboardView() {
                     })}
                   </ul>
                 ) : (
-                  <p className="py-8 text-center text-sm text-muted-foreground">
-                    لا توجد أوامر صيانة نشطة
-                  </p>
+                  <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+                    <span className="text-3xl">🔧</span>
+                    <p className="text-sm font-medium text-muted-foreground">لا توجد أوامر صيانة نشطة</p>
+                    <a href="/maintenance" className="text-xs text-primary hover:underline">إضافة أمر صيانة جديد</a>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -439,7 +479,7 @@ export function DashboardView() {
           Financial overview: stock value at cost vs. price, daily invoice count,
           customer debt, supplier debt. These are secondary metrics so they get
           plain StatCards (no sparklines). */}
-      <BentoGrid cols={hasMaintenance ? 4 : 5}>
+      <BentoGrid cols={4}>
         <BentoCell>
           <KpiCard
             title="قيمة المخزون (تكلفة)"
@@ -458,30 +498,20 @@ export function DashboardView() {
         </BentoCell>
         <BentoCell>
           <KpiCard
-            title="فواتير اليوم"
-            value={loading ? '...' : String(data?.todaySalesCount ?? 0)}
-            icon={<ShoppingBag />}
-            variant="info"
-          />
-        </BentoCell>
-        <BentoCell>
-          <KpiCard
             title="ديون العملاء"
             value={loading ? '...' : formatCurrency(data?.totalOutstandingDebt ?? 0)}
             icon={<AlertTriangle />}
             variant="warning"
           />
         </BentoCell>
-        {!hasMaintenance && (
-          <BentoCell>
-            <KpiCard
-              title="مستحق الموردين"
-              value={loading ? '...' : formatCurrency(data?.totalSupplierDebt ?? 0)}
-              icon={<Truck />}
-              variant="warning"
-            />
-          </BentoCell>
-        )}
+        <BentoCell>
+          <KpiCard
+            title="مستحق الموردين"
+            value={loading ? '...' : formatCurrency(data?.totalSupplierDebt ?? 0)}
+            icon={<Truck />}
+            variant="warning"
+          />
+        </BentoCell>
       </BentoGrid>
 
       {/* === Row 6: Last 10 sales table === */}
@@ -497,33 +527,94 @@ export function DashboardView() {
               ))}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10 text-center">#</TableHead>
-                  <TableHead className="w-28">الفاتورة</TableHead>
-                  <TableHead className="w-52">الوقت</TableHead>
-                  <TableHead className="w-32 text-center">الإجمالي</TableHead>
-                  <TableHead className="w-28 text-center">الحالة</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              <div className="hidden lg:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10 text-center">#</TableHead>
+                      <TableHead className="w-28">الفاتورة</TableHead>
+                      <TableHead className="w-40">العميل</TableHead>
+                      <TableHead className="w-52">الوقت</TableHead>
+                      <TableHead className="w-32 text-center">الإجمالي</TableHead>
+                      <TableHead className="w-28 text-center">الحالة</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data?.last10Sales?.length ? (
+                      data.last10Sales.map((s, index) => (
+                        <TableRow key={s.id}>
+                          <TableCell className="text-center font-mono text-xs">
+                            {index + 1}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {s.invoiceNo ?? `#${s.id}`}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm max-w-[160px] truncate">
+                            {s.customerName ?? '—'}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-xs">
+                            <DateTimeCell date={s.createdAt} />
+                          </TableCell>
+                          <TableCell className="text-center font-semibold tabular-nums">
+                            {formatCurrency(s.total)}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge
+                              variant={
+                                s.status === 'مرتجعة' ? 'danger' :
+                                s.status === 'مكتملة' ? 'success' : 'secondary'
+                              }
+                              size="sm"
+                            >
+                              {s.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell
+                          colSpan={6}
+                          className="py-8 text-center text-muted-foreground"
+                        >
+                          📊 لا توجد مبيعات بعد
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/*
+                نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
+              */}
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:hidden">
                 {data?.last10Sales?.length ? (
                   data.last10Sales.map((s, index) => (
-                    <TableRow key={s.id}>
-                      <TableCell className="text-center font-mono text-xs">
-                        {index + 1}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {s.invoiceNo ?? `#${s.id}`}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-xs">
-                        <DateTimeCell date={s.createdAt} />
-                      </TableCell>
-                      <TableCell className="text-center font-semibold tabular-nums">
-                        {formatCurrency(s.total)}
-                      </TableCell>
-                      <TableCell className="text-center">
+                    <div key={s.id} className="flex items-center justify-between gap-2 rounded-lg border bg-card p-2.5">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            #{index + 1}
+                          </span>
+                          <p className="truncate text-sm font-medium leading-tight">
+                            {s.invoiceNo ?? `#${s.id}`}
+                          </p>
+                        </div>
+                        {s.customerName && (
+                          <p className="mt-0.5 text-[10px] text-muted-foreground truncate">
+                            {s.customerName}
+                          </p>
+                        )}
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          <DateTimeCell date={s.createdAt} />
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-left">
+                        <p className="text-sm font-semibold tabular-nums">
+                          {formatCurrency(s.total)}
+                        </p>
                         <Badge
                           variant={
                             s.status === 'مرتجعة' ? 'danger' :
@@ -533,21 +624,16 @@ export function DashboardView() {
                         >
                           {s.status}
                         </Badge>
-                      </TableCell>
-                    </TableRow>
+                      </div>
+                    </div>
                   ))
                 ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="py-8 text-center text-muted-foreground"
-                    >
-                      لا توجد مبيعات بعد
-                    </TableCell>
-                  </TableRow>
+                  <p className="col-span-full py-8 text-center text-muted-foreground">
+                    📊 لا توجد مبيعات بعد
+                  </p>
                 )}
-              </TableBody>
-            </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

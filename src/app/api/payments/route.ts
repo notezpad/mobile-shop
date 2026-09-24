@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { recordCommission, createPrincipalCashEntry } from '@/lib/commission'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,9 +9,9 @@ const VALID_METHODS = new Set(['cash', 'vodafone_cash', 'instapay', 'fawry'])
 
 const METHOD_LABELS: Record<string, string> = {
   cash: 'كاش',
-  vodafone_cash: 'فودافون كاش',
+  vodafone_cash: 'محافظ إلكترونية',
   instapay: 'انستاباي',
-  fawry: 'فوري',
+  fawry: 'محفظة إلكترونية',
 }
 
 export async function GET(req: NextRequest) {
@@ -47,6 +48,24 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(payments)
 }
 
+/**
+ * 🛡️ 2026-09-15 (v3): Customer payment — Bug #9 + #11 + CashEntry.method fix.
+ *
+ * Bug #9 fix: Commission logic was using a NEGATIVE amount (-commission) in
+ *   this route but a POSITIVE amount (+commission) in finance/route.ts.
+ *   Now both use the unified `recordCommission()` helper which always
+ *   creates a POSITIVE commission entry (revenue, not expense).
+ *
+ * Bug #11 fix: Wasn't linking the payment to a Sale.paid. Now accepts an
+ *   optional `saleId` body parameter. When provided:
+ *   - Creates a `SalePayment` row (linked via cashEntryId to the CashEntry)
+ *   - Increments `Sale.paid` so the sale record stays in sync
+ *   - When DELETE sale runs later, it can reverse this payment via the
+ *     SalePayment.cashEntryId link
+ *
+ * Bug #22 fix: CashEntry.method column is now populated so the drawer
+ *   aggregation can split by method.
+ */
 export async function POST(req: NextRequest) {
   let session
   try {
@@ -103,31 +122,39 @@ export async function POST(req: NextRequest) {
       ? String(body.note).trim() || null
       : null
 
-  // load tenant commission rates for non-cash methods
-  let commission = 0
-  if (method !== 'cash') {
-    const tenant = await db.tenant.findUnique({
-      where: { id: session.tenantId },
-      select: {
-        commissionVodafoneCash: true,
-        commissionInstapay: true,
-        commissionFawry: true,
-      },
+  // 🛡️ Bug #11: optional saleId — link the payment to a specific sale
+  const saleId = body.saleId ? parseInt(body.saleId, 10) : null
+  let sale: any = null
+  if (saleId) {
+    if (isNaN(saleId)) {
+      return NextResponse.json(
+        { error: 'saleId غير صالح' },
+        { status: 400 }
+      )
+    }
+    sale = await db.sale.findUnique({
+      where: { id: saleId },
+      select: { id: true, tenantId: true, customerId: true, paid: true, total: true, invoiceNo: true },
     })
-    const rate =
-      method === 'vodafone_cash'
-        ? (tenant?.commissionVodafoneCash ?? 0)
-        : method === 'instapay'
-          ? (tenant?.commissionInstapay ?? 0)
-          : (tenant?.commissionFawry ?? 0)
-    commission = (amount * rate) / 100
+    if (!sale || sale.tenantId !== session.tenantId) {
+      return NextResponse.json(
+        { error: 'الفاتورة غير موجودة' },
+        { status: 404 }
+      )
+    }
+    if (sale.customerId && sale.customerId !== customerId) {
+      return NextResponse.json(
+        { error: 'الفاتورة لا تنتمي لهذا العميل' },
+        { status: 400 }
+      )
+    }
   }
 
   const methodName = METHOD_LABELS[method] || method
   const customerName = customer.name
 
   const created = await db.$transaction(async (tx) => {
-    // 1. create the Payment record
+    // 1. Create the Payment record
     const payment = await tx.payment.create({
       data: {
         tenantId: session.tenantId,
@@ -139,41 +166,63 @@ export async function POST(req: NextRequest) {
       include: { customer: true },
     })
 
-    // 2. decrement customer balance (allow going negative — overpayment => shop owes customer)
+    // 2. Decrement customer balance (allow going negative — overpayment => shop owes customer)
     const updatedCustomer = await tx.customer.update({
       where: { id: customerId },
       data: { balance: { decrement: amount } },
     })
 
-    // 3. CashEntry(ies)
-    // First entry: the actual payment (+amount)
-    await tx.cashEntry.create({
-      data: {
-        tenantId: session.tenantId,
-        source: 'payment',
-        refId: payment.id,
-        amount,
-        note: `دفعة من ${customerName} - ${methodName}`,
-        userId: session.userId,
-      },
+    // 3. Create the principal CashEntry with `method` column (Bug #22 fix)
+    //    Use the unified helper.
+    const principalEntry = await createPrincipalCashEntry(tx, {
+      tenantId: session.tenantId,
+      userId: session.userId,
+      method,
+      source: 'payment',
+      refId: payment.id,
+      amount, // positive — money INTO the drawer
+      note: `دفعة من ${customerName} - ${methodName}${sale ? ` — فاتورة ${sale.invoiceNo ?? sale.id}` : ''}`,
     })
 
-    // For non-cash methods: a second commission entry (-commission)
-    if (method !== 'cash' && commission > 0) {
-      await tx.cashEntry.create({
+    // 4. Record commission (Bug #9 fix — unified helper, always POSITIVE)
+    const { commission, commissionEntryId } = await recordCommission(tx, {
+      tenantId: session.tenantId,
+      userId: session.userId,
+      method,
+      amount,
+      refType: 'payment',
+      refId: payment.id,
+      noteSuffix: customerName,
+    })
+
+    // 5. 🛡️ Bug #11: If saleId was provided, link this payment to the sale
+    //    via the SalePayment model + increment Sale.paid
+    if (sale) {
+      await tx.salePayment.create({
         data: {
-          tenantId: session.tenantId,
-          source: 'commission',
-          refId: payment.id,
-          amount: -commission,
-          note: `عمولة ${methodName} على دفعة ${customerName}`,
-          userId: session.userId,
+          saleId: sale.id,
+          amount,
+          note: `دفعة ${methodName} - ${customerName}`,
+          cashEntryId: principalEntry.id,
         },
+      })
+      // Increment Sale.paid — keeps the sale record in sync with what's
+      // actually in the drawer for this sale.
+      await tx.sale.update({
+        where: { id: sale.id },
+        data: { paid: { increment: amount } },
       })
     }
 
     // Attach the freshly-updated customer (post-decrement) to the response
-    return { ...payment, customer: updatedCustomer }
+    return {
+      ...payment,
+      customer: updatedCustomer,
+      commission,
+      commissionEntryId,
+      linkedSaleId: sale?.id ?? null,
+      linkedCashEntryId: principalEntry.id,
+    }
   })
 
   return NextResponse.json(created, { status: 201 })

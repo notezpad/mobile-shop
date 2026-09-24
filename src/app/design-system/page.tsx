@@ -522,10 +522,10 @@ export default function DesignSystemPage() {
                 </TableHeader>
                 <TableBody>
                   {[
-                    { name: "آيفون 15 برو", cat: "موبايل", qty: 24, price: "62,000 ج.م", status: "success" as const, label: "متوفر" },
-                    { name: "سامسونج A55", cat: "موبايل", qty: 8, price: "18,500 ج.م", status: "warning" as const, label: "منخفض" },
-                    { name: "شاحن Anker 65W", cat: "إكسسوارات", qty: 0, price: "1,200 ج.م", status: "danger" as const, label: "نفذ" },
-                    { name: "كابل Type-C", cat: "إكسسوارات", qty: 145, price: "150 ج.م", status: "success" as const, label: "متوفر" },
+                    { name: "آيفون 15 برو", cat: "موبايل", qty: 24, price: "62,000 ", status: "success" as const, label: "متوفر" },
+                    { name: "سامسونج A55", cat: "موبايل", qty: 8, price: "18,500 ", status: "warning" as const, label: "منخفض" },
+                    { name: "شاحن Anker 65W", cat: "إكسسوارات", qty: 0, price: "1,200 ", status: "danger" as const, label: "نفذ" },
+                    { name: "كابل Type-C", cat: "إكسسوارات", qty: 145, price: "150 ", status: "success" as const, label: "متوفر" },
                   ].map((row, i) => (
                     <TableRow key={i}>
                       <TableCell className="font-medium">{row.name}</TableCell>
@@ -573,7 +573,7 @@ export default function DesignSystemPage() {
                 <BentoCell>
                   <KpiCard
                     title="مبيعات اليوم"
-                    value="٤٢٬٨٠٠ ج.م"
+                    value="٤٢٬٨٠٠ "
                     delta={{ value: "12.5%", direction: "up", label: "عن الأمس" }}
                     icon={<DollarSign />}
                     variant="primary"
@@ -602,7 +602,7 @@ export default function DesignSystemPage() {
                 <BentoCell>
                   <KpiCard
                     title="أرصدة الآجل"
-                    value="١٢٬٤٠٠ ج.م"
+                    value="١٢٬٤٠٠ "
                     delta={{ value: "5%", direction: "up" }}
                     icon={<Users />}
                     variant="warning"
@@ -625,7 +625,7 @@ export default function DesignSystemPage() {
                     <div className="flex items-center justify-between mb-4">
                       <div>
                         <p className="text-xs text-muted-foreground uppercase tracking-wider">مبيعات آخر 7 أيام</p>
-                        <p className="text-2xl font-bold mt-1 tabular-nums">٢٤٨٬٥٠٠ ج.م</p>
+                        <p className="text-2xl font-bold mt-1 tabular-nums">٢٤٨٬٥٠٠ </p>
                       </div>
                       <Badge variant="success">
                         <TrendingUp className="size-3" />
@@ -652,7 +652,7 @@ export default function DesignSystemPage() {
                     <DonutChart
                       data={[
                         { label: "كاش", value: 45 },
-                        { label: "فودافون كاش", value: 30 },
+                        { label: "محافظ إلكترونية", value: 30 },
                         { label: "انستاباي", value: 15 },
                         { label: "فوري", value: 10 },
                       ]}
@@ -663,7 +663,7 @@ export default function DesignSystemPage() {
                     <div className="w-full space-y-2">
                       {[
                         { label: "كاش", value: "45%", color: "var(--chart-1)" },
-                        { label: "فودافون كاش", value: "30%", color: "var(--chart-2)" },
+                        { label: "محافظ إلكترونية", value: "30%", color: "var(--chart-2)" },
                         { label: "انستاباي", value: "15%", color: "var(--chart-3)" },
                         { label: "فوري", value: "10%", color: "var(--chart-4)" },
                       ].map((d) => (

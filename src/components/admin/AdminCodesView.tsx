@@ -9,6 +9,11 @@ import {
   Download,
   Loader2,
   CheckCircle2,
+  Search,
+  UserCog,
+  Clock,
+  Calendar,
+  Tag,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -67,12 +72,22 @@ interface CodeRow {
   tenantId: string | null
   tenantName: string | null
   notes: string | null
+  // 🛡️ 2026-09-21: new fields
+  durationDays: number | null
+  expiresAt: string | null
+  assignedTenantId: string | null
+  batchLabel: string | null
 }
 
 interface PlanLite {
   id: number
   code: string
   name: string
+}
+
+interface TenantLite {
+  id: string
+  shopName: string
 }
 
 const PERIOD_LABEL: Record<string, string> = {
@@ -85,8 +100,10 @@ export function AdminCodesView() {
   const [rows, setRows] = React.useState<CodeRow[]>([])
   const [loading, setLoading] = React.useState(true)
   const [plans, setPlans] = React.useState<PlanLite[]>([])
+  const [tenants, setTenants] = React.useState<TenantLite[]>([])
   const [statusFilter, setStatusFilter] = React.useState('all')
   const [planFilter, setPlanFilter] = React.useState('all')
+  const [search, setSearch] = React.useState('')
 
   const [genOpen, setGenOpen] = React.useState(false)
   const [deleteId, setDeleteId] = React.useState<number | null>(null)
@@ -99,6 +116,7 @@ export function AdminCodesView() {
       if (statusFilter === 'available') params.set('status', 'available')
       if (statusFilter === 'redeemed') params.set('status', 'redeemed')
       if (planFilter !== 'all') params.set('planId', planFilter)
+      if (search.trim()) params.set('search', search.trim())
       const data = await api<{ items: CodeRow[] }>(`/api/admin/codes?${params.toString()}`)
       setRows(data.items)
     } catch (e: any) {
@@ -106,12 +124,22 @@ export function AdminCodesView() {
     } finally {
       setLoading(false)
     }
-  }, [statusFilter, planFilter])
+  }, [statusFilter, planFilter, search])
 
   const loadPlans = React.useCallback(async () => {
     try {
       const data = await api<{ items: PlanLite[] }>('/api/admin/plans')
       setPlans(data.items)
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  // 🛡️ 2026-09-21: load tenants for the "assign to tenant" select
+  const loadTenants = React.useCallback(async () => {
+    try {
+      const data = await api<{ items: TenantLite[] }>('/api/admin/tenants?status=')
+      setTenants(data.items)
     } catch {
       /* ignore */
     }
@@ -124,6 +152,10 @@ export function AdminCodesView() {
   React.useEffect(() => {
     loadPlans()
   }, [loadPlans])
+
+  React.useEffect(() => {
+    loadTenants()
+  }, [loadTenants])
 
   const stats = React.useMemo(() => {
     const available = rows.filter((r) => r.status === 'available').length
@@ -154,9 +186,20 @@ export function AdminCodesView() {
       toast.error('لا توجد أكواد متاحة للتصدير')
       return
     }
-    const csv = ['Code,Plan,Period']
+    const csv = ['Code,Plan,Period,DurationDays,ExpiresAt,AssignedTenant,Batch']
     for (const r of available) {
-      csv.push(`${r.code},${r.planName},${PERIOD_LABEL[r.period] ?? r.period}`)
+      const escaped = (s: string | null) => s ? `"${s.replace(/"/g, '""')}"` : ''
+      csv.push(
+        [
+          r.code,
+          escaped(r.planName),
+          PERIOD_LABEL[r.period] ?? r.period,
+          r.durationDays ?? '',
+          r.expiresAt ? formatShortDate(r.expiresAt) : '',
+          r.tenantName ? escaped(r.tenantName) : '',
+          escaped(r.batchLabel),
+        ].join(',')
+      )
     }
     const blob = new Blob(['\uFEFF' + csv.join('\n')], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -235,6 +278,15 @@ export function AdminCodesView() {
                   ))}
                 </SelectContent>
               </Select>
+              <div className="relative">
+                <Search className="absolute right-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="بحث بالكود/الملاحظات/الباتش..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="sm:w-56 pr-8"
+                />
+              </div>
               <Button variant="outline" onClick={exportCSV} className="gap-1.5">
                 <Download className="size-4" />
                 تصدير المتاح (CSV)
@@ -271,70 +323,125 @@ export function AdminCodesView() {
                     <TableHead className="w-10 text-center">#</TableHead>
                     <TableHead>الكود</TableHead>
                     <TableHead className="w-32">الباقة</TableHead>
-                    <TableHead className="w-24 text-center">الفترة</TableHead>
+                    <TableHead className="w-24 text-center">المدة</TableHead>
                     <TableHead className="w-24 text-center">الحالة</TableHead>
-                    <TableHead className="w-32">تاريخ الإنشاء</TableHead>
-                    <TableHead className="w-32">تاريخ الاستخدام</TableHead>
-                    <TableHead className="w-36">المحل المستخدم</TableHead>
+                    <TableHead className="w-28 text-center">انتهاء الكود</TableHead>
+                    <TableHead className="w-28 text-center">مخصص لـ</TableHead>
+                    <TableHead className="w-24">الباتش</TableHead>
+                    <TableHead className="w-28">تاريخ الإنشاء</TableHead>
+                    <TableHead className="w-28">الاستخدام</TableHead>
                     <TableHead className="w-20 text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
                         لا توجد أكواد
                       </TableCell>
                     </TableRow>
                   ) : (
-                    rows.map((r, i) => (
-                      <TableRow key={r.id}>
-                        <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs" dir="ltr">
-                              {r.code}
-                            </code>
-                            <button
-                              onClick={() => copyCode(r.code)}
-                              className="text-muted-foreground hover:text-foreground"
-                              title="نسخ"
-                            >
-                              <Copy className="size-3.5" />
-                            </button>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs">{r.planName}</TableCell>
-                        <TableCell className="text-center text-xs">{PERIOD_LABEL[r.period] ?? r.period}</TableCell>
-                        <TableCell className="text-center">
-                          {r.status === 'available' ? (
-                            <Badge variant="outline" className="bg-success-subtle text-success-subtle-foreground border-emerald-500/30">
-                              متاح
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-warning-subtle text-warning-subtle-foreground dark:text-warning-subtle-foreground border-warning-subtle">
-                              مستخدم
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs">{formatShortDate(r.createdAt)}</TableCell>
-                        <TableCell className="text-xs">{r.redeemedAt ? formatShortDate(r.redeemedAt) : '-'}</TableCell>
-                        <TableCell className="text-xs">{r.tenantName ?? '-'}</TableCell>
-                        <TableCell className="text-center">
-                          {r.status === 'available' && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-8 text-destructive hover:bg-destructive/10"
-                              title="حذف"
-                              onClick={() => setDeleteId(r.id)}
-                            >
-                              <Trash2 className="size-4" />
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    rows.map((r, i) => {
+                      const codeExpired = r.expiresAt && new Date(r.expiresAt) < new Date()
+                      return (
+                        <TableRow key={r.id}>
+                          <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs" dir="ltr">
+                                {r.code}
+                              </code>
+                              <button
+                                onClick={() => copyCode(r.code)}
+                                className="text-muted-foreground hover:text-foreground"
+                                title="نسخ"
+                              >
+                                <Copy className="size-3.5" />
+                              </button>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs">{r.planName}</TableCell>
+                          <TableCell className="text-center text-xs">
+                            {r.durationDays ? (
+                              <Badge variant="outline" className="bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-800">
+                                {r.durationDays} يوم
+                              </Badge>
+                            ) : (
+                              PERIOD_LABEL[r.period] ?? r.period
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {r.status === 'available' ? (
+                              <Badge variant="outline" className="bg-success-subtle text-success-subtle-foreground border-emerald-500/30">
+                                متاح
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="bg-warning-subtle text-warning-subtle-foreground dark:text-warning-subtle-foreground border-warning-subtle">
+                                مستخدم
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center text-xs">
+                            {r.expiresAt ? (
+                              <span className={codeExpired ? 'text-red-600 font-semibold' : ''}>
+                                {formatShortDate(r.expiresAt)}
+                                {codeExpired && ' (منتهي)'}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center text-xs">
+                            {r.assignedTenantId ? (
+                              <span title={r.assignedTenantId}>
+                                <UserCog className="inline size-3 ml-1 text-primary" />
+                                مخصّص
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">عام</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {r.batchLabel ? (
+                              <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5">
+                                <Tag className="size-2.5" />
+                                {r.batchLabel}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs">{formatShortDate(r.createdAt)}</TableCell>
+                          <TableCell className="text-xs">
+                            {r.redeemedAt ? (
+                              <div>
+                                <div>{formatShortDate(r.redeemedAt)}</div>
+                                {r.tenantName && (
+                                  <div className="text-muted-foreground text-[10px] truncate max-w-[120px]" title={r.tenantName}>
+                                    {r.tenantName}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {r.status === 'available' && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-8 text-destructive hover:bg-destructive/10"
+                                title="حذف"
+                                onClick={() => setDeleteId(r.id)}
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
                   )}
                 </TableBody>
               </Table>
@@ -346,6 +453,7 @@ export function AdminCodesView() {
       {/* Generate Dialog */}
       <GenerateCodesDialog
         plans={plans}
+        tenants={tenants}
         open={genOpen}
         onOpenChange={setGenOpen}
         generated={generated}
@@ -381,6 +489,7 @@ export function AdminCodesView() {
 
 function GenerateCodesDialog({
   plans,
+  tenants,
   open,
   onOpenChange,
   generated,
@@ -388,6 +497,7 @@ function GenerateCodesDialog({
   onSaved,
 }: {
   plans: PlanLite[]
+  tenants: TenantLite[]
   open: boolean
   onOpenChange: (o: boolean) => void
   generated: string[] | null
@@ -398,14 +508,25 @@ function GenerateCodesDialog({
   const [period, setPeriod] = React.useState<'monthly' | 'yearly' | 'trial'>('monthly')
   const [quantity, setQuantity] = React.useState('5')
   const [notes, setNotes] = React.useState('')
+  // 🛡️ 2026-09-21: new fields
+  const [useCustomDuration, setUseCustomDuration] = React.useState(false)
+  const [durationDays, setDurationDays] = React.useState('')
+  const [expiresAt, setExpiresAt] = React.useState('')
+  const [assignedTenantId, setAssignedTenantId] = React.useState('none')
+  const [batchLabel, setBatchLabel] = React.useState('')
   const [saving, setSaving] = React.useState(false)
 
   React.useEffect(() => {
     if (open) {
-      setPlanId(plans.find((p) => p.code === 'pro')?.id?.toString() ?? '')
+      setPlanId(plans.find((p) => p.code === 'electronics-basic')?.id?.toString() ?? plans[0]?.id?.toString() ?? '')
       setPeriod('monthly')
       setQuantity('5')
       setNotes('')
+      setUseCustomDuration(false)
+      setDurationDays('')
+      setExpiresAt('')
+      setAssignedTenantId('none')
+      setBatchLabel('')
     }
   }, [open, plans])
 
@@ -414,16 +535,29 @@ function GenerateCodesDialog({
       toast.error('اختر الباقة')
       return
     }
+    if (useCustomDuration) {
+      const d = Number(durationDays)
+      if (!d || d < 1 || d > 3650) {
+        toast.error('مدة الكود يجب أن تكون بين 1 و 3650 يوم')
+        return
+      }
+    }
     setSaving(true)
     try {
+      const body: any = {
+        planId: Number(planId),
+        period,
+        quantity: Number(quantity) || 1,
+        notes,
+      }
+      if (useCustomDuration) body.durationDays = Number(durationDays)
+      if (expiresAt) body.expiresAt = new Date(expiresAt).toISOString()
+      if (assignedTenantId !== 'none') body.assignedTenantId = assignedTenantId
+      if (batchLabel.trim()) body.batchLabel = batchLabel.trim()
+
       const data = await api<{ codes: string[] }>('/api/admin/codes', {
         method: 'POST',
-        body: {
-          planId: Number(planId),
-          period,
-          quantity: Number(quantity) || 1,
-          notes,
-        },
+        body,
       })
       onGenerated(data.codes)
       toast.success(`تم توليد ${data.codes.length} كود`)
@@ -450,11 +584,12 @@ function GenerateCodesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>توليد أكواد تفعيل</DialogTitle>
           <DialogDescription>
             سيتم توليد أكواد عشوائية بطول 12 حرف (بدون أحرف ملتبسة مثل 0/O أو 1/I).
+            استخدم الخيارات المتقدمة لتخصيص مدة الكود أو تخصيصه لمحل معين.
           </DialogDescription>
         </DialogHeader>
         {generated ? (
@@ -506,36 +641,119 @@ function GenerateCodesDialog({
                 </div>
                 <div className="space-y-1.5">
                   <Label>الفترة</Label>
-                  <Select value={period} onValueChange={(v: any) => setPeriod(v)}>
+                  <Select value={period} onValueChange={(v: any) => setPeriod(v)} disabled={useCustomDuration}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="monthly">شهري</SelectItem>
-                      <SelectItem value="yearly">سنوي</SelectItem>
-                      <SelectItem value="trial">تجريبي</SelectItem>
+                      <SelectItem value="monthly">شهري (30 يوم)</SelectItem>
+                      <SelectItem value="yearly">سنوي (365 يوم)</SelectItem>
+                      <SelectItem value="trial">تجريبي (14 يوم)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
+
+              {/* 🛡️ 2026-09-21: Custom duration override */}
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="size-4"
+                    checked={useCustomDuration}
+                    onChange={(e) => setUseCustomDuration(e.target.checked)}
+                  />
+                  <span className="text-sm font-medium flex items-center gap-1.5">
+                    <Clock className="size-3.5 text-primary" />
+                    تخصيص مدة الكود (بالأيام)
+                  </span>
+                </label>
+                {useCustomDuration && (
+                  <div className="space-y-1.5 pl-6">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={3650}
+                      value={durationDays}
+                      onChange={(e) => setDurationDays(e.target.value)}
+                      placeholder="مثال: 45 (ليوم 45 يوم بدلاً من 30)"
+                      dir="ltr"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      عند التفعيل، يحصل المستخدم على اشتراك بالمدة المحددة بالأيام بدلاً من الفترة الشهرية/السنوية.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>العدد (1-100)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    dir="ltr"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>تخصيص لمحل (اختياري)</Label>
+                  <Select value={assignedTenantId} onValueChange={setAssignedTenantId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="عام (أي محل)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">عام (أي محل يقدر يفعّله)</SelectItem>
+                      {tenants.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.shopName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <div className="space-y-1.5">
-                <Label>العدد (1-100)</Label>
+                <Label className="flex items-center gap-1.5">
+                  <Calendar className="size-3.5 text-muted-foreground" />
+                  تاريخ انتهاء صلاحية الكود (اختياري)
+                </Label>
                 <Input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
+                  type="date"
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
                   dir="ltr"
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  إذا حُدّد، لا يمكن تفعيل الكود بعد هذا التاريخ (حتى لو لم يُستخدم).
+                </p>
               </div>
+
               <div className="space-y-1.5">
-                <Label>ملاحظات</Label>
+                <Label className="flex items-center gap-1.5">
+                  <Tag className="size-3.5 text-muted-foreground" />
+                  تصنيف الباتش (اختياري)
+                </Label>
+                <Input
+                  value={batchLabel}
+                  onChange={(e) => setBatchLabel(e.target.value)}
+                  placeholder="مثال: حملة ديسمبر 2026"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  اسم يُميّز مجموعة الأكواد دي عن غيرها (للترتيب والبحث لاحقاً).
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>ملاحظات داخلية</Label>
                 <Textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={2}
-                  placeholder="مثال: حملة تسويقية ديسمبر"
+                  placeholder="مثال: حملة تسويقية ديسمبر — تُرسل للعملاء عبر WhatsApp"
                 />
               </div>
             </div>

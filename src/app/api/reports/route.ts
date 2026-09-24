@@ -168,13 +168,20 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => a.date.localeCompare(b.date))
 
   // ---------- top products ----------
+  // 🛡️ 2026-09-15 (v3): SaleItem.productId is now nullable (Int?) because
+  // products can be hard-deleted via mode=archive without losing sale
+  // history. When productId is null (the product was deleted), we use a
+  // special bucket key `0` so the snapshot name still appears in reports.
   const productAgg = new Map<
     number,
     { name: string; qty: number; total: number; profit: number }
   >()
   for (const s of sales) {
     for (const it of s.items) {
-      const cur = productAgg.get(it.productId) ?? {
+      // 🛡️ Use 0 as the bucket key for items whose product was deleted
+      // (productId is null after archive delete). The snapshot name stays.
+      const bucketKey = it.productId ?? 0
+      const cur = productAgg.get(bucketKey) ?? {
         name: it.name,
         qty: 0,
         total: 0,
@@ -183,7 +190,7 @@ export async function GET(req: NextRequest) {
       cur.qty += it.quantity
       cur.total += it.price * it.quantity
       cur.profit += (it.price - it.cost) * it.quantity
-      productAgg.set(it.productId, cur)
+      productAgg.set(bucketKey, cur)
     }
   }
   const topProducts = Array.from(productAgg.values())
@@ -191,13 +198,19 @@ export async function GET(req: NextRequest) {
     .slice(0, 8)
 
   // ---------- category breakdown ----------
+  // 🛡️ 2026-09-15 (v3): For items with productId = null (deleted products),
+  // categorize them as 'منتجات محذوفة' instead of lumping them with
+  // un-categorized products.
   const productCategoryById = new Map<number, string>(
     allProducts.map((p) => [p.id, p.category || 'بدون تصنيف'])
   )
   const categoryAgg = new Map<string, number>()
   for (const s of sales) {
     for (const it of s.items) {
-      const cat = productCategoryById.get(it.productId) ?? 'بدون تصنيف'
+      // 🛡️ Deleted products → 'منتجات محذوفة' category
+      const cat = it.productId == null
+        ? 'منتجات محذوفة'
+        : (productCategoryById.get(it.productId) ?? 'بدون تصنيف')
       categoryAgg.set(cat, (categoryAgg.get(cat) ?? 0) + it.price * it.quantity)
     }
   }

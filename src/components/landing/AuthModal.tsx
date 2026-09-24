@@ -126,6 +126,17 @@ export function AuthModal({
             : 'ابدأ تجربتك المجانية لمدة 14 يوم بدون بطاقة ائتمان'}
         </DialogDescription>
 
+        {/* 🛡️ 2026-09-13: small text "إغلاق" button at the top-right corner
+            (replaces the old X icon — see DialogContent default change).
+            Positioned to match where the X used to be. */}
+        <button
+          type="button"
+          onClick={() => onOpenChange(false)}
+          className="absolute top-2.5 right-3 z-20 rounded-md bg-white/15 px-2.5 py-1 text-xs font-bold text-white shadow-sm transition-colors hover:bg-white/25"
+        >
+          إغلاق
+        </button>
+
         {/* Header */}
         <div className="relative flex flex-col items-center gap-2 overflow-hidden bg-gradient-to-br from-primary to-primary/85 px-6 py-7 text-primary-foreground">
           <div className="absolute -right-8 -top-8 size-28 rounded-full bg-white/10" />
@@ -212,7 +223,7 @@ export function AuthModal({
                     icon={<Phone className="size-4" />}
                     value={phone}
                     onChange={setPhone}
-                    placeholder="01000000000"
+                    placeholder="+966 5X XXX XXXX"
                     ltr
                   />
                 </div>
@@ -324,14 +335,8 @@ export function AuthModal({
                   : 'لديك حساب؟ تسجيل الدخول'}
               </button>
 
-              {mode === 'login' && (
-                <div className="rounded-md bg-muted/60 p-3 text-center text-[11px] text-muted-foreground">
-                  <p className="font-semibold">حسابات تجريبية:</p>
-                  <p dir="ltr" className="mt-1">super@admin.com / super123 (أدمن أعلى)</p>
-                  <p dir="ltr">admin@demo.com / admin123 (مدير محل)</p>
-                  <p dir="ltr">emp@demo.com / emp123 (موظف)</p>
-                </div>
-              )}
+              {/* 🛡️ 2026-09-17 (v2): Demo accounts section removed —
+                  system is going live, no need to expose test credentials. */}
             </motion.form>
           </AnimatePresence>
         </div>

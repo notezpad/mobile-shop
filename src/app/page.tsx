@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   KeyRound,
   Clock,
+  Sparkles,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -22,6 +23,12 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Sidebar } from '@/components/shop/Sidebar'
+// ScaleWrapper is applied selectively around the authenticated app shell
+// (MainApp / SuperAdminApp). It must NOT wrap the landing page or auth
+// page — those rely on natural document scrolling and would be clipped
+// by ScaleWrapper's `position: fixed; overflow: hidden` outer container.
+// See: src/components/providers.tsx for the rationale.
+import { ScaleWrapper } from '@/components/ScaleWrapper'
 
 // FIXED: lazy-load all heavy view components so the initial JS bundle only contains
 // the shell (Sidebar, auth, layout). Each view is fetched on first navigation to it.
@@ -50,9 +57,15 @@ const BranchesView   = React.lazy(() => import('@/components/shop/BranchesView')
 const SuperAdminApp  = React.lazy(() => import('@/components/admin/SuperAdminApp').then(m => ({ default: m.SuperAdminApp })))
 const LandingPage    = React.lazy(() => import('@/components/landing/LandingPage').then(m => ({ default: m.LandingPage })))
 import { useShopStore } from '@/lib/store'
+import { useViewRouter } from '@/lib/use-view-router'
 import { api } from '@/lib/api'
 import { getMe, type AuthUser } from '@/lib/auth-client'
 import { toast } from 'sonner'
+// 🛡️ 2026-09-15: import CRITICAL_MODULES from plan-constants (CLIENT-SAFE).
+// DO NOT import from '@/lib/features' here — that file pulls in Prisma + `pg`
+// (Postgres driver), which uses Node's `dns` module and breaks the browser
+// bundle. plan-constants.ts has no db imports and is safe for client code.
+import { CRITICAL_MODULES } from '@/lib/plan-constants'
 
 const VIEW_TITLES: Record<string, string> = {
   dashboard: 'لوحة المعلومات',
@@ -64,7 +77,7 @@ const VIEW_TITLES: Record<string, string> = {
   suppliers: 'الموردين',
   purchases: 'المشتريات',
   finance: 'المعاملات المالية',
-  expenses: 'المصروفات',
+  expenses: 'الالمعاملات المالية',
   cash: 'الخزنة',
   reports: 'التقارير',
   settings: 'الإعدادات',
@@ -276,9 +289,31 @@ function SubscriptionExpiredScreen() {
                 <AlertTriangle className="size-7" />
               </div>
               <h1 className="text-xl font-bold">اشتراكك منتهي</h1>
-              <p className="text-xs opacity-90">يرجى تفعيل كود اشتراك جديد للمتابعة</p>
+              <p className="text-xs opacity-90">يرجى الاشتراك أو تفعيل كود للمتابعة</p>
             </div>
             <div className="space-y-4 p-6">
+              {/* ── Option 1: Online payment via Paymob ── */}
+              <div className="rounded-lg border bg-emerald-50 p-3">
+                <p className="mb-2 text-xs font-semibold text-emerald-800">
+                  📲 الدفع الإلكتروني عبر المحافظ (Vodafone Cash, Instapay, Fawry)
+                </p>
+                <a
+                  href="/pricing"
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
+                >
+                  <Sparkles className="size-4" />
+                  اشترك الآن — صفحة الباقات
+                </a>
+              </div>
+
+              {/* ── Divider ── */}
+              <div className="flex items-center gap-2">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-[10px] text-muted-foreground">أو</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+
+              {/* ── Option 2: Activate by code ── */}
               <div className="space-y-1.5">
                 <Label htmlFor="redeem-code">كود التفعيل</Label>
                 <Input
@@ -370,6 +405,8 @@ function SubscriptionWarningBanner() {
     expiringSoon: boolean
     daysLeft: number | null
     expired: boolean
+    planCode?: string
+    planId?: number
   } | null>(null)
 
   React.useEffect(() => {
@@ -383,9 +420,16 @@ function SubscriptionWarningBanner() {
   return (
     <div className="sticky top-0 z-30 flex items-center gap-2 bg-amber-400 px-4 py-2 text-amber-950">
       <Clock className="size-4 shrink-0" />
-      <span className="text-xs sm:text-sm font-medium">
+      <span className="text-xs sm:text-sm font-medium flex-1">
         ⏰ اشتراكك ينتهي خلال {data.daysLeft} {data.daysLeft === 1 ? 'يوم' : 'أيام'} — جدد الآن لتجنب الانقطاع
       </span>
+      <a
+        href="/pricing"
+        className="inline-flex h-7 items-center gap-1.5 rounded-md bg-amber-900 px-3 text-xs font-medium text-amber-50 transition-colors hover:bg-amber-800"
+      >
+        <Sparkles className="size-3.5" />
+        تجديد الآن
+      </a>
     </div>
   )
 }
@@ -394,20 +438,27 @@ function SubscriptionWarningBanner() {
 
 function ModuleLockedView({ label }: { label: string }) {
   return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-center">
+    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 text-center">
       <div className="rounded-full bg-amber-100 p-4 text-amber-600 dark:bg-amber-900/30">
         <Shield className="size-8" />
       </div>
       <h2 className="text-xl font-bold">{label} — غير متاحة في باقتك</h2>
       <p className="max-w-md text-sm text-muted-foreground">
-        الميزة دي متاحة في باقة أعلى. يمكنك ترقية اشتراكك من إعدادات الحساب لتفعيلها.
+        الميزة دي متاحة في باقة أعلى. يمكنك ترقية اشتراكك لتفعيلها.
       </p>
+      <a
+        href="/pricing"
+        className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+      >
+        <Sparkles className="size-4" />
+        ترقية الاشتراك
+      </a>
     </div>
   )
 }
 
 function MainApp() {
-  const activeView = useShopStore((s) => s.activeView)
+  const { activeView, setActiveView } = useViewRouter()
   const user = useShopStore((s) => s.user)
   const shopName = useShopStore((s) => s.shopName)
   const setPlan = useShopStore((s) => s.setPlan)
@@ -417,8 +468,6 @@ function MainApp() {
     loading: true,
     expired: false,
   })
-
-  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN'
 
   // Check subscription status + hydrate plan context (enabledModules/capabilities/businessType).
   React.useEffect(() => {
@@ -443,15 +492,19 @@ function MainApp() {
   }, [user, setPlan])
 
   const ActiveView = React.useMemo(() => {
-    // Guard: employees can't see admin-only views
-    if (
-      !isAdmin &&
-      ['finance', 'expenses', 'cash', 'reports', 'settings', 'users', 'branches'].includes(activeView)
-    ) {
-      return <DashboardView />
-    }
-    // Defence-in-depth: even if a user manually flips activeView, block modules not in plan.
-    if (!enabledModules.includes(activeView) && activeView !== 'dashboard') {
+    // 🛡️ 2026-09-15 (v2): Defence in depth (layer 3). CRITICAL_MODULES is
+    // imported from @/lib/plan-constants (client-safe). Only `settings` and
+    // `users` are forced-critical — everything else is gated by the plan's
+    // enabledModules. The previous version had a local copy of
+    // CRITICAL_MODULES that included every module, which defeated per-plan
+    // gating entirely (every plan saw every module regardless of DB config).
+    const isAllowed =
+      activeView === 'dashboard' ||
+      enabledModules.includes(activeView) ||
+      (CRITICAL_MODULES as readonly string[]).includes(activeView)
+
+    // Modules not in plan AND not in critical list → show locked view
+    if (!isAllowed) {
       return <ModuleLockedView label={VIEW_TITLES[activeView] ?? activeView} />
     }
     switch (activeView) {
@@ -490,7 +543,7 @@ function MainApp() {
       default:
         return <DashboardView />
     }
-  }, [activeView, isAdmin, enabledModules])
+  }, [activeView, enabledModules])
 
   if (subState.loading) {
     return (
@@ -509,7 +562,24 @@ function MainApp() {
       <ImpersonationBanner />
       <SubscriptionWarningBanner />
 
-      {/* Mobile top bar */}
+      {/*
+        ───────────── Responsive sidebar strategy ─────────────
+        < md (< 768px):  Hamburger menu in mobile top bar + Sheet drawer.
+                         Content takes full width (no margin).
+        md–lg (768-1023px): Icon rail — fixed-right 68px collapsed sidebar.
+                         Mobile top bar still visible (h-14 with shop name).
+                         Content margin = 68px.
+        ≥ lg (≥ 1024px):  Full 260px sidebar.
+                         Mobile top bar hidden.
+                         Desktop header with LiveClock + ThemeToggle visible.
+                         Content margin = 260px.
+
+        We use Tailwind's `md:max-lg:*` (max-lg variant, supported in
+        Tailwind v3.4+ and v4) to scope the icon-rail to exactly the md–lg
+        range. Below md, neither fixed sidebar is shown.
+      */}
+
+      {/* Mobile top bar — shown below lg (covers both mobile + md rail modes) */}
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/60 lg:hidden">
         <Button
           variant="ghost"
@@ -523,7 +593,7 @@ function MainApp() {
         <ThemeToggle />
       </header>
 
-      {/* Mobile sidebar */}
+      {/* Mobile sidebar (drawer) — below md only */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="right" className="w-[280px] p-0">
           <SheetTitle className="sr-only">القائمة</SheetTitle>
@@ -531,22 +601,21 @@ function MainApp() {
         </SheetContent>
       </Sheet>
 
-      {/*
-        ✅ نفس أسلوب WorkerOS:
-        - السايدبار: position fixed على اليمين — خارج الـ flex flow
-        - الـ main: margin-right بعرض السايدبار + overflow-y-auto
-        - النتيجة: شريط التمرير على أقصى اليسار (RTL طبيعي) ✅
-      */}
+      {/* Icon rail sidebar — md to lg only (68px collapsed) */}
+      <div className="fixed right-0 top-0 z-40 hidden h-screen md:max-lg:block">
+        <Sidebar collapsed />
+      </div>
 
-      {/* Desktop sidebar — fixed right */}
-      <div className="fixed right-0 top-0 hidden h-screen lg:block z-40">
+      {/* Desktop sidebar — lg and up (260px full) */}
+      <div className="fixed right-0 top-0 z-40 hidden h-screen lg:block">
         <Sidebar />
       </div>
 
-      {/* Right side layout — header fixed, content scrolls */}
-      <div className="flex flex-1 flex-col min-h-0 lg:mr-[260px]">
+      {/* Right side layout — header (lg only) fixed, content scrolls.
+          Margins: none < md, 68px md–lg, 260px lg+. */}
+      <div className="flex flex-1 flex-col min-h-0 md:mr-[68px] lg:mr-[260px]">
 
-        {/* Desktop header — خارج منطقة الـ scroll ✅ */}
+        {/* Desktop header — outside the scroll area, lg+ only */}
         <header className="sticky top-0 z-20 hidden h-14 shrink-0 items-center justify-between border-b bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60 lg:flex">
           {/* الساعة والتاريخ الحيّين — مقاسها مضبوط على ارتفاع التولبار (h-14) */}
           <LiveClock />
@@ -558,18 +627,16 @@ function MainApp() {
         {/* منطقة الـ scroll — بس المحتوى يتمرر، الهيدر ما يتأثرش ✅ */}
         <div className="flex-1 overflow-y-auto min-h-0">
           <div className="p-4 sm:p-6">
+            {/*
+              ⚡ Performance: removed AnimatePresence mode="wait" — it was adding
+              360ms per navigation (180ms exit + 180ms enter). Now the view
+              switches instantly. React.Suspense still shows the spinner while
+              the lazy-loaded chunk is being fetched.
+            */}
             <React.Suspense fallback={<ViewFallback />}>
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={activeView}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.18 }}
-                >
-                  {ActiveView}
-                </motion.div>
-              </AnimatePresence>
+              <div key={activeView}>
+                {ActiveView}
+              </div>
             </React.Suspense>
           </div>
 
@@ -592,23 +659,28 @@ export default function Home() {
   React.useEffect(() => {
     let alive = true
     ;(async () => {
-      const me = await getMe()
+      // ⚡ Performance: call getMe() + /api/tenant in PARALLEL instead of
+      // sequential. This saves 1 full API roundtrip (~200-500ms).
+      const [meResult, tenantResult] = await Promise.allSettled([
+        getMe(),
+        api<{
+          shopName?: string
+          phone?: string | null
+          address?: string | null
+          logoPath?: string | null
+          invoicePrefix?: string
+        }>('/api/tenant'),
+      ])
       if (!alive) return
+
+      const me = meResult.status === 'fulfilled' ? meResult.value : null
       if (me) {
         setUser(me)
         if (me.role === 'SUPER_ADMIN' && !(me as any).impersonating) {
-          // Super admin (not impersonating) — no shop name needed
           setBootState('authed')
         } else {
-          // load tenant shop name + branding (logo/phone/address/invoice prefix)
-          try {
-            const t = await api<{
-              shopName?: string
-              phone?: string | null
-              address?: string | null
-              logoPath?: string | null
-              invoicePrefix?: string
-            }>('/api/tenant')
+          if (tenantResult.status === 'fulfilled') {
+            const t = tenantResult.value
             if (t?.shopName) setShopName(t.shopName)
             setBranding({
               phone: t?.phone ?? null,
@@ -616,8 +688,6 @@ export default function Home() {
               logoPath: t?.logoPath ?? null,
               invoicePrefix: t?.invoicePrefix || 'INV',
             })
-          } catch {
-            /* ignore — maybe expired */
           }
           setBootState('authed')
         }
@@ -689,7 +759,7 @@ export default function Home() {
     )
   }
 
-  // Render based on role
+  // Super admin (not impersonating) → SuperAdminApp on /
   if (user?.role === 'SUPER_ADMIN' && !(user as any).impersonating) {
     return (
       <React.Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="size-6 animate-spin text-primary" /></div>}>
@@ -698,5 +768,15 @@ export default function Home() {
     )
   }
 
-  return <MainApp />
+  // Authed shop user → redirect to /dashboard (proper Next.js route)
+  // Each shop page is now a separate route: /dashboard, /products, /settings, etc.
+  // This gives us URL routing + code splitting + browser back/forward + bookmarks.
+  if (typeof window !== 'undefined') {
+    window.location.href = '/dashboard'
+  }
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <Loader2 className="size-6 animate-spin text-primary" />
+    </div>
+  )
 }

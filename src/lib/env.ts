@@ -43,6 +43,18 @@ function readKnownProcessEnv(name: string): string | undefined {
       return asNonEmptyString(process.env.JWT_SECRET)
     case 'NODE_ENV':
       return asNonEmptyString(process.env.NODE_ENV)
+    case 'PAYMOB_API_KEY':
+      return asNonEmptyString(process.env.PAYMOB_API_KEY)
+    case 'PAYMOB_PUBLIC_KEY':
+      return asNonEmptyString(process.env.PAYMOB_PUBLIC_KEY)
+    case 'PAYMOB_INTEGRATION_ID':
+      return asNonEmptyString(process.env.PAYMOB_INTEGRATION_ID)
+    case 'PAYMOB_IFRAME_ID':
+      return asNonEmptyString(process.env.PAYMOB_IFRAME_ID)
+    case 'PAYMOB_HMAC_SECRET':
+      return asNonEmptyString(process.env.PAYMOB_HMAC_SECRET)
+    case 'NEXT_PUBLIC_APP_URL':
+      return asNonEmptyString(process.env.NEXT_PUBLIC_APP_URL)
     default:
       return undefined
   }

@@ -41,7 +41,7 @@ export function DateTimeCell({
           even flip "6:37" into "37:6" inside this RTL page. The Arabic
           month name and ص/م marker still render with correct script
           shaping; only the run ORDER is pinned. */}
-      <span dir="ltr" className="tabular-nums">{label}</span>
+      <span dir="ltr" style={{ unicodeBidi: "isolate" }} className="tabular-nums">{label}</span>
     </span>
   )
 }

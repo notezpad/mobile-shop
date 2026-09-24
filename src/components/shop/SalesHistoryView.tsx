@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { FileSpreadsheet, Printer, RotateCcw, Search, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileDown, FileSpreadsheet, Printer, RotateCcw, Search, X } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,7 +20,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { printSale } from '@/lib/print-client'
+import { printSale, exportSalePdf } from '@/lib/print-client'
 import { useShopStore } from '@/lib/store'
 import { DateTimeCell } from './DateTimeCell'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
@@ -54,28 +54,35 @@ export function SalesHistoryView() {
   const [from, setFrom] = React.useState('')
   const [to, setTo] = React.useState('')
   const [refundId, setRefundId] = React.useState<number | null>(null)
+  const [page, setPage] = React.useState(1)
+  const [totalPages, setTotalPages] = React.useState(1)
+  const [total, setTotal] = React.useState(0)
+  const PAGE_SIZE = 50
 
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
 
-  const load = React.useCallback(async (f?: string, t?: string) => {
+  const load = React.useCallback(async (f?: string, t?: string, p = 1) => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
       if (f) params.set('from', f)
       if (t) params.set('to', t)
-      // ✅ نبعت timezone offset للسيرفر عشان يحسب نطاق UTC الصح
-      // مثال: القاهرة UTC+3 → offset = -180 (getTimezoneOffset بترجع العكس)
       params.set('tzOffset', String(new Date().getTimezoneOffset()))
+      params.set('page', String(p))
+      params.set('limit', String(PAGE_SIZE))
       const qs = params.toString()
-      const data = await api<Sale[]>(`/api/sales${qs ? `?${qs}` : ''}`)
-      setSales(data)
+      const res = await api<{ data: Sale[]; total: number; totalPages: number }>(`/api/sales${qs ? `?${qs}` : ''}`)
+      setSales(res.data)
+      setTotal(res.total)
+      setTotalPages(res.totalPages)
+      setPage(p)
     } catch (e: any) {
       toast.error(e?.message || 'فشل تحميل المبيعات')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [PAGE_SIZE])
 
   React.useEffect(() => {
     load(from, to)
@@ -85,7 +92,7 @@ export function SalesHistoryView() {
   const applyRange = (f: string, t: string) => {
     setFrom(f)
     setTo(t)
-    load(f, t)
+    load(f, t, 1)
   }
 
   // ✅ getLocalDateStr من dateUtils بتستخدم getFullYear/getMonth/getDate
@@ -141,6 +148,28 @@ export function SalesHistoryView() {
         customer: s.customer
           ? { name: s.customer.name, phone: s.customer.phone }
           : null,
+      },
+      { name: shopName, phone: shopBranding.phone || undefined, address: shopBranding.address || undefined, logo: shopBranding.logoPath || undefined, invoicePrefix: shopBranding.invoicePrefix }
+    )
+  }
+
+  const exportPdf = (s: Sale) => {
+    exportSalePdf(
+      {
+        id: s.id,
+        invoiceNo: s.invoiceNo,
+        total: s.total,
+        paid: s.paid,
+        status: s.status,
+        createdAt: s.createdAt,
+        items: s.items.map((it) => {
+          const hasUnit = it.unitQuantity != null && it.unitQuantity > 0
+          const displayQty = hasUnit ? it.unitQuantity! : it.quantity
+          const displayPrice = hasUnit ? (it.price * it.quantity) / it.unitQuantity! : it.price
+          const unitSuffix = it.unitLabel ? ` (${displayQty} ${it.unitLabel})` : ''
+          return { name: it.name + unitSuffix, price: displayPrice, quantity: displayQty }
+        }),
+        customer: s.customer ? { name: s.customer.name, phone: s.customer.phone } : null,
       },
       { name: shopName, phone: shopBranding.phone || undefined, address: shopBranding.address || undefined, logo: shopBranding.logoPath || undefined, invoicePrefix: shopBranding.invoicePrefix }
     )
@@ -206,7 +235,7 @@ export function SalesHistoryView() {
             استعراض الفواتير وإعادة الطباعة والإرجاع
           </p>
         </div>
-        <Button variant="outline" onClick={exportExcel} disabled={filtered.length === 0}>
+        <Button variant="outline" onClick={exportExcel} disabled={sales.length === 0}>
           <FileSpreadsheet className="size-4" />
           تصدير Excel
         </Button>
@@ -268,7 +297,7 @@ export function SalesHistoryView() {
 
       {(from || to) && (
         <p className="text-xs text-muted-foreground">
-          عرض المبيعات من {from || 'البداية'} إلى {to || 'اليوم'} — {filtered.length} فاتورة
+          عرض المبيعات من {from || 'البداية'} إلى {to || 'اليوم'} — {total} فاتورة
         </p>
       )}
 
@@ -281,7 +310,7 @@ export function SalesHistoryView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto" dir="ltr">
+            <div className="hidden overflow-x-auto lg:block" dir="ltr">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -394,8 +423,192 @@ export function SalesHistoryView() {
               </Table>
             </div>
           )}
+
+          {/*
+            نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg (لابتوب صغير،
+            تابلت، موبايل). كل فاتورة بقى كارت مستقل تُعرض فيه البيانات
+            الأساسية رأسيًا بدل صف عريض في جدول يحتاج سكرول أفقي ليُقرأ.
+          */}
+          {!loading && (
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+              {filtered.length === 0 ? (
+                <p className="col-span-full py-8 text-center text-muted-foreground">
+                  لا توجد مبيعات
+                </p>
+              ) : (
+                filtered.map((s, index) => {
+                  const due = s.total - s.paid
+                  const itemCount = s.items.reduce((sum, it) => sum + it.quantity, 0)
+                  const isReturned = s.status === 'مرتجعة'
+                  return (
+                    <div
+                      key={s.id}
+                      className={cn(
+                        'rounded-lg border bg-card p-3',
+                        isReturned && 'opacity-60'
+                      )}
+                    >
+                      {/* رأس الكارت: رقم الفاتورة + شارة الحالة */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              #{index + 1}
+                            </span>
+                            <p className="font-medium leading-tight">
+                              {s.invoiceNo ?? `#${s.id}`}
+                            </p>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            <DateTimeCell date={s.createdAt} />
+                          </p>
+                        </div>
+                        <Badge
+                          variant={isReturned ? 'destructive' : 'secondary'}
+                          className={
+                            s.status === 'مكتملة'
+                              ? 'bg-primary/10 text-primary'
+                              : ''
+                          }
+                        >
+                          {s.status}
+                        </Badge>
+                      </div>
+
+                      {/* العميل والبائع */}
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                        <span className="text-muted-foreground">العميل:</span>
+                        <span className="font-medium">
+                          {s.customer ? s.customer.name : 'بدون عميل'}
+                        </span>
+                        {s.userName && (
+                          <>
+                            <span className="text-muted-foreground">البائع:</span>
+                            <span className="font-medium">{s.userName}</span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* شبكة البيانات: إجمالي/مدفوع/باقي + كمية/حالة */}
+                      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-2 text-center">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">الإجمالي</p>
+                          <p className="font-semibold tabular-nums">
+                            {formatCurrency(s.total)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">المدفوع</p>
+                          <p className="tabular-nums">{formatCurrency(s.paid)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">الباقي</p>
+                          <p
+                            className={cn(
+                              'font-semibold tabular-nums',
+                              due > 0 && 'text-destructive'
+                            )}
+                          >
+                            {formatCurrency(due)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">الكمية</p>
+                          <p className="tabular-nums text-muted-foreground">
+                            {itemCount}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">الحالة</p>
+                          <p
+                            className={cn(
+                              'text-xs font-medium',
+                              isReturned ? 'text-destructive' : 'text-success'
+                            )}
+                          >
+                            {s.status}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">إجراءات</p>
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7"
+                              onClick={() => reprint(s)}
+                              title="إعادة طباعة"
+                            >
+                              <Printer className="size-3.5" />
+                            </Button>
+                            {!isReturned && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-7 text-destructive hover:text-destructive"
+                                onClick={() => setRefundId(s.id)}
+                                title="مرتجع الفاتورة كاملة"
+                              >
+                                <RotateCcw className="size-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-1 py-2">
+          <p className="text-sm text-muted-foreground">
+            صفحة {page} من {totalPages} — إجمالي {total} فاتورة
+          </p>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-8"
+              disabled={page <= 1}
+              onClick={() => load(from, to, page - 1)}
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              const half = Math.floor(Math.min(5, totalPages) / 2)
+              let start = Math.max(1, page - half)
+              const end = Math.min(totalPages, start + Math.min(5, totalPages) - 1)
+              start = Math.max(1, end - Math.min(5, totalPages) + 1)
+              return start + i
+            }).map((p) => (
+              <Button
+                key={p}
+                variant={p === page ? 'default' : 'outline'}
+                size="icon"
+                className="size-8 text-xs"
+                onClick={() => load(from, to, p)}
+              >
+                {p}
+              </Button>
+            ))}
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-8"
+              disabled={page >= totalPages}
+              onClick={() => load(from, to, page + 1)}
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {refundId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

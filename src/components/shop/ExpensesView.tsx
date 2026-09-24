@@ -112,6 +112,26 @@ export function ExpensesView() {
       return
     }
     setSaving(true)
+    // ⚡ Optimistic: add to local list immediately
+    const tempId = Date.now()
+    const newExpense = {
+      id: tempId,
+      category,
+      amount: amt,
+      note: note.trim() || null,
+      userName: null,
+      createdAt: new Date().toISOString(),
+    }
+    setData((prev) => prev ? {
+      ...prev,
+      expenses: [newExpense, ...(prev.expenses || [])],
+      total: (prev.total || 0) + amt,
+      byCategory: {
+        ...(prev.byCategory || {}),
+        [category]: (prev.byCategory?.[category] || 0) + amt,
+      },
+    } : prev)
+
     try {
       await api('/api/expenses', {
         method: 'POST',
@@ -120,9 +140,20 @@ export function ExpensesView() {
       toast.success('تم تسجيل المصروف')
       setAmount('')
       setNote('')
-      load()
+      if (typeof navigator === 'undefined' || navigator.onLine) load()
     } catch (e: any) {
-      toast.error(e?.message || 'فشل الحفظ')
+      if (e?.message?.includes('تم الحفظ') || e?.message?.includes('offline')) {
+        toast.success('تم تسجيل المصروف (offline — سيتم المزامنة لاحقاً)')
+        setAmount('')
+        setNote('')
+      } else {
+        // Revert on real error
+        setData((prev) => prev ? {
+          ...prev,
+          expenses: (prev.expenses || []).filter((e: any) => e.id !== tempId),
+        } : prev)
+        toast.error(e?.message || 'فشل الحفظ')
+      }
     } finally {
       setSaving(false)
     }
@@ -131,13 +162,28 @@ export function ExpensesView() {
   const confirmDelete = async () => {
     if (!deleteId) return
     setDeleting(true)
+    // ⚡ Optimistic: remove from list immediately
+    const deleted = data?.expenses?.find((e: any) => e.id === deleteId)
+    setData((prev) => prev ? {
+      ...prev,
+      expenses: (prev.expenses || []).filter((e: any) => e.id !== deleteId),
+      total: Math.max(0, (prev.total || 0) - (deleted?.amount || 0)),
+    } : prev)
+
     try {
       await api(`/api/expenses/${deleteId}`, { method: 'DELETE' })
       toast.success('تم حذف المصروف')
       setDeleteId(null)
-      load()
+      if (typeof navigator === 'undefined' || navigator.onLine) load()
     } catch (e: any) {
-      toast.error(e?.message || 'فشل الحذف')
+      if (e?.message?.includes('تم الحفظ') || e?.message?.includes('offline')) {
+        toast.success('تم حذف المصروف (offline — سيتم المزامنة لاحقاً)')
+        setDeleteId(null)
+      } else {
+        // Revert
+        if (deleted) setData((prev) => prev ? { ...prev, expenses: [deleted, ...(prev.expenses || [])] } : prev)
+        toast.error(e?.message || 'فشل الحذف')
+      }
     } finally {
       setDeleting(false)
     }
@@ -238,7 +284,7 @@ export function ExpensesView() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-            <div className="space-y-1.5">
+            <div className="space-y-2.5">
               <Label>النوع</Label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger className="w-full">
@@ -253,7 +299,7 @@ export function ExpensesView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-2.5">
               <Label htmlFor="exp-amount">المبلغ</Label>
               <Input
                 id="exp-amount"
@@ -268,7 +314,7 @@ export function ExpensesView() {
                 className="text-left"
               />
             </div>
-            <div className="space-y-1.5 sm:col-span-2">
+            <div className="space-y-2.5 sm:col-span-2">
               <Label htmlFor="exp-note">ملاحظات</Label>
               <div className="flex gap-2">
                 <Input
@@ -294,7 +340,7 @@ export function ExpensesView() {
       {/* Filters */}
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3 p-4">
-          <div className="space-y-1.5">
+          <div className="space-y-2.5">
             <Label htmlFor="exp-from">من تاريخ</Label>
             <Input
               id="exp-from"
@@ -303,7 +349,7 @@ export function ExpensesView() {
               onChange={(e) => setFrom(e.target.value)}
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-2.5">
             <Label htmlFor="exp-to">إلى تاريخ</Label>
             <Input
               id="exp-to"
@@ -312,7 +358,7 @@ export function ExpensesView() {
               onChange={(e) => setTo(e.target.value)}
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-2.5">
             <Label>النوع</Label>
             <Select value={filterCategory} onValueChange={setFilterCategory}>
               <SelectTrigger className="w-40">
@@ -354,7 +400,7 @@ export function ExpensesView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto" dir="ltr">
+            <div className="hidden overflow-x-auto lg:block" dir="ltr">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -374,7 +420,7 @@ export function ExpensesView() {
                         colSpan={7}
                         className="py-8 text-center text-muted-foreground"
                       >
-                        لا توجد مصروفات — سجّل أول مصروف بالأعلى
+                        لا توجد المصروفات — سجّل أول مصروف بالأعلى
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -412,6 +458,60 @@ export function ExpensesView() {
                   )}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {/*
+            نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
+          */}
+          {!loading && data && (
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+              {data.expenses.length === 0 ? (
+                <p className="col-span-full py-8 text-center text-muted-foreground">
+                  لا توجد المصروفات — سجّل أول مصروف بالأعلى
+                </p>
+              ) : (
+                data.expenses.map((e, index) => (
+                  <div key={e.id} className="rounded-lg border bg-card p-3 hover:bg-muted/30 dark:hover:bg-muted/20">
+                    {/* رأس الكارت: التصنيف + المبلغ */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            #{index + 1}
+                          </span>
+                          <p className="font-medium leading-tight">{e.category}</p>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          <DateTimeCell date={e.createdAt} />
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-base font-bold tabular-nums text-destructive">
+                        {formatCurrency(e.amount)}
+                      </p>
+                    </div>
+
+                    {/* ملاحظة + بواسطة */}
+                    {e.note && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {e.note}
+                      </p>
+                    )}
+                    <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>بواسطة: {e.userName ?? '—'}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => setDeleteId(e.id)}
+                        title="حذف"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </CardContent>

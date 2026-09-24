@@ -18,15 +18,23 @@ import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
 import { printSale } from '@/lib/print-client'
+import { printThermalReceipt, getStoredPrinterSettings } from '@/lib/thermal-printer'
+import { ProductDialog } from './ProductDialog'
 
 interface ProductLite {
   id: number
@@ -100,6 +108,9 @@ export function POSView() {
   const [submitting, setSubmitting] = React.useState(false)
   const [customersVersion, setCustomersVersion] = React.useState(0)
   const [addingProduct, setAddingProduct] = React.useState(false)
+  // Mobile cart drawer — below lg, the cart is hidden behind a floating button
+  // that opens this Sheet so it doesn't push the search/summary out of view.
+  const [cartSheetOpen, setCartSheetOpen] = React.useState(false)
 
   // Variant (color/size) picker — shown before adding a product that has
   // variants to the cart, so the cashier always sells a specific one.
@@ -109,6 +120,19 @@ export function POSView() {
   const [variantPickerUnits, setVariantPickerUnits] = React.useState<PosUnit[]>([])
 
   const openQuickAddProduct = useShopStore((s) => s.openQuickAddProduct)
+  const quickAdd = useShopStore((s) => s.quickAddProduct)
+  const closeQuickAdd = useShopStore((s) => s.closeQuickAddProduct)
+  const [productDlgOpen, setProductDlgOpen] = React.useState(false)
+  const [productInitial, setProductInitial] = React.useState<Record<string,any> | null>(null)
+
+  // فتح دايلوج المنتج الجديد مباشرة في نقطة البيع
+  React.useEffect(() => {
+    if (quickAdd.open) {
+      setProductInitial(quickAdd.seed ? { name: quickAdd.seed, barcode: quickAdd.seed } : {})
+      setProductDlgOpen(true)
+      closeQuickAdd()
+    }
+  }, [quickAdd, closeQuickAdd])
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
   const capabilities = useShopStore((s) => s.plan.capabilities)
@@ -146,7 +170,8 @@ export function POSView() {
     setSearchLoading(true)
     const t = setTimeout(async () => {
       try {
-        const data = await api<ProductLite[]>(`/api/products?search=${encodeURIComponent(q)}`)
+        const res = await api<{ data: ProductLite[] } | ProductLite[]>(`/api/products?search=${encodeURIComponent(q)}`)
+        const data = Array.isArray(res) ? res : (res as any)?.data ?? []
         setResults(data)
         setOpen(true)
       } catch {
@@ -288,7 +313,8 @@ export function POSView() {
     if (!q) return
     setSearchLoading(true)
     try {
-      const data = await api<ProductLite[]>(`/api/products?search=${encodeURIComponent(q)}`)
+      const res = await api<{ data: ProductLite[] } | ProductLite[]>(`/api/products?search=${encodeURIComponent(q)}`)
+      const data = Array.isArray(res) ? res : (res as any)?.data ?? []
       const exact = data.find((r) => r.barcode === q)
       // Scanned/typed code matched a specific variant's own barcode (not the
       // product's main barcode) — go straight to that color/size.
@@ -462,6 +488,29 @@ export function POSView() {
           invoicePrefix: shopBranding.invoicePrefix,
         }
       )
+
+      // ⚡ Thermal printer — ESC/POS direct printing (if configured)
+      const _ts = getStoredPrinterSettings()
+      if (_ts.width) {
+        printThermalReceipt({
+          shopName: shopName || 'محل',
+          shopPhone: shopBranding.phone || undefined,
+          shopAddress: shopBranding.address || undefined,
+          invoiceNo: sale.invoiceNo ?? String(sale.id),
+          date: new Date(sale.createdAt).toLocaleString('ar-EG'),
+          items: sale.items.map((it: any) => ({
+            name: it.name + (it.variant ? ` ${[it.variant.color, it.variant.size].filter(Boolean).join('/')}` : ''),
+            qty: it.unitQuantity ?? it.quantity,
+            price: it.unitQuantity ? (it.price * it.quantity) / it.unitQuantity : it.price,
+            total: it.price * it.quantity,
+          })),
+          total: sale.total,
+          paid: sale.paid,
+          remaining: sale.total - sale.paid,
+          customerName: sale.customer?.name,
+        })
+      }
+
       setCart([])
       setCustomerName('')
       setCustomerPhone('')
@@ -576,8 +625,12 @@ export function POSView() {
             </CardContent>
           </Card>
 
-          {/* Cart */}
-          <Card>
+          {/*
+            Cart — Desktop (lg+): rendered inline as a Card with the table layout.
+            Mobile (below lg): hidden — replaced by a floating "عرض السلة"
+            button + Sheet drawer with the same content but stacked-card layout.
+          */}
+          <Card className="hidden lg:block">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <ShoppingCart className="size-4 text-primary" />
@@ -710,6 +763,147 @@ export function POSView() {
               )}
             </CardContent>
           </Card>
+
+          {/*
+            Mobile (below lg): Floating "عرض السلة" button — opens a Sheet
+            containing the same cart but with a stacked-card layout.
+          */}
+          <Button
+            type="button"
+            onClick={() => setCartSheetOpen(true)}
+            className="fixed bottom-4 left-4 z-40 h-12 gap-2 rounded-full px-4 shadow-lg lg:hidden"
+            size="lg"
+          >
+            <ShoppingCart className="size-5" />
+            عرض السلة
+            {cart.length > 0 && (
+              <span className="ml-1 inline-flex size-5 items-center justify-center rounded-full bg-primary-foreground text-xs font-bold text-primary">
+                {cart.length}
+              </span>
+            )}
+          </Button>
+
+          <Sheet open={cartSheetOpen} onOpenChange={setCartSheetOpen}>
+            <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto p-0 sm:max-w-md sm:mx-auto">
+              <SheetTitle className="flex items-center gap-2 px-4 py-3 text-base">
+                <ShoppingCart className="size-4 text-primary" />
+                السلة ({cart.length})
+              </SheetTitle>
+              <div className="space-y-2 px-3 pb-4">
+                {cart.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    السلة فارغة — ابحث وأضف منتجات للبدء
+                  </p>
+                ) : (
+                  cart.map((it) => (
+                    <div key={it.cartKey} className="rounded-lg border bg-card p-2.5">
+                      {/* Product name + remove */}
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="min-w-0 flex-1 truncate font-medium leading-tight">
+                          {it.product.name}
+                        </p>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => removeItem(it.cartKey)}
+                          title="حذف"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+
+                      {/* Variant (color/size) selector */}
+                      {it.availableVariants.length > 0 && (
+                        <div className="mt-2">
+                          <select
+                            value={it.variantId ?? ''}
+                            onChange={(e) => {
+                              const vid = e.target.value ? parseInt(e.target.value, 10) : null
+                              const variant = vid
+                                ? it.availableVariants.find((v) => v.id === vid) ?? null
+                                : null
+                              updateVariant(it.cartKey, variant)
+                            }}
+                            className="w-full rounded border bg-background px-2 py-1 text-xs"
+                          >
+                            <option value="" disabled>اختار اللون/المقاس</option>
+                            {it.availableVariants.map((v) => (
+                              <option key={v.id} value={v.id} disabled={v.quantity <= 0}>
+                                {variantLabelOf(v)} {v.quantity <= 0 ? '(نفد)' : `(متاح ${v.quantity})`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Unit selector */}
+                      {it.availableUnits.length > 0 && (
+                        <div className="mt-2">
+                          <select
+                            value={it.unitId ?? ''}
+                            onChange={(e) => {
+                              const uid = e.target.value ? parseInt(e.target.value, 10) : null
+                              const unit = uid
+                                ? it.availableUnits.find((u) => u.id === uid) ?? null
+                                : null
+                              updateUnit(it.cartKey, unit)
+                            }}
+                            className="w-full rounded border bg-background px-2 py-1 text-xs"
+                          >
+                            <option value="">قطعة</option>
+                            {it.availableUnits.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.name}
+                                {u.price != null ? ` (${formatCurrency(u.price)})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Price + Quantity + Total row */}
+                      <div className="mt-2 flex items-end gap-2 border-t border-border/60 pt-2">
+                        <div className="flex-1">
+                          <label className="block text-[10px] text-muted-foreground">السعر</label>
+                          <Input
+                            type="number"
+                            value={it.price}
+                            onChange={(e) => updatePrice(it.cartKey, parseFloat(e.target.value) || 0)}
+                            className="h-8 text-center"
+                            min={0}
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-[10px] text-muted-foreground">الكمية</label>
+                          <Input
+                            type="number"
+                            value={it.quantity}
+                            onChange={(e) => updateQty(it.cartKey, parseInt(e.target.value, 10) || 1)}
+                            className="h-8 text-center"
+                            min={1}
+                            max={it.maxQuantity}
+                          />
+                        </div>
+                        <div className="text-left">
+                          <label className="block text-[10px] text-muted-foreground">الإجمالي</label>
+                          <p className="text-sm font-semibold tabular-nums">
+                            {formatCurrency(it.price * it.quantity)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Available + unit label footer */}
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        متاح: {it.maxQuantity}
+                        {it.unitLabel ? ` • ${it.unitLabel}` : ''}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
 
         {/* Right column - summary */}
@@ -918,8 +1112,22 @@ export function POSView() {
               ))}
             </ul>
           )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setVariantPickerOpen(false)}>
+              إلغاء
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── دايلوج إضافة منتج جديد من نقطة البيع ── */}
+      <ProductDialog
+        open={productDlgOpen}
+        onOpenChange={setProductDlgOpen}
+        initial={productInitial}
+        onSaved={() => { setProductDlgOpen(false); setProductInitial(null) }}
+      />
     </div>
   )
 }

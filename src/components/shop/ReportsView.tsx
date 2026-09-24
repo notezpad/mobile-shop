@@ -107,9 +107,9 @@ interface Report {
 
 const METHOD_LABELS: Record<string, string> = {
   cash: 'كاش',
-  vodafone_cash: 'فودافون كاش',
-  instapay: 'إنستاباي',
-  fawry: 'فوري',
+  vodafone_cash: 'محافظ إلكترونية',
+  instapay: 'محافظ إلكترونية',
+  fawry: 'محفظة إلكترونية',
 }
 
 function pad(d: Date) {
@@ -398,28 +398,58 @@ export function ReportsView() {
                 {loading ? (
                   <Skeleton className="h-56 w-full" />
                 ) : report && report.topProducts.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>المنتج</TableHead>
-                        <TableHead className="text-center">الكمية</TableHead>
-                        <TableHead className="text-center">الإيراد</TableHead>
-                        <TableHead className="text-center">الربح</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                  <>
+                    {/* جدول — يظهر على lg+ */}
+                    <div className="hidden lg:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>المنتج</TableHead>
+                            <TableHead className="text-center">الكمية</TableHead>
+                            <TableHead className="text-center">الإيراد</TableHead>
+                            <TableHead className="text-center">الربح</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {report.topProducts.map((p, i) => (
+                            <TableRow key={i}>
+                              <TableCell className="font-medium">{p.name}</TableCell>
+                              <TableCell className="text-center tabular-nums">{formatNumber(p.qty)}</TableCell>
+                              <TableCell className="text-center tabular-nums">{formatCurrency(p.total)}</TableCell>
+                              <TableCell className="text-center tabular-nums text-primary">
+                                {formatCurrency(p.profit)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    {/* كروت — تظهر تحت lg */}
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:hidden">
                       {report.topProducts.map((p, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="font-medium">{p.name}</TableCell>
-                          <TableCell className="text-center tabular-nums">{formatNumber(p.qty)}</TableCell>
-                          <TableCell className="text-center tabular-nums">{formatCurrency(p.total)}</TableCell>
-                          <TableCell className="text-center tabular-nums text-primary">
-                            {formatCurrency(p.profit)}
-                          </TableCell>
-                        </TableRow>
+                        <div key={i} className="rounded-lg border bg-card p-2.5 hover:bg-muted/30 dark:hover:bg-muted/20">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="min-w-0 flex-1 truncate text-sm font-medium leading-tight">
+                              {p.name}
+                            </p>
+                            <Badge variant="secondary" className="shrink-0 text-[10px]">
+                              {formatNumber(p.qty)}
+                            </Badge>
+                          </div>
+                          <div className="mt-2 grid grid-cols-2 gap-1 text-center text-xs">
+                            <div>
+                              <p className="text-[10px] text-muted-foreground">الإيراد</p>
+                              <p className="tabular-nums">{formatCurrency(p.total)}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-muted-foreground">الربح</p>
+                              <p className="tabular-nums text-primary">{formatCurrency(p.profit)}</p>
+                            </div>
+                          </div>
+                        </div>
                       ))}
-                    </TableBody>
-                  </Table>
+                    </div>
+                  </>
                 ) : (
                   <p className="py-8 text-center text-sm text-muted-foreground">لا توجد بيانات</p>
                 )}
@@ -531,30 +561,53 @@ export function ReportsView() {
               {loading ? (
                 <Skeleton className="h-40 w-full" />
               ) : report && report.lowStockProducts.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>المنتج</TableHead>
-                      <TableHead className="text-center">الكمية الحالية</TableHead>
-                      <TableHead className="text-center">الحد الأدنى</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <>
+                  {/* جدول — يظهر على lg+ */}
+                  <div className="hidden lg:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>المنتج</TableHead>
+                          <TableHead className="text-center">الكمية الحالية</TableHead>
+                          <TableHead className="text-center">الحد الأدنى</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {report.lowStockProducts.map((p, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-medium">{p.name}</TableCell>
+                            <TableCell className="text-center tabular-nums">
+                              <Badge variant={p.quantity === 0 ? 'destructive' : 'secondary'}>
+                                {formatNumber(p.quantity)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-center tabular-nums text-muted-foreground">
+                              {formatNumber(p.minQuantity)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {/* كروت — تظهر تحت lg */}
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:hidden">
                     {report.lowStockProducts.map((p, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="font-medium">{p.name}</TableCell>
-                        <TableCell className="text-center tabular-nums">
-                          <Badge variant={p.quantity === 0 ? 'destructive' : 'secondary'}>
+                      <div key={i} className="flex items-center justify-between gap-2 rounded-lg border bg-card p-2.5">
+                        <p className="min-w-0 flex-1 truncate text-sm font-medium leading-tight">
+                          {p.name}
+                        </p>
+                        <div className="shrink-0 text-left">
+                          <Badge variant={p.quantity === 0 ? 'destructive' : 'secondary'} className="text-[10px]">
                             {formatNumber(p.quantity)}
                           </Badge>
-                        </TableCell>
-                        <TableCell className="text-center tabular-nums text-muted-foreground">
-                          {formatNumber(p.minQuantity)}
-                        </TableCell>
-                      </TableRow>
+                          <p className="mt-1 text-[10px] text-muted-foreground">
+                            الأدنى: {formatNumber(p.minQuantity)}
+                          </p>
+                        </div>
+                      </div>
                     ))}
-                  </TableBody>
-                </Table>
+                  </div>
+                </>
               ) : (
                 <p className="py-8 text-center text-sm text-muted-foreground">
                   كل المنتجات فوق الحد الأدنى للمخزون 👍
@@ -570,7 +623,7 @@ export function ReportsView() {
             <MiniStat icon={Wallet} label="رصيد الخزنة" value={formatCurrency(report?.cashBalance ?? 0)} loading={loading} tone="primary" />
             <MiniStat icon={ArrowDownRight} label="إيداعات مالية" value={formatCurrency(report?.financeIn ?? 0)} loading={loading} />
             <MiniStat icon={ArrowUpRight} label="سحوبات مالية" value={formatCurrency(report?.financeOut ?? 0)} loading={loading} />
-            <MiniStat icon={ReceiptText} label="إجمالي المصروفات" value={formatCurrency(report?.totalExpenses ?? 0)} loading={loading} />
+            <MiniStat icon={ReceiptText} label="إجمالي الالمعاملات المالية" value={formatCurrency(report?.totalExpenses ?? 0)} loading={loading} />
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -585,7 +638,7 @@ export function ReportsView() {
                   <>
                     <FormulaRow label="هامش ربح المبيعات" value={report?.totalProfit ?? 0} />
                     <FormulaRow label="+ إيراد الصيانة" value={report?.maintenanceRevenue ?? 0} />
-                    <FormulaRow label="− المصروفات" value={-(report?.totalExpenses ?? 0)} negative />
+                    <FormulaRow label="− الالمعاملات المالية" value={-(report?.totalExpenses ?? 0)} negative />
                     <div className="mt-2 flex items-center justify-between border-t pt-2">
                       <span className="font-semibold">= صافي الربح</span>
                       <span
@@ -630,7 +683,7 @@ export function ReportsView() {
 
             <Card className="lg:col-span-2">
               <CardHeader>
-                <CardTitle className="text-base">المصروفات حسب التصنيف</CardTitle>
+                <CardTitle className="text-base">الالمعاملات المالية حسب التصنيف</CardTitle>
               </CardHeader>
               <CardContent>
                 {loading ? (
@@ -644,7 +697,7 @@ export function ReportsView() {
                   />
                 ) : (
                   <p className="py-8 text-center text-sm text-muted-foreground">
-                    لا توجد مصروفات مسجلة في هذه الفترة
+                    لا توجد المعاملات المالية مسجلة في هذه الفترة
                   </p>
                 )}
               </CardContent>
@@ -888,7 +941,7 @@ function buildReportHtml(
     ? r.expensesByCategory
         .map((e) => `<tr><td style="text-align:right;font-weight:600">${escapeHtml(e.category)}</td><td style="font-weight:700;color:${BRAND.red}">${fmtMoney(e.amount)}</td></tr>`)
         .join('')
-    : emptyRow(2, 'لا توجد مصروفات مسجلة في هذه الفترة')
+    : emptyRow(2, 'لا توجد المعاملات المالية مسجلة في هذه الفترة')
 
   const categoryBars = r.categoryBreakdown.length
     ? r.categoryBreakdown.map((c) => barRow(escapeHtml(c.category), c.total, maxCategory, fmtMoney(c.total))).join('')
@@ -963,14 +1016,14 @@ function buildReportHtml(
     </div>
 
     <div class="kpi-grid">
-      ${kpi('إجمالي المبيعات', fmtMoney(r.totalSales) + ' ج.م')}
-      ${kpi('صافي الربح', fmtMoney(r.netProfit) + ' ج.م', true)}
+      ${kpi('إجمالي المبيعات', fmtMoney(r.totalSales) + ' ')}
+      ${kpi('صافي الربح', fmtMoney(r.netProfit) + ' ', true)}
       ${kpi('عدد الفواتير', formatNumber(r.salesCount))}
-      ${kpi('متوسط الفاتورة', fmtMoney(r.avgOrderValue) + ' ج.م')}
-      ${kpi('إيراد الصيانة', fmtMoney(r.maintenanceRevenue) + ' ج.م')}
-      ${kpi('إجمالي المصروفات', fmtMoney(r.totalExpenses) + ' ج.م')}
-      ${kpi('رصيد الخزنة', fmtMoney(r.cashBalance) + ' ج.م', true)}
-      ${kpi('إجمالي المشتريات', fmtMoney(r.totalPurchases) + ' ج.م')}
+      ${kpi('متوسط الفاتورة', fmtMoney(r.avgOrderValue) + ' ')}
+      ${kpi('إيراد الصيانة', fmtMoney(r.maintenanceRevenue) + ' ')}
+      ${kpi('إجمالي الالمعاملات المالية', fmtMoney(r.totalExpenses) + ' ')}
+      ${kpi('رصيد الخزنة', fmtMoney(r.cashBalance) + ' ', true)}
+      ${kpi('إجمالي المشتريات', fmtMoney(r.totalPurchases) + ' ')}
     </div>
 
     ${section(
@@ -989,7 +1042,7 @@ function buildReportHtml(
     <div class="two-col">
       ${section('طرق الدفع (المقبوضات)', `<div style="padding-top:2px">${methodBars}</div>`)}
       ${section(
-        'المصروفات حسب التصنيف',
+        'الالمعاملات المالية حسب التصنيف',
         `<table><thead><tr><th>التصنيف</th><th>المبلغ</th></tr></thead><tbody>${expenseRows}</tbody></table>`
       )}
     </div>
@@ -1004,16 +1057,16 @@ function buildReportHtml(
       'الملخص المالي',
       `<div class="two-col">
         <div class="formula-box">
-          <div class="formula-row"><span>هامش ربح المبيعات</span><span>${fmtMoney(r.totalProfit)} ج.م</span></div>
-          <div class="formula-row"><span>+ إيراد الصيانة</span><span>${fmtMoney(r.maintenanceRevenue)} ج.م</span></div>
-          <div class="formula-row"><span>− المصروفات</span><span style="color:${BRAND.red}">${fmtMoney(r.totalExpenses)} ج.م</span></div>
-          <div class="formula-row total"><span>= صافي الربح</span><span>${fmtMoney(r.netProfit)} ج.م</span></div>
+          <div class="formula-row"><span>هامش ربح المبيعات</span><span>${fmtMoney(r.totalProfit)} </span></div>
+          <div class="formula-row"><span>+ إيراد الصيانة</span><span>${fmtMoney(r.maintenanceRevenue)} </span></div>
+          <div class="formula-row"><span>− الالمعاملات المالية</span><span style="color:${BRAND.red}">${fmtMoney(r.totalExpenses)} </span></div>
+          <div class="formula-row total"><span>= صافي الربح</span><span>${fmtMoney(r.netProfit)} </span></div>
         </div>
         <div class="formula-box">
-          <div class="formula-row"><span>إيداعات مالية</span><span>${fmtMoney(r.financeIn)} ج.م</span></div>
-          <div class="formula-row"><span>سحوبات مالية</span><span>${fmtMoney(r.financeOut)} ج.م</span></div>
-          <div class="formula-row"><span>مستحقات على العملاء</span><span>${fmtMoney(r.customersReceivable)} ج.م</span></div>
-          <div class="formula-row"><span>مستحقات للموردين</span><span style="color:${BRAND.red}">${fmtMoney(r.suppliersPayable)} ج.م</span></div>
+          <div class="formula-row"><span>إيداعات مالية</span><span>${fmtMoney(r.financeIn)} </span></div>
+          <div class="formula-row"><span>سحوبات مالية</span><span>${fmtMoney(r.financeOut)} </span></div>
+          <div class="formula-row"><span>مستحقات على العملاء</span><span>${fmtMoney(r.customersReceivable)} </span></div>
+          <div class="formula-row"><span>مستحقات للموردين</span><span style="color:${BRAND.red}">${fmtMoney(r.suppliersPayable)} </span></div>
         </div>
       </div>`
     )}

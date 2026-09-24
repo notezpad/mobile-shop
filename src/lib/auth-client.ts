@@ -50,12 +50,23 @@ export async function apiLogout(): Promise<void> {
 
 export async function getMe(): Promise<AuthUser | null> {
   try {
-    const res = await fetch('/api/auth/me', { cache: 'no-store' })
+    const res = await fetch('/api/auth/me', { cache: 'default' })
     if (!res.ok) return null
     const data = await res.json()
     if (!data?.ok) return null
     return data.user as AuthUser
   } catch {
+    // ⚡ Offline: try to return cached user from IndexedDB
+    // This allows the app to boot offline (showing cached data)
+    if (typeof window !== 'undefined' && typeof indexedDB !== 'undefined') {
+      try {
+        const { idb } = await import('./offline/idb')
+        const cached = await idb.getCached<{ user: AuthUser }>('/api/auth/me')
+        if (cached?.data?.user) return cached.data.user
+      } catch {
+        /* ignore */
+      }
+    }
     return null
   }
 }

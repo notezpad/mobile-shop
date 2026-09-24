@@ -50,9 +50,10 @@ export function Barcode({
         format: 'CODE128',
         height,
         width,
-        displayValue: false, // هنعرض الرقم بأنفسنا في شريحة مخصّصة
+        displayValue: false,
         margin: 0,
         background: 'transparent',
+        lineColor: 'currentColor', // ⚡ uses inherited text color — adapts to dark/light mode
       })
       // نضيف زوايا دائرية على كل الأعمدة عشان الشكل يبقى ناعم/عصري
       const svg = svgRef.current
@@ -84,7 +85,7 @@ export function Barcode({
   const chip = (
     <span
       dir="ltr"
-      className="inline-flex items-center rounded-sm bg-muted/60 px-1.5 font-mono text-foreground/80"
+      className="inline-flex items-center rounded-sm bg-muted px-1.5 font-mono text-foreground"
       style={{
         fontSize,
         lineHeight: `${chipHeight}px`,
@@ -98,7 +99,7 @@ export function Barcode({
   // الحاوية: أكواع ركنية بدل بوردر كامل + توسيط + منع الفيضان
   const frame = (
     <div
-      className={className}
+      className={className ? `${className} text-foreground` : 'text-foreground'}
       style={{
         height: reservedHeight,
         maxWidth: '100%',
@@ -135,14 +136,14 @@ export function Barcode({
           backgroundPosition:
             'left top,left top,right top,right top,left bottom,left bottom,right bottom,right bottom',
           color: 'var(--color-muted-foreground)',
-          opacity: 0.55,
+          opacity: 0.7,
         }}
       />
       <svg
         ref={svgRef}
         {...({ dir: 'ltr' } as React.SVGProps<SVGSVGElement>)}
         preserveAspectRatio={fitContainer ? 'xMidYMid meet' : undefined}
-        style={{ maxWidth: '100%', height: 'auto', display: 'block' }}
+        style={{ maxWidth: '100%', height: 'auto', display: 'block', color: 'inherit' }}
       />
       {chip}
     </div>

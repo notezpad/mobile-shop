@@ -1,7 +1,10 @@
 'use client'
 
 import * as React from 'react'
+import { ProductAvatar } from './ProductAvatar'
 import {
+  ChevronLeft,
+  ChevronRight,
   FileSpreadsheet,
   FolderOpen,
   ImageOff,
@@ -82,9 +85,14 @@ export function ProductsView() {
   const [initial, setInitial] = React.useState<Partial<ProductFormValues> | null>(null)
   const [catDialogOpen, setCatDialogOpen] = React.useState(false)
   const [confirmId, setConfirmId] = React.useState<number | null>(null)
+  const [bulkConfirmOpen, setBulkConfirmOpen] = React.useState(false)
   const [selectedIds, setSelectedIds] = React.useState<Set<number>>(new Set())
+  const [page, setPage] = React.useState(1)
+  const [totalPages, setTotalPages] = React.useState(1)
+  const [total, setTotal] = React.useState(0)
+  const PAGE_SIZE = 50
   const [labelsDialogOpen, setLabelsDialogOpen] = React.useState(false)
-  const [unitsFor, setUnitsFor] = React.useState<{id:number;name:string}|null>(null)
+  const [unitsFor, setUnitsFor] = React.useState<{id:number;name:string;price:number}|null>(null)
   const [variantsFor, setVariantsFor] = React.useState<{id:number;name:string}|null>(null)
   const [collectionDlg, setCollectionDlg] = React.useState(false)
   const capabilities = useShopStore((st) => st.plan.capabilities)
@@ -103,30 +111,43 @@ export function ProductsView() {
     }
   }, [])
 
-  const loadProducts = React.useCallback(async () => {
+  const loadProducts = React.useCallback(async (p = page) => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
       if (search.trim()) params.set('search', search.trim())
       if (category && category !== 'all') params.set('category', category)
       params.set('status', status)
-      const data = await api<Product[]>(`/api/products?${params.toString()}`)
-      setProducts(data)
+      params.set('page', String(p))
+      params.set('limit', String(PAGE_SIZE))
+      const res = await api<{ data: Product[]; total: number; totalPages: number }>(`/api/products?${params.toString()}`)
+      setProducts(res.data)
+      setTotal(res.total)
+      setTotalPages(res.totalPages)
     } catch (e: any) {
-      toast.error(e?.message || 'فشل تحميل المنتجات')
+      if (e?.message?.includes('لا توجد بيانات محفوظة')) {
+        toast.info('أنت غير متصل — افتح المنتجات مرة واحدة وأنت متصل لحفظها')
+      } else {
+        toast.error(e?.message || 'فشل تحميل المنتجات')
+      }
     } finally {
       setLoading(false)
     }
-  }, [search, category, status])
+  }, [search, category, status, page, PAGE_SIZE])
 
   React.useEffect(() => {
     loadCats()
   }, [loadCats])
 
+  // Reset to page 1 when filters change
   React.useEffect(() => {
-    const t = setTimeout(loadProducts, 250)
+    setPage(1)
+  }, [search, category, status])
+
+  React.useEffect(() => {
+    const t = setTimeout(() => loadProducts(page), 400)
     return () => clearTimeout(t)
-  }, [loadProducts])
+  }, [loadProducts, page])
 
   // Quick-add product requested from POS
   React.useEffect(() => {
@@ -157,28 +178,215 @@ export function ProductsView() {
   }
 
   const removeProduct = async (id: number) => {
+    // 🛡️ 2026-09-15 (v3 → v4): Smart, accounting-aware product deletion.
+    //
+    // v4 fix: was using `toast()` with both `action` + `cancel` options,
+    // but sonner 2.0.7 only supports ONE action button per regular toast.
+    // The `cancel` option was silently ignored, so the user saw the message
+    // but no buttons → couldn't proceed.
+    //
+    // v4 fix: use `toast.custom()` to render a custom React component
+    // with BOTH buttons (حذف نهائي محاسبياً + تعطيل فقط) inside the toast.
     try {
       await api(`/api/products/${id}`, { method: 'DELETE' })
-      toast.success('تم حذف المنتج')
-      loadProducts()
-      loadCats()
+      // Success — product was hard-deleted immediately (no FK refs)
+      setProducts((prev) => prev.filter((p) => p.id !== id))
+      setSelectedIds((prev) => {
+        const next = new Set(prev); next.delete(id); return next
+      })
+      toast.success('تم حذف المنتج نهائياً (مفيش بيانات مربوطة بيه)')
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        loadCats()
+      }
     } catch (e: any) {
-      toast.error(e?.message || 'فشل الحذف')
+      if (e?.message?.includes('تم الحفظ محلياً') || e?.message?.includes('offline')) {
+        // Offline — optimistic queue
+        setProducts((prev) => prev.filter((p) => p.id !== id))
+        toast.success('تم حذف المنتج (offline — سيتم المزامنة لاحقاً)')
+      } else {
+        // 🛡️ 2026-09-15 (v4): Use toast.custom() to render a custom toast
+        // with TWO buttons. sonner's regular `toast()` only supports one
+        // `action` button, so the previous `cancel` option was ignored.
+        const errorBody = e?.body ?? e
+        const references = errorBody?.references
+        const totalRefs = errorBody?.total_references
+        const mainError = errorBody?.error ?? errorBody?.message ?? e?.message ?? 'فشل الحذف'
+
+        if (references && totalRefs > 0) {
+          const refSummary = [
+            references.sale_items ? `${references.sale_items} صنف بيع` : null,
+            references.stock_movements ? `${references.stock_movements} حركة مخزون` : null,
+            references.transfer_items ? `${references.transfer_items} تحويل` : null,
+            references.stocktake_items ? `${references.stocktake_items} جرد` : null,
+            references.purchase_order_items ? `${references.purchase_order_items} شراء` : null,
+          ].filter(Boolean).join('، ')
+
+          // 🛡️ toast.custom() lets us render any React element as the toast.
+          // We pass a function that receives the toast ID (so we can dismiss
+          // it after the user clicks a button).
+          toast.custom((toastId) => (
+            <div
+              dir="rtl"
+              className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-lg dark:border-amber-700 dark:bg-amber-950"
+              style={{ maxWidth: '440px' }}
+            >
+              <div className="flex items-start gap-2">
+                <span className="text-xl">⚠️</span>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-amber-900 dark:text-amber-100">
+                    {mainError}
+                  </p>
+                  {refSummary && (
+                    <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
+                      المنتج مربوط بـ: {refSummary}.
+                    </p>
+                  )}
+                  <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                    الخزنة + المبيعات + التقارير محفوظة في الحالتين.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="flex-1 rounded-md bg-rose-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-rose-700"
+                  onClick={async () => {
+                    try {
+                      const archiveResult = await api(
+                        `/api/products/${id}?mode=archive`,
+                        { method: 'DELETE' }
+                      )
+                      setProducts((prev) => prev.filter((p) => p.id !== id))
+                      setSelectedIds((prev) => {
+                        const next = new Set(prev); next.delete(id); return next
+                      })
+                      toast.dismiss(toastId)
+                      toast.success(
+                        `تم حذف المنتج نهائياً. السجل المالي محفوظ (${archiveResult?.cleared_references?.sale_items ?? 0} صنف بيع، ${archiveResult?.cleared_references?.stock_movements ?? 0} حركة مخزون)`
+                      )
+                      if (typeof navigator === 'undefined' || navigator.onLine) {
+                        loadCats()
+                      }
+                    } catch (err: any) {
+                      toast.dismiss(toastId)
+                      // 🛡️ 2026-09-15 (v5): Show the FULL error detail so we can
+                      // see the actual DB error. The err.body has the structured
+                      // response from the DELETE endpoint (error, detail,
+                      // suggestion). The err.message is just the top-level message.
+                      const mainErr = err?.message || 'فشل الحذف المحاسبي'
+                      const detail = err?.body?.detail
+                      const suggestion = err?.body?.suggestion
+                      if (detail || suggestion) {
+                        // Show full toast with detail + suggestion
+                        toast.custom((toastId2) => (
+                          <div
+                            dir="rtl"
+                            className="flex flex-col gap-2 rounded-lg border border-rose-200 bg-rose-50 p-4 shadow-lg dark:border-rose-700 dark:bg-rose-950"
+                            style={{ maxWidth: '480px' }}
+                          >
+                            <div className="flex items-start gap-2">
+                              <span className="text-xl">❌</span>
+                              <div className="flex-1">
+                                <p className="text-sm font-bold text-rose-900 dark:text-rose-100">
+                                  {mainErr}
+                                </p>
+                                {detail && (
+                                  <p className="mt-1 text-xs text-rose-800 dark:text-rose-200" dir="ltr">
+                                    {String(detail)}
+                                  </p>
+                                )}
+                                {suggestion && (
+                                  <p className="mt-1 text-[11px] text-rose-700 dark:text-rose-300">
+                                    {suggestion}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className="self-end rounded-md bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
+                              onClick={() => toast.dismiss(toastId2)}
+                            >
+                              إغلاق
+                            </button>
+                          </div>
+                        ), { duration: 30000 })
+                      } else {
+                        toast.error(mainErr)
+                      }
+                    }
+                  }}
+                >
+                  حذف نهائي محاسبياً ✓
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 rounded-md bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-700"
+                  onClick={() => {
+                    const prod = products.find((p) => p.id === id)
+                    if (prod) {
+                      toggleActive({ ...prod, active: true }).then(() => {
+                        setProducts((prev) => prev.filter((p) => p.id !== id))
+                        toast.dismiss(toastId)
+                        toast.success('تم تعطيل المنتج (هيختفي من القائمة، تقدر تفعلّه تاني من الفلتر)')
+                      })
+                    }
+                  }}
+                >
+                  تعطيل فقط (آمن)
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-muted px-3 py-2 text-xs font-bold text-muted-foreground transition-colors hover:bg-muted/70"
+                  onClick={() => toast.dismiss(toastId)}
+                  title="إغلاق"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ), {
+            duration: 30000, // 30 seconds — give user time to read + decide
+          })
+        } else {
+          // Old-style error (no references field) — show generic error
+          toast.error(mainError)
+        }
+      }
     } finally {
       setConfirmId(null)
     }
   }
 
   const toggleActive = async (p: Product) => {
+    // ⚡ Optimistic update: update the UI immediately
+    const newActive = !p.active
+    setProducts((prev) => prev.map((item) =>
+      item.id === p.id ? { ...item, active: newActive } : item
+    ))
+
     try {
       await api(`/api/products/${p.id}`, {
         method: 'PATCH',
-        body: { active: !p.active },
+        body: { active: newActive },
       })
-      toast.success(p.active ? 'تم تعطيل المنتج' : 'تم تفعيل المنتج')
-      loadProducts()
+      toast.success(newActive ? 'تم تفعيل المنتج' : 'تم تعطيل المنتج')
+      // Only reload from server if we're online (offline = already updated locally)
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        loadProducts()
+      }
     } catch (e: any) {
-      toast.error(e?.message || 'فشل التحديث')
+      // ⚡ Offline: the PATCH was queued in outbox — show success
+      // The optimistic update already happened above
+      if (e?.message?.includes('تم الحفظ محلياً') || e?.message?.includes('offline')) {
+        toast.success(`${newActive ? 'تم تفعيل' : 'تم تعطيل'} المنتج (offline — سيتم المزامنة لاحقاً)`)
+      } else {
+        // Revert optimistic update on real error
+        setProducts((prev) => prev.map((item) =>
+          item.id === p.id ? { ...item, active: p.active } : item
+        ))
+        toast.error(e?.message || 'فشل التحديث')
+      }
     }
   }
 
@@ -292,32 +500,56 @@ export function ProductsView() {
               <SelectItem value="inactive">معطّل فقط</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={() => setCatDialogOpen(true)}>
-            <FolderOpen className="size-4" />
-            التصنيفات
-          </Button>
-          <Button variant="outline" onClick={exportExcel} disabled={products.length === 0}>
-            <FileSpreadsheet className="size-4" />
-            تصدير Excel
-          </Button>
-          <Button
-            variant="outline"
-            onClick={openBulkLabels}
-            disabled={selectedIds.size === 0}
-          >
-            <Printer className="size-4" />
-            طباعة ملصقات {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
-          </Button>
-          {capabilities.includes('collections') && (
-            <Button variant="outline" onClick={() => setCollectionDlg(true)}>
-              <Percent className="size-4" />
-              خصم كوليكشن
-            </Button>
+          {selectedIds.size > 0 ? (
+            /* ── Bulk-action bar (replaces normal actions when items are selected) ── */
+            <>
+              <span className="text-sm font-medium text-muted-foreground">
+                {selectedIds.size} محدد
+              </span>
+              <Button
+                variant="outline"
+                onClick={openBulkLabels}
+              >
+                <Printer className="size-4" />
+                طباعة ملصقات
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => setBulkConfirmOpen(true)}
+              >
+                <Trash2 className="size-4" />
+                حذف المحدد
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                إلغاء التحديد
+              </Button>
+            </>
+          ) : (
+            /* ── Normal toolbar ── */
+            <>
+              <Button variant="outline" onClick={() => setCatDialogOpen(true)}>
+                <FolderOpen className="size-4" />
+                التصنيفات
+              </Button>
+              <Button variant="outline" onClick={exportExcel} disabled={products.length === 0}>
+                <FileSpreadsheet className="size-4" />
+                تصدير Excel
+              </Button>
+              {capabilities.includes('collections') && (
+                <Button variant="outline" onClick={() => setCollectionDlg(true)}>
+                  <Percent className="size-4" />
+                  خصم كوليكشن
+                </Button>
+              )}
+              <Button onClick={openAdd}>
+                <Plus className="size-4" />
+                منتج جديد
+              </Button>
+            </>
           )}
-          <Button onClick={openAdd}>
-            <Plus className="size-4" />
-            منتج جديد
-          </Button>
         </CardContent>
       </Card>
 
@@ -377,7 +609,7 @@ export function ProductsView() {
                     products.map((p, index) => {
                       const low = p.quantity <= p.minQuantity
                       return (
-                        <TableRow key={p.id} className={!p.active ? 'opacity-50' : ''}>
+                        <TableRow key={p.id} className={!p.active ? 'opacity-50' : 'hover:bg-muted/40'}>
                           <TableCell className="text-center pr-4">
                             <Checkbox
                               checked={selectedIds.has(p.id)}
@@ -388,17 +620,7 @@ export function ProductsView() {
                             {index + 1}
                           </TableCell>
                           <TableCell className="text-center">
-                            <div className="flex size-10 items-center justify-center overflow-hidden rounded-md border bg-muted mx-auto">
-                              {p.imagePath ? (
-                                <img
-                                  src={p.imagePath}
-                                  alt={p.name}
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : (
-                                <ImageOff className="size-4 text-muted-foreground" />
-                              )}
-                            </div>
+                            <div className="mx-auto"><ProductAvatar name={p.name} imagePath={p.imagePath} size="sm" /></div>
                           </TableCell>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-1.5">
@@ -478,7 +700,7 @@ export function ProductsView() {
                                   </DropdownMenuItem>
                                   {capabilities.includes('multi_unit') && (
                                     <DropdownMenuItem
-                                      onClick={() => setUnitsFor({ id: p.id, name: p.name })}
+                                      onClick={() => setUnitsFor({ id: p.id, name: p.name, price: p.price })}
                                     >
                                       <Package className="size-4" />
                                       وحدات الجملة
@@ -549,17 +771,7 @@ export function ProductsView() {
                           onCheckedChange={() => toggleSelect(p.id)}
                           className="mt-1"
                         />
-                        <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
-                          {p.imagePath ? (
-                            <img
-                              src={p.imagePath}
-                              alt={p.name}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <ImageOff className="size-4 text-muted-foreground" />
-                          )}
-                        </div>
+                        <ProductAvatar name={p.name} imagePath={p.imagePath} size="md" />
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <p className="font-medium leading-tight">{p.name}</p>
@@ -613,7 +825,7 @@ export function ProductsView() {
                               </DropdownMenuItem>
                               {capabilities.includes('multi_unit') && (
                                 <DropdownMenuItem
-                                  onClick={() => setUnitsFor({ id: p.id, name: p.name })}
+                                  onClick={() => setUnitsFor({ id: p.id, name: p.name, price: p.price })}
                                 >
                                   <Package className="size-4" />
                                   وحدات الجملة
@@ -715,6 +927,9 @@ export function ProductsView() {
         initial={initial}
         categories={categories}
         onSaved={() => {
+          // ⚡ Online: reload from server. Offline: loadProducts() returns
+          // cached data (which doesn't include the new product, but the
+          // toast says "تم الحفظ" so user knows it's queued).
           loadProducts()
           loadCats()
         }}
@@ -754,6 +969,52 @@ export function ProductsView() {
         onDone={loadProducts}
       />
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-1 py-2">
+          <p className="text-sm text-muted-foreground">
+            عرض {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} من {total} منتج
+          </p>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-8"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              const half = Math.floor(Math.min(5, totalPages) / 2)
+              let start = Math.max(1, page - half)
+              const end = Math.min(totalPages, start + Math.min(5, totalPages) - 1)
+              start = Math.max(1, end - Math.min(5, totalPages) + 1)
+              return start + i
+            }).map((p) => (
+              <Button
+                key={p}
+                variant={p === page ? 'default' : 'outline'}
+                size="icon"
+                className="size-8 text-xs"
+                onClick={() => setPage(p)}
+              >
+                {p}
+              </Button>
+            ))}
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-8"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* simple inline confirm */}
       {confirmId !== null && (
         <ConfirmDialog
@@ -761,6 +1022,48 @@ export function ProductsView() {
           message="هل أنت متأكد من حذف هذا المنتج نهائياً؟ لو المنتج له مبيعات سابقة، استخدم زر التعطيل بدلاً من الحذف."
           onConfirm={() => removeProduct(confirmId)}
           onCancel={() => setConfirmId(null)}
+        />
+      )}
+
+      {/* bulk delete confirm */}
+      {bulkConfirmOpen && (
+        <ConfirmDialog
+          title={`حذف ${selectedIds.size} منتج`}
+          message="المنتجات التي ليس لها بيانات مرتبطة ستُحذف نهائياً. المنتجات التي لها مبيعات أو مخزون ستُحذف محاسبياً مع الحفاظ على السجل المالي."
+          onConfirm={async () => {
+            setBulkConfirmOpen(false)
+            const ids = Array.from(selectedIds)
+            let deleted = 0
+            let archived = 0
+            const failed: string[] = []
+            for (const id of ids) {
+              try {
+                await api(`/api/products/${id}`, { method: 'DELETE' })
+                deleted++
+              } catch (e: any) {
+                const errorBody = e?.body ?? e
+                const totalRefs = errorBody?.total_references
+                if (totalRefs > 0) {
+                  try {
+                    await api(`/api/products/${id}?mode=archive`, { method: 'DELETE' })
+                    archived++
+                  } catch {
+                    const name = products.find((p) => p.id === id)?.name ?? `#${id}`
+                    failed.push(name)
+                  }
+                } else {
+                  const name = products.find((p) => p.id === id)?.name ?? `#${id}`
+                  failed.push(name)
+                }
+              }
+            }
+            setSelectedIds(new Set())
+            await loadProducts()
+            if (deleted > 0) toast.success(`تم حذف ${deleted} منتج نهائياً`)
+            if (archived > 0) toast.success(`تم حذف ${archived} منتج محاسبياً مع حفظ السجل المالي`)
+            if (failed.length > 0) toast.error(`فشل حذف: ${failed.join('، ')}`, { duration: 6000 })
+          }}
+          onCancel={() => setBulkConfirmOpen(false)}
         />
       )}
     </div>

@@ -1,0 +1,260 @@
+/**
+ * Service Worker 2026 — نظام المحل PWA
+ *
+ * Features:
+ *  ✅ Precaching (app shell + critical assets)
+ *  ✅ Network-first for API (fresh data, cache fallback)
+ *  ✅ Stale-while-revalidate for static assets (JS/CSS/images)
+ *  ✅ Cache-first for fonts + icons
+ *  ✅ Offline page fallback
+ *  ✅ Background sync (flush outbox when network returns)
+ *  ✅ Push notifications (display push from server)
+ *  ✅ Skip-waiting on install (instant activation)
+ *  ✅ Cache cleanup on activate
+ *  ✅ Navigation preload (faster page loads)
+ *  ✅ Message handler (client → SW communication)
+ *  ✅ Periodic sync (optional, for background data refresh)
+ */
+
+const CACHE_VERSION = 'shop-erp-v2'
+const OFFLINE_URL = '/offline.html'
+
+// ─── Precache list ──────────────────────────────────────────
+const PRECACHE_URLS = [
+  '/dashboard',
+  '/pos',
+  '/products',
+  '/settings',
+  '/finance',
+  '/offline.html',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
+]
+
+// ─── Install: precache app shell ─────────────────────────────
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_VERSION).then((cache) => {
+      // Cache what we can — ignore individual failures
+      return cache.addAll(PRECACHE_URLS).catch(() => {})
+    })
+  )
+  self.skipWaiting()
+})
+
+// ─── Activate: clean old caches + enable navigation preload ──
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    Promise.all([
+      // Delete old caches
+      caches.keys().then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key !== CACHE_VERSION)
+            .map((key) => caches.delete(key))
+        )
+      ),
+      // Enable navigation preload
+      self.registration.navigationPreload?.enable(),
+    ])
+  )
+  self.clients.claim()
+})
+
+// ─── Fetch handler ──────────────────────────────────────────
+self.addEventListener('fetch', (event) => {
+  const { request } = event
+
+  // Skip non-GET (POST/PUT/PATCH/DELETE → always network)
+  if (request.method !== 'GET') return
+
+  const url = new URL(request.url)
+
+  // Skip cross-origin (Paymob, Google Fonts, etc.)
+  if (url.origin !== self.location.origin) return
+
+  // ── API requests → network-first ─────────────────────────
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          // Cache a copy for offline
+          const clone = response.clone()
+          caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+          return response
+        })
+        .catch(() => {
+          // Offline → try cache, then 503
+          return caches.match(request).then((cached) => {
+            return cached || new Response(
+              JSON.stringify({ error: 'أنت غير متصل بالإنترنت' }),
+              { status: 503, headers: { 'Content-Type': 'application/json' } }
+            )
+          })
+        })
+    )
+    return
+  }
+
+  // ── Navigation → network-first + preload + offline fallback
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      (async () => {
+        try {
+          // Use navigation preload if available
+          const preload = await event.preloadResponse
+          if (preload) {
+            // Cache the preloaded response
+            const clone = preload.clone()
+            caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+            return preload
+          }
+
+          // Normal fetch
+          const response = await fetch(request)
+          const clone = response.clone()
+          caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+          return response
+        } catch {
+          // Offline → cache → offline page
+          const cached = await caches.match(request)
+          return cached || caches.match(OFFLINE_URL)
+        }
+      })()
+    )
+    return
+  }
+
+  // ── Static assets → stale-while-revalidate ───────────────
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      const fetchPromise = fetch(request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone()
+            caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+          }
+          return response
+        })
+        .catch(() => cached)
+
+      return cached || fetchPromise
+    })
+  )
+})
+
+// ─── Background Sync: flush outbox when network returns ─────
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'shop-erp-sync') {
+    event.waitUntil(
+      // Notify all clients to flush their outbox
+      self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: 'FLUSH_OUTBOX' })
+        })
+      })
+    )
+  }
+})
+
+// ─── Push notifications ──────────────────────────────────────
+self.addEventListener('push', (event) => {
+  if (!event.data) return
+
+  let data
+  try {
+    data = event.data.json()
+  } catch {
+    data = { title: 'نظام المحل', body: event.data.text() }
+  }
+
+  const title = data.title || 'نظام المحل'
+  const options = {
+    body: data.body || data.message || '',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    dir: 'rtl',
+    lang: 'ar',
+    vibrate: [100, 50, 100],
+    data: {
+      url: data.url || '/dashboard',
+    },
+    actions: data.actions || [],
+    tag: data.tag || 'shop-erp-notification',
+    renotify: data.renotify || false,
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  )
+})
+
+// ─── Notification click ──────────────────────────────────────
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+
+  const targetUrl = event.notification.data?.url || '/dashboard'
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window' }).then((clientList) => {
+      // Focus existing window if open
+      for (const client of clientList) {
+        if (client.url.includes(targetUrl) && 'focus' in client) {
+          return client.focus()
+        }
+      }
+      // Open new window
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl)
+      }
+    })
+  )
+})
+
+// ─── Message handler (client → SW) ──────────────────────────
+self.addEventListener('message', (event) => {
+  if (!event.data) return
+
+  switch (event.data.type) {
+    case 'SKIP_WAITING':
+      self.skipWaiting()
+      break
+
+    case 'PRECACHE_URLS':
+      // Precache additional URLs sent by the client
+      if (Array.isArray(event.data.urls)) {
+        caches.open(CACHE_VERSION).then((cache) => {
+          cache.addAll(event.data.urls).catch(() => {})
+        })
+      }
+      break
+
+    case 'CLEAR_CACHE':
+      caches.delete(CACHE_VERSION).then(() => {
+        event.source?.postMessage({ type: 'CACHE_CLEARED' })
+      })
+      break
+
+    case 'GET_CACHE_SIZE':
+      caches.open(CACHE_VERSION).then((cache) => {
+        cache.keys().then((keys) => {
+          event.source?.postMessage({ type: 'CACHE_SIZE', count: keys.length })
+        })
+      })
+      break
+  }
+})
+
+// ─── Periodic Sync (background data refresh) ─────────────────
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'shop-erp-refresh') {
+    event.waitUntil(
+      self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: 'PERIODIC_REFRESH' })
+        })
+      })
+    )
+  }
+})

@@ -1,6 +1,8 @@
 export function formatCurrency(amount: number | null | undefined): string {
   const n = Number(amount ?? 0)
-  const formatted = n.toLocaleString('ar-EG', {
+  // ar-EG يحوّل الصفر لـ ٠ اللي يظهر كـ bullet في الفونت الكبير
+  // en-US يعطي أرقام غربية واضحة مناسبة لتطبيق ERP
+  const formatted = n.toLocaleString('en-US', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })
@@ -9,7 +11,7 @@ export function formatCurrency(amount: number | null | undefined): string {
 
 export function formatNumber(n: number | null | undefined): string {
   const v = Number(n ?? 0)
-  return v.toLocaleString('ar-EG')
+  return v.toLocaleString('en-US')
 }
 
 export function formatDate(date: Date | string | null | undefined): string {
@@ -57,7 +59,7 @@ export function formatArabicDateTime(date: Date | string | null | undefined): st
   hours = hours % 12
   if (hours === 0) hours = 12
 
-  return `${day} ${month} ${year} - ${hours}:${minutes} ${period}`
+  return `\u200F${day} ${month} ${year} \u200F- ${hours}:${minutes} ${period}`
 }
 
 /** Same as formatArabicDateTime but without the time portion, e.g. "18 يوليو 2026". */
@@ -70,5 +72,5 @@ export function formatArabicDate(date: Date | string | null | undefined): string
   const month = ARABIC_MONTHS[d.getMonth()]
   const year = d.getFullYear()
 
-  return `${day} ${month} ${year}`
+  return `\u200F${day} ${month} ${year}`
 }

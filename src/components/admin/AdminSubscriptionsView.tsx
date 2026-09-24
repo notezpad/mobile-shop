@@ -107,9 +107,9 @@ const PERIOD_LABEL: Record<string, string> = {
 
 const METHOD_LABEL: Record<string, string> = {
   cash: 'كاش',
-  vodafone_cash: 'فودافون كاش',
+  vodafone_cash: 'محافظ إلكترونية',
   instapay: 'إنستا باي',
-  fawry: 'فوري',
+  fawry: 'محفظة إلكترونية',
   manual: 'يدوي',
   code: 'كود تفعيل',
 }
@@ -297,83 +297,167 @@ export function AdminSubscriptionsView() {
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto" dir="ltr">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10 text-center">#</TableHead>
-                    <TableHead>المحل</TableHead>
-                    <TableHead className="w-28">الباقة</TableHead>
-                    <TableHead className="w-24 text-center">الفترة</TableHead>
-                    <TableHead className="w-32">البداية</TableHead>
-                    <TableHead className="w-32">النهاية</TableHead>
-                    <TableHead className="w-28 text-center">المبلغ</TableHead>
-                    <TableHead className="w-32">طريقة الدفع</TableHead>
-                    <TableHead className="w-28 text-center">الحالة</TableHead>
-                    <TableHead className="w-32 text-center">إجراءات</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.length === 0 ? (
+            <>
+              <div className="hidden overflow-x-auto lg:block" dir="ltr">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
-                        لا توجد اشتراكات
-                      </TableCell>
+                      <TableHead className="w-10 text-center">#</TableHead>
+                      <TableHead>المحل</TableHead>
+                      <TableHead className="w-28">الباقة</TableHead>
+                      <TableHead className="w-24 text-center">الفترة</TableHead>
+                      <TableHead className="w-32">البداية</TableHead>
+                      <TableHead className="w-32">النهاية</TableHead>
+                      <TableHead className="w-28 text-center">المبلغ</TableHead>
+                      <TableHead className="w-32">طريقة الدفع</TableHead>
+                      <TableHead className="w-28 text-center">الحالة</TableHead>
+                      <TableHead className="w-32 text-center">إجراءات</TableHead>
                     </TableRow>
-                  ) : (
-                    rows.map((r, i) => (
-                      <TableRow key={r.id}>
-                        <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
-                        <TableCell className="font-medium">{r.shopName}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[10px]">{r.planName}</Badge>
-                        </TableCell>
-                        <TableCell className="text-center text-xs">{PERIOD_LABEL[r.period] ?? r.period}</TableCell>
-                        <TableCell className="text-xs">{formatShortDate(r.startDate)}</TableCell>
-                        <TableCell className="text-xs">{formatShortDate(r.endDate)}</TableCell>
-                        <TableCell className="text-center text-xs">{formatCurrency(r.amountPaid)}</TableCell>
-                        <TableCell className="text-xs">{r.paymentMethod ? (METHOD_LABEL[r.paymentMethod] ?? r.paymentMethod) : '-'}</TableCell>
-                        <TableCell className="text-center"><StatusBadge status={r.status} /></TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-8 text-success-subtle-foreground hover:text-success-subtle-foreground"
-                              title="تمديد"
-                              disabled={busyId === r.id}
-                              onClick={() => setExtendRow(r)}
-                            >
-                              <CalendarPlus className="size-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-8 text-warning-subtle-foreground hover:text-warning-subtle-foreground"
-                              title="إيقاف"
-                              disabled={busyId === r.id}
-                              onClick={() => handlePause(r)}
-                            >
-                              <Pause className="size-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-8 text-destructive hover:bg-destructive/10"
-                              title="حذف"
-                              disabled={busyId === r.id}
-                              onClick={() => setDeleteId(r.id)}
-                            >
-                              <Trash2 className="size-4" />
-                            </Button>
-                          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                          لا توجد اشتراكات
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                    ) : (
+                      rows.map((r, i) => (
+                        <TableRow key={r.id}>
+                          <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
+                          <TableCell className="font-medium">{r.shopName}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px]">{r.planName}</Badge>
+                          </TableCell>
+                          <TableCell className="text-center text-xs">{PERIOD_LABEL[r.period] ?? r.period}</TableCell>
+                          <TableCell className="text-xs">{formatShortDate(r.startDate)}</TableCell>
+                          <TableCell className="text-xs">{formatShortDate(r.endDate)}</TableCell>
+                          <TableCell className="text-center text-xs">{formatCurrency(r.amountPaid)}</TableCell>
+                          <TableCell className="text-xs">{r.paymentMethod ? (METHOD_LABEL[r.paymentMethod] ?? r.paymentMethod) : '-'}</TableCell>
+                          <TableCell className="text-center"><StatusBadge status={r.status} /></TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-8 text-success-subtle-foreground hover:text-success-subtle-foreground"
+                                title="تمديد"
+                                disabled={busyId === r.id}
+                                onClick={() => setExtendRow(r)}
+                              >
+                                <CalendarPlus className="size-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-8 text-warning-subtle-foreground hover:text-warning-subtle-foreground"
+                                title="إيقاف"
+                                disabled={busyId === r.id}
+                                onClick={() => handlePause(r)}
+                              >
+                                <Pause className="size-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-8 text-destructive hover:bg-destructive/10"
+                                title="حذف"
+                                disabled={busyId === r.id}
+                                onClick={() => setDeleteId(r.id)}
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* كروت — تظهر تحت lg */}
+              <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+                {rows.length === 0 ? (
+                  <p className="col-span-full py-8 text-center text-sm text-muted-foreground">
+                    لا توجد اشتراكات
+                  </p>
+                ) : (
+                  rows.map((r, i) => (
+                    <div key={r.id} className="rounded-lg border bg-card p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              #{i + 1}
+                            </span>
+                            <p className="truncate font-medium leading-tight">{r.shopName}</p>
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <Badge variant="outline" className="text-[10px]">{r.planName}</Badge>
+                            <span className="text-[10px] text-muted-foreground">
+                              {PERIOD_LABEL[r.period] ?? r.period}
+                            </span>
+                          </div>
+                        </div>
+                        <StatusBadge status={r.status} />
+                      </div>
+                      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-2 text-center">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">البداية</p>
+                          <p className="text-xs">{formatShortDate(r.startDate)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">النهاية</p>
+                          <p className="text-xs">{formatShortDate(r.endDate)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">المبلغ</p>
+                          <p className="text-xs font-semibold tabular-nums">
+                            {formatCurrency(r.amountPaid)}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="mt-2 text-[11px] text-muted-foreground">
+                        طريقة الدفع: {r.paymentMethod ? (METHOD_LABEL[r.paymentMethod] ?? r.paymentMethod) : '-'}
+                      </p>
+                      <div className="mt-2 flex items-center justify-end gap-1 border-t border-border/60 pt-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7 text-success-subtle-foreground hover:text-success-subtle-foreground"
+                          title="تمديد"
+                          disabled={busyId === r.id}
+                          onClick={() => setExtendRow(r)}
+                        >
+                          <CalendarPlus className="size-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7 text-warning-subtle-foreground hover:text-warning-subtle-foreground"
+                          title="إيقاف"
+                          disabled={busyId === r.id}
+                          onClick={() => handlePause(r)}
+                        >
+                          <Pause className="size-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7 text-destructive hover:bg-destructive/10"
+                          title="حذف"
+                          disabled={busyId === r.id}
+                          onClick={() => setDeleteId(r.id)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -498,7 +582,7 @@ function ExtendDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="cash">كاش</SelectItem>
-                <SelectItem value="vodafone_cash">فودافون كاش</SelectItem>
+                <SelectItem value="vodafone_cash">محافظ إلكترونية</SelectItem>
                 <SelectItem value="instapay">إنستا باي</SelectItem>
                 <SelectItem value="fawry">فوري</SelectItem>
                 <SelectItem value="manual">يدوي</SelectItem>
@@ -661,7 +745,7 @@ function AddSubscriptionDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="cash">كاش</SelectItem>
-                  <SelectItem value="vodafone_cash">فودافون كاش</SelectItem>
+                  <SelectItem value="vodafone_cash">محافظ إلكترونية</SelectItem>
                   <SelectItem value="instapay">إنستا باي</SelectItem>
                   <SelectItem value="fawry">فوري</SelectItem>
                   <SelectItem value="manual">يدوي</SelectItem>

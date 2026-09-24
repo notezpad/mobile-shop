@@ -156,7 +156,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="max-h-[60vh] overflow-auto">
+          <div className="hidden max-h-[60vh] overflow-auto lg:block">
             <Table fixed>
               <TableHeader className="sticky top-0 bg-muted/50 backdrop-blur">
                 <TableRow>
@@ -234,6 +234,97 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                 )}
               </TableBody>
             </Table>
+          </div>
+
+          {/*
+            نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
+          */}
+          <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+            {filtered.length === 0 ? (
+              <p className="col-span-full py-10 text-center text-muted-foreground">
+                <Package className="mx-auto mb-2 size-8 opacity-40" />
+                لا توجد منتجات مطابقة
+              </p>
+            ) : (
+              filtered.map(p => {
+                const out = p.quantity <= 0
+                const low = !out && p.quantity <= p.minQuantity
+                return (
+                  <div
+                    key={p.id}
+                    className={
+                      out
+                        ? 'rounded-lg border bg-destructive-subtle/50 p-3'
+                        : low
+                        ? 'rounded-lg border bg-warning-subtle/40 p-3'
+                        : 'rounded-lg border bg-card p-3'
+                    }
+                  >
+                    {/* رأس الكارت: اسم + إجراءات */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium leading-tight">{p.name}</p>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          {branchName(p.branchId) ?? 'بدون فرع'}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="size-8 p-0 text-success-subtle-foreground hover:bg-success-subtle hover:text-success-subtle-foreground"
+                          onClick={() => setAdjOpen({ product: p, type: 'in' })}
+                          title="إضافة كمية (وارد)"
+                        >
+                          <Plus className="size-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="size-8 p-0 text-destructive-subtle-foreground hover:bg-destructive-subtle hover:text-destructive-subtle-foreground"
+                          onClick={() => setAdjOpen({ product: p, type: 'out' })}
+                          disabled={p.quantity <= 0}
+                          title="خصم كمية (صادر)"
+                        >
+                          <Minus className="size-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* الباركود */}
+                    <div className="mt-2 rounded-md border bg-muted/30 py-1">
+                      <Barcode value={p.barcode} height={24} fontSize={9} fitContainer />
+                    </div>
+
+                    {/* شبكة البيانات: كمية/حد أدنى/تكلفة/سعر */}
+                    <div className="mt-3 grid grid-cols-4 gap-1 border-t border-border/60 pt-2 text-center">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">الكمية</p>
+                        {out ? (
+                          <Badge variant="destructive">نفد</Badge>
+                        ) : low ? (
+                          <Badge className="bg-warning-subtle text-warning-subtle-foreground">{p.quantity}</Badge>
+                        ) : (
+                          <Badge variant="secondary">{p.quantity}</Badge>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">الحد الأدنى</p>
+                        <p className="text-xs tabular-nums text-muted-foreground">{p.minQuantity}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">التكلفة</p>
+                        <p className="text-xs tabular-nums text-muted-foreground">{formatCurrency(p.cost)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">السعر</p>
+                        <p className="text-xs font-semibold tabular-nums">{formatCurrency(p.price)}</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            )}
           </div>
         </CardContent>
       </Card>

@@ -37,6 +37,17 @@ export async function GET(req: NextRequest) {
       { phone: { contains: search } },
     ]
   }
+  // 2026-09-17 (v2): Move plan filtering to DB-side (was JS-side after
+  // take:500). If the first 500 tenants didn't include any on the
+  // filtered plan, the result was incorrectly empty.
+  if (planCode && planCode !== 'all') {
+    where.subscriptions = {
+      some: {
+        status: 'active',
+        plan: { code: planCode },
+      },
+    }
+  }
 
   const tenants = await db.tenant.findMany({
     where,
@@ -52,9 +63,9 @@ export async function GET(req: NextRequest) {
     take: 500,
   })
 
-  let rows = tenants.map((t) => {
+  const rows = tenants.map((t) => {
     const latestSub = t.subscriptions[0]
-    const planCode = latestSub?.plan?.code ?? '-'
+    const rowPlanCode = latestSub?.plan?.code ?? '-'
     const planName = latestSub?.plan?.name ?? '-'
     const endDate = latestSub?.endDate ?? null
     return {
@@ -68,17 +79,13 @@ export async function GET(req: NextRequest) {
       createdAt: t.createdAt.toISOString(),
       lastLoginAt: t.lastLoginAt ? t.lastLoginAt.toISOString() : null,
       usersCount: t.users.length,
-      planCode,
+      planCode: rowPlanCode,
       planName,
       subscriptionEnd: endDate ? endDate.toISOString() : null,
     }
   })
 
-  // Filter by plan code if specified
-  if (planCode && planCode !== 'all') {
-    rows = rows.filter((r) => r.planCode === planCode)
-  }
-
+  // Plan filtering is now done DB-side (above), no JS filtering needed.
   return NextResponse.json({ items: rows, total: rows.length })
 }
 

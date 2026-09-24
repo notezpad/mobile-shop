@@ -46,18 +46,26 @@ export async function GET(req: NextRequest) {
     if (from) createdAt.gte = localDateToUTC(from, '00:00:00.000', tzOffset)
     if (to)   createdAt.lte = localDateToUTC(to,   '23:59:59.999', tzOffset)
 
-    const sales = await db.sale.findMany({
-      where: {
-        tenantId: session.tenantId,
-        ...(from || to ? { createdAt } : {}),
-      },
-      orderBy: { id: 'desc' },
-      include: {
-        items: true,
-        customer: true,
-      },
-      ...(from || to ? {} : { take: 500 }),
-    })
+    const page  = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
+    const limit = Math.min(200, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)))
+    const skip  = (page - 1) * limit
+
+    const where = {
+      tenantId: session.tenantId,
+      ...(from || to ? { createdAt } : {}),
+    }
+
+    const [sales, total] = await Promise.all([
+      db.sale.findMany({
+        where,
+        orderBy: { id: 'desc' },
+        include: { items: true, customer: true },
+        skip,
+        take: limit,
+      }),
+      db.sale.count({ where }),
+    ])
+
     const userIds = [...new Set(sales.map((s) => s.userId).filter(Boolean))] as string[]
     const users = userIds.length
       ? await db.user.findMany({
@@ -70,7 +78,13 @@ export async function GET(req: NextRequest) {
       ...s,
       userName: s.userId ? (userNameById.get(s.userId) ?? null) : null,
     }))
-    return NextResponse.json(result)
+    return NextResponse.json({
+      data: result,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    })
   })
 }
 

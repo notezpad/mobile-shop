@@ -93,6 +93,16 @@ export async function POST(req: NextRequest) {
   const endDate = computeEndDate(startDate, period, plan.trialDays)
   const amountPaid = computeAmount(plan, period, amountPaidRaw)
 
+  // 2026-09-17 (v2): Cancel any existing active subscriptions for this
+  // tenant before creating a new one. Otherwise the tenant ends up with
+  // multiple active subscriptions — causing MRR double-counting in stats,
+  // confusion in /api/subscription (which returns the latest one), and
+  // incorrect activeSubscriptions count in the dashboard.
+  await db.subscription.updateMany({
+    where: { tenantId, status: 'active' },
+    data: { status: 'cancelled' },
+  })
+
   const sub = await db.subscription.create({
     data: {
       tenantId,
