@@ -306,11 +306,15 @@ export async function cleanupDuplicateNotifications(
   tenantId: string
 ): Promise<number> {
   try {
-    // Get all notifications for this tenant, grouped by (type, message)
+    // Get all notifications for this tenant, grouped by (type, message).
+    // PERF FIX: cap at 500 rows so the Worker never loads thousands of old
+    // duplicates into memory. Since we sort by createdAt desc, we keep the
+    // most-recent 500 notifications. Any older ones are safe to delete anyway.
     const allNotifs = await db.notification.findMany({
       where: { tenantId },
       select: { id: true, type: true, message: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
+      take: 500,
     })
 
     // Group by (type + message)

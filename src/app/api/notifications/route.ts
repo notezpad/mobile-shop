@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { db, withDb } from '@/lib/db'
 import { requireAuthIgnoreSubscription, authErrorResponse } from '@/lib/auth'
 import {
@@ -57,32 +56,13 @@ export async function GET(req: NextRequest) {
     // via in-memory `shouldRunCheck()` AND dedup (7-day window by message).
     // Even if called every 30 seconds, the checks will actually run at
     // most once every 5 minutes per tenant.
-    //
-    // PERF FIX (2026-09-25): the proactive checks + duplicate cleanup used to
-    // run on EVERY poll. The in-memory cooldown inside them never works on the
-    // edge runtime (fresh isolate per request), so every single poll executed
-    // several extra queries — one of the main reasons the app crawled and threw
-    // random 503s. A `notif_ck` cookie now caps them at once per 10 minutes per
-    // browser, which is plenty for stock/subscription alerts.
-    const cookieStore = await cookies()
-    const checksRanRecently = cookieStore.get('notif_ck')?.value === session.tenantId
-
-    if (!checksRanRecently) {
-      cookieStore.set('notif_ck', session.tenantId, {
-        httpOnly: true,
-        sameSite: 'lax',
-        maxAge: 600, // 10 minutes
-        path: '/',
-      })
-
-      try {
-        await Promise.allSettled([
-          checkLowStockAndNotify(db, session.tenantId),
-          checkExpiringSubscriptions(db, session.tenantId),
-        ])
-      } catch (e: any) {
-        if (debug) console.error('[notifications GET] checks failed:', e?.message ?? e)
-      }
+    try {
+      await Promise.allSettled([
+        checkLowStockAndNotify(db, session.tenantId),
+        checkExpiringSubscriptions(db, session.tenantId),
+      ])
+    } catch (e: any) {
+      if (debug) console.error('[notifications GET] checks failed:', e?.message ?? e)
     }
 
     // 🧹 2026-09-15 (v3): Run cleanup on every poll.
@@ -90,15 +70,13 @@ export async function GET(req: NextRequest) {
     // exist) and is the right call given that serverless isolates don't
     // preserve `globalThis` flags between requests. The cleanup also
     // handles any legacy duplicates from the v2 broken dedup.
-    if (!checksRanRecently) {
-      try {
-        const deleted = await cleanupDuplicateNotifications(db, session.tenantId)
-        if (deleted > 0 && debug) {
-          console.log(`[notifications GET] cleaned up ${deleted} duplicate notifications`)
-        }
-      } catch (e: any) {
-        if (debug) console.error('[notifications GET] cleanup failed:', e?.message ?? e)
+    try {
+      const deleted = await cleanupDuplicateNotifications(db, session.tenantId)
+      if (deleted > 0 && debug) {
+        console.log(`[notifications GET] cleaned up ${deleted} duplicate notifications`)
       }
+    } catch (e: any) {
+      if (debug) console.error('[notifications GET] cleanup failed:', e?.message ?? e)
     }
 
     // 🛡️ Wrap the actual list fetch in try/catch — if the Notification table
@@ -119,13 +97,9 @@ export async function GET(req: NextRequest) {
         take: 50,
       })
 
-      // PERF FIX (2026-09-25): when we already have the full (unread-only)
-      // list there is no need for a second COUNT round-trip.
-      unreadCount = onlyUnread
-        ? notifications.length
-        : await db.notification.count({
-            where: { tenantId: session.tenantId, isRead: false },
-          })
+      unreadCount = await db.notification.count({
+        where: { tenantId: session.tenantId, isRead: false },
+      })
     } catch (e: any) {
       dbError = e?.message ?? String(e)
       // Detect "table does not exist" errors and surface a friendly message
