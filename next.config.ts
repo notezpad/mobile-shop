@@ -1,30 +1,40 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
   typescript: {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
-  // These packages ship workerd-specific code paths (conditional "exports"
-  // in their package.json). Next.js's default bundler (esbuild, via
-  // OpenNext) doesn't resolve those correctly and fails with
-  // `Could not resolve "pg-cloudflare"`. Marking them external tells
-  // Next.js to leave them as real require()/import calls resolved at
-  // runtime by the Workers runtime instead of trying to bundle them.
-  // See: https://opennext.js.org/cloudflare/howtos/workerd
+
+  // ── Server-external packages ─────────────────────────────────────────────
+  // Packages listed here are NOT bundled into the Worker JS file.
+  // Instead, they are resolved at runtime by the Workers runtime.
+  //
+  // Rule: any package that (a) ships native/Workers-specific code,
+  // (b) is client-only and should never run on the server,
+  // or (c) is very large and would bloat the Worker bundle — goes here.
   serverExternalPackages: [
+    // ── Prisma / Postgres ── (Workers-specific code paths)
     "@prisma/client",
     ".prisma/client",
     "@prisma/adapter-pg",
     "pg",
     "pg-cloudflare",
+
+    // ── Heavy editor (client-only, ~5 MB) ──
+    // Never runs on the server; keeping it external prevents it from being
+    // bundled into the Worker and exceeding resource limits.
+    "@mdxeditor/editor",
+
+    // ── Other large client-only packages ──
+    "react-syntax-highlighter",
+    "xlsx-js-style",
+    "jsbarcode",
   ],
 };
 
 export default nextConfig;
 
-// Enables `getCloudflareContext()` (bindings, env vars) during `next dev`,
-// so local development matches the Cloudflare Workers runtime.
+// Enables `getCloudflareContext()` during `next dev`.
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 initOpenNextCloudflareForDev();

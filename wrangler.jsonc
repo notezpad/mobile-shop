@@ -2,27 +2,15 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "nezampos",
   "main": ".open-next/worker.js",
-  // Fixes "Uncaught ReferenceError: __name is not defined" in the browser.
-  // Wrangler's esbuild step enables `keepNames` by default; next-themes
-  // injects an inline <script> into the page that gets keepNames-wrapped,
-  // and the __name() helper it calls isn't defined in that inline-script
-  // scope. See: https://opennext.js.org/cloudflare/howtos/keep_names
   "keep_names": false,
-  // Prevents `wrangler deploy`/CI builds from wiping out env vars & secrets
-  // added manually via the Cloudflare dashboard (like DATABASE_URL here).
   "keep_vars": true,
-  "compatibility_date": "2025-01-01",
+  // Updated to 2025-04-01: enables nodejs_compat_populate_process_env by
+  // default and includes the latest Workers runtime fixes.
+  "compatibility_date": "2025-04-01",
   "compatibility_flags": [
-    // Required: gives Prisma's pg adapter access to Node APIs (Buffer, net, etc.)
     "nodejs_compat",
-    // Required: lets `pg` open real TCP connections to Supabase Postgres
-    "enable_nodejs_process_v2",
-    // CRITICAL: without this, process.env stays EMPTY even though secrets
-    // are set correctly in the dashboard — this flag is what actually
-    // copies Worker vars/secrets into process.env at runtime. It's on by
-    // default only for compatibility_date >= 2025-04-01, and our is
-    // 2025-01-01, so it must be listed explicitly here.
-    "nodejs_compat_populate_process_env"
+    "enable_nodejs_process_v2"
+    // nodejs_compat_populate_process_env is now ON by default for dates >= 2025-04-01
   ],
   "assets": {
     "directory": ".open-next/assets",
@@ -31,11 +19,6 @@
   "observability": {
     "enabled": true
   },
-  // Environment variables that are NOT secret can go here.
-  // Put DATABASE_URL, DIRECT_URL and JWT_SECRET in Cloudflare secrets instead:
-  //   wrangler secret put DATABASE_URL
-  //   wrangler secret put DIRECT_URL
-  //   wrangler secret put JWT_SECRET
   "vars": {
     "NODE_ENV": "production"
   }
