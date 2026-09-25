@@ -120,7 +120,7 @@ function getPasswordStrength(pwd: string): { score: 0 | 1 | 2 | 3; label: string
 
 type SignupError = { field: string; message: string }
 
-export default function SignupPage() {
+function SignupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [selectedPlan, setSelectedPlan] = React.useState<string>(
@@ -546,5 +546,19 @@ export default function SignupPage() {
         </div>
       </div>
     </main>
+  )
+}
+
+export default function SignupPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-[#0a0a0f]">
+          <Loader2 className="size-8 animate-spin text-white/50" />
+        </div>
+      }
+    >
+      <SignupContent />
+    </React.Suspense>
   )
 }
