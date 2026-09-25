@@ -70,7 +70,14 @@ export async function GET(req: Request) {
         _sum: { amount: true },
       }),
       // FIXED: single products fetch — used for lowStockCount, stockValue, AND lowStockAlerts
-      db.product.findMany({ where: tenantFilter }),
+      // PERF FIX (2026-09-25): only the 5 columns the dashboard actually uses.
+      // Fetching every column of every product moved megabytes per request and
+      // was a main reason the dashboard felt frozen (and sometimes timed out
+      // with a 503 on large shops).
+      db.product.findMany({
+        where: tenantFilter,
+        select: { id: true, name: true, quantity: true, minQuantity: true, cost: true, price: true },
+      }),
       db.maintenanceOrder.count({
         where: { ...tenantFilter, status: { in: ['مستلم', 'قيد العمل', 'مكتمل'] } },
       }),

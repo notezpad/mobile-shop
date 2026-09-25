@@ -167,10 +167,25 @@ export function NotificationBell() {
     }
   }, [])
 
+  // PERF FIX (2026-09-25): polling every 30s meant 120 extra API calls/hour
+  // per open tab, each one opening a DB connection — a major cause of the
+  // slowness and the random 503s. Now: every 3 minutes, and only while the
+  // tab is actually visible.
   React.useEffect(() => {
-    load()
-    const id = setInterval(load, 30000)
-    return () => clearInterval(id)
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      void load()
+    }
+    tick()
+    const id = setInterval(tick, 180000)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void load()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [load])
 
   // ─── Click-outside to close ───

@@ -78,6 +78,14 @@ function shouldRunCheck(tenantId: string, checkName: string): boolean {
 }
 
 /**
+ * PERF FIX (2026-09-25): the in-memory limiter above cannot work on the edge
+ * runtime — every request may land in a fresh isolate, so the map is empty and
+ * the checks ran on EVERY poll. The notifications route now adds a cookie-based
+ * cooldown on top of it (see `runProactiveChecks` there), and the low-stock
+ * check below no longer runs one query per low-stock product.
+ */
+
+/**
  * Check for low-stock products and create notifications.
  *
  * 🛡️ 2026-09-15 (v3) fixes:
@@ -114,33 +122,39 @@ export async function checkLowStockAndNotify(db: PrismaClient, tenantId: string)
   // Dedup window — for suppressing duplicate notifications
   const dedupSince = new Date(Date.now() - DEDUP_WINDOW_MS)
 
-  for (const p of trulyLow) {
-    try {
-      // 🛡️ DB dedup: check for ANY notification (read OR unread) whose
-      // MESSAGE contains the product name within the dedup window.
-      // We use `message` (not `title`) because the message uniquely
-      // identifies the alert per-product (`المنتج "${p.name}" وصل...`).
-      const existing = await db.notification.findFirst({
-        where: {
-          tenantId,
-          type: 'low_stock',
-          message: { contains: p.name },
-          createdAt: { gte: dedupSince },
-        },
-        select: { id: true },
-      })
-      if (existing) continue
+  // PERF FIX (2026-09-25): previously this ran ONE dedup query per low-stock
+  // product (a shop with 40 low-stock items = 40 sequential round-trips inside
+  // a single request → seconds of delay and frequent 503s). Now: one query for
+  // all recent low_stock messages, dedup in memory, then one bulk insert.
+  let recentMessages: string[] = []
+  try {
+    const recent = await db.notification.findMany({
+      where: { tenantId, type: 'low_stock', createdAt: { gte: dedupSince } },
+      select: { message: true },
+    })
+    recentMessages = recent.map((r) => r.message ?? '')
+  } catch (e) {
+    console.error('[checkLowStockAndNotify] could not read recent notifications:', e)
+    return
+  }
 
-      await createNotification(db, tenantId, {
-        type: 'low_stock',
-        title: `مخزون منخفض — ${p.name}`,
-        message: `المنتج "${p.name}" وصل للحد الأدنى (${p.quantity} متبقي)`,
-        link: '/products',
-      })
-      console.log(`[checkLowStockAndNotify] created notification for product "${p.name}"`)
-    } catch (e) {
-      console.error(`[checkLowStockAndNotify] failed for product "${p.name}":`, e)
-    }
+  const toCreate = trulyLow
+    .filter((p) => !recentMessages.some((m) => m.includes(p.name)))
+    .map((p) => ({
+      tenantId,
+      userId: null,
+      type: 'low_stock',
+      title: `مخزون منخفض — ${p.name}`,
+      message: `المنتج "${p.name}" وصل للحد الأدنى (${p.quantity} متبقي)`,
+      link: '/products',
+    }))
+
+  if (toCreate.length === 0) return
+
+  try {
+    await db.notification.createMany({ data: toCreate })
+  } catch (e) {
+    console.error('[checkLowStockAndNotify] bulk insert failed:', e)
   }
 }
 

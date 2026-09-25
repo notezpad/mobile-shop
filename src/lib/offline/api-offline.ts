@@ -20,6 +20,68 @@
 
 import { idb, idbAvailable, onOutboxChange, type OutboxEntry } from './idb'
 
+/**
+ * PERF / RELIABILITY FIX (2026-09-25)
+ *
+ * The app showed random red "فشل 500 / فشل 503" errors. Those statuses come
+ * from the edge runtime when a database connection cannot be opened in time —
+ * they are transient. Two safeguards are added here:
+ *
+ *  1. fetchWithRetry: retries GET requests up to 2 extra times with a short
+ *     backoff on 500/502/503/504 and on network errors, and aborts a request
+ *     that hangs longer than 20s instead of leaving the page spinning.
+ *  2. in-flight de-duplication: identical concurrent GETs share one request,
+ *     so a page that mounts several widgets pointing at the same endpoint no
+ *     longer multiplies server load.
+ */
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504])
+const REQUEST_TIMEOUT_MS = 20000
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  retries: number,
+  signal?: AbortSignal,
+): Promise<Response> {
+  let lastError: unknown = null
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController()
+    const onAbort = () => controller.abort()
+    if (signal) {
+      if (signal.aborted) controller.abort()
+      else signal.addEventListener('abort', onAbort, { once: true })
+    }
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+
+    try {
+      const res = await fetch(url, { ...init, signal: controller.signal })
+      if (RETRYABLE_STATUS.has(res.status) && attempt < retries) {
+        await sleep(400 * (attempt + 1))
+        continue
+      }
+      return res
+    } catch (err) {
+      lastError = err
+      // A caller-triggered abort must not be retried.
+      if (signal?.aborted) throw err
+      if (attempt >= retries) throw err
+      await sleep(400 * (attempt + 1))
+    } finally {
+      clearTimeout(timer)
+      if (signal) signal.removeEventListener('abort', onAbort)
+    }
+  }
+
+  throw lastError ?? new Error('طلب فاشل')
+}
+
+const inFlightGets = new Map<string, Promise<any>>()
+
 export function isOnline(): boolean {
   return typeof navigator === 'undefined' ? true : navigator.onLine !== false
 }
@@ -75,12 +137,18 @@ export async function offlineFetch<T = any>(
   // ── Write operations ──────────────────────────────────
   if (isWrite) {
     try {
-      const res = await fetch(url, {
-        method,
-        headers: options?.body !== undefined ? { 'Content-Type': 'application/json' } : {},
-        body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
-        signal: options?.signal,
-      })
+      // Writes are never retried automatically (that could duplicate a sale),
+      // but they do get the 20s timeout so the UI cannot hang forever.
+      const res = await fetchWithRetry(
+        url,
+        {
+          method,
+          headers: options?.body !== undefined ? { 'Content-Type': 'application/json' } : {},
+          body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
+        },
+        0,
+        options?.signal,
+      )
       const text = await res.text()
       let data: any = null
       if (text) {
@@ -124,13 +192,30 @@ export async function offlineFetch<T = any>(
   }
 
   // ── GET operations ───────────────────────────────────
-  // Step 1: Try fetching from server
+  // De-duplicate identical concurrent GETs.
+  const pending = inFlightGets.get(url)
+  if (pending) return pending as Promise<T>
+  const request = runGet<T>(url, options)
+  inFlightGets.set(url, request)
   try {
-    const res = await fetch(url, {
-      method: 'GET',
-      cache: 'default',
-      signal: options?.signal,
-    })
+    return await request
+  } finally {
+    inFlightGets.delete(url)
+  }
+}
+
+async function runGet<T>(
+  url: string,
+  options?: { method?: string; body?: any; signal?: AbortSignal },
+): Promise<T> {
+  // Step 1: Try fetching from server (with retry on transient 5xx)
+  try {
+    const res = await fetchWithRetry(
+      url,
+      { method: 'GET', cache: 'default' },
+      2,
+      options?.signal,
+    )
     const text = await res.text()
     let data: any = null
     if (text) {

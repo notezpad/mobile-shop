@@ -151,10 +151,12 @@ export function startSyncEngine(): () => void {
   // Initial sync after 2 seconds (let page render first)
   const timeoutId = setTimeout(() => void fullSync(), 2000)
 
-  // Periodic sync every 2 minutes
+  // PERF FIX (2026-09-25): sync every 5 minutes instead of 2, and never while
+  // the tab is in the background — background syncs piled up on the server.
   const intervalId = setInterval(() => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
     if (isOnline()) void fullSync()
-  }, 2 * 60 * 1000)
+  }, 5 * 60 * 1000)
 
   return () => {
     window.removeEventListener('online', onOnline)

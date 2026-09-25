@@ -17,6 +17,18 @@
   "observability": {
     "enabled": true
   },
+  // PERF FIX (2026-09-25): Smart Placement runs the Worker close to the
+  // database instead of close to the visitor. Every page does several DB
+  // round-trips, so this alone removes a large part of the slowness.
+  "placement": {
+    "mode": "smart"
+  },
+  // Recommended: create a Hyperdrive config for the same Postgres database and
+  // paste its id below (see HYPERDRIVE_SETUP.md). The code picks it up
+  // automatically and falls back to DATABASE_URL when it is absent.
+  // "hyperdrive": [
+  //   { "binding": "HYPERDRIVE", "id": "<your-hyperdrive-id>" }
+  // ],
   "vars": {
     "NODE_ENV": "production"
   }
