@@ -137,19 +137,21 @@ export async function offlineFetch<T = any>(
       try { data = JSON.parse(text) } catch { data = text }
     }
     if (!res.ok) {
-      if (res.status >= 500) {
-        // Server error → try cached
-        const cached = await idb.getCached<T>(url)
-        if (cached) return cached.data
-      }
       const msg = (data && typeof data === 'object' && (data.error || data.message)) || `طلب فاشل (${res.status})`
-      throw new Error(typeof msg === 'string' ? msg : 'طلب فاشل')
+      const err = new Error(typeof msg === 'string' ? msg : 'طلب فاشل') as Error & { status?: number }
+      err.status = res.status
+      throw err
     }
     // Success → cache + return
     await idb.setCached(url, data)
     return data as T
   } catch (err: any) {
-    // Step 2: fetch failed → try cached response
+    // 4xx client errors (401 session expired, 403 forbidden, 404 not found)
+    // must propagate immediately — falling back to stale cache would show
+    // wrong data and hide the real problem (e.g. "please login again").
+    if (err?.status && err.status >= 400 && err.status < 500) throw err
+
+    // Step 2: network error or 5xx → try cached response
     const cached = await idb.getCached<T>(url)
     if (cached) return cached.data
 
@@ -159,7 +161,10 @@ export async function offlineFetch<T = any>(
       if (localResults) return localResults
     }
 
-    // Step 4: No cache, no local data → friendly error
+    // Step 4: No cache, no local data
+    // If this was a server error (5xx) re-throw its message, otherwise
+    // show the generic offline message.
+    if (err?.status && err.status >= 500) throw err
     throw new Error('لا توجد بيانات محفوظة — تحتاج اتصال بالإنترنت لتحميل البيانات لأول مرة')
   }
 }
