@@ -14,7 +14,7 @@ function parseArr(raw: string | null | undefined): string[] | null {
   return null
 }
 
-export async function GET() {
+async function __GET() {
   let session
   try {
     // 🛡️ 2026-09-21: Use requireAuthIgnoreSubscription instead of requireAuth.
@@ -111,4 +111,8 @@ export async function GET() {
   // deploy, leading to confusion ("I deployed but nothing changed").
   res.headers.set('Cache-Control', 'private, max-age=5, stale-while-revalidate=10')
   return res
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
 }

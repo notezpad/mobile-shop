@@ -4,7 +4,7 @@ import { requireSuperAdmin, authErrorResponse } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-export async function DELETE(
+async function __DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -34,4 +34,8 @@ export async function DELETE(
 
   await db.activationCode.delete({ where: { id: codeId } })
   return NextResponse.json({ ok: true })
+}
+
+export async function DELETE(...args: Parameters<typeof __DELETE>) {
+  return withDb(() => __DELETE(...args))
 }

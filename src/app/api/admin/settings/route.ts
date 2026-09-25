@@ -21,7 +21,7 @@ const DEFAULTS: Record<string, string> = {
   whatsappUrl: '',
 }
 
-export async function GET() {
+async function __GET() {
   try {
     await requireSuperAdmin()
   } catch (e) {
@@ -34,7 +34,7 @@ export async function GET() {
   return NextResponse.json(map)
 }
 
-export async function PUT(req: NextRequest) {
+async function __PUT(req: NextRequest) {
   try {
     await requireSuperAdmin()
   } catch (e) {
@@ -84,4 +84,11 @@ export async function PUT(req: NextRequest) {
   const map: Record<string, string> = { ...DEFAULTS }
   for (const r of rows) map[r.key] = r.value
   return NextResponse.json({ ok: true, settings: map })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function PUT(...args: Parameters<typeof __PUT>) {
+  return withDb(() => __PUT(...args))
 }

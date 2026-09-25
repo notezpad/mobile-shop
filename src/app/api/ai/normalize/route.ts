@@ -1,3 +1,4 @@
+import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { extractAttributesFromText } from '@/lib/arabic-dictionary'
@@ -35,7 +36,7 @@ export const dynamic = 'force-dynamic'
  *   2. Pre-fill the product form fields based on the dictionary lookup
  *   3. Show the user the canonical form so they can confirm
  */
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -98,4 +99,8 @@ export async function POST(req: NextRequest) {
         ? '⚠️ الـ confidence منخفض — ممكن النص مش في الـ dictionary. لو الـ AI assistant شغّال، اعتمد على الـ LLM output.'
         : '✓ تم استخراج الـ attributes بنجاح من الـ dictionary.',
   })
+}
+
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

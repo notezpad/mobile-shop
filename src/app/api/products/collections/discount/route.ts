@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
  * POST /api/products/collections/discount
  * Body: { collection: string, percent: number }  // percent 0..90
  */
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   let session
   try {
     session = await requireAdmin()
@@ -54,4 +54,8 @@ export async function POST(req: NextRequest) {
   )
 
   return NextResponse.json({ ok: true, updated: products.length, collection, percent })
+}
+
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

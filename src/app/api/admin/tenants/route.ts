@@ -14,7 +14,7 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   try {
     await requireSuperAdmin()
   } catch (e) {
@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ items: rows, total: rows.length })
 }
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   try {
     await requireSuperAdmin()
   } catch (e) {
@@ -184,4 +184,11 @@ export async function POST(req: NextRequest) {
       password,
     },
   })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

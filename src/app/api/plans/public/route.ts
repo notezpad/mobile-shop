@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic'
  *     plan on signup, so a generic "trial" plan card is redundant.
  *   - Inactive plans are also hidden (isActive = false).
  */
-export async function GET() {
+async function __GET() {
   try {
     const plans = await db.plan.findMany({
       where: {
@@ -65,4 +65,8 @@ export async function GET() {
       { status: 500 }
     )
   }
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
 }

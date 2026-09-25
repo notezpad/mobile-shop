@@ -4,7 +4,7 @@ import { requireAuth, authErrorResponse } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(
+async function __GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -61,7 +61,7 @@ export async function GET(
  *         decremented by the unpaid credit portion AFTER all payments
  *         (i.e., `max(0, sale.total - totalPaid)`).
  */
-export async function DELETE(
+async function __DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -243,4 +243,11 @@ export async function DELETE(
       customer_credit_reversed: unpaidCredit,
     },
   })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function DELETE(...args: Parameters<typeof __DELETE>) {
+  return withDb(() => __DELETE(...args))
 }

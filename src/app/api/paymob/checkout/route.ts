@@ -1,3 +1,4 @@
+import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
@@ -5,7 +6,7 @@ import { createPaymobIntention, toCents } from '@/lib/paymob'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   // ── 1. Auth ────────────────────────────────────────────────────────
   let session
   try {
@@ -127,4 +128,8 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

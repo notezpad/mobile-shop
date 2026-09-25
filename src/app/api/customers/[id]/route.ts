@@ -4,7 +4,7 @@ import { requireAuth, authErrorResponse } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(
+async function __GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -89,7 +89,7 @@ export async function GET(
   })
 }
 
-export async function PUT(
+async function __PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -128,7 +128,7 @@ export async function PUT(
   return NextResponse.json(updated)
 }
 
-export async function DELETE(
+async function __DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -158,4 +158,14 @@ export async function DELETE(
       { status: 400 }
     )
   }
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function PUT(...args: Parameters<typeof __PUT>) {
+  return withDb(() => __PUT(...args))
+}
+export async function DELETE(...args: Parameters<typeof __DELETE>) {
+  return withDb(() => __DELETE(...args))
 }

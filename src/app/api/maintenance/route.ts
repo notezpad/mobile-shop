@@ -5,7 +5,7 @@ import { requireModule, featureErrorResponse } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+async function __GET() {
   let session
   try {
     session = await requireAuth()
@@ -25,7 +25,7 @@ export async function GET() {
   return NextResponse.json(orders)
 }
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -56,4 +56,11 @@ export async function POST(req: NextRequest) {
     },
   })
   return NextResponse.json(created, { status: 201 })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

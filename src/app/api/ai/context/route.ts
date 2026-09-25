@@ -1,3 +1,4 @@
+import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { buildAIContext, type DictCategory } from '@/lib/arabic-dictionary'
@@ -26,7 +27,7 @@ export const dynamic = 'force-dynamic'
  * The AI assistant uses this to know the dialect → canonical mapping so
  * it can normalize the user's input before storing it.
  */
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -53,4 +54,8 @@ export async function GET(req: NextRequest) {
     categories: categories ?? 'all',
     context: contextText,
   })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
 }

@@ -1,3 +1,4 @@
+import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 
@@ -17,7 +18,7 @@ const ALLOWED_TYPES = new Set([
   'image/gif',
 ])
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   try {
     await requireAuth()
   } catch (e) {
@@ -59,4 +60,8 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'فشل معالجة الصورة' }, { status: 500 })
   }
+}
+
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

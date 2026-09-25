@@ -3,7 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 export const dynamic = 'force-dynamic'
 
-export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+async function __POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   let s
   try { s = await requireAuth() } catch (e) {
     const err = authErrorResponse(e); return NextResponse.json(err?.body,{status:err?.status})
@@ -29,4 +29,8 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     await tx.stocktake.update({ where: { id: sid }, data: { status: 'committed', committedAt: new Date() } })
   })
   return NextResponse.json({ ok: true })
+}
+
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

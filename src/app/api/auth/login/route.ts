@@ -4,7 +4,7 @@ import { verifyPassword, createSession } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null)
     if (!body || typeof body !== 'object') {
@@ -89,4 +89,8 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

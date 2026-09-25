@@ -10,7 +10,7 @@ function ymd(d: Date) {
   return `${d.getFullYear()}-${x(d.getMonth() + 1)}-${x(d.getDate())}`
 }
 
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -306,4 +306,8 @@ export async function GET(req: NextRequest) {
     totalPurchases,
     purchasesCount,
   })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
 }

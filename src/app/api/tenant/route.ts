@@ -8,7 +8,7 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+async function __GET() {
   let session
   try {
     // 🛡️ 2026-09-21: Use requireAuthIgnoreSubscription instead of requireAuth.
@@ -48,7 +48,7 @@ export async function GET() {
   return res
 }
 
-export async function PUT(req: NextRequest) {
+async function __PUT(req: NextRequest) {
   let session
   try {
     session = await requireAdmin()
@@ -101,4 +101,11 @@ export async function PUT(req: NextRequest) {
     },
   })
   return NextResponse.json(updated)
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function PUT(...args: Parameters<typeof __PUT>) {
+  return withDb(() => __PUT(...args))
 }

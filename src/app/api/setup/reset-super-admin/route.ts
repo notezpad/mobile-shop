@@ -1,3 +1,4 @@
+import { withDb } from '@/lib/db'
 /**
  * ⚠️ ملف مؤقت — احذفه فور ما تسجل دخول بنجاح
  * امسح المجلد كله: src/app/api/setup/reset-super-admin/
@@ -13,7 +14,7 @@ const NEW_PASSWORD = '246810'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+async function __GET() {
   try {
     const hashed = await bcrypt.hash(NEW_PASSWORD, 10)
 
@@ -53,4 +54,8 @@ export async function GET() {
   } finally {
     await db.$disconnect()
   }
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
 }

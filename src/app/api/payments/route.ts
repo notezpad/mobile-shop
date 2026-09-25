@@ -14,7 +14,7 @@ const METHOD_LABELS: Record<string, string> = {
   fawry: 'محفظة إلكترونية',
 }
 
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
  * Bug #22 fix: CashEntry.method column is now populated so the drawer
  *   aggregation can split by method.
  */
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -226,4 +226,11 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json(created, { status: 201 })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

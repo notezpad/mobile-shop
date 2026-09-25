@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
  * ولسه مش مرتبطة بأي أمر شراء سابق — دي المرشحة إنها "منتجات فاتورة النهاردة"
  * اللي لسه محتاجة تتحط في سلة أمر شراء.
  */
-export async function GET() {
+async function __GET() {
   let session
   try {
     session = await requireAuth()
@@ -44,4 +44,8 @@ export async function GET() {
   })
 
   return NextResponse.json(products)
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
 }

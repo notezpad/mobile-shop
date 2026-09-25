@@ -1,3 +1,4 @@
+import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { paymobVerifyHmacAsync } from '@/lib/paymob'
@@ -21,7 +22,7 @@ export const dynamic = 'force-dynamic'
  *
  * Body is form-urlencoded (Paymob default). We read it as URLSearchParams.
  */
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   const hmacSecret = readEnv('PAYMOB_HMAC_SECRET')
   if (!hmacSecret) {
     console.error('[paymob/webhook] PAYMOB_HMAC_SECRET not configured')
@@ -166,9 +167,16 @@ export async function POST(req: NextRequest) {
 }
 
 // GET is here only for testing — Paymob always uses POST for the webhook.
-export async function GET() {
+async function __GET() {
   return NextResponse.json({
     ok: true,
     message: 'Paymob webhook endpoint. Configure this URL in your Paymob dashboard.',
   })
+}
+
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
+}
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
 }

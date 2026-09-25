@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic'
  *   batchLabel       — filter by batch label (exact match)
  *   search           — partial match on code or notes
  */
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   try {
     await requireSuperAdmin()
   } catch (e) {
@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
  *   assignedTenantId — optional, pre-assign code to a specific tenant
  *   batchLabel       — optional, grouping label
  */
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   try {
     await requireSuperAdmin()
   } catch (e) {
@@ -200,4 +200,11 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, codes: created, count: created.length })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

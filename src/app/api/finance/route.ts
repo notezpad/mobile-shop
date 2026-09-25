@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 const METHODS = new Set(['vodafone_cash', 'instapay', 'fawry'])
 const KINDS = new Set(['deposit', 'withdraw'])
 
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(result)
 }
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -160,4 +160,11 @@ export async function POST(req: NextRequest) {
     }
   })
   return NextResponse.json(tx, { status: 201 })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

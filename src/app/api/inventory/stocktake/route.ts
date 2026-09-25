@@ -5,7 +5,7 @@ import { requireModule, featureErrorResponse } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+async function __GET() {
   let s
   try { s = await requireAuth() } catch (e) {
     const err = authErrorResponse(e); return NextResponse.json(err?.body,{status:err?.status})
@@ -40,7 +40,7 @@ export async function GET() {
   return NextResponse.json(result)
 }
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   let s
   try { s = await requireAuth() } catch (e) {
     const err = authErrorResponse(e); return NextResponse.json(err?.body,{status:err?.status})
@@ -102,4 +102,11 @@ export async function POST(req: NextRequest) {
     return st
   })
   return NextResponse.json(created, { status: 201 })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

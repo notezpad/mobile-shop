@@ -11,7 +11,7 @@ async function loadTenantProduct(tenantId: string, productId: number) {
   return p
 }
 
-export async function GET(
+async function __GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -50,7 +50,7 @@ export async function GET(
   return NextResponse.json(units)
 }
 
-export async function POST(
+async function __POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -109,4 +109,11 @@ export async function POST(
     }
     return NextResponse.json({ error: 'فشل إنشاء الوحدة' }, { status: 500 })
   }
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

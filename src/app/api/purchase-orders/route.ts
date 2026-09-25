@@ -17,7 +17,7 @@ async function nextOrderNo(tenantId: string): Promise<string> {
   return `PO-${year}-${seq}`
 }
 
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(result)
 }
 
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -212,4 +212,11 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json(order, { status: 201 })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

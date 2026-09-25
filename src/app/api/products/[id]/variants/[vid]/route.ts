@@ -14,7 +14,7 @@ async function loadOwned(tenantId: string, pid: number, vid: number) {
   return v
 }
 
-export async function PUT(
+async function __PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; vid: string }> },
 ) {
@@ -55,7 +55,7 @@ export async function PUT(
   }
 }
 
-export async function DELETE(
+async function __DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; vid: string }> },
 ) {
@@ -77,4 +77,11 @@ export async function DELETE(
   await db.productVariant.delete({ where: { id: vId } })
   await syncProductQuantityFromVariants(db, pid)
   return NextResponse.json({ ok: true })
+}
+
+export async function PUT(...args: Parameters<typeof __PUT>) {
+  return withDb(() => __PUT(...args))
+}
+export async function DELETE(...args: Parameters<typeof __DELETE>) {
+  return withDb(() => __DELETE(...args))
 }

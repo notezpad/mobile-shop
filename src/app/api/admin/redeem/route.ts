@@ -35,7 +35,7 @@ export const dynamic = 'force-dynamic'
  *   - Activates the tenant (status='active')
  *   - Creates an in-app notification confirming the renewal
  */
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   // NOTE: we intentionally use getSession() here instead of requireAuth().
   // requireAuth() enforces an active subscription, which would make it
   // impossible for a tenant with an EXPIRED subscription to ever redeem a
@@ -232,4 +232,8 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     )
   }
+}
+
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

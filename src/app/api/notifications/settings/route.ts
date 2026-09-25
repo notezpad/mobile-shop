@@ -1,3 +1,4 @@
+import { withDb } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
@@ -8,7 +9,7 @@ export const dynamic = 'force-dynamic'
  * GET /api/notifications/settings
  * Returns the tenant's notification preferences.
  */
-export async function GET() {
+async function __GET() {
   let session
   try {
     session = await requireAuth()
@@ -36,7 +37,7 @@ export async function GET() {
  * Update the tenant's notification preferences.
  * Body: { notifyLowStock?, notifyExpiringSubscription?, notifyNewSales? }
  */
-export async function PUT(req: Request) {
+async function __PUT(req: Request) {
   let session
   try {
     session = await requireAuth()
@@ -68,4 +69,11 @@ export async function PUT(req: Request) {
   })
 
   return NextResponse.json(updated)
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function PUT(...args: Parameters<typeof __PUT>) {
+  return withDb(() => __PUT(...args))
 }

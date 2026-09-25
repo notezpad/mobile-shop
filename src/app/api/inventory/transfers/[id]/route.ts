@@ -5,7 +5,7 @@ import { requireAuth, authErrorResponse } from '@/lib/auth'
 export const dynamic = 'force-dynamic'
 
 /** GET — fetch a single transfer with its items (used by detail dialog). */
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+async function __GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   let s
   try { s = await requireAuth() } catch (e) {
     const err = authErrorResponse(e); return NextResponse.json(err?.body, { status: err?.status })
@@ -30,7 +30,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 }
 
 /** DELETE — cancel a *pending* transfer. Completed transfers cannot be cancelled. */
-export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+async function __DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   let s
   try { s = await requireAuth() } catch (e) {
     const err = authErrorResponse(e); return NextResponse.json(err?.body, { status: err?.status })
@@ -52,4 +52,11 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
     data: { status: 'cancelled' },
   })
   return NextResponse.json({ ok: true })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function DELETE(...args: Parameters<typeof __DELETE>) {
+  return withDb(() => __DELETE(...args))
 }

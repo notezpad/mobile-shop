@@ -1,3 +1,4 @@
+import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
@@ -11,7 +12,7 @@ export const dynamic = 'force-dynamic'
  *   - id: mark single notification as read
  *   - all: mark ALL notifications as read for this tenant
  */
-export async function PATCH(req: NextRequest) {
+async function __PATCH(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -42,4 +43,8 @@ export async function PATCH(req: NextRequest) {
   })
 
   return NextResponse.json({ ok: true })
+}
+
+export async function PATCH(...args: Parameters<typeof __PATCH>) {
+  return withDb(() => __PATCH(...args))
 }

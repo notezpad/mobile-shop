@@ -11,7 +11,7 @@ const ARABIC_MONTHS = [
   'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
 ]
 
-export async function GET() {
+async function __GET() {
   try {
     await requireSuperAdmin()
   } catch (e) {
@@ -161,4 +161,8 @@ export async function GET() {
     expiringSoon: expiringSoonData,
     recentTenants,
   })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
 }

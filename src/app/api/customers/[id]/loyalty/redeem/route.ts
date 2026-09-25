@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
  * POST /api/customers/[id]/loyalty/redeem  body: { points: number }
  * Returns the discount value; caller applies it to the next sale total.
  */
-export async function POST(
+async function __POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -55,4 +55,8 @@ export async function POST(
     discount: points, // 1 point = 1 EGP
     remainingPoints: updated.loyaltyPoints,
   })
+}
+
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

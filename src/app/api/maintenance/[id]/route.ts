@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 
 const VALID_STATUSES = ['مستلم', 'قيد العمل', 'مكتمل', 'مُسلَّم']
 
-export async function PUT(
+async function __PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -80,7 +80,7 @@ export async function PUT(
   return NextResponse.json(updated)
 }
 
-export async function DELETE(
+async function __DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -109,4 +109,11 @@ export async function DELETE(
   }
   await db.maintenanceOrder.delete({ where: { id: oid } })
   return NextResponse.json({ ok: true })
+}
+
+export async function PUT(...args: Parameters<typeof __PUT>) {
+  return withDb(() => __PUT(...args))
+}
+export async function DELETE(...args: Parameters<typeof __DELETE>) {
+  return withDb(() => __DELETE(...args))
 }

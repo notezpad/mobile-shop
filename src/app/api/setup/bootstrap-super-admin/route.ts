@@ -1,3 +1,4 @@
+import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { db, PLATFORM_TENANT_ID, hashPassword } from '@/lib/auth'
 
@@ -69,7 +70,7 @@ async function createSuperAdmin(email: string, password: string, name: string) {
 
 // GET so it can be triggered by simply visiting a URL in the browser, e.g.:
 // /api/setup/bootstrap-super-admin?email=you@example.com&password=yourpassword&name=Name
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const email = (searchParams.get('email') ?? '').trim().toLowerCase()
@@ -102,7 +103,7 @@ export async function GET(req: NextRequest) {
  * once. Leaving it in the deployed app means anyone who finds the URL
  * before you use it could create the first Super Admin account themselves.
  */
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null)
     if (!body || typeof body !== 'object') {
@@ -119,4 +120,11 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     )
   }
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

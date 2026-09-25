@@ -9,7 +9,7 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(
+async function __POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -32,4 +32,8 @@ export async function POST(
 
   await startImpersonation(id)
   return NextResponse.json({ ok: true, tenantId: id, shopName: tenant.shopName })
+}
+
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

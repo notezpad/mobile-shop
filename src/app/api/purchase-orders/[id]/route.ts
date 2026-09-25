@@ -4,7 +4,7 @@ import { requireAuth, authErrorResponse } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(
+async function __GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -34,7 +34,7 @@ export async function GET(
 // DELETE marks the purchase order as returned to the supplier:
 // stock is pulled back out, the supplier debt (if any) is reversed,
 // and a cash entry restores any cash that was paid out.
-export async function DELETE(
+async function __DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -112,4 +112,11 @@ export async function DELETE(
   })
 
   return NextResponse.json({ ok: true })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function DELETE(...args: Parameters<typeof __DELETE>) {
+  return withDb(() => __DELETE(...args))
 }

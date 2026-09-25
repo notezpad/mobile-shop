@@ -1,3 +1,4 @@
+import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { ALL_DICTIONARIES, DICTIONARY_STATS, lookupArabicWord, type DictCategory } from '@/lib/arabic-dictionary'
@@ -21,7 +22,7 @@ export const dynamic = 'force-dynamic'
  * No auth required for GET (it's just a dictionary, no PII).
  * Useful for the AI assistant to fetch the dictionary as JSON context.
  */
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   const url = new URL(req.url)
   const category = url.searchParams.get('category') as DictCategory | null
   const format = (url.searchParams.get('format') ?? 'full') as 'full' | 'compact'
@@ -80,7 +81,7 @@ export async function GET(req: NextRequest) {
  *
  * Useful for the AI to normalize a single word the user typed.
  */
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -141,4 +142,11 @@ export async function POST(req: NextRequest) {
       ? `⚠️ Match غير exact — "كتبت ${word}" و اللي لُقي أقرب هو "${lookup.canonical}" (score: ${lookup.score?.toFixed(2)}). ممكن تختار من الـ suggestions لو ده مش اللي تقصده.`
       : '✓ Match exact في القاموس.',
   })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
+}
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

@@ -1,3 +1,4 @@
+import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
@@ -15,7 +16,7 @@ export const dynamic = 'force-dynamic'
  * Returns:
  *   { status: 'pending' | 'paid' | 'failed' }
  */
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -59,4 +60,8 @@ export async function GET(req: NextRequest) {
   else status = 'pending'
 
   return NextResponse.json({ status })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
 }

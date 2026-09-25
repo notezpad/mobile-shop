@@ -38,7 +38,7 @@ export const dynamic = 'force-dynamic'
  *   got the -30 entry but Sale.paid stayed at 50. Now we decrement Sale.paid
  *   so it stays in sync with what actually went in the drawer.
  */
-export async function POST(req: NextRequest) {
+async function __POST(req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -257,4 +257,8 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json(result, { status: 201 })
+}
+
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
 }

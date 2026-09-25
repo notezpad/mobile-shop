@@ -4,7 +4,7 @@ import { requireSuperAdmin, authErrorResponse } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-export async function PUT(
+async function __PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -96,7 +96,7 @@ export async function PUT(
   return NextResponse.json({ ok: true, plan: updated })
 }
 
-export async function DELETE(
+async function __DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -147,4 +147,11 @@ export async function DELETE(
   // Custom plan with no subscriptions → hard delete
   await db.plan.delete({ where: { id: planId } })
   return NextResponse.json({ ok: true, action: 'deleted', message: 'تم حذف الباقة نهائياً' })
+}
+
+export async function PUT(...args: Parameters<typeof __PUT>) {
+  return withDb(() => __PUT(...args))
+}
+export async function DELETE(...args: Parameters<typeof __DELETE>) {
+  return withDb(() => __DELETE(...args))
 }

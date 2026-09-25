@@ -13,7 +13,7 @@ async function loadOwned(tenantId: string, pid: number, uid: number) {
   return u
 }
 
-export async function PATCH(
+async function __PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; uid: string }> },
 ) {
@@ -43,7 +43,7 @@ export async function PATCH(
   return NextResponse.json(updated)
 }
 
-export async function DELETE(
+async function __DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; uid: string }> },
 ) {
@@ -71,4 +71,11 @@ export async function DELETE(
       { status: 400 },
     )
   }
+}
+
+export async function PATCH(...args: Parameters<typeof __PATCH>) {
+  return withDb(() => __PATCH(...args))
+}
+export async function DELETE(...args: Parameters<typeof __DELETE>) {
+  return withDb(() => __DELETE(...args))
 }

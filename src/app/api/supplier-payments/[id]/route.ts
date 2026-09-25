@@ -11,7 +11,7 @@ const METHOD_LABELS: Record<string, string> = {
   fawry: 'محفظة إلكترونية',
 }
 
-export async function DELETE(
+async function __DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -65,4 +65,8 @@ export async function DELETE(
   })
 
   return NextResponse.json({ ok: true })
+}
+
+export async function DELETE(...args: Parameters<typeof __DELETE>) {
+  return withDb(() => __DELETE(...args))
 }

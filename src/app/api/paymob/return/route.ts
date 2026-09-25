@@ -1,3 +1,4 @@
+import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { computeEndDate, computeAmount } from '@/lib/admin-utils'
@@ -12,7 +13,7 @@ export const dynamic = 'force-dynamic'
  * this endpoint simply reads the subscription status from our DB
  * (already updated by the webhook) and redirects accordingly.
  */
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   const url = new URL(req.url)
   const merchantOrderId = url.searchParams.get('merchant_order_id') ?? ''
 
@@ -60,4 +61,8 @@ export async function GET(req: NextRequest) {
       new URL('/checkout/callback?status=failed&reason=verification_error', req.url)
     )
   }
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
 }

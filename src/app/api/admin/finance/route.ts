@@ -9,7 +9,7 @@ const ARABIC_MONTHS = [
   'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
 ]
 
-export async function GET(req: NextRequest) {
+async function __GET(req: NextRequest) {
   try {
     await requireSuperAdmin()
   } catch (e) {
@@ -113,4 +113,8 @@ export async function GET(req: NextRequest) {
     transactions,
     count: inRange.length,
   })
+}
+
+export async function GET(...args: Parameters<typeof __GET>) {
+  return withDb(() => __GET(...args))
 }
