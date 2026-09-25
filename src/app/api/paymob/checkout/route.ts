@@ -1,43 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
-import {
-  paymobAuth,
-  paymobCreateOrder,
-  paymobPaymentKey,
-  paymobIframeUrl,
-  toCents,
-} from '@/lib/paymob'
-import { readEnv } from '@/lib/env'
+import { createPaymobIntention, toCents } from '@/lib/paymob'
 
 export const dynamic = 'force-dynamic'
 
-/**
- * POST /api/paymob/checkout
- *
- * Body:
- *   {
- *     planId: number,
- *     period: 'monthly' | 'yearly',
- *     successUrl?: string,   // optional — defaults to /upgrade?status=success
- *     cancelUrl?: string     // optional — defaults to /upgrade?status=cancelled
- *   }
- *
- * Response:
- *   {
- *     ok: true,
- *     checkoutUrl: string,        // iframe URL the user is redirected to
- *     paymobOrderId: number,      // for verification after redirect
- *     merchantOrderId: string    // = subscriptionId, for matching on webhook
- *   }
- *
- * Flow:
- *   1. Validate request + tenant's plan + period.
- *   2. Create a PENDING subscription row in our DB (status='pending', amountPaid=0).
- *      This is what the webhook will activate once payment succeeds.
- *   3. Call Paymob: auth → create order → payment key → iframe URL.
- *   4. Return iframe URL to the client.
- */
 export async function POST(req: NextRequest) {
   // ── 1. Auth ────────────────────────────────────────────────────────
   let session
@@ -65,7 +32,6 @@ export async function POST(req: NextRequest) {
   const successUrl = String(body.successUrl ?? '/checkout/callback?status=success')
   const cancelUrl = String(body.cancelUrl ?? '/checkout/callback?status=failed&reason=user_cancelled')
 
-  // Optional customer data — used for Paymob's billing_data
   const customer = body.customer && typeof body.customer === 'object'
     ? {
         name: String(body.customer.name ?? ''),
@@ -86,12 +52,8 @@ export async function POST(req: NextRequest) {
       select: { id: true, shopName: true, status: true },
     }),
   ])
-  if (!plan) {
-    return NextResponse.json({ error: 'الباقة غير متاحة' }, { status: 404 })
-  }
-  if (!tenant) {
-    return NextResponse.json({ error: 'المحل غير موجود' }, { status: 404 })
-  }
+  if (!plan) return NextResponse.json({ error: 'الباقة غير متاحة' }, { status: 404 })
+  if (!tenant) return NextResponse.json({ error: 'المحل غير موجود' }, { status: 404 })
 
   const amount = period === 'yearly' ? plan.priceYearly : plan.priceMonthly
   if (amount <= 0) {
@@ -101,10 +63,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // ── 4. Create PENDING subscription row ────────────────────────────────
-  // We track the payment attempt here. On webhook success, we flip status='active'
-  // and set amountPaid. On webhook failure (or timeout), a daily cleanup job can
-  // delete stale pending subscriptions older than 24h.
+  // ── 4. Create PENDING subscription row ─────────────────────────────
   const startDate = new Date()
   const endDate = new Date(startDate)
   if (period === 'monthly') endDate.setDate(endDate.getDate() + 30)
@@ -124,47 +83,31 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  // ── 5. Call Paymob ────────────────────────────────────────────────
+  // ── 5. Call Paymob Intention API ───────────────────────────────────
   try {
-    const token = await paymobAuth()
     const merchantOrderId = `sub-${pendingSub.id}`
-    const order = await paymobCreateOrder(token, toCents(amount), merchantOrderId, [
-      {
-        name: `${plan.name} - ${period === 'yearly' ? 'سنوي' : 'شهري'}`,
-        amount_cents: toCents(amount),
-        quantity: 1,
-      },
-    ])
-    const integrationId = Number(readEnv('PAYMOB_INTEGRATION_ID'))
-    if (!integrationId) throw new Error('PAYMOB_INTEGRATION_ID غير مضبوط')
-
-    // Use customer data if provided (from checkout form), otherwise fall back to session data.
     const fullName = customer?.name?.trim() || session.name || tenant.shopName || 'Customer'
-    const firstName = fullName.split(' ')[0]
-    const lastName = fullName.split(' ').slice(1).join(' ') || firstName
     const email = customer?.email?.trim() || session.email || `${session.userId}@local`
     const phone = customer?.phone?.trim() || '01000000000'
+    const planLabel = `${plan.name} - ${period === 'yearly' ? 'سنوي' : 'شهري'}`
 
-    const paymentKey = await paymobPaymentKey(token, toCents(amount), order.id, integrationId, {
-      email,
-      firstName,
-      lastName,
-      phone,
+    const { checkoutUrl, intentionId } = await createPaymobIntention({
+      merchantOrderId,
+      amountCents: toCents(amount),
+      planLabel,
+      customer: { name: fullName, phone, email },
     })
-    const iframeUrl = paymobIframeUrl(paymentKey)
 
-    // Store paymob order id on the subscription's paymentNote for traceability
     await db.subscription.update({
       where: { id: pendingSub.id },
       data: {
-        paymentNote: `paymob-order:${order.id}|by:${session.email}|success:${successUrl}|cancel:${cancelUrl}`,
+        paymentNote: `paymob-intention:${intentionId}|by:${session.email}|success:${successUrl}|cancel:${cancelUrl}`,
       },
     })
 
     return NextResponse.json({
       ok: true,
-      checkoutUrl: iframeUrl,
-      paymobOrderId: order.id,
+      checkoutUrl,
       merchantOrderId,
       subscriptionId: pendingSub.id,
       amount,
@@ -172,7 +115,6 @@ export async function POST(req: NextRequest) {
       planName: plan.name,
     })
   } catch (e: any) {
-    // Mark the subscription as failed so cleanup can remove it later
     await db.subscription.update({
       where: { id: pendingSub.id },
       data: {
