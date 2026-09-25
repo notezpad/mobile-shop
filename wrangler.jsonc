@@ -4,13 +4,13 @@
   "main": ".open-next/worker.js",
   "keep_names": false,
   "keep_vars": true,
-  // Updated to 2025-04-01: enables nodejs_compat_populate_process_env by
-  // default and includes the latest Workers runtime fixes.
   "compatibility_date": "2025-04-01",
   "compatibility_flags": [
     "nodejs_compat",
-    "enable_nodejs_process_v2"
-    // nodejs_compat_populate_process_env is now ON by default for dates >= 2025-04-01
+    "enable_nodejs_process_v2",
+    // Keep this explicit even though 2025-04-01 makes it default — belt and
+    // suspenders: it's what actually copies Cloudflare secrets into process.env.
+    "nodejs_compat_populate_process_env"
   ],
   "assets": {
     "directory": ".open-next/assets",
