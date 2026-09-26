@@ -1,14 +1,11 @@
-import { withDb } from '@/lib/db'
+// src/app/api/auth/logout/route.ts
+// REMOVED withDb — clearSession() only deletes cookies, no DB needed.
 import { NextResponse } from 'next/server'
 import { clearSession } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-async function __POST() {
+export async function POST() {
   await clearSession()
   return NextResponse.json({ ok: true })
-}
-
-export async function POST(...args: Parameters<typeof __POST>) {
-  return withDb(() => __POST(...args))
 }
