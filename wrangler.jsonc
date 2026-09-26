@@ -1,45 +1,51 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "nezampos",
-  "main": ".open-next/worker.js",
-  "keep_names": false,
-  "keep_vars": true,
-  "compatibility_date": "2025-01-01",
-  "compatibility_flags": [
-    "nodejs_compat",
-    "enable_nodejs_process_v2",
-    "nodejs_compat_populate_process_env"
-  ],
-  "assets": {
-    "directory": ".open-next/assets",
-    "binding": "ASSETS"
-  },
-  "observability": {
-    "enabled": true
-  },
-  // PERF FIX (2026-09-25): Smart Placement runs the Worker close to the
-  // database instead of close to the visitor. Every page does several DB
-  // round-trips, so this alone removes a large part of the slowness.
-  "placement": {
-    "mode": "smart"
-  },
-  // ─── Hyperdrive (STRONGLY RECOMMENDED — fixes most 503/1102 errors) ────────
-  // Hyperdrive pools Postgres connections at the Cloudflare edge so each
-  // Worker request reuses an existing socket instead of opening a new TCP+TLS
-  // handshake (~200-400ms) every time. On a dashboard with 12+ queries this
-  // alone cuts several seconds off every load and eliminates the connection-
-  // saturation that causes 503s.
-  //
-  // How to enable (one-time setup, ~2 minutes):
-  //   1. npx wrangler hyperdrive create nezampos-db --connection-string="<your DATABASE_URL>"
-  //   2. Copy the "id" from the output.
-  //   3. Uncomment the block below and paste the id.
-  //   4. npx wrangler deploy
-  //
-  // "hyperdrive": [
-  //   { "binding": "HYPERDRIVE", "id": "<paste-id-here>" }
-  // ],
-  "vars": {
-    "NODE_ENV": "production"
-  }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "nezampos",
+	"main": ".open-next/worker.js",
+	"keep_names": false,
+	"keep_vars": true,
+	"compatibility_date": "2025-01-01",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"enable_nodejs_process_v2",
+		"nodejs_compat_populate_process_env"
+	],
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+	"observability": {
+		"enabled": true
+	},
+	// PERF FIX (2026-09-25): Smart Placement runs the Worker close to the
+	// database instead of close to the visitor. Every page does several DB
+	// round-trips, so this alone removes a large part of the slowness.
+	"placement": {
+		"mode": "smart"
+	},
+	// ─── Hyperdrive (STRONGLY RECOMMENDED — fixes most 503/1102 errors) ────────
+	// Hyperdrive pools Postgres connections at the Cloudflare edge so each
+	// Worker request reuses an existing socket instead of opening a new TCP+TLS
+	// handshake (~200-400ms) every time. On a dashboard with 12+ queries this
+	// alone cuts several seconds off every load and eliminates the connection-
+	// saturation that causes 503s.
+	//
+	// How to enable (one-time setup, ~2 minutes):
+	//   1. npx wrangler hyperdrive create nezampos-db --connection-string="<your DATABASE_URL>"
+	//   2. Copy the "id" from the output.
+	//   3. Uncomment the block below and paste the id.
+	//   4. npx wrangler deploy
+	//
+	// "hyperdrive": [
+	//   { "binding": "HYPERDRIVE", "id": "<paste-id-here>" }
+	// ],
+	"vars": {
+		"NODE_ENV": "production"
+	},
+	"hyperdrive": [
+		{
+			"binding": "HYPERDRIVE",
+			"id": "f78f3b67ec9145cab8492d1951b67dd0"
+		}
+	]
 }

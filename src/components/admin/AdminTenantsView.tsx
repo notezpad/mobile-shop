@@ -274,6 +274,7 @@ export function AdminTenantsView() {
                       <TableHead className="w-10 text-center">#</TableHead>
                       <TableHead>اسم المحل</TableHead>
                       <TableHead>البريد</TableHead>
+                      <TableHead className="w-36">التليفون</TableHead>
                       <TableHead className="w-28">الباقة</TableHead>
                       <TableHead className="w-24 text-center">الحالة</TableHead>
                       <TableHead className="w-32">تاريخ التسجيل</TableHead>
@@ -284,7 +285,7 @@ export function AdminTenantsView() {
                   <TableBody>
                     {rows.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                           لا توجد محلات مطابقة
                         </TableCell>
                       </TableRow>
@@ -294,6 +295,17 @@ export function AdminTenantsView() {
                           <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
                           <TableCell className="font-medium">{r.shopName}</TableCell>
                           <TableCell className="text-xs text-muted-foreground" dir="ltr">{r.ownerEmail ?? '-'}</TableCell>
+                          <TableCell className="text-xs font-mono" dir="ltr">
+                            {(r.ownerPhone ?? r.phone) ? (
+                              <a
+                                href={`tel:${r.ownerPhone ?? r.phone}`}
+                                className="text-blue-500 hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {r.ownerPhone ?? r.phone}
+                              </a>
+                            ) : '-'}
+                          </TableCell>
                           <TableCell>
                             <Badge variant="outline" className="text-[10px]">{r.planName}</Badge>
                           </TableCell>
@@ -382,9 +394,19 @@ export function AdminTenantsView() {
                             </span>
                             <p className="truncate font-medium leading-tight">{r.shopName}</p>
                           </div>
-                          <p className="mt-1 truncate text-[11px] text-muted-foreground" dir="ltr">
+                          <p className="mt-0.5 truncate text-[11px] text-muted-foreground" dir="ltr">
                             {r.ownerEmail ?? '-'}
                           </p>
+                          {(r.ownerPhone ?? r.phone) && (
+                            <a
+                              href={`tel:${r.ownerPhone ?? r.phone}`}
+                              className="mt-0.5 block truncate text-[11px] font-mono text-blue-500"
+                              dir="ltr"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              📞 {r.ownerPhone ?? r.phone}
+                            </a>
+                          )}
                         </div>
                         <div className="flex shrink-0 flex-col items-end gap-1">
                           <StatusBadge status={r.status} />
