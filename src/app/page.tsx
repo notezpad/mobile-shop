@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import dynamic from 'next/dynamic'
 import {
   Menu,
   Loader2,
@@ -34,29 +35,40 @@ import { ScaleWrapper } from '@/components/ScaleWrapper'
 // FIXED: lazy-load all heavy view components so the initial JS bundle only contains
 // the shell (Sidebar, auth, layout). Each view is fetched on first navigation to it.
 // This alone cuts the initial parse+execute time by ~60-70% (from ~950KB to ~280KB).
+//
+// ⚡ PERF FIX (CPU time / Error 1102): switched from React.lazy to next/dynamic
+// with ssr:false. React.lazy + Suspense is STILL fully rendered on the Worker
+// during SSR (Next resolves the import and streams the real markup — the CPU
+// cost is paid either way, just spread across the response instead of upfront).
+// Every one of these views fetches its own data client-side in useEffect, so
+// none of them need — or ever benefited from — being rendered on the server.
+// ssr:false skips server rendering entirely for whichever view is active,
+// which is the single biggest CPU cost on this route (this file renders 19
+// possible views, several of them 1000+ line components). Zero behavior
+// change: the `loading` fallback below is the same spinner Suspense showed.
 const ViewFallback = () => (
   <div className="flex min-h-[40vh] items-center justify-center">
     <Loader2 className="size-5 animate-spin text-primary" />
   </div>
 )
-const DashboardView  = React.lazy(() => import('@/components/shop/DashboardView').then(m => ({ default: m.DashboardView })))
-const POSView        = React.lazy(() => import('@/components/shop/POSView').then(m => ({ default: m.POSView })))
-const ProductsView   = React.lazy(() => import('@/components/shop/ProductsView').then(m => ({ default: m.ProductsView })))
-const SalesHistoryView = React.lazy(() => import('@/components/shop/SalesHistoryView').then(m => ({ default: m.SalesHistoryView })))
-const MaintenanceView = React.lazy(() => import('@/components/shop/MaintenanceView').then(m => ({ default: m.MaintenanceView })))
-const CustomersView  = React.lazy(() => import('@/components/shop/CustomersView').then(m => ({ default: m.CustomersView })))
-const SuppliersView  = React.lazy(() => import('@/components/shop/SuppliersView').then(m => ({ default: m.SuppliersView })))
-const PurchaseOrdersView = React.lazy(() => import('@/components/shop/PurchaseOrdersView').then(m => ({ default: m.PurchaseOrdersView })))
-const FinanceView    = React.lazy(() => import('@/components/shop/FinanceView').then(m => ({ default: m.FinanceView })))
-const ExpensesView   = React.lazy(() => import('@/components/shop/ExpensesView').then(m => ({ default: m.ExpensesView })))
-const CashView       = React.lazy(() => import('@/components/shop/CashView').then(m => ({ default: m.CashView })))
-const ReportsView    = React.lazy(() => import('@/components/shop/ReportsView').then(m => ({ default: m.ReportsView })))
-const SettingsView   = React.lazy(() => import('@/components/shop/SettingsView').then(m => ({ default: m.SettingsView })))
-const UsersView      = React.lazy(() => import('@/components/shop/UsersView').then(m => ({ default: m.UsersView })))
-const InventoryView  = React.lazy(() => import('@/components/shop/InventoryView').then(m => ({ default: m.InventoryView })))
-const BranchesView   = React.lazy(() => import('@/components/shop/BranchesView').then(m => ({ default: m.BranchesView })))
-const SuperAdminApp  = React.lazy(() => import('@/components/admin/SuperAdminApp').then(m => ({ default: m.SuperAdminApp })))
-const LandingPage    = React.lazy(() => import('@/components/landing/LandingPage').then(m => ({ default: m.LandingPage })))
+const DashboardView  = dynamic(() => import('@/components/shop/DashboardView').then(m => m.DashboardView), { ssr: false, loading: ViewFallback })
+const POSView        = dynamic(() => import('@/components/shop/POSView').then(m => m.POSView), { ssr: false, loading: ViewFallback })
+const ProductsView   = dynamic(() => import('@/components/shop/ProductsView').then(m => m.ProductsView), { ssr: false, loading: ViewFallback })
+const SalesHistoryView = dynamic(() => import('@/components/shop/SalesHistoryView').then(m => m.SalesHistoryView), { ssr: false, loading: ViewFallback })
+const MaintenanceView = dynamic(() => import('@/components/shop/MaintenanceView').then(m => m.MaintenanceView), { ssr: false, loading: ViewFallback })
+const CustomersView  = dynamic(() => import('@/components/shop/CustomersView').then(m => m.CustomersView), { ssr: false, loading: ViewFallback })
+const SuppliersView  = dynamic(() => import('@/components/shop/SuppliersView').then(m => m.SuppliersView), { ssr: false, loading: ViewFallback })
+const PurchaseOrdersView = dynamic(() => import('@/components/shop/PurchaseOrdersView').then(m => m.PurchaseOrdersView), { ssr: false, loading: ViewFallback })
+const FinanceView    = dynamic(() => import('@/components/shop/FinanceView').then(m => m.FinanceView), { ssr: false, loading: ViewFallback })
+const ExpensesView   = dynamic(() => import('@/components/shop/ExpensesView').then(m => m.ExpensesView), { ssr: false, loading: ViewFallback })
+const CashView       = dynamic(() => import('@/components/shop/CashView').then(m => m.CashView), { ssr: false, loading: ViewFallback })
+const ReportsView    = dynamic(() => import('@/components/shop/ReportsView').then(m => m.ReportsView), { ssr: false, loading: ViewFallback })
+const SettingsView   = dynamic(() => import('@/components/shop/SettingsView').then(m => m.SettingsView), { ssr: false, loading: ViewFallback })
+const UsersView      = dynamic(() => import('@/components/shop/UsersView').then(m => m.UsersView), { ssr: false, loading: ViewFallback })
+const InventoryView  = dynamic(() => import('@/components/shop/InventoryView').then(m => m.InventoryView), { ssr: false, loading: ViewFallback })
+const BranchesView   = dynamic(() => import('@/components/shop/BranchesView').then(m => m.BranchesView), { ssr: false, loading: ViewFallback })
+const SuperAdminApp  = dynamic(() => import('@/components/admin/SuperAdminApp').then(m => m.SuperAdminApp), { ssr: false, loading: () => <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="size-6 animate-spin text-primary" /></div> })
+const LandingPage    = dynamic(() => import('@/components/landing/LandingPage').then(m => m.LandingPage), { ssr: false, loading: () => <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="size-6 animate-spin text-primary" /></div> })
 import { useShopStore } from '@/lib/store'
 import { useViewRouter } from '@/lib/use-view-router'
 import { api } from '@/lib/api'
