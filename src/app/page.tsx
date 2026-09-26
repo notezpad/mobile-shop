@@ -11,6 +11,7 @@ import {
   Clock,
   Sparkles,
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -335,9 +336,16 @@ function SubscriptionExpiredScreen() {
               <Button
                 variant="outline"
                 className="w-full"
-                onClick={() => {
-                  logout()
-                  setTimeout(() => window.location.reload(), 200)
+                onClick={async () => {
+                  // 🛡️ FIX: wait for logout() to finish (it now awaits the
+                  // server-side cookie clear itself) BEFORE reloading.
+                  // Reloading on a fixed 200ms timer raced the network
+                  // request — on a slow connection the cookie wasn't
+                  // cleared yet, so the reload landed the user right back
+                  // on this same expired-subscription screen, forcing them
+                  // to click logout again and again.
+                  await logout()
+                  window.location.reload()
                 }}
               >
                 تسجيل الخروج
@@ -655,6 +663,7 @@ export default function Home() {
   const setShopName = useShopStore((s) => s.setShopName)
   const setBranding = useShopStore((s) => s.setBranding)
   const user = useShopStore((s) => s.user)
+  const router = useRouter()
 
   React.useEffect(() => {
     let alive = true
@@ -771,9 +780,30 @@ export default function Home() {
   // Authed shop user → redirect to /dashboard (proper Next.js route)
   // Each shop page is now a separate route: /dashboard, /products, /settings, etc.
   // This gives us URL routing + code splitting + browser back/forward + bookmarks.
-  if (typeof window !== 'undefined') {
-    window.location.href = '/dashboard'
-  }
+  return <RedirectToDashboard router={router} />
+}
+
+// 🛡️ FIX (redirect-loop / Cloudflare 1102): this redirect used to be a
+// `window.location.href = '/dashboard'` assignment executed directly in
+// Home's render body (not inside an effect). Side effects in a render body
+// run on every render, not once — so any unrelated re-render while this
+// branch was active (a store update, a slow network response arriving
+// late, etc.) fired ANOTHER full hard-reload navigation on top of one
+// already in flight. Two navigations racing each other is exactly what
+// shows up as "the page keeps loading forever / white screen" — the
+// browser keeps cancelling and restarting the page load. Each of those
+// hard reloads is also a fresh request to the Worker (session + tenant +
+// subscription lookups all over again), so a tight loop of them is what
+// can blow through Cloudflare's per-request CPU limit (Error 1102).
+//
+// Moving the navigation into a `useEffect` that runs exactly once, and
+// using the Next.js router (client-side transition, no full reload)
+// instead of `window.location.href`, removes both problems.
+function RedirectToDashboard({ router }: { router: ReturnType<typeof useRouter> }) {
+  React.useEffect(() => {
+    router.replace('/dashboard')
+  }, [router])
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
       <Loader2 className="size-6 animate-spin text-primary" />

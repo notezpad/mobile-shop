@@ -136,7 +136,7 @@ interface ShopState {
   /** Subscription state (expired / expiringSoon / daysLeft / etc.). */
   subscription: SubscriptionState
   setSubscription: (s: Partial<SubscriptionState>) => void
-  logout: () => void
+  logout: () => Promise<void>
   quickAddProduct: { open: boolean; seed?: string }
   openQuickAddProduct: (seed?: string) => void
   closeQuickAddProduct: () => void
@@ -197,8 +197,31 @@ export const useShopStore = create<ShopState>()(
         set((s) => ({ plan: { ...s.plan, capabilities } })),
       subscription: DEFAULT_SUBSCRIPTION,
       setSubscription: (s) => set((state) => ({ subscription: { ...state.subscription, ...s } })),
-      logout: () => {
-        fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+      logout: async () => {
+        // 🛡️ FIX (redirect-loop / Cloudflare 1102): this used to fire the
+        // server logout request WITHOUT waiting for it, then immediately
+        // clear the client `user` state. That let the redirect to `/`
+        // (triggered by `user` becoming null) happen BEFORE the
+        // `shop_session` cookie was actually cleared on the server. `/`
+        // would then call `/api/auth/me` again, still see the (not-yet-
+        // cleared) cookie, think the user was still logged in, and bounce
+        // straight back into the authed app — which itself may hard-
+        // reload — repeating over and over. That's the "keeps loading /
+        // white screen / stuck trying to log out" loop, and each bounce
+        // re-runs session + tenant + subscription lookups against the
+        // Worker, which is what was blowing through Cloudflare's per-
+        // request resource limit (Error 1102) on refresh.
+        //
+        // Awaiting the request here guarantees the cookie is gone on the
+        // server BEFORE we clear local state / redirect, so the very next
+        // auth check is unambiguous and there's nothing left to bounce on.
+        try {
+          await fetch('/api/auth/logout', { method: 'POST' })
+        } catch {
+          // Network hiccup — still proceed to clear local state below so
+          // the user isn't stuck; worst case they're prompted to log in
+          // again if the server-side session actually survived.
+        }
         // 🛡️ DON'T clear drafts on logout — the storage key is per-tenant
         // so another user on the same browser won't see them anyway.
         set({
