@@ -50,7 +50,14 @@ export async function apiLogout(): Promise<void> {
 
 export async function getMe(): Promise<AuthUser | null> {
   try {
-    const res = await fetch('/api/auth/me', { cache: 'default' })
+    // 🛡️ FIX: was `cache: 'default'`, which let the browser answer this
+    // from its own HTTP cache (keyed by URL, not by cookie) instead of
+    // asking the server. Right after logout that meant this call could
+    // still report "logged in" for up to a minute even though the
+    // session cookie was already gone — see the Cache-Control note in
+    // src/app/api/auth/me/route.ts. `no-store` forces a real network
+    // round trip every time, so this always reflects the current cookie.
+    const res = await fetch('/api/auth/me', { cache: 'no-store' })
     if (!res.ok) return null
     const data = await res.json()
     if (!data?.ok) return null

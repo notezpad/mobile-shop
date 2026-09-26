@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { ThemeProvider as NextThemesProvider } from 'next-themes'
 import { ConfirmDialogProvider } from '@/components/shop/ConfirmDialogProvider'
+import { SessionGuard } from '@/components/shop/SessionGuard'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -29,6 +30,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         `min-h-screen` with content taller than the viewport now scroll
         naturally as expected.
       */}
+      <SessionGuard />
       <ConfirmDialogProvider>{children}</ConfirmDialogProvider>
     </NextThemesProvider>
   )

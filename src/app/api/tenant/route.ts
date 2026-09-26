@@ -43,8 +43,13 @@ async function __GET() {
     return NextResponse.json({ error: 'المحل غير موجود' }, { status: 404 })
   }
   const res = NextResponse.json(tenant)
-  // ⚡ Cache for 60 seconds — tenant data rarely changes
-  res.headers.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+  // 🛡️ FIX (stuck-logout / stale data across sessions): same class of bug
+  // as /api/auth/me — caching a per-session response in the browser's own
+  // HTTP cache means it can outlive the session itself. If tenant A logs
+  // out and tenant B logs in on the same browser within the cache window,
+  // B could briefly see A's cached shop name/branding too. See the note
+  // in src/app/api/auth/me/route.ts for the full explanation.
+  res.headers.set('Cache-Control', 'no-store')
   return res
 }
 

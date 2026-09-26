@@ -109,7 +109,12 @@ async function __GET() {
   // requiring the user to hard-refresh. Previously this was 30 seconds
   // which meant users would still see old plan config up to 30s after a
   // deploy, leading to confusion ("I deployed but nothing changed").
-  res.headers.set('Cache-Control', 'private, max-age=5, stale-while-revalidate=10')
+  // 🛡️ FIX: same stale-cache class of bug as /api/auth/me — a cached
+  // "subscription OK" response can outlive a logout by a few seconds.
+  // Small window, but this endpoint is cheap (5-min sub_ok cookie already
+  // does the real caching server-side), so no-store removes the risk
+  // entirely instead of just shrinking it.
+  res.headers.set('Cache-Control', 'no-store')
   return res
 }
 

@@ -21,6 +21,38 @@
 import { idb, idbAvailable, onOutboxChange, type OutboxEntry } from './idb'
 
 /**
+ * 🛡️ FIX: global "session is actually gone" signal.
+ *
+ * Before this: when the session expired (or logout raced ahead of an
+ * in-flight request — see the Cache-Control fix in
+ * src/app/api/auth/me/route.ts), the app kept the authed dashboard mounted
+ * and just let EVERY individual widget (dashboard, products, sales...)
+ * independently hit a real 401 and show its own "غير مصرح — يرجى تسجيل
+ * الدخول" toast, while their data emptied out one by one. Nothing actually
+ * moved the app to the login screen, so the user was stuck looking at a
+ * half-broken authed page and had to mash the logout button repeatedly
+ * hoping something would eventually take.
+ *
+ * Now: the first real 401 from any API call fires this event once. A
+ * listener (SessionGuard, mounted near the app root) clears the local
+ * `user` in the store, which the existing boot logic in
+ * src/app/(shop)/layout.tsx and src/app/page.tsx already watches — it
+ * immediately redirects to the login page instead of leaving a stale,
+ * half-empty dashboard on screen.
+ */
+let unauthorizedNotifiedAt = 0
+function notifySessionExpired() {
+  if (typeof window === 'undefined') return
+  // Debounce: a page can fire several requests at once that all 401
+  // together (dashboard + products + notifications...) — only the first
+  // needs to trigger the redirect.
+  const now = Date.now()
+  if (now - unauthorizedNotifiedAt < 1000) return
+  unauthorizedNotifiedAt = now
+  window.dispatchEvent(new CustomEvent('shop:session-expired'))
+}
+
+/**
  * PERF / RELIABILITY FIX (2026-09-25)
  *
  * The app showed random red "فشل 500 / فشل 503" errors. Those statuses come
@@ -175,6 +207,7 @@ export async function offlineFetch<T = any>(
         const err = new Error(errorMessage) as Error & { body?: any; status?: number }
         err.body = data
         err.status = res.status
+        if (res.status === 401) notifySessionExpired()
         throw err
       }
       return data as T
@@ -225,6 +258,7 @@ async function runGet<T>(
       const msg = (data && typeof data === 'object' && (data.error || data.message)) || `طلب فاشل (${res.status})`
       const err = new Error(typeof msg === 'string' ? msg : 'طلب فاشل') as Error & { status?: number }
       err.status = res.status
+      if (res.status === 401) notifySessionExpired()
       throw err
     }
     // Success → cache + return
