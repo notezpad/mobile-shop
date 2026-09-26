@@ -1,5 +1,3 @@
-// src/app/api/auth/logout/route.ts
-// REMOVED withDb — clearSession() only deletes cookies, no DB needed.
 import { NextResponse } from 'next/server'
 import { clearSession } from '@/lib/auth'
 
