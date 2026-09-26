@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
 const nextConfig: NextConfig = {
   typescript: {
@@ -16,5 +17,10 @@ const nextConfig: NextConfig = {
 
 export default nextConfig;
 
-import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
-initOpenNextCloudflareForDev();
+// Only run during local development — NOT during CI/production builds.
+// During `next build` (Cloudflare Pages CI), NODE_ENV is "production",
+// so this is skipped and the missing Hyperdrive local connection string
+// no longer causes a build failure.
+if (process.env.NODE_ENV === "development") {
+  initOpenNextCloudflareForDev();
+}
