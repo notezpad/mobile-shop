@@ -111,12 +111,11 @@ export async function checkLowStockAndNotify(db: PrismaClient, tenantId: string)
   if (!notifyLowStock) return
 
   // Find low-stock products
-  const lowStockProducts = await db.product.findMany({
-    where: { tenantId },
-    select: { id: true, name: true, quantity: true, minQuantity: true },
-  })
-
-  const trulyLow = lowStockProducts.filter((p) => p.quantity <= p.minQuantity)
+  // Filter inside the database and cap the result — never load all products.
+  const trulyLow = await db.$queryRaw<{ id: number; name: string; quantity: number; minQuantity: number }[]>`
+    SELECT p."id", p."name", p."quantity", p."minQuantity" FROM "Product" p
+    WHERE p."tenantId" = ${tenantId} AND p."quantity" <= p."minQuantity"
+    ORDER BY p."quantity" ASC LIMIT 30`
   if (trulyLow.length === 0) return
 
   // Dedup window — for suppressing duplicate notifications

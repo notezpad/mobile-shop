@@ -42,188 +42,82 @@ export async function GET(req: Request) {
     // keep last7Start alias for backward compat with existing references below
     const last7Start = lastNStart
 
+    const tid = session.tenantId
+    const chartEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000)
+    // All sums are computed inside PostgreSQL — loading every product and
+    // sale item into the Worker was exceeding Cloudflare's CPU limit.
+    const profitSince = (since: Date) => db.$queryRaw<{ profit: number }[]>`
+      SELECT COALESCE(SUM((i."price" - i."cost") * i."quantity"), 0)::float8 AS profit
+      FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
+      WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${since}`
+
     const [
-      // PERF FIX (2026-09-25 v2): todaySales and monthSales used include:{items:true}
-      // which loads potentially thousands of SaleItem rows into Worker memory on every
-      // dashboard open. Replaced with aggregate queries (total) + separate profit queries
-      // using only the columns needed. The full items list is NOT needed for the
-      // dashboard — only the totals are displayed.
-      todaySalesAgg,
-      todayProfitRaw,
-      monthSalesAgg,
-      monthProfitRaw,
-      cashAgg,
-      allProducts,       // FIXED: fetch once, derive lowStockCount + stockValue from it
-      activeMaintenance,
-      activeMaintenanceOrders,
-      last10SalesRaw,
-      last30DaysSales,
-      customersCount,
-      customersWithBalance,
-      suppliersWithBalance,
-      // FIXED: fetch all last-7-days sales in ONE query instead of 7 sequential queries
-      last7RawSales,
+      todaySalesAgg, todayProfitRows, monthSalesAgg, monthProfitRows, cashAgg,
+      stockRows, lowStockRows, activeMaintenance, activeMaintenanceOrders, last10SalesRaw,
+      topProductRows, customersCount, custAgg, suppAgg, chartRows,
     ] = await Promise.all([
-      // Today: aggregate total + count (no items needed)
-      db.sale.aggregate({
-        where: { ...tenantFilter, createdAt: { gte: todayStart }, status: 'مكتملة' },
-        _sum: { total: true },
-        _count: { id: true },
-      }),
-      // Today profit: only the columns needed for (price-cost)*qty calculation
-      db.saleItem.findMany({
-        where: {
-          sale: { tenantId: tenantFilter.tenantId, createdAt: { gte: todayStart }, status: 'مكتملة' },
-        },
-        select: { price: true, cost: true, quantity: true },
-      }),
-      // Month: aggregate total (no items needed)
-      db.sale.aggregate({
-        where: { ...tenantFilter, createdAt: { gte: monthStart }, status: 'مكتملة' },
-        _sum: { total: true },
-        _count: { id: true },
-      }),
-      // Month profit items
-      db.saleItem.findMany({
-        where: {
-          sale: { tenantId: tenantFilter.tenantId, createdAt: { gte: monthStart }, status: 'مكتملة' },
-        },
-        select: { price: true, cost: true, quantity: true },
-      }),
-      db.cashEntry.aggregate({
-        where: tenantFilter,
-        _sum: { amount: true },
-      }),
-      // FIXED: single products fetch — used for lowStockCount, stockValue, AND lowStockAlerts
-      // PERF FIX (2026-09-25): only the 5 columns the dashboard actually uses.
-      // Fetching every column of every product moved megabytes per request and
-      // was a main reason the dashboard felt frozen (and sometimes timed out
-      // with a 503 on large shops).
-      db.product.findMany({
-        where: tenantFilter,
-        select: { id: true, name: true, quantity: true, minQuantity: true, cost: true, price: true },
-      }),
-      db.maintenanceOrder.count({
-        where: { ...tenantFilter, status: { in: ['مستلم', 'قيد العمل', 'مكتمل'] } },
-      }),
-      db.maintenanceOrder.findMany({
-        where: { ...tenantFilter, status: { in: ['مستلم', 'قيد العمل', 'مكتمل'] } },
-        orderBy: { id: 'desc' },
-        take: 10,
-      }),
-      db.sale.findMany({
-        where: tenantFilter,
-        orderBy: { id: 'desc' },
-        take: 10,
-        include: { items: true, customer: true },
-      }),
-      db.sale.findMany({
-        where: {
-          ...tenantFilter,
-          createdAt: { gte: last30Start },
-          status: 'مكتملة',
-        },
-        include: { items: true },
-      }),
+      db.sale.aggregate({ where: { ...tenantFilter, createdAt: { gte: todayStart }, status: 'مكتملة' }, _sum: { total: true }, _count: { id: true } }),
+      profitSince(todayStart),
+      db.sale.aggregate({ where: { ...tenantFilter, createdAt: { gte: monthStart }, status: 'مكتملة' }, _sum: { total: true }, _count: { id: true } }),
+      profitSince(monthStart),
+      db.cashEntry.aggregate({ where: tenantFilter, _sum: { amount: true } }),
+      db.$queryRaw<{ vcost: number; vprice: number; low: number }[]>`
+        SELECT COALESCE(SUM(p."cost" * p."quantity"), 0)::float8 AS vcost,
+               COALESCE(SUM(p."price" * p."quantity"), 0)::float8 AS vprice,
+               COUNT(*) FILTER (WHERE p."quantity" <= p."minQuantity")::int AS low
+        FROM "Product" p WHERE p."tenantId" = ${tid}`,
+      db.$queryRaw<{ id: number; name: string; quantity: number; minQuantity: number }[]>`
+        SELECT p."id", p."name", p."quantity", p."minQuantity" FROM "Product" p
+        WHERE p."tenantId" = ${tid} AND p."quantity" <= p."minQuantity"
+        ORDER BY p."quantity" ASC LIMIT 50`,
+      db.maintenanceOrder.count({ where: { ...tenantFilter, status: { in: ['مستلم', 'قيد العمل', 'مكتمل'] } } }),
+      db.maintenanceOrder.findMany({ where: { ...tenantFilter, status: { in: ['مستلم', 'قيد العمل', 'مكتمل'] } }, orderBy: { id: 'desc' }, take: 10 }),
+      db.sale.findMany({ where: tenantFilter, orderBy: { id: 'desc' }, take: 10, select: { id: true, invoiceNo: true, createdAt: true, total: true, paid: true, status: true, customer: { select: { name: true } } } }),
+      db.$queryRaw<{ name: string; quantity: number; total: number }[]>`
+        SELECT MIN(i."name") AS name, SUM(i."quantity")::float8 AS quantity, SUM(i."price" * i."quantity")::float8 AS total
+        FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
+        WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${last30Start}
+        GROUP BY COALESCE(i."productId", 0) ORDER BY quantity DESC LIMIT 5`,
       db.customer.count({ where: tenantFilter }),
-      db.customer.findMany({
-        where: tenantFilter,
-        select: { balance: true },
-      }),
-      db.supplier.findMany({
-        where: tenantFilter,
-        select: { balance: true },
-      }),
-      // FIXED: Single query for last 7 days — replaces the for-loop of 7 sequential awaits
-      db.sale.findMany({
-        where: {
-          ...tenantFilter,
-          createdAt: { gte: last7Start, lt: new Date(todayStart.getTime() + 24 * 60 * 60 * 1000) },
-          status: 'مكتملة',
-        },
-        select: {
-          createdAt: true,
-          total: true,
-          items: { select: { price: true, cost: true, quantity: true } },
-        },
-      }),
+      db.customer.aggregate({ where: { ...tenantFilter, balance: { gt: 0 } }, _sum: { balance: true } }),
+      db.supplier.aggregate({ where: { ...tenantFilter, balance: { gt: 0 } }, _sum: { balance: true } }),
+      db.$queryRaw<{ createdAt: Date; total: number; profit: number }[]>`
+        SELECT s."createdAt", s."total"::float8 AS total,
+               COALESCE((SELECT SUM((i."price" - i."cost") * i."quantity") FROM "SaleItem" i WHERE i."saleId" = s."id"), 0)::float8 AS profit
+        FROM "Sale" s
+        WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${last7Start} AND s."createdAt" < ${chartEnd}`,
     ])
 
+    const n = (v: unknown) => Number(v ?? 0)
     const todaySalesTotal = todaySalesAgg._sum.total ?? 0
     const todaySalesCount = todaySalesAgg._count.id
-    const todayProfit = todayProfitRaw.reduce(
-      (s, it) => s + (it.price - it.cost) * it.quantity,
-      0
-    )
+    const todayProfit = n(todayProfitRows[0]?.profit)
     const monthSalesTotal = monthSalesAgg._sum.total ?? 0
-    const monthProfit = monthProfitRaw.reduce(
-      (s, it) => s + (it.price - it.cost) * it.quantity,
-      0
-    )
+    const monthProfit = n(monthProfitRows[0]?.profit)
     const cashBalance = cashAgg._sum.amount ?? 0
-    const lowStockCount = allProducts.filter((p) => p.quantity <= p.minQuantity).length
-    const stockValueCost = allProducts.reduce((s, p) => s + p.cost * p.quantity, 0)
-    const stockValuePrice = allProducts.reduce((s, p) => s + p.price * p.quantity, 0)
-    const totalOutstandingDebt = customersWithBalance.reduce(
-      (s, c) => s + (c.balance > 0 ? c.balance : 0),
-      0
-    )
-    const totalSupplierDebt = suppliersWithBalance.reduce(
-      (s, sup) => s + (sup.balance > 0 ? sup.balance : 0),
-      0
-    )
+    const lowStockCount = n(stockRows[0]?.low)
+    const stockValueCost = n(stockRows[0]?.vcost)
+    const stockValuePrice = n(stockRows[0]?.vprice)
+    const totalOutstandingDebt = n(custAgg._sum.balance)
+    const totalSupplierDebt = n(suppAgg._sum.balance)
 
-    // FIXED: Build last7DaysSales from single-query result using in-memory grouping
+    // Chart: group the (small) per-sale rows by local day
     const pad = (x: number) => String(x).padStart(2, '0')
     const dayMap = new Map<string, { total: number; profit: number }>()
-    // Pre-populate all N days with zeros so days without sales still appear
     for (let i = chartDays - 1; i >= 0; i--) {
       const d = new Date(todayStart)
       d.setDate(d.getDate() - i)
-      const key = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`
-      dayMap.set(key, { total: 0, profit: 0 })
+      dayMap.set(`${pad(d.getDate())}/${pad(d.getMonth() + 1)}`, { total: 0, profit: 0 })
     }
-    for (const sale of last7RawSales) {
-      const d = sale.createdAt
-      const key = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`
-      const slot = dayMap.get(key)
-      if (slot) {
-        slot.total += sale.total
-        slot.profit += sale.items.reduce((a, it) => a + (it.price - it.cost) * it.quantity, 0)
-      }
+    for (const r of chartRows) {
+      const d = new Date(r.createdAt)
+      const slot = dayMap.get(`${pad(d.getDate())}/${pad(d.getMonth() + 1)}`)
+      if (slot) { slot.total += n(r.total); slot.profit += n(r.profit) }
     }
-    const last7DaysSales = Array.from(dayMap.entries()).map(([date, v]) => ({
-      date,
-      ...v,
-    }))
+    const last7DaysSales = Array.from(dayMap.entries()).map(([date, v]) => ({ date, ...v }))
 
-    // top 5 selling products (by quantity, last 30 days)
-    const productQty = new Map<number, { name: string; quantity: number; total: number }>()
-    for (const s of last30DaysSales) {
-      for (const it of s.items) {
-        const cur = productQty.get(it.productId) ?? {
-          name: it.name,
-          quantity: 0,
-          total: 0,
-        }
-        cur.quantity += it.quantity
-        cur.total += it.price * it.quantity
-        productQty.set(it.productId, cur)
-      }
-    }
-    const topProducts = Array.from(productQty.values())
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 5)
-
-    // FIXED: reuse allProducts (single fetch) for low stock alerts
-    const lowStockAlerts = allProducts
-      .filter((p) => p.quantity <= p.minQuantity)
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        quantity: p.quantity,
-        minQuantity: p.minQuantity,
-      }))
+    const topProducts = topProductRows.map((r) => ({ name: r.name, quantity: n(r.quantity), total: n(r.total) }))
+    const lowStockAlerts = lowStockRows.map((p) => ({ id: n(p.id), name: p.name, quantity: n(p.quantity), minQuantity: n(p.minQuantity) }))
 
     // last 10 sales (lightweight payload)
     const last10Sales = last10SalesRaw.map((s) => ({

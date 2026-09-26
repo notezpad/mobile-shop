@@ -62,8 +62,8 @@ export async function GET(req: NextRequest) {
     if (search) {
       where.AND.push({
         OR: [
-          { name: { contains: search } },
-          { barcode: { contains: search } },
+          { name: { contains: search, mode: 'insensitive' } },
+          { barcode: { contains: search, mode: 'insensitive' } },
           // A scanned/typed code that belongs to a specific color/size (variant
           // barcode) must still surface the parent product here — otherwise
           // scanning a variant's own label at the POS finds nothing at all.
@@ -112,7 +112,7 @@ export async function GET(req: NextRequest) {
         where: { productId: { in: products.map((p) => p.id) } },
         _sum: { quantity: true },
       })
-      soldMap = new Map(salesAgg.map((s) => [s.productId, s._sum.quantity ?? 0]))
+      soldMap = new Map(salesAgg.filter((s) => s.productId != null).map((s) => [s.productId as number, s._sum.quantity ?? 0]))
     }
 
     const withSales = products.map((p) => ({

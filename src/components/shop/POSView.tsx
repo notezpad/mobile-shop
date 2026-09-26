@@ -163,24 +163,34 @@ export function POSView() {
     return null
   }, [selectedCustomerId, customerName, customers])
 
-  // debounced search
+  // debounced search — retries once on a network/server hiccup and ignores
+  // stale responses so an old empty result never overwrites a newer one.
+  const [searchError, setSearchError] = React.useState(false)
   React.useEffect(() => {
     const q = query.trim()
-    if (!q) { setResults([]); setOpen(false); return }
+    if (!q) { setResults([]); setOpen(false); setSearchError(false); return }
     setSearchLoading(true)
+    let cancelled = false
     const t = setTimeout(async () => {
-      try {
-        const res = await api<{ data: ProductLite[] } | ProductLite[]>(`/api/products?search=${encodeURIComponent(q)}`)
-        const data = Array.isArray(res) ? res : (res as any)?.data ?? []
-        setResults(data)
-        setOpen(true)
-      } catch {
-        setResults([])
-      } finally {
-        setSearchLoading(false)
+      const url = `/api/products?search=${encodeURIComponent(q)}&limit=20`
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const res = await api<{ data: ProductLite[] } | ProductLite[]>(url)
+          if (cancelled) return
+          const data = Array.isArray(res) ? res : (res as any)?.data ?? []
+          setResults(data)
+          setSearchError(false)
+          setOpen(true)
+          setSearchLoading(false)
+          return
+        } catch {
+          if (cancelled) return
+          if (attempt === 0) await new Promise((r) => setTimeout(r, 400))
+        }
       }
+      if (!cancelled) { setResults([]); setSearchError(true); setSearchLoading(false) }
     }, 250)
-    return () => clearTimeout(t)
+    return () => { cancelled = true; clearTimeout(t) }
   }, [query])
 
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0)
@@ -607,7 +617,10 @@ export function POSView() {
                   </div>
                 )}
 
-                {query.trim() && !open && !searchLoading && results.length === 0 && (
+                {query.trim() && !searchLoading && searchError && (
+                  <p className="mt-2 text-sm text-destructive">تعذّر البحث — تأكد من الاتصال وجرّب تاني.</p>
+                )}
+                {query.trim() && !searchError && !searchLoading && results.length === 0 && (
                   <div className="mt-2 space-y-2">
                     <p className="text-sm text-muted-foreground">لا يوجد منتج مطابق.</p>
                     <Button

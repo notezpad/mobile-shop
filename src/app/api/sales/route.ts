@@ -11,13 +11,16 @@ async function nextInvoiceNo(
   tenantId: string
 ): Promise<string> {
   const year = new Date().getFullYear()
-  const count = await db.sale.count({
-    where: {
-      tenantId,
-      invoiceNo: { startsWith: `${prefix}-${year}-` },
-    },
+  // Read only the latest invoice number (uses the index) instead of counting
+  // every invoice of the year; avoids duplicate numbers after deletions.
+  const start = `${prefix}-${year}-`
+  const last = await db.sale.findFirst({
+    where: { tenantId, invoiceNo: { startsWith: start } },
+    orderBy: { id: 'desc' },
+    select: { invoiceNo: true },
   })
-  const seq = (count + 1).toString().padStart(5, '0')
+  const lastSeq = last?.invoiceNo ? parseInt(last.invoiceNo.slice(start.length), 10) || 0 : 0
+  const seq = (lastSeq + 1).toString().padStart(5, '0')
   return `${prefix}-${year}-${seq}`
 }
 
@@ -382,7 +385,7 @@ export async function POST(req: NextRequest) {
       }
 
       return created
-    })
+    }, { maxWait: 10000, timeout: 20000 }) // default 5s was too short over a remote DB → sale hung/failed
 
     return NextResponse.json(sale, { status: 201 })
   })
