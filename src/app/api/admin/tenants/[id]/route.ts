@@ -36,7 +36,12 @@ async function __GET(
   const now = new Date()
   const last30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
-  const [productsCount, salesCount, usersCount, cashAgg, sales30, profit30Raw] =
+  // ⚡ PERF FIX: was two findMany calls — one pulling every sale from the
+  // last 30 days, another pulling those same sales WITH every line item
+  // included — just to sum them in JS. Same math, now done by Postgres in
+  // a single small query each (matches the pattern already used in
+  // /api/reports and /api/dashboard).
+  const [productsCount, salesCount, usersCount, cashAgg, sales30Agg, profit30Row] =
     await Promise.all([
       db.product.count({ where: { tenantId: id } }),
       db.sale.count({ where: { tenantId: id } }),
@@ -45,22 +50,18 @@ async function __GET(
         where: { tenantId: id },
         _sum: { amount: true },
       }),
-      db.sale.findMany({
+      db.sale.aggregate({
         where: { tenantId: id, createdAt: { gte: last30 }, status: 'مكتملة' },
-        select: { total: true },
+        _sum: { total: true },
       }),
-      db.sale.findMany({
-        where: { tenantId: id, createdAt: { gte: last30 }, status: 'مكتملة' },
-        include: { items: { select: { price: true, cost: true, quantity: true } } },
-      }),
+      db.$queryRaw<{ profit: number }[]>`
+        SELECT COALESCE(SUM((i."price" - i."cost") * i."quantity"), 0)::float8 AS profit
+        FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
+        WHERE s."tenantId" = ${id} AND s."status" = 'مكتملة' AND s."createdAt" >= ${last30}`,
     ])
 
-  const sales30Total = sales30.reduce((s, x) => s + x.total, 0)
-  const profit30 = profit30Raw.reduce(
-    (s, x) =>
-      s + x.items.reduce((a, it) => a + (it.price - it.cost) * it.quantity, 0),
-    0
-  )
+  const sales30Total = sales30Agg._sum.total ?? 0
+  const profit30 = profit30Row[0]?.profit ?? 0
 
   return NextResponse.json({
     id: tenant.id,

@@ -31,65 +31,99 @@ async function __GET(req: NextRequest) {
   startOfToday.setHours(0, 0, 0, 0)
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
   const startOfYear = new Date(now.getFullYear(), 0, 1)
+  const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1)
 
-  const where = {
-    tenant: { id: { not: PLATFORM_TENANT_ID } },
-    amountPaid: { gt: 0 },
-  }
+  // ⚡ PERF FIX (CPU time / Error 1102): this endpoint used to load EVERY
+  // paid subscription across the platform's entire history (with `tenant`
+  // and `plan` included) into the Worker, then ran the same array through
+  // ~7 separate `.filter()`/`.reduce()` passes (daily/monthly/yearly/total
+  // revenue, a 12-month breakdown, a payment-method breakdown...). That
+  // array grows every time any tenant pays for anything, so this page got
+  // slower — and closer to the CPU limit — every day, forever.
+  //
+  // Fix: every number below is computed by Postgres (SUM/COUNT/GROUP BY),
+  // scoped to the requested date range in the WHERE clause instead of being
+  // fetched in full and filtered in JS. The Worker only ever handles small,
+  // bounded result sets (a handful of rows per breakdown, 100 transactions).
+  const tenantId = { not: PLATFORM_TENANT_ID }
+  const baseWhere = { tenantId, amountPaid: { gt: 0 } } as const
 
-  const all = await db.subscription.findMany({
-    where,
-    include: { tenant: true, plan: true },
-    orderBy: { createdAt: 'desc' },
-  })
+  const [
+    rangeAgg, dailyAgg, monthlyAgg, yearlyAgg,
+    monthlyRows, methodRows, transactions, count,
+  ] = await Promise.all([
+    db.subscription.aggregate({
+      where: { ...baseWhere, createdAt: { gte: from, lte: to } },
+      _sum: { amountPaid: true },
+    }),
+    // Each period below is intersected with [from, to] — matching the
+    // original `inRange.filter(s.createdAt >= startOfX)` semantics exactly
+    // (the DB just applies both bounds in one WHERE instead of two passes).
+    db.subscription.aggregate({
+      where: { ...baseWhere, createdAt: { gte: startOfToday > from ? startOfToday : from, lte: to } },
+      _sum: { amountPaid: true },
+    }),
+    db.subscription.aggregate({
+      where: { ...baseWhere, createdAt: { gte: startOfMonth > from ? startOfMonth : from, lte: to } },
+      _sum: { amountPaid: true },
+    }),
+    db.subscription.aggregate({
+      where: { ...baseWhere, createdAt: { gte: startOfYear > from ? startOfYear : from, lte: to } },
+      _sum: { amountPaid: true },
+    }),
+    // Last 12 months breakdown for the chart, grouped in SQL.
+    db.$queryRaw<{ month: string; revenue: number; count: number }[]>`
+      SELECT to_char(date_trunc('month', "createdAt"), 'YYYY-MM') AS month,
+             SUM("amountPaid")::float8 AS revenue,
+             COUNT(*)::int AS count
+      FROM "Subscription"
+      WHERE "tenantId" != ${PLATFORM_TENANT_ID} AND "amountPaid" > 0
+        AND "createdAt" >= ${twelveMonthsAgo}
+      GROUP BY 1 ORDER BY 1`,
+    db.subscription.groupBy({
+      by: ['paymentMethod'],
+      where: { ...baseWhere, createdAt: { gte: from, lte: to } },
+      _sum: { amountPaid: true },
+      _count: true,
+    }),
+    // Last 100 transactions in range — was previously `inRange.slice(0, 100)`
+    // after loading everything; now the DB does the ordering + limiting.
+    db.subscription.findMany({
+      where: { ...baseWhere, createdAt: { gte: from, lte: to } },
+      include: { tenant: true, plan: true },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    }),
+    db.subscription.count({ where: { ...baseWhere, createdAt: { gte: from, lte: to } } }),
+  ])
 
-  const inRange = all.filter((s) => {
-    return s.createdAt >= from && s.createdAt <= to
-  })
-
-  const dailyRevenue = inRange
-    .filter((s) => s.createdAt >= startOfToday)
-    .reduce((sum, s) => sum + s.amountPaid, 0)
-  const monthlyRevenue = inRange
-    .filter((s) => s.createdAt >= startOfMonth)
-    .reduce((sum, s) => sum + s.amountPaid, 0)
-  const yearlyRevenue = inRange
-    .filter((s) => s.createdAt >= startOfYear)
-    .reduce((sum, s) => sum + s.amountPaid, 0)
-  const totalRevenue = inRange.reduce((sum, s) => sum + s.amountPaid, 0)
+  const n = (v: number | null | undefined) => v ?? 0
+  const totalRevenue = n(rangeAgg._sum.amountPaid)
+  const dailyRevenue = n(dailyAgg._sum.amountPaid)
+  const monthlyRevenue = n(monthlyAgg._sum.amountPaid)
+  const yearlyRevenue = n(yearlyAgg._sum.amountPaid)
   const avgMonthly = totalRevenue / 12
 
-  // Last 12 months breakdown for chart
+  // Fill in the 12-month window (including months with zero revenue, which
+  // the GROUP BY above never returns a row for) — only 12 iterations.
+  const monthlyByKey = new Map(monthlyRows.map((r) => [r.month, r]))
   const monthly: Array<{ month: string; revenue: number; count: number }> = []
   for (let i = 11; i >= 0; i--) {
-    const dStart = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const dEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 1)
-    const monthSubs = all.filter(
-      (s) => s.createdAt >= dStart && s.createdAt < dEnd
-    )
-    monthly.push({
-      month: ARABIC_MONTHS[dStart.getMonth()],
-      revenue: monthSubs.reduce((sum, s) => sum + s.amountPaid, 0),
-      count: monthSubs.length,
-    })
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const row = monthlyByKey.get(key)
+    monthly.push({ month: ARABIC_MONTHS[d.getMonth()], revenue: n(row?.revenue), count: row?.count ?? 0 })
   }
 
-  // Payment method breakdown
-  const methodMap: Record<string, { revenue: number; count: number }> = {}
-  for (const s of inRange) {
-    const m = s.paymentMethod ?? 'manual'
-    if (!methodMap[m]) methodMap[m] = { revenue: 0, count: 0 }
-    methodMap[m].revenue += s.amountPaid
-    methodMap[m].count += 1
-  }
-  const methodBreakdown = Object.entries(methodMap).map(([method, v]) => ({
-    method,
-    revenue: v.revenue,
-    count: v.count,
-  }))
+  const methodBreakdown = methodRows
+    .map((r) => ({
+      method: r.paymentMethod ?? 'manual',
+      revenue: n(r._sum.amountPaid),
+      count: r._count,
+    }))
+    .sort((a, b) => b.revenue - a.revenue)
 
-  // Last 100 transactions
-  const transactions = inRange.slice(0, 100).map((s) => ({
+  const transactionsPayload = transactions.map((s) => ({
     id: s.id,
     date: s.createdAt.toISOString(),
     tenantId: s.tenantId,
@@ -110,8 +144,8 @@ async function __GET(req: NextRequest) {
     avgMonthly: Math.round(avgMonthly),
     monthly,
     methodBreakdown,
-    transactions,
-    count: inRange.length,
+    transactions: transactionsPayload,
+    count,
   })
 }
 

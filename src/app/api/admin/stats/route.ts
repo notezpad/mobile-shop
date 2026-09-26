@@ -21,31 +21,47 @@ async function __GET() {
 
   const now = new Date()
   const tenantFilter = { id: { not: PLATFORM_TENANT_ID } }
+  // Direct-column equivalent of `tenant: tenantFilter` — avoids a join with
+  // Tenant for every count/aggregate below.
+  const notPlatform = { not: PLATFORM_TENANT_ID }
+  const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const fourteenDaysLater = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
 
+  // ⚡ PERF FIX (CPU time / Error 1102): this endpoint used to load EVERY
+  // subscription ever created (across every tenant, with `plan` + `tenant`
+  // included) into the Worker, then ran ~18 separate `.filter()`/`.reduce()`
+  // passes over that array in JS to compute MRR, growth, retention, etc.
+  // That array only grows over time (every renewal adds a row), so this was
+  // getting slower — and closer to the CPU limit — every single day, on a
+  // page that gets opened constantly (the admin dashboard).
+  //
+  // Fix: every number below is now computed by Postgres itself (COUNT,
+  // SUM, GROUP BY) — the Worker only ever receives small, fixed-size
+  // result sets, no matter how many tenants/subscriptions exist.
   const [
     totalTenants,
     tenantsByStatus,
     activeSubs,
+    totalSubsEver,
+    activeTrials,
+    expiringWithin7Days,
     expiringSoon,
     plans,
-    allSubs,
+    mrrRow,
+    growthRows,
     recentTenantsRaw,
   ] = await Promise.all([
     db.tenant.count({ where: tenantFilter }),
-    db.tenant.groupBy({
-      by: ['status'],
-      where: tenantFilter,
-      _count: true,
-    }),
+    db.tenant.groupBy({ by: ['status'], where: tenantFilter, _count: true }),
+    db.subscription.count({ where: { status: 'active', tenantId: notPlatform } }),
+    db.subscription.count({ where: { tenantId: notPlatform } }),
+    db.subscription.count({ where: { status: 'active', period: 'trial', tenantId: notPlatform } }),
     db.subscription.count({
-      where: { status: 'active', tenant: tenantFilter },
+      where: { status: 'active', tenantId: notPlatform, endDate: { gte: now, lte: sevenDaysLater } },
     }),
     db.subscription.findMany({
-      where: {
-        status: 'active',
-        endDate: { gte: now, lte: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000) },
-        tenant: tenantFilter,
-      },
+      where: { status: 'active', tenantId: notPlatform, endDate: { gte: now, lte: fourteenDaysLater } },
       include: { tenant: true, plan: true },
       orderBy: { endDate: 'asc' },
       take: 5,
@@ -54,62 +70,59 @@ async function __GET() {
       where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
       include: {
-        subscriptions: {
-          where: { status: 'active', tenant: tenantFilter },
-          select: { id: true },
-        },
+        subscriptions: { where: { status: 'active', tenant: tenantFilter }, select: { id: true } },
       },
     }),
-    db.subscription.findMany({
-      where: { tenant: tenantFilter },
-      include: { plan: true, tenant: true },
-      orderBy: { createdAt: 'desc' },
-    }),
+    // MRR: monthly-equivalent revenue of every currently-active subscription,
+    // computed inside Postgres via a join instead of looping over every
+    // subscription row in JS.
+    db.$queryRaw<{ mrr: number }[]>`
+      SELECT COALESCE(SUM(
+        CASE WHEN s."period" = 'monthly' THEN p."priceMonthly"
+             WHEN s."period" = 'yearly' THEN p."priceYearly" / 12.0
+             ELSE 0 END
+      ), 0)::float8 AS mrr
+      FROM "Subscription" s
+      JOIN "Plan" p ON p."id" = s."planId"
+      WHERE s."status" = 'active' AND s."tenantId" != ${PLATFORM_TENANT_ID}`,
+    // New vs. cancelled subscriptions per month, grouped in SQL (last 6 months).
+    db.$queryRaw<{ month: string; newSubs: number; cancelled: number }[]>`
+      SELECT to_char(date_trunc('month', "createdAt"), 'YYYY-MM') AS month,
+             COUNT(*)::int AS "newSubs",
+             COUNT(*) FILTER (WHERE "status" = 'cancelled')::int AS cancelled
+      FROM "Subscription"
+      WHERE "tenantId" != ${PLATFORM_TENANT_ID} AND "createdAt" >= ${sixMonthsAgo}
+      GROUP BY 1 ORDER BY 1`,
     db.tenant.findMany({
       where: tenantFilter,
       orderBy: { createdAt: 'desc' },
       take: 5,
       include: {
-        subscriptions: {
-          orderBy: { endDate: 'desc' },
-          take: 1,
-          include: { plan: true },
-        },
+        subscriptions: { orderBy: { endDate: 'desc' }, take: 1, include: { plan: true } },
       },
     }),
   ])
-
-  // MRR
-  let mrr = 0
-  for (const s of allSubs) {
-    if (s.status !== 'active') continue
-    if (s.period === 'monthly') mrr += s.plan.priceMonthly
-    else if (s.period === 'yearly') mrr += s.plan.priceYearly / 12
-  }
 
   const statusMap: Record<string, number> = {}
   for (const s of tenantsByStatus) statusMap[s.status] = s._count
   const suspendedCount = (statusMap['suspended'] ?? 0) + (statusMap['cancelled'] ?? 0)
   const expiredCount = statusMap['expired'] ?? 0
-  const activeTrials = allSubs.filter(
-    (s) => s.status === 'active' && s.period === 'trial'
-  ).length
 
+  const mrr = mrrRow[0]?.mrr ?? 0
   const arpu = activeSubs > 0 ? Math.round(mrr / activeSubs) : 0
-  const totalSubsEver = allSubs.length
-  const activeSubsCount = allSubs.filter((s) => s.status === 'active').length
   const retentionRate =
-    totalSubsEver > 0 ? Math.round((activeSubsCount / totalSubsEver) * 1000) / 10 : 100
+    totalSubsEver > 0 ? Math.round((activeSubs / totalSubsEver) * 1000) / 10 : 100
 
+  // Fill in the 6-month window (including months with zero activity, which
+  // the GROUP BY above never returns a row for) — only 6 iterations, so
+  // this is a rounding error CPU-wise compared to the old N-subscription scan.
+  const growthByMonth = new Map(growthRows.map((r) => [r.month, r]))
   const growth: Array<{ month: string; newSubs: number; cancelled: number }> = []
   for (let i = 5; i >= 0; i--) {
-    const dStart = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const dEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 1)
-    const newSubs = allSubs.filter((s) => s.createdAt >= dStart && s.createdAt < dEnd).length
-    const cancelled = allSubs.filter(
-      (s) => s.status === 'cancelled' && s.createdAt >= dStart && s.createdAt < dEnd
-    ).length
-    growth.push({ month: ARABIC_MONTHS[dStart.getMonth()], newSubs, cancelled })
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const row = growthByMonth.get(key)
+    growth.push({ month: ARABIC_MONTHS[d.getMonth()], newSubs: row?.newSubs ?? 0, cancelled: row?.cancelled ?? 0 })
   }
 
   const planDistribution = plans.map((p) => ({
@@ -139,12 +152,6 @@ async function __GET() {
     endDate: s.endDate.toISOString(),
     daysLeft: Math.ceil((s.endDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)),
   }))
-
-  const expiringWithin7Days = allSubs.filter((s) => {
-    if (s.status !== 'active') return false
-    const daysLeft = (s.endDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
-    return daysLeft >= 0 && daysLeft <= 7
-  }).length
 
   return NextResponse.json({
     totalTenants,
