@@ -15,9 +15,15 @@ async function __GET() {
   }
   const where: any = { tenantId: s.tenantId }
   if (s.branchId) where.OR = [{ fromBranchId: s.branchId }, { toBranchId: s.branchId }]
+  // ⚡ PERF FIX (CPU time / Error 1102): same issue as /api/inventory/stocktake
+  // — no `take` limit, so every transfer ever made (each with its full item
+  // list + product name/barcode) was loaded on every /inventory page open.
+  // Capped at the 300 most recent transfers, matching how the UI actually
+  // displays this list (no pagination exists to reach further back).
   const rows = await db.transfer.findMany({
     where,
     orderBy: { id: 'desc' },
+    take: 300,
     include: {
       fromBranch: { select: { name: true } },
       toBranch: { select: { name: true } },

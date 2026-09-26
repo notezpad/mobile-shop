@@ -15,9 +15,18 @@ async function __GET() {
   }
   const where: any = { tenantId: s.tenantId }
   if (s.branchId) where.branchId = s.branchId
+  // ⚡ PERF FIX (CPU time / Error 1102): this had NO `take` limit — every
+  // stocktake session ever created for the tenant was loaded, each one WITH
+  // its full item list (one row per counted product) and the product name/
+  // barcode for every item. A shop that does regular stocktakes accumulates
+  // these forever, so this endpoint got heavier every week — and it's
+  // fetched on EVERY page load of /inventory (all 5 calls fire in parallel
+  // regardless of which tab is open). Capped at the 200 most recent sessions,
+  // which is what the UI renders anyway (no pagination/"load more" exists).
   const rows = await db.stocktake.findMany({
     where,
     orderBy: { id: 'desc' },
+    take: 200,
     include: {
       branch: { select: { name: true } },
       items: { include: { product: { select: { name: true, barcode: true } } } },
