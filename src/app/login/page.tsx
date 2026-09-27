@@ -57,6 +57,9 @@ export default function LoginPage() {
       const data = await api<{ ok: boolean; user?: any; error?: string }>("/api/auth/login", {
         method: "POST",
         body: { email: email.trim().toLowerCase(), password, remember },
+        // آمن نعيد المحاولة هنا: تسجيل الدخول عملية "قراءة/تحقق" وليس
+        // إنشاء بيانات، فمفيش خطر تكرار — على عكس مثلاً حفظ فاتورة.
+        idempotent: true,
       });
       if (data?.ok && data.user) {
         toast.success(`أهلاً بك ${data.user.name ?? ""} 👋`);

@@ -161,7 +161,7 @@ async function localProductSearch<T>(url: string): Promise<T | null> {
  */
 export async function offlineFetch<T = any>(
   url: string,
-  options?: { method?: string; body?: any; signal?: AbortSignal }
+  options?: { method?: string; body?: any; signal?: AbortSignal; idempotent?: boolean }
 ): Promise<T> {
   const method = options?.method ?? 'GET'
   const isWrite = method !== 'GET'
@@ -169,8 +169,19 @@ export async function offlineFetch<T = any>(
   // ── Write operations ──────────────────────────────────
   if (isWrite) {
     try {
-      // Writes are never retried automatically (that could duplicate a sale),
-      // but they do get the 20s timeout so the UI cannot hang forever.
+      // Writes are never retried automatically by default (that could
+      // duplicate a sale/invoice/etc.), BUT a caller can opt in via
+      // `idempotent: true` for requests it knows are safe to repeat —
+      // e.g. login, where re-sending the same email/password on a
+      // transient 500 just re-checks credentials, it never creates data.
+      //
+      // 🛡️ 2026-09-27: without this, a login attempt that hit the cold
+      // "first DB connection of the request" delay described in
+      // PERF_FIX_503.md failed immediately with a raw "طلب فاشل (500)"
+      // even though trying again a moment later (once the connection was
+      // warm) worked fine — the user had to notice and click "دخول" a
+      // second time themselves. Login now retries that transient failure
+      // automatically, same backoff as GET requests.
       const res = await fetchWithRetry(
         url,
         {
@@ -178,7 +189,7 @@ export async function offlineFetch<T = any>(
           headers: options?.body !== undefined ? { 'Content-Type': 'application/json' } : {},
           body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
         },
-        0,
+        options?.idempotent ? 2 : 0,
         options?.signal,
       )
       const text = await res.text()

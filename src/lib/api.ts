@@ -19,7 +19,7 @@ import { offlineFetch } from './offline/api-offline'
 
 export async function api<T = any>(
   url: string,
-  options?: { method?: string; body?: any; signal?: AbortSignal }
+  options?: { method?: string; body?: any; signal?: AbortSignal; idempotent?: boolean }
 ): Promise<T> {
   return offlineFetch<T>(url, options)
 }

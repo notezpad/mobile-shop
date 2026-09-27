@@ -9,20 +9,38 @@ export interface AuthUser {
   branchId?: number | null
 }
 
+const RETRYABLE_LOGIN_STATUS = new Set([500, 502, 503, 504])
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export async function apiLogin(
   email: string,
   password: string
 ): Promise<AuthUser> {
-  const res = await fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  })
-  const data = await res.json().catch(() => null)
-  if (!res.ok || !data?.ok) {
-    throw new Error(data?.error || 'فشل تسجيل الدخول')
+  // 🛡️ 2026-09-27: login is a POST but it's a pure "check credentials"
+  // call — retrying it is safe (no data gets created twice), unlike a
+  // sale or a product save. Without a retry here, a transient 500 from
+  // the edge runtime's cold DB connection (see PERF_FIX_503.md) surfaced
+  // straight to the user as "طلب فاشل (500)" even though trying again a
+  // second later — once the connection warmed up — worked fine.
+  let lastRes: Response | null = null
+  let lastData: any = null
+  for (let attempt = 0; attempt <= 2; attempt++) {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+    const data = await res.json().catch(() => null)
+    if (res.ok && data?.ok) return data.user as AuthUser
+    lastRes = res
+    lastData = data
+    if (!RETRYABLE_LOGIN_STATUS.has(res.status) || attempt === 2) break
+    await sleep(400 * (attempt + 1))
   }
-  return data.user as AuthUser
+  throw new Error(lastData?.error || `فشل تسجيل الدخول${lastRes ? ` (${lastRes.status})` : ''}`)
 }
 
 export async function apiSignup(input: {
