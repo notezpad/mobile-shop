@@ -65,10 +65,23 @@ async function __POST(req: NextRequest) {
   }
 
   // ── 4. Create PENDING subscription row ─────────────────────────────
+  // 🛡️ 2026-09-27 ROOT FIX: a pending (unpaid) row must carry ZERO duration.
+  // Previously endDate was set to now+30/+365 days here, so simply opening the
+  // Paymob page granted a full paid period even if the user never paid.
+  // The real endDate is computed ONLY in the webhook, after Paymob confirms
+  // a successful transaction.
   const startDate = new Date()
   const endDate = new Date(startDate)
-  if (period === 'monthly') endDate.setDate(endDate.getDate() + 30)
-  else endDate.setDate(endDate.getDate() + 365)
+
+  // Close out abandoned checkout attempts for this tenant (older than 30 min)
+  await db.subscription.updateMany({
+    where: {
+      tenantId: session.tenantId,
+      status: 'pending',
+      createdAt: { lt: new Date(Date.now() - 30 * 60 * 1000) },
+    },
+    data: { status: 'failed', paymentNote: 'paymob-abandoned-checkout' },
+  }).catch(() => {})
 
   const pendingSub = await db.subscription.create({
     data: {

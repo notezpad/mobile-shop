@@ -1,5 +1,6 @@
 import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { countableSubWhere } from '@/lib/subscription-status'
 import { db } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 
@@ -74,7 +75,7 @@ async function __POST(req: NextRequest) {
   // ── Check tenant's existing subscriptions ──
   const now = new Date()
   const latestSub = await db.subscription.findFirst({
-    where: { tenantId: session.tenantId },
+    where: { tenantId: session.tenantId, ...countableSubWhere },
     orderBy: { endDate: 'desc' },
     select: { id: true, planId: true, endDate: true, period: true, status: true },
   })

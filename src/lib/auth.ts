@@ -2,6 +2,7 @@
 // New hashes use Web Crypto PBKDF2 — zero CPU overhead on Workers.
 import { cookies, headers } from 'next/headers'
 import { SignJWT, jwtVerify } from 'jose'
+import { countableSubWhere } from '@/lib/subscription-status'
 import { db } from './db'
 import { isProductionRuntime, readEnv } from './env'
 
@@ -198,8 +199,10 @@ export async function requireActiveSubscription(tenantId: string) {
     throw new Error('TENANT_SUSPENDED')
   }
 
+  // 🛡️ 2026-09-27: ONLY count real subscriptions. A 'pending' row created
+  // when the user merely opened the Paymob checkout must never grant access.
   const latestSub = await db.subscription.findFirst({
-    where: { tenantId },
+    where: { tenantId, ...countableSubWhere },
     orderBy: { endDate: 'desc' },
   })
 

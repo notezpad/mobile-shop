@@ -91,6 +91,12 @@ async function __POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
+    // 🛡️ Idempotency: never re-activate / re-extend an already-active row.
+    if (success && !isVoided && !isRefunded && sub.status === 'active') {
+      console.log(`[paymob/webhook] Subscription ${subscriptionId} already active — ignoring duplicate callback`)
+      return NextResponse.json({ ok: true })
+    }
+
     if (success && !isVoided && !isRefunded) {
       // ── Payment succeeded — activate subscription ──
       const amountCents = Number(obj.amount_cents ?? 0)
@@ -99,8 +105,14 @@ async function __POST(req: NextRequest) {
       // Use our helper to compute the proper end date. If the user already has
       // an active subscription that hasn't expired, EXTEND the end date
       // instead of starting a new one — this is the standard SaaS behaviour.
+      // 🛡️ 2026-09-27: base the extension on the tenant's real ACTIVE
+      // subscription (if any), never on the pending row's own endDate.
       const now = new Date()
-      const baseDate = sub.endDate > now ? sub.endDate : now
+      const currentActive = await db.subscription.findFirst({
+        where: { tenantId: sub.tenantId, status: 'active', endDate: { gt: now } },
+        orderBy: { endDate: 'desc' },
+      })
+      const baseDate = currentActive && currentActive.endDate > now ? currentActive.endDate : now
       const newEndDate = computeEndDate(baseDate, sub.period as 'monthly' | 'yearly', sub.plan.trialDays)
 
       await db.subscription.update({

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuthIgnoreSubscription, authErrorResponse } from '@/lib/auth'
+import { countableSubWhere } from '@/lib/subscription-status'
 import { ALL_MODULES, getPlanContext } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
@@ -57,7 +58,9 @@ async function __GET() {
   }
 
   const latestSub = await db.subscription.findFirst({
-    where: { tenantId: session.tenantId },
+    // 🛡️ 2026-09-27: exclude 'pending'/'failed' rows — an unpaid Paymob
+    // checkout attempt must not show as "30 days left".
+    where: { tenantId: session.tenantId, ...countableSubWhere },
     orderBy: { endDate: 'desc' },
     include: { plan: true },
   })
