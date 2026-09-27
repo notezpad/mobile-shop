@@ -68,11 +68,31 @@ export function resourceTagsForUrl(url: string): DataTag[] {
 
   if (has('/api/customers')) {
     tags.add('customers')
-    if (has('/payments')) tags.add('cash')
+  }
+  // 🛡️ 2026-09-27 (v6): customer payments live at the FLAT route
+  // `/api/payments` (see src/app/api/payments/route.ts), not under
+  // `/api/customers/.../payments`. The old check above only ever looked
+  // for `/api/customers` + `/payments` together, which this URL never
+  // satisfies — so recording/deleting a customer payment silently never
+  // tagged 'customers' or 'cash' and every other open view/dialog kept
+  // showing the pre-payment balance until an unrelated write happened to
+  // touch one of those tags (or a full remount forced a refetch).
+  if (has('/api/payments')) {
+    tags.add('customers')
+    tags.add('cash')
   }
   if (has('/api/suppliers')) {
     tags.add('suppliers')
-    if (has('/payments')) tags.add('cash')
+  }
+  // 🛡️ 2026-09-27 (v6): same bug, supplier side. The route is
+  // `/api/supplier-payments` (see src/app/api/supplier-payments/route.ts)
+  // — a SEPARATE path that does not contain the substring
+  // `/api/suppliers` (it's "supplier-payments", not "suppliers-payments"),
+  // so `has('/api/suppliers')` above was always false for it and no tag
+  // ever fired for a supplier payment.
+  if (has('/api/supplier-payments')) {
+    tags.add('suppliers')
+    tags.add('cash')
   }
   if (has('/api/sales')) {
     tags.add('sales')
@@ -92,6 +112,13 @@ export function resourceTagsForUrl(url: string): DataTag[] {
     tags.add('cash')
   }
   if (has('/api/cash')) tags.add('cash')
+  // 🛡️ 2026-09-27 (v6): `/api/finance` (deposits/withdrawals in
+  // FinanceView — vodafone_cash/instapay/fawry) moves money in/out of the
+  // drawer just like /api/cash does, but had no tag at all. FinanceView,
+  // CashView and ReportsView all subscribe to 'cash', so a deposit/
+  // withdraw there was invisible to every one of them until an unrelated
+  // write happened to fire 'cash' first.
+  if (has('/api/finance')) tags.add('cash')
   if (has('/api/inventory')) {
     tags.add('inventory')
     tags.add('products')
