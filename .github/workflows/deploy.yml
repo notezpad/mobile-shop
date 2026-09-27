@@ -7,6 +7,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -24,4 +25,4 @@ jobs:
         run: npm run cf:deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: ${{ postgresql://postgres.sfkelvztwtsyjcruurrc:MO7amedr87%40%40@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true }}
+          CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: "postgresql://postgres.sfkelvztwtsyjcruurrc:MO7amedr87%40%40@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
