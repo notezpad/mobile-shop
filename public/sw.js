@@ -16,16 +16,26 @@
  *  ✅ Periodic sync (optional, for background data refresh)
  */
 
-const CACHE_VERSION = 'shop-erp-v2'
+const CACHE_VERSION = 'shop-erp-v3'
 const OFFLINE_URL = '/offline.html'
 
 // ─── Precache list ──────────────────────────────────────────
+// 🛡️ 2026-09-27: app routes (dashboard/pos/products/settings/finance)
+// USED to be listed here and precached as full HTML documents. That
+// caused the "sidebar link sometimes doesn't open the page until I
+// refresh" bug: Next.js's App Router does client-side transitions by
+// fetching an RSC payload from the SAME pathname as the page (a plain
+// GET, not a `navigate`-mode request) — and the catch-all handler below
+// would serve the STALE PRECACHED FULL HTML for that exact URL instead
+// of forwarding to the network, so the router silently got the wrong
+// payload shape and the on-screen content never changed (URL/history
+// still updated, which is why it looked random/intermittent). A full
+// page refresh worked because that request IS `navigate`-mode, which
+// always goes to the network first (see below). It was also a stale/
+// cross-tenant risk on a shared device: a dashboard HTML precached for
+// one logged-in tenant could get served to a different tenant later.
+// Only truly static, non-personalized assets belong in this list now.
 const PRECACHE_URLS = [
-  '/dashboard',
-  '/pos',
-  '/products',
-  '/settings',
-  '/finance',
   '/offline.html',
   '/manifest.json',
   '/icon-192.png',
@@ -73,6 +83,23 @@ self.addEventListener('fetch', (event) => {
 
   // Skip cross-origin (Paymob, Google Fonts, etc.)
   if (url.origin !== self.location.origin) return
+
+  // 🛡️ 2026-09-27: Next.js's App Router fetches an RSC payload from the
+  // SAME URL as the page itself when you click a <Link> (client-side
+  // transition) — it's a plain GET, not a `navigate`-mode request, so it
+  // would otherwise fall into the generic "static asset" cache below and
+  // could be answered with a stale cached HTML document for that path
+  // instead of the fresh RSC payload Next.js expects, silently breaking
+  // the transition (see the note on PRECACHE_URLS above for the full
+  // story). These requests must always go straight to the network with
+  // no Service Worker caching involved.
+  const isNextRouterRequest =
+    request.headers.get('RSC') === '1' ||
+    request.headers.has('Next-Router-State-Tree') ||
+    request.headers.has('Next-Router-Prefetch') ||
+    url.pathname.startsWith('/_next/data/') ||
+    url.searchParams.has('_rsc')
+  if (isNextRouterRequest) return
 
   // ── API requests → network-first ─────────────────────────
   if (url.pathname.startsWith('/api/')) {
