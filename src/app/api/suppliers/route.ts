@@ -10,7 +10,17 @@ export const dynamic = 'force-dynamic'
  * PrismaClient per request instead of creating a new TCP+TLS+auth connection
  * per query. GET makes 2 parallel queries; without `withDb` each was 200-500ms
  * of pure connection overhead.
+ *
+ * 🛡️ 2026-09-27: Same unbounded-scan shape as /api/customers — no `take`
+ * limit at all. See the comment there for the full rationale: every current
+ * caller (SuppliersView's table, purchase-order picker, offline prewarm)
+ * keeps calling this with NO `page` param and gets the same bare array as
+ * before, since SuppliersView's stats/export also need the full set in
+ * memory — just now bounded by SAFETY_CAP instead of truly unbounded.
+ * `page` + `limit` params opt into real pagination — { data, total, page,
+ * limit, totalPages } — for whoever adopts it later. No current page does.
  */
+const SAFETY_CAP = 3000
 
 export async function GET(req: NextRequest) {
   return withDb(async () => {
@@ -38,12 +48,23 @@ export async function GET(req: NextRequest) {
         { phone: { contains: search } },
       ]
     }
-    const [suppliers, purchasesAgg] = await Promise.all([
+
+    const paginated = searchParams.has('page')
+    const limit = paginated
+      ? Math.min(200, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)))
+      : SAFETY_CAP
+    const page = paginated ? Math.max(1, parseInt(searchParams.get('page') ?? '1', 10)) : 1
+    const skip = paginated ? (page - 1) * limit : 0
+
+    const [suppliers, total, purchasesAgg] = await Promise.all([
       db.supplier.findMany({
         where,
         orderBy: { id: 'desc' },
         include: { _count: { select: { purchaseOrders: true } } },
+        skip,
+        take: limit,
       }),
+      paginated ? db.supplier.count({ where }) : Promise.resolve(null),
       db.purchaseOrder.groupBy({
         by: ['supplierId'],
         where: { tenantId: session.tenantId, supplierId: { not: null } },
@@ -62,7 +83,17 @@ export async function GET(req: NextRequest) {
       totalPurchases: aggBySupplier.get(s.id)?.totalPurchases ?? 0,
       lastPurchaseAt: aggBySupplier.get(s.id)?.lastPurchaseAt ?? null,
     }))
-    return NextResponse.json(result)
+
+    if (!paginated) {
+      return NextResponse.json(result)
+    }
+    return NextResponse.json({
+      data: result,
+      total: total ?? result.length,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil((total ?? result.length) / limit)),
+    })
   })
 }
 

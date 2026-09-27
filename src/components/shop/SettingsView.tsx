@@ -77,17 +77,53 @@ export function SettingsView() {
     expiringSoon: boolean
   } | null>(null)
   const [subLoading, setSubLoading] = React.useState(true)
-
-  React.useEffect(() => {
-    api<any>('/api/subscription')
-      .then((d) => setSub(d))
-      .catch(() => {})
-      .finally(() => setSubLoading(false))
-  }, [])
   const setShopName = useShopStore((s) => s.setShopName)
   const setBranding = useShopStore((s) => s.setBranding)
+  const setPlan = useShopStore((s) => s.setPlan)
+  const setSubscription = useShopStore((s) => s.setSubscription)
   const enabledModules = useShopStore((s) => s.plan.enabledModules)
   const hasFinance = enabledModules.includes('finance')
+
+  // 🛡️ 2026-09-27: single source of truth for refreshing subscription data.
+  // Previously every caller (initial load, RedeemCodeCard.onRedeemed, the
+  // now-removed PlanSwitcher.onSwitched) only did `setSub(d)` — updating
+  // THIS component's own local badge/expiry display but never touching the
+  // global `plan.{enabledModules,capabilities}` in useShopStore. Every other
+  // page (ProductsView, Sidebar, ...) reads capabilities from that global
+  // store, so after redeeming a code tied to a different plan, this page
+  // would correctly show the new plan name while the rest of the app kept
+  // running on the OLD capabilities until a hard refresh — e.g. the
+  // "variants" (sizes/colors) capability silently missing from ProductsView
+  // even though no product data was touched. This helper updates both.
+  const refreshSubscription = React.useCallback(() => {
+    return api<any>('/api/subscription')
+      .then((d) => {
+        setSub(d)
+        setSubscription({
+          expired: Boolean(d?.expired),
+          expiringSoon: Boolean(d?.expiringSoon),
+          daysLeft: typeof d?.daysLeft === 'number' ? d.daysLeft : null,
+          endDate: d?.endDate ?? null,
+          planCode: d?.planCode ?? null,
+          planName: d?.planName ?? null,
+          period: d?.period ?? null,
+        })
+        if (Array.isArray(d?.enabledModules)) {
+          setPlan({
+            businessType: d.businessType === 'fashion' ? 'fashion' : 'electronics',
+            enabledModules: d.enabledModules,
+            capabilities: Array.isArray(d.capabilities) ? d.capabilities : [],
+          })
+        }
+        return d
+      })
+      .catch(() => null)
+  }, [setPlan, setSubscription])
+
+  React.useEffect(() => {
+    refreshSubscription().finally(() => setSubLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -281,26 +317,25 @@ export function SettingsView() {
           so users can stack a renewal code while still active. */}
       <RedeemCodeCard
         onRedeemed={() => {
-          // Refresh subscription data after a successful redeem
+          // Refresh subscription data (local badge + global store) after a
+          // successful redeem — a code can be tied to a different plan than
+          // the one the tenant is currently on.
           setSubLoading(true)
-          api<any>('/api/subscription')
-            .then((d) => setSub(d))
-            .catch(() => {})
-            .finally(() => setSubLoading(false))
+          refreshSubscription().finally(() => setSubLoading(false))
         }}
       />
 
-      {/* 🛡️ 2026-09-15 (v4): Self-service plan switcher. Lets the tenant
-          admin switch their subscription to one of the 4 canonical plans.
-          Useful for users who are on the legacy `trial` plan and need to
-          migrate to a real canonical plan. */}
-      <PlanSwitcher
-        currentPlanCode={sub?.planCode ?? null}
-        onSwitched={() => {
-          // Refresh the subscription after a successful switch
-          api<any>('/api/subscription').then((d) => setSub(d)).catch(() => {})
-        }}
-      />
+      {/* 🛡️ 2026-09-27: PlanSwitcher removed — it was a self-testing tool
+          for migrating legacy `trial` tenants to a canonical plan, and it's
+          no longer needed day-to-day. It also had a real bug: switching
+          only updated this page's own local `sub` state, not the global
+          plan/capabilities in useShopStore — so pages like ProductsView
+          (which read capabilities from the store) wouldn't reflect the new
+          plan until a hard refresh, making a successful switch LOOK like it
+          silently lost the "variants" (colors/sizes) capability. No product
+          data was ever touched by switching plans — it was purely a stale
+          UI-state bug. See PlanSwitcher's old definition (kept below,
+          unused) if this ever needs to come back for a specific tenant. */}
 
       {/* 🛡️ 2026-09-17: Notification settings — connected to /api/notifications/settings */}
       <NotificationSettingsCard />

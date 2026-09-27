@@ -9,7 +9,25 @@ export const dynamic = 'force-dynamic'
  * PrismaClient per request instead of creating a new TCP+TLS+auth connection
  * per query. GET makes 2 parallel queries; without `withDb` each was 200-500ms
  * of pure connection overhead.
+ *
+ * 🛡️ 2026-09-27: This list had no `take` limit at all — every request
+ * fetched the tenant's ENTIRE customer table. Fine with a handful of rows,
+ * but the same unbounded-scan shape as the Error 1102 fix elsewhere,
+ * just waiting to happen as a shop's customer base grows.
+ *
+ * Every current caller (CustomersView's table, POS autocomplete, offline
+ * prewarm) still calls this route with NO `page` param and gets the same
+ * bare array as before — CustomersView's stats cards and Excel export need
+ * the whole tenant's customers in memory to stay correct, so behavior is
+ * unchanged there. What changed is that "all of them" is now bounded by
+ * SAFETY_CAP instead of a truly unbounded query.
+ *
+ * Real, opt-in pagination is available for whoever wants it: pass `page`
+ * (and optionally `limit`) and the response becomes { data, total, page,
+ * limit, totalPages } instead of a bare array — mirroring /api/products.
+ * No current page uses this yet.
  */
+const SAFETY_CAP = 3000
 
 export async function GET(req: NextRequest) {
   return withDb(async () => {
@@ -30,12 +48,23 @@ export async function GET(req: NextRequest) {
         { phone: { contains: search } },
       ]
     }
-    const [customers, salesAgg] = await Promise.all([
+
+    const paginated = searchParams.has('page')
+    const limit = paginated
+      ? Math.min(200, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)))
+      : SAFETY_CAP
+    const page = paginated ? Math.max(1, parseInt(searchParams.get('page') ?? '1', 10)) : 1
+    const skip = paginated ? (page - 1) * limit : 0
+
+    const [customers, total, salesAgg] = await Promise.all([
       db.customer.findMany({
         where,
         orderBy: { id: 'desc' },
         include: { _count: { select: { sales: true } } },
+        skip,
+        take: limit,
       }),
+      paginated ? db.customer.count({ where }) : Promise.resolve(null),
       db.sale.groupBy({
         by: ['customerId'],
         where: { tenantId: session.tenantId, customerId: { not: null } },
@@ -54,7 +83,17 @@ export async function GET(req: NextRequest) {
       totalPurchases: aggByCustomer.get(c.id)?.totalPurchases ?? 0,
       lastSaleAt: aggByCustomer.get(c.id)?.lastSaleAt ?? null,
     }))
-    return NextResponse.json(result)
+
+    if (!paginated) {
+      return NextResponse.json(result)
+    }
+    return NextResponse.json({
+      data: result,
+      total: total ?? result.length,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil((total ?? result.length) / limit)),
+    })
   })
 }
 

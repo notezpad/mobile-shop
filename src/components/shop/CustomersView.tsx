@@ -10,6 +10,8 @@ import {
   Eye,
   TrendingDown,
   FileSpreadsheet,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import {
   Dialog,

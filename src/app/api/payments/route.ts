@@ -41,9 +41,14 @@ async function __GET(req: NextRequest) {
     return NextResponse.json({ error: 'العميل غير موجود' }, { status: 404 })
   }
 
+  // 🛡️ 2026-09-27: safety cap — this was unbounded. Scoped to one customer
+  // so the realistic ceiling is much lower than /api/customers, but a
+  // long-lived customer with years of small payments could still grow this
+  // without bound. Most recent 500 is effectively unlimited in practice.
   const payments = await db.payment.findMany({
     where: { tenantId: session.tenantId, customerId },
     orderBy: { createdAt: 'desc' },
+    take: 500,
   })
   return NextResponse.json(payments)
 }

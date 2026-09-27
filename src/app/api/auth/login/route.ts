@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
-import { verifyPassword, createSession } from '@/lib/auth'
+import { verifyPassword, hashPassword, createSession } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,6 +38,26 @@ async function __POST(req: NextRequest) {
         { error: 'بيانات الدخول غير صحيحة' },
         { status: 401 }
       )
+    }
+
+    // 🛡️ 2026-09-27: lazily migrate legacy bcrypt hashes to PBKDF2 the
+    // first time their owner logs in successfully. `bcrypt.compare()` is
+    // deliberately CPU-expensive (that's the whole point of bcrypt), but
+    // Cloudflare Workers give each request a small CPU-time budget — see
+    // the "Worker exceeded resource limits" (Error 1102) issue. Every
+    // login by an account still on its original bcrypt hash was paying
+    // that full CPU cost on EVERY single login, forever, instead of once.
+    // We already have plain access to the correct password right here, so
+    // just re-hash it with the cheap PBKDF2 (Web Crypto) scheme and save
+    // it — from the next login onward this account no longer touches
+    // bcrypt at all. Best-effort: never block/fail the login over this.
+    if (user.password.startsWith('$2')) {
+      try {
+        const upgraded = await hashPassword(password)
+        await db.user.update({ where: { id: user.id }, data: { password: upgraded } })
+      } catch {
+        /* ignore — will simply retry the migration on their next login */
+      }
     }
 
     // Update last login timestamp on the tenant (unless super admin)

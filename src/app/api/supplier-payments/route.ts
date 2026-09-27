@@ -41,9 +41,12 @@ async function __GET(req: NextRequest) {
     return NextResponse.json({ error: 'المورد غير موجود' }, { status: 404 })
   }
 
+  // 🛡️ 2026-09-27: safety cap — see the identical note in
+  // /api/payments/route.ts. Scoped per supplier, most recent 500.
   const payments = await db.supplierPayment.findMany({
     where: { tenantId: session.tenantId, supplierId },
     orderBy: { createdAt: 'desc' },
+    take: 500,
   })
   return NextResponse.json(payments)
 }
