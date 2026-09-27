@@ -38,6 +38,7 @@ import { formatCurrency, formatDate } from '@/lib/format'
 import { DateTimeCell } from './DateTimeCell'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
+import { useDataRefresh } from '@/lib/offline/data-events'
 
 const CATEGORIES = [
   'إيجار',
@@ -104,6 +105,9 @@ export function ExpensesView() {
   React.useEffect(() => {
     load()
   }, [load])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
+  useDataRefresh(['expenses'], load)
 
   const submit = async () => {
     const amt = parseFloat(amount)

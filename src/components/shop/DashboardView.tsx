@@ -47,6 +47,7 @@ import { KpiCard } from '@/components/bento/kpi-card'
 import { BentoGrid, BentoCell } from '@/components/bento/bento-grid'
 import { Sparkline } from '@/components/charts/sparkline'
 import { DonutChart } from '@/components/charts/donut-chart'
+import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface DashboardData {
   todaySales: number
@@ -157,6 +158,9 @@ export function DashboardView() {
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [load])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
+  useDataRefresh(['dashboard'], load)
 
   // Build sparkline data from last7DaysSales — fallback to flat array if loading
   const salesSparkData = data?.last7DaysSales?.map((d) => d.total) ?? []

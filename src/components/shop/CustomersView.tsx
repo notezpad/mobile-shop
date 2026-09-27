@@ -42,6 +42,7 @@ import { useConfirm } from './ConfirmDialogProvider'
 import { CustomerDetailDialog } from './CustomerDetailDialog'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
+import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface Customer {
   id: number
@@ -89,6 +90,11 @@ export function CustomersView() {
     const t = setTimeout(load, 250)
     return () => clearTimeout(t)
   }, [load])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh — e.g. a payment added from
+  // CustomerDetailDialog (which sits on top of this list) now updates the
+  // balance shown here instantly, no hard refresh needed.
+  useDataRefresh(['customers'], load)
 
   const exportExcel = () => {
     if (customers.length === 0) return

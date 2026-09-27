@@ -29,6 +29,7 @@ import { DateTimeCell } from './DateTimeCell'
 import { cn } from '@/lib/utils'
 import { printListReportHtml, openPrintWindow } from '@/lib/print'
 import { useShopStore } from '@/lib/store'
+import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface Entry {
   id: number
@@ -75,6 +76,9 @@ export function CashView() {
   React.useEffect(() => {
     load()
   }, [load])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
+  useDataRefresh(['cash'], load)
 
   // Entries come newest-first from the API, and `data.balance` is the
   // authoritative running total (sum of ALL entries, not just the visible

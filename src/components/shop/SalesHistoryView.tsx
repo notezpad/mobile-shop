@@ -25,6 +25,7 @@ import { useShopStore } from '@/lib/store'
 import { DateTimeCell } from './DateTimeCell'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { getLocalDateStr } from '@/lib/dateUtils'
+import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface SaleItem {
   id: number
@@ -87,6 +88,9 @@ export function SalesHistoryView() {
     load(from, to)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
+  useDataRefresh(['sales'], () => load(from, to, page))
 
   const applyRange = (f: string, t: string) => {
     setFrom(f)

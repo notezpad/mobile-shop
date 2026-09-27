@@ -29,6 +29,7 @@ import { formatCurrency, formatArabicDateTime } from '@/lib/format'
 import { DateTimeCell } from './DateTimeCell'
 import { printListReportHtml, openPrintWindow } from '@/lib/print'
 import { useShopStore } from '@/lib/store'
+import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface Txn {
   id: number
@@ -81,6 +82,10 @@ export function FinanceView() {
   React.useEffect(() => {
     load()
   }, [load])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh — this view mixes cash, sales
+  // and expenses data, so refetch when any of those change.
+  useDataRefresh(['cash', 'sales', 'expenses'], load)
 
   const submit = async () => {
     const amt = parseFloat(amount)

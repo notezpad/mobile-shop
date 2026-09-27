@@ -40,6 +40,7 @@ import { useConfirm } from './ConfirmDialogProvider'
 import { SupplierDetailDialog } from './SupplierDetailDialog'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
+import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface Supplier {
   id: number
@@ -83,6 +84,9 @@ export function SuppliersView() {
     const t = setTimeout(load, 250)
     return () => clearTimeout(t)
   }, [load])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
+  useDataRefresh(['suppliers'], load)
 
   const exportExcel = () => {
     if (suppliers.length === 0) return

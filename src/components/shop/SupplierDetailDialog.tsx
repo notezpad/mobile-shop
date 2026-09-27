@@ -47,6 +47,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { useDataRefresh } from '@/lib/offline/data-events'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { DateTimeCell } from './DateTimeCell'
 import { SupplierPaymentDialog } from './SupplierPaymentDialog'
@@ -201,6 +202,9 @@ export function SupplierDetailDialog({
       setDetail(null)
     }
   }, [open, supplierId, load])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
+  useDataRefresh(['suppliers'], load, open && !!supplierId)
 
   const balance = detail?.balance ?? 0
   const balanceTone =

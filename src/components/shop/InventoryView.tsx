@@ -24,6 +24,7 @@ import { StockTab } from './inventory/StockTab'
 import { MovementsTab } from './inventory/MovementsTab'
 import { TransfersTab } from './inventory/TransfersTab'
 import { StocktakeTab } from './inventory/StocktakeTab'
+import { useDataRefresh } from '@/lib/offline/data-events'
 
 export interface Branch {
   id: number
@@ -116,6 +117,10 @@ export function InventoryView() {
     }
   }, [])
   React.useEffect(() => { load() }, [load])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh — a sale from POS, or an edit
+  // from the Products page, changes stock shown here too.
+  useDataRefresh(['inventory', 'products', 'branches'], load)
 
   // ----- Derived summary stats -----
   const stats = React.useMemo(() => {

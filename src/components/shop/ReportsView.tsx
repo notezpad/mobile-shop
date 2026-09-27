@@ -55,6 +55,7 @@ import { formatCurrency, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
 import { BRAND, baseDocStyles, fmt as fmtMoney, openPrintWindow } from '@/lib/print'
+import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface Branch {
   id: number
@@ -153,6 +154,10 @@ export function ReportsView() {
   React.useEffect(() => {
     load()
   }, [load])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh — this report aggregates sales,
+  // expenses, cash and products, so refetch when any of those change.
+  useDataRefresh(['sales', 'expenses', 'cash', 'products'], load)
 
   const setQuickRange = (preset: 'today' | 'week' | 'month' | 'all') => {
     setActivePreset(preset)

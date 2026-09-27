@@ -24,6 +24,7 @@ import { PurchaseOrderDialog } from './PurchaseOrderDialog'
 import { DateTimeCell } from './DateTimeCell'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
+import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface OrderItem {
   id: number
@@ -74,6 +75,9 @@ export function PurchaseOrdersView() {
     load(from, to)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
+  useDataRefresh(['purchase-orders'], () => load(from, to))
 
   const applyRange = (f: string, t: string) => {
     setFrom(f)

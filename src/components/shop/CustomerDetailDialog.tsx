@@ -47,6 +47,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { useDataRefresh } from '@/lib/offline/data-events'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { DateTimeCell } from './DateTimeCell'
 import { PaymentDialog } from './PaymentDialog'
@@ -200,6 +201,11 @@ export function CustomerDetailDialog({
       setDetail(null)
     }
   }, [open, customerId, load])
+
+  // 🛡️ ROOT FIX (2026-09-27): stay live while open — e.g. if a payment for
+  // this same customer is somehow recorded elsewhere while this dialog is
+  // open, or after an offline-queued payment finally syncs.
+  useDataRefresh(['customers'], load, open && !!customerId)
 
   const balance = detail?.balance ?? 0
   const balanceTone =

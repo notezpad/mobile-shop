@@ -22,6 +22,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useShopStore } from '@/lib/store'
 import { formatCurrency } from '@/lib/format'
+import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface TenantData {
   id: string
@@ -140,6 +141,9 @@ export function SettingsView() {
   React.useEffect(() => {
     load()
   }, [load])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
+  useDataRefresh(['settings'], load)
 
   const update = <K extends keyof TenantData>(
     key: K,
@@ -609,6 +613,9 @@ function NotificationSettingsCard() {
   }, [])
 
   React.useEffect(() => { load() }, [load])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
+  useDataRefresh(['notifications'], load)
 
   const toggle = async (key: 'notifyLowStock' | 'notifyExpiringSubscription' | 'notifyNewSales', value: boolean) => {
     if (!prefs) return

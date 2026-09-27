@@ -59,6 +59,7 @@ import { Package, Percent } from 'lucide-react'
 import { Barcode } from './Barcode'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
+import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface Product {
   id: number
@@ -148,6 +149,11 @@ export function ProductsView() {
     const t = setTimeout(() => loadProducts(page), 400)
     return () => clearTimeout(t)
   }, [loadProducts, page])
+
+  // 🛡️ ROOT FIX (2026-09-27): refetch live whenever ANY write anywhere in the
+  // app touches products/categories — not just ones made from this view
+  // (e.g. a stock adjustment from the Inventory page, or a sale from POS).
+  useDataRefresh(['products', 'categories'], () => { loadProducts(); loadCats() })
 
   // Quick-add product requested from POS
   React.useEffect(() => {

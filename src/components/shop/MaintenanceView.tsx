@@ -31,6 +31,7 @@ import { DateTimeCell } from './DateTimeCell'
 import { printListReportHtml, openPrintWindow } from '@/lib/print'
 import { useShopStore } from '@/lib/store'
 import { useConfirm } from './ConfirmDialogProvider'
+import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface Order {
   id: number
@@ -87,6 +88,9 @@ export function MaintenanceView() {
   React.useEffect(() => {
     load()
   }, [load])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
+  useDataRefresh(['maintenance'], load)
 
   const cycleStatus = async (o: Order) => {
     const idx = STATUSES.indexOf(o.status as Status)

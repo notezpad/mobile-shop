@@ -11,6 +11,7 @@
 import { idb, type OutboxEntry } from './idb'
 import { isOnline, isNetworkError } from './api-offline'
 import { prewarmAll } from './prewarm'
+import { emitDataChanged } from './data-events'
 
 export type SyncState = {
   online: boolean
@@ -86,6 +87,11 @@ export async function flushOutbox(): Promise<{ done: number; failed: number }> {
 
         // Success
         await idb.removeFromOutbox(entry.id)
+        // 🛡️ ROOT FIX (2026-09-27): an operation made while offline just
+        // landed on the server for real — tell any open screen that shows
+        // this kind of data to refetch, instead of leaving it showing what
+        // was only a local optimistic guess until the user hard-refreshes.
+        emitDataChanged(entry.url, entry.method)
         done++
       } catch (err: any) {
         if (isNetworkError(err)) {

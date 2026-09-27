@@ -19,6 +19,7 @@
  */
 
 import { idb, idbAvailable, onOutboxChange, type OutboxEntry } from './idb'
+import { emitDataChanged } from './data-events'
 
 /**
  * 🛡️ FIX: global "session is actually gone" signal.
@@ -221,6 +222,11 @@ export async function offlineFetch<T = any>(
         if (res.status === 401) notifySessionExpired()
         throw err
       }
+      // 🛡️ ROOT FIX (2026-09-27): announce that this kind of data changed so
+      // every mounted view/dialog showing it (not just the one that made the
+      // request) can refetch live instead of needing a hard refresh. See
+      // src/lib/offline/data-events.ts for the full explanation.
+      emitDataChanged(url, method)
       return data as T
     } catch (err: any) {
       if (isNetworkError(err)) {
@@ -229,6 +235,10 @@ export async function offlineFetch<T = any>(
           body: options?.body,
           label: getOperationLabel(url, method, options?.body),
         })
+        // Optimistic: local screens usually already update their own state,
+        // but nudge everyone else too (e.g. a list of the same data open in
+        // another dialog) — harmless offline since it just re-reads cache.
+        emitDataChanged(url, method)
         return { ok: true, offline: true, message: 'تم الحفظ محلياً — سيتم المزامنة عند عودة الاتصال' } as T
       }
       throw err

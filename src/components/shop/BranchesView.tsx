@@ -53,6 +53,7 @@ import { DateTimeCell } from './DateTimeCell'
 import { printListReportHtml, openPrintWindow } from '@/lib/print'
 import { useShopStore } from '@/lib/store'
 import { useConfirm } from './ConfirmDialogProvider'
+import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface Branch {
   id: number
@@ -109,6 +110,9 @@ export function BranchesView() {
     }
   }, [])
   React.useEffect(() => { load() }, [load])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
+  useDataRefresh(['branches', 'sales'], load)
 
   /**
    * Lightweight reload — fetches ONLY the branches list (single fast query).

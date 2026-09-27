@@ -36,6 +36,7 @@ import { formatArabicDateTime } from '@/lib/format'
 import { DateTimeCell } from './DateTimeCell'
 import { printListReportHtml, openPrintWindow } from '@/lib/print'
 import { useShopStore } from '@/lib/store'
+import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface UserRow {
   id: string
@@ -72,6 +73,9 @@ export function UsersView() {
   React.useEffect(() => {
     load()
   }, [load])
+
+  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
+  useDataRefresh(['users'], load)
 
   const toggleActive = async (u: UserRow) => {
     try {
