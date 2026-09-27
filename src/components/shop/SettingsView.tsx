@@ -144,6 +144,11 @@ export function SettingsView() {
         address: out.address,
         logoPath: out.logoPath,
         invoicePrefix: out.invoicePrefix,
+        // 🛡️ 2026-09-27: من غير السطر ده، تغيير المنطقة الزمنية من هنا كان
+        // بيتخزن في الـ DB بس مش بينعكس على الساعة/التاريخ في التولبار
+        // فوق إلا بعد ريفريش كامل للصفحة، لأن LiveClock بياخد القيمة من
+        // الـ store مباشرة.
+        timezone: out.timezone,
       })
       toast.success('تم حفظ الإعدادات')
     } catch (e: any) {

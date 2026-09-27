@@ -27,6 +27,18 @@ export interface ShopBranding {
   address: string | null
   logoPath: string | null
   invoicePrefix: string
+  /**
+   * IANA timezone of the shop (e.g. "Africa/Cairo", "Asia/Riyadh").
+   * 🛡️ 2026-09-27: added so the toolbar clock/date can follow the shop's
+   * configured timezone instead of the device/browser's local clock —
+   * previously `LiveClock` used `new Date()` + `getHours()`/`getMonth()`
+   * directly, which reads the *visiting device's* local time. That could
+   * visually disagree with "today's sales" (computed server-side from the
+   * tenant's `timezone`) whenever an employee's device clock was set to a
+   * different zone than the shop's. Defaults to Africa/Cairo to match the
+   * tenant's own default until `/api/tenant` responds.
+   */
+  timezone: string
 }
 
 /**
@@ -185,7 +197,7 @@ export const useShopStore = create<ShopState>()(
       setActiveView: (v) => set({ activeView: v }),
       shopName: 'محل الاتصالات',
       setShopName: (n) => set({ shopName: n }),
-      branding: { phone: null, address: null, logoPath: null, invoicePrefix: 'INV' },
+      branding: { phone: null, address: null, logoPath: null, invoicePrefix: 'INV', timezone: 'Africa/Cairo' },
       setBranding: (b) => set((s) => ({ branding: { ...s.branding, ...b } })),
       user: null,
       setUser: (u) => set({ user: u }),

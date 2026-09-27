@@ -40,7 +40,48 @@ const VIEW_PATHS: Record<string, string> = {
   '/branches': 'branches',
 }
 
-function LiveClock() {
+// 🛡️ 2026-09-27: الساعة والتاريخ هنا كانوا بيتحسبوا بـ now.getHours() /
+// now.getDay() / ...إلخ، واللي بتاخد "توقيت الحائط" من *جهاز/متصفح*
+// المستخدم نفسه — مش من إعداد المنطقة الزمنية بتاع المحل (Settings ›
+// timezone). ده كان بيعمل تضارب بصري: موظف فاتح من دولة تانية بيشوف
+// ساعة مختلفة عن التوقيت اللي بيتحسب بيه "مبيعات اليوم" فعليًا في
+// السيرفر (اللي بياخد tenant.timezone دايمًا، راجع src/lib/tenantTime.ts).
+//
+// الحل: بنسيب `now` زي ما هو (لحظة زمنية مطلقة صحيحة أيًا كان جهاز
+// المستخدم)، لكن بدل ما نستخرج الساعة/الشهر منه بدوال الجهاز المحلية،
+// بنستخدم Intl.DateTimeFormat مع timeZone بتاع المحل عشان نعرض "توقيت
+// حائط" المحل بالظبط، متسق مع باقي أرقام السيستم.
+function getWallTimeInTz(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    weekday: 'short',
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric',
+  }).formatToParts(date)
+
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  return {
+    hour: Number(get('hour')) % 24,
+    minute: Number(get('minute')),
+    second: Number(get('second')),
+    weekday: get('weekday'), // e.g. "Sun", "Mon"...
+    day: Number(get('day')),
+    month: Number(get('month')), // 1-12
+    year: Number(get('year')),
+  }
+}
+
+const WEEKDAY_MAP: Record<string, string> = {
+  Sun: 'الأحد', Mon: 'الاثنين', Tue: 'الثلاثاء', Wed: 'الأربعاء',
+  Thu: 'الخميس', Fri: 'الجمعة', Sat: 'السبت',
+}
+
+function LiveClock({ timeZone }: { timeZone: string }) {
   const [mounted, setMounted] = React.useState(false)
   const [now, setNow] = React.useState(new Date())
 
@@ -53,15 +94,16 @@ function LiveClock() {
   if (!mounted) return <div className="h-9 w-[220px] shrink-0 rounded-xl bg-muted/50 animate-pulse" />
 
   const pad = (n: number) => String(n).padStart(2, '0')
-  let h = now.getHours()
+  const wall = getWallTimeInTz(now, timeZone)
+  let h = wall.hour
   const period = h >= 12 ? 'م' : 'ص'
   h = h % 12 || 12
-  const m = pad(now.getMinutes())
-  const s = pad(now.getSeconds())
-  const dayName = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'][now.getDay()]
-  const day = now.getDate()
-  const month = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'][now.getMonth()]
-  const year = now.getFullYear()
+  const m = pad(wall.minute)
+  const s = pad(wall.second)
+  const dayName = WEEKDAY_MAP[wall.weekday] || wall.weekday
+  const day = wall.day
+  const month = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'][wall.month - 1]
+  const year = wall.year
 
   return (
     <div className="inline-flex items-stretch shrink-0 rounded-xl border border-border bg-card shadow-sm overflow-hidden">
@@ -109,6 +151,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   const user = useShopStore((s) => s.user)
   const shopName = useShopStore((s) => s.shopName)
   const subscription = useShopStore((s) => s.subscription)
+  const tenantTimezone = useShopStore((s) => s.branding.timezone)
   const [mobileOpen, setMobileOpen] = React.useState(false)
 
   // ⚡ Initialize offline sync engine (flush outbox when network returns)
@@ -119,7 +162,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
     ;(async () => {
       const [meResult, tenantResult, subResult] = await Promise.allSettled([
         getMe(),
-        api<{ shopName?: string; phone?: string | null; address?: string | null; logoPath?: string | null; invoicePrefix?: string }>('/api/tenant'),
+        api<{ shopName?: string; phone?: string | null; address?: string | null; logoPath?: string | null; invoicePrefix?: string; timezone?: string }>('/api/tenant'),
         api<any>('/api/subscription'),
       ])
       if (!alive) return
@@ -145,6 +188,9 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           address: t?.address ?? null,
           logoPath: t?.logoPath ?? null,
           invoicePrefix: t?.invoicePrefix || 'INV',
+          // 🛡️ 2026-09-27: تولبار الساعة/التاريخ فوق بيتبع دلوقتي المنطقة
+          // الزمنية بتاعة المحل (مش جهاز المستخدم) — راجع LiveClock تحت.
+          timezone: t?.timezone || 'Africa/Cairo',
         })
       }
 
@@ -255,7 +301,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         <div className="flex flex-1 flex-col min-h-0">
         {/* Desktop header */}
         <header className="sticky top-0 z-20 hidden h-14 shrink-0 items-center justify-between border-b bg-card px-6 shadow-sm lg:flex">
-          <LiveClock />
+          <LiveClock timeZone={tenantTimezone || 'Africa/Cairo'} />
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <div className="header-divider" />
