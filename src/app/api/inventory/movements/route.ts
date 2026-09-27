@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,13 +30,14 @@ async function __GET(req: NextRequest) {
   }
   if (productId) where.AND.push({ productId: parseInt(productId, 10) })
   if (type && type !== 'all') where.AND.push({ type })
-  if (from) {
-    const d = new Date(from); d.setHours(0,0,0,0)
-    where.AND.push({ createdAt: { gte: d } })
-  }
-  if (to) {
-    const d = new Date(to); d.setHours(23,59,59,999)
-    where.AND.push({ createdAt: { lte: d } })
+  // 🕐 "from"/"to" هي تواريخ تقويمية بتوقيت المحل (زي 2026-09-27)، فلازم
+  // تتحول لحدود UTC بتوقيت المحل نفسه — مش بتوقيت السيرفر (كان
+  // `new Date(from)` بيديها منتصف ليل UTC، يعني بتزحلق يوم كامل لأي محل
+  // مش على توقيت UTC بالظبط).
+  if (from || to) {
+    const tz = await getTenantTimezone(s.tenantId)
+    if (from) where.AND.push({ createdAt: { gte: localDateStrToUtcBounds(from, 'start', tz) } })
+    if (to) where.AND.push({ createdAt: { lte: localDateStrToUtcBounds(to, 'end', tz) } })
   }
   if (q) {
     where.AND.push({

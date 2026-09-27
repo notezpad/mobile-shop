@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireSuperAdmin, authErrorResponse, PLATFORM_TENANT_ID } from '@/lib/auth'
+import { DEFAULT_TENANT_TIMEZONE, startOfDayInTz, startOfMonthInTz, startOfYearInTz } from '@/lib/tenantTime'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,10 +28,13 @@ async function __GET(req: NextRequest) {
   const from = fromStr ? new Date(fromStr) : defaultFrom
   const to = toStr ? new Date(toStr) : now
 
-  const startOfToday = new Date(now)
-  startOfToday.setHours(0, 0, 0, 0)
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  const startOfYear = new Date(now.getFullYear(), 0, 1)
+  // 🕐 هذا تقرير المنصة نفسها (عبر كل المحلات)، فمفيش "توقيت محل" واحد
+  // ينطبق هنا — بنستخدم توقيت مصر بشكل ثابت كتوقيت تشغيل المنصة (بدل ما
+  // كان بيتحسب بتوقيت السيرفر UTC، وده كان بيخلي "إيرادات اليوم" هنا
+  // بتتغير حدودها فعلياً كل يوم بفارق ساعتين/3 ساعات عن يوم العمل الحقيقي).
+  const startOfToday = startOfDayInTz(now, DEFAULT_TENANT_TIMEZONE)
+  const startOfMonth = startOfMonthInTz(now, DEFAULT_TENANT_TIMEZONE)
+  const startOfYear = startOfYearInTz(now, DEFAULT_TENANT_TIMEZONE)
   const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1)
 
   // ⚡ PERF FIX (CPU time / Error 1102): this endpoint used to load EVERY

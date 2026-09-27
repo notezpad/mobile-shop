@@ -2,20 +2,9 @@ import { NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { checkLowStockAndNotify, checkExpiringSubscriptions } from '@/lib/notifications'
+import { getTenantTimezone, startOfDayInTz, startOfMonthInTz, dateStrInTz } from '@/lib/tenantTime'
 
 export const dynamic = 'force-dynamic'
-
-function startOfDay(d: Date) {
-  const x = new Date(d)
-  x.setHours(0, 0, 0, 0)
-  return x
-}
-function startOfMonth(d: Date) {
-  const x = new Date(d)
-  x.setDate(1)
-  x.setHours(0, 0, 0, 0)
-  return x
-}
 
 export async function GET(req: Request) {
   let session
@@ -34,11 +23,18 @@ export async function GET(req: Request) {
   return withDb(async () => {
     const tenantFilter = { tenantId: session.tenantId }
     const now = new Date()
-    const todayStart = startOfDay(now)
-    const monthStart = startOfMonth(now)
+    // 🕐 ROOT FIX (2026-09-27): "today"/"this month" must mean the shop's
+    // own local day, not the server's (UTC) clock. Previously this used
+    // `now.setHours(0,0,0,0)` — that's UTC midnight on Cloudflare Workers,
+    // so a sale made after local midnight but before UTC midnight (e.g.
+    // ~1-2 AM in Egypt) was silently missing from "today's sales" even
+    // though the invoice itself is stamped with today's date everywhere
+    // else in the UI. See src/lib/tenantTime.ts for the full explanation.
+    const tz = await getTenantTimezone(session.tenantId)
+    const todayStart = startOfDayInTz(now, tz)
+    const monthStart = startOfMonthInTz(now, tz)
     const last30Start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-    const lastNStart = new Date(todayStart)
-    lastNStart.setDate(lastNStart.getDate() - (chartDays - 1))
+    const lastNStart = startOfDayInTz(new Date(now.getTime() - (chartDays - 1) * 24 * 60 * 60 * 1000), tz)
     // keep last7Start alias for backward compat with existing references below
     const last7Start = lastNStart
 
@@ -101,17 +97,17 @@ export async function GET(req: Request) {
     const totalOutstandingDebt = n(custAgg._sum.balance)
     const totalSupplierDebt = n(suppAgg._sum.balance)
 
-    // Chart: group the (small) per-sale rows by local day
-    const pad = (x: number) => String(x).padStart(2, '0')
+    // Chart: group the (small) per-sale rows by local day — in the SHOP's
+    // timezone, so a sale at 1 AM lands in the same day bucket its own
+    // invoice date shows, instead of drifting a day off near UTC midnight.
+    const toDdMm = (isoDate: string) => { const [, m, d] = isoDate.split('-'); return `${d}/${m}` }
     const dayMap = new Map<string, { total: number; profit: number }>()
     for (let i = chartDays - 1; i >= 0; i--) {
-      const d = new Date(todayStart)
-      d.setDate(d.getDate() - i)
-      dayMap.set(`${pad(d.getDate())}/${pad(d.getMonth() + 1)}`, { total: 0, profit: 0 })
+      const d = new Date(todayStart.getTime() - i * 24 * 60 * 60 * 1000)
+      dayMap.set(toDdMm(dateStrInTz(d, tz)), { total: 0, profit: 0 })
     }
     for (const r of chartRows) {
-      const d = new Date(r.createdAt)
-      const slot = dayMap.get(`${pad(d.getDate())}/${pad(d.getMonth() + 1)}`)
+      const slot = dayMap.get(toDdMm(dateStrInTz(new Date(r.createdAt), tz)))
       if (slot) { slot.total += n(r.total); slot.profit += n(r.profit) }
     }
     const last7DaysSales = Array.from(dayMap.entries()).map(([date, v]) => ({ date, ...v }))
@@ -146,24 +142,31 @@ export async function GET(req: Request) {
     // existing unread notifications of the same type — so calling them
     // on every dashboard load is safe (no duplicate notifications).
     //
-    // The await Promise.allSettled lets both finish before the response
-    // is sent. This adds ~50-150ms to the dashboard load but ensures the
-    // user sees fresh notifications on dashboard open. If you'd rather
-    // have it purely fire-and-forget (faster response, notifications show
-    // up on the NEXT poll), replace with:
-    //   void checkLowStockAndNotify(db, session.tenantId).catch(() => {})
-    //   void checkExpiringSubscriptions(db, session.tenantId).catch(() => {})
-    try {
-      await Promise.allSettled([
-        checkLowStockAndNotify(db, session.tenantId),
-        checkExpiringSubscriptions(db, session.tenantId),
-      ])
-    } catch {
-      // 🛡️ Never let notification failures break the dashboard.
-      // The dashboard response is more important than notifications.
+    // 🛡️ Shares the same `notif_checked_at` cookie cooldown as
+    // /api/notifications (see that route for the full explanation): the
+    // in-memory rate limiter in lib/notifications.ts doesn't survive
+    // across Cloudflare Workers isolates, so without this, a tenant with
+    // both the dashboard (5-min auto-refresh) and the notification bell
+    // (3-min poll) open would run these checks from BOTH endpoints,
+    // independently, far more often than the intended 5-minute cooldown.
+    const NOTIF_COOLDOWN_MS = 5 * 60 * 1000
+    const cookieHeader = req.headers.get('cookie') ?? ''
+    const lastCheckedMatch = cookieHeader.match(/(?:^|;\s*)notif_checked_at=([^;]+)/)
+    const lastChecked = lastCheckedMatch ? Number(lastCheckedMatch[1]) : 0
+    const shouldRunChecks = !Number.isFinite(lastChecked) || Date.now() - lastChecked >= NOTIF_COOLDOWN_MS
+    if (shouldRunChecks) {
+      try {
+        await Promise.allSettled([
+          checkLowStockAndNotify(db, session.tenantId),
+          checkExpiringSubscriptions(db, session.tenantId),
+        ])
+      } catch {
+        // 🛡️ Never let notification failures break the dashboard.
+        // The dashboard response is more important than notifications.
+      }
     }
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       todaySales: todaySalesTotal,
       todayProfit,
       cashBalance,
@@ -183,5 +186,14 @@ export async function GET(req: Request) {
       lowStockProducts: lowStockAlerts,
       activeMaintenanceOrders: activeMaintenanceList,
     })
+    if (shouldRunChecks) {
+      res.cookies.set('notif_checked_at', String(Date.now()), {
+        maxAge: NOTIF_COOLDOWN_MS / 1000,
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+      })
+    }
+    return res
   })
 }

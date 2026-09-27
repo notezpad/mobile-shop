@@ -11,6 +11,13 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useShopStore } from '@/lib/store'
@@ -23,12 +30,33 @@ interface TenantData {
   address: string | null
   logoPath: string | null
   invoicePrefix: string
+  timezone: string
   commissionVodafoneCash: number
   commissionInstapay: number
   commissionFawry: number
   wholesaleEnabled: boolean
   retailEnabled: boolean
 }
+
+// بلاد التشغيل الحالية/المحتملة للمحلات — القائمة دي بس اقتراحات سريعة
+// في الواجهة؛ أي IANA timezone صحيح مقبول فعليًا لو اتبعت مباشرة للـ API.
+const TIMEZONE_OPTIONS = [
+  { value: 'Africa/Cairo', label: 'القاهرة (مصر)' },
+  { value: 'Asia/Riyadh', label: 'الرياض (السعودية)' },
+  { value: 'Asia/Dubai', label: 'دبي (الإمارات)' },
+  { value: 'Asia/Kuwait', label: 'الكويت' },
+  { value: 'Asia/Qatar', label: 'الدوحة (قطر)' },
+  { value: 'Asia/Bahrain', label: 'المنامة (البحرين)' },
+  { value: 'Asia/Amman', label: 'عمّان (الأردن)' },
+  { value: 'Asia/Beirut', label: 'بيروت (لبنان)' },
+  { value: 'Asia/Baghdad', label: 'بغداد (العراق)' },
+  { value: 'Africa/Casablanca', label: 'الدار البيضاء (المغرب)' },
+  { value: 'Africa/Tunis', label: 'تونس' },
+  { value: 'Africa/Algiers', label: 'الجزائر' },
+  { value: 'Europe/London', label: 'لندن (بريطانيا)' },
+  { value: 'Europe/Istanbul', label: 'إسطنبول (تركيا)' },
+  { value: 'America/New_York', label: 'نيويورك (أمريكا)' },
+]
 
 export function SettingsView() {
   const [data, setData] = React.useState<TenantData | null>(null)
@@ -353,6 +381,26 @@ export function SettingsView() {
                 value={data?.invoicePrefix ?? 'INV'}
                 onChange={(e) => update('invoicePrefix', e.target.value)}
               />
+            </Field>
+            <Field label="المنطقة الزمنية للمحل" full>
+              <Select
+                value={data?.timezone || 'Africa/Cairo'}
+                onValueChange={(v) => update('timezone', v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="اختر المنطقة الزمنية" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIMEZONE_OPTIONS.map((tz) => (
+                    <SelectItem key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                على أساسها بيتحسب "اليوم" و"الشهر" في لوحة المعلومات والتقارير — مهم لو المحل خارج توقيت القاهرة.
+              </p>
             </Field>
           </div>
         </CardContent>

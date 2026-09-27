@@ -51,18 +51,31 @@ export async function GET(req: NextRequest) {
     const onlyUnread = url.searchParams.get('unread') === 'true'
     const debug = url.searchParams.get('debug') === 'true'
 
+    // 🛡️ REAL FIX for the rate limiter: the in-memory `shouldRunCheck` map in
+    // lib/notifications.ts only works if the same isolate handles consecutive
+    // requests, which Cloudflare Workers never guarantees — so the promised
+    // "runs at most once every 5 minutes" was not actually true; it could run
+    // on every single poll (every 3 min per open tab, times however many
+    // staff have the app open). The checks themselves aren't CPU-heavy
+    // (small, capped queries), so this wasn't the cause of Error 1102 — but
+    // it was still firing far more DB round-trips than intended. A cookie
+    // survives across isolates (it round-trips through the browser), so it's
+    // an actual, reliable cooldown instead of one that silently does nothing.
+    const COOLDOWN_MS = 5 * 60 * 1000
+    const lastCheckedCookie = req.cookies.get('notif_checked_at')?.value
+    const lastChecked = lastCheckedCookie ? Number(lastCheckedCookie) : 0
+    const shouldRunChecks = !Number.isFinite(lastChecked) || Date.now() - lastChecked >= COOLDOWN_MS
+
     // 🔔 Run notification checks (await — fresh results on the same poll).
-    // 🛡️ 2026-09-15 (v3): checks are now rate-limited (5 min per tenant)
-    // via in-memory `shouldRunCheck()` AND dedup (7-day window by message).
-    // Even if called every 30 seconds, the checks will actually run at
-    // most once every 5 minutes per tenant.
-    try {
-      await Promise.allSettled([
-        checkLowStockAndNotify(db, session.tenantId),
-        checkExpiringSubscriptions(db, session.tenantId),
-      ])
-    } catch (e: any) {
-      if (debug) console.error('[notifications GET] checks failed:', e?.message ?? e)
+    if (shouldRunChecks) {
+      try {
+        await Promise.allSettled([
+          checkLowStockAndNotify(db, session.tenantId),
+          checkExpiringSubscriptions(db, session.tenantId),
+        ])
+      } catch (e: any) {
+        if (debug) console.error('[notifications GET] checks failed:', e?.message ?? e)
+      }
     }
 
     // 🧹 2026-09-15 (v3): Run cleanup on every poll.
@@ -127,13 +140,22 @@ export async function GET(req: NextRequest) {
 
     // Always return 200 — the bell will show "no notifications" if the table
     // is missing, but at least it won't crash the page with red 500s in console.
-    return NextResponse.json({
+    const res = NextResponse.json({
       items: notifications,
       unreadCount,
       // 🛡️ Diagnostic flags — frontend can show a small banner if needed.
       migrationNeeded,
       ...(debug && dbError ? { error: dbError } : {}),
     })
+    if (shouldRunChecks) {
+      res.cookies.set('notif_checked_at', String(Date.now()), {
+        maxAge: COOLDOWN_MS / 1000,
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+      })
+    }
+    return res
   })
 }
 

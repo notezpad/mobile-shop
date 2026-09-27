@@ -17,6 +17,12 @@ datasource db {
 model Tenant {
   id                     String    @id @default(cuid())
   shopName               String    @default("محل الاتصالات")
+  // IANA timezone name (e.g. "Africa/Cairo", "Asia/Riyadh"). Every
+  // "today" / "this month" boundary in the app is computed in THIS
+  // timezone — the shop's own local day — never the server's clock and
+  // never whichever employee's browser happens to load the page.
+  // See src/lib/tenantTime.ts.
+  timezone               String    @default("Africa/Cairo")
   phone                  String?
   address                String?
   logoPath               String?

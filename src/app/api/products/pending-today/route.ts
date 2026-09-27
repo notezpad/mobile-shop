@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { getTenantTimezone, startOfDayInTz } from '@/lib/tenantTime'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,8 +19,10 @@ async function __GET() {
     return NextResponse.json(err?.body, { status: err?.status })
   }
 
-  const startOfDay = new Date()
-  startOfDay.setHours(0, 0, 0, 0)
+  // 🕐 نفس إصلاح توقيت المحل الموجود في /api/dashboard — "النهاردة" لازم
+  // يتحسب بتوقيت المحل نفسه، مش بتوقيت السيرفر (UTC).
+  const tz = await getTenantTimezone(session.tenantId)
+  const startOfDay = startOfDayInTz(new Date(), tz)
 
   const where: any = {
     tenantId: session.tenantId,

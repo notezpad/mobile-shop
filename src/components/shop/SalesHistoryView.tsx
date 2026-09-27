@@ -68,7 +68,6 @@ export function SalesHistoryView() {
       const params = new URLSearchParams()
       if (f) params.set('from', f)
       if (t) params.set('to', t)
-      params.set('tzOffset', String(new Date().getTimezoneOffset()))
       params.set('page', String(p))
       params.set('limit', String(PAGE_SIZE))
       const qs = params.toString()
@@ -95,9 +94,9 @@ export function SalesHistoryView() {
     load(f, t, 1)
   }
 
-  // ✅ getLocalDateStr من dateUtils بتستخدم getFullYear/getMonth/getDate
-  //    اللي بترجع التوقيت المحلي للمتصفح تلقائياً (مش UTC)
-  //    مش زي toISOString() اللي كانت بترجع UTC وبتعمل مشكلة للمستخدمين خارج UTC
+  // ✅ الأزرار دي بس بتملأ حقول التاريخ باقتراح مبدئي (بتوقيت المتصفح).
+  //    الفلترة الفعلية بتتحول على السيرفر بتوقيت *المحل* نفسه (مش المتصفح
+  //    ومش UTC) — راجع src/lib/tenantTime.ts و /api/sales.
 
   const quickToday = () => {
     const today = getLocalDateStr(new Date())

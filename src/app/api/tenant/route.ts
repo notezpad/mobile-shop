@@ -32,6 +32,7 @@ async function __GET() {
       address: true,
       logoPath: true,
       invoicePrefix: true,
+      timezone: true,
       commissionVodafoneCash: true,
       commissionInstapay: true,
       commissionFawry: true,
@@ -77,6 +78,18 @@ async function __PUT(req: NextRequest) {
     data.logoPath = body.logoPath ? String(body.logoPath) : null
   if (body.invoicePrefix !== undefined)
     data.invoicePrefix = String(body.invoicePrefix || 'INV')
+  if (body.timezone !== undefined) {
+    const tz = String(body.timezone || '').trim()
+    // ✅ لازم يكون اسم منطقة زمنية IANA صحيح (زي "Africa/Cairo") — بنتأكد
+    // منه عن طريق محاولة استخدامه فعليًا، لأن أي منطقة غلط هنا هتكسر
+    // كل حسابات "اليوم/الشهر" في الداشبورد وتقارير المخزون والمبيعات.
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: tz })
+      data.timezone = tz
+    } catch {
+      return NextResponse.json({ error: 'منطقة زمنية غير صالحة' }, { status: 400 })
+    }
+  }
   if (body.commissionVodafoneCash !== undefined)
     data.commissionVodafoneCash = Number(body.commissionVodafoneCash) || 0
   if (body.commissionInstapay !== undefined)
@@ -98,6 +111,7 @@ async function __PUT(req: NextRequest) {
       address: true,
       logoPath: true,
       invoicePrefix: true,
+      timezone: true,
       commissionVodafoneCash: true,
       commissionInstapay: true,
       commissionFawry: true,

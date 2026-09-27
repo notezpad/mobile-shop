@@ -1,0 +1,13 @@
+-- Root fix for the "today's sales show 0 while today's invoices exist"
+-- family of bugs: every day/month boundary in the app was computed using
+-- the SERVER's clock (UTC on Cloudflare Workers) instead of the shop's
+-- own local day. A sale made after local midnight but before UTC
+-- midnight (e.g. 1:53 AM Cairo time) was silently excluded from "today".
+--
+-- Each tenant now carries its own IANA timezone so "today" means the
+-- same thing everywhere in the app, for every device/country an
+-- employee happens to log in from. Defaults to Africa/Cairo (existing
+-- shops), matching current behavior for the common case while fixing
+-- the DST-era offset bug (Egypt now observes DST, so a fixed "+2" was
+-- already wrong for part of the year).
+ALTER TABLE "Tenant" ADD COLUMN "timezone" TEXT NOT NULL DEFAULT 'Africa/Cairo';

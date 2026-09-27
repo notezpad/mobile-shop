@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireCapability, featureErrorResponse } from '@/lib/features'
 import { deductStock } from '@/lib/deduct-stock'
+import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,16 +39,19 @@ export async function GET(req: NextRequest) {
     const from = searchParams.get('from')
     const to = searchParams.get('to')
 
-    const tzOffset = parseInt(searchParams.get('tzOffset') ?? '0', 10)
-
-    function localDateToUTC(dateStr: string, time: string, offsetMinutes: number): Date {
-      const utcMs = new Date(`${dateStr}T${time}Z`).getTime()
-      return new Date(utcMs + offsetMinutes * 60 * 1000)
-    }
-
+    // 🕐 ROOT FIX (2026-09-27): "from"/"to" used to be resolved with the
+    // *browser's* tzOffset — which meant two employees of the SAME shop,
+    // opening this page from different devices/countries, would see
+    // different sales for "today". A shop has ONE local day, so we now
+    // resolve it from the tenant's own stored timezone instead (see
+    // src/lib/tenantTime.ts) — consistent for everyone looking at this
+    // shop's data, and correct through DST changes.
     const createdAt: { gte?: Date; lte?: Date } = {}
-    if (from) createdAt.gte = localDateToUTC(from, '00:00:00.000', tzOffset)
-    if (to)   createdAt.lte = localDateToUTC(to,   '23:59:59.999', tzOffset)
+    if (from || to) {
+      const tz = await getTenantTimezone(session.tenantId)
+      if (from) createdAt.gte = localDateStrToUtcBounds(from, 'start', tz)
+      if (to)   createdAt.lte = localDateStrToUtcBounds(to, 'end', tz)
+    }
 
     const page  = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
     const limit = Math.min(200, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)))
