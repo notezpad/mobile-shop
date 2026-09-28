@@ -1,5 +1,5 @@
 # 🛡️ robots.txt — نظام المحل
-# https://shop-system.com/robots.txt
+# https://nezampos.com/robots.txt
 
 # ── All bots allowed ──
 User-agent: *
@@ -68,4 +68,4 @@ Disallow: /checkout/callback
 Disallow: /design-system
 
 # ── Sitemaps ──
-Sitemap: https://shop-system.com/sitemap.xml
+Sitemap: https://nezampos.com/sitemap.xml

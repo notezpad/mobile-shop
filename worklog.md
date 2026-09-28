@@ -1882,8 +1882,8 @@ Work Log:
   - rm src/components/landing/TestimonialsSection.tsx
 
 - 🔥 إصلاح 4 (P0 #4): استبدال domain .eg بـ domain محايد
-  - HeroSection.tsx:202: "app.shop-system.eg/dashboard" → "app.shop-system.com/dashboard"
-  - ScreenshotsSection.tsx:154: "app.shop-system.eg/{''}" → "app.shop-system.com" (شيلت الـ {''} bug)
+  - HeroSection.tsx:202: "nezampos.com/dashboard" → "nezampos.com/dashboard"
+  - ScreenshotsSection.tsx:154: "nezampos.com/{''}" → "nezampos.com" (شيلت الـ {''} bug)
 
 - 🔥 إصلاح 5 (P1 #5): صيغة الهاتف المصرية في placeholders
   - AuthPage.tsx: "01000000000" → "+966 5X XXX XXXX"
@@ -2019,7 +2019,7 @@ Work Log:
   - formatDetection (telephone + email)
   - verification (google placeholder)
   - other (theme-color, msapplication, apple PWA, rating, revisit-after, language, geo)
-  - metadataBase: https://shop-system.com (لازم تتغير للدومين الحقيقي)
+  - metadataBase: https://nezampos.com (لازم تتغير للدومين الحقيقي)
 
 - 🔥 إصلاح 2: JSON-LD Structured Data (3 schemas)
   - Organization: name, alternateName, url, logo, description, foundingDate, sameAs, contactPoint
