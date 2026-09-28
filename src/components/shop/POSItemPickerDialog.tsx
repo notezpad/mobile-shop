@@ -172,7 +172,7 @@ export function POSItemPickerDialog({ open, onOpenChange, product, onConfirm }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent mobileSheet className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{product.name}</DialogTitle>
         </DialogHeader>

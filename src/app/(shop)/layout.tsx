@@ -2,7 +2,8 @@
 
 import * as React from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { Loader2, Menu, CalendarDays, X } from 'lucide-react'
+import Link from 'next/link'
+import { Loader2, Menu, CalendarDays, Home, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -75,6 +76,26 @@ function getWallTimeInTz(date: Date, timeZone: string) {
     month: Number(get('month')), // 1-12
     year: Number(get('year')),
   }
+}
+
+// عناوين الصفحات في هيدر الموبايل (بدل اسم المحل).
+const PAGE_TITLES: Record<string, string> = {
+  '/dashboard': 'لوحة المعلومات',
+  '/pos': 'نقطة البيع',
+  '/products': 'المنتجات',
+  '/sales': 'سجل المبيعات',
+  '/maintenance': 'الصيانة',
+  '/customers': 'العملاء',
+  '/suppliers': 'الموردين',
+  '/purchases': 'المشتريات',
+  '/inventory': 'المخزون',
+  '/finance': 'المعاملات المالية',
+  '/expenses': 'المصروفات',
+  '/cash': 'الخزنة',
+  '/reports': 'التقارير',
+  '/settings': 'الإعدادات',
+  '/users': 'المستخدمين',
+  '/branches': 'الفروع',
 }
 
 const WEEKDAY_MAP: Record<string, string> = {
@@ -274,7 +295,23 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           <Button variant="ghost" size="icon" className="size-9 shrink-0" onClick={() => setMobileOpen(true)}>
             <Menu className="size-5" />
           </Button>
-          <span className="truncate text-sm font-bold">{shopName}</span>
+          {/* زر الرئيسية: نفس شكل لوجو السايدبار، يرجّع للوحة المعلومات */}
+          <Link
+            href="/dashboard"
+            aria-label="الرئيسية — لوحة المعلومات"
+            className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-sm ring-1 ring-brand-500/20 transition-transform active:scale-90"
+          >
+            <Home className="size-[18px]" strokeWidth={1.9} />
+          </Link>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold leading-tight">
+              {PAGE_TITLES[pathname] ?? PAGE_TITLES['/' + pathname.split('/')[1]] ?? ''}
+            </p>
+            {/* في وضع الدخول بدل عميل (impersonation) نعرض اسم المحل عشان ما يحصلش لبس */}
+            {(user as any)?.impersonating && (
+              <p className="truncate text-[10px] leading-tight text-muted-foreground">{shopName}</p>
+            )}
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <ThemeToggle />

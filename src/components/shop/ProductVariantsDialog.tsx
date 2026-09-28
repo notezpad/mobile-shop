@@ -226,7 +226,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent mobileSheet className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>متغيرات المنتج — {product?.name}</DialogTitle>
         </DialogHeader>

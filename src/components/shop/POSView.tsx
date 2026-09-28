@@ -816,7 +816,7 @@ export function POSView() {
           </Button>
 
           <Sheet open={cartSheetOpen} onOpenChange={setCartSheetOpen}>
-            <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto p-0 sm:max-w-md sm:mx-auto">
+            <SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto overscroll-contain p-0 sm:max-w-md sm:mx-auto">
               <SheetTitle className="flex items-center gap-2 px-4 py-3 text-base">
                 <ShoppingCart className="size-4 text-primary" />
                 السلة ({cart.length})

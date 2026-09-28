@@ -232,8 +232,11 @@ export function PurchaseOrderDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHeader className="border-b px-6 pt-6 pb-4">
+      <DialogContent
+        mobileSheet
+        className="flex h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:h-auto sm:max-h-[90dvh] sm:max-w-2xl"
+      >
+        <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-5 text-start sm:px-6 sm:pt-6 sm:pb-4">
           <DialogTitle className="flex items-center gap-2">
             <PackagePlus className="size-5 text-primary" />
             أمر شراء جديد
@@ -243,7 +246,7 @@ export function PurchaseOrderDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[calc(90vh-180px)] space-y-4 overflow-y-auto px-6 py-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-3 sm:px-6 sm:py-4">
           {/* Supplier select */}
           <div className="space-y-1.5">
             <Label>المورد</Label>
@@ -346,8 +349,66 @@ export function PurchaseOrderDialog({
             </div>
           )}
 
-          {/* Cart */}
-          <Card className="overflow-hidden py-0">
+          {/* Cart — موبايل: كروت (كمية وتكلفة بإدخال مريح) */}
+          <div className="space-y-2 md:hidden">
+            {cart.length === 0 ? (
+              <p className="rounded-lg border border-dashed py-6 text-center text-sm text-muted-foreground">
+                السلة فارغة — ابحث وأضف أصناف
+              </p>
+            ) : (
+              cart.map((i) => (
+                <div key={i.product.id} className="rounded-lg border bg-card p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 flex-1 text-sm font-medium leading-snug">{i.product.name}</p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="-mt-1 -ml-1 size-8 shrink-0 text-destructive hover:text-destructive"
+                      onClick={() => removeItem(i.product.id)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 items-end gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">الكمية</Label>
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        value={i.quantity}
+                        onChange={(e) => updateQty(i.product.id, parseInt(e.target.value, 10) || 1)}
+                        className="h-9 text-center tabular-nums"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">تكلفة الوحدة</Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="0.01"
+                        value={i.cost}
+                        onChange={(e) => updateCost(i.product.id, parseFloat(e.target.value) || 0)}
+                        className="h-9 text-center tabular-nums"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div className="space-y-1 text-center">
+                      <p className="text-[11px] text-muted-foreground">الإجمالي</p>
+                      <p className="flex h-9 items-center justify-center text-sm font-semibold tabular-nums">
+                        {formatCurrency(i.cost * i.quantity)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Cart — ديسكتوب: جدول */}
+          <Card className="hidden overflow-hidden py-0 md:block">
             <CardContent className="p-0">
               <div className="overflow-x-auto" dir="ltr">
                 <Table>
@@ -468,7 +529,7 @@ export function PurchaseOrderDialog({
           </div>
         </div>
 
-        <DialogFooter className="border-t px-6 py-4">
+        <DialogFooter className="shrink-0 flex-row flex-wrap gap-2 border-t bg-card px-4 py-3 sm:px-6 sm:py-4 max-sm:[&>button]:flex-1">
           <Button onClick={submit} disabled={submitting || cart.length === 0}>
             {submitting && <Loader2 className="size-4 animate-spin" />}
             <Plus className="size-4" />

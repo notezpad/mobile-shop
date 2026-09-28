@@ -598,7 +598,7 @@ function TenantDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent mobileSheet className="sm:max-w-2xl max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>تفاصيل المحل</DialogTitle>
           <DialogDescription>معلومات شاملة عن المحل واشتراكاته</DialogDescription>
@@ -819,7 +819,7 @@ function EditTenantDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent mobileSheet className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>تعديل بيانات المحل</DialogTitle>
           <DialogDescription>{row.shopName}</DialogDescription>
@@ -962,7 +962,7 @@ function AddTenantDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent mobileSheet className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>إضافة محل جديد</DialogTitle>
           <DialogDescription>

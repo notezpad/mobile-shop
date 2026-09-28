@@ -471,7 +471,7 @@ function StocktakeDetailDialog({
   const totalD = stocktake.items.reduce((s, i) => s + i.diff, 0)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[640px]">
+      <DialogContent mobileSheet className="sm:max-w-[640px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ClipboardList className="size-5 text-primary" />

@@ -113,7 +113,7 @@ export function CategoryManagerDialog({ open, onOpenChange, onChanged }: Props) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent mobileSheet className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FolderTree className="size-5 text-primary" />

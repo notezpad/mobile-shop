@@ -5,6 +5,7 @@ import { useUnsavedConfirm } from '@/hooks/use-dirty-confirm'
 import { Dices, ImagePlus, Loader2, Trash2, Upload } from 'lucide-react'
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -166,16 +167,20 @@ export function ProductDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[560px]">
-        <DialogHeader>
+      <DialogContent
+        mobileSheet
+        className="flex flex-col gap-0 overflow-hidden p-0 sm:max-h-[90dvh] sm:max-w-[560px]"
+      >
+        <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-5 sm:px-6 sm:pt-6 sm:pb-4">
           <DialogTitle>
             {initial?.id ? 'تعديل منتج' : 'إضافة منتج جديد'}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <DialogBody>
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
           {/* 1. name */}
-          <div className="space-y-1.5 sm:col-span-2">
+          <div className="col-span-2 space-y-1.5">
             <Label htmlFor="p-name">
               الاسم <span className="text-destructive">*</span>
             </Label>
@@ -188,20 +193,20 @@ export function ProductDialog({
           </div>
 
           {/* 2. category + collection (inline row) */}
-          <div className="space-y-1.5">
+          <div className="col-span-2 space-y-1.5 sm:col-span-1">
             <Label>التصنيف</Label>
             <CategoryCombobox
               value={category}
               onChange={setCategory}
               placeholder="اختر أو اكتب تصنيف جديد..."
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="hidden text-[11px] text-muted-foreground sm:block">
               يمكنك كتابة تصنيف جديد وسيتم إنشاؤه تلقائياً
             </p>
           </div>
 
           {hasCollections ? (
-            <div className="space-y-1.5">
+            <div className="col-span-2 space-y-1.5 sm:col-span-1">
               <Label htmlFor="p-collection">الكوليكشن</Label>
               <Input
                 id="p-collection"
@@ -209,16 +214,16 @@ export function ProductDialog({
                 onChange={(e) => setCollection(e.target.value)}
                 placeholder="مثال: صيف 2026"
               />
-              <p className="text-[11px] text-muted-foreground">
+              <p className="hidden text-[11px] text-muted-foreground sm:block">
                 لتجميع المنتجات وتطبيق خصم جماعي عليها
               </p>
             </div>
           ) : (
-            <div />
+            <div className="hidden sm:block" />
           )}
 
           {/* 4. barcode */}
-          <div className="space-y-1.5 sm:col-span-2">
+          <div className="col-span-2 space-y-1.5">
             <Label>الباركود</Label>
             <div className="flex gap-2">
               <Input
@@ -240,7 +245,7 @@ export function ProductDialog({
           </div>
 
           {/* branch */}
-          <div className="space-y-1.5 sm:col-span-2">
+          <div className="col-span-2 space-y-1.5">
             <Label>الفرع</Label>
             {branches.length > 0 ? (
               <Select value={branchId || 'none'} onValueChange={(v) => setBranchId(v === 'none' ? '' : v)}>
@@ -261,7 +266,7 @@ export function ProductDialog({
                 لم يتم إنشاء أي فرع بعد — يمكنك إضافة الفروع من قسم «الفروع».
               </div>
             )}
-            <p className="text-[11px] text-muted-foreground">
+            <p className="hidden text-[11px] text-muted-foreground sm:block">
               حدد الفرع الذي ينتمي إليه المنتج. الموظفون مرتبطون بفرع يرون فقط منتجاته.
             </p>
           </div>
@@ -293,7 +298,7 @@ export function ProductDialog({
           </div>
 
           {/* 5.5 retail margin override — dynamic pricing for the "قطعة" unit only */}
-          <div className="space-y-1.5">
+          <div className="col-span-2 space-y-1.5">
             <Label htmlFor="p-retail-margin">نسبة هامش ربح القطعة (اختياري)</Label>
             <Input
               id="p-retail-margin"
@@ -334,10 +339,10 @@ export function ProductDialog({
           </div>
 
           {/* 8. image */}
-          <div className="space-y-1.5 sm:col-span-2">
+          <div className="col-span-2 space-y-1.5">
             <Label>الصورة</Label>
             <div className="flex items-center gap-3">
-              <div className="flex size-[100px] items-center justify-center overflow-hidden rounded-md border bg-muted">
+              <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted sm:size-[100px]">
                 {imagePath ? (
                   <img
                     src={imagePath}
@@ -390,8 +395,9 @@ export function ProductDialog({
             </div>
           </div>
         </div>
+        </DialogBody>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0 flex-row gap-2 border-t bg-card px-4 py-3 sm:px-6 sm:py-4 max-sm:[&>button]:flex-1">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             إلغاء
           </Button>

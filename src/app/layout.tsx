@@ -185,6 +185,9 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
+  // 🛡️ لما الكيبورد يفتح على الجوال، الـ layout viewport يصغر معاه (بدل ما الكيبورد
+  // يغطي الجزء السفلي) — فالدايلوجات و Bottom Sheets تفضل ظاهرة فوق الكيبورد.
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({

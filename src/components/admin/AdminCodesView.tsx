@@ -584,7 +584,7 @@ function GenerateCodesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent mobileSheet className="sm:max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>توليد أكواد تفعيل</DialogTitle>
           <DialogDescription>

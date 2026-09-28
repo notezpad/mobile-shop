@@ -145,7 +145,7 @@ export function PaymentDialog({
               min={0.01}
               step="0.01"
               placeholder="0.00"
-              autoFocus
+              autoFocus={typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches}
               dir="ltr"
               className="text-left"
             />

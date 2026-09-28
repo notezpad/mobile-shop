@@ -137,7 +137,7 @@ export function UpgradeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl sm:max-w-3xl">
+      <DialogContent mobileSheet className="max-w-2xl sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <Sparkles className="size-5 text-primary" />
