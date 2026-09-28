@@ -160,11 +160,11 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   React.useEffect(() => {
     let alive = true
     ;(async () => {
-      const [meResult, tenantResult, subResult] = await Promise.allSettled([
-        getMe(),
-        api<{ shopName?: string; phone?: string | null; address?: string | null; logoPath?: string | null; invoicePrefix?: string; timezone?: string }>('/api/tenant'),
-        api<any>('/api/subscription'),
-      ])
+      // 🛡️ ROOT FIX (استهلاك موارد): التلات ريكويستات كانوا بيتنططوا
+      // بالتوازي لأي حد يفتح الصفحة — يعني زائر/بوت مش مسجّل دخول كان
+      // بيكلّف 3 ريكويستات + 3 اتصالات قاعدة بيانات. دلوقتي بنتأكد من
+      // السيشن الأول، وبعدها بس بنسحب بيانات المحل والاشتراك.
+      const meResult = await Promise.allSettled([getMe()]).then((r) => r[0])
       if (!alive) return
 
       const me = meResult.status === 'fulfilled' ? meResult.value : null
@@ -173,6 +173,12 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         return
       }
       setUser(me)
+
+      const [tenantResult, subResult] = await Promise.allSettled([
+        api<{ shopName?: string; phone?: string | null; address?: string | null; logoPath?: string | null; invoicePrefix?: string; timezone?: string }>('/api/tenant'),
+        api<any>('/api/subscription'),
+      ])
+      if (!alive) return
 
       if (me.role === 'SUPER_ADMIN' && !(me as any).impersonating) {
         setBootState('admin')

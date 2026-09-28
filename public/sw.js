@@ -16,7 +16,7 @@
  *  ✅ Periodic sync (optional, for background data refresh)
  */
 
-const CACHE_VERSION = 'shop-erp-v3'
+const CACHE_VERSION = 'shop-erp-v4'
 const OFFLINE_URL = '/offline.html'
 
 // ─── Precache list ──────────────────────────────────────────
@@ -103,6 +103,8 @@ self.addEventListener('fetch', (event) => {
 
   // ── API requests → network-first ─────────────────────────
   if (url.pathname.startsWith('/api/')) {
+    // 🛡️ /api/auth/* بيحدد مين مسجّل دخول — ممنوع يتخزن نهائياً
+    if (url.pathname.startsWith('/api/auth/')) return
     event.respondWith(
       fetch(request)
         .then((response) => {
@@ -149,6 +151,30 @@ self.addEventListener('fetch', (event) => {
           return cached || caches.match(OFFLINE_URL)
         }
       })()
+    )
+    return
+  }
+
+  // 🛡️ ROOT FIX: ملفات /_next/static/* أسماؤها فيها hash ومش بتتغير
+  // أبداً. القديم كان stale-while-revalidate: يرجّع النسخة المخزنة
+  // *ويعمل كمان ريكويست شبكة لنفس الملف في كل مرة* — أي ~25 ريكويست
+  // زيادة على السيرفر في كل فتح صفحة بدون أي فايدة. دلوقتي cache-first
+  // بالكامل: لو الملف موجود في الكاش خلاص، صفر شبكة.
+  const isImmutable =
+    url.pathname.startsWith('/_next/static/') ||
+    url.pathname.startsWith('/fonts/')
+  if (isImmutable) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached
+        return fetch(request).then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone()
+            caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+          }
+          return response
+        })
+      })
     )
     return
   }

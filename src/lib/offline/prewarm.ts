@@ -70,7 +70,7 @@ export async function prewarmAll(): Promise<{ products: number; endpoints: numbe
 
   // Check if we already pre-warmed recently (within 5 minutes)
   const lastPrewarm = await idb.getMeta<number>('lastPrewarmAt')
-  if (lastPrewarm && Date.now() - lastPrewarm < 5 * 60 * 1000) {
+  if (lastPrewarm && Date.now() - lastPrewarm < 20 * 60 * 1000) {
     // Already warmed recently — skip
     return { products: 0, endpoints: 0 }
   }

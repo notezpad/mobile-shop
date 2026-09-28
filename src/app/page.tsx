@@ -680,22 +680,26 @@ export default function Home() {
   React.useEffect(() => {
     let alive = true
     ;(async () => {
-      // ⚡ Performance: call getMe() + /api/tenant in PARALLEL instead of
-      // sequential. This saves 1 full API roundtrip (~200-500ms).
-      const [meResult, tenantResult] = await Promise.allSettled([
-        getMe(),
-        api<{
-          shopName?: string
-          phone?: string | null
-          address?: string | null
-          logoPath?: string | null
-          invoicePrefix?: string
-        }>('/api/tenant'),
-      ])
+      // 🛡️ ROOT FIX (استهلاك موارد): ده كان بينادي getMe() + /api/tenant
+      // بالتوازي لكل زائر — يعني كل زيارة للصفحة الرئيسية (وكل زحف من
+      // بوت/كراولر) كانت تعمل ريكويستين على السيرفر + اتصال بقاعدة
+      // البيانات، حتى لو مفيش سيشن أصلاً. دلوقتي بنسأل عن السيشن الأول،
+      // و/api/tenant بينده *فقط* للمستخدم المسجّل.
+      const meResult = await Promise.allSettled([getMe()]).then((r) => r[0])
       if (!alive) return
 
       const me = meResult.status === 'fulfilled' ? meResult.value : null
       if (me) {
+        const tenantResult = await Promise.allSettled([
+          api<{
+            shopName?: string
+            phone?: string | null
+            address?: string | null
+            logoPath?: string | null
+            invoicePrefix?: string
+          }>('/api/tenant'),
+        ]).then((r) => r[0])
+        if (!alive) return
         setUser(me)
         if (me.role === 'SUPER_ADMIN' && !(me as any).impersonating) {
           setBootState('authed')

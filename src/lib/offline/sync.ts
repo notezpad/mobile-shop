@@ -162,7 +162,7 @@ export function startSyncEngine(): () => void {
   const intervalId = setInterval(() => {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
     if (isOnline()) void fullSync()
-  }, 5 * 60 * 1000)
+  }, 20 * 60 * 1000) // 🛡️ كان 5 دقائق: كان بيسحب كل المنتجات + 8 endpoints كل 5 دقائق لكل تاب مفتوح
 
   return () => {
     window.removeEventListener('online', onOnline)

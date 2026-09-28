@@ -177,7 +177,7 @@ export function NotificationBell() {
       void load()
     }
     tick()
-    const id = setInterval(tick, 180000)
+    const id = setInterval(tick, 600000) // 🛡️ 10 دقائق بدل 3 (تقليل استهلاك الموارد)
     const onVisible = () => {
       if (document.visibilityState === 'visible') void load()
     }

@@ -146,11 +146,21 @@ export function DashboardView() {
   React.useEffect(() => {
     load()
 
-    // Auto-refresh every 5 minutes
-    const interval = setInterval(load, 5 * 60 * 1000)
+    // 🛡️ Auto-refresh every 15 minutes (كان 5) وبس لو التاب ظاهر
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'hidden') return
+      load()
+    }, 15 * 60 * 1000)
 
-    // Refresh when user returns to tab
-    const onVisible = () => { if (document.visibilityState === 'visible') load() }
+    // 🛡️ الرجوع للتاب كان بيعمل ريكويست جديد في كل مرة (alt-tab storm).
+    // دلوقتي مرة كل 5 دقائق كحد أقصى.
+    let lastLoad = Date.now()
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - lastLoad < 5 * 60 * 1000) return
+      lastLoad = Date.now()
+      load()
+    }
     document.addEventListener('visibilitychange', onVisible)
 
     return () => {
