@@ -1,4 +1,8 @@
-export function formatCurrency(amount: number | null | undefined): string {
+// LTR isolate — بيثبّت "العلامة + الرقم" قدام بعض في الصفحات RTL
+const LRI = '\u2066'
+const PDI = '\u2069'
+
+function formatAmountParts(amount: number | null | undefined) {
   const n = Number(amount ?? 0)
   // ar-EG يحوّل الصفر لـ ٠ اللي يظهر كـ bullet في الفونت الكبير
   // en-US يعطي أرقام غربية واضحة مناسبة لتطبيق ERP
@@ -6,7 +10,47 @@ export function formatCurrency(amount: number | null | undefined): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })
-  return `${formatted} جنيه`
+  const negative = formatted.startsWith('-')
+  const digits = negative ? formatted.slice(1) : formatted
+  // "0" و "-0" (من التقريب) من غير علامة
+  return { digits, negative: negative && digits !== '0' }
+}
+
+/**
+ * المبلغ بالجنيه. القيم السالبة بتتعرض صح في صفحات RTL: "-502 جنيه"
+ * (من غير العزل كانت بتظهر "502-" لأن علامة السالب بتاخد اتجاه الفقرة).
+ *
+ * ⚠️ الناتج للسالب فيه حروف اتجاه غير مرئية (U+2066/U+2069) — مناسب للشاشة
+ * والـ HTML والـ PDF. الطابعة الحرارية (ESC/POS) بتشيلها قبل تحويل النص لـ bytes.
+ */
+export function formatCurrency(amount: number | null | undefined): string {
+  const { digits, negative } = formatAmountParts(amount)
+  return negative ? `${LRI}-${digits}${PDI} جنيه` : `${digits} جنيه`
+}
+
+/** زي formatCurrency + خيار showPlus لإظهار "+" للقيم الموجبة (حركات الوارد). */
+export function formatSignedCurrency(
+  amount: number | null | undefined,
+  showPlus = false
+): string {
+  const { digits, negative } = formatAmountParts(amount)
+  if (negative) return `${LRI}-${digits}${PDI} جنيه`
+  if (showPlus && digits !== '0') return `${LRI}+${digits}${PDI} جنيه`
+  return `${digits} جنيه`
+}
+
+/** رقم بعلامة (كميات مخزون، فروقات جرد...) بعلامة صحيحة في RTL: "+5" / "-5". */
+export function formatSignedNumber(
+  value: number | null | undefined,
+  showPlus = true
+): string {
+  const n = Number(value ?? 0)
+  const formatted = n.toLocaleString('en-US')
+  const negative = formatted.startsWith('-')
+  const digits = negative ? formatted.slice(1) : formatted
+  if (digits === '0') return '0'
+  if (negative) return `${LRI}-${digits}${PDI}`
+  return showPlus ? `${LRI}+${digits}${PDI}` : digits
 }
 
 export function formatNumber(n: number | null | undefined): string {

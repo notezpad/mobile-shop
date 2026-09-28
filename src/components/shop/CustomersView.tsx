@@ -224,7 +224,7 @@ export function CustomersView() {
               </Badge>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">عملاء مسوّون</p>
+              <p className="text-xs text-muted-foreground">عملاء بلا ديون</p>
               <p className="text-lg font-bold tabular-nums">
                 {customers.filter((c) => c.balance <= 0).length}
               </p>

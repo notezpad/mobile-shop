@@ -1,6 +1,6 @@
 // ضعه مرة واحدة داخل <body> في app/layout.tsx:  <SiteJsonLd />
 // وفي الصفحة الرئيسية بعد قسم الأسئلة: <FaqJsonLd items={faqs} />
-import { SITE_URL, SITE_NAME, SITE_NAME_EN, SITE_DESCRIPTION, WHATSAPP } from "@/lib/site";
+import { SITE_URL, SITE_NAME, SITE_NAME_AR, SITE_DESCRIPTION, WHATSAPP } from "@/lib/site";
 
 const graph = {
   "@context": "https://schema.org",
@@ -9,7 +9,7 @@ const graph = {
       "@type": "Organization",
       "@id": `${SITE_URL}/#org`,
       name: SITE_NAME,
-      alternateName: SITE_NAME_EN,
+      alternateName: SITE_NAME_AR,
       url: SITE_URL,
       logo: `${SITE_URL}/icon-512.png`,
       contactPoint: {

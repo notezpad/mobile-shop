@@ -1,10 +1,13 @@
 // مصدر واحد لكل بيانات السيو — غيّر هنا بس ويتطبق على الموقع كله
 export const SITE_URL = "https://nezampos.com";
-export const SITE_NAME = "نظام المحل";
-export const SITE_NAME_EN = "Nezam POS";
-export const SITE_TITLE = "نظام المحل | برنامج كاشير ونقطة بيع POS لإدارة المحلات";
+// البراند الرسمي: Nezam POS — و"نظام المحل" هو الاسم العربي الوصفي للمنتج.
+export const SITE_NAME = "Nezam POS";
+export const SITE_NAME_EN = SITE_NAME; // للتوافق مع الاستيرادات القديمة
+export const SITE_NAME_AR = "نظام المحل";
+// Title/Description الصفحة الرئيسية — مصدرهم src/lib/seo.ts (SEO_PAGES["/"])
+export const SITE_TITLE = "Nezam POS | نظام المحل لإدارة المحلات ونقاط البيع";
 export const SITE_DESCRIPTION =
-  "برنامج كاشير ونقطة بيع (POS) لمحلات الموبايل والكمبيوتر والملابس والأحذية: فواتير بالباركود، مخزون، صيانة، عملاء وتقارير أرباح لحظية. جرّب مجاناً 14 يوم.";
+  "Nezam POS هو نظام المحل لإدارة المبيعات والمخزون ونقاط البيع POS للموبايل والكمبيوتر والملابس والأحذية، مع الصيانة والخزنة والتقارير وأتمتة العمليات.";
 export const OG_IMAGE = `${SITE_URL}/og-image.png`;
 export const WHATSAPP = "+201010328471";
 export const SUPPORT_PHONE = WHATSAPP;

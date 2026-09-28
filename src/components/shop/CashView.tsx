@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/table'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { formatCurrency, formatArabicDateTime } from '@/lib/format'
+import { formatCurrency, formatSignedCurrency, formatArabicDateTime } from '@/lib/format'
 import { DateTimeCell } from './DateTimeCell'
 import { cn } from '@/lib/utils'
 import { printListReportHtml, openPrintWindow } from '@/lib/print'
@@ -43,6 +43,7 @@ interface Entry {
 const SOURCE_LABEL: Record<string, string> = {
   sale: 'بيع',
   refund: 'مرتجع بيع',
+  return: 'مرتجع/استبدال',
   maintenance: 'صيانة',
   transaction: 'معاملة مالية',
   manual: 'يدوي',
@@ -118,12 +119,12 @@ export function CashView() {
           <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatArabicDateTime(e.createdAt)}</span>,
           SOURCE_LABEL[e.source] ?? e.source,
           e.userName ?? '—',
-          `${e.amount >= 0 ? '+' : ''}${formatCurrency(e.amount)}`,
-          formatCurrency(runningBalances[index] ?? 0),
+          formatSignedCurrency(e.amount, true),
+          formatSignedCurrency(runningBalances[index] ?? 0),
           e.note ?? '—',
         ]),
         kpis: [
-          { label: 'رصيد الخزنة الحالي', value: formatCurrency(data.balance), emphasize: true },
+          { label: 'رصيد الخزنة الحالي', value: formatSignedCurrency(data.balance), emphasize: true },
           { label: 'إجمالي الوارد', value: formatCurrency(totalIn) },
           { label: 'إجمالي الصادر', value: formatCurrency(totalOut) },
           { label: 'عدد الحركات', value: String(data.entries.length) },
@@ -172,7 +173,7 @@ export function CashView() {
               <Skeleton className="mt-1 h-8 w-40 bg-primary-foreground/20" />
             ) : (
               <p className="text-3xl font-bold tabular-nums">
-                {formatCurrency(data?.balance ?? 0)}
+                {formatSignedCurrency(data?.balance ?? 0)}
               </p>
             )}
           </div>
@@ -230,11 +231,10 @@ export function CashView() {
                             e.amount >= 0 ? 'text-primary' : 'text-destructive'
                           )}
                         >
-                          {e.amount >= 0 ? '+' : ''}
-                          {formatCurrency(e.amount)}
+                          {formatSignedCurrency(e.amount, true)}
                         </TableCell>
                         <TableCell className="text-center tabular-nums text-muted-foreground">
-                          {formatCurrency(runningBalances[index] ?? 0)}
+                          {formatSignedCurrency(runningBalances[index] ?? 0)}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">
                           {e.note ?? '—'}
@@ -280,8 +280,7 @@ export function CashView() {
                           e.amount >= 0 ? 'text-primary' : 'text-destructive'
                         )}
                       >
-                        {e.amount >= 0 ? '+' : ''}
-                        {formatCurrency(e.amount)}
+                        {formatSignedCurrency(e.amount, true)}
                       </p>
                     </div>
 
@@ -291,7 +290,7 @@ export function CashView() {
                       <div className="flex items-center justify-between gap-2">
                         <span>بواسطة: {e.userName ?? '—'}</span>
                         <span className="font-semibold">
-                          الرصيد: {formatCurrency(runningBalances[index] ?? 0)}
+                          الرصيد: {formatSignedCurrency(runningBalances[index] ?? 0)}
                         </span>
                       </div>
                     </div>
@@ -322,6 +321,7 @@ function ManualDialog({ open, onOpenChange, onSaved }: ManualProps) {
   const [amount, setAmount] = React.useState('')
   const [note, setNote] = React.useState('')
   const [saving, setSaving] = React.useState(false)
+  const parsedAmount = parseFloat(amount)
 
   React.useEffect(() => {
     if (open) {
@@ -366,10 +366,25 @@ function ManualDialog({ open, onOpenChange, onSaved }: ManualProps) {
             <Input
               id="m-amount"
               type="number"
+              dir="ltr"
+              inputMode="decimal"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="مثال: 100 أو -50"
             />
+            {/* تأكيد فوري لأثر الحركة على الرصيد — بيمنع لخبطة + / - */}
+            {Number.isFinite(parsedAmount) && parsedAmount !== 0 && (
+              <p
+                className={cn(
+                  'text-xs font-medium',
+                  parsedAmount > 0 ? 'text-primary' : 'text-destructive'
+                )}
+              >
+                {parsedAmount > 0
+                  ? `دخل — الرصيد هيزيد ${formatCurrency(parsedAmount)}`
+                  : `مصروف — الرصيد هينقص ${formatCurrency(Math.abs(parsedAmount))}`}
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="m-note">ملاحظات</Label>

@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import { LandingPage } from '@/components/landing/LandingPage'
 import { HomeGate } from '@/components/HomeGate'
-import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from '@/lib/site'
+import { SITE_URL, SITE_NAME, SITE_NAME_AR, SITE_DESCRIPTION } from '@/lib/site'
+import { buildPageMetadata } from '@/lib/seo'
 
 /**
  * 🛡️ الصفحة الرئيسية — Server Component (SSR / static).
@@ -11,15 +12,15 @@ import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from '@/lib/site'
  * مفيش cookies() أو headers() هنا عمداً، عشان Next يعمل prerender ثابت
  * للصفحة — يعني صفر CPU على الـ Worker لكل زحفة بوت.
  */
-export const metadata: Metadata = {
-  alternates: { canonical: '/' },
-}
+// Title / Description / OG / canonical مأخوذين حرفيًا من src/lib/seo.ts
+export const metadata: Metadata = buildPageMetadata('/')
 
 // أسعار الباقات — لازم تطابق اللي معروض فعلاً في صفحة الأسعار.
 const softwareAppJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
   name: SITE_NAME,
+  alternateName: SITE_NAME_AR,
   applicationCategory: 'BusinessApplication',
   operatingSystem: 'Web, iOS, Android, Windows, macOS',
   url: SITE_URL,

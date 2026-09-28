@@ -30,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatDate, formatCurrency } from '@/lib/format'
+import { formatDate, formatCurrency, formatSignedNumber } from '@/lib/format'
 import { DateTimeCell } from '../DateTimeCell'
 import type { Branch, Movement } from '../InventoryView'
 
@@ -265,7 +265,7 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId, on
                       </TableCell>
                       <TableCell className="text-center">
                         <span className={`font-bold ${m.quantity < 0 ? 'text-destructive-subtle-foreground' : 'text-success-subtle-foreground'}`}>
-                          {m.quantity > 0 ? '+' : ''}{m.quantity}
+                          {formatSignedNumber(m.quantity)}
                         </span>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
@@ -291,7 +291,8 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId, on
               </p>
             ) : (
               filtered.map((m, index) => {
-                const incoming = m.type === 'in' || m.type === 'in_adjust' || m.type === 'transfer_in'
+                // الإشارة من الكمية المخزّنة نفسها (سالبة للصادر) — زي الجدول والإجماليات
+                const incoming = m.quantity >= 0
                 return (
                   <div key={m.id} className="rounded-lg border bg-card p-3 hover:bg-muted/30 dark:hover:bg-muted/20">
                     <div className="flex items-start justify-between gap-2">
@@ -317,7 +318,7 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId, on
                           ? 'shrink-0 text-base font-bold tabular-nums text-success'
                           : 'shrink-0 text-base font-bold tabular-nums text-destructive'
                       }>
-                        {incoming ? '+' : '-'}{m.quantity}
+                        {formatSignedNumber(m.quantity)}
                       </p>
                     </div>
 

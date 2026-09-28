@@ -45,7 +45,7 @@ import {
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { formatDate } from '@/lib/format'
+import { formatDate, formatSignedNumber } from '@/lib/format'
 import { DateTimeCell } from '../DateTimeCell'
 import { useShopStore } from '@/lib/store'
 import type { Branch, InventoryProduct, Stocktake } from '../InventoryView'
@@ -313,7 +313,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                           </TableCell>
                           <TableCell className="text-center">
                             <span className={`font-bold ${diff === 0 ? 'text-muted-foreground' : diff > 0 ? 'text-success-subtle-foreground' : 'text-destructive-subtle-foreground'}`}>
-                              {diff > 0 ? '+' : ''}{diff}
+                              {formatSignedNumber(diff)}
                             </span>
                           </TableCell>
                           <TableCell>
@@ -347,7 +347,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                   </span>
                   <span>
                     صافي الفرق: <span className={`font-bold ${totalDiff === 0 ? '' : totalDiff > 0 ? 'text-success-subtle-foreground' : 'text-destructive-subtle-foreground'}`}>
-                      {totalDiff > 0 ? '+' : ''}{totalDiff}
+                      {formatSignedNumber(totalDiff)}
                     </span>
                   </span>
                 </div>
@@ -420,7 +420,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                         <TableCell className="text-center">{st.items.length}</TableCell>
                         <TableCell className="text-center">
                           <span className={`font-bold ${totalD === 0 ? '' : totalD > 0 ? 'text-success-subtle-foreground' : 'text-destructive-subtle-foreground'}`}>
-                            {totalD > 0 ? '+' : ''}{totalD}
+                            {formatSignedNumber(totalD)}
                           </span>
                         </TableCell>
                         <TableCell className="text-center">
@@ -522,7 +522,7 @@ function StocktakeDetailDialog({
             <span className="text-sm text-muted-foreground">
               {stocktake.items.length} صنف — صافي الفرق:{' '}
               <span className={`font-bold ${totalD === 0 ? '' : totalD > 0 ? 'text-success-subtle-foreground' : 'text-destructive-subtle-foreground'}`}>
-                {totalD > 0 ? '+' : ''}{totalD}
+                {formatSignedNumber(totalD)}
               </span>
             </span>
           </div>
@@ -549,7 +549,7 @@ function StocktakeDetailDialog({
                     <TableCell className="text-center font-bold">{it.countedQty}</TableCell>
                     <TableCell className="text-center">
                       <span className={`font-bold ${it.diff === 0 ? 'text-muted-foreground' : it.diff > 0 ? 'text-success-subtle-foreground' : 'text-destructive-subtle-foreground'}`}>
-                        {it.diff > 0 ? '+' : ''}{it.diff}
+                        {formatSignedNumber(it.diff)}
                       </span>
                     </TableCell>
                   </TableRow>

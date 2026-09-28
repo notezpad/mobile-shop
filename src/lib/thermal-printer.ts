@@ -20,6 +20,10 @@
 
 import { formatCurrency } from '@/lib/format'
 
+// الطابعة الحرارية بتحوّل النص لـ bytes — لازم نشيل حروف اتجاه الـ bidi غير المرئية
+const plainMoney = (n: number | null | undefined) =>
+  formatCurrency(n).replace(/[\u2066\u2069]/g, '')
+
 // ─── Types ─────────────────────────────────────────────────
 export type PrinterWidth = '58mm' | '80mm'
 export type PrinterConnection = 'usb' | 'network' | 'browser'
@@ -153,7 +157,7 @@ function buildEscPosReceipt(data: ThermalReceiptData, settings: PrinterSettings)
   // Items
   data.items.forEach((item) => {
     const name = truncate(item.name, Math.floor(cols * 0.4))
-    bytes.push(...textToBytes(padLine(name, String(item.qty), formatCurrency(item.price), formatCurrency(item.total), cols)))
+    bytes.push(...textToBytes(padLine(name, String(item.qty), plainMoney(item.price), plainMoney(item.total), cols)))
     bytes.push(LF)
   })
 
@@ -163,16 +167,16 @@ function buildEscPosReceipt(data: ThermalReceiptData, settings: PrinterSettings)
 
   // Totals
   bytes.push(...CMD.boldOn)
-  bytes.push(...textToBytes(padLine('الإجمالي', '', '', formatCurrency(data.total), cols)))
+  bytes.push(...textToBytes(padLine('الإجمالي', '', '', plainMoney(data.total), cols)))
   bytes.push(LF)
   bytes.push(...CMD.boldOff)
 
-  bytes.push(...textToBytes(padLine('المدفوع', '', '', formatCurrency(data.paid), cols)))
+  bytes.push(...textToBytes(padLine('المدفوع', '', '', plainMoney(data.paid), cols)))
   bytes.push(LF)
 
   if (data.remaining > 0) {
     bytes.push(...CMD.boldOn)
-    bytes.push(...textToBytes(padLine('المتبقي', '', '', formatCurrency(data.remaining), cols)))
+    bytes.push(...textToBytes(padLine('المتبقي', '', '', plainMoney(data.remaining), cols)))
     bytes.push(LF)
     bytes.push(...CMD.boldOff)
   }

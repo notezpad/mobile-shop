@@ -7,7 +7,7 @@ import { Providers } from "@/components/providers";
 import {
   SITE_URL,
   SITE_NAME,
-  SITE_NAME_EN,
+  SITE_NAME_AR,
   SITE_TITLE,
   SITE_DESCRIPTION,
   SUPPORT_PHONE,
@@ -24,32 +24,6 @@ const cairo = Cairo({
 // <title>, <meta description>, Open Graph tags, Twitter Card tags,
 // canonical URLs, robots meta, and more — automatically.
 
-const SITE_KEYWORDS = [
-  "إدارة المحلات",
-  "نقطة بيع",
-  "POS",
-  "محل موبايل",
-  "محل كمبيوتر",
-  "محل ملابس",
-  "محل أحذية",
-  "إدارة المخزون",
-  "نظام محاسبي",
-  "فواتير",
-  "باركود",
-  "صيانة",
-  "عملاء",
-  "موردين",
-  "تقارير مبيعات",
-  "بيع بالجملة",
-  "بيع بالقطاعي",
-  "السوق العربي",
-  "منصة SaaS",
-  "إدارة محلات",
-  "برنامج محاسبة",
-  "كاشير",
-  "خزنة",
-];
-
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
 
@@ -59,11 +33,10 @@ export const metadata: Metadata = {
     template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
-  keywords: SITE_KEYWORDS,
-  authors: [{ name: "نظام المحل", url: SITE_URL }],
-  creator: "نظام المحل",
-  publisher: "نظام المحل",
-  applicationName: SITE_NAME,
+  authors: [{ name: SITE_NAME, url: SITE_URL }],
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
+  applicationName: SITE_NAME_AR, // اسم التطبيق (PWA) — زي ما كان
   category: "Business",
   classification: "Business Software, POS, ERP, Inventory Management",
 
@@ -105,14 +78,14 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "نظام المحل — منصة إدارة المحلات",
+        alt: SITE_TITLE,
         type: "image/png",
       },
       {
         url: "/og-image-square.png",
         width: 1080,
         height: 1080,
-        alt: "نظام المحل — منصة إدارة المحلات",
+        alt: SITE_TITLE,
         type: "image/png",
       },
     ],
@@ -133,7 +106,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: SITE_NAME,
+    title: SITE_NAME_AR, // اسم الأيقونة على الشاشة الرئيسية — زي ما كان
   },
 
   // ── Icons ──
@@ -170,8 +143,8 @@ export const metadata: Metadata = {
     "apple-mobile-web-app-capable": "yes",
     "mobile-web-app-capable": "yes",
     "apple-mobile-web-app-status-bar-style": "black-translucent",
-    "apple-mobile-web-app-title": SITE_NAME,
-    "application-name": SITE_NAME,
+    "apple-mobile-web-app-title": SITE_NAME_AR,
+    "application-name": SITE_NAME_AR,
     "rating": "general",
     "language": "Arabic",
   },
@@ -202,7 +175,7 @@ export default function RootLayout({
     "@context": "https://schema.org",
     "@type": "Organization",
     name: SITE_NAME,
-    alternateName: SITE_NAME_EN,
+    alternateName: SITE_NAME_AR,
     url: SITE_URL,
     logo: `${SITE_URL}/icon-512.png`,
     description: SITE_DESCRIPTION,

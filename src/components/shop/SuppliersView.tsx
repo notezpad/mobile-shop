@@ -213,7 +213,7 @@ export function SuppliersView() {
               </Badge>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">موردين مسوّون</p>
+              <p className="text-xs text-muted-foreground">موردين لا مستحق لهم</p>
               <p className="text-lg font-bold tabular-nums">
                 {suppliers.filter((c) => c.balance <= 0).length}
               </p>
@@ -228,7 +228,7 @@ export function SuppliersView() {
               </Badge>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">موردين عليهم مستحق</p>
+              <p className="text-xs text-muted-foreground">موردين لهم مستحق</p>
               <p className="text-lg font-bold tabular-nums text-destructive">
                 {suppliers.filter((c) => c.balance > 0).length}
               </p>
