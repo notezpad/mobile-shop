@@ -78,26 +78,6 @@ function getWallTimeInTz(date: Date, timeZone: string) {
   }
 }
 
-// عناوين الصفحات في هيدر الموبايل (بدل اسم المحل).
-const PAGE_TITLES: Record<string, string> = {
-  '/dashboard': 'لوحة المعلومات',
-  '/pos': 'نقطة البيع',
-  '/products': 'المنتجات',
-  '/sales': 'سجل المبيعات',
-  '/maintenance': 'الصيانة',
-  '/customers': 'العملاء',
-  '/suppliers': 'الموردين',
-  '/purchases': 'المشتريات',
-  '/inventory': 'المخزون',
-  '/finance': 'المعاملات المالية',
-  '/expenses': 'المصروفات',
-  '/cash': 'الخزنة',
-  '/reports': 'التقارير',
-  '/settings': 'الإعدادات',
-  '/users': 'المستخدمين',
-  '/branches': 'الفروع',
-}
-
 const WEEKDAY_MAP: Record<string, string> = {
   Sun: 'الأحد', Mon: 'الاثنين', Tue: 'الثلاثاء', Wed: 'الأربعاء',
   Thu: 'الخميس', Fri: 'الجمعة', Sat: 'السبت',
@@ -171,7 +151,6 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   const setPlan = useShopStore((s) => s.setPlan)
   const setSubscription = useShopStore((s) => s.setSubscription)
   const user = useShopStore((s) => s.user)
-  const shopName = useShopStore((s) => s.shopName)
   const subscription = useShopStore((s) => s.subscription)
   const tenantTimezone = useShopStore((s) => s.branding.timezone)
   const [mobileOpen, setMobileOpen] = React.useState(false)
@@ -303,15 +282,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           >
             <Home className="size-[18px]" strokeWidth={1.9} />
           </Link>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold leading-tight">
-              {PAGE_TITLES[pathname] ?? PAGE_TITLES['/' + pathname.split('/')[1]] ?? ''}
-            </p>
-            {/* في وضع الدخول بدل عميل (impersonation) نعرض اسم المحل عشان ما يحصلش لبس */}
-            {(user as any)?.impersonating && (
-              <p className="truncate text-[10px] leading-tight text-muted-foreground">{shopName}</p>
-            )}
-          </div>
+          <div className="header-divider" />
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <ThemeToggle />
