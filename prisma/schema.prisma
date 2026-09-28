@@ -35,8 +35,11 @@ model Tenant {
   commissionVodafoneCash Float     @default(1.0)
   commissionInstapay     Float     @default(0.5)
   commissionFawry        Float     @default(1.0)
-  wholesaleEnabled       Boolean   @default(false)
   retailEnabled          Boolean   @default(true)
+  // Unit-based dynamic retail pricing (Piece / قطعة only — never touches
+  // wholesale ProductUnit prices). See src/lib/retail-pricing.ts.
+  dynamicRetailPricingEnabled Boolean @default(false)
+  defaultRetailMarginPercent  Float   @default(20)
   status                 String    @default("active")
   ownerEmail             String?
   ownerPhone             String?
@@ -218,6 +221,10 @@ model Product {
 
   // Fashion: collection field only (used for bulk collection discounts).
   collection String?
+
+  // Per-product override of Tenant.defaultRetailMarginPercent for dynamic
+  // retail (Piece / قطعة) pricing. null = use the tenant's global default.
+  retailMarginPercent Float?
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   branch         Branch?         @relation(fields: [branchId], references: [id])

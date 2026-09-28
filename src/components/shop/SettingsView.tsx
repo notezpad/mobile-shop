@@ -35,8 +35,9 @@ interface TenantData {
   commissionVodafoneCash: number
   commissionInstapay: number
   commissionFawry: number
-  wholesaleEnabled: boolean
   retailEnabled: boolean
+  dynamicRetailPricingEnabled: boolean
+  defaultRetailMarginPercent: number
 }
 
 // بلاد التشغيل الحالية/المحتملة للمحلات — القائمة دي بس اقتراحات سريعة
@@ -501,48 +502,42 @@ export function SettingsView() {
         </Card>
       )}
 
+      {/* ─── التسعير الديناميكي للقطاعي (Unit-Based Dynamic Pricing) ─── */}
       <Card>
         <CardHeader>
-          <CardTitle>خطة الأسعار (جملة / قطاعي)</CardTitle>
+          <CardTitle className="text-base">تسعير القطعة التلقائي</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            لما تفعّلها، سعر بيع «قطعة» في نقطة البيع بيتحسب تلقائياً = سعر التكلفة + نسبة هامش الربح، بدل السعر الثابت المدخل يدوياً. أسعار وحدات الجملة (ربع دستة، نص دستة، دستة...) بتفضل زي ما هي دايماً ومتأثرش بالتفعيل ده.
+          </p>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <label className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer">
-              <input
-                type="checkbox"
-                className="mt-1 size-4"
-                checked={!!data?.wholesaleEnabled}
-                onChange={(e) => update('wholesaleEnabled', e.target.checked)}
-              />
-              <div>
-                <div className="font-medium">تفعيل البيع بالجملة</div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  عند التفعيل يظهر اختيار الوحدة (ربع/نص/دستة/ونص دستة) في نقطة البيع.
-                  عند التعطيل تُخفى الوحدات ويُستخدم سعر القطاعي فقط.
-                </div>
-              </div>
-            </label>
-            <label className="flex items-start gap-3 rounded-lg border p-3 cursor-not-allowed opacity-60">
-              <input
-                type="checkbox"
-                className="mt-1 size-4"
-                checked={!!data?.retailEnabled}
-                disabled
-                readOnly
-              />
-              <div>
-                <div className="font-medium flex items-center gap-2">
-                  تفعيل البيع بالقطاعي
-                  <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800">
-                    قريباً
-                  </span>
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  السعر القطاعي يظهر كسعر بيع القطعة الواحدة — هذا الخيار سيُفعَّل في تحديث قادم.
-                </div>
-              </div>
-            </label>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+            <div className="flex-1">
+              <p className="text-sm font-medium">تفعيل التسعير التلقائي للقطعة</p>
+              <p className="text-xs text-muted-foreground">
+                السعر بيتحدّث فوراً في نقطة البيع لحظة اختيار وحدة «قطعة»
+              </p>
+            </div>
+            <Switch
+              checked={data?.dynamicRetailPricingEnabled ?? false}
+              onCheckedChange={(v) => update('dynamicRetailPricingEnabled', v === true)}
+              disabled={saving}
+            />
           </div>
+          <Field label="نسبة هامش الربح الافتراضية %">
+            <Input
+              type="number"
+              min={0}
+              step="0.1"
+              value={String(data?.defaultRetailMarginPercent ?? 20)}
+              onChange={(e) =>
+                update('defaultRetailMarginPercent', parseFloat(e.target.value) || 0)
+              }
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              تُطبَّق على أي منتج ملوش نسبة مخصصة له. يمكن تخصيص نسبة مختلفة لمنتج معين من داخل بيانات المنتج نفسه.
+            </p>
+          </Field>
         </CardContent>
       </Card>
 

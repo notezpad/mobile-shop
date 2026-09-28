@@ -38,6 +38,7 @@ export interface ProductFormValues {
   imagePath: string | null
   branchId?: number | null
   collection?: string | null
+  retailMarginPercent?: number | null
 }
 
 interface Props {
@@ -68,6 +69,9 @@ export function ProductDialog({
   const [branchId, setBranchId] = React.useState<string>('')
   const [branches, setBranches] = React.useState<{ id: number; name: string }[]>([])
   const [collection, setCollection] = React.useState<string>('')
+  // Unit-Based Dynamic Pricing: per-product override of the tenant's default
+  // retail margin %. Empty string = "use the tenant default".
+  const [retailMarginPercent, setRetailMarginPercent] = React.useState<string>('')
   const [dirty, setDirty] = React.useState(false)
   const fileRef = React.useRef<HTMLInputElement>(null)
   const capabilities = useShopStore((s) => s.plan.capabilities)
@@ -91,6 +95,9 @@ export function ProductDialog({
       setImagePath(initial?.imagePath ?? null)
       setBranchId(initial?.branchId != null ? String(initial.branchId) : '')
       setCollection((initial as any)?.collection ?? '')
+      setRetailMarginPercent(
+        initial?.retailMarginPercent != null ? String(initial.retailMarginPercent) : ''
+      )
       fetch('/api/branches').then(r => r.ok ? r.json() : []).then(setBranches).catch(() => setBranches([]))
     }
   }, [open, initial])
@@ -135,6 +142,7 @@ export function ProductDialog({
         imagePath,
         branchId: branchId ? parseInt(branchId, 10) : null,
         collection: collection.trim() || null,
+        retailMarginPercent: retailMarginPercent.trim() !== '' ? parseFloat(retailMarginPercent) : null,
       }
       if (initial?.id) {
         await api(`/api/products/${initial.id}`, { method: 'PUT', body: payload })
@@ -282,6 +290,23 @@ export function ProductDialog({
               value={cost}
               onChange={(e) => { setCost(e.target.value); setDirty(true) }}
             />
+          </div>
+
+          {/* 5.5 retail margin override — dynamic pricing for the "قطعة" unit only */}
+          <div className="space-y-1.5">
+            <Label htmlFor="p-retail-margin">نسبة هامش ربح القطعة (اختياري)</Label>
+            <Input
+              id="p-retail-margin"
+              type="number"
+              min={0}
+              step="0.1"
+              placeholder="افتراضي المحل"
+              value={retailMarginPercent}
+              onChange={(e) => { setRetailMarginPercent(e.target.value); setDirty(true) }}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              يُستخدم فقط لو التسعير التلقائي للقطعة مفعّل من الإعدادات. سيبه فاضي عشان يستخدم النسبة الافتراضية للمحل.
+            </p>
           </div>
 
           {/* 6. quantity */}

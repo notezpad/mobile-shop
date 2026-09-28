@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
-import { requireCapability, featureErrorResponse } from '@/lib/features'
+import { requireCapability, featureErrorResponse, getPlanContext } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,12 +28,10 @@ async function __GET(
   const prod = await loadTenantProduct(session.tenantId, pid)
   if (!prod) return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
 
-  // إذا كان البيع بالجملة معطَّلاً من الإعدادات، نُخفي الوحدات في كل الواجهات.
-  const tenant = await db.tenant.findUnique({
-    where: { id: session.tenantId },
-    select: { wholesaleEnabled: true },
-  })
-  if (tenant && tenant.wholesaleEnabled === false) {
+  // 🛡️ 2026-09-27: مفيش تفعيل/تعطيل يدوي تاني (wholesaleEnabled) — الوحدات
+  // بتظهر تلقائي لو، وبس لو، الباقة فيها capability = multi_unit (احترافية).
+  const planCtx = await getPlanContext(session.tenantId)
+  if (!planCtx.capabilities.includes('multi_unit')) {
     return NextResponse.json([])
   }
 

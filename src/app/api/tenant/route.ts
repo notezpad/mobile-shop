@@ -36,8 +36,9 @@ async function __GET() {
       commissionVodafoneCash: true,
       commissionInstapay: true,
       commissionFawry: true,
-      wholesaleEnabled: true,
       retailEnabled: true,
+      dynamicRetailPricingEnabled: true,
+      defaultRetailMarginPercent: true,
     },
   })
   if (!tenant) {
@@ -96,10 +97,25 @@ async function __PUT(req: NextRequest) {
     data.commissionInstapay = Number(body.commissionInstapay) || 0
   if (body.commissionFawry !== undefined)
     data.commissionFawry = Number(body.commissionFawry) || 0
-  if (body.wholesaleEnabled !== undefined)
-    data.wholesaleEnabled = Boolean(body.wholesaleEnabled)
+  // 🛡️ 2026-09-27: مفيش `wholesaleEnabled` تاني — البيع بالجملة بقى محكوم
+  // بالكامل بـ capability الباقة (multi_unit). لو الباقة احترافية، الوحدات
+  // شغالة تلقائي من غير أي تفعيل يدوي من التاجر. شوف
+  // src/app/api/products/[id]/units/route.ts.
   if (body.retailEnabled !== undefined)
     data.retailEnabled = Boolean(body.retailEnabled)
+
+  // Unit-Based Dynamic Pricing (Piece / قطعة = cost + margin%). Global
+  // on/off toggle + customizable default margin, per-product overrides
+  // live on Product.retailMarginPercent (see /api/products/[id]).
+  if (body.dynamicRetailPricingEnabled !== undefined)
+    data.dynamicRetailPricingEnabled = Boolean(body.dynamicRetailPricingEnabled)
+  if (body.defaultRetailMarginPercent !== undefined) {
+    const margin = Number(body.defaultRetailMarginPercent)
+    if (isNaN(margin) || margin < 0) {
+      return NextResponse.json({ error: 'نسبة هامش الربح غير صالحة' }, { status: 400 })
+    }
+    data.defaultRetailMarginPercent = margin
+  }
 
   const updated = await db.tenant.update({
     where: { id: session.tenantId },
@@ -115,8 +131,9 @@ async function __PUT(req: NextRequest) {
       commissionVodafoneCash: true,
       commissionInstapay: true,
       commissionFawry: true,
-      wholesaleEnabled: true,
       retailEnabled: true,
+      dynamicRetailPricingEnabled: true,
+      defaultRetailMarginPercent: true,
     },
   })
   return NextResponse.json(updated)

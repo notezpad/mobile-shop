@@ -47,6 +47,18 @@ interface ProductLite {
   // variant a scanned code refers to.
   matchedVariantId?: number | null
   matchedVariantLabel?: string | null
+  // Unit-Based Dynamic Pricing: precomputed by /api/products as
+  // cost + margin% when the tenant has the feature enabled, else null.
+  // Applies ONLY to the "Piece / قطعة" unit — never to wholesale units.
+  dynamicRetailPrice?: number | null
+}
+
+// The price to use for the "Piece / قطعة" unit (no wholesale unit selected):
+// the dynamically computed retail price when the tenant has enabled it,
+// otherwise the flat price on the product card — exactly like before this
+// feature existed. Never applies to wholesale ProductUnit prices.
+function piecePrice(product: ProductLite): number {
+  return product.dynamicRetailPrice ?? product.price
 }
 
 interface CustomerLite {
@@ -211,9 +223,13 @@ export function POSView() {
     const unit = unitId ? availableUnits.find((u) => u.id === unitId) : null
     const factor = unit?.factor ?? 1
     // Per-piece price: if unit has its own price, spread it across factor pieces.
+    // Note: an unpriced WHOLESALE unit still falls back to the raw flat
+    // product.price (never the dynamic retail price) — a cashier/admin who
+    // forgot to price a wholesale unit shouldn't have it silently inflated
+    // by the retail markup. Dynamic pricing only kicks in for actual "Piece".
     const perPiecePrice = unit
       ? (unit.price != null ? unit.price / factor : product.price)
-      : product.price
+      : piecePrice(product)
     const startQty = factor // start at exactly 1 unit worth of pieces
 
     setCart((prev) => {
@@ -382,9 +398,12 @@ export function POSView() {
         const newUnitId = unit?.id ?? null
         const newKey = `${i.product.id}-${newUnitId ?? 'x'}-${i.variantId ?? 'x'}`
         const factor = unit?.factor ?? 1
+        // Same rule as addToCartDirect: unpriced wholesale unit → raw flat
+        // product.price, never the dynamic retail price. Only true "Piece"
+        // (unit === null) uses the dynamic retail calculation.
         const perPiecePrice = unit
           ? (unit.price != null ? unit.price / factor : i.product.price)
-          : i.product.price
+          : piecePrice(i.product)
         // Base ceiling: the selected variant's own stock if this line is a
         // specific color/size, otherwise the product's aggregate stock.
         const baseStock = i.variantId
@@ -600,7 +619,7 @@ export function POSView() {
                               )}
                             </div>
                             <div className="text-left text-xs">
-                              <p className="font-semibold text-primary">{formatCurrency(p.price)}</p>
+                              <p className="font-semibold text-primary">{formatCurrency(piecePrice(p))}</p>
                               <p
                                 className={cn(
                                   'text-muted-foreground',

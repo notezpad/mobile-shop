@@ -108,6 +108,15 @@ export async function PUT(
               ? String(body.collection).trim() || null
               : null
             : existing.collection,
+        // Unit-Based Dynamic Pricing: per-product override of the tenant's
+        // default retail margin %. Sending null/'' clears the override back
+        // to "use the tenant default".
+        retailMarginPercent:
+          body.retailMarginPercent !== undefined
+            ? (body.retailMarginPercent === null || body.retailMarginPercent === ''
+                ? null
+                : Number(body.retailMarginPercent))
+            : existing.retailMarginPercent,
       },
     })
     // عند تغيير سعر البيع: إعادة حساب أسعار الوحدات تلقائياً (سعر × factor).

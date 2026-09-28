@@ -73,6 +73,8 @@ interface Product {
   imagePath: string | null
   active: boolean
   soldQuantity?: number
+  retailMarginPercent?: number | null
+  dynamicRetailPrice?: number | null
 }
 
 export function ProductsView() {
@@ -179,6 +181,7 @@ export function ProductsView() {
       quantity: p.quantity,
       minQuantity: p.minQuantity,
       imagePath: p.imagePath,
+      retailMarginPercent: p.retailMarginPercent ?? null,
     })
     setDialogOpen(true)
   }
@@ -430,6 +433,7 @@ export function ProductsView() {
         { header: 'التصنيف', key: 'category', format: 'text' },
         { header: 'الباركود', key: 'barcode', format: 'text' },
         { header: 'سعر البيع', key: 'price', format: 'currency' },
+        { header: 'سعر القطعة الفعلي', key: 'effectiveRetailPrice', format: 'currency' },
         { header: 'التكلفة', key: 'cost', format: 'currency' },
         { header: 'الكمية المتاحة', key: 'quantity', format: 'int' },
         { header: 'الحد الأدنى', key: 'minQuantity', format: 'int' },
@@ -440,6 +444,10 @@ export function ProductsView() {
         category: p.category || '-',
         barcode: p.barcode || '-',
         price: p.price,
+        // Unit-Based Dynamic Pricing: the price actually charged for the
+        // "Piece / قطعة" unit — cost+margin when enabled, else same as
+        // the flat sale price. Never the wholesale ProductUnit price.
+        effectiveRetailPrice: p.dynamicRetailPrice ?? p.price,
         cost: p.cost,
         quantity: p.quantity,
         minQuantity: p.minQuantity,
@@ -579,7 +587,7 @@ export function ProductsView() {
                 يمين وشمال عشان يشوف صف واحد كامل). الكروت بتحل المشكلة
                 دي جذريًا بعرض كل بيانات المنتج رأسيًا بدل أفقيًا.
               */}
-              <Table className="min-w-[1220px]">
+              <Table className="min-w-[1340px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-14 text-center pr-4">
@@ -595,6 +603,7 @@ export function ProductsView() {
                     <TableHead className="w-52">الباركود</TableHead>
                     <TableHead className="w-28 text-center">التكلفة</TableHead>
                     <TableHead className="w-28 text-center">السعر</TableHead>
+                    <TableHead className="w-32 text-center">سعر القطعة الفعلي</TableHead>
                     <TableHead className="w-16 text-center">الكمية</TableHead>
                     <TableHead className="w-20 text-center">الحد الأدنى</TableHead>
                     <TableHead className="w-24 text-center">عدد المبيعات</TableHead>
@@ -605,7 +614,7 @@ export function ProductsView() {
                   {products.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={12}
+                        colSpan={13}
                         className="py-8 text-center text-muted-foreground"
                       >
                         لا توجد منتجات
@@ -655,6 +664,20 @@ export function ProductsView() {
                           </TableCell>
                           <TableCell className="text-center font-semibold tabular-nums">
                             {formatCurrency(p.price)}
+                          </TableCell>
+                          <TableCell className="text-center tabular-nums">
+                            {p.dynamicRetailPrice != null ? (
+                              <div className="flex flex-col items-center gap-0.5">
+                                <span className="font-semibold text-primary">
+                                  {formatCurrency(p.dynamicRetailPrice)}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  تلقائي {p.retailMarginPercent != null ? `(${p.retailMarginPercent}%)` : ''}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">{formatCurrency(p.price)}</span>
+                            )}
                           </TableCell>
                           <TableCell className="text-center">
                             <span
@@ -917,6 +940,19 @@ export function ProductsView() {
                             {low ? 'منخفض' : 'جيدة'}
                           </p>
                         </div>
+                        {p.dynamicRetailPrice != null && (
+                          <div className="col-span-3 border-t border-border/60 pt-2">
+                            <p className="text-[10px] text-muted-foreground">سعر القطعة الفعلي (تلقائي)</p>
+                            <p className="font-semibold tabular-nums text-primary">
+                              {formatCurrency(p.dynamicRetailPrice)}
+                              {p.retailMarginPercent != null && (
+                                <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                                  ({p.retailMarginPercent}%)
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )

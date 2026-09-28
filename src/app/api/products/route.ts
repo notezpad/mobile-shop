@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { buildDefaultUnitsData } from '@/lib/default-units'
+import { getPlanContext } from '@/lib/features'
+import { computeDynamicRetailPrice } from '@/lib/retail-pricing'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,9 +81,15 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)))
     const skip  = (page - 1) * limit
 
-    const [products, total] = await Promise.all([
+    const [products, total, retailPricingTenant] = await Promise.all([
       db.product.findMany({ where, orderBy: { id: 'desc' }, skip, take: limit }),
       db.product.count({ where }),
+      // Only need these two columns to compute dynamic retail pricing below —
+      // not the full tenant row.
+      db.tenant.findUnique({
+        where: { id: session.tenantId },
+        select: { dynamicRetailPricingEnabled: true, defaultRetailMarginPercent: true },
+      }),
     ])
 
     // If the search term is an EXACT match for one of this product's variant
@@ -120,6 +128,13 @@ export async function GET(req: NextRequest) {
       soldQuantity: soldMap.get(p.id) ?? 0,
       matchedVariantId: matchedVariantByProduct.get(p.id)?.id ?? null,
       matchedVariantLabel: matchedVariantByProduct.get(p.id)?.label ?? null,
+      // Unit-Based Dynamic Pricing: computed on read only, never persisted.
+      // null when the tenant hasn't enabled the feature — callers (POS) fall
+      // back to the flat p.price exactly like before this feature existed.
+      // Wholesale ProductUnit prices are completely untouched by this.
+      dynamicRetailPrice: retailPricingTenant
+        ? computeDynamicRetailPrice(p, retailPricingTenant)
+        : null,
     }))
 
     return NextResponse.json({
@@ -183,16 +198,29 @@ export async function POST(req: NextRequest) {
         imagePath: body.imagePath ? String(body.imagePath) : null,
         branchId: session.branchId ?? (body.branchId ? parseInt(body.branchId, 10) : null),
         collection: body.collection ? String(body.collection).trim() || null : null,
+        // Unit-Based Dynamic Pricing: per-product override of the tenant's
+        // default retail margin %. null/omitted = use the tenant default.
+        retailMarginPercent:
+          body.retailMarginPercent !== undefined && body.retailMarginPercent !== null && body.retailMarginPercent !== ''
+            ? Number(body.retailMarginPercent)
+            : null,
       },
     })
-    // إنشاء الوحدات تلقائياً فور حفظ المنتج (ربع/نص/دستة/ونص دستة).
+    // 🛡️ إنشاء الوحدات تلقائياً فور حفظ المنتج (ربع/نص/دستة/ونص دستة) —
+    // بس لو الباقة فيها capability = multi_unit (احترافية فقط: electronics-pro
+    // أو fashion-pro). قبل الإصلاح ده كانت الوحدات بتتعمل لكل منتج في أي باقة
+    // (حتى الأساسية)، وده كان بيسيب وحدات جملة جاهزة بالسعر الصح في الداتابيز
+    // لعملاء ملهومش الحق فيها أصلاً حسب باقتهم.
     // سعر كل وحدة = سعر البيع × factor. بدون تدخل يدوي.
-    try {
-      await db.productUnit.createMany({
-        data: buildDefaultUnitsData(created.id, price),
-      })
-    } catch {
-      // تجاهل إذا كانت الوحدات موجودة مسبقاً لأي سبب
+    const planCtx = await getPlanContext(session.tenantId)
+    if (planCtx.capabilities.includes('multi_unit')) {
+      try {
+        await db.productUnit.createMany({
+          data: buildDefaultUnitsData(created.id, price),
+        })
+      } catch {
+        // تجاهل إذا كانت الوحدات موجودة مسبقاً لأي سبب
+      }
     }
     // stock in movement on initial quantity
     const initialQty = parseInt(body.quantity ?? 0, 10) || 0
