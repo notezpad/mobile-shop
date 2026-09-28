@@ -7,6 +7,7 @@ export const SITE_DESCRIPTION =
   "برنامج كاشير ونقطة بيع (POS) لمحلات الموبايل والكمبيوتر والملابس والأحذية: فواتير بالباركود، مخزون، صيانة، عملاء وتقارير أرباح لحظية. جرّب مجاناً 14 يوم.";
 export const OG_IMAGE = `${SITE_URL}/og-image.png`;
 export const WHATSAPP = "+201010328471";
+export const SUPPORT_PHONE = WHATSAPP;
 
 export const PAGES = [
   { path: "/", changeFrequency: "weekly", priority: 1 },
