@@ -304,7 +304,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         </div>
 
         {/* Main content */}
-        <div className="flex flex-1 flex-col min-h-0">
+        <div className="flex min-w-0 flex-1 flex-col min-h-0">
         {/* Desktop header */}
         <header className="sticky top-0 z-20 hidden h-14 shrink-0 items-center justify-between border-b bg-card px-6 shadow-sm lg:flex">
           <LiveClock timeZone={tenantTimezone || 'Africa/Cairo'} />
@@ -318,8 +318,8 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         </header>
 
         {/* Scrollable content area — renders the page */}
-        <div className="flex-1 overflow-y-auto min-h-0">
-          <div className="p-4 sm:p-6">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 min-w-0">
+          <div className="p-4 sm:p-6 min-w-0">
             {children}
           </div>
         </div>

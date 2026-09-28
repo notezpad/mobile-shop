@@ -470,7 +470,7 @@ export function ProductsView() {
     : products.filter((p) => selectedIds.has(p.id))
 
   return (
-    <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold">المنتجات</h1>
@@ -480,9 +480,9 @@ export function ProductsView() {
         </div>
       </div>
 
-      <Card className="max-w-full overflow-hidden">
-        <CardContent className="grid min-w-0 grid-cols-1 gap-2 p-3 sm:grid-cols-2 xl:flex xl:flex-wrap xl:items-center">
-          <div className="relative min-w-0 sm:col-span-2 xl:min-w-[200px] xl:flex-1">
+      <Card>
+        <CardContent className="flex flex-wrap items-center gap-2 p-3">
+          <div className="relative min-w-[200px] flex-1">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
               value={search}
@@ -492,7 +492,7 @@ export function ProductsView() {
             />
           </div>
           <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="w-full xl:w-[180px]">
+            <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="كل التصنيفات" />
             </SelectTrigger>
             <SelectContent>
@@ -505,7 +505,7 @@ export function ProductsView() {
             </SelectContent>
           </Select>
           <Select value={status} onValueChange={setStatus}>
-            <SelectTrigger className="w-full xl:w-[150px]">
+            <SelectTrigger className="w-[150px]">
               <SelectValue placeholder="الحالة" />
             </SelectTrigger>
             <SelectContent>
@@ -517,7 +517,7 @@ export function ProductsView() {
           {selectedIds.size > 0 ? (
             /* ── Bulk-action bar (replaces normal actions when items are selected) ── */
             <>
-              <span className="self-center text-sm font-medium text-muted-foreground">
+              <span className="text-sm font-medium text-muted-foreground">
                 {selectedIds.size} محدد
               </span>
               <Button
@@ -567,8 +567,8 @@ export function ProductsView() {
         </CardContent>
       </Card>
 
-      <Card className="min-w-0 max-w-full overflow-hidden py-0">
-        <CardContent className="min-w-0 max-w-full p-0">
+      <Card className="overflow-hidden py-0">
+        <CardContent className="p-0">
           {loading ? (
             <div className="space-y-2 p-4">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -576,7 +576,7 @@ export function ProductsView() {
               ))}
             </div>
           ) : (
-            <div className="hidden w-full max-w-full overflow-x-auto overscroll-x-contain lg:block" dir="ltr">
+            <div className="hidden overflow-x-auto xl:block" dir="ltr">
               {/*
                 من lg فما فوق: نعرض الجدول العادي بكل أعمدته. تحته نسخة
                 كروت (خارج هذا الشرط) مخصصة للشاشات الأصغر من lg، بدل ما
@@ -587,27 +587,27 @@ export function ProductsView() {
                 يمين وشمال عشان يشوف صف واحد كامل). الكروت بتحل المشكلة
                 دي جذريًا بعرض كل بيانات المنتج رأسيًا بدل أفقيًا.
               */}
-              <Table className="min-w-[1340px]">
+              <Table className="min-w-[1100px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-14 text-center pr-4">
+                    <TableHead className="w-10 text-center px-2">
                       <Checkbox
                         checked={products.length > 0 && selectedIds.size === products.length}
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
-                    <TableHead className="w-10 text-center">#</TableHead>
-                    <TableHead className="w-14 text-center">الصورة</TableHead>
+                    <TableHead className="w-8 text-center px-1">#</TableHead>
+                    <TableHead className="w-12 text-center px-1">الصورة</TableHead>
                     <TableHead>الاسم</TableHead>
-                    <TableHead className="w-24">التصنيف</TableHead>
-                    <TableHead className="w-52">الباركود</TableHead>
-                    <TableHead className="w-28 text-center">التكلفة</TableHead>
-                    <TableHead className="w-28 text-center">السعر</TableHead>
-                    <TableHead className="w-32 text-center">سعر القطعة الفعلي</TableHead>
+                    <TableHead className="w-20">التصنيف</TableHead>
+                    <TableHead className="w-40">الباركود</TableHead>
+                    <TableHead className="w-24 text-center">التكلفة</TableHead>
+                    <TableHead className="w-24 text-center">السعر</TableHead>
+                    <TableHead className="w-28 text-center">سعر القطعة الفعلي</TableHead>
                     <TableHead className="w-16 text-center">الكمية</TableHead>
-                    <TableHead className="w-20 text-center">الحد الأدنى</TableHead>
-                    <TableHead className="w-24 text-center">عدد المبيعات</TableHead>
-                    <TableHead className="w-24 text-center pl-4">إجراءات</TableHead>
+                    <TableHead className="w-16 text-center px-1">الحد الأدنى</TableHead>
+                    <TableHead className="w-20 text-center px-1">عدد المبيعات</TableHead>
+                    <TableHead className="w-24 text-center pl-2">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -625,7 +625,7 @@ export function ProductsView() {
                       const low = p.quantity <= p.minQuantity
                       return (
                         <TableRow key={p.id} className={!p.active ? 'opacity-50' : 'hover:bg-muted/40'}>
-                          <TableCell className="text-center pr-4">
+                          <TableCell className="text-center px-2">
                             <Checkbox
                               checked={selectedIds.has(p.id)}
                               onCheckedChange={() => toggleSelect(p.id)}
@@ -700,8 +700,8 @@ export function ProductsView() {
                           <TableCell className="text-center font-semibold tabular-nums text-info-subtle-foreground">
                             {p.soldQuantity ?? 0}
                           </TableCell>
-                          <TableCell className="text-center pl-4">
-                            <div className="flex items-center justify-center gap-1.5">
+                          <TableCell className="text-center pl-2">
+                            <div className="flex items-center justify-center gap-1">
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -777,7 +777,7 @@ export function ProductsView() {
             المهمة)، بدل صف عريض في جدول يحتاج سكرول أفقي ليُقرأ كاملًا.
           */}
           {!loading && (
-            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 xl:hidden">
               {products.length === 0 ? (
                 <p className="col-span-full py-8 text-center text-muted-foreground">
                   لا توجد منتجات
