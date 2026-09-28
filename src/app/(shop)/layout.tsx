@@ -2,10 +2,11 @@
 
 import * as React from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { Loader2, Menu, CalendarDays } from 'lucide-react'
+import { Loader2, Menu, CalendarDays, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetTitle,
 } from '@/components/ui/sheet'
@@ -258,19 +259,24 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <div className="flex h-screen flex-col bg-background overflow-hidden">
+    // 🛡️ الشِل ثابت (fixed inset-0) بدل h-screen: كده الهيدر والسايدبار مش
+    // بيتحركوا أبدًا مع سكرول الصفحة على الموبايل — السكرول بس داخل منطقة
+    // المحتوى. (h-screen = 100vh كان أطول من الشاشة الظاهرة في كروم موبايل.)
+    <div className="fixed inset-0 flex flex-col bg-background overflow-hidden overscroll-none">
       {/* Sticky trial/expiring banner — shown above everything else when
           subscription is expired or expiring soon. Does NOT lock the user
           out; just encourages them to subscribe. */}
       <TrialExpiredBanner />
       <OfflineIndicator />
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-card px-3 shadow-sm lg:hidden">
-        <Button variant="ghost" size="icon" className="size-9" onClick={() => setMobileOpen(true)}>
-          <Menu className="size-5" />
-        </Button>
-        <span className="font-bold">{shopName}</span>
-        <div className="flex items-center gap-1.5">
+      <header className="z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-card px-3 pt-[env(safe-area-inset-top)] shadow-sm lg:hidden">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <Button variant="ghost" size="icon" className="size-9 shrink-0" onClick={() => setMobileOpen(true)}>
+            <Menu className="size-5" />
+          </Button>
+          <span className="truncate text-sm font-bold">{shopName}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
           <ThemeToggle />
           <div className="header-divider" />
           <NotificationBell />
@@ -281,9 +287,19 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
 
       {/* Mobile sidebar */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="right" className="w-[280px] p-0">
+        <SheetContent
+          side="right"
+          showCloseButton={false}
+          className="h-dvh w-[82vw] max-w-[300px] gap-0 p-0 sm:max-w-[300px]"
+        >
           <SheetTitle className="sr-only">القائمة</SheetTitle>
-          <Sidebar onNavigate={() => setMobileOpen(false)} />
+          {/* زر الإغلاق على الشمال عشان ما يغطيش لوجو المحل */}
+          <SheetClose className="absolute left-3 top-4 z-10 flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted active:scale-90">
+            <X className="size-4" />
+            <span className="sr-only">إغلاق</span>
+          </SheetClose>
+          {/* w-full: السايدبار يملا الشيت بالكامل (كان 252px فيسيب شريط فاضي) */}
+          <Sidebar className="w-full border-l-0" onNavigate={() => setMobileOpen(false)} />
         </SheetContent>
       </Sheet>
 
@@ -318,8 +334,8 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         </header>
 
         {/* Scrollable content area — renders the page */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 min-w-0">
-          <div className="p-4 sm:p-6 min-w-0">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain min-h-0 min-w-0">
+          <div className="p-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 min-w-0">
             {children}
           </div>
         </div>

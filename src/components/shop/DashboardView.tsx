@@ -177,14 +177,14 @@ export function DashboardView() {
   const profitSparkData = data?.last7DaysSales?.map((d) => d.profit) ?? []
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Welcome header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
             مرحباً، {user?.name ?? 'مستخدم'}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
             لوحة المعلومات — نظرة سريعة على أداء المحل اليوم
           </p>
         </div>
@@ -259,7 +259,7 @@ export function DashboardView() {
             variant="success"
           />
         </BentoCell>
-        <BentoCell>
+        <BentoCell className={hasMaintenance ? undefined : 'col-span-2 lg:col-span-1'}>
           <KpiCard
             title="العملاء"
             value={loading ? '...' : String(data?.customersCount ?? 0)}
@@ -344,7 +344,7 @@ export function DashboardView() {
           </Card>
         </BentoCell>
 
-        <BentoCell rowSpan={2} className="animate-in-up stagger-3">
+        <BentoCell rowSpan={2} className="col-span-2 animate-in-up stagger-3 lg:col-span-1">
           <Card variant="bento" className="h-full">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -395,7 +395,7 @@ export function DashboardView() {
         </BentoCell>
 
         {/* === Row 4: Low stock + Active maintenance (2 cells side by side) === */}
-        <BentoCell className="animate-in-up stagger-4">
+        <BentoCell className="col-span-2 animate-in-up stagger-4 lg:col-span-1">
           <Card variant="bento" className="h-full border-destructive/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -437,7 +437,7 @@ export function DashboardView() {
         </BentoCell>
 
         {hasMaintenance && (
-          <BentoCell className="animate-in-up stagger-5">
+          <BentoCell className="col-span-2 animate-in-up stagger-5 lg:col-span-1">
             <Card variant="bento" className="h-full">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">

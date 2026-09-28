@@ -23,10 +23,10 @@ export function BentoGrid({
   return (
     <div
       className={cn(
-        "grid gap-4",
+        "grid gap-2.5 sm:gap-4",
         cols === 2 && "grid-cols-1 md:grid-cols-2",
-        cols === 3 && "grid-cols-1 md:grid-cols-2 lg:grid-cols-3",
-        cols === 4 && "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
+        cols === 3 && "grid-cols-2 lg:grid-cols-3",
+        cols === 4 && "grid-cols-2 lg:grid-cols-4",
         cols === 5 && "grid-cols-2 md:grid-cols-3 lg:grid-cols-5",
         className
       )}
@@ -56,11 +56,11 @@ export function BentoCell({
   return (
     <div
       className={cn(
-        "col-span-1",
-        colSpan === 2 && "md:col-span-2",
+        "col-span-1 min-w-0",
+        colSpan === 2 && "col-span-2",
         colSpan === 3 && "lg:col-span-3",
         colSpan === 4 && "lg:col-span-4",
-        rowSpan === 2 && "row-span-2",
+        rowSpan === 2 && "lg:row-span-2",
         className
       )}
     >

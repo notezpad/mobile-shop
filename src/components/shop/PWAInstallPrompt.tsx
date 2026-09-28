@@ -98,29 +98,29 @@ export function PWAInstallPrompt() {
 
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 z-[200] animate-in-up"
+      className="fixed bottom-0 left-0 right-0 z-40 animate-in-up pb-[env(safe-area-inset-bottom)]"
       style={{
         animation: 'slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
-      <div className="mx-auto max-w-md p-4">
+      <div className="mx-auto max-w-md p-2 sm:p-4">
         <div
-          className="flex items-center gap-3 rounded-2xl border bg-card p-4 shadow-2xl"
+          className="flex items-center gap-2 rounded-2xl border bg-card p-2.5 shadow-2xl sm:gap-3 sm:p-4"
           style={{
             boxShadow: '0 20px 50px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255,255,255,0.05)',
           }}
         >
           {/* Icon */}
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-lg shadow-brand-600/30">
+          <div className="hidden size-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-lg shadow-brand-600/30 min-[380px]:flex">
             <Smartphone className="size-6" />
           </div>
 
           {/* Content */}
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold">
+            <p className="truncate text-sm font-bold">
               {isIOS ? 'أضف النظام لشاشتك' : 'تثبيت التطبيق'}
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="truncate text-[11px] text-muted-foreground sm:text-xs">
               {isIOS
                 ? 'يعمل بدون متصفح وبسرعة أكبر'
                 : 'استخدم النظام كتطبيق بدون متصفح'}
@@ -136,7 +136,7 @@ export function PWAInstallPrompt() {
           ) : (
             <button
               onClick={handleInstall}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/30 active:scale-95"
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/30 active:scale-95"
             >
               <Download className="size-3.5" />
               تثبيت

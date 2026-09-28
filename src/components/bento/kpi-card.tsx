@@ -68,25 +68,25 @@ export function KpiCard({
   const styles = variantStyles[variant]
 
   return (
-    <Card variant="bento" className={cn("relative overflow-hidden p-5", className)}>
+    <Card variant="bento" className={cn("relative h-full overflow-hidden p-3 sm:p-5", className)}>
       {/* Decorative gradient blob — fades in on hover for premium feel.
           Positioned top-right (RTL: top-left visually) so it doesn't
           interfere with text readability. */}
       <div className="pointer-events-none absolute -top-12 -left-12 size-32 rounded-full bg-gradient-to-br from-primary/10 to-transparent blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-slow" />
 
-      <div className="relative flex items-start justify-between gap-3">
+      <div className="relative flex flex-col-reverse items-start gap-2 sm:flex-row sm:justify-between sm:gap-3">
         <div className="space-y-1 min-w-0 flex-1">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider truncate">
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider truncate sm:text-xs">
             {title}
           </p>
-          <p className="text-2xl font-bold tracking-tight text-foreground tabular-nums truncate">
+          <p className="text-lg font-bold tracking-tight text-foreground tabular-nums truncate sm:text-2xl">
             {value}
           </p>
         </div>
         {icon && (
           <div
             className={cn(
-              "flex size-10 shrink-0 items-center justify-center rounded-lg [&_svg]:size-5",
+              "flex size-8 shrink-0 items-center justify-center rounded-lg sm:size-10 [&_svg]:size-4 sm:[&_svg]:size-5",
               styles.iconWrap
             )}
           >

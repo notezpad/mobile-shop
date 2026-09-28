@@ -962,6 +962,15 @@ html::-webkit-scrollbar-thumb:active {
   --app-w: 100vw;
 }
 
+/* موبايل: 100vh في كروم/سفاري = الارتفاع "الكبير" (بعد اختفاء شريط العنوان)،
+   فالتطبيق كان أطول من الشاشة الظاهرة والصفحة كلها بتسكرول والهيدر بينزل
+   ويطلع. dvh بيتبع الارتفاع الظاهر فعليًا. */
+@supports (height: 100dvh) {
+  :root {
+    --app-h: 100dvh;
+  }
+}
+
 .h-screen     { height:     var(--app-h); }
 .min-h-screen { min-height: var(--app-h); }
 
