@@ -36,6 +36,9 @@ model Tenant {
   commissionInstapay     Float     @default(0.5)
   commissionFawry        Float     @default(1.0)
   retailEnabled          Boolean   @default(true)
+  // Unit-Based Dynamic Pricing (retail piece price = cost + margin%).
+  dynamicRetailPricingEnabled Boolean @default(false)
+  defaultRetailMarginPercent  Float   @default(20)
   status                 String    @default("active")
   ownerEmail             String?
   ownerPhone             String?
@@ -211,6 +214,9 @@ model Product {
   cost        Float    @default(0)
   quantity    Int      @default(0)
   minQuantity Int      @default(1)
+  // Unit-Based Dynamic Pricing: per-product override of the tenant's default
+  // retail margin %. null = fall back to Tenant.defaultRetailMarginPercent.
+  retailMarginPercent Float?
   imagePath   String?
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
