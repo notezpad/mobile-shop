@@ -596,7 +596,7 @@ function MainApp() {
       </div>
 
       {/* Right side layout — header fixed, content scrolls */}
-      <div className="flex flex-1 flex-col min-h-0 lg:mr-[260px]">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:mr-[260px]">
 
         {/* Desktop header — خارج منطقة الـ scroll ✅ */}
         <header className="sticky top-0 z-20 hidden h-14 shrink-0 items-center justify-between border-b bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60 lg:flex">
@@ -608,11 +608,12 @@ function MainApp() {
         </header>
 
         {/* منطقة الـ scroll — بس المحتوى يتمرر، الهيدر ما يتأثرش ✅ */}
-        <div className="flex-1 overflow-y-auto min-h-0">
-          <div className="p-4 sm:p-6">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="min-w-0 max-w-full p-4 sm:p-6">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeView}
+                className="min-w-0 max-w-full"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
