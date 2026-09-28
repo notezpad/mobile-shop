@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Store, Facebook, Instagram, Twitter, MessageCircle } from 'lucide-react'
+import { Store, MessageCircle } from 'lucide-react'
 
 const PRODUCT_LINKS = [
   { label: 'المزايا', href: '#features' },
@@ -11,7 +11,6 @@ const PRODUCT_LINKS = [
 ]
 const COMPANY_LINKS = [
   { label: 'من نحن', href: '/about-us' },
-  { label: 'المدونة', href: '#' },
   { label: 'سياسة الكوكيز', href: '/cookies-policy' },
   { label: 'تواصل معنا', href: '/contact-us' },
 ]
@@ -52,9 +51,6 @@ export function LandingFooter() {
             </p>
             <div className="flex items-center gap-2">
               {[
-                { icon: Facebook, label: 'فيسبوك', href: '#' },
-                { icon: Instagram, label: 'انستجرام', href: '#' },
-                { icon: Twitter, label: 'تويتر', href: '#' },
                 { icon: MessageCircle, label: 'واتساب', href: 'https://wa.me/201010328471' },
               ].map((s, i) => {
                 const Icon = s.icon

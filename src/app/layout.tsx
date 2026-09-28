@@ -4,6 +4,14 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
+import {
+  SITE_URL,
+  SITE_NAME,
+  SITE_NAME_EN,
+  SITE_TITLE,
+  SITE_DESCRIPTION,
+  SUPPORT_PHONE,
+} from "@/lib/site";
 
 const cairo = Cairo({
   variable: "--font-cairo",
@@ -16,11 +24,6 @@ const cairo = Cairo({
 // <title>, <meta description>, Open Graph tags, Twitter Card tags,
 // canonical URLs, robots meta, and more — automatically.
 
-const SITE_URL = "https://shop-system.com";
-const SITE_NAME = "نظام المحل";
-const SITE_TITLE = "نظام المحل — منصة إدارة المحلات #1 في الدول العربية";
-const SITE_DESCRIPTION =
-  "نظام متكامل لإدارة محلات الموبايل والكمبيوتر، والملابس والأحذية — نقطة بيع (POS)، مخزون، صيانة، عملاء، معاملات مالية، وتقارير لحظية. تجربة مجانية 14 يوم بدون بطاقة ائتمان.";
 const SITE_KEYWORDS = [
   "إدارة المحلات",
   "نقطة بيع",
@@ -118,8 +121,8 @@ export const metadata: Metadata = {
   // ── Twitter Cards ──
   twitter: {
     card: "summary_large_image",
-    site: "@shop_system",
-    creator: "@shop_system",
+    site: "@nezampos",
+    creator: "@nezampos",
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
     images: ["/og-image.png"],
@@ -156,11 +159,10 @@ export const metadata: Metadata = {
     address: false,
     email: true,
   },
-  verification: {
-    google: "google-site-verification-token-here", // ← ضع التوكن الحقيقي هنا من Google Search Console
-    yandex: "",
-    yahoo: "",
-  },
+  // توكن التحقق بيتحط من متغير البيئة فقط — مفيش قيمة وهمية بتتطلّع في الـ HTML
+  verification: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
+    : undefined,
   other: {
     "theme-color": "#10b981",
     "msapplication-TileColor": "#10b981",
@@ -171,10 +173,7 @@ export const metadata: Metadata = {
     "apple-mobile-web-app-title": SITE_NAME,
     "application-name": SITE_NAME,
     "rating": "general",
-    "revisit-after": "1 day",
     "language": "Arabic",
-    "geo.region": "ARAB",
-    "geo.placename": "Arab World",
   },
 };
 
@@ -195,100 +194,33 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // 🛡️ JSON-LD structured data for search engines.
-  // Helps Google understand the organization + the software application +
-  // the FAQ entries → can appear as rich results in search.
+  // 🛡️ JSON-LD (Organization + WebSite) — بيانات حقيقية بس.
+  // اتشال: aggregateRating (تقييمات مش حقيقية = مخالفة لسياسة جوجل)،
+  // و SearchAction (مفيش بحث في الموقع بالشكل ده)، ورابط واتساب من sameAs.
+  // SoftwareApplication اتنقل للصفحة الرئيسية بس (src/app/page.tsx).
   const organizationJsonLd = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "نظام المحل",
-    alternateName: "Shop System",
+    name: SITE_NAME,
+    alternateName: SITE_NAME_EN,
     url: SITE_URL,
     logo: `${SITE_URL}/icon-512.png`,
     description: SITE_DESCRIPTION,
-    foundingDate: "2026",
-    sameAs: [
-      "https://wa.me/201010328471",
-    ],
     contactPoint: {
       "@type": "ContactPoint",
-      telephone: "+201010328471",
+      telephone: SUPPORT_PHONE,
       contactType: "customer support",
       availableLanguage: ["Arabic"],
-      areaServed: ["SA", "AE", "EG", "QA", "KW", "OM", "BH", "JO", "LB", "IQ", "YE", "PS", "SY", "JO"],
     },
-  };
-
-  const softwareAppJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: "نظام المحل",
-    applicationCategory: "BusinessApplication",
-    operatingSystem: "Web, iOS, Android, Windows, macOS",
-    url: SITE_URL,
-    description: SITE_DESCRIPTION,
-    offers: [
-      {
-        "@type": "Offer",
-        name: "باقة أساسية - موبايل وكمبيوتر",
-        price: "299",
-        priceCurrency: "EGP",
-        description: "إدارة كاملة لمحل الموبايل والكمبيوتر — POS، مخزون، صيانة، معاملات مالية",
-      },
-      {
-        "@type": "Offer",
-        name: "باقة احترافية - موبايل وكمبيوتر",
-        price: "599",
-        priceCurrency: "EGP",
-        description: "كل مزايا الباقة الأساسية + تقارير متقدمة، فروع، مستخدمين، وبيع بالجملة",
-      },
-      {
-        "@type": "Offer",
-        name: "باقة أساسية - ملابس وأحذية",
-        price: "349",
-        priceCurrency: "EGP",
-        description: "إدارة محل الملابس والأحذية — POS، مخزون، مقاسات وألوان",
-      },
-      {
-        "@type": "Offer",
-        name: "باقة احترافية - ملابس وأحذية",
-        price: "699",
-        priceCurrency: "EGP",
-        description: "كل مزايا الباقة الأساسية + كوليكشنات وبيع بالجملة (دستة/نص دستة)",
-      },
-    ],
-    aggregateRating: {
-      "@type": "AggregateRating",
-      ratingValue: "4.8",
-      ratingCount: "127",
-      reviewCount: "127",
-      bestRating: "5",
-      worstRating: "1",
-    },
-    featureList: [
-      "نقطة بيع (POS) كاملة بالباركود",
-      "إدارة مخزون ذكية مع تنبيهات النفاد",
-      "متابعة الصيانة أول بأول",
-      "معاملات مالية ومحافظ إلكترونية متعددة",
-      "تقارير وأرباح لحظية",
-      "بيع بالجملة والقطاعي",
-      "يعمل بدون إنترنت (PWA + Offline)",
-      "تطبيق ويب قابل للتثبيت (PWA)",
-    ],
   };
 
   const websiteJsonLd = {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    name: "نظام المحل",
+    name: SITE_NAME,
     url: SITE_URL,
     inLanguage: "ar",
     description: SITE_DESCRIPTION,
-    potentialAction: {
-      "@type": "SearchAction",
-      target: `${SITE_URL}/?q={search_term_string}`,
-      "query-input": "required name=search_term_string",
-    },
   };
 
   return (
@@ -328,10 +260,6 @@ export default function RootLayout({
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareAppJsonLd) }}
         />
         <script
           type="application/ld+json"

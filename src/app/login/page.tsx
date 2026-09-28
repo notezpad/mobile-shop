@@ -338,9 +338,9 @@ export default function LoginPage() {
             className="flex items-center rounded-2xl overflow-hidden border"
             style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>
             {[
-              { value: "1,000+", label: "محل نشط",        icon: "🏪" },
-              { value: "⭐ 4.9", label: "تقييم المستخدمين", icon: "" },
-              { value: "99.9%",  label: "جاهزية الخدمة",   icon: "🔒" },
+              { value: "14 يوم", label: "تجربة مجانية",     icon: "🎁" },
+              { value: "بدون بطاقة", label: "ائتمان مطلوبة", icon: "💳" },
+              { value: "أوفلاين", label: "يعمل بدون إنترنت", icon: "📶" },
             ].map((s, i) => (
               <div key={i} className="flex-1 text-center py-3"
                 style={{ borderRightWidth: i > 0 ? 1 : 0, borderColor: "rgba(255,255,255,0.08)" }}>

@@ -199,7 +199,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                       dir="ltr"
                     >
                       <span className="size-2 rounded-full bg-brand-400" />
-                      app.shop-system.com/dashboard
+                      nezampos.com/dashboard
                     </div>
                   </div>
 

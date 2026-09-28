@@ -151,7 +151,7 @@ function BrowserFrame({ children }: { children: React.ReactNode }) {
         </div>
         <div className="mx-auto flex items-center gap-1.5 rounded-md bg-background px-3 py-1 text-[10px] text-muted-foreground" dir="ltr">
           <span className="size-2 rounded-full bg-brand-500" />
-          app.shop-system.com
+          nezampos.com
         </div>
       </div>
       <div className="bg-background p-3 sm:p-5">{children}</div>

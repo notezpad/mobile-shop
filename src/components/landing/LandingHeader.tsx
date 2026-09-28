@@ -87,7 +87,7 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
             <span className="flex flex-col leading-tight">
               <span className="text-base font-bold text-white">نظام المحل</span>
               <span className="hidden text-[10px] lg-muted sm:block">
-                منصة إدارة المحلات والجملة #1 في العالم العربي
+                منصة إدارة المحلات والجملة للسوق العربي
               </span>
             </span>
           </a>

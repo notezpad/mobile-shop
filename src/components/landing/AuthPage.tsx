@@ -46,14 +46,6 @@ const SIGNUP_BENEFITS = [
   'ألغِ في أي وقت بدون أي التزام',
 ]
 
-const TESTIMONIAL = {
-  quote:
-    'أخيراً نظام بسيط ومفهوم، ولادي اشتغلوا عليه في يوم واحد. المبيعات زادت 30% لأننا بقينا نعرف بالظبط بتبيع إيه.',
-  name: 'أحمد محمد',
-  shop: 'محل الاتصالات',
-  rating: 5,
-}
-
 /**
  * 🛡️ 2026-09-17 (v2): Polished professional auth page.
  *
@@ -538,7 +530,7 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
         >
           <div className="glass-pill mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium text-white">
             <Star className="size-3.5 fill-current text-amber-300" />
-            منصة إدارة المحلات والجملة #1 في العالم العربي
+            منصة إدارة المحلات والجملة للسوق العربي
           </div>
           <h2 className="text-3xl font-bold leading-tight text-white xl:text-4xl">
             أدِر محلك باحترافية
@@ -584,16 +576,10 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
               transition={{ duration: 0.4, delay: 0.2 }}
               className="glass-panel-strong rounded-2xl p-6"
             >
-              <div className="mb-3 flex gap-1">
-                {Array.from({ length: TESTIMONIAL.rating }).map((_, i) => (
-                  <Star key={i} className="size-4 fill-amber-300 text-amber-300" />
-                ))}
-              </div>
-              <p className="mb-4 text-sm leading-relaxed text-white">"{TESTIMONIAL.quote}"</p>
-              <div>
-                <p className="text-sm font-semibold text-white">{TESTIMONIAL.name}</p>
-                <p className="text-xs lg-muted">{TESTIMONIAL.shop}</p>
-              </div>
+              <p className="mb-2 text-sm font-semibold text-white">كل محلك في نظام واحد</p>
+              <p className="text-sm leading-relaxed text-white/85">
+                نقطة بيع، مخزون، صيانة، عملاء، ومعاملات مالية وتقارير لحظية — جملة وقطاعي، وبيشتغل حتى من غير إنترنت.
+              </p>
             </motion.div>
           )}
         </div>
@@ -606,12 +592,12 @@ export function AuthPage({ mode, onModeChange, onAuthed, onBack }: AuthPageProps
           className="relative z-10 grid grid-cols-3 gap-4 border-t border-white/10 pt-6"
         >
           <div>
-            <p className="text-2xl font-bold text-white">1,000+</p>
-            <p className="text-[11px] lg-muted">محل نشط</p>
+            <p className="text-2xl font-bold text-white">POS</p>
+            <p className="text-[11px] lg-muted">نقطة بيع كاملة</p>
           </div>
           <div>
-            <p className="text-2xl font-bold text-white">⭐ 4.9</p>
-            <p className="text-[11px] lg-muted">تقييم العملاء</p>
+            <p className="text-2xl font-bold text-white">أوفلاين</p>
+            <p className="text-[11px] lg-muted">يعمل بدون إنترنت</p>
           </div>
           <div>
             <p className="text-2xl font-bold text-white">14 يوم</p>
