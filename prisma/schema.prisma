@@ -3,7 +3,12 @@
 
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
+  // FIX Error 1102 (2026-09-27): the default Rust/WASM query engine is loaded
+  // into every Cloudflare Worker isolate (tens of MB + heavy startup CPU),
+  // which blows the Worker CPU/memory limit on cold starts — even for pages
+  // that never touch the DB. The TypeScript "client" engine removes it.
+  previewFeatures = ["driverAdapters", "queryCompiler"]
+  engineType      = "client"
 }
 
 datasource db {
@@ -30,7 +35,6 @@ model Tenant {
   commissionVodafoneCash Float     @default(1.0)
   commissionInstapay     Float     @default(0.5)
   commissionFawry        Float     @default(1.0)
-  wholesaleEnabled       Boolean   @default(false)
   retailEnabled          Boolean   @default(true)
   status                 String    @default("active")
   ownerEmail             String?
