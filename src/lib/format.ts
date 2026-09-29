@@ -14,6 +14,19 @@ export function formatNumber(n: number | null | undefined): string {
   return v.toLocaleString('en-US')
 }
 
+/**
+ * Formats a number with an explicit sign: +5 / -3 / 0.
+ * Used for stock movements and stocktake differences. A left-to-right mark
+ * is prepended so the minus/plus sign stays on the left of the digits in
+ * RTL (Arabic) layouts instead of jumping to the end ("5-").
+ */
+export function formatSignedNumber(n: number | null | undefined): string {
+  const v = Number(n ?? 0)
+  if (!Number.isFinite(v) || v === 0) return '0'
+  const abs = Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 2 })
+  return `\u200E${v > 0 ? '+' : '-'}${abs}`
+}
+
 export function formatDate(date: Date | string | null | undefined): string {
   if (!date) return '-'
   const d = typeof date === 'string' ? new Date(date) : date
