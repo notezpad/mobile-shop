@@ -35,7 +35,7 @@ import { formatCurrency, formatArabicDateTime } from '@/lib/format'
 import { parseSignedAmount } from '@/lib/amount'
 import { DateTimeCell } from './DateTimeCell'
 import { cn } from '@/lib/utils'
-import { printListReportHtml, openPrintWindow } from '@/lib/print'
+import { printListReportHtml, openPrintWindow, printLtr } from '@/lib/print'
 import { useShopStore } from '@/lib/store'
 import { useDataRefresh } from '@/lib/offline/data-events'
 
@@ -123,7 +123,7 @@ export function CashView() {
         ],
         rows: data.entries.map((e, index) => [
           String(index + 1),
-          <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatArabicDateTime(e.createdAt)}</span>,
+          printLtr(formatArabicDateTime(e.createdAt)),
           SOURCE_LABEL[e.source] ?? e.source,
           e.userName ?? '—',
           `${e.amount >= 0 ? '+' : '-'}${formatCurrency(Math.abs(e.amount))}`,

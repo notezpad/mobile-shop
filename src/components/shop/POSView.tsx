@@ -1685,14 +1685,14 @@ export function POSView() {
           )}
         </div>
 
-        {/* Payment method (كاش / محفظة / انستاباي / فوري) — بتحدد الدرج اللي الفلوس دخلت فيه */}
+        {/* Payment method (كاش / محفظة) — بتحدد الدرج اللي الفلوس دخلت فيه
+            🛡️ 2026-09-30: انستاباي وفوري اتشالوا من نقطة البيع بطلب صاحب المحل —
+            طرق الدفع المتبقية هي اللي بتتصلك بالدرج فعلاً في الكاشير. */}
         <div className="space-y-2.5">
           <div className="grid grid-cols-2 gap-1.5">
             {[
               { v: 'cash', label: 'كاش' },
               { v: 'vodafone_cash', label: 'محفظة' },
-              { v: 'instapay', label: 'انستاباي' },
-              { v: 'fawry', label: 'فوري' },
             ].map((m) => (
               <button
                 key={m.v}

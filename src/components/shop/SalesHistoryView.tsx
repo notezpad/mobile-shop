@@ -56,7 +56,6 @@ export function SalesHistoryView() {
   const [query, setQuery] = React.useState('')
   const [from, setFrom] = React.useState('')
   const [to, setTo] = React.useState('')
-  const [refundId, setRefundId] = React.useState<number | null>(null)
   const [partialReturnSale, setPartialReturnSale] = React.useState<Sale | null>(null)
   const [page, setPage] = React.useState(1)
   const [totalPages, setTotalPages] = React.useState(1)
@@ -65,8 +64,6 @@ export function SalesHistoryView() {
 
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
-  const userRole = useShopStore((s) => s.user?.role)
-  const isAdmin = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN'
 
   const load = React.useCallback(async (f?: string, t?: string, p = 1) => {
     setLoading(true)
@@ -222,18 +219,6 @@ export function SalesHistoryView() {
         paid: filtered.filter((s) => s.status !== 'مرتجعة').reduce((sum, s) => sum + s.paid, 0),
       },
     })
-  }
-
-  const doRefund = async (id: number) => {
-    try {
-      await api(`/api/sales/${id}`, { method: 'DELETE' })
-      toast.success('تم ارتجاع الفاتورة')
-      load(from, to)
-    } catch (e: any) {
-      toast.error(e?.message || 'فشل الإرجاع')
-    } finally {
-      setRefundId(null)
-    }
   }
 
   return (
@@ -419,20 +404,9 @@ export function SalesHistoryView() {
                                 size="icon"
                                 className="size-8 text-destructive hover:text-destructive"
                                 onClick={() => setPartialReturnSale(s)}
-                                title="مرتجع جزئي (صنف/كمية)"
+                                title="مرتجع (جزئي أو كلي — جواه إرجاع كل المتبقي)"
                               >
                                 <RotateCcw className="size-4" />
-                              </Button>
-                            )}
-                            {isAdmin && s.status !== 'مرتجعة' && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8 text-destructive hover:text-destructive"
-                                onClick={() => setRefundId(s.id)}
-                                title="مرتجع الفاتورة كاملة (أدمن فقط)"
-                              >
-                                <RotateCcw className="size-4 rotate-180" />
                               </Button>
                             )}
                           </div>
@@ -568,20 +542,9 @@ export function SalesHistoryView() {
                                 size="icon"
                                 className="size-7 text-destructive hover:text-destructive"
                                 onClick={() => setPartialReturnSale(s)}
-                                title="مرتجع جزئي (صنف/كمية)"
+                                title="مرتجع (جزئي أو كلي — جواه إرجاع كل المتبقي)"
                               >
                                 <RotateCcw className="size-3.5" />
-                              </Button>
-                            )}
-                            {isAdmin && !isReturned && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-7 text-destructive hover:text-destructive"
-                                onClick={() => setRefundId(s.id)}
-                                title="مرتجع الفاتورة كاملة (أدمن فقط)"
-                              >
-                                <RotateCcw className="size-3.5 rotate-180" />
                               </Button>
                             )}
                           </div>
@@ -642,26 +605,6 @@ export function SalesHistoryView() {
         </div>
       )}
 
-      {refundId !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <Card className="w-full max-w-sm">
-            <CardContent className="space-y-4 p-6 text-center">
-              <h3 className="text-lg font-bold">مرتجع الفاتورة كاملة</h3>
-              <p className="text-sm text-muted-foreground">
-                سيتم استرجاع الكميات للمخزون ورد المدفوع كله للعميل. متابعة؟
-              </p>
-              <div className="flex justify-center gap-2">
-                <Button variant="outline" onClick={() => setRefundId(null)}>
-                  إلغاء
-                </Button>
-                <Button variant="destructive" onClick={() => doRefund(refundId)}>
-                  تأكيد المرتجع
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       {partialReturnSale && (
         <SaleReturnDialog
@@ -674,6 +617,7 @@ export function SalesHistoryView() {
             customerName: partialReturnSale.customer?.name ?? null,
             paid: partialReturnSale.paid,
             refunded: partialReturnSale.refunded ?? 0,
+            paymentMethod: (partialReturnSale as any).paymentMethod ?? null,
           }}
           items={partialReturnSale.items.map((it) => ({
             id: it.id,
