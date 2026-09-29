@@ -674,7 +674,6 @@ export function SalesHistoryView() {
             customerName: partialReturnSale.customer?.name ?? null,
             paid: partialReturnSale.paid,
             refunded: partialReturnSale.refunded ?? 0,
-            paymentMethod: (partialReturnSale as any).paymentMethod ?? null,
           }}
           items={partialReturnSale.items.map((it) => ({
             id: it.id,

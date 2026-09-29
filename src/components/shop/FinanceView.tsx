@@ -27,7 +27,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency, formatArabicDateTime } from '@/lib/format'
 import { DateTimeCell } from './DateTimeCell'
-import { printListReportHtml, openPrintWindow, printLtr } from '@/lib/print'
+import { printListReportHtml, openPrintWindow } from '@/lib/print'
 import { useShopStore } from '@/lib/store'
 import { useConfirm } from './ConfirmDialogProvider'
 import { useDataRefresh } from '@/lib/offline/data-events'
@@ -150,7 +150,7 @@ export function FinanceView() {
         ],
         rows: rows.map((t, i) => [
           String(i + 1),
-          printLtr(formatArabicDateTime(t.createdAt)),
+          <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatArabicDateTime(t.createdAt)}</span>,
           METHOD_LABEL[t.method] ?? t.method,
           t.userName ?? '—',
           t.kind === 'deposit' ? 'إيداع' : 'سحب',

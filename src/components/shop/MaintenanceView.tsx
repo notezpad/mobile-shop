@@ -28,7 +28,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency, formatArabicDateTime } from '@/lib/format'
 import { DateTimeCell } from './DateTimeCell'
-import { printListReportHtml, openPrintWindow, printLtr } from '@/lib/print'
+import { printListReportHtml, openPrintWindow } from '@/lib/print'
 import { useShopStore } from '@/lib/store'
 import { useConfirm } from './ConfirmDialogProvider'
 import { useDataRefresh } from '@/lib/offline/data-events'
@@ -156,8 +156,8 @@ export function MaintenanceView() {
           o.issue || '—',
           o.status,
           formatCurrency(o.cost),
-          printLtr(formatArabicDateTime(o.receivedAt)),
-          o.deliveredAt ? printLtr(formatArabicDateTime(o.deliveredAt)) : '—',
+          <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatArabicDateTime(o.receivedAt)}</span>,
+          o.deliveredAt ? <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatArabicDateTime(o.deliveredAt)}</span> : '—',
         ]),
         kpis: [
           { label: 'إجمالي أوامر الصيانة', value: String(orders.length) },
