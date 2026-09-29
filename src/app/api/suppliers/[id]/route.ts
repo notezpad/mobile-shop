@@ -39,18 +39,46 @@ async function __GET(
     return NextResponse.json({ error: 'المورد غير موجود' }, { status: 404 })
   }
 
-  // Compute aggregated totals
-  const totalPurchases = supplier.purchaseOrders.reduce((s, x) => s + x.total, 0)
-  const totalPaidPayments = supplier.payments.reduce((s, p) => s + p.amount, 0)
-  const totalPaidOrders = supplier.purchaseOrders.reduce(
-    (s, x) => s + (x.paid ?? 0),
-    0
-  )
-  const totalPaid = totalPaidPayments + totalPaidOrders
-  const totalDebt = supplier.purchaseOrders.reduce(
-    (s, x) => s + Math.max(0, x.total - (x.paid ?? 0)),
-    0
-  )
+  // 🛡️ 2026-09-30: كل الإجماليات بقت صافية ومتطابقة مع الرصيد (المصدر الصحيح):
+  //
+  //   إجمالي المشتريات (صافي) = Σ فواتير (مكتملة + مرتجعة جزئياً) − قيمة
+  //                              المرتجعات من الفواتير المرتجعة جزئياً
+  //                              (الفواتير المرتجعة بالكامل مستبعدة)
+  //   إجمالي المرتجعات        = قيمة كل المرتجعات (للعرض)
+  //   إجمالي المدفوع (صافي)   = دفعات مستقلة (غير الملغاة) + المدفوع على الفواتير
+  //                             − المبالغ اللي رجعت لنا كاش من المرتجعات (refunded)
+  //   إجمالي الدين            = إجمالي المشتريات الصافي − إجمالي المدفوع الصافي
+  //                             = الرصيد بالظبط (نفس معادلة الـ ledger)
+  //
+  // قبل كده: totalPurchases كان بيحسب الفواتير المرتجعة، وtotalDebt كان
+  // max(0, total − paid) لكل فاتورة — بيتجاهل المرتجعات والدفعات المستقلة
+  // خالص، فكان مش بيطابق الرصيد أبداً.
+  const n = (v: unknown) => Number(v ?? 0)
+  const r2 = (x: number) => Math.round((x + Number.EPSILON) * 100) / 100
+
+  let grossPurchases = 0
+  let totalReturns = 0
+  let totalPaidOrders = 0
+  for (const o of supplier.purchaseOrders) {
+    if (o.status === 'مرتجعة') continue // مرتجعة بالكامل → مستبعدة من المشتريات
+    grossPurchases += n(o.total)
+    // قيمة المرتجعات من الفاتورة دي (الكميات المرجعة × سعر شرائها)
+    const returnedValue = o.items.reduce(
+      (s, it) => s + n(it.returnedQty) * n(it.cost),
+      0,
+    )
+    totalReturns += returnedValue
+    totalPaidOrders += n(o.paid) - n(o.refunded)
+  }
+  const totalPurchases = Math.max(0, r2(grossPurchases - totalReturns))
+  totalReturns = r2(totalReturns)
+
+  // cancelled payments no longer count
+  const totalPaidPayments = supplier.payments
+    .filter((p) => p.status !== 'cancelled')
+    .reduce((s, p) => s + n(p.amount), 0)
+  const totalPaid = r2(Math.max(0, totalPaidPayments + totalPaidOrders))
+  const totalDebt = r2(totalPurchases - totalPaid)
 
   return NextResponse.json({
     id: supplier.id,
@@ -63,9 +91,14 @@ async function __GET(
       orderNo: o.orderNo,
       total: o.total,
       paid: o.paid,
+      paymentMethod: o.paymentMethod,
       refunded: o.refunded,
       status: o.status,
       createdAt: o.createdAt.toISOString(),
+      // صافي قيمة المرتجعات من الفاتورة دي — الواجهة بتستخدمه في عمود "علينا"
+      returnedValue: r2(
+        o.items.reduce((s, it) => s + n(it.returnedQty) * n(it.cost), 0),
+      ),
       items: o.items.map((it) => ({
         id: it.id,
         name: it.name,
@@ -79,12 +112,15 @@ async function __GET(
       amount: p.amount,
       method: p.method,
       note: p.note,
+      status: p.status,
+      cancelledAt: p.cancelledAt ? p.cancelledAt.toISOString() : null,
       createdAt: p.createdAt.toISOString(),
     })),
     summary: {
-      totalPurchases,
-      totalPaid,
-      totalDebt,
+      totalPurchases, // صافي بعد المرتجعات
+      totalReturns,
+      totalPaid, // صافي بعد المبالغ المستردة
+      totalDebt, // = الرصيد (نفس معادلة الـ ledger)
       balance: supplier.balance, // source of truth (amount we owe)
     },
   })

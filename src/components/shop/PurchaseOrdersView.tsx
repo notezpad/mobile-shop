@@ -39,6 +39,7 @@ interface PurchaseOrder {
   orderNo: string | null
   total: number
   paid: number
+  paymentMethod?: string | null
   refunded?: number
   status: string
   createdAt: string
@@ -88,7 +89,15 @@ export function PurchaseOrdersView() {
     load(f, t)
   }
 
-  const toISODate = (d: Date) => d.toISOString().slice(0, 10)
+  // 🕐 2026-09-30: التاريخ بتوقيت جهاز المحل (مش UTC). قبل كده
+  // `toISOString()` كان بيقطع بتوقيت UTC، فزرار "النهاردة" قبل الساعة 2
+  // صباحاً بتوقيت القاهرة كان يبعت تاريخ إمبارح — والسيرفر كمان كان
+  // بيفسّره بتوقيت السيرفر. دلوقتي التاريخ المحلي هو المرسَل، والسيرفر
+  // بيفسّره بتوقيت المحل المسجّل (Tenant.timezone).
+  const toISODate = (d: Date) => {
+    const off = d.getTimezoneOffset()
+    return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10)
+  }
 
   const quickToday = () => {
     const today = toISODate(new Date())

@@ -44,6 +44,8 @@ export interface ReturnableOrder {
   orderNo: string | null;
   paid: number;
   refunded?: number;
+  /** how this order was paid — used as the default refund method */
+  paymentMethod?: string | null;
   items: ReturnableItem[];
 }
 
@@ -105,7 +107,7 @@ function ReturnForm({
   const [qtys, setQtys] = React.useState<Record<number, string>>({});
   const [refund, setRefund] = React.useState("");
   const [refundTouched, setRefundTouched] = React.useState(false);
-  const [method, setMethod] = React.useState("cash");
+  const [method, setMethod] = React.useState(order.paymentMethod || "cash");
   const [note, setNote] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const inFlight = React.useRef(false); // hard guard against double click
@@ -128,17 +130,21 @@ function ReturnForm({
 
   const returnValue = round2(lines.reduce((s, l) => s + l.it.cost * l.q, 0));
 
-  // default refund = the cash we paid on this order that was not refunded yet
-  const defaultRefund = hasSupplier
-    ? Math.min(
-        returnValue,
-        Math.max(0, round2(order.paid - (order.refunded ?? 0))),
-      )
+  // 🛡️ 2026-09-30: the refund is NEVER assumed. Default = 0 → the supplier just
+  // deducts the return from what we owe him and the till is untouched. Only if
+  // he really hands money back does the user type it (or press the shortcut).
+  // Without a supplier account the whole value must come back as money.
+  const paidNotRefunded = Math.max(0, round2(order.paid - (order.refunded ?? 0)));
+  const maxRefund = hasSupplier ? Math.min(returnValue, paidNotRefunded) : returnValue;
+  const defaultRefund = hasSupplier ? 0 : returnValue;
+  const refundNum = hasSupplier
+    ? refundTouched
+      ? Number(refund) || 0
+      : defaultRefund
     : returnValue;
-  const refundNum = refundTouched ? Number(refund) || 0 : defaultRefund;
   const refundInvalid =
     refundNum < 0 ||
-    refundNum > returnValue ||
+    round2(refundNum) > round2(maxRefund) ||
     (!hasSupplier && round2(refundNum) !== returnValue);
   const balanceDrop = round2(returnValue - refundNum);
 
@@ -161,7 +167,7 @@ function ReturnForm({
       toast.error(
         !hasSupplier
           ? "الأمر غير مرتبط بمورد، لازم المبلغ المسترد يساوي قيمة المرتجع"
-          : "المبلغ المسترد لازم يكون بين صفر وقيمة المرتجع",
+          : `المبلغ المسترد لازم يكون بين صفر و ${formatCurrency(maxRefund)} (المدفوع فعلاً ولم يُسترد)`,
       );
       return;
     }
@@ -271,7 +277,7 @@ function ReturnForm({
           <div className="space-y-1.5">
             <Label htmlFor="pr-refund">
               {hasSupplier
-                ? "المبلغ اللي المورد رجّعه فعلاً (فلوس)"
+                ? "الفلوس اللي المورد رجّعها لك فعلاً (سيبها 0 لو خصمها من حسابك بس)"
                 : "المبلغ المسترد (فلوس)"}
             </Label>
             <Input
@@ -289,9 +295,22 @@ function ReturnForm({
                 setRefund(e.target.value);
               }}
             />
+            {hasSupplier && maxRefund > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setRefundTouched(true);
+                  setRefund(String(round2(maxRefund)));
+                }}
+              >
+                المورد رجّع كل المبلغ ({formatCurrency(maxRefund)})
+              </Button>
+            )}
             {refundInvalid && returnValue > 0 && (
               <p className="text-xs text-destructive">
-                المبلغ لازم يكون بين صفر وقيمة المرتجع
+                المبلغ لازم يكون بين صفر و {formatCurrency(maxRefund)}
               </p>
             )}
           </div>

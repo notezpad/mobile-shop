@@ -67,7 +67,12 @@ export async function GET(req: NextRequest) {
       paginated ? db.customer.count({ where }) : Promise.resolve(null),
       db.sale.groupBy({
         by: ['customerId'],
-        where: { tenantId: session.tenantId, customerId: { not: null } },
+        // 🛡️ 2026-09-30 (C6/M12): الفواتير المرتجعة بالكامل ماتتحسبش مشتريات.
+        where: {
+          tenantId: session.tenantId,
+          customerId: { not: null },
+          status: { not: 'مرتجعة' },
+        },
         _sum: { total: true },
         _max: { createdAt: true },
       }),

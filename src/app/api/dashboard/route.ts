@@ -166,6 +166,39 @@ export async function GET(req: Request) {
       }
     }
 
+    // 🛡️ 2026-09-30 (M10): فواتير آجلة متأخرة — استحقاقها عدّى ومفيش سداد
+    // كامل. بتظهر في الداشبورد عشان التحصيل يحصل قبل ما الدين يتقادم.
+    const tzNow = await getTenantTimezone(session.tenantId)
+    const todayStr2 = dateStrInTz(new Date(), tzNow)
+    const overdueCutoff = new Date(`${todayStr2}T00:00:00.000Z`)
+    const overdueRows = await db.sale.findMany({
+      where: {
+        tenantId: session.tenantId,
+        status: { not: 'مرتجعة' },
+        dueDate: { lt: overdueCutoff },
+      },
+      select: {
+        id: true,
+        invoiceNo: true,
+        total: true,
+        paid: true,
+        dueDate: true,
+        customer: { select: { name: true, phone: true } },
+      },
+      orderBy: { dueDate: 'asc' },
+      take: 10,
+    })
+    const overdueInvoices = overdueRows
+      .map((s) => ({
+        id: s.id,
+        invoiceNo: s.invoiceNo,
+        remaining: Math.max(0, s.total - s.paid),
+        dueDate: s.dueDate ? s.dueDate.toISOString() : null,
+        customerName: s.customer?.name ?? null,
+        customerPhone: s.customer?.phone ?? null,
+      }))
+      .filter((s) => s.remaining > 0.005)
+
     const res = NextResponse.json({
       todaySales: todaySalesTotal,
       todayProfit,
@@ -185,6 +218,7 @@ export async function GET(req: Request) {
       last10Sales,
       lowStockProducts: lowStockAlerts,
       activeMaintenanceOrders: activeMaintenanceList,
+      overdueInvoices,
     })
     if (shouldRunChecks) {
       res.cookies.set('notif_checked_at', String(Date.now()), {

@@ -182,12 +182,14 @@ export function PaymentDialog({
           {/* Hint */}
           <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
             💡 المبلغ سيُضاف للخزنة ويخصم من رصيد العميل
-            {method !== 'cash' && (
-              <span className="mt-0.5 block text-warning-subtle-foreground">
-                سيُحتسب عمولة على هذه الدفعة حسب إعدادات المحل
-              </span>
-            )}
           </p>
+          {/* 🛡️ 2026-09-30 (N6): تحذير لو الدفعة أكبر من مديونية العميل */}
+          {currentBalance > 0 && parseFloat(amount) > currentBalance + 0.005 && (
+            <p className="rounded-md border border-warning-subtle bg-warning-subtle/20 px-3 py-2 text-xs text-warning-subtle-foreground">
+              ⚠️ الدفعة أكبر من مديونية العميل ({formatCurrency(currentBalance)}) —
+              الفرق هيبقى رصيد دائن لصالح العميل (المحل بيبقى مديون له).
+            </p>
+          )}
         </div>
 
         <DialogFooter>

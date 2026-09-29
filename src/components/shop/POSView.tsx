@@ -17,6 +17,8 @@ import {
   ShoppingBag,
   Trash2,
   User,
+  Volume2,
+  VolumeX,
   Wallet,
   X,
 } from 'lucide-react'
@@ -124,6 +126,135 @@ function writeLS(key: string, value: unknown) {
   }
 }
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n))
+
+/* ── Barcode-scanner support ───────────────────────────────────
+   A USB/Bluetooth scanner in "keyboard mode" types the code and then sends
+   Enter (or Tab). What tells it apart from a human: the gap between
+   characters is a few ms, a person types at 100ms+. We watch the whole page
+   (not just the search box) so a scan is never lost or mis-routed when focus
+   happens to sit on a button, and the terminating Enter can't "click" it. */
+const SCAN_MAX_GAP_MS = 60 // raise to ~120 for very slow scanners
+const SCAN_MIN_LENGTH = 4
+
+function createScanDetector(maxGap = SCAN_MAX_GAP_MS, minLen = SCAN_MIN_LENGTH) {
+  let buf = ''
+  let last = 0
+  return {
+    char(c: string, now: number) {
+      if (now - last > maxGap) buf = ''
+      buf += c
+      last = now
+    },
+    /** Enter/Tab pressed: returns the scanned code, or null if it was a human. */
+    end(now: number): string | null {
+      const ok = buf.length >= minLen && now - last <= maxGap + 20
+      const code = buf
+      buf = ''
+      return ok ? code : null
+    },
+    reset() {
+      buf = ''
+    },
+  }
+}
+
+/** Arabic keyboard layout active? e.key would be an Arabic letter — recover the physical key. */
+function charFromKeyEvent(e: KeyboardEvent): string {
+  if (/^[\x21-\x7e]$/.test(e.key)) return e.key
+  const m = /^Key([A-Z])$/.exec(e.code)
+  if (m) return e.shiftKey ? m[1] : m[1].toLowerCase()
+  const d = /^Digit(\d)$/.exec(e.code)
+  if (d) return d[1]
+  return e.key
+}
+
+function normalizeCode(raw: string): string {
+  return raw
+    .replace(/[\u0660-\u0669]/g, (c) => String(c.charCodeAt(0) - 0x0660))
+    .replace(/[\u06f0-\u06f9]/g, (c) => String(c.charCodeAt(0) - 0x06f0))
+    .replace(/[\u200e\u200f\u202a-\u202e\u0000-\u001f]/g, '')
+    .trim()
+}
+
+let audioCtx: AudioContext | null = null
+function beep(kind: 'ok' | 'err') {
+  try {
+    const AC = window.AudioContext || (window as any).webkitAudioContext
+    if (!AC) return
+    audioCtx = audioCtx ?? new AC()
+    if (audioCtx.state === 'suspended') void audioCtx.resume()
+    const o = audioCtx.createOscillator()
+    const g = audioCtx.createGain()
+    o.type = 'square'
+    o.frequency.value = kind === 'ok' ? 1500 : 280
+    g.gain.value = 0.05
+    o.connect(g)
+    g.connect(audioCtx.destination)
+    o.start()
+    o.stop(audioCtx.currentTime + (kind === 'ok' ? 0.07 : 0.25))
+  } catch {
+    /* audio blocked — visual feedback still works */
+  }
+}
+
+/* ── Draft persistence ─────────────────────────────────────────
+   The invoice in progress survives leaving the POS page (the view unmounts,
+   so plain React state is lost) and a browser refresh. It is stored per
+   tenant + user, and dropped after 12h so a forgotten cart from yesterday
+   never sneaks into today's sale. */
+const DRAFT_MAX_AGE_MS = 12 * 60 * 60 * 1000
+
+interface PosDraft {
+  cart: CartItem[]
+  customerName: string
+  selectedCustomerId: number | null
+  paidFull: boolean
+  paidAmount: number
+}
+
+function draftKeyFor(user: { tenantId: string; userId: string } | null | undefined) {
+  return user ? `pos:draft:v1:${user.tenantId}:${user.userId}` : null
+}
+
+function loadDraft(): PosDraft | null {
+  try {
+    const key = draftKeyFor(useShopStore.getState().user)
+    if (!key) return null
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    const d = JSON.parse(raw)
+    if (!d || d.v !== 1 || Date.now() - Number(d.updatedAt) > DRAFT_MAX_AGE_MS) {
+      window.localStorage.removeItem(key)
+      return null
+    }
+    const cart: CartItem[] = (Array.isArray(d.cart) ? d.cart : [])
+      .filter(
+        (i: any) =>
+          i &&
+          typeof i.cartKey === 'string' &&
+          typeof i.product?.id === 'number' &&
+          Number.isFinite(i.price) &&
+          Number.isFinite(i.quantity) &&
+          i.quantity > 0
+      )
+      .map((i: any) => ({
+        ...i,
+        availableUnits: Array.isArray(i.availableUnits) ? i.availableUnits : [],
+        availableVariants: Array.isArray(i.availableVariants) ? i.availableVariants : [],
+        unitFactor: i.unitFactor || 1,
+      }))
+    if (cart.length === 0 && !String(d.customerName ?? '').trim()) return null
+    return {
+      cart,
+      customerName: String(d.customerName ?? ''),
+      selectedCustomerId: typeof d.selectedCustomerId === 'number' ? d.selectedCustomerId : null,
+      paidFull: d.paidFull !== false,
+      paidAmount: Number.isFinite(d.paidAmount) ? d.paidAmount : 0,
+    }
+  } catch {
+    return null
+  }
+}
 
 // Tailwind v4 derives every spacing / size utility from --spacing and every
 // font size from --text-*. Overriding them on the POS root shrinks (or grows)
@@ -236,6 +367,12 @@ function useMediaQuery(query: string) {
    ──────────────────────────────────────────────────────────────── */
 
 export function POSView() {
+  const user = useShopStore((s) => s.user)
+  const draftKey = draftKeyFor(user)
+  // Read once, on mount — before any state below is created.
+  const [restored] = React.useState<PosDraft | null>(() => loadDraft())
+  const [restoredNotice, setRestoredNotice] = React.useState(() => (restored?.cart.length ?? 0) > 0)
+
   const [query, setQuery] = React.useState('')
   const [category, setCategory] = React.useState<string>('all')
   const [categories, setCategories] = React.useState<CategoryLite[]>([])
@@ -244,17 +381,24 @@ export function POSView() {
   const [searchError, setSearchError] = React.useState(false)
   const [refreshTick, setRefreshTick] = React.useState(0)
 
-  const [cart, setCart] = React.useState<CartItem[]>([])
+  const [cart, setCart] = React.useState<CartItem[]>(() => restored?.cart ?? [])
   const [lastAddedKey, setLastAddedKey] = React.useState<string | null>(null)
   const [confirmClear, setConfirmClear] = React.useState(false)
 
   const [customers, setCustomers] = React.useState<CustomerLite[]>([])
   const [custQuery, setCustQuery] = React.useState('')
   const [custOpen, setCustOpen] = React.useState(false)
-  const [selectedCustomerId, setSelectedCustomerId] = React.useState<number | null>(null)
-  const [customerName, setCustomerName] = React.useState('')
-  const [paidFull, setPaidFull] = React.useState(true)
-  const [paidAmount, setPaidAmount] = React.useState(0)
+  const [selectedCustomerId, setSelectedCustomerId] = React.useState<number | null>(
+    () => restored?.selectedCustomerId ?? null
+  )
+  const [customerName, setCustomerName] = React.useState(() => restored?.customerName ?? '')
+  const [paidFull, setPaidFull] = React.useState(() => restored?.paidFull ?? true)
+  const [paidAmount, setPaidAmount] = React.useState(() => restored?.paidAmount ?? 0)
+  // 🛡️ 2026-09-30 (C12): طريقة دفع مبلغ البيع — كاش/محفظة/انستاباي/فوري.
+  // قبلها كل المبيعات كانت بتسجل في الخزنة بmethod=null.
+  const [paymentMethod, setPaymentMethod] = React.useState('cash')
+  // 🛡️ 2026-09-30 (M10): تاريخ استحقاق اختياري للفواتير الآجلة (للتقادم والتنبيهات).
+  const [dueDate, setDueDate] = React.useState('')
   const [received, setReceived] = React.useState<number | ''>('')
   const [submitting, setSubmitting] = React.useState(false)
   const [customersVersion, setCustomersVersion] = React.useState(0)
@@ -267,6 +411,23 @@ export function POSView() {
   const [variantPickerUnits, setVariantPickerUnits] = React.useState<PosUnit[]>([])
 
   const searchRef = React.useRef<HTMLInputElement>(null)
+  // Caches that keep repeated scans instant (all cleared after a sale).
+  const detailsCache = React.useRef(
+    new Map<number, { t: number; units: PosUnit[]; variants: PosVariant[] }>()
+  )
+  const barcodeCache = React.useRef(
+    new Map<string, { t: number; product: ProductLite; variantId: number | null }>()
+  )
+  const gridCache = React.useRef(
+    new Map<string, { t: number; tick: number; data: ProductLite[] }>()
+  )
+  const scanChain = React.useRef<Promise<unknown>>(Promise.resolve())
+  const enqueueScanRef = React.useRef<(code: string) => void>(() => {})
+  const [soundOn, setSoundOn] = React.useState<boolean>(() => readLS('pos:sound', true))
+  React.useEffect(() => writeLS('pos:sound', soundOn), [soundOn])
+  const playBeep = (k: 'ok' | 'err') => {
+    if (soundOn) beep(k)
+  }
   const isDesktop = useMediaQuery('(min-width: 1024px)')
 
   // Smart fit: pick a scale from the space we actually have (height AND the
@@ -344,11 +505,21 @@ export function POSView() {
   // URL so the offline layer keeps serving it from IndexedDB.
   React.useEffect(() => {
     const q = query.trim()
+    const cacheKey = `${q}|${category}`
+    const hit = gridCache.current.get(cacheKey)
+    if (hit && hit.tick === refreshTick && Date.now() - hit.t < 20_000) {
+      // Same view seen a moment ago (e.g. right after a scan cleared the box):
+      // no request, no spinner.
+      setProducts(hit.data)
+      setSearchError(false)
+      setProductsLoading(false)
+      return
+    }
     setProductsLoading(true)
     let cancelled = false
     const t = setTimeout(async () => {
       const url =
-        `/api/products?search=${encodeURIComponent(q)}&limit=40` +
+        `/api/products?search=${encodeURIComponent(q)}&limit=40&pos=1` +
         (category !== 'all' ? `&category=${encodeURIComponent(category)}` : '')
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
@@ -358,6 +529,8 @@ export function POSView() {
           setProducts(data)
           setSearchError(false)
           setProductsLoading(false)
+          if (gridCache.current.size > 30) gridCache.current.clear()
+          gridCache.current.set(cacheKey, { t: Date.now(), tick: refreshTick, data })
           return
         } catch {
           if (cancelled) return
@@ -469,52 +642,77 @@ export function POSView() {
     flashLine(cartKey)
   }
 
-  const handleProductSelect = async (p: ProductLite, preselectedVariantId?: number | null) => {
-    if (addingProduct) return
+  const focusSearch = () => {
+    if (isDesktop) searchRef.current?.focus()
+  }
+
+  /** Returns true when the item was added (or the variant picker opened). */
+  const handleProductSelect = async (
+    p: ProductLite,
+    preselectedVariantId?: number | null,
+    opts?: { fromScan?: boolean }
+  ): Promise<boolean> => {
+    // Clicks are guarded against double-taps; scans are serialised by the
+    // queue instead, so a fast second scan is never silently dropped.
+    if (addingProduct && !opts?.fromScan) return false
     setAddingProduct(true)
     try {
-      const [unitData, variantData] = await Promise.all([
-        hasUnitsCap
-          ? api<any[]>(`/api/products/${p.id}/units`)
-              .then((d) =>
-                d.map((u: any) => ({ id: u.id, name: u.name, price: u.price, factor: u.factor }))
-              )
-              .catch(() => [])
-          : Promise.resolve([]),
-        hasVariantsCap
-          ? api<any[]>(`/api/products/${p.id}/variants`)
-              .then((d) =>
-                d.map((v: any) => ({
-                  id: v.id,
-                  size: v.size,
-                  color: v.color,
-                  quantity: v.quantity,
-                }))
-              )
-              .catch(() => [])
-          : Promise.resolve([]),
-      ])
+      let unitData: PosUnit[]
+      let variantData: PosVariant[]
+      const cached = detailsCache.current.get(p.id)
+      if (cached && Date.now() - cached.t < 30_000) {
+        unitData = cached.units
+        variantData = cached.variants
+      } else {
+        ;[unitData, variantData] = await Promise.all([
+          hasUnitsCap
+            ? api<any[]>(`/api/products/${p.id}/units`)
+                .then((d) =>
+                  d.map((u: any) => ({ id: u.id, name: u.name, price: u.price, factor: u.factor }))
+                )
+                .catch(() => [] as PosUnit[])
+            : Promise.resolve([] as PosUnit[]),
+          hasVariantsCap
+            ? api<any[]>(`/api/products/${p.id}/variants`)
+                .then((d) =>
+                  d.map((v: any) => ({
+                    id: v.id,
+                    size: v.size,
+                    color: v.color,
+                    quantity: v.quantity,
+                  }))
+                )
+                .catch(() => [] as PosVariant[])
+            : Promise.resolve([] as PosVariant[]),
+        ])
+        detailsCache.current.set(p.id, { t: Date.now(), units: unitData, variants: variantData })
+      }
 
       if (variantData.length > 0) {
         if (preselectedVariantId) {
           const v = variantData.find((v: PosVariant) => v.id === preselectedVariantId)
           if (v) {
+            if (v.quantity <= 0) playBeep('err')
             addToCartDirect(p, null, null, v.quantity, unitData, v.id, variantLabelOf(v), variantData)
-            return
+            return v.quantity > 0
           }
         }
         setVariantPickerProduct(p)
         setVariantPickerUnits(unitData)
         setVariantPickerVariants(variantData)
         setVariantPickerOpen(true)
-        return
+        return true
       }
 
+      if (p.quantity <= 0) playBeep('err')
       addToCartDirect(p, null, null, p.quantity, unitData)
+      return p.quantity > 0
     } catch (e: any) {
       toast.error(e?.message || 'فشل تحميل بيانات المنتج')
+      return false
     } finally {
       setAddingProduct(false)
+      focusSearch()
     }
   }
 
@@ -534,36 +732,67 @@ export function POSView() {
     setVariantPickerProduct(null)
     setVariantPickerVariants([])
     setVariantPickerUnits([])
+    playBeep('ok')
+    window.setTimeout(focusSearch, 50)
   }
 
-  // Enter in the search box = barcode scanner behaviour: an exact code goes
-  // straight to the cart; otherwise the grid already shows the matches.
-  const handleSearchSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const q = query.trim()
-    if (!q) return
+  // One lookup path for hardware scans AND Enter typed in the search box.
+  //  - 'scan':   the box was already cleared; unknown code = error beep + toast.
+  //  - 'manual': the person may just be filtering by name; leave the text alone
+  //              unless it resolved to exactly one product.
+  const processScan = async (raw: string, mode: 'scan' | 'manual') => {
+    const code = normalizeCode(raw)
+    if (!code) return
     try {
-      const res = await api<{ data: ProductLite[] } | ProductLite[]>(
-        `/api/products?search=${encodeURIComponent(q)}`
-      )
-      const data = Array.isArray(res) ? res : (res as any)?.data ?? []
-      const exact = data.find((r) => r.barcode === q)
-      const variantExact = data.find((r) => r.matchedVariantId != null)
-      if (exact) {
-        await handleProductSelect(exact)
-        setQuery('')
-      } else if (variantExact) {
-        await handleProductSelect(variantExact, variantExact.matchedVariantId)
-        setQuery('')
-      } else if (data.length === 1) {
-        await handleProductSelect(data[0])
-        setQuery('')
-      } else if (data.length === 0) {
-        toast.error('لا يوجد منتج بهذا الاسم أو الباركود')
+      let target: { product: ProductLite; variantId: number | null } | null = null
+      const cached = barcodeCache.current.get(code)
+      if (cached && Date.now() - cached.t < 60_000) {
+        target = { product: cached.product, variantId: cached.variantId }
+      } else {
+        const res = await api<{ data: ProductLite[] } | ProductLite[]>(
+          `/api/products?search=${encodeURIComponent(code)}&limit=20&pos=1`
+        )
+        const data = Array.isArray(res) ? res : (res as any)?.data ?? []
+        const exact = data.find((r) => r.barcode === code)
+        const variantExact = data.find((r) => r.matchedVariantId != null)
+        if (exact) target = { product: exact, variantId: exact.matchedVariantId ?? null }
+        else if (variantExact) target = { product: variantExact, variantId: variantExact.matchedVariantId ?? null }
+        else if (data.length === 1) target = { product: data[0], variantId: null }
+        else if (data.length === 0) {
+          playBeep('err')
+          toast.error(
+            mode === 'scan'
+              ? `الباركود ${code} غير مسجّل`
+              : 'لا يوجد منتج بهذا الاسم أو الباركود'
+          )
+          return
+        } else if (mode === 'scan') {
+          playBeep('err')
+          toast.error(`الباركود ${code} مش مطابق لمنتج واحد — راجع الباركود أو ابحث بالاسم`)
+          return
+        } else {
+          return // several name matches: the grid already shows them
+        }
+        barcodeCache.current.set(code, { t: Date.now(), ...target })
       }
+      const added = await handleProductSelect(target.product, target.variantId, { fromScan: true })
+      if (added) playBeep('ok')
+      if (mode === 'manual') setQuery((q) => (q.trim() === raw.trim() ? '' : q))
     } catch {
+      playBeep('err')
       toast.error('فشل البحث عن المنتج')
     }
+  }
+
+  const enqueueScan = (code: string, mode: 'scan' | 'manual' = 'scan') => {
+    scanChain.current = scanChain.current.then(() => processScan(code, mode)).catch(() => {})
+  }
+  enqueueScanRef.current = (code) => enqueueScan(code, 'scan')
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const q = query.trim()
+    if (q) enqueueScan(q, 'manual')
   }
 
   const updateQty = (cartKey: string, q: number) => {
@@ -593,6 +822,7 @@ export function POSView() {
       return
     }
     setCart([])
+    setRestoredNotice(false)
     setConfirmClear(false)
   }
 
@@ -658,6 +888,13 @@ export function POSView() {
       toast.error('البيع بالآجل لازم يكون مرتبط بعميل')
       return
     }
+    const paidNow = paidFull ? total : paidAmount
+    // 🛡️ 2026-09-30 (C5): الزيادة عن الإجمالي مرفوضة من السيرفر — نمنعها هنا
+    // برسالة واضحة بدل رسالة خطأ غامضة بعد الإرسال.
+    if (paidNow > total + 0.005) {
+      toast.error('المدفوع أكبر من إجمالي الفاتورة — لو العميل دفع زيادة سجلها دفعة على حسابه من شاشة العملاء')
+      return
+    }
     setSubmitting(true)
     try {
       const paid = paidFull ? total : paidAmount
@@ -683,6 +920,8 @@ export function POSView() {
           }),
           customerId,
           paid,
+          paymentMethod,
+          ...(dueDate ? { dueDate: new Date(`${dueDate}T12:00:00`).toISOString() } : {}),
         },
       })
       toast.success(`تمت عملية البيع بنجاح - ${sale.invoiceNo}`)
@@ -745,6 +984,7 @@ export function POSView() {
       }
 
       setCart([])
+      setRestoredNotice(false)
       setCustomerName('')
       setSelectedCustomerId(null)
       setPaidFull(true)
@@ -753,6 +993,9 @@ export function POSView() {
       setCartSheetOpen(false)
       setCustomersVersion((v) => v + 1)
       // Refresh stock numbers in the grid and get ready for the next scan.
+      detailsCache.current.clear()
+      barcodeCache.current.clear()
+      gridCache.current.clear()
       setRefreshTick((t) => t + 1)
       searchRef.current?.focus()
     } catch (e: any) {
@@ -761,6 +1004,111 @@ export function POSView() {
       setSubmitting(false)
     }
   }
+
+  /* ── autosave the invoice in progress ───────────────────────── */
+
+  const skipFirstSave = React.useRef(true)
+  React.useEffect(() => {
+    if (skipFirstSave.current) {
+      // First run just mirrors what we loaded — don't extend the 12h window.
+      skipFirstSave.current = false
+      return
+    }
+    if (!draftKey) return
+    try {
+      const empty = cart.length === 0 && !customerName.trim() && !selectedCustomerId
+      if (empty) {
+        window.localStorage.removeItem(draftKey)
+      } else {
+        window.localStorage.setItem(
+          draftKey,
+          JSON.stringify({
+            v: 1,
+            updatedAt: Date.now(),
+            cart,
+            customerName,
+            selectedCustomerId,
+            paidFull,
+            paidAmount,
+          })
+        )
+      }
+    } catch {
+      /* storage full / blocked — the cart still works, it just won't persist */
+    }
+  }, [draftKey, cart, customerName, selectedCustomerId, paidFull, paidAmount])
+
+  // Stock may have changed while the cart sat there. Re-check ceilings once
+  // (prices are left alone — the cashier may have edited them on purpose).
+  const revalidated = React.useRef(false)
+  React.useEffect(() => {
+    if (revalidated.current || !restored || restored.cart.length === 0) return
+    revalidated.current = true
+    void (async () => {
+      const items = restored.cart
+      const freshProduct = new Map<number, ProductLite>()
+      const freshVariants = new Map<number, PosVariant[]>()
+      await Promise.all(
+        [...new Set(items.map((i) => i.product.id))].map(async (id) => {
+          const it = items.find((i) => i.product.id === id)!
+          try {
+            if (it.variantId != null) {
+              const d = await api<any[]>(`/api/products/${id}/variants`)
+              freshVariants.set(
+                id,
+                d.map((v: any) => ({ id: v.id, size: v.size, color: v.color, quantity: v.quantity }))
+              )
+            } else {
+              const q = it.product.barcode || it.product.name
+              const res = await api<{ data: ProductLite[] } | ProductLite[]>(
+                `/api/products?search=${encodeURIComponent(q)}&limit=50`
+              )
+              const list = Array.isArray(res) ? res : (res as any)?.data ?? []
+              const hit = list.find((p) => p.id === id)
+              if (hit) freshProduct.set(id, hit)
+            }
+          } catch {
+            /* offline or transient — keep the saved numbers */
+          }
+        })
+      )
+
+      const updates = new Map<string, CartItem | null>()
+      let adjusted = 0
+      for (const i of items) {
+        const stock =
+          i.variantId != null
+            ? freshVariants.get(i.product.id)?.find((v) => v.id === i.variantId)?.quantity
+            : freshProduct.get(i.product.id)?.quantity
+        if (stock == null) continue
+        const max = i.unitFactor > 1 ? Math.floor(stock / i.unitFactor) * i.unitFactor : stock
+        if (max <= 0) {
+          updates.set(i.cartKey, null)
+          adjusted++
+          continue
+        }
+        const qty = Math.min(i.quantity, max)
+        if (qty !== i.quantity || max !== i.maxQuantity) {
+          if (qty !== i.quantity) adjusted++
+          updates.set(i.cartKey, {
+            ...i,
+            quantity: qty,
+            maxQuantity: max,
+            product: { ...i.product, quantity: freshProduct.get(i.product.id)?.quantity ?? i.product.quantity },
+            availableVariants: freshVariants.get(i.product.id) ?? i.availableVariants,
+          })
+        }
+      }
+      if (updates.size === 0) return
+      setCart((prev) =>
+        prev
+          .filter((i) => updates.get(i.cartKey) !== null)
+          .map((i) => updates.get(i.cartKey) ?? i)
+      )
+      if (adjusted > 0) toast.warning('اتعدّلت كميات في السلة المسترجعة حسب المخزون الحالي')
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   /* ── keyboard shortcuts: "/" search · Esc clear · F9 pay ─────── */
 
@@ -788,6 +1136,55 @@ export function POSView() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  React.useEffect(() => {
+    const det = createScanDetector()
+    const isOtherField = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null
+      if (!el || el === searchRef.current) return false // search box is scanner-friendly
+      return (
+        el.tagName === 'INPUT' ||
+        el.tagName === 'TEXTAREA' ||
+        el.tagName === 'SELECT' ||
+        el.isContentEditable
+      )
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.altKey || e.metaKey) return
+      // Qty / price / customer fields and open dialogs are left alone.
+      if (isOtherField(e.target) || document.querySelector('[role="dialog"]')) {
+        det.reset()
+        return
+      }
+      const now = performance.now()
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        const code = det.end(now)
+        if (code) {
+          // Swallow the terminator so it can't click a focused button.
+          e.preventDefault()
+          e.stopPropagation()
+          setQuery('')
+          enqueueScanRef.current(code)
+        }
+        return
+      }
+      if (e.key === 'Shift' || e.key === 'CapsLock' || e.key === 'Process') return
+      if (e.key.length === 1 || /^(Key[A-Z]|Digit\d)$/.test(e.code)) det.char(charFromKeyEvent(e), now)
+      else det.reset()
+    }
+    window.addEventListener('keydown', onKey, true) // capture: run before anything else
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
+
+  // Coming back to the tab/window: hand focus back to the search box.
+  React.useEffect(() => {
+    if (!isDesktop) return
+    const onFocus = () => {
+      if (document.activeElement === document.body) searchRef.current?.focus()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [isDesktop])
 
   const filteredCustomers = custQuery.trim()
     ? customers.filter(
@@ -1288,13 +1685,67 @@ export function POSView() {
           )}
         </div>
 
-        {/* Payment mode */}
+        {/* Payment method (كاش / محفظة / انستاباي / فوري) — بتحدد الدرج اللي الفلوس دخلت فيه */}
         <div className="space-y-2.5">
-          <p className="text-xs font-semibold text-muted-foreground">طريقة السداد</p>
-          <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1" role="radiogroup">
+          <div className="grid grid-cols-2 gap-1.5">
             {[
-              { full: true, label: 'سداد كامل', icon: Check },
-              { full: false, label: 'سداد جزئي', icon: Wallet },
+              { v: 'cash', label: 'كاش' },
+              { v: 'vodafone_cash', label: 'محفظة' },
+              { v: 'instapay', label: 'انستاباي' },
+              { v: 'fawry', label: 'فوري' },
+            ].map((m) => (
+              <button
+                key={m.v}
+                type="button"
+                onClick={() => setPaymentMethod(m.v)}
+                className={cn(
+                  'rounded-xl border py-1.5 text-xs font-medium transition-colors',
+                  paymentMethod === m.v
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground hover:bg-muted',
+                )}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          {!paidFull && (
+            <div className="flex items-center gap-1.5">
+              <label className="text-xs text-muted-foreground" htmlFor="pos-due-date">
+                استحقاق الآجل (اختياري)
+              </label>
+              <Input
+                id="pos-due-date"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="h-8 flex-1 rounded-lg text-xs"
+              />
+            </div>
+          )}
+          <p className="text-xs font-semibold text-muted-foreground">طريقة السداد</p>
+          {/* Payment mode: a sliding "thumb" glides between the two options.
+              Full = brand green, partial = amber (it creates a debt, so it
+              should look different at a glance). */}
+          <div
+            role="radiogroup"
+            aria-label="طريقة السداد"
+            className="relative grid grid-cols-2 rounded-2xl bg-muted p-1 ring-1 ring-inset ring-border"
+          >
+            <span
+              aria-hidden
+              style={{ insetInlineStart: paidFull ? '0.25rem' : '50%' }}
+              className={cn(
+                'pointer-events-none absolute inset-y-1 w-[calc(50%-0.25rem)] rounded-xl shadow-lg',
+                'transition-[inset-inline-start,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.34,1.4,0.64,1)]',
+                paidFull
+                  ? 'bg-gradient-to-br from-brand-700 to-brand-500 shadow-brand-700/30'
+                  : 'bg-gradient-to-br from-warning to-warning/85 shadow-warning/30'
+              )}
+            />
+            {[
+              { full: true, label: 'سداد كامل', hint: 'كامل المبلغ', icon: Check },
+              { full: false, label: 'سداد جزئي', hint: 'والباقي آجل', icon: Wallet },
             ].map((m) => {
               const active = paidFull === m.full
               const Icon = m.icon
@@ -1309,14 +1760,36 @@ export function POSView() {
                     setPaidAmount(m.full ? 0 : total)
                   }}
                   className={cn(
-                    'flex h-9 items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-all',
+                    'relative z-10 flex h-12 items-center justify-center gap-2 rounded-xl px-2 transition-colors duration-300',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
                     active
-                      ? 'bg-background text-foreground shadow-sm'
+                      ? m.full
+                        ? 'text-white'
+                        : 'text-warning-foreground'
                       : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  {active && <Icon className="size-3.5 text-primary" />}
-                  {m.label}
+                  <span
+                    className={cn(
+                      'flex size-7 shrink-0 items-center justify-center rounded-full transition-all duration-300',
+                      active
+                        ? 'scale-100 bg-white/25'
+                        : 'scale-90 bg-background ring-1 ring-inset ring-border'
+                    )}
+                  >
+                    <Icon className="size-4" strokeWidth={active ? 3 : 2} />
+                  </span>
+                  <span className="flex flex-col items-start leading-tight">
+                    <span className="text-sm font-bold">{m.label}</span>
+                    <span
+                      className={cn(
+                        'text-[length:var(--fs-2xs,0.6875rem)] font-medium transition-opacity duration-300',
+                        active ? 'opacity-85' : 'opacity-70'
+                      )}
+                    >
+                      {m.hint}
+                    </span>
+                  </span>
                 </button>
               )
             })}
@@ -1377,8 +1850,9 @@ export function POSView() {
                 id="paid-amount"
                 type="number"
                 min={0}
+                max={total}
                 value={paidAmount}
-                onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
+                onChange={(e) => setPaidAmount(Math.min(total, Math.max(0, parseFloat(e.target.value) || 0)))}
                 onFocus={(e) => e.currentTarget.select()}
                 className={cn('h-10 rounded-xl text-center text-base tabular-nums', spinlessPay)}
               />
@@ -1472,6 +1946,17 @@ export function POSView() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl"
+            onClick={() => setSoundOn((v) => !v)}
+            title={soundOn ? 'إيقاف صوت السكان' : 'تشغيل صوت السكان'}
+            aria-pressed={soundOn}
+          >
+            {soundOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+            <span className="hidden sm:inline">{soundOn ? 'الصوت' : 'صامت'}</span>
+          </Button>
           {isDesktop && (
             <div
               dir="ltr"
@@ -1525,6 +2010,22 @@ export function POSView() {
           </Button>
         </div>
       </header>
+
+      {restoredNotice && cart.length > 0 && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-info-subtle bg-info-subtle px-3 py-2 text-sm text-info-subtle-foreground">
+          <span>
+            رجّعنا الفاتورة اللي كنت شغال عليها ({cart.length} صنف). راجع الأسعار والكميات قبل الدفع.
+          </span>
+          <button
+            type="button"
+            onClick={() => setRestoredNotice(false)}
+            className="shrink-0 rounded-md p-1 hover:bg-black/5"
+            aria-label="إخفاء التنبيه"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
 
       <div
         className={cn(
@@ -1647,6 +2148,9 @@ export function POSView() {
         onSaved={() => {
           setProductDlgOpen(false)
           setProductInitial(null)
+          detailsCache.current.clear()
+          barcodeCache.current.clear()
+          gridCache.current.clear()
           setRefreshTick((t) => t + 1)
         }}
       />

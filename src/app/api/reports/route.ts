@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import {
+  getTenantTimezone,
+  localDateStrToUtcBounds,
+} from '@/lib/tenantTime'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,10 +28,19 @@ async function __GET(req: NextRequest) {
   const branchIdStr = searchParams.get('branchId')
   const branchId = branchIdStr ? Number(branchIdStr) : null
 
+  // 🕐 ROOT FIX (2026-09-30): التواريخ كانت بتتفسّر بتوقيت السيرفر (UTC على
+  // Cloudflare) — يعني "تقرير النهاردة" كان بيبدأ من 2 صباحاً بتوقيت القاهرة
+  // وبيسيب آخر ساعتين من اليوم الفعلي خارج الحساب (والعكس في الإغلاق).
+  // دلوقتي from/to بيتحوّلوا لحدود UTC بتوقيت المحل نفسه (Tenant.timezone)،
+  // وتجميع منحنى المبيعات بيتم بتوقيت المحل كمان (AT TIME ZONE). نفس نهج
+  // /api/sales و /api/dashboard (شوف src/lib/tenantTime.ts).
+  const tz = await getTenantTimezone(session.tenantId)
   const now = new Date()
-  const from = fromStr ? new Date(fromStr) : new Date(0)
-  const to = toStr ? new Date(toStr) : now
-  if (toStr) to.setDate(to.getDate() + 1) // include the full "to" day
+  const from = fromStr ? localDateStrToUtcBounds(fromStr, 'start', tz) : new Date(0)
+  // "to" حدّ علوي حصري (lt): نهاية يوم to بتوقيت المحل + 1ms = منتصف ليل اليوم اللي بعده
+  const to = toStr
+    ? new Date(localDateStrToUtcBounds(toStr, 'end', tz).getTime() + 1)
+    : now
 
   const dateRange = { gte: from, lt: to }
   const tenantFilter: Record<string, unknown> = { tenantId: session.tenantId }
@@ -57,7 +70,7 @@ async function __GET(req: NextRequest) {
   const [
     cur, prev, maintenanceCount, maintAgg, prevMaintAgg, finIn, finOut, cashAgg,
     stockRows, lowStockRows, expAgg, prevExpAgg, expByCat, purchAgg, custAgg, suppAgg,
-    branches, trendRows, topProductRows, categoryRows, topCustomerRows, methodRows,
+    branches, trendRows, topProductRows, categoryRows, topCustomerRows, methodRows, commissionAgg,
   ] = await Promise.all([
     saleAgg(from, to),
     hasBoundedRange ? saleAgg(prevFrom, prevTo) : Promise.resolve([{ total: 0, profit: 0, cnt: 0 }]),
@@ -88,7 +101,8 @@ async function __GET(req: NextRequest) {
     db.supplier.aggregate({ where: { tenantId: tid, balance: { gt: 0 } }, _sum: { balance: true } }),
     db.branch.findMany({ where: { tenantId: tid }, orderBy: [{ isMain: 'desc' }, { id: 'asc' }], select: { id: true, name: true } }),
     db.$queryRaw<{ date: string; total: number; profit: number }[]>`
-      SELECT to_char(s."createdAt", 'YYYY-MM-DD') AS date,
+      -- 🕐 التجميع اليومي بتوقيت المحل (AT TIME ZONE بيتعامل مع التوقيت الصيفي تلقائياً)
+      SELECT to_char(s."createdAt" AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS date,
              SUM(s."total")::float8 AS total,
              COALESCE(SUM(ip.profit), 0)::float8 AS profit
       FROM "Sale" s
@@ -114,6 +128,9 @@ async function __GET(req: NextRequest) {
       WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND s."status" = 'مكتملة' AND s."createdAt" >= ${from} AND s."createdAt" < ${to}
       GROUP BY c."id", c."name" ORDER BY total DESC LIMIT 6`,
     db.transaction.groupBy({ by: ['method'], where: { tenantId: tid, createdAt: dateRange, kind: 'deposit' }, _sum: { amount: true } }),
+    // 🛡️ 2026-09-30 (X7): عمولة المحفظة (إيراد فعلي للمحل) كانت مش داخلة
+    // في صافي الربح — محل بيكسب 1% على كل معاملات المحفظة كان ربحه بيطلع أقل من الحقيقي.
+    db.cashEntry.aggregate({ where: { tenantId: tid, source: 'commission', createdAt: dateRange }, _sum: { amount: true } }),
   ])
 
   const n = (v: unknown) => Number(v ?? 0)
@@ -123,7 +140,9 @@ async function __GET(req: NextRequest) {
   const avgOrderValue = salesCount > 0 ? totalSales / salesCount : 0
   const maintenanceRevenue = n(maintAgg._sum.cost)
   const totalExpenses = n(expAgg._sum.amount)
-  const netProfit = totalProfit + maintenanceRevenue - totalExpenses
+  // 🛡️ 2026-09-30 (X7): عمولة المحفظة داخلة في صافي الربح (فقط لما مفيش فلترة فرع — العمولة مش مربوطة بفرع).
+  const commissionRevenue = bid === null ? n(commissionAgg._sum.amount) : 0
+  const netProfit = totalProfit + maintenanceRevenue - totalExpenses + commissionRevenue
 
   const prevTotalSales = n(prev[0]?.total)
   const prevTotalProfit = n(prev[0]?.profit)

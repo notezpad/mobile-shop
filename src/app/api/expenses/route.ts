@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,8 +14,13 @@ const CATEGORIES = new Set([
   'صيانة المحل',
   'إنترنت واتصالات',
   'ضيافة',
+  'هالك وتالف', // 🛡️ 2026-09-30: تسجيل خسارة الهالك (بتتسجل تلقائياً من حركة هالك في المخزون)
   'أخرى',
 ])
+
+// 🛡️ 2026-09-30: طريقة دفع المصروف — عشان رصيد الكاش يفضل منفصل عن المحافظ
+// (مصروف مدفوع من فودافون كاش مكاناش بيتسجل كاش).
+const EXPENSE_METHODS = new Set(['cash', 'vodafone_cash', 'instapay', 'fawry'])
 
 async function __GET(req: NextRequest) {
   let session
@@ -34,14 +40,12 @@ async function __GET(req: NextRequest) {
   const category = searchParams.get('category')
 
   const where: any = { tenantId: session.tenantId }
+  // 🕐 2026-09-30: حدود from/to بتوقيت المحل مش توقيت السيرفر
   if (from || to) {
+    const tz = await getTenantTimezone(session.tenantId)
     where.createdAt = {}
-    if (from) where.createdAt.gte = new Date(from)
-    if (to) {
-      const toDate = new Date(to)
-      toDate.setDate(toDate.getDate() + 1)
-      where.createdAt.lt = toDate
-    }
+    if (from) where.createdAt.gte = localDateStrToUtcBounds(from, 'start', tz)
+    if (to) where.createdAt.lte = localDateStrToUtcBounds(to, 'end', tz)
   }
   if (category && CATEGORIES.has(category)) {
     where.category = category
@@ -94,12 +98,26 @@ async function __POST(req: NextRequest) {
   if (!category) {
     return NextResponse.json({ error: 'النوع مطلوب' }, { status: 400 })
   }
+  // 🛡️ 2026-09-30 (X5): الفئة كانت بتتفحص في GET بس — POST كان بيقبل أي
+  // نص كفئة جديدة، فتقارير المصروفات بتتلخبط بفئات موجودة خارج القايمة.
+  if (!CATEGORIES.has(category)) {
+    return NextResponse.json(
+      { error: 'النوع غير صالح — اختار من قايمة الأنواع المعروضة' },
+      { status: 400 },
+    )
+  }
   const amount = Number(body.amount)
   if (isNaN(amount) || amount <= 0) {
     return NextResponse.json(
       { error: 'المبلغ يجب أن يكون أكبر من صفر' },
       { status: 400 }
     )
+  }
+  const method = body.method === undefined || body.method === null || body.method === ''
+    ? 'cash'
+    : String(body.method)
+  if (!EXPENSE_METHODS.has(method)) {
+    return NextResponse.json({ error: 'طريقة الدفع غير صالحة' }, { status: 400 })
   }
   const note = body.note ? String(body.note).trim() || null : null
 
@@ -121,7 +139,8 @@ async function __POST(req: NextRequest) {
         source: 'expense',
         refId: expense.id,
         amount: -amount,
-        note: `الدول العربيةوف ${category}${note ? ' - ' + note : ''}`,
+        method, // 🛡️ X5: من أي درج/محفظة خرجت الفلوس
+        note: `المصروف ${category}${note ? ' - ' + note : ''}`,
         userId: session.userId,
       },
     })

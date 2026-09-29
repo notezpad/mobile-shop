@@ -24,10 +24,18 @@ import {
 } from '@/components/ui/table'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { formatCurrency, formatArabicDateTime } from '@/lib/format'
+import { parseSignedAmount } from '@/lib/amount'
 import { DateTimeCell } from './DateTimeCell'
 import { cn } from '@/lib/utils'
-import { printListReportHtml, openPrintWindow } from '@/lib/print'
+import { printListReportHtml, openPrintWindow, printLtr } from '@/lib/print'
 import { useShopStore } from '@/lib/store'
 import { useDataRefresh } from '@/lib/offline/data-events'
 
@@ -115,10 +123,10 @@ export function CashView() {
         ],
         rows: data.entries.map((e, index) => [
           String(index + 1),
-          <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatArabicDateTime(e.createdAt)}</span>,
+          printLtr(formatArabicDateTime(e.createdAt)),
           SOURCE_LABEL[e.source] ?? e.source,
           e.userName ?? '—',
-          `${e.amount >= 0 ? '+' : ''}${formatCurrency(e.amount)}`,
+          `${e.amount >= 0 ? '+' : '-'}${formatCurrency(Math.abs(e.amount))}`,
           formatCurrency(runningBalances[index] ?? 0),
           e.note ?? '—',
         ]),
@@ -230,8 +238,10 @@ export function CashView() {
                             e.amount >= 0 ? 'text-primary' : 'text-destructive'
                           )}
                         >
-                          {e.amount >= 0 ? '+' : ''}
-                          {formatCurrency(e.amount)}
+                          <span dir="ltr" style={{ unicodeBidi: 'isolate' }}>
+                            {e.amount >= 0 ? '+' : '-'}
+                            {formatCurrency(Math.abs(e.amount))}
+                          </span>
                         </TableCell>
                         <TableCell className="text-center tabular-nums text-muted-foreground">
                           {formatCurrency(runningBalances[index] ?? 0)}
@@ -280,8 +290,10 @@ export function CashView() {
                           e.amount >= 0 ? 'text-primary' : 'text-destructive'
                         )}
                       >
-                        {e.amount >= 0 ? '+' : ''}
-                        {formatCurrency(e.amount)}
+                        <span dir="ltr" style={{ unicodeBidi: 'isolate' }}>
+                          {e.amount >= 0 ? '+' : '-'}
+                          {formatCurrency(Math.abs(e.amount))}
+                        </span>
                       </p>
                     </div>
 
@@ -321,26 +333,38 @@ interface ManualProps {
 function ManualDialog({ open, onOpenChange, onSaved }: ManualProps) {
   const [amount, setAmount] = React.useState('')
   const [note, setNote] = React.useState('')
+  const [method, setMethod] = React.useState('cash')
   const [saving, setSaving] = React.useState(false)
 
   React.useEffect(() => {
     if (open) {
       setAmount('')
       setNote('')
+      setMethod('cash')
     }
   }, [open])
 
+  // 🛡️ FIX: `parseFloat` dropped a sign written after the number ("100-") and
+  // ignored the Unicode minus "−", so a withdrawal was saved as a deposit and
+  // vice-versa. `parseSignedAmount` keeps the sign the user actually meant.
+  const parsed = parseSignedAmount(amount)
+
   const submit = async () => {
-    const amt = parseFloat(amount)
-    if (isNaN(amt) || amt === 0) {
+    const amt = parsed
+    if (amt === null || amt === 0) {
       toast.error('المبلغ غير صالح')
+      return
+    }
+    // 🛡️ 2026-09-30: السبب إجباري — الحركة من غير سبب بترفض من السيرفر كمان
+    if (note.trim().length < 3) {
+      toast.error('اكتب سبب الحركة (إجباري)')
       return
     }
     setSaving(true)
     try {
       await api('/api/cash', {
         method: 'POST',
-        body: { amount: amt, note: note.trim() || null },
+        body: { amount: amt, note: note.trim(), method },
       })
       toast.success('تمت إضافة الحركة')
       onSaved()
@@ -365,18 +389,54 @@ function ManualDialog({ open, onOpenChange, onSaved }: ManualProps) {
             </Label>
             <Input
               id="m-amount"
-              type="number"
+              type="text"
+              inputMode="text"
+              dir="ltr"
+              className="text-left"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="مثال: 100 أو -50"
             />
+            {parsed !== null && parsed !== 0 && (
+              <p
+                className={cn(
+                  'text-xs font-medium',
+                  parsed > 0 ? 'text-primary' : 'text-destructive'
+                )}
+              >
+                {parsed > 0 ? 'سيتم إضافة ' : 'سيتم خصم '}
+                <span dir="ltr" style={{ unicodeBidi: 'isolate' }}>
+                  {formatCurrency(Math.abs(parsed))}
+                </span>
+                {parsed > 0 ? ' إلى الخزنة' : ' من الخزنة'}
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="m-note">ملاحظات</Label>
+            <Label htmlFor="m-method">طريقة الدفع / الاستلام</Label>
+            <Select value={method} onValueChange={setMethod}>
+              <SelectTrigger id="m-method">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cash">نقدي</SelectItem>
+                <SelectItem value="vodafone_cash">فودافون كاش</SelectItem>
+                <SelectItem value="instapay">إنستاباي</SelectItem>
+                <SelectItem value="fawry">فوري</SelectItem>
+                <SelectItem value="card">بطاقة</SelectItem>
+                <SelectItem value="bank">بنك / تحويل</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="m-note">
+              السبب <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="m-note"
               value={note}
               onChange={(e) => setNote(e.target.value)}
+              placeholder="إجباري — مثال: مصاريف نثرية، تحصيل من عميل..."
             />
           </div>
         </div>

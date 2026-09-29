@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
-import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { ensureCategory } from '../route'
 
 export const dynamic = 'force-dynamic'
@@ -39,6 +39,29 @@ export async function PUT(
     if (!existing || existing.tenantId !== session.tenantId) {
       return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
     }
+
+    // 🛡️ 2026-09-30 (X9): تعديل التكلفة/الكمية من شاشة المنتج كان أي موظف
+    // يقدر يعمله وبصمت — التكلفة بتغير ربح كل الفواتير الجاية، والكمية
+    // كانت بتتغير من غير أي حركة مخزون (دفتر الحركات ميغطيهاش).
+    // دلوقتي: الاتنين أدمن بس، وأي تغيير كمية بيتوثق كحركة 'adjust'.
+    const newCost = body.cost !== undefined ? Number(body.cost) || 0 : existing.cost
+    const newQty = body.quantity !== undefined ? parseInt(body.quantity, 10) || 0 : existing.quantity
+    const costChanged = newCost !== existing.cost
+    const qtyChanged = newQty !== existing.quantity
+    if (costChanged || qtyChanged) {
+      try {
+        await requireAdmin()
+      } catch (e) {
+        const err = authErrorResponse(e)
+        if (err) {
+          return NextResponse.json(
+            { error: 'تعديل التكلفة أو الكمية من شاشة المنتج للأدمن فقط — استخدم حركات المخزون (وارد/صرف) عشان السجل يفضل موثق' },
+            { status: err.status },
+          )
+        }
+        throw e
+      }
+    }
     const name = String(body.name ?? existing.name).trim()
     if (!name) {
       return NextResponse.json({ error: 'الاسم مطلوب' }, { status: 400 })
@@ -72,52 +95,72 @@ export async function PUT(
     } else {
       barcode = existing.barcode
     }
-    const updated = await db.product.update({
-      where: { id: pid },
-      data: {
-        name,
-        category,
-        barcode,
-        price,
-        cost:
-          body.cost !== undefined ? Number(body.cost) || 0 : existing.cost,
-        quantity:
-          body.quantity !== undefined
-            ? parseInt(body.quantity, 10) || 0
-            : existing.quantity,
-        minQuantity:
-          body.minQuantity !== undefined
-            ? parseInt(body.minQuantity, 10) || 1
-            : existing.minQuantity,
-        imagePath:
-          body.imagePath !== undefined
-            ? body.imagePath
-              ? String(body.imagePath)
-              : null
-            : existing.imagePath,
-        branchId:
-          body.branchId !== undefined
-            ? body.branchId
-              ? parseInt(body.branchId, 10) || null
-              : null
-            : existing.branchId,
-        // collection — اسم الكوليكشن لميزة الخصم الجماعي (فاشون فقط)
-        collection:
-          body.collection !== undefined
-            ? body.collection
-              ? String(body.collection).trim() || null
-              : null
-            : existing.collection,
-        // Unit-Based Dynamic Pricing: per-product override of the tenant's
-        // default retail margin %. Sending null/'' clears the override back
-        // to "use the tenant default".
-        retailMarginPercent:
-          body.retailMarginPercent !== undefined
-            ? (body.retailMarginPercent === null || body.retailMarginPercent === ''
-                ? null
-                : Number(body.retailMarginPercent))
-            : existing.retailMarginPercent,
-      },
+    const updated = await db.$transaction(async (tx) => {
+      const row = await tx.product.update({
+        where: { id: pid },
+        data: {
+          name,
+          category,
+          barcode,
+          price,
+          cost:
+            body.cost !== undefined ? Number(body.cost) || 0 : existing.cost,
+          quantity:
+            body.quantity !== undefined
+              ? parseInt(body.quantity, 10) || 0
+              : existing.quantity,
+          minQuantity:
+            body.minQuantity !== undefined
+              ? parseInt(body.minQuantity, 10) || 1
+              : existing.minQuantity,
+          imagePath:
+            body.imagePath !== undefined
+              ? body.imagePath
+                ? String(body.imagePath)
+                : null
+              : existing.imagePath,
+          branchId:
+            body.branchId !== undefined
+              ? body.branchId
+                ? parseInt(body.branchId, 10) || null
+                : null
+              : existing.branchId,
+          // collection — اسم الكوليكشن لميزة الخصم الجماعي (فاشون فقط)
+          collection:
+            body.collection !== undefined
+              ? body.collection
+                ? String(body.collection).trim() || null
+                : null
+              : existing.collection,
+          // Unit-Based Dynamic Pricing: per-product override of the tenant's
+          // default retail margin %. Sending null/'' clears the override back
+          // to "use the tenant default".
+          retailMarginPercent:
+            body.retailMarginPercent !== undefined
+              ? (body.retailMarginPercent === null || body.retailMarginPercent === ''
+                  ? null
+                  : Number(body.retailMarginPercent))
+              : existing.retailMarginPercent,
+        },
+      })
+      // 🛡️ 2026-09-30 (X9): تغيير الكمية من شاشة المنتج بيتوثق كحركة 'adjust'
+      // — قبل كده كان بيحصل بصمت ودفتر الحركات ميغطيهش خالص.
+      if (qtyChanged) {
+        await tx.stockMovement.create({
+          data: {
+            tenantId: session.tenantId,
+            branchId: session.branchId ?? null,
+            productId: pid,
+            type: 'adjust',
+            quantity: newQty - existing.quantity,
+            refType: 'manual',
+            refId: pid,
+            note: `تعديل كمية من شاشة المنتج (${existing.quantity} → ${newQty})`,
+            userId: session.userId,
+          },
+        })
+      }
+      return row
     })
     // عند تغيير سعر البيع: إعادة حساب أسعار الوحدات تلقائياً (سعر × factor).
     // يمكن تعطيلها بإرسال recomputeUnitPrices=false.

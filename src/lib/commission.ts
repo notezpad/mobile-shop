@@ -10,15 +10,16 @@
  *
  * The CORRECT accounting convention:
  *   - The shop EARNS the commission from Vodafone/Instapay/Fawry
- *     (it's a service fee the shop charges customers)
+ *     (it's a service fee the shop charges customers for wallet services)
  *   - The customer pays: `amount + commission`
  *   - The drawer receives: `amount + commission` (full cash in)
  *   - But the commission portion is REVENUE, not the principal
  *
- * For expense side (paying supplier via Vodafone Cash):
- *   - The shop PAYS the supplier: `amount` (principal leaves the drawer)
- *   - The shop EARNS commission on the transaction: `commission` (revenue in)
- *   - Net drawer impact: `-(amount - commission)` = `commission - amount`
+ * 🛡️ 2026-09-30: commission is charged ONLY on the wallet-agent module
+ * (finance/route.ts — customers doing deposit/withdraw at the shop's desk).
+ * NO commission on customer payments, and DEFINITELY none on supplier
+ * payments — paying a supplier from the shop's wallet is money going OUT,
+ * not a fee the shop earns (was wrongly implied by the old docblock here).
  *
  * This helper centralizes the logic so all routes compute + record it
  * consistently. The `recordCommission` function:
@@ -55,7 +56,7 @@ export interface CommissionInput {
   method: PaymentMethod
   /** The principal amount (e.g. customer payment amount, supplier payment amount) */
   amount: number
-  /** Type of the referencing record: 'sale' | 'payment' | 'supplier_payment' | 'purchase' | 'finance' */
+  /** Type of the referencing record: 'sale' | 'payment' | 'purchase' | 'finance' */
   refType: string
   /** ID of the referencing record */
   refId?: number | null
@@ -67,8 +68,7 @@ export interface CommissionResult {
   /** Commission earned (always >= 0). 0 if method is cash/card. */
   commission: number
   /** Net amount to be recorded as the principal cash entry.
-   *  For incoming payments (customer): amount + commission
-   *  For outgoing payments (supplier): amount - commission
+   *  For incoming wallet transactions (finance module): amount + commission
    *  But the caller is responsible for the direction — we just return
    *  the commission so the caller can compute the net.
    */

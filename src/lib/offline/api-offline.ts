@@ -230,10 +230,26 @@ export async function offlineFetch<T = any>(
       return data as T
     } catch (err: any) {
       if (isNetworkError(err)) {
+        // 🛡️ 2026-09-30 (M7): idempotency for queued sales — a network error
+        // AFTER the server committed used to keep the outbox entry and re-POST
+        // it later, creating a duplicate invoice (double stock/till/debt).
+        // Each queued sale now carries a unique clientRef; the sale POST
+        // returns the original invoice when it sees the same ref again.
+        let queuedBody = options?.body
+        if (url === '/api/sales' && method === 'POST' && queuedBody && typeof queuedBody === 'object') {
+          queuedBody = {
+            ...queuedBody,
+            clientRef:
+              (queuedBody as any).clientRef ??
+              (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+                ? crypto.randomUUID()
+                : `offline-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`),
+          }
+        }
         await idb.addToOutbox({
           url, method,
-          body: options?.body,
-          label: getOperationLabel(url, method, options?.body),
+          body: queuedBody,
+          label: getOperationLabel(url, method, queuedBody),
         })
         // Optimistic: local screens usually already update their own state,
         // but nudge everyone else too (e.g. a list of the same data open in

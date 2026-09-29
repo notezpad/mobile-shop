@@ -63,16 +63,29 @@ async function __PUT(
       },
     })
     if (becomingDelivered && ord.cost > 0) {
-      await tx.cashEntry.create({
-        data: {
+      // 🛡️ 2026-09-30 (X1): قيد واحد بس لكل أوردر — قبل كده لو الحالة رجعت
+      // مستلم ورجعت مُسلّم تاني، قيد خزنة تاني كان بيتسجل (الخزنة بتتضخم).
+      const existingEntry = await tx.cashEntry.findFirst({
+        where: {
           tenantId: session.tenantId,
           source: 'maintenance',
           refId: oid,
-          amount: ord.cost,
-          note: `صيانة - ${ord.customerName} (${ord.device})`,
-          userId: session.userId,
+          amount: { gt: 0 },
         },
+        select: { id: true },
       })
+      if (!existingEntry) {
+        await tx.cashEntry.create({
+          data: {
+            tenantId: session.tenantId,
+            source: 'maintenance',
+            refId: oid,
+            amount: ord.cost,
+            note: `صيانة - ${ord.customerName} (${ord.device})`,
+            userId: session.userId,
+          },
+        })
+      }
     }
     return ord
   })
@@ -107,7 +120,32 @@ async function __DELETE(
       { status: 404 }
     )
   }
-  await db.maintenanceOrder.delete({ where: { id: oid } })
+  // 🛡️ 2026-09-30 (X1): حذف الأوردر كان بيسيب قيد الخزنة يتيم — الفلوس
+  // بتفضل في الخزنة على حاجة اتمسحت. دلوقتي القيد بيعكس الأول.
+  await db.$transaction(async (tx) => {
+    const entry = await tx.cashEntry.findFirst({
+      where: {
+        tenantId: session.tenantId,
+        source: 'maintenance',
+        refId: oid,
+      },
+      orderBy: { id: 'desc' },
+    })
+    if (entry && entry.amount > 0) {
+      await tx.cashEntry.create({
+        data: {
+          tenantId: session.tenantId,
+          source: 'maintenance',
+          refId: oid,
+          amount: -entry.amount,
+          method: entry.method,
+          note: `عكس قيد صيانة محذوفة - ${existing.customerName} (${existing.device})`,
+          userId: session.userId,
+        },
+      })
+    }
+    await tx.maintenanceOrder.delete({ where: { id: oid } })
+  })
   return NextResponse.json({ ok: true })
 }
 

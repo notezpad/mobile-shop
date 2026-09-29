@@ -145,6 +145,10 @@ export async function requireCapability(
   capability: Capability,
 ) {
   if (session.role === 'SUPER_ADMIN') return
+  // 🛡️ 2026-09-30 (قرار تجاري): المرتجع/الاستبدال بقى متاح لكل الباقات —
+  // بنفترضه هنا مباشرة عشان القاعدة تشتغل فوراً حتى للـ tenants القدامى
+  // اللي Plan بتاعهم في الداتابيز لسه ماعدلش (من غير ما تستنى re-seed).
+  if ((capability as string) === 'returns_exchange') return
   const ctx = await getPlanContext(session.tenantId)
   if (!ctx.capabilities.includes(capability)) {
     throw new FeatureError(

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
-import { recordCommission, createPrincipalCashEntry } from '@/lib/commission'
+import { createPrincipalCashEntry } from '@/lib/commission'
 
 export const dynamic = 'force-dynamic'
 
@@ -139,7 +139,7 @@ async function __POST(req: NextRequest) {
     }
     sale = await db.sale.findUnique({
       where: { id: saleId },
-      select: { id: true, tenantId: true, customerId: true, paid: true, total: true, invoiceNo: true },
+      select: { id: true, tenantId: true, customerId: true, paid: true, total: true, invoiceNo: true, status: true },
     })
     if (!sale || sale.tenantId !== session.tenantId) {
       return NextResponse.json(
@@ -150,6 +150,22 @@ async function __POST(req: NextRequest) {
     if (sale.customerId && sale.customerId !== customerId) {
       return NextResponse.json(
         { error: 'الفاتورة لا تنتمي لهذا العميل' },
+        { status: 400 }
+      )
+    }
+    // 🛡️ 2026-09-30: مفيش دفعات على فاتورة مرتجعة بالكامل.
+    if (sale.status === 'مرتجعة') {
+      return NextResponse.json(
+        { error: 'الفاتورة مرتجعة بالكامل — مش ممكن تستلم عليها دفعة' },
+        { status: 400 }
+      )
+    }
+    // 🛡️ 2026-09-30: الدفعة ماتعدّيش المتبقي على الفاتورة (قرار تجاري:
+    // الزيادة ترفض — استخدم دفعة على الحساب من غير saleId).
+    const remaining = sale.total - sale.paid
+    if (amount > remaining + 0.005) {
+      return NextResponse.json(
+        { error: `الدفعة (${amount}) أكبر من المتبقي على الفاتورة (${Math.max(0, remaining)})` },
         { status: 400 }
       )
     }
@@ -189,16 +205,10 @@ async function __POST(req: NextRequest) {
       note: `دفعة من ${customerName} - ${methodName}${sale ? ` — فاتورة ${sale.invoiceNo ?? sale.id}` : ''}`,
     })
 
-    // 4. Record commission (Bug #9 fix — unified helper, always POSITIVE)
-    const { commission, commissionEntryId } = await recordCommission(tx, {
-      tenantId: session.tenantId,
-      userId: session.userId,
-      method,
-      amount,
-      refType: 'payment',
-      refId: payment.id,
-      noteSuffix: customerName,
-    })
+    // 4. 🛡️ 2026-09-30: NO commission on customer payments. A customer paying
+    //    his account by wallet / InstaPay is a plain collection, not a
+    //    wallet-agent service. Commission is only charged by the "financial
+    //    transactions" module (finance/route.ts).
 
     // 5. 🛡️ Bug #11: If saleId was provided, link this payment to the sale
     //    via the SalePayment model + increment Sale.paid
@@ -223,8 +233,6 @@ async function __POST(req: NextRequest) {
     return {
       ...payment,
       customer: updatedCustomer,
-      commission,
-      commissionEntryId,
       linkedSaleId: sale?.id ?? null,
       linkedCashEntryId: principalEntry.id,
     }

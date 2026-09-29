@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { recordCommission, createPrincipalCashEntry } from '@/lib/commission'
+import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,14 +28,12 @@ async function __GET(req: NextRequest) {
   const method = searchParams.get('method')
 
   const where: any = { tenantId: session.tenantId }
+  // 🕐 2026-09-30: حدود from/to بتوقيت المحل مش توقيت السيرفر
   if (from || to) {
+    const tz = await getTenantTimezone(session.tenantId)
     where.createdAt = {}
-    if (from) where.createdAt.gte = new Date(from)
-    if (to) {
-      const toDate = new Date(to)
-      toDate.setDate(toDate.getDate() + 1)
-      where.createdAt.lt = toDate
-    }
+    if (from) where.createdAt.gte = localDateStrToUtcBounds(from, 'start', tz)
+    if (to) where.createdAt.lte = localDateStrToUtcBounds(to, 'end', tz)
   }
   if (method && METHODS.has(method)) {
     where.method = method

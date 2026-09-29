@@ -293,11 +293,15 @@ model Customer {
   name          String
   phone         String?
   balance       Float    @default(0)
+  // 🛡️ 2026-09-30: حد ائتماني اختياري — لو متحدد، بيع آجل يخلي الرصيد يتعداه
+  // بيت refused من الـ API (مفيش فرض تلقائي).
+  creditLimit   Float?
   createdAt     DateTime @default(now())
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  sales    Sale[]
-  payments Payment[]
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sales       Sale[]
+  payments    Payment[]
+  saleReturns SaleReturn[]
 
   @@index([tenantId])
   @@index([tenantId, name])
@@ -311,10 +315,18 @@ model Payment {
   amount     Float
   method     String   @default("cash")
   note       String?
+  // 🛡️ 2026-09-30: إلغاء ناعم بدل الحذف — نفس موك SupplierPayment:
+  // الدفعة بتفضل في كشف حساب العميل بعلامة "ملغية" (مين وامتى)،
+  // والعكس بيتعمل على الرصيد والخزنة مرة واحدة بس (مطالبة ذرية).
+  status      String    @default("active") // active | cancelled
+  cancelledAt DateTime?
+  cancelledBy String?
   createdAt  DateTime @default(now())
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  // 🛡️ 2026-09-30: كان Cascade — حذف العميل كان بيمسح كل دفعاته ودينه
+  // يختفي. NoAction + فحص في الـ API يمنع حذف أي عميل ليه سجل.
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: NoAction)
 
   @@index([tenantId])
   @@index([tenantId, customerId])
@@ -347,6 +359,11 @@ model SupplierPayment {
   amount     Float
   method     String   @default("cash")
   note       String?
+  // 🛡️ 2026-09-30: a cancelled payment is no longer deleted — it is marked
+  // 'cancelled' (with who/when) so the supplier statement keeps its audit trail.
+  status      String    @default("active") // active | cancelled
+  cancelledAt DateTime?
+  cancelledBy String?
   createdAt  DateTime @default(now())
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -370,6 +387,9 @@ model PurchaseOrder {
   userId     String?
   total      Float    @default(0)
   paid       Float    @default(0)
+  // 🛡️ 2026-09-30: how the `paid` amount left the shop (cash | vodafone_cash |
+  // instapay | fawry). Used for the till entry and as the default refund method.
+  paymentMethod String  @default("cash")
   // 🛡️ 2026-09-29: cash actually received back from the supplier through
   // returns of this order (used to cap the default refund of later returns).
   refunded   Float    @default(0)
@@ -387,6 +407,9 @@ model PurchaseOrder {
   @@index([tenantId])
   @@index([tenantId, createdAt])
   @@index([branchId])
+  // 🛡️ 2026-09-30: رقم أمر الشراء فريد داخل المحل — نفس ضمانة الفواتير
+  // (كان count+1 بيتكرر مع الحذف ومع الطلبات المتزامنة).
+  @@unique([tenantId, orderNo])
 }
 
 model PurchaseOrderItem {
@@ -459,18 +482,39 @@ model Sale {
   userId     String?
   total      Float    @default(0)
   paid       Float    @default(0)
-  status     String   @default("مكتملة")
+  // 🛡️ 2026-09-30: طريقة دفع المبلغ المدفوع في البيع (cash | vodafone_cash |
+  // instapay | fawry) — نفس عمود PurchaseOrder.paymentMethod، عشان الخزنة
+  // تتفصل كاش/محافظ/انستاباي على التدفق الأكبر في النظام.
+  paymentMethod String @default("cash")
+  // 🛡️ 2026-09-30: الكاش اللي ردّه المحل فعلاً للعميل عبر مرتجعات هذه الفاتورة
+  // (بيد Cap للمرتجعات: مفيش رد أكبر من اللي اتدفعت فعلاً).
+  refunded   Float    @default(0)
+  // 🛡️ 2026-09-30: تاريخ استحقاق الفاتورة الآجلة (اختياري) — للتقادم والتنبيهات.
+  dueDate    DateTime?
+  // 🛡️ 2026-09-30: معرف رسالة مكرر من الأوفلاين (idempotency key) — retry
+  // لنفس الفاتورة بيرجع الفاتورة الأصلية بدل ما يعمل نسخة تانية.
+  clientRef  String?
+  status     String   @default("مكتملة") // مكتملة | مرتجعة جزئياً | مرتجعة
   createdAt  DateTime @default(now())
 
   tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   branch   Branch?       @relation(fields: [branchId], references: [id])
-  customer Customer?     @relation(fields: [customerId], references: [id])
+  // 🛡️ 2026-09-30: كان SetNull افتراضياً — حذف عميل كان بيفصل فواتيره
+  // ويمسح الدين. NoAction + فحص الحذف يمنع كله ده.
+  customer Customer?     @relation(fields: [customerId], references: [id], onDelete: NoAction)
   items    SaleItem[]
   payments SalePayment[]
+  returns  SaleReturn[]
 
   @@index([tenantId])
   @@index([tenantId, createdAt])
   @@index([branchId])
+  // 🛡️ 2026-09-30: رقم الفاتورة فريد داخل المحل — الضمانة الأخيرة ضد تكرار
+  // الأرقام مع فواتير متزامنة (التوليد نفسه جوه الـ tx + retry على P2002).
+  // الـ NULLs (فواتير قديمة قبل نظام الأرقام) مسموحة في Postgres.
+  @@unique([tenantId, invoiceNo])
+  // 🛡️ 2026-09-30: مفتاح عدم التكرار للأوفلاين — نفس الـ clientRef مايتسجلش مرتين.
+  @@unique([tenantId, clientRef])
 }
 
 model SaleItem {
@@ -485,6 +529,9 @@ model SaleItem {
   name      String
   price     Float
   quantity  Int         // total pieces (kept for legacy reports)
+  // 🛡️ 2026-09-30: كام قطعة من هذا السطر رجعت بالفعل عبر مرتجع البيع.
+  // Invariant: 0 <= returnedQty <= quantity (مطالبة ذرية في src/lib/sale-return.ts).
+  returnedQty Int    @default(0)
   cost      Float  @default(0)
 
   // Optional wholesale-unit metadata — for invoice display
@@ -524,6 +571,52 @@ model SalePayment {
   @@index([cashEntryId])
 }
 
+// 🛡️ 2026-09-30: مرتجع بيع (جزئي أو كامل) — نفس موك PurchaseReturn بالظبط:
+//   total         = قيمة البضاعة المرتجعة (بسعر البيع الفعلي)
+//   exchangeTotal = قيمة بضاعة الاستبدال اللي خرجت من المخزن
+//   refund        = الكاش اللي ردّه المحل للعميل فعلاً دلوقتي (≤ المدفوع غير المسترد)
+//   creditApplied = الجزء اللي اتحول على حساب العميل (total − exchangeTotal − refund)
+// الثابت المحاسبي: creditApplied + refund = total − exchangeTotal (لما الفرق موجب).
+model SaleReturn {
+  id            Int      @id @default(autoincrement())
+  tenantId      String
+  branchId      Int?
+  saleId        Int
+  customerId    Int?
+  total         Float    @default(0)
+  exchangeTotal Float    @default(0)
+  refund        Float    @default(0)
+  refundMethod  String?
+  creditApplied Float    @default(0)
+  note          String?
+  userId        String?
+  createdAt     DateTime @default(now())
+
+  sale     Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  customer Customer?        @relation(fields: [customerId], references: [id])
+  items    SaleReturnItem[]
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@index([saleId])
+  @@index([customerId])
+}
+
+model SaleReturnItem {
+  id           Int    @id @default(autoincrement())
+  saleReturnId Int
+  saleItemId   Int?
+  productId    Int?
+  name         String
+  price        Float
+  cost         Float  @default(0)
+  quantity     Int
+
+  saleReturn SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
+
+  @@index([saleReturnId])
+}
+
 model MaintenanceOrder {
   id           Int       @id @default(autoincrement())
   tenantId     String
@@ -553,6 +646,10 @@ model Transaction {
   commission Float    @default(0)
   note       String?
   userId     String?
+  // 🛡️ 2026-09-30: إلغاء ناعم لمعاملة المحفظة بدل ما تفضل للأبد — نفس موك الدفعات.
+  status      String    @default("active") // active | cancelled
+  cancelledAt DateTime?
+  cancelledBy String?
   createdAt  DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -597,6 +694,10 @@ model Expense {
   amount    Float
   note      String?
   userId    String?
+  // 🛡️ 2026-09-30: مصدر المصروف لو اتولد آلياً ('damage' = خسارة هالك من
+  // حركة مخزون). مصروف الهالك بيتمنع حذفه من شاشة المصروفات لأن حذف أي
+  // مصروف بيضيف قيمته تاني للخزنة — وده غلط لما مفيش فلوس خرجت أصلاً.
+  source    String?
   createdAt DateTime @default(now())
 
   tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)

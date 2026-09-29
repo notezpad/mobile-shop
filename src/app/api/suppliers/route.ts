@@ -56,7 +56,12 @@ export async function GET(req: NextRequest) {
     const page = paginated ? Math.max(1, parseInt(searchParams.get('page') ?? '1', 10)) : 1
     const skip = paginated ? (page - 1) * limit : 0
 
-    const [suppliers, total, purchasesAgg] = await Promise.all([
+    // 🛡️ 2026-09-30: الإجماليات بقت صافية:
+ //   إجمالي المشتريات = فواتير (مكتملة + مرتجعة جزئياً) − قيمة المرتجعات بتاعة
+ //   الفواتير المرتجعة جزئياً (الفواتير المرتجعة بالكامل مستبعدة أصلاً).
+ //   قبل كده الـ groupBy كان بيحسب كل الفواتير حتى المرتجعة، فالرقم كان مضخّم.
+ //   نفس معادلة /api/reports بالظبط (marketplace واحدة للحسابات).
+    const [suppliers, total, purchasesAgg, partialReturnsAgg] = await Promise.all([
       db.supplier.findMany({
         where,
         orderBy: { id: 'desc' },
@@ -67,16 +72,41 @@ export async function GET(req: NextRequest) {
       paginated ? db.supplier.count({ where }) : Promise.resolve(null),
       db.purchaseOrder.groupBy({
         by: ['supplierId'],
-        where: { tenantId: session.tenantId, supplierId: { not: null } },
+        where: {
+          tenantId: session.tenantId,
+          supplierId: { not: null },
+          status: { in: ['مكتملة', 'مرتجعة جزئياً'] },
+        },
         _sum: { total: true },
         _max: { createdAt: true },
       }),
+      db.purchaseReturn.groupBy({
+        by: ['supplierId'],
+        where: {
+          tenantId: session.tenantId,
+          purchaseOrder: { status: 'مرتجعة جزئياً' },
+        },
+        _sum: { total: true },
+      }),
     ])
-    const aggBySupplier = new Map<number, { totalPurchases: number; lastPurchaseAt: Date | null }>(
-      purchasesAgg.map((a) => [
-        a.supplierId as number,
-        { totalPurchases: a._sum.total ?? 0, lastPurchaseAt: a._max.createdAt },
-      ])
+    const n = (v: unknown) => Number(v ?? 0)
+    const aggBySupplier = new Map<
+      number,
+      { totalPurchases: number; lastPurchaseAt: Date | null }
+    >(
+      purchasesAgg.map((a) => {
+        const gross = n(a._sum.total)
+        const ret = n(
+          partialReturnsAgg.find((r) => r.supplierId === a.supplierId)?._sum.total,
+        )
+        return [
+          a.supplierId as number,
+          {
+            totalPurchases: Math.max(0, Math.round((gross - ret) * 100) / 100),
+            lastPurchaseAt: a._max.createdAt,
+          },
+        ]
+      }),
     )
     const result = suppliers.map((s) => ({
       ...s,

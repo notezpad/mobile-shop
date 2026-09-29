@@ -1,25 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import type { Session } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
-import { round2 } from '@/lib/purchase-return'
+import { round2, REFUND_METHODS } from '@/lib/purchase-return'
+import { createPrincipalCashEntry } from '@/lib/commission'
+import { getTenantTimezone, dateStrInTz, localDateStrToUtcBounds } from '@/lib/tenantTime'
 
 export const dynamic = 'force-dynamic'
 
-async function nextOrderNo(tenantId: string): Promise<string> {
-  const year = new Date().getFullYear()
-  const count = await db.purchaseOrder.count({
-    where: {
-      tenantId,
-      orderNo: { startsWith: `PO-${year}-` },
-    },
+/**
+ * 🛡️ 2026-09-30: توليد رقم أمر الشراء.
+ *
+ * قبل كده كان `count + 1` — يعني أي حذف لأمر شراء بيرجّع العدّاد للورا
+ * ورقم اتعمل قبل كده بيتولد تاني (تكرار). وكمان القراءة كانت بره الـ
+ * transaction، فطلبان متزامنين بيقرّوا نفس العدّاد ويكتبوا نفس الرقم.
+ *
+ * الحل:
+ *   1. max+1 بدل count+1 (قراءة أعلى رقم موجود — الحذف مش بيأثر عليه).
+ *   2. الدالة بتشتغل جوه الـ transaction نفسه (بـ tx client) والفريد
+ *      `@@unique([tenantId, orderNo])` في الداتابيز هو الحكم الأخير —
+ *      لو حصل تضارب برضه الـ POST بيعيد المحاولة برقم جديد (retry على P2002).
+ *   3. السنة بتوقيت المحل (Tenant.timezone) مش توقيت السيرفر.
+ */
+async function nextOrderNo(
+  tenantId: string,
+  tx: Prisma.TransactionClient,
+  year: number,
+): Promise<string> {
+  const start = `PO-${year}-`
+  // قراءة أعلى رقم فقط (بتستخدم الفهرس) بدل عدّ كل أوامر السنة
+  const last = await tx.purchaseOrder.findFirst({
+    where: { tenantId, orderNo: { startsWith: start } },
+    orderBy: { id: 'desc' },
+    select: { orderNo: true },
   })
-  const seq = (count + 1).toString().padStart(5, '0')
-  return `PO-${year}-${seq}`
+  const lastSeq = last?.orderNo ? parseInt(last.orderNo.slice(start.length), 10) || 0 : 0
+  const seq = (lastSeq + 1).toString().padStart(5, '0')
+  return `${start}${seq}`
 }
 
 async function __GET(req: NextRequest) {
-  let session
+  let session: Session
   try {
     session = await requireAuth()
   } catch (e) {
@@ -34,9 +57,16 @@ async function __GET(req: NextRequest) {
   const from = searchParams.get('from')
   const to = searchParams.get('to')
 
+  // 🕐 2026-09-30: "from"/"to" تواريخ تقويمية بتوقيت المحل — بتتحول لحدود
+  // UTC بتوقيت المحل (Tenant.timezone) مش بتوقيت السيرفر (كانت
+  // `new Date(`${from}T00:00:00`)` بتتفسّر بتوقيت السيرفر = UTC على Workers،
+  // يعني فاتورة 1 صباحاً بتوقيت القاهرة بتقع في "إمبارح").
   const createdAt: { gte?: Date; lte?: Date } = {}
-  if (from) createdAt.gte = new Date(`${from}T00:00:00`)
-  if (to) createdAt.lte = new Date(`${to}T23:59:59.999`)
+  if (from || to) {
+    const tz = await getTenantTimezone(session.tenantId)
+    if (from) createdAt.gte = localDateStrToUtcBounds(from, 'start', tz)
+    if (to) createdAt.lte = localDateStrToUtcBounds(to, 'end', tz)
+  }
 
   const orders = await db.purchaseOrder.findMany({
     where: {
@@ -65,7 +95,7 @@ async function __GET(req: NextRequest) {
 }
 
 async function __POST(req: NextRequest) {
-  let session
+  let session: Session
   try {
     session = await requireAuth()
   } catch (e) {
@@ -88,6 +118,15 @@ async function __POST(req: NextRequest) {
     return NextResponse.json({ error: 'المبلغ المدفوع غير صالح' }, { status: 400 })
   }
   const paid = round2(paidRaw)
+  // 🛡️ 2026-09-30: how the money left the shop (cash / wallet / InstaPay). It
+  // used to be dropped, so every purchase hit the till as plain cash.
+  const paymentMethod =
+    body.paymentMethod === undefined || body.paymentMethod === null || body.paymentMethod === ''
+      ? 'cash'
+      : String(body.paymentMethod)
+  if (!REFUND_METHODS.has(paymentMethod)) {
+    return NextResponse.json({ error: 'طريقة الدفع غير صالحة' }, { status: 400 })
+  }
   let supplierId: number | null = null
   if (body.supplierId) {
     supplierId = parseInt(body.supplierId, 10) || null
@@ -175,10 +214,29 @@ async function __POST(req: NextRequest) {
     }
   }
 
-  const orderNo = await nextOrderNo(session.tenantId)
+  // 🛡️ 2026-09-30: توليد الرقم جوه الـ transaction + إعادة المحاولة عند تضارب
+  // (طلبان متزامنين). الفهرس الفريد @@unique([tenantId, orderNo]) هو الضمانة.
+  const tz = await getTenantTimezone(session.tenantId)
+  const year = parseInt(dateStrInTz(new Date(), tz).slice(0, 4), 10)
 
-  const order = await db.$transaction(async (tx) => {
-    const created = await tx.purchaseOrder.create({
+  let order: Awaited<ReturnType<typeof createOrderTx>> | null = null
+  const MAX_ATTEMPTS = 5
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      order = await createOrderTx(year)
+      break
+    } catch (e: any) {
+      // تضارب في الرقم الفريد (طلب متزامن معانا) → جرّب تاني برقم أعلى.
+      // أي خطأ تاني بيتنشر طبيعي.
+      if (e?.code === 'P2002' && attempt < MAX_ATTEMPTS) continue
+      throw e
+    }
+  }
+
+  async function createOrderTx(year: number) {
+    return db.$transaction(async (tx) => {
+      const orderNo = await nextOrderNo(session.tenantId, tx, year)
+      const created = await tx.purchaseOrder.create({
       data: {
         tenantId: session.tenantId,
         branchId: session.branchId ?? null,
@@ -187,6 +245,7 @@ async function __POST(req: NextRequest) {
         userId: session.userId,
         total,
         paid,
+        paymentMethod: paid > 0 ? paymentMethod : 'cash',
         status: 'مكتملة',
         items: {
           create: itemsData,
@@ -195,10 +254,26 @@ async function __POST(req: NextRequest) {
       include: { items: true, supplier: true },
     })
     // increment stock + update product cost + record movement
+    // 🛡️ 2026-09-30: تكلفة المتوسط المرجح (Weighted Moving Average) بدل
+    // "آخر سعر شراء". قبل كده `cost: it.cost` كان بيمسح التكلفة القديمة
+    // بالكامل، فبضاعة قديمة اشتريناها بـ 100 بتبقى تكليفتها 150 فجأة بعد
+    // أول فاتورة جديدة، وربح المبيعات القديمة/الجاية بيتغيّر كله.
+    // المتوسط المرجح: newCost = (الكمية القديمة × تكليفتها + الكمية الجديدة × سعرها) ÷ الإجمالي
     for (const it of itemsData) {
+      const cur = await tx.product.findUnique({
+        where: { id: it.productId },
+        select: { quantity: true, cost: true },
+      })
+      const oldQty = Math.max(0, cur?.quantity ?? 0)
+      const oldCost = Math.max(0, cur?.cost ?? 0)
+      const totalQty = oldQty + it.quantity
+      const avgCost =
+        totalQty > 0
+          ? round2((oldQty * oldCost + it.quantity * it.cost) / totalQty)
+          : it.cost // مفيش مخزون قديم → التكلفة هي سعر الشراء الجديد
       await tx.product.update({
         where: { id: it.productId },
-        data: { quantity: { increment: it.quantity }, cost: it.cost },
+        data: { quantity: { increment: it.quantity }, cost: Math.max(0, avgCost) },
       })
       await tx.stockMovement.create({
         data: {
@@ -227,21 +302,23 @@ async function __POST(req: NextRequest) {
         })
       }
     }
-    // cash entry for the paid amount (money leaving the till)
+    // till entry for the paid amount (money leaving the shop) — carries the
+    // payment method so cash / wallet / InstaPay balances stay separate.
+    // No commission: paying a supplier is an outgoing payment, not a service fee.
     if (paid > 0) {
-      await tx.cashEntry.create({
-        data: {
-          tenantId: session.tenantId,
-          source: 'purchase',
-          refId: created.id,
-          amount: -paid,
-          note: `شراء أمر ${orderNo}`,
-          userId: session.userId,
-        },
+      await createPrincipalCashEntry(tx, {
+        tenantId: session.tenantId,
+        userId: session.userId,
+        method: paymentMethod,
+        source: 'purchase',
+        refId: created.id,
+        amount: -paid,
+        note: `شراء أمر ${orderNo}`,
       })
     }
-    return created
-  })
+      return created
+    }, { maxWait: 10000, timeout: 20000 })
+  }
 
   return NextResponse.json(order, { status: 201 })
 }

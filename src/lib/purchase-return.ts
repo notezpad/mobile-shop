@@ -20,7 +20,10 @@
  *
  * ACCOUNTING MODEL (all amounts rounded to 2 decimals)
  *   returnValue = Σ cost × qty            → goods leave the shop
- *   refund      = cash the supplier really hands back (0 … returnValue)
+ *   refund      = money the supplier REALLY hands back (0 … returnValue).
+ *                 It is never assumed: when the caller does not say, refund = 0
+ *                 (the supplier just credits us) so the till is never inflated.
+ *                 It also cannot exceed what we actually paid on this order.
  *
  *   Stock            : − qty per line
  *   Supplier.balance : − (returnValue − refund)      (what we owe him drops)
@@ -150,13 +153,16 @@ export async function performPurchaseReturn(
   returnValue = round2(returnValue)
 
   const hasSupplier = order.supplierId != null
+  const paidNotRefunded = Math.max(0, round2(order.paid - order.refunded))
   let refund: number
   if (input.refund === undefined || input.refund === null) {
-    // Default = old behaviour: we get back the cash we paid on this order
-    // (that was not already refunded); the rest reduces the supplier debt.
-    refund = hasSupplier
-      ? Math.min(returnValue, Math.max(0, round2(order.paid - order.refunded)))
-      : returnValue
+    // 🛡️ 2026-09-30: NEVER assume the supplier handed the money back. Before,
+    // the default was "everything we paid in cash" and it went straight into the
+    // till — if he only deducted it from our account the till became bigger than
+    // the real cash. Default now = nothing came back (supplier balance drops).
+    // Without a supplier account there is nobody to hold a credit, so the whole
+    // value must have come back as money.
+    refund = hasSupplier ? 0 : returnValue
   } else {
     refund = Number(input.refund)
     if (!Number.isFinite(refund) || refund < 0) {
@@ -174,7 +180,15 @@ export async function performPurchaseReturn(
       400,
     )
   }
-  const refundMethod = input.refundMethod ?? 'cash'
+  if (hasSupplier && refund > paidNotRefunded) {
+    // You cannot get back cash you never paid on this order.
+    throw new PurchaseReturnError(
+      `المبلغ المسترد (${refund}) أكبر من المدفوع فعلاً على هذا الأمر ولم يُسترد بعد (${paidNotRefunded}). الباقي يُخصم من حساب المورد.`,
+      400,
+    )
+  }
+  // Default method = the way we paid this order (money normally goes back the same way).
+  const refundMethod = input.refundMethod ?? order.paymentMethod ?? 'cash'
   if (refund > 0 && !REFUND_METHODS.has(refundMethod)) {
     throw new PurchaseReturnError('طريقة استلام المبلغ غير صالحة', 400)
   }
@@ -231,10 +245,51 @@ export async function performPurchaseReturn(
   for (const [itemId, qty] of wanted) {
     const it = itemById.get(itemId)!
     if (it.productId != null) {
-      await tx.product.update({
+      // 🛡️ 2026-09-30: stock can never go below zero. The conditional UPDATE is
+      // atomic — it matches only if enough is still on the shelf (part of it may
+      // already have been sold). No match → the whole return rolls back.
+      //
+      // 🛡️ 2026-09-30: تكلفة المتوسط المرجح — المرتجع لازم يخصم من قيمة
+      // المخزون. قبل كده الكمية بتنقص والتكلفة (Product.cost) بتفضل زي ما هي،
+      // فقيمة المخزون بتضل مبالغ فيها وربح اللي بعد كده بيتحسب غلط.
+      // نقرأ (الكمية × التكلفة) قبل الخصم، ونرجّع وزن الكمية المرتجعة بسعر
+      // دفعتها (line cost) من المتوسط:
+      //   newCost = (Q_before × C_before − qty × lineCost) ÷ remaining
+      const cur = await tx.product.findUnique({
         where: { id: it.productId },
+        select: { quantity: true, cost: true },
+      })
+      const out = await tx.product.updateMany({
+        where: { id: it.productId, tenantId, quantity: { gte: qty } },
         data: { quantity: { decrement: qty } },
       })
+      if (out.count !== 1) {
+        const cur2 = await tx.product.findUnique({
+          where: { id: it.productId },
+          select: { quantity: true },
+        })
+        throw new PurchaseReturnError(
+          `لا يمكن إرجاع ${qty} من "${it.name}": المتاح بالمخزن ${cur2?.quantity ?? 0} فقط (باقي الكمية اتباعت أو اتسحبت). قلّل الكمية.`,
+          409,
+        )
+      }
+      const qBefore = Math.max(0, cur?.quantity ?? 0)
+      const cBefore = Math.max(0, cur?.cost ?? 0)
+      const remaining = qBefore - qty
+      if (remaining > 0 && qBefore > 0) {
+        const newCost = Math.max(
+          0,
+          round2((qBefore * cBefore - qty * Math.max(0, it.cost)) / remaining),
+        )
+        if (newCost !== cBefore) {
+          await tx.product.update({
+            where: { id: it.productId },
+            data: { cost: newCost },
+          })
+        }
+      }
+      // لو remaining = 0 (المخزون فضي بالكامل) بنسيب التكلفة زي ما هي —
+      // أول شراء جاي هيبدأ من سعره هو (oldQty = 0 في معادلة المتوسط).
     }
     await tx.stockMovement.create({
       data: {

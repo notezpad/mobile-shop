@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { FileText, Loader2, Plus, Search } from 'lucide-react'
+import { Ban, FileText, Loader2, Plus, Search } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,8 +27,9 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency, formatArabicDateTime } from '@/lib/format'
 import { DateTimeCell } from './DateTimeCell'
-import { printListReportHtml, openPrintWindow } from '@/lib/print'
+import { printListReportHtml, openPrintWindow, printLtr } from '@/lib/print'
 import { useShopStore } from '@/lib/store'
+import { useConfirm } from './ConfirmDialogProvider'
 import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface Txn {
@@ -39,6 +40,7 @@ interface Txn {
   commission: number
   note: string | null
   userName?: string | null
+  status?: string
   createdAt: string
 }
 
@@ -49,8 +51,24 @@ const METHOD_LABEL: Record<string, string> = {
 }
 
 export function FinanceView() {
+  const confirm = useConfirm()
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
+  const userRole = useShopStore((s) => s.user?.role)
+  const isAdmin = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN'
+
+  // 🛡️ 2026-09-30 (X6): إلغاء معاملة محفظة — أدمن بس، إلغاء ناعم على السيرفر
+  // بيعكس قيد الأصل + العمولة بنفس طريقة الدفع.
+  const cancelTxn = async (id: number) => {
+    if (!(await confirm('إلغاء المعاملة؟ سيتم عكس قيد الأصل والعمولة من الخزنة بنفس طريقة الدفع'))) return
+    try {
+      await api(`/api/finance/${id}`, { method: 'DELETE' })
+      toast.success('تم إلغاء المعاملة وعكس القيود')
+      load()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل الإلغاء')
+    }
+  }
   const [rows, setRows] = React.useState<Txn[]>([])
   const [loading, setLoading] = React.useState(true)
   const [method, setMethod] = React.useState('vodafone_cash')
@@ -132,7 +150,7 @@ export function FinanceView() {
         ],
         rows: rows.map((t, i) => [
           String(i + 1),
-          <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatArabicDateTime(t.createdAt)}</span>,
+          printLtr(formatArabicDateTime(t.createdAt)),
           METHOD_LABEL[t.method] ?? t.method,
           t.userName ?? '—',
           t.kind === 'deposit' ? 'إيداع' : 'سحب',
@@ -343,7 +361,22 @@ export function FinanceView() {
                           )}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">
-                          {t.note ?? '—'}
+                          <span className="flex items-center gap-1.5">
+                            {t.note ?? '—'}
+                            {t.status === 'cancelled' ? (
+                              <Badge variant="destructive" className="shrink-0 text-[10px]">ملغية</Badge>
+                            ) : isAdmin ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-6 shrink-0 text-destructive hover:text-destructive"
+                                onClick={() => cancelTxn(t.id)}
+                                title="إلغاء المعاملة (أدمن فقط)"
+                              >
+                                <Ban className="size-3.5" />
+                              </Button>
+                            ) : null}
+                          </span>
                         </TableCell>
                       </TableRow>
                     ))

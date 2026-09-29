@@ -10,6 +10,7 @@ import {
   Wallet,
   TrendingDown,
   TrendingUp,
+  Undo2,
 } from 'lucide-react'
 import {
   Dialog,
@@ -49,6 +50,7 @@ import {
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useDataRefresh } from '@/lib/offline/data-events'
+import { useShopStore } from '@/lib/store'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { DateTimeCell } from './DateTimeCell'
 import { SupplierPaymentDialog } from './SupplierPaymentDialog'
@@ -89,9 +91,11 @@ interface PurchaseOrder {
   orderNo: string | null
   total: number
   paid: number
+  paymentMethod?: string | null
   refunded?: number
   status: string
   createdAt: string
+  returnedValue?: number
   items: OrderItem[]
 }
 interface Payment {
@@ -99,6 +103,8 @@ interface Payment {
   amount: number
   method: string
   note: string | null
+  status?: string // 'active' | 'cancelled'
+  cancelledAt?: string | null
   createdAt: string
 }
 
@@ -111,7 +117,8 @@ interface SupplierDetail {
   purchaseOrders: PurchaseOrder[]
   payments: Payment[]
   summary: {
-    totalPurchases: number
+    totalPurchases: number // صافي بعد المرتجعات
+    totalReturns: number
     totalPaid: number
     totalDebt: number
     balance: number
@@ -134,6 +141,9 @@ type TimelineRow =
       items: OrderItem[]
       total: number
       paid: number
+      refunded: number
+      returnedValue: number
+      status: string
     }
   | {
       kind: 'payment'
@@ -177,6 +187,8 @@ export function SupplierDetailDialog({
   supplierId,
   supplierName: initialName,
 }: Props) {
+  const role = useShopStore((s) => s.user?.role)
+  const canCancelPayment = role === 'ADMIN' || role === 'SUPER_ADMIN'
   const [detail, setDetail] = React.useState<SupplierDetail | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [tab, setTab] = React.useState('account')
@@ -225,14 +237,19 @@ export function SupplierDetailDialog({
       items: o.items,
       total: o.total,
       paid: o.paid,
+      refunded: o.refunded ?? 0,
+      returnedValue: o.returnedValue ?? 0,
+      status: o.status,
     }))
-    const paymentRows: TimelineRow[] = detail.payments.map((p) => ({
+    const paymentRows: TimelineRow[] = detail.payments
+      .filter((p) => p.status !== 'cancelled')
+      .map((p) => ({
       kind: 'payment' as const,
       date: p.createdAt,
       amount: p.amount,
       method: p.method,
       note: p.note,
-    }))
+      }))
     return [...purchaseRows, ...paymentRows].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     )
@@ -243,11 +260,11 @@ export function SupplierDetailDialog({
     setDeleting(true)
     try {
       await api(`/api/supplier-payments/${deletePaymentId}`, { method: 'DELETE' })
-      toast.success('تم حذف الدفعة')
+      toast.success('تم إلغاء الدفعة')
       setDeletePaymentId(null)
       load()
     } catch (e: any) {
-      toast.error(e?.message || 'فشل الحذف')
+      toast.error(e?.message || 'فشل إلغاء الدفعة')
     } finally {
       setDeleting(false)
     }
@@ -320,11 +337,17 @@ export function SupplierDetailDialog({
 
               {/* ===== Account Summary Tab ===== */}
               <TabsContent value="account" className="space-y-3">
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 [&>*:last-child]:col-span-2 sm:[&>*:last-child]:col-span-1">
+                {/* 🛡️ 2026-09-30: الأرقام صافية بعد المرتجعات والمستردات — بتطابق الرصيد */}
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
                   <StatBox
                     icon={TrendingUp}
                     label="إجمالي المشتريات"
                     value={formatCurrency(detail.summary.totalPurchases)}
+                  />
+                  <StatBox
+                    icon={Undo2}
+                    label="إجمالي المرتجعات"
+                    value={formatCurrency(detail.summary.totalReturns)}
                   />
                   <StatBox
                     icon={Wallet}
@@ -369,7 +392,12 @@ export function SupplierDetailDialog({
                                 const itemsText = row.items
                                   .map((it) => `${it.name}×${it.quantity}`)
                                   .join('، ')
-                                const debt = Math.max(0, row.total - row.paid)
+                                // 🛡️ علينا = صافي الفاتورة بعد المرتجعات − الصافي المدفوع فعلاً
+                                const paidNet = Math.max(0, row.paid - row.refunded)
+                                const debt = Math.max(
+                                  0,
+                                  row.total - row.returnedValue - paidNet,
+                                )
                                 return (
                                   <TableRow key={`o-${row.orderId}-${i}`}>
                                     <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
@@ -395,6 +423,12 @@ export function SupplierDetailDialog({
                                         <span className="text-xs text-success-subtle-foreground">
                                           {' '}
                                           (دفعنا كاش: {formatCurrency(row.paid)})
+                                        </span>
+                                      )}
+                                      {row.returnedValue > 0 && (
+                                        <span className="text-xs text-info-subtle-foreground">
+                                          {' '}
+                                          (مرتجع: {formatCurrency(row.returnedValue)})
                                         </span>
                                       )}
                                     </TableCell>
@@ -459,7 +493,9 @@ export function SupplierDetailDialog({
                     timeline.map((row, i) => {
                       if (row.kind === 'purchase') {
                         const itemsText = row.items.map((it) => `${it.name}×${it.quantity}`).join('، ')
-                        const debt = Math.max(0, row.total - row.paid)
+                        // 🛡️ علينا = صافي الفاتورة بعد المرتجعات − الصافي المدفوع فعلاً
+                        const paidNet = Math.max(0, row.paid - row.refunded)
+                        const debt = Math.max(0, row.total - row.returnedValue - paidNet)
                         return (
                           <div key={`mo-${row.orderId}-${i}`} className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3">
                             <Badge variant="outline" className="mt-0.5 shrink-0 bg-info-subtle text-info-subtle-foreground border-info-subtle">
@@ -473,6 +509,11 @@ export function SupplierDetailDialog({
                               {row.paid > 0 && (
                                 <p className="mt-0.5 text-xs text-success-subtle-foreground">
                                   دفعنا كاش: {formatCurrency(row.paid)}
+                                </p>
+                              )}
+                              {row.returnedValue > 0 && (
+                                <p className="mt-0.5 text-xs text-info-subtle-foreground">
+                                  مرتجع: {formatCurrency(row.returnedValue)}
                                 </p>
                               )}
                               <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -660,7 +701,9 @@ export function SupplierDetailDialog({
                     إجمالي الدفعات:{' '}
                     <span className="font-semibold text-success-subtle-foreground tabular-nums">
                       {formatCurrency(
-                        detail.payments.reduce((s, p) => s + p.amount, 0)
+                        detail.payments
+                          .filter((p) => p.status !== 'cancelled')
+                          .reduce((s, p) => s + p.amount, 0)
                       )}
                     </span>
                   </p>
@@ -694,11 +737,11 @@ export function SupplierDetailDialog({
                             </TableRow>
                           ) : (
                             detail.payments.map((p) => (
-                              <TableRow key={p.id}>
+                              <TableRow key={p.id} className={p.status === 'cancelled' ? 'opacity-60' : undefined}>
                                 <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                                   <DateTimeCell date={p.createdAt} />
                                 </TableCell>
-                                <TableCell className="text-center font-semibold tabular-nums text-success-subtle-foreground">
+                                <TableCell className={`text-center font-semibold tabular-nums ${p.status === 'cancelled' ? 'text-muted-foreground line-through' : 'text-success-subtle-foreground'}`}>
                                   {formatCurrency(p.amount)}
                                 </TableCell>
                                 <TableCell className="text-center">
@@ -711,18 +754,25 @@ export function SupplierDetailDialog({
                                   </span>
                                 </TableCell>
                                 <TableCell className="text-sm text-muted-foreground">
+                                  {p.status === 'cancelled' && (
+                                    <Badge variant="outline" className="me-2 border-destructive/40 text-destructive">
+                                      ملغية
+                                    </Badge>
+                                  )}
                                   {p.note ?? '—'}
                                 </TableCell>
                                 <TableCell className="text-center">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                    onClick={() => setDeletePaymentId(p.id)}
-                                    title="حذف الدفعة"
-                                  >
-                                    <Trash2 className="size-4" />
-                                  </Button>
+                                  {canCancelPayment && p.status !== 'cancelled' && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                      onClick={() => setDeletePaymentId(p.id)}
+                                      title="إلغاء الدفعة"
+                                    >
+                                      <Trash2 className="size-4" />
+                                    </Button>
+                                  )}
                                 </TableCell>
                               </TableRow>
                             ))
@@ -740,7 +790,7 @@ export function SupplierDetailDialog({
                     </p>
                   ) : (
                     detail.payments.map((p) => (
-                      <div key={p.id} className="flex items-center gap-3 rounded-lg border bg-card p-3">
+                      <div key={p.id} className={`flex items-center gap-3 rounded-lg border bg-card p-3 ${p.status === 'cancelled' ? 'opacity-60' : ''}`}>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span
@@ -751,23 +801,30 @@ export function SupplierDetailDialog({
                             <span className="text-[11px] text-muted-foreground">
                               <DateTimeCell date={p.createdAt} />
                             </span>
+                            {p.status === 'cancelled' && (
+                              <Badge variant="outline" className="border-destructive/40 text-destructive">
+                                ملغية
+                              </Badge>
+                            )}
                           </div>
                           {p.note && (
                             <p className="mt-1 truncate text-xs text-muted-foreground">{p.note}</p>
                           )}
                         </div>
-                        <span className="shrink-0 text-sm font-bold tabular-nums text-success-subtle-foreground">
+                        <span className={`shrink-0 text-sm font-bold tabular-nums ${p.status === 'cancelled' ? 'text-muted-foreground line-through' : 'text-success-subtle-foreground'}`}>
                           {formatCurrency(p.amount)}
                         </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-9 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => setDeletePaymentId(p.id)}
-                          title="حذف الدفعة"
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
+                        {canCancelPayment && p.status !== 'cancelled' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-9 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => setDeletePaymentId(p.id)}
+                            title="إلغاء الدفعة"
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        )}
                       </div>
                     ))
                   )}
@@ -819,9 +876,9 @@ export function SupplierDetailDialog({
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>تأكيد حذف الدفعة</AlertDialogTitle>
+              <AlertDialogTitle>تأكيد إلغاء الدفعة</AlertDialogTitle>
               <AlertDialogDescription>
-                سيتم إلغاء الدفعة وإرجاع المبلغ لحساب المورد وعكس القيود في الخزنة.
+                سيتم تعليم الدفعة "ملغية" (تفضل ظاهرة في السجل) وإرجاع المبلغ لحساب المورد وعكس قيد الخزنة بنفس طريقة الدفع.
                 لا يمكن التراجع عن هذا الإجراء.
               </AlertDialogDescription>
             </AlertDialogHeader>
@@ -833,7 +890,7 @@ export function SupplierDetailDialog({
                 className="bg-destructive text-white hover:bg-destructive/90"
               >
                 {deleting && <Loader2 className="size-4 animate-spin" />}
-                حذف
+                إلغاء الدفعة
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

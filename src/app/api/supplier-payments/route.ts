@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
-import { recordCommission, createPrincipalCashEntry } from '@/lib/commission'
+import { createPrincipalCashEntry } from '@/lib/commission'
 
 export const dynamic = 'force-dynamic'
 
@@ -135,26 +135,14 @@ async function __POST(req: NextRequest) {
       note: `دفعة لمورد ${supplierName} - ${methodName}`,
     })
 
-    // 4. 🛡️ 2026-09-15 (v3): Record commission (Bug #9 fix — was missing
-    //    entirely from this route, but customer payments had it. Now both
-    //    use the unified helper. The shop EARNS the commission even when
-    //    paying a supplier via Vodafone Cash — it's a service fee from
-    //    Vodafone to the shop.)
-    const { commission, commissionEntryId } = await recordCommission(tx, {
-      tenantId: session.tenantId,
-      userId: session.userId,
-      method,
-      amount,
-      refType: 'supplier_payment',
-      refId: payment.id,
-      noteSuffix: supplierName,
-    })
+    // 🛡️ 2026-09-30: NO commission here. Paying a supplier from a wallet /
+    // InstaPay is money going OUT — it is not a fee the shop earns. Commission
+    // belongs only to the "financial transactions" module (finance/route.ts),
+    // where the shop acts as a wallet agent for its customers.
 
     return {
       ...payment,
       supplier: updatedSupplier,
-      commission,
-      commissionEntryId,
       linkedCashEntryId: principalEntry.id,
     }
   })

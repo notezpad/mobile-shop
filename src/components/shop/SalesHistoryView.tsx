@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils'
 import { printSale, exportSalePdf } from '@/lib/print-client'
 import { useShopStore } from '@/lib/store'
 import { DateTimeCell } from './DateTimeCell'
+import { SaleReturnDialog } from './SaleReturnDialog'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { getLocalDateStr } from '@/lib/dateUtils'
 import { useDataRefresh } from '@/lib/offline/data-events'
@@ -44,7 +45,8 @@ interface Sale {
   status: string
   createdAt: string
   userName?: string | null
-  customer: { name: string; phone?: string | null } | null
+  refunded?: number
+  customer: ({ id: number; name: string; phone?: string | null }) | null
   items: SaleItem[]
 }
 
@@ -55,6 +57,7 @@ export function SalesHistoryView() {
   const [from, setFrom] = React.useState('')
   const [to, setTo] = React.useState('')
   const [refundId, setRefundId] = React.useState<number | null>(null)
+  const [partialReturnSale, setPartialReturnSale] = React.useState<Sale | null>(null)
   const [page, setPage] = React.useState(1)
   const [totalPages, setTotalPages] = React.useState(1)
   const [total, setTotal] = React.useState(0)
@@ -62,6 +65,8 @@ export function SalesHistoryView() {
 
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
+  const userRole = useShopStore((s) => s.user?.role)
+  const isAdmin = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN'
 
   const load = React.useCallback(async (f?: string, t?: string, p = 1) => {
     setLoading(true)
@@ -211,8 +216,10 @@ export function SalesHistoryView() {
       })),
       totals: {
         invoiceNo: 'الإجمالي',
-        total: filtered.reduce((sum, s) => sum + s.total, 0),
-        paid: filtered.reduce((sum, s) => sum + s.paid, 0),
+        // 🛡️ 2026-09-30 (M12): الفواتير المرتجعة بالكامل ماتدخلش الإجماليات
+        // (الـ total عليها قائم والمدفوع صفّر بعد الحذف).
+        total: filtered.filter((s) => s.status !== 'مرتجعة').reduce((sum, s) => sum + s.total, 0),
+        paid: filtered.filter((s) => s.status !== 'مرتجعة').reduce((sum, s) => sum + s.paid, 0),
       },
     })
   }
@@ -411,10 +418,21 @@ export function SalesHistoryView() {
                                 variant="ghost"
                                 size="icon"
                                 className="size-8 text-destructive hover:text-destructive"
-                                onClick={() => setRefundId(s.id)}
-                                title="مرتجع الفاتورة كاملة"
+                                onClick={() => setPartialReturnSale(s)}
+                                title="مرتجع جزئي (صنف/كمية)"
                               >
                                 <RotateCcw className="size-4" />
+                              </Button>
+                            )}
+                            {isAdmin && s.status !== 'مرتجعة' && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 text-destructive hover:text-destructive"
+                                onClick={() => setRefundId(s.id)}
+                                title="مرتجع الفاتورة كاملة (أدمن فقط)"
+                              >
+                                <RotateCcw className="size-4 rotate-180" />
                               </Button>
                             )}
                           </div>
@@ -549,10 +567,21 @@ export function SalesHistoryView() {
                                 variant="ghost"
                                 size="icon"
                                 className="size-7 text-destructive hover:text-destructive"
-                                onClick={() => setRefundId(s.id)}
-                                title="مرتجع الفاتورة كاملة"
+                                onClick={() => setPartialReturnSale(s)}
+                                title="مرتجع جزئي (صنف/كمية)"
                               >
                                 <RotateCcw className="size-3.5" />
+                              </Button>
+                            )}
+                            {isAdmin && !isReturned && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-7 text-destructive hover:text-destructive"
+                                onClick={() => setRefundId(s.id)}
+                                title="مرتجع الفاتورة كاملة (أدمن فقط)"
+                              >
+                                <RotateCcw className="size-3.5 rotate-180" />
                               </Button>
                             )}
                           </div>
@@ -617,9 +646,9 @@ export function SalesHistoryView() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <Card className="w-full max-w-sm">
             <CardContent className="space-y-4 p-6 text-center">
-              <h3 className="text-lg font-bold">مرتجع الفاتورة</h3>
+              <h3 className="text-lg font-bold">مرتجع الفاتورة كاملة</h3>
               <p className="text-sm text-muted-foreground">
-                سيتم استرجاع الكميات للمخزون وإنشاء قيد خزنة سلبي. متابعة؟
+                سيتم استرجاع الكميات للمخزون ورد المدفوع كله للعميل. متابعة؟
               </p>
               <div className="flex justify-center gap-2">
                 <Button variant="outline" onClick={() => setRefundId(null)}>
@@ -632,6 +661,31 @@ export function SalesHistoryView() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {partialReturnSale && (
+        <SaleReturnDialog
+          open
+          onOpenChange={(o) => !o && setPartialReturnSale(null)}
+          sale={{
+            id: partialReturnSale.id,
+            invoiceNo: partialReturnSale.invoiceNo,
+            customerId: partialReturnSale.customer?.id ?? null,
+            customerName: partialReturnSale.customer?.name ?? null,
+            paid: partialReturnSale.paid,
+            refunded: partialReturnSale.refunded ?? 0,
+            paymentMethod: (partialReturnSale as any).paymentMethod ?? null,
+          }}
+          items={partialReturnSale.items.map((it) => ({
+            id: it.id,
+            productId: (it as any).productId ?? null,
+            name: it.name + (it.unitLabel ? ` (${it.unitQuantity}× ${it.unitLabel})` : ''),
+            price: it.price,
+            quantity: it.quantity,
+            returnedQty: (it as any).returnedQty ?? 0,
+          }))}
+          onDone={() => load(from, to, page)}
+        />
       )}
     </div>
   )

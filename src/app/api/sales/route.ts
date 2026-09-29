@@ -1,32 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import type { Session } from '@/lib/auth'
 import { requireCapability, featureErrorResponse } from '@/lib/features'
 import { deductStock } from '@/lib/deduct-stock'
-import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
+import { getTenantTimezone, localDateStrToUtcBounds, dateStrInTz } from '@/lib/tenantTime'
+import type { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * 🛡️ 2026-09-30: توليد رقم الفاتورة جوه الـ transaction نفسه.
+ *
+ * المشكلة: الرقم كان بيتحسب بره الـ transaction (قراءة أعلى رقم ثم كتابة)،
+ * فكاشيرين بيفطوا في نفس اللحظة بيقرّوا نفس الرقم ويتكتب مرتين (تكرار).
+ * الحل: القراءة جوه الـ tx + فهرس فريد `@@unique([tenantId, invoiceNo])`
+ * في الداتابيز كضمانة أخيرة — لو حصل تضارب، الـ POST بيعيد المحاولة
+ * برقم جديد (retry على P2002). والسنة دلوقتي بتوقيت المحل (Tenant.timezone)
+ * مش توقيت السيرفر.
+ */
 async function nextInvoiceNo(
   prefix: string,
-  tenantId: string
+  tenantId: string,
+  tx: Prisma.TransactionClient,
+  year: number,
 ): Promise<string> {
-  const year = new Date().getFullYear()
+  const start = `${prefix}-${year}-`
   // Read only the latest invoice number (uses the index) instead of counting
   // every invoice of the year; avoids duplicate numbers after deletions.
-  const start = `${prefix}-${year}-`
-  const last = await db.sale.findFirst({
+  const last = await tx.sale.findFirst({
     where: { tenantId, invoiceNo: { startsWith: start } },
     orderBy: { id: 'desc' },
     select: { invoiceNo: true },
   })
   const lastSeq = last?.invoiceNo ? parseInt(last.invoiceNo.slice(start.length), 10) || 0 : 0
   const seq = (lastSeq + 1).toString().padStart(5, '0')
-  return `${prefix}-${year}-${seq}`
+  return `${start}${seq}`
 }
 
 export async function GET(req: NextRequest) {
-  let session
+  let session: Session
   try {
     session = await requireAuth()
   } catch (e) {
@@ -96,7 +109,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  let session
+  let session: Session
   try {
     session = await requireAuth()
   } catch (e) {
@@ -112,6 +125,31 @@ export async function POST(req: NextRequest) {
     )
   }
   const paid = Number(body.paid ?? 0) || 0
+  // 🛡️ 2026-09-30 (C4): paid سالب كان بيزوّد دين العميل بمقداره ويخصم الخزنة — مرفوض.
+  if (!Number.isFinite(paid) || paid < 0) {
+    return NextResponse.json({ error: 'المبلغ المدفوع غير صالح' }, { status: 400 })
+  }
+  // 🛡️ 2026-09-30 (C12): طريقة دفع مبلغ البيع — زي أمر الشراء بالظبط،
+  // عشان الخزنة تتفصل كاش / محافظ / انستاباي على أكبر تدفق فلوس في النظام.
+  const SALE_METHODS = new Set(['cash', 'vodafone_cash', 'instapay', 'fawry'])
+  const paymentMethod = body.paymentMethod === undefined || body.paymentMethod === null || body.paymentMethod === ''
+    ? 'cash'
+    : String(body.paymentMethod)
+  if (!SALE_METHODS.has(paymentMethod)) {
+    return NextResponse.json({ error: 'طريقة الدفع غير صالحة' }, { status: 400 })
+  }
+  // 🛡️ 2026-09-30 (M10): تاريخ استحقاق اختياري للفاتورة الآجلة.
+  let dueDate: Date | null = null
+  if (body.dueDate) {
+    const d = new Date(body.dueDate)
+    if (isNaN(d.getTime())) {
+      return NextResponse.json({ error: 'تاريخ الاستحقاق غير صالح' }, { status: 400 })
+    }
+    dueDate = d
+  }
+  // 🛡️ 2026-09-30 (M7): مفتاح عدم التكرار للأوفلاين — retry لنفس الفاتورة بيرجّع
+  // الفاتورة الأصلية بدل ما يعمل خصم مخزن وخزنة ودين مكرر.
+  const clientRef = body.clientRef ? String(body.clientRef).slice(0, 64) : null
   let customerId: number | null = null
   if (body.customerId) {
     customerId = parseInt(body.customerId, 10) || null
@@ -322,74 +360,154 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const prefix = tenant?.invoicePrefix || 'INV'
-    const invoiceNo = await nextInvoiceNo(prefix, session.tenantId)
+    // 🛡️ 2026-09-30 (C5 — قرار تجاري: ترفض): مدفوع أكبر من الإجمالي مرفوض.
+    // قبل كده الفرق كان بيضيع من الحسابات (بيخلش الخزنة ومفيش رصيد دائن للعميل).
+    if (paid > total + 0.005) {
+      return NextResponse.json(
+        { error: `المدفوع (${paid}) أكبر من إجمالي الفاتورة (${Math.round(total * 100) / 100}) — لو العميل دفع زيادة سجلها دفعة على حسابه` },
+        { status: 400 }
+      )
+    }
 
-    const sale = await db.$transaction(async (tx) => {
-      const created = await tx.sale.create({
-        data: {
-          tenantId: session.tenantId,
-          branchId: session.branchId ?? null,
-          invoiceNo,
-          customerId,
-          userId: session.userId,
-          total,
-          paid,
-          status: 'مكتملة',
-          items: {
-            create: itemsData.map((i) => ({
-              productId: i.productId,
-              name: i.name,
-              price: i.price,
-              cost: i.cost,
-              quantity: i.quantity,
-              unitId: i.unitId,
-              unitLabel: i.unitLabel,
-              unitQuantity: i.unitQuantity,
-              variantId: i.variantId,
-            })),
-          },
-        },
-        include: { items: { include: { variant: true } }, customer: true },
+    // 🛡️ 2026-09-30 (M10): الحد الائتماني — لو العميل متحدد له حد وبيع آجل
+    // هيعديه، البيع يترفض (بدون فرض ولا استثناء تلقائي).
+    if (customerId && paid < total && customerCheck?.creditLimit != null) {
+      const projected = (customerCheck.balance ?? 0) + (total - paid)
+      if (projected > customerCheck.creditLimit + 0.005) {
+        return NextResponse.json(
+          { error: `بيع آجل هيعدي الحد الائتماني للعميل ${customerCheck.name} (الحد: ${customerCheck.creditLimit}، الرصيد الحالي: ${customerCheck.balance}، إجمالي بعد البيع: ${Math.round(projected * 100) / 100})` },
+          { status: 400 }
+        )
+      }
+    }
+
+    // 🛡️ 2026-09-30 (M7): idempotency — نفس clientRef؟ رجّع الفاتورة الأصلية.
+    if (clientRef) {
+      const existing = await db.sale.findUnique({
+        where: { tenantId_clientRef: { tenantId: session.tenantId, clientRef } },
+        include: { items: true, customer: true },
       })
-
-      for (const it of itemsData) {
-        await deductStock(tx, {
-          tenantId: session.tenantId,
-          branchId: session.branchId ?? null,
-          userId: session.userId,
-          productId: it.productId,
-          quantity: it.unitsEntered,
-          unitId: it.unitId,
-          variantId: it.variantId,
-          refType: 'sale',
-          refId: created.id,
-          note: `فاتورة ${invoiceNo}`,
-        })
+      if (existing) {
+        return NextResponse.json(existing, { status: 200 })
       }
+    }
 
-      if (customerId && paid < total) {
-        await tx.customer.update({
-          where: { id: customerId },
-          data: { balance: { increment: total - paid } },
-        })
+    const prefix = tenant?.invoicePrefix || 'INV'
+    // 🛡️ 2026-09-30: توليد الرقم جوه الـ tx + إعادة المحاولة عند التضارب
+    const tz = await getTenantTimezone(session.tenantId)
+    const invYear = parseInt(dateStrInTz(new Date(), tz).slice(0, 4), 10)
+
+    let sale: Awaited<ReturnType<typeof createSaleTx>> | null = null
+    const MAX_ATTEMPTS = 5
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        sale = await createSaleTx(prefix, invYear)
+        break
+      } catch (e: any) {
+        // 🛡️ تضارب فريد متزامن: لو السبب clientRef (أوفلاين أرسل نفس الفاتورة
+        // مرتين) → النسخة الأصلية اتحفظ بالفعل، رجّعها بدل إعادة المحاولة.
+        if (e?.code === 'P2002' && clientRef) {
+          const existing = await db.sale.findUnique({
+            where: { tenantId_clientRef: { tenantId: session.tenantId, clientRef } },
+            include: { items: true, customer: true },
+          })
+          if (existing) {
+            return NextResponse.json(existing, { status: 200 })
+          }
+        }
+        // تضارب في الرقم الفريد (فاتورة متزامنة معانا) → جرّب تاني برقم أعلى
+        if (e?.code === 'P2002' && attempt < MAX_ATTEMPTS) continue
+        throw e
       }
+    }
 
-      if (paid > 0) {
-        await tx.cashEntry.create({
+    async function createSaleTx(prefix: string, year: number) {
+      return db.$transaction(async (tx) => {
+        const invoiceNo = await nextInvoiceNo(prefix, session.tenantId, tx, year)
+        const created = await tx.sale.create({
           data: {
             tenantId: session.tenantId,
-            source: 'sale',
-            refId: created.id,
-            amount: paid,
-            note: `بيع فاتورة ${invoiceNo}`,
+            branchId: session.branchId ?? null,
+            invoiceNo,
+            customerId,
             userId: session.userId,
+            total,
+            paid,
+            paymentMethod,
+            dueDate,
+            clientRef,
+            status: 'مكتملة',
+            items: {
+              create: itemsData.map((i) => ({
+                productId: i.productId,
+                name: i.name,
+                price: i.price,
+                cost: i.cost,
+                quantity: i.quantity,
+                unitId: i.unitId,
+                unitLabel: i.unitLabel,
+                unitQuantity: i.unitQuantity,
+                variantId: i.variantId,
+              })),
+            },
           },
+          include: { items: { include: { variant: true } }, customer: true },
         })
-      }
 
-      return created
-    }, { maxWait: 10000, timeout: 20000 }) // default 5s was too short over a remote DB → sale hung/failed
+        for (const it of itemsData) {
+          // 🛡️ 2026-09-30 (X2): كل بيع بيسجل حركة مخزون من نوع 'sale' — كان
+          // دفتر الحركات طرف واحد (البيع أكبر حركة خروج ومفيش منها أي أثر).
+          await deductStock(tx, {
+            tenantId: session.tenantId,
+            branchId: session.branchId ?? null,
+            userId: session.userId,
+            productId: it.productId,
+            quantity: it.unitsEntered,
+            unitId: it.unitId,
+            variantId: it.variantId,
+            refType: 'sale',
+            refId: created.id,
+            note: `فاتورة ${invoiceNo}`,
+          })
+          await tx.stockMovement.create({
+            data: {
+              tenantId: session.tenantId,
+              branchId: session.branchId ?? null,
+              productId: it.productId,
+              type: 'sale',
+              quantity: -it.quantity, // pieces (unit factor already applied)
+              refType: 'sale',
+              refId: created.id,
+              note: `فاتورة ${invoiceNo} — ${it.name}`,
+              userId: session.userId,
+            },
+          })
+        }
+
+        if (customerId && paid < total) {
+          await tx.customer.update({
+            where: { id: customerId },
+            data: { balance: { increment: total - paid } },
+          })
+        }
+
+        if (paid > 0) {
+          await tx.cashEntry.create({
+            data: {
+              tenantId: session.tenantId,
+              source: 'sale',
+              refId: created.id,
+              amount: paid,
+              method: paymentMethod, // 🛡️ C12: الخزنة بتتفصل بطريقة الدفع
+              note: `بيع فاتورة ${invoiceNo}`,
+              userId: session.userId,
+            },
+          })
+        }
+
+        return created
+      }, { maxWait: 10000, timeout: 20000 }) // default 5s was too short over a remote DB → sale hung/failed
+    }
 
     return NextResponse.json(sale, { status: 201 })
   })

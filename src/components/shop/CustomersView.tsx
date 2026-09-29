@@ -132,7 +132,24 @@ export function CustomersView() {
   }
 
   const remove = async (id: number) => {
-    if (!(await confirm('حذف العميل؟'))) return
+    // 🛡️ 2026-09-30 (N4 + C7): تحذير واضح قبل الحذف — والسيرفر نفسه بيمنع
+    // حذف أي عميل عليه رصيد أو له سجل فواتير/دفعات (أدمن بس كمان).
+    const target = customers.find((c) => c.id === id)
+    if (target && Math.abs(target.balance) > 0.005) {
+      toast.error(
+        target.balance > 0
+          ? `العميل ${target.name} عليه مديونية ${target.balance.toFixed(2)} — صفّي الحساب الأول (النظام ممنوع يحذفه)`
+          : `العميل ${target.name} له رصيد دائن ${Math.abs(target.balance).toFixed(2)} — ارجع له الفلوس الأول`,
+      )
+      return
+    }
+    if (target && (target._count?.sales ?? 0) > 0) {
+      toast.error(
+        `العميل ${target.name} له سجل فواتير (${target._count?.sales}) — لا يمكن حذفه حفاظاً على الحسابات`,
+      )
+      return
+    }
+    if (!(await confirm('حذف العميل؟ (الحذف متاح فقط لعملاء بدون أي سجل مالي)'))) return
     // ⚡ Optimistic: remove from list immediately
     const removed = customers.find((c) => c.id === id)
     setCustomers((prev) => prev.filter((c) => c.id !== id))

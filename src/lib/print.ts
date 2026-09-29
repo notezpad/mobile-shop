@@ -499,6 +499,19 @@ function emptyRow(colspan: number, message: string): string {
   return `<tr><td colspan="${colspan}" style="text-align:center;color:${BRAND.sub};padding:22px 8px">${escapeHtml(message)}</td></tr>`
 }
 
+/**
+ * Cell value for ListReport rows that must render Left-To-Right inside the RTL
+ * printed table (dates, numbers, phones, tracking codes).
+ *
+ * Contract fix (2026-09-30): ListReportOptions.rows is string[][] — JSX spans
+ * passed by Cash/Finance/Maintenance views interpolated as "[object Object]"
+ * in printListReportHtml's raw `${cell}` template. Views must pass plain
+ * strings/HTML; use this helper (never JSX) for LTR-isolated cells.
+ */
+export function printLtr(text: string): string {
+  return `<span dir="ltr" style="unicode-bidi:isolate">${escapeHtml(text)}</span>`
+}
+
 function escapeHtml(s: string): string {
   return String(s ?? '')
     .replace(/&/g, '&amp;')

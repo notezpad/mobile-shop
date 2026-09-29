@@ -48,6 +48,7 @@ const CATEGORIES = [
   'صيانة المحل',
   'إنترنت واتصالات',
   'ضيافة',
+  'هالك وتالف',
   'أخرى',
 ]
 
@@ -76,6 +77,8 @@ export function ExpensesView() {
   const [category, setCategory] = React.useState(CATEGORIES[0])
   const [amount, setAmount] = React.useState('')
   const [note, setNote] = React.useState('')
+  // 🛡️ 2026-09-30 (X5): طريقة دفع المصروف — من أي درج/محفظة خرجت الفلوس
+  const [method, setMethod] = React.useState('cash')
   const [saving, setSaving] = React.useState(false)
 
   // filters
@@ -139,7 +142,7 @@ export function ExpensesView() {
     try {
       await api('/api/expenses', {
         method: 'POST',
-        body: { category, amount: amt, note: note.trim() || null },
+        body: { category, amount: amt, note: note.trim() || null, method },
       })
       toast.success('تم تسجيل المصروف')
       setAmount('')
@@ -300,6 +303,21 @@ export function ExpensesView() {
                       {c}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* 🛡️ 2026-09-30 (X5): من أي درج/محفظة خرجت الفلوس */}
+            <div className="space-y-2.5">
+              <Label>طريقة الدفع</Label>
+              <Select value={method} onValueChange={setMethod}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">كاش</SelectItem>
+                  <SelectItem value="vodafone_cash">محفظة إلكترونية</SelectItem>
+                  <SelectItem value="instapay">انستاباي</SelectItem>
+                  <SelectItem value="fawry">فوري</SelectItem>
                 </SelectContent>
               </Select>
             </div>

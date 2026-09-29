@@ -6,10 +6,12 @@ import { requireCapability, featureErrorResponse } from '@/lib/features'
 export const dynamic = 'force-dynamic'
 
 /**
- * Fashion Pro capability: loyalty
- * Redeem loyalty points as a discount (1 point = 1 EGP).
- * POST /api/customers/[id]/loyalty/redeem  body: { points: number }
- * Returns the discount value; caller applies it to the next sale total.
+ * 🛡️ 2026-09-30 (M6): this endpoint was referencing `Customer.loyaltyPoints`
+ * — a column that was DROPPED by migration 20260721_remove_variants_and_
+ * fashion_extras. Every call used to crash with a Prisma 500 (column does
+ * not exist), and nothing in the UI ever awarded points (the dialog was
+ * never mounted). The route now returns a clean, explicit 410 instead of a
+ * runtime 500, until loyalty is rebuilt on a real points ledger.
  */
 async function __POST(
   req: NextRequest,
@@ -32,29 +34,21 @@ async function __POST(
 
   const { id } = await params
   const customerId = parseInt(id, 10)
-  const body = await req.json().catch(() => null)
-  const points = parseInt(body?.points, 10)
-  if (!customerId || !points || points <= 0) {
-    return NextResponse.json({ error: 'بيانات غير صحيحة' }, { status: 400 })
+  if (customerId) {
+    const exists = await db.customer.findFirst({
+      where: { id: customerId, tenantId: session.tenantId },
+      select: { id: true },
+    })
+    if (!exists) return NextResponse.json({ error: 'العميل غير موجود' }, { status: 404 })
   }
 
-  const c = await db.customer.findFirst({
-    where: { id: customerId, tenantId: session.tenantId },
-  })
-  if (!c) return NextResponse.json({ error: 'العميل غير موجود' }, { status: 404 })
-  if (c.loyaltyPoints < points) {
-    return NextResponse.json({ error: 'النقاط غير كافية' }, { status: 400 })
-  }
-
-  const updated = await db.customer.update({
-    where: { id: customerId },
-    data: { loyaltyPoints: { decrement: points } },
-  })
-  return NextResponse.json({
-    ok: true,
-    discount: points, // 1 point = 1 EGP
-    remainingPoints: updated.loyaltyPoints,
-  })
+  return NextResponse.json(
+    {
+      error:
+        'نظام نقاط الولاء موقوف مؤقتاً في هذه النسخة (النقاط مش بتتجمع حالياً). لو محتاجه، تواصل مع الدعم لإعادة تفعيله.',
+    },
+    { status: 410 },
+  )
 }
 
 export async function POST(...args: Parameters<typeof __POST>) {

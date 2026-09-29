@@ -79,6 +79,8 @@ export function PurchaseOrderDialog({
   const [supplierId, setSupplierId] = React.useState<string>('none')
   const [paidFull, setPaidFull] = React.useState(true)
   const [paidAmount, setPaidAmount] = React.useState(0)
+  // how the payment leaves the shop: cash | vodafone_cash | instapay | fawry
+  const [payMethod, setPayMethod] = React.useState('cash')
   const [submitting, setSubmitting] = React.useState(false)
   const [categories, setCategories] = React.useState<{ id: number; name: string }[]>([])
   const [newProductOpen, setNewProductOpen] = React.useState(false)
@@ -226,6 +228,7 @@ export function PurchaseOrderDialog({
           })),
           supplierId: supplierId !== 'none' ? Number(supplierId) : null,
           paid,
+          paymentMethod: paid > 0 ? payMethod : 'cash',
         },
       })
       toast.success(`تم تسجيل أمر الشراء بنجاح - ${order.orderNo}`)
@@ -507,9 +510,25 @@ export function PurchaseOrderDialog({
                 onCheckedChange={(v) => setPaidFull(v === true)}
               />
               <Label htmlFor="po-paid-full" className="text-sm font-normal">
-                تم دفع كامل المبلغ كاش
+                تم دفع كامل المبلغ
               </Label>
             </div>
+            {(paidFull ? total : paidAmount) > 0 && (
+              <div className="space-y-1.5">
+                <Label>طريقة الدفع</Label>
+                <Select value={payMethod} onValueChange={setPayMethod}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">كاش</SelectItem>
+                    <SelectItem value="vodafone_cash">محافظ إلكترونية</SelectItem>
+                    <SelectItem value="instapay">انستاباي</SelectItem>
+                    <SelectItem value="fawry">محفظة إلكترونية (فوري)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {!paidFull && (
               <div className="space-y-1.5">
                 <Label htmlFor="po-paid-amount">المبلغ المدفوع الآن</Label>

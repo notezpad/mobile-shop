@@ -57,7 +57,7 @@ const PLANS = [
     maxBranches: 1,
     businessType: 'electronics',
     enabledModules: ELECTRONICS_BASIC,
-    capabilities: [] as string[],
+    capabilities: ['returns_exchange'] as string[], // 🛡️ 2026-09-30: المرتجع/الاستبدال متاح لكل الباقات (قرار تجاري)
     sortOrder: 10,
   },
   {
@@ -71,7 +71,7 @@ const PLANS = [
     maxBranches: 5,
     businessType: 'electronics',
     enabledModules: ELECTRONICS_PRO,
-    capabilities: ['multi_unit'],
+    capabilities: ['multi_unit', 'returns_exchange'], // 🛡️ 2026-09-30: + المرتجع للكل
     sortOrder: 20,
   },
   {
@@ -85,7 +85,7 @@ const PLANS = [
     maxBranches: 1,
     businessType: 'fashion',
     enabledModules: FASHION_BASIC,
-    capabilities: ['variants'], // ← clothing always has sizes/colors
+    capabilities: ['variants', 'returns_exchange'], // ← clothing always has sizes/colors + 🛡️ المرتجع للكل
     sortOrder: 30,
   },
   {
@@ -103,7 +103,7 @@ const PLANS = [
     // merchants. They sell by carton/lot (multi_unit), not by individual
     // piece with sizes/colors. If they want to sell by piece, they add a
     // unit with factor=1. So NO 'variants' capability here.
-    capabilities: ['collections', 'multi_unit'],
+    capabilities: ['collections', 'multi_unit', 'returns_exchange'], // 🛡️ 2026-09-30: + المرتجع للكل
     sortOrder: 40,
   },
 ]

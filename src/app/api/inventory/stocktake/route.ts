@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
-import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
@@ -51,7 +51,10 @@ async function __GET() {
 
 async function __POST(req: NextRequest) {
   let s
-  try { s = await requireAuth() } catch (e) {
+  try {
+    // 🛡️ 2026-09-30 (X8): اعتماد الجرد بيغيّر أرصدة المخزن فعلياً — أدمن بس.
+    s = await requireAdmin()
+  } catch (e) {
     const err = authErrorResponse(e); return NextResponse.json(err?.body,{status:err?.status})
   }
   try { await requireModule(s, 'inventory') } catch (e) {
@@ -62,6 +65,16 @@ async function __POST(req: NextRequest) {
   const items = Array.isArray(b?.items) ? b.items : []
   const commit = b?.commit === true
   if (items.length === 0) return NextResponse.json({ error: 'أضف منتجات للجرد' }, { status: 400 })
+  // 🛡️ 2026-09-30 (X8): اعتماد الجرد من غير سبب كان بيقبل أي تغيير مجهول.
+  if (commit) {
+    const reason = b?.note ? String(b.note).trim() : ''
+    if (reason.length < 3) {
+      return NextResponse.json(
+        { error: 'اكتب سبب/مرجع الجرد (إجباري عند الاعتماد — مثال: جرد نهاية الشهر)' },
+        { status: 400 },
+      )
+    }
+  }
 
   const productIds = items.map((it: any) => parseInt(it.productId, 10)).filter(Boolean)
   const products = await db.product.findMany({ where: { id: { in: productIds }, tenantId: s.tenantId } })
@@ -80,6 +93,13 @@ async function __POST(req: NextRequest) {
           create: items.map((it: any) => {
             const pid = parseInt(it.productId, 10)
             const counted = parseInt(it.countedQty, 10) || 0
+            // 🛡️ 2026-09-30 (X8): الكمية المعدودة سالب → مرفوضة. كانت بتتحفظ
+            // كقيمة مطلقة في المخزن وبتكسر أرضية الصفر اللي باقي النظام بيحافظ عليها.
+            if (counted < 0) {
+              throw new StocktakeNegativeError(
+                `الكمية المعدودة للمنتج "${pMap.get(pid)?.name ?? pid}" لا يمكن أن تكون سالبة`,
+              )
+            }
             const p = pMap.get(pid)
             const sys = p?.quantity ?? 0
             return { productId: pid, systemQty: sys, countedQty: counted, diff: counted - sys }
@@ -101,7 +121,7 @@ async function __POST(req: NextRequest) {
               quantity: it.diff,
               refType: 'stocktake',
               refId: st.id,
-              note: 'تسوية جرد',
+              note: b?.note ? String(b.note).trim() : 'تسوية جرد',
               userId: s.userId,
             },
           })
@@ -113,9 +133,20 @@ async function __POST(req: NextRequest) {
   return NextResponse.json(created, { status: 201 })
 }
 
+class StocktakeNegativeError extends Error {}
+
 export async function GET(...args: Parameters<typeof __GET>) {
   return withDb(() => __GET(...args))
 }
 export async function POST(...args: Parameters<typeof __POST>) {
-  return withDb(() => __POST(...args))
+  return withDb(async () => {
+    try {
+      return await __POST(...args)
+    } catch (e) {
+      if (e instanceof StocktakeNegativeError) {
+        return NextResponse.json({ error: e.message }, { status: 400 })
+      }
+      throw e
+    }
+  })
 }

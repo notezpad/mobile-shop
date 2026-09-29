@@ -12,6 +12,8 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   SlidersHorizontal,
+  Repeat,
+  X,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -65,11 +67,23 @@ const ADJUST_REASONS = [
   'أخرى',
 ]
 
+// 🛡️ 2026-09-30: أسباب مخصصة لتسجيل الهالك — الخسارة بتتسجل بقيمتها في
+// المصروفات (فئة "هالك وتالف") والسبب بيتكتب في الحركة والمصروف.
+const DAMAGE_REASONS = [
+  'تالف / هالك',
+  'انتهاء صلاحية',
+  'تلف التخزين (رطوبة/حرارة)',
+  'تلف أثناء النقل',
+  'عيوب صناعة',
+  'أخرى',
+]
+
 export function StockTab({ products, branches, isEmployee, userBranchId, onChanged }: Props) {
   const [search, setSearch] = React.useState('')
   const [branchFilter, setBranchFilter] = React.useState<string>('all')
   const [statusFilter, setStatusFilter] = React.useState<string>('all')
-  const [adjOpen, setAdjOpen] = React.useState<{ product: InventoryProduct; type: 'in' | 'out' } | null>(null)
+  const [adjOpen, setAdjOpen] = React.useState<{ product: InventoryProduct; type: 'in' | 'out' | 'damage' } | null>(null)
+  const [exchangeOpen, setExchangeOpen] = React.useState(false)
 
   const filtered = React.useMemo(() => {
     return products.filter(p => {
@@ -139,6 +153,14 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
               </SelectContent>
             </Select>
           </div>
+          {/* 🛡️ 2026-09-30: استبدال بضاعة مع مورد — بيخرج التالف ويدخل البديل
+              وبيحسب فرق القيمة على حساب المورد تلقائياً */}
+          {!isEmployee && (
+            <Button variant="outline" className="gap-1.5" onClick={() => setExchangeOpen(true)}>
+              <Repeat className="size-4" />
+              استبدال مورد
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -226,6 +248,19 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                             >
                               <Minus className="size-3.5" />
                             </Button>
+                            {/* 🛡️ 2026-09-30: تسجيل هالك — بيسجّل الخسارة في المصروفات */}
+                            {!isEmployee && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="size-8 p-0 text-warning-subtle-foreground hover:bg-warning-subtle hover:text-warning-subtle-foreground"
+                                onClick={() => setAdjOpen({ product: p, type: 'damage' })}
+                                disabled={p.quantity <= 0}
+                                title="تسجيل هالك (بيسجّل الخسارة في المصروفات)"
+                              >
+                                <AlertTriangle className="size-3.5" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -288,6 +323,18 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                         >
                           <Minus className="size-3.5" />
                         </Button>
+                        {!isEmployee && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="size-8 p-0 text-warning-subtle-foreground hover:bg-warning-subtle hover:text-warning-subtle-foreground"
+                            onClick={() => setAdjOpen({ product: p, type: 'damage' })}
+                            disabled={p.quantity <= 0}
+                            title="تسجيل هالك (بيسجّل الخسارة في المصروفات)"
+                          >
+                            <AlertTriangle className="size-3.5" />
+                          </Button>
+                        )}
                       </div>
                     </div>
 
@@ -329,7 +376,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
         </CardContent>
       </Card>
 
-      {/* Adjust dialog */}
+      {/* Adjust dialog (وارد / صادر / هالك) */}
       {adjOpen && (
         <AdjustDialog
           open={!!adjOpen}
@@ -339,11 +386,22 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
           onDone={onChanged}
         />
       )}
+
+      {/* استبدال مع مورد */}
+      {exchangeOpen && (
+        <ExchangeDialog
+          open={exchangeOpen}
+          onOpenChange={setExchangeOpen}
+          products={products}
+          branches={branches}
+          onDone={onChanged}
+        />
+      )}
     </div>
   )
 }
 
-/* ---------------- Adjust Dialog ---------------- */
+/* ---------------- Adjust Dialog (وارد / صادر / هالك) ---------------- */
 
 function AdjustDialog({
   open,
@@ -355,13 +413,15 @@ function AdjustDialog({
   open: boolean
   onOpenChange: (o: boolean) => void
   product: InventoryProduct
-  type: 'in' | 'out'
+  type: 'in' | 'out' | 'damage'
   onDone: () => void
 }) {
   const [qty, setQty] = React.useState('')
-  const [reason, setReason] = React.useState(ADJUST_REASONS[0])
+  const [reason, setReason] = React.useState(type === 'damage' ? DAMAGE_REASONS[0] : ADJUST_REASONS[0])
   const [note, setNote] = React.useState('')
   const [saving, setSaving] = React.useState(false)
+
+  const reasons = type === 'damage' ? DAMAGE_REASONS : ADJUST_REASONS
 
   // Reset fields whenever the dialog opens (keyed by product id + type)
   const resetKey = `${product.id}-${type}`
@@ -369,13 +429,22 @@ function AdjustDialog({
   if (resetKey !== lastResetKey) {
     setLastResetKey(resetKey)
     setQty('')
-    setReason(ADJUST_REASONS[0])
+    setReason(type === 'damage' ? DAMAGE_REASONS[0] : ADJUST_REASONS[0])
     setNote('')
   }
+
+  const qNum = parseInt(qty, 10) || 0
+  // 🛡️ قيمة الخسارة المتوقعة = الكمية × التكلفة الحالية (المتوسط المرجح)
+  const lossPreview = type === 'damage' && qNum > 0 ? qNum * Math.max(0, product.cost) : 0
 
   const submit = async () => {
     const q = parseInt(qty, 10)
     if (!q || q <= 0) { toast.error('كمية غير صالحة'); return }
+    // 🛡️ 2026-09-30: السبب إجباري للصادر والهالك (السيرفر بيرفض بدونه كمان)
+    if (type !== 'in' && `${reason}${note ? ' — ' + note : ''}`.trim().length < 3) {
+      toast.error('اكتب سبب الحركة (إجباري)')
+      return
+    }
     setSaving(true)
     try {
       await api('/api/inventory/movements', {
@@ -387,7 +456,11 @@ function AdjustDialog({
           note: `${reason}${note ? ' — ' + note : ''}`,
         },
       })
-      toast.success(type === 'in' ? 'تم تسجيل الكمية الواردة' : 'تم خصم الكمية')
+      if (type === 'damage') {
+        toast.success(`تم تسجيل الهالك — خسارة ${formatCurrency(qNum * Math.max(0, product.cost))} اتسجلت في المصروفات`)
+      } else {
+        toast.success(type === 'in' ? 'تم تسجيل الكمية الواردة' : 'تم خصم الكمية')
+      }
       onOpenChange(false)
       onDone()
     } catch (e: any) {
@@ -398,17 +471,21 @@ function AdjustDialog({
   }
 
   const isIn = type === 'in'
+  const isDamage = type === 'damage'
+  const title = isDamage ? 'تسجيل هالك / تالف' : isIn ? 'إضافة كمية واردة' : 'خصم كمية صادرة'
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {isIn ? (
+            {isDamage ? (
+              <AlertTriangle className="size-5 text-warning-subtle-foreground" />
+            ) : isIn ? (
               <ArrowDownToLine className="size-5 text-success-subtle-foreground" />
             ) : (
               <ArrowUpFromLine className="size-5 text-destructive-subtle-foreground" />
             )}
-            {isIn ? 'إضافة كمية واردة' : 'خصم كمية صادرة'}
+            {title}
           </DialogTitle>
           <DialogDescription>
             المنتج: <span className="font-medium text-foreground">{product.name}</span>
@@ -420,9 +497,16 @@ function AdjustDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
+          {isDamage && (
+            <div className="rounded-md border border-warning-subtle bg-warning-subtle/40 p-2.5 text-xs leading-relaxed">
+              تسجيل الهالك هيخصم الكمية من المخزون <b>وهيسجّل الخسارة تلقائياً</b> في
+              المصروفات (فئة «هالك وتالف») بقيمة <b>الكمية × التكلفة الحالية</b> — فتظهر
+              في صافي الربح. الخزنة مش هتتأثر (مفيش فلوس خرجت).
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>
-              الكمية {isIn ? 'الواردة' : 'الخارجة'} <span className="text-destructive">*</span>
+              الكمية {isDamage ? 'التالفة' : isIn ? 'الواردة' : 'الخارجة'} <span className="text-destructive">*</span>
             </Label>
             <Input
               type="number"
@@ -435,16 +519,21 @@ function AdjustDialog({
             />
             {!isIn && product.quantity > 0 && (
               <p className="text-[11px] text-muted-foreground">
-                المتاح للخصم: {product.quantity}
+                المتاح: {product.quantity}
+                {lossPreview > 0 && (
+                  <> — قيمة الخسارة المتوقعة: <b className="text-destructive">{formatCurrency(lossPreview)}</b></>
+                )}
               </p>
             )}
           </div>
           <div className="space-y-1.5">
-            <Label>السبب</Label>
+            <Label>
+              السبب {!isIn && <span className="text-destructive">*</span>}
+            </Label>
             <Select value={reason} onValueChange={setReason}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {ADJUST_REASONS.map(r => (
+                {reasons.map(r => (
                   <SelectItem key={r} value={r}>{r}</SelectItem>
                 ))}
               </SelectContent>
@@ -465,10 +554,239 @@ function AdjustDialog({
           <Button
             onClick={submit}
             disabled={saving}
-            className={isIn ? 'bg-primary hover:bg-primary-hover' : 'bg-destructive hover:bg-destructive/90'}
+            className={isDamage ? 'bg-warning-subtle-foreground hover:bg-warning-subtle-foreground/90' : isIn ? 'bg-primary hover:bg-primary-hover' : 'bg-destructive hover:bg-destructive/90'}
           >
             {saving && <Loader2 className="ml-1 size-4 animate-spin" />}
-            {isIn ? 'تأكيد الإضافة' : 'تأكيد الخصم'}
+            {isDamage ? 'تأكيد تسجيل الهالك' : isIn ? 'تأكيد الإضافة' : 'تأكيد الخصم'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/* ---------------- Exchange with supplier (استبدال مورد) ---------------- */
+
+interface ExchangeLineUI {
+  productId: number
+  name: string
+  cost: number
+  quantity: string
+}
+
+function ExchangeDialog({
+  open,
+  onOpenChange,
+  products,
+  onDone,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  products: InventoryProduct[]
+  branches: Branch[]
+  onDone: () => void
+}) {
+  const available = React.useMemo(() => products.filter(p => p.quantity > 0), [products])
+  const [supplierId, setSupplierId] = React.useState('')
+  const [suppliers, setSuppliers] = React.useState<Array<{ id: number; name: string }>>([])
+  const [outLines, setOutLines] = React.useState<ExchangeLineUI[]>([])
+  const [inLines, setInLines] = React.useState<ExchangeLineUI[]>([])
+  const [pickOut, setPickOut] = React.useState('')
+  const [pickIn, setPickIn] = React.useState('')
+  const [reason, setReason] = React.useState('')
+  const [saving, setSaving] = React.useState(false)
+
+  React.useEffect(() => {
+    if (open) {
+      setOutLines([])
+      setInLines([])
+      setPickOut('')
+      setPickIn('')
+      setReason('')
+      setSupplierId('')
+      api<Array<{ id: number; name: string }>>('/api/suppliers')
+        .then((rows) => setSuppliers(rows.map((r) => ({ id: r.id, name: r.name }))))
+        .catch(() => setSuppliers([]))
+    }
+  }, [open])
+
+  const productById = React.useMemo(() => new Map(products.map(p => [p.id, p])), [products])
+
+  const addLine = (
+    setter: React.Dispatch<React.SetStateAction<ExchangeLineUI[]>>,
+    lines: ExchangeLineUI[],
+    pid: string,
+  ) => {
+    const id = parseInt(pid, 10)
+    const p = productById.get(id)
+    if (!p) return
+    if (lines.some(l => l.productId === p.id)) {
+      toast.error('الصنف مضاف بالفعل — عدّل الكمية')
+      return
+    }
+    setter([...lines, { productId: p.id, name: p.name, cost: p.cost, quantity: '1' }])
+  }
+
+  const valueOf = (lines: ExchangeLineUI[]) =>
+    lines.reduce((s, l) => s + (parseInt(l.quantity, 10) || 0) * Math.max(0, l.cost), 0)
+  const valueOut = valueOf(outLines)
+  const valueIn = valueOf(inLines)
+  const diff = Math.round((valueIn - valueOut) * 100) / 100
+
+  const submit = async () => {
+    const out = outLines
+      .map(l => ({ productId: l.productId, quantity: parseInt(l.quantity, 10) || 0 }))
+      .filter(l => l.quantity > 0)
+    const inn = inLines
+      .map(l => ({ productId: l.productId, quantity: parseInt(l.quantity, 10) || 0 }))
+      .filter(l => l.quantity > 0)
+    if (!supplierId) { toast.error('اختار المورد'); return }
+    if (out.length === 0 || inn.length === 0) {
+      toast.error('لازم بضاعة راجعة وبضاعة بديلة (صنف على الأقل في كل جانب)')
+      return
+    }
+    if (reason.trim().length < 3) { toast.error('اكتب سبب الاستبدال (إجباري)'); return }
+    setSaving(true)
+    try {
+      const res = await api<{ message?: string }>('/api/inventory/exchange', {
+        method: 'POST',
+        body: { supplierId: parseInt(supplierId, 10), lines: out, replacements: inn, note: reason.trim() },
+      })
+      toast.success(res?.message || 'تم تسجيل الاستبدال')
+      onOpenChange(false)
+      onDone()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل تسجيل الاستبدال')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const lineEditor = (
+    lines: ExchangeLineUI[],
+    setter: React.Dispatch<React.SetStateAction<ExchangeLineUI[]>>,
+    kind: 'out' | 'in',
+  ) => (
+    <div className="space-y-2">
+      <Select
+        value={kind === 'out' ? pickOut : pickIn}
+        onValueChange={(v) => {
+          kind === 'out' ? setPickOut(v) : setPickIn(v)
+          addLine(setter, lines, v)
+        }}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder={kind === 'out' ? 'اختر صنف راجع للمورد...' : 'اختر صنف بديل من المورد...'} />
+        </SelectTrigger>
+        <SelectContent>
+          {(kind === 'out' ? available : products).map(p => (
+            <SelectItem key={p.id} value={String(p.id)}>
+              {p.name} {kind === 'out' ? `(متاح: ${p.quantity})` : ''}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {lines.map((l, idx) => (
+        <div key={l.productId} className="flex items-center gap-2 rounded-md border bg-muted/30 p-2">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{l.name}</p>
+            <p className="text-[11px] text-muted-foreground">تكلفة الوحدة: {formatCurrency(l.cost)}</p>
+          </div>
+          <Input
+            type="number"
+            min={1}
+            className="w-20"
+            value={l.quantity}
+            onChange={(e) => {
+              const v = e.target.value
+              setter(lines.map((x, i) => (i === idx ? { ...x, quantity: v } : x)))
+            }}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            className="size-8 p-0 text-destructive"
+            onClick={() => setter(lines.filter((_, i) => i !== idx))}
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+      ))}
+    </div>
+  )
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Repeat className="size-5 text-primary" />
+            استبدال بضاعة مع مورد
+          </DialogTitle>
+          <DialogDescription>
+            بضاعة تالفة/مردودة تترجع للمورد وبضاعة بديلة تاخدها — فرق القيمة بيتحسب
+            تلقائياً على حساب المورد.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>
+              المورد <span className="text-destructive">*</span>
+            </Label>
+            <Select value={supplierId} onValueChange={setSupplierId}>
+              <SelectTrigger><SelectValue placeholder="اختر المورد..." /></SelectTrigger>
+              <SelectContent>
+                {suppliers.map(su => (
+                  <SelectItem key={su.id} value={String(su.id)}>{su.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="rounded-lg border p-3">
+            <p className="mb-2 text-sm font-medium text-destructive">١. بضاعة راجعة للمورد</p>
+            {lineEditor(outLines, setOutLines, 'out')}
+            <p className="mt-2 text-xs text-muted-foreground">
+              قيمة الصادر: <b className="text-destructive">{formatCurrency(valueOut)}</b>
+            </p>
+          </div>
+
+          <div className="rounded-lg border p-3">
+            <p className="mb-2 text-sm font-medium text-success-subtle-foreground">٢. بضاعة بديلة من المورد</p>
+            {lineEditor(inLines, setInLines, 'in')}
+            <p className="mt-2 text-xs text-muted-foreground">
+              قيمة الوارد: <b className="text-success-subtle-foreground">{formatCurrency(valueIn)}</b>
+            </p>
+          </div>
+
+          <div className="rounded-md border bg-muted/40 p-2.5 text-sm">
+            فرق القيمة: <b>{formatCurrency(Math.abs(diff))}</b>{' '}
+            {diff === 0 ? (
+              <span className="text-muted-foreground">— استبدال متكافئ (مفيش أثر على حساب المورد)</span>
+            ) : diff > 0 ? (
+              <span className="text-destructive">— ستزيد عليك في الحساب</span>
+            ) : (
+              <span className="text-success-subtle-foreground">— هتقل حسابك عنده</span>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>
+              سبب الاستبدال <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              rows={2}
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              placeholder="مثال: 3 قطع تالفة بديلها قطع سليمة..."
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>إلغاء</Button>
+          <Button onClick={submit} disabled={saving} className="bg-primary hover:bg-primary-hover">
+            {saving && <Loader2 className="ml-1 size-4 animate-spin" />}
+            تأكيد الاستبدال
           </Button>
         </DialogFooter>
       </DialogContent>
