@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { performPurchaseReturn, PurchaseReturnError } from '@/lib/purchase-return'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,7 @@ async function __GET(
   }
   const order = await db.purchaseOrder.findUnique({
     where: { id: oid },
-    include: { items: true, supplier: true },
+    include: { items: true, supplier: true, returns: { include: { items: true }, orderBy: { id: 'desc' } } },
   })
   if (!order || order.tenantId !== session.tenantId) {
     return NextResponse.json({ error: 'أمر الشراء غير موجود' }, { status: 404 })
@@ -31,9 +32,12 @@ async function __GET(
   return NextResponse.json(order)
 }
 
-// DELETE marks the purchase order as returned to the supplier:
-// stock is pulled back out, the supplier debt (if any) is reversed,
-// and a cash entry restores any cash that was paid out.
+// DELETE = return EVERYTHING that is still returnable on this order (kept for
+// backwards compatibility with old clients / the offline outbox).
+// 🛡️ 2026-09-29: the whole thing — the "already returned?" check included — now
+// runs inside ONE transaction that locks the order row, so a double click or a
+// replayed request can no longer return the same goods twice.
+// For partial returns use POST /api/purchase-orders/[id]/returns.
 async function __DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -51,67 +55,22 @@ async function __DELETE(
   if (isNaN(oid)) {
     return NextResponse.json({ error: 'معرف غير صالح' }, { status: 400 })
   }
-  const order = await db.purchaseOrder.findUnique({
-    where: { id: oid },
-    include: { items: true, supplier: true },
-  })
-  if (!order || order.tenantId !== session.tenantId) {
-    return NextResponse.json({ error: 'أمر الشراء غير موجود' }, { status: 404 })
-  }
-  if (order.status === 'مرتجعة') {
-    return NextResponse.json({ error: 'أمر الشراء مرتجع بالفعل' }, { status: 400 })
-  }
 
-  await db.$transaction(async (tx) => {
-    // pull stock back out (guard against negative stock going too low is not
-    // enforced here — a purchase return means the goods physically leave)
-    for (const it of order.items) {
-      await tx.product.update({
-        where: { id: it.productId },
-        data: { quantity: { decrement: it.quantity } },
+  try {
+    const result = await db.$transaction((tx) =>
+      performPurchaseReturn(tx, {
+        tenantId: session.tenantId,
+        userId: session.userId,
+        orderId: oid,
       })
-      await tx.stockMovement.create({
-        data: {
-          tenantId: session.tenantId,
-          branchId: order.branchId,
-          productId: it.productId,
-          type: 'out',
-          quantity: -it.quantity,
-          refType: 'purchase',
-          refId: oid,
-          note: `مرتجع أمر شراء ${order.orderNo ?? oid}`,
-          userId: session.userId,
-        },
-      })
+    )
+    return NextResponse.json({ ok: true, ...result })
+  } catch (e) {
+    if (e instanceof PurchaseReturnError) {
+      return NextResponse.json({ error: e.message }, { status: e.status })
     }
-    // mark returned
-    await tx.purchaseOrder.update({
-      where: { id: oid },
-      data: { status: 'مرتجعة' },
-    })
-    // cash entry: any cash paid out for this order comes back in
-    if (order.paid > 0) {
-      await tx.cashEntry.create({
-        data: {
-          tenantId: session.tenantId,
-          source: 'purchase_refund',
-          refId: oid,
-          amount: order.paid,
-          note: `مرتجع أمر شراء ${order.orderNo ?? oid}`,
-          userId: session.userId,
-        },
-      })
-    }
-    // if supplier had balance increase for unpaid amount, decrease back
-    if (order.supplierId && order.paid < order.total) {
-      await tx.supplier.update({
-        where: { id: order.supplierId },
-        data: { balance: { decrement: order.total - order.paid } },
-      })
-    }
-  })
-
-  return NextResponse.json({ ok: true })
+    throw e
+  }
 }
 
 export async function GET(...args: Parameters<typeof __GET>) {

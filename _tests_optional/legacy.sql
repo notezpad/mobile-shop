@@ -1,0 +1,15 @@
+-- "OLD" schema (before the 2026-09-29 migration): only the tables the feature touches
+CREATE TABLE "Supplier" ("id" SERIAL PRIMARY KEY, "tenantId" TEXT NOT NULL, "name" TEXT NOT NULL, "phone" TEXT, "balance" DOUBLE PRECISION NOT NULL DEFAULT 0, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE "SupplierPayment" ("id" SERIAL PRIMARY KEY, "tenantId" TEXT NOT NULL, "supplierId" INTEGER NOT NULL, "amount" DOUBLE PRECISION NOT NULL, "method" TEXT NOT NULL DEFAULT 'cash', "note" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "SupplierPayment_supplierId_fkey" FOREIGN KEY ("supplierId") REFERENCES "Supplier"("id") ON DELETE CASCADE ON UPDATE CASCADE);
+CREATE TABLE "PurchaseOrder" ("id" SERIAL PRIMARY KEY, "tenantId" TEXT NOT NULL, "branchId" INTEGER, "orderNo" TEXT, "supplierId" INTEGER, "userId" TEXT, "total" DOUBLE PRECISION NOT NULL DEFAULT 0, "paid" DOUBLE PRECISION NOT NULL DEFAULT 0, "status" TEXT NOT NULL DEFAULT 'مكتملة', "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "PurchaseOrder_supplierId_fkey" FOREIGN KEY ("supplierId") REFERENCES "Supplier"("id") ON DELETE SET NULL ON UPDATE CASCADE);
+CREATE TABLE "PurchaseOrderItem" ("id" SERIAL PRIMARY KEY, "purchaseOrderId" INTEGER NOT NULL, "productId" INTEGER, "name" TEXT NOT NULL, "cost" DOUBLE PRECISION NOT NULL, "quantity" INTEGER NOT NULL,
+  CONSTRAINT "PurchaseOrderItem_po_fkey" FOREIGN KEY ("purchaseOrderId") REFERENCES "PurchaseOrder"("id") ON DELETE CASCADE ON UPDATE CASCADE);
+CREATE TABLE "Product" ("id" SERIAL PRIMARY KEY, "tenantId" TEXT NOT NULL, "branchId" INTEGER, "name" TEXT NOT NULL, "category" TEXT, "barcode" TEXT UNIQUE, "price" DOUBLE PRECISION NOT NULL DEFAULT 0, "cost" DOUBLE PRECISION NOT NULL DEFAULT 0, "quantity" INTEGER NOT NULL DEFAULT 0, "minQuantity" INTEGER NOT NULL DEFAULT 1, "retailMarginPercent" DOUBLE PRECISION, "imagePath" TEXT, "active" BOOLEAN NOT NULL DEFAULT true, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "collection" TEXT);
+CREATE TABLE "StockMovement" ("id" SERIAL PRIMARY KEY, "tenantId" TEXT NOT NULL, "branchId" INTEGER, "productId" INTEGER, "type" TEXT NOT NULL, "quantity" INTEGER NOT NULL, "refType" TEXT, "refId" INTEGER, "note" TEXT, "userId" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE "CashEntry" ("id" SERIAL PRIMARY KEY, "tenantId" TEXT NOT NULL, "source" TEXT NOT NULL, "refId" INTEGER, "amount" DOUBLE PRECISION NOT NULL, "note" TEXT, "userId" TEXT, "method" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+-- legacy data: an order that was fully returned with the OLD endpoint (paid 300 of 500)
+INSERT INTO "Supplier"("tenantId","name","balance") VALUES ('t1','Legacy Sup', 0);
+INSERT INTO "PurchaseOrder"("tenantId","orderNo","supplierId","total","paid","status") VALUES ('t1','PO-OLD',1,500,300,'مرتجعة');
+INSERT INTO "PurchaseOrderItem"("purchaseOrderId","name","cost","quantity") VALUES (1,'old item',50,10);

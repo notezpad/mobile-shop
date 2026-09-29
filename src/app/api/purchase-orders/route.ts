@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { round2 } from '@/lib/purchase-return'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,7 +80,14 @@ async function __POST(req: NextRequest) {
   if (!body || !Array.isArray(body.items) || body.items.length === 0) {
     return NextResponse.json({ error: 'السلة فارغة' }, { status: 400 })
   }
-  const paid = Number(body.paid ?? 0) || 0
+  // 🛡️ 2026-09-29: validate `paid`. Before, `Number(x) || 0` turned garbage into
+  // 0 (a silent full-credit purchase) and a NEGATIVE paid inflated the supplier
+  // debt above the invoice total while pushing money INTO the till.
+  const paidRaw = body.paid === undefined || body.paid === null || body.paid === '' ? 0 : Number(body.paid)
+  if (!Number.isFinite(paidRaw) || paidRaw < 0) {
+    return NextResponse.json({ error: 'المبلغ المدفوع غير صالح' }, { status: 400 })
+  }
+  const paid = round2(paidRaw)
   let supplierId: number | null = null
   if (body.supplierId) {
     supplierId = parseInt(body.supplierId, 10) || null
@@ -124,6 +132,12 @@ async function __POST(req: NextRequest) {
         { status: 400 }
       )
     }
+    if (!Number.isFinite(cost)) {
+      return NextResponse.json(
+        { error: `سعر تكلفة غير صالح للمنتج ${p.name}` },
+        { status: 400 }
+      )
+    }
     total += cost * qty
     itemsData.push({
       productId: p.id,
@@ -133,10 +147,22 @@ async function __POST(req: NextRequest) {
     })
   }
 
+  total = round2(total)
+
   // credit purchase requires a supplier
   if (paid < total && !supplierId) {
     return NextResponse.json(
       { error: 'الشراء بالآجل لازم يكون مرتبط بمورد' },
+      { status: 400 }
+    )
+  }
+  // 🛡️ 2026-09-29: paying MORE than the invoice is only meaningful when there is
+  // a supplier account to hold the surplus as a credit (negative balance =
+  // the supplier owes us). Without a supplier the extra money would just vanish
+  // from every report.
+  if (paid > total && !supplierId) {
+    return NextResponse.json(
+      { error: 'المدفوع أكبر من إجمالي الفاتورة، اختر مورداً ليُسجَّل الفرق كرصيد دائن لك عنده' },
       { status: 400 }
     )
   }
@@ -188,12 +214,18 @@ async function __POST(req: NextRequest) {
         },
       })
     }
-    // update supplier balance (what we owe = total - paid)
-    if (supplierId && paid < total) {
-      await tx.supplier.update({
-        where: { id: supplierId },
-        data: { balance: { increment: total - paid } },
-      })
+    // update supplier balance: what we owe changes by (total - paid).
+    // 🛡️ 2026-09-29: this used to run only when paid < total, so an overpayment
+    // (paid > total) never reached the supplier account. Now the sign is kept:
+    // positive = we owe him more, negative = we overpaid (he owes us).
+    if (supplierId) {
+      const diff = round2(total - paid)
+      if (diff !== 0) {
+        await tx.supplier.update({
+          where: { id: supplierId },
+          data: { balance: { increment: diff } },
+        })
+      }
     }
     // cash entry for the paid amount (money leaving the till)
     if (paid > 0) {

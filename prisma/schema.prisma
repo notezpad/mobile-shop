@@ -350,7 +350,11 @@ model SupplierPayment {
   createdAt  DateTime @default(now())
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  // 🛡️ 2026-09-29: was `onDelete: Cascade` — deleting a supplier silently wiped
+  // ALL of its payments (the debt history vanished). NoAction (not Restrict) so
+  // the DB blocks deleting a supplier that still has payments, while a whole-
+  // tenant delete still works (NO ACTION is checked at end of statement).
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: NoAction)
 
   @@index([tenantId])
   @@index([tenantId, supplierId])
@@ -366,13 +370,19 @@ model PurchaseOrder {
   userId     String?
   total      Float    @default(0)
   paid       Float    @default(0)
-  status     String   @default("مكتملة") // مكتملة | مرتجعة
+  // 🛡️ 2026-09-29: cash actually received back from the supplier through
+  // returns of this order (used to cap the default refund of later returns).
+  refunded   Float    @default(0)
+  status     String   @default("مكتملة") // مكتملة | مرتجعة جزئياً | مرتجعة
   createdAt  DateTime @default(now())
 
   tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   branch   Branch?             @relation(fields: [branchId], references: [id])
-  supplier Supplier?           @relation(fields: [supplierId], references: [id])
+  // 🛡️ 2026-09-29: NoAction — a supplier with orders can no longer be deleted
+  // (the default SetNull used to orphan the orders and erase the debt).
+  supplier Supplier?           @relation(fields: [supplierId], references: [id], onDelete: NoAction)
   items    PurchaseOrderItem[]
+  returns  PurchaseReturn[]
 
   @@index([tenantId])
   @@index([tenantId, createdAt])
@@ -389,12 +399,55 @@ model PurchaseOrderItem {
   name            String
   cost            Float
   quantity        Int
+  // 🛡️ 2026-09-29: how many pieces of THIS line were already returned to the
+  // supplier. Invariant: 0 <= returnedQty <= quantity (enforced atomically in
+  // src/lib/purchase-return.ts).
+  returnedQty     Int    @default(0)
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   product       Product?      @relation(fields: [productId], references: [id])
 
   @@index([purchaseOrderId])
   @@index([productId])
+}
+
+// 🛡️ 2026-09-29: a (partial or full) return of goods to the supplier.
+//   total  = value of the goods returned (reduces what we owe the supplier)
+//   refund = money the supplier actually handed back (cash enters the till)
+// Net effect on Supplier.balance = -(total - refund).
+model PurchaseReturn {
+  id              Int      @id @default(autoincrement())
+  tenantId        String
+  branchId        Int?
+  purchaseOrderId Int
+  supplierId      Int?
+  total           Float    @default(0)
+  refund          Float    @default(0)
+  refundMethod    String?
+  note            String?
+  userId          String?
+  createdAt       DateTime @default(now())
+
+  purchaseOrder PurchaseOrder       @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  items         PurchaseReturnItem[]
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@index([purchaseOrderId])
+}
+
+model PurchaseReturnItem {
+  id                  Int    @id @default(autoincrement())
+  purchaseReturnId    Int
+  purchaseOrderItemId Int?
+  productId           Int?
+  name                String
+  cost                Float
+  quantity            Int
+
+  purchaseReturn PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseReturnId])
 }
 
 model Sale {

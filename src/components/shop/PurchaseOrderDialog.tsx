@@ -202,8 +202,16 @@ export function PurchaseOrderDialog({
       return
     }
     const paid = paidFull ? total : paidAmount
+    if (!Number.isFinite(paid) || paid < 0) {
+      toast.error('المبلغ المدفوع غير صالح')
+      return
+    }
     if (paid < total && supplierId === 'none') {
       toast.error('الشراء بالآجل لازم يكون مرتبط بمورد')
+      return
+    }
+    if (paid > total && supplierId === 'none') {
+      toast.error('المدفوع أكبر من إجمالي الفاتورة، اختر مورداً ليُسجَّل الفرق كرصيد دائن لك عنده')
       return
     }
     setSubmitting(true)

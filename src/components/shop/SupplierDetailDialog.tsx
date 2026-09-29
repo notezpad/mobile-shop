@@ -5,6 +5,7 @@ import {
   Loader2,
   Plus,
   Trash2,
+  RotateCcw,
   Receipt,
   Wallet,
   TrendingDown,
@@ -52,6 +53,7 @@ import { formatCurrency, formatDate } from '@/lib/format'
 import { DateTimeCell } from './DateTimeCell'
 import { SupplierPaymentDialog } from './SupplierPaymentDialog'
 import { PurchaseOrderDialog } from './PurchaseOrderDialog'
+import { PurchaseReturnDialog } from './PurchaseReturnDialog'
 
 const METHOD_LABELS: Record<string, string> = {
   cash: 'كاش',
@@ -80,12 +82,14 @@ interface OrderItem {
   name: string
   cost: number
   quantity: number
+  returnedQty?: number
 }
 interface PurchaseOrder {
   id: number
   orderNo: string | null
   total: number
   paid: number
+  refunded?: number
   status: string
   createdAt: string
   items: OrderItem[]
@@ -180,6 +184,7 @@ export function SupplierDetailDialog({
   const [newOrderOpen, setNewOrderOpen] = React.useState(false)
   const [deletePaymentId, setDeletePaymentId] = React.useState<number | null>(null)
   const [deleting, setDeleting] = React.useState(false)
+  const [returnOrderId, setReturnOrderId] = React.useState<number | null>(null)
 
   const load = React.useCallback(async () => {
     if (!supplierId) return
@@ -532,13 +537,14 @@ export function SupplierDetailDialog({
                             <TableHead className="w-28 text-center">الإجمالي</TableHead>
                             <TableHead className="w-28 text-center">المدفوع</TableHead>
                             <TableHead className="w-24 text-center">الحالة</TableHead>
+                            <TableHead className="w-16 text-center">مرتجع</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {detail.purchaseOrders.length === 0 ? (
                             <TableRow>
                               <TableCell
-                                colSpan={6}
+                                colSpan={7}
                                 className="py-8 text-center text-muted-foreground"
                               >
                                 لا توجد أوامر شراء
@@ -573,6 +579,19 @@ export function SupplierDetailDialog({
                                   >
                                     {o.status}
                                   </Badge>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {o.status !== 'مرتجعة' && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="size-8 text-destructive hover:text-destructive"
+                                      onClick={() => setReturnOrderId(o.id)}
+                                      title="مرتجع للمورد"
+                                    >
+                                      <RotateCcw className="size-4" />
+                                    </Button>
+                                  )}
                                 </TableCell>
                               </TableRow>
                             ))
@@ -617,6 +636,17 @@ export function SupplierDetailDialog({
                             <p className="font-semibold tabular-nums text-success-subtle-foreground">{formatCurrency(o.paid)}</p>
                           </div>
                         </div>
+                        {o.status !== 'مرتجعة' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-2 w-full text-destructive hover:text-destructive"
+                            onClick={() => setReturnOrderId(o.id)}
+                          >
+                            <RotateCcw className="size-3.5" />
+                            مرتجع للمورد
+                          </Button>
+                        )}
                       </div>
                     ))
                   )}
@@ -755,6 +785,19 @@ export function SupplierDetailDialog({
           supplierName={detail?.name ?? initialName ?? ''}
           currentBalance={detail?.balance ?? 0}
           onSaved={() => {
+            load()
+          }}
+        />
+
+        {/* Purchase return (partial / full) nested */}
+        <PurchaseReturnDialog
+          open={returnOrderId !== null}
+          onOpenChange={(o) => {
+            if (!o) setReturnOrderId(null)
+          }}
+          order={detail?.purchaseOrders.find((o) => o.id === returnOrderId) ?? null}
+          hasSupplier={true}
+          onDone={() => {
             load()
           }}
         />

@@ -63,6 +63,7 @@ async function __GET(
       orderNo: o.orderNo,
       total: o.total,
       paid: o.paid,
+      refunded: o.refunded,
       status: o.status,
       createdAt: o.createdAt.toISOString(),
       items: o.items.map((it) => ({
@@ -70,6 +71,7 @@ async function __GET(
         name: it.name,
         cost: it.cost,
         quantity: it.quantity,
+        returnedQty: it.returnedQty,
       })),
     })),
     payments: supplier.payments.map((p) => ({
@@ -149,12 +151,60 @@ async function __DELETE(
   if (isNaN(sid)) {
     return NextResponse.json({ error: 'معرف غير صالح' }, { status: 400 })
   }
-  const existing = await db.supplier.findUnique({ where: { id: sid } })
-  if (!existing || existing.tenantId !== session.tenantId) {
-    return NextResponse.json({ error: 'المورد غير موجود' }, { status: 404 })
-  }
+  // 🛡️ 2026-09-29: deleting a supplier used to be unconditional. The old FK
+  // config then (a) CASCADE-deleted every supplier payment and (b) orphaned every
+  // purchase order (supplierId → NULL) — the debt history simply disappeared and
+  // no check looked at the balance. Now a supplier can be deleted only if it has
+  // NO history and a zero balance. The check runs inside a transaction that
+  // locks the supplier row (a concurrent purchase/payment takes a conflicting
+  // lock via its FK), and the DB foreign keys are NO ACTION as a last line of
+  // defence (see migration 20260929_purchase_returns_and_supplier_safety).
+  type Blocked = { blocked: string }
   try {
-    await db.supplier.delete({ where: { id: sid } })
+    const result = await db.$transaction(async (tx): Promise<Blocked | null> => {
+      const rows = await tx.$queryRaw<{ id: number }[]>`
+        SELECT "id" FROM "Supplier"
+         WHERE "id" = ${sid} AND "tenantId" = ${session.tenantId}
+           FOR UPDATE`
+      if (rows.length === 0) return { blocked: '__404__' }
+
+      const supplier = await tx.supplier.findUnique({ where: { id: sid } })
+      if (!supplier) return { blocked: '__404__' }
+
+      if (Math.abs(supplier.balance) > 0.005) {
+        const amount = Math.abs(supplier.balance).toFixed(2)
+        return {
+          blocked:
+            supplier.balance > 0
+              ? `لا يمكن حذف المورد: عليك له رصيد ${amount}. سدّد الحساب أولاً.`
+              : `لا يمكن حذف المورد: له عندك رصيد دائن ${amount}. سوِّ الحساب أولاً.`,
+        }
+      }
+
+      // sequential on purpose: one connection per interactive transaction
+      const orders = await tx.purchaseOrder.count({
+        where: { supplierId: sid, tenantId: session.tenantId },
+      })
+      const payments = await tx.supplierPayment.count({
+        where: { supplierId: sid, tenantId: session.tenantId },
+      })
+      if (orders > 0 || payments > 0) {
+        return {
+          blocked:
+            'لا يمكن حذف المورد لأن له فواتير أو دفعات مسجلة، حذفه سيمسح سجل الحسابات. احتفظ به (رصيده صفر ولن يؤثر على شيء).',
+        }
+      }
+
+      await tx.supplier.delete({ where: { id: sid } })
+      return null
+    })
+
+    if (result?.blocked === '__404__') {
+      return NextResponse.json({ error: 'المورد غير موجود' }, { status: 404 })
+    }
+    if (result) {
+      return NextResponse.json({ error: result.blocked }, { status: 409 })
+    }
     return NextResponse.json({ ok: true })
   } catch {
     return NextResponse.json({ error: 'تعذّر حذف المورد' }, { status: 400 })

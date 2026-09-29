@@ -21,6 +21,7 @@ import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PurchaseOrderDialog } from './PurchaseOrderDialog'
+import { PurchaseReturnDialog } from './PurchaseReturnDialog'
 import { DateTimeCell } from './DateTimeCell'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
@@ -31,12 +32,14 @@ interface OrderItem {
   name: string
   cost: number
   quantity: number
+  returnedQty?: number
 }
 interface PurchaseOrder {
   id: number
   orderNo: string | null
   total: number
   paid: number
+  refunded?: number
   status: string
   createdAt: string
   userName?: string | null
@@ -108,17 +111,7 @@ export function PurchaseOrdersView() {
     ? orders.filter((o) => (o.orderNo ?? String(o.id)).includes(query.trim()))
     : orders
 
-  const doReturn = async (id: number) => {
-    try {
-      await api(`/api/purchase-orders/${id}`, { method: 'DELETE' })
-      toast.success('تم ارتجاع أمر الشراء')
-      load(from, to)
-    } catch (e: any) {
-      toast.error(e?.message || 'فشل الإرجاع')
-    } finally {
-      setReturnId(null)
-    }
-  }
+  const returnOrder = returnId !== null ? orders.find((o) => o.id === returnId) ?? null : null
 
   const exportExcel = () => {
     if (filtered.length === 0) return
@@ -450,30 +443,15 @@ export function PurchaseOrdersView() {
         </CardContent>
       </Card>
 
-      {returnId !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <Card className="w-full max-w-sm">
-            <CardContent className="space-y-4 p-6 text-center">
-              <h3 className="text-lg font-bold">مرتجع أمر الشراء</h3>
-              <p className="text-sm text-muted-foreground">
-                سيتم سحب الكمية من المخزون وعكس القيود المالية المرتبطة. هل تريد
-                المتابعة؟
-              </p>
-              <div className="flex justify-center gap-2">
-                <Button variant="outline" onClick={() => setReturnId(null)}>
-                  إلغاء
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => returnId && doReturn(returnId)}
-                >
-                  تأكيد الإرجاع
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <PurchaseReturnDialog
+        open={returnId !== null}
+        onOpenChange={(o) => {
+          if (!o) setReturnId(null)
+        }}
+        order={returnOrder}
+        hasSupplier={!!returnOrder?.supplier}
+        onDone={() => load(from, to)}
+      />
 
       <PurchaseOrderDialog
         open={newOpen}

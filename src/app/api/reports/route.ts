@@ -83,7 +83,7 @@ async function __GET(req: NextRequest) {
       ? db.expense.aggregate({ where: { tenantId: tid, ...branchWhere, createdAt: prevDateRange }, _sum: { amount: true } })
       : Promise.resolve({ _sum: { amount: 0 } }),
     db.expense.groupBy({ by: ['category'], where: { tenantId: tid, ...branchWhere, createdAt: dateRange }, _sum: { amount: true } }),
-    db.purchaseOrder.aggregate({ where: { tenantId: tid, ...branchWhere, createdAt: dateRange, status: 'مكتملة' }, _sum: { total: true }, _count: { _all: true } }),
+    db.purchaseOrder.aggregate({ where: { tenantId: tid, ...branchWhere, createdAt: dateRange, status: { in: ['مكتملة', 'مرتجعة جزئياً'] } }, _sum: { total: true }, _count: { _all: true } }),
     db.customer.aggregate({ where: { tenantId: tid, balance: { gt: 0 } }, _sum: { balance: true } }),
     db.supplier.aggregate({ where: { tenantId: tid, balance: { gt: 0 } }, _sum: { balance: true } }),
     db.branch.findMany({ where: { tenantId: tid }, orderBy: [{ isMain: 'desc' }, { id: 'asc' }], select: { id: true, name: true } }),
@@ -136,7 +136,17 @@ async function __GET(req: NextRequest) {
   const stockValueCost = n(stockRows[0]?.vcost)
   const stockValuePrice = n(stockRows[0]?.vprice)
   const lowStockCount = n(stockRows[0]?.low)
-  const totalPurchases = n(purchAgg._sum.total)
+  // 🛡️ 2026-09-29: a partially-returned order stays in the purchases total, net
+  // of the value already sent back to the supplier (fully returned orders are
+  // excluded entirely, as before).
+  const partialReturnsAgg = await db.purchaseReturn.aggregate({
+    where: {
+      tenantId: tid,
+      purchaseOrder: { ...branchWhere, createdAt: dateRange, status: 'مرتجعة جزئياً' },
+    },
+    _sum: { total: true },
+  })
+  const totalPurchases = Math.max(0, n(purchAgg._sum.total) - n(partialReturnsAgg._sum.total))
   const purchasesCount = purchAgg._count._all
   const customersReceivable = n(custAgg._sum.balance)
   const suppliersPayable = n(suppAgg._sum.balance)
