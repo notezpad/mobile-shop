@@ -38,7 +38,7 @@ export function ComparisonSection({ onOpenAuth }: ComparisonSectionProps) {
       <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-14">
           <motion.span
-            initial={{ opacity: 0, y: 10 }}
+            initial={false}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.4 }}
@@ -47,7 +47,7 @@ export function ComparisonSection({ onOpenAuth }: ComparisonSectionProps) {
             ليه نظام المحل
           </motion.span>
           <motion.h2
-            initial={{ opacity: 0, y: 14 }}
+            initial={false}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
@@ -57,7 +57,7 @@ export function ComparisonSection({ onOpenAuth }: ComparisonSectionProps) {
             الدفاتر والإكسل مقابل نظام المحل
           </motion.h2>
           <motion.p
-            initial={{ opacity: 0, y: 14 }}
+            initial={false}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.1 }}
@@ -70,7 +70,7 @@ export function ComparisonSection({ onOpenAuth }: ComparisonSectionProps) {
         <AnimatePresence mode="wait">
           <motion.div
             key={vertical}
-            initial={{ opacity: 0 }}
+            initial={false}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
@@ -127,7 +127,7 @@ export function ComparisonSection({ onOpenAuth }: ComparisonSectionProps) {
         </AnimatePresence>
 
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={false}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-60px' }}
           transition={{ duration: 0.5 }}

@@ -55,20 +55,10 @@ export const metadata: Metadata = {
     },
   },
 
-  // ── Canonical + Alternates ──
-  alternates: {
-    canonical: "/",
-    languages: {
-      "ar": "/",
-      "x-default": "/",
-    },
-  },
-
   // ── Open Graph (Facebook, LinkedIn, etc.) ──
   openGraph: {
     type: "website",
-    locale: "ar_AR",
-    alternateLocale: ["ar_SA", "ar_AE", "ar_EG", "ar_QA", "ar_KW", "ar_OM", "ar_BH", "ar_JO", "ar_LB"],
+    locale: "ar_EG",
     url: SITE_URL,
     siteName: SITE_NAME,
     title: SITE_TITLE,
@@ -154,8 +144,6 @@ export const viewport: Viewport = {
   themeColor: "#10b981",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
   // 🛡️ لما الكيبورد يفتح على الجوال، الـ layout viewport يصغر معاه (بدل ما الكيبورد
   // يغطي الجزء السفلي) — فالدايلوجات و Bottom Sheets تفضل ظاهرة فوق الكيبورد.
@@ -199,36 +187,6 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
       <head>
-        {/* PWA Manifest */}
-        <link rel="manifest" href="/manifest.json" />
-
-        {/* 🛡️ Favicons — all formats for all devices */}
-        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-        <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-        <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png" />
-        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
-        <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
-        <link rel="shortcut icon" href="/favicon.ico" />
-
-        {/* Apple PWA */}
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="نظام المحل" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-
-        {/* Windows Tiles */}
-        <meta name="msapplication-TileColor" content="#10b981" />
-        <meta name="msapplication-TileImage" content="/icon-512.png" />
-        <meta name="msapplication-tap-highlight" content="no" />
-        <meta name="application-name" content="نظام المحل" />
-
-        {/* Theme color for browsers */}
-        <meta name="theme-color" content="#10b981" />
-
         {/* 🛡️ SEO: JSON-LD Structured Data */}
         <script
           type="application/ld+json"

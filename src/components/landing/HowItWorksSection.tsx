@@ -29,7 +29,7 @@ export function HowItWorksSection() {
         {/* Header */}
         <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-16">
           <motion.span
-            initial={{ opacity: 0, y: 10 }}
+            initial={false}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.4 }}
@@ -38,7 +38,7 @@ export function HowItWorksSection() {
             البداية
           </motion.span>
           <motion.h2
-            initial={{ opacity: 0, y: 14 }}
+            initial={false}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
@@ -48,7 +48,7 @@ export function HowItWorksSection() {
             ابدأ في 3 خطوات بسيطة
           </motion.h2>
           <motion.p
-            initial={{ opacity: 0, y: 14 }}
+            initial={false}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.1 }}
@@ -65,7 +65,7 @@ export function HowItWorksSection() {
             return (
               <motion.div
                 key={s.title}
-                initial={{ opacity: 0, y: 22 }}
+                initial={false}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-60px' }}
                 transition={{ duration: 0.5, delay: i * 0.12 }}

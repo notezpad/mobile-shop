@@ -18,7 +18,7 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
 
       <div className="relative mx-auto max-w-3xl px-4 text-center sm:px-6 lg:px-8">
         <motion.h2
-          initial={{ opacity: 0, y: 16 }}
+          initial={false}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-80px' }}
           transition={{ duration: 0.5 }}
@@ -29,7 +29,7 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
         </motion.h2>
 
         <motion.p
-          initial={{ opacity: 0, y: 16 }}
+          initial={false}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-80px' }}
           transition={{ duration: 0.5, delay: 0.08 }}
@@ -39,7 +39,7 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
         </motion.p>
 
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={false}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-80px' }}
           transition={{ duration: 0.5, delay: 0.16 }}
@@ -56,7 +56,7 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={false}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-80px' }}
           transition={{ duration: 0.5, delay: 0.24 }}

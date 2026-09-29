@@ -85,7 +85,7 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
         {/* Header */}
         <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">
           <motion.span
-            initial={{ opacity: 0, y: 10 }}
+            initial={false}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.4 }}
@@ -94,7 +94,7 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
             الأسعار · {meta.label}
           </motion.span>
           <motion.h2
-            initial={{ opacity: 0, y: 14 }}
+            initial={false}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
@@ -104,7 +104,7 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
             باقات تناسب كل حجم محل
           </motion.h2>
           <motion.p
-            initial={{ opacity: 0, y: 14 }}
+            initial={false}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.1 }}
@@ -150,7 +150,7 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
         <AnimatePresence mode="wait">
           <motion.div
             key={vertical}
-            initial={{ opacity: 0 }}
+            initial={false}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
@@ -203,7 +203,7 @@ function PlanCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 24 }}
+      initial={false}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-60px' }}
       transition={{ duration: 0.45, delay: index * 0.08 }}

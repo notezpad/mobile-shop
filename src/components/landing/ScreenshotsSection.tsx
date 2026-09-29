@@ -62,7 +62,7 @@ export function ScreenshotsSection() {
         {/* Header */}
         <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-16">
           <motion.span
-            initial={{ opacity: 0, y: 10 }}
+            initial={false}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.4 }}
@@ -71,7 +71,7 @@ export function ScreenshotsSection() {
             لمحة
           </motion.span>
           <motion.h2
-            initial={{ opacity: 0, y: 14 }}
+            initial={false}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
@@ -107,7 +107,7 @@ export function ScreenshotsSection() {
               <AnimatePresence mode="wait">
                 <motion.div
                   key={t.key}
-                  initial={{ opacity: 0, y: 12 }}
+                  initial={false}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -12 }}
                   transition={{ duration: 0.3 }}
@@ -119,7 +119,7 @@ export function ScreenshotsSection() {
                     {HIGHLIGHTS[t.key].map((h, i) => (
                       <motion.div
                         key={h}
-                        initial={{ opacity: 0, y: 10 }}
+                        initial={false}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.3, delay: i * 0.08 }}
                         className="glass-card flex items-start gap-2 rounded-lg p-3 text-sm"

@@ -80,9 +80,8 @@ export function LandingPage({ onAuthed: _onAuthed }: LandingPageProps) {
                 return (
                   <motion.div
                     key={i}
-                    initial={{ opacity: 0, y: 12 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: '-40px' }}
+                    initial={false}
+                    animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, delay: i * 0.06 }}
                     className="flex items-center justify-center gap-3 py-6 sm:py-8"
                   >

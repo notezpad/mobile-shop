@@ -65,7 +65,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
             <AnimatePresence mode="wait">
               <motion.div
                 key={vertical + '-title'}
-                initial={{ opacity: 0, y: 10 }}
+                initial={false}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.35 }}
@@ -86,7 +86,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
             <AnimatePresence mode="wait">
               <motion.ul
                 key={vertical + '-bullets'}
-                initial={{ opacity: 0, y: 10 }}
+                initial={false}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.35, delay: 0.05 }}
@@ -153,7 +153,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
 
           {/* Left column (visual) — glass dashboard mockup, swaps per vertical */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            initial={false}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
             className="relative"
@@ -161,7 +161,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
             <AnimatePresence mode="wait">
               <motion.div
                 key={vertical}
-                initial={{ opacity: 0, y: 14 }}
+                initial={false}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.4 }}

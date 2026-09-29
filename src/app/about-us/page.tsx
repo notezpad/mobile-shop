@@ -164,7 +164,7 @@ export default function AboutPage() {
         {/* ════════════ Hero ════════════ */}
         <section className="ab-hero">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={false}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
             className="ab-hero-inner"
