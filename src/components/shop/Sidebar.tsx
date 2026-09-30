@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, ShoppingCart, Package, Receipt, Wrench, Users, Truck,
   PackagePlus, Wallet, ReceiptText, Banknote, Warehouse, Building2,
-  BarChart3, Settings as SettingsIcon, UserCog, LogOut, Store,
+  BarChart3, Settings as SettingsIcon, UserCog, LogOut, Store, Plus,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -32,6 +32,18 @@ interface NavItem {
   module: ViewKey
 }
 
+/**
+ * 🛡️ 2026-09-30: صفحات المخزون بقت صفحات مستقلة بدل التبويبات —
+ * عنصر "المخزون" في السايدبار بقى مجموعة قابلة للتوسيع بعلامة (+)
+ * يخرج منها: المخزون / الحركات / التحويلات / الجرد، وكل صفحة بلون هويتها.
+ */
+const INVENTORY_CHILDREN: { path: string; label: string; color: string }[] = [
+  { path: '/inventory', label: 'حالة المخزون', color: '#10b981' },
+  { path: '/inventory/movements', label: 'الحركات', color: '#0ea5e9' },
+  { path: '/inventory/transfers', label: 'التحويلات', color: '#f59e0b' },
+  { path: '/inventory/stocktake', label: 'الجرد', color: '#8b5cf6' },
+]
+
 const MAIN_GROUP: NavItem[] = [
   { path: '/dashboard', label: 'لوحة المعلومات', icon: LayoutDashboard, module: 'dashboard' },
   { path: '/pos', label: 'نقطة البيع', icon: ShoppingCart, module: 'pos' },
@@ -41,7 +53,6 @@ const MAIN_GROUP: NavItem[] = [
   { path: '/customers', label: 'العملاء', icon: Users, module: 'customers' },
   { path: '/suppliers', label: 'الموردين', icon: Truck, module: 'suppliers' },
   { path: '/purchases', label: 'المشتريات', icon: PackagePlus, module: 'purchases' },
-  { path: '/inventory', label: 'المخزون', icon: Warehouse, module: 'inventory' },
 ]
 
 const MANAGE_GROUP: NavItem[] = [
@@ -107,6 +118,178 @@ function NavButton({
   }
 
   return linkEl
+}
+
+/* ───────────── مجموعة المخزون القابلة للتوسيع (+) ───────────── */
+
+function InventoryGroup({
+  collapsed,
+  pathname,
+  onNavigate,
+}: {
+  collapsed?: boolean
+  pathname: string
+  onNavigate?: () => void
+}) {
+  const inInventory = pathname.startsWith('/inventory')
+  // بيتفتح تلقائياً أول ما تدخل أي صفحة من صفحات المخزون، وتفضل مفتوحة
+  // على ذوقك لحد ما تقفلها بنفسك.
+  const [open, setOpen] = React.useState(inInventory)
+  React.useEffect(() => {
+    if (inInventory) setOpen(true)
+  }, [inInventory])
+
+  const parentActive = pathname === '/inventory'
+
+  /* ── الوضع المطوي (شريط الأيقونات): لينك عادي + Tooltip ── */
+  if (collapsed) {
+    const linkEl = (
+      <Link
+        href="/inventory"
+        className={cn(
+          'group relative flex size-11 items-center justify-center rounded-lg transition-all duration-150',
+          inInventory
+            ? 'bg-primary-subtle text-primary-subtle-foreground'
+            : 'text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+        )}
+      >
+        {inInventory && (
+          <span
+            aria-hidden
+            className="absolute -right-2 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-l-full bg-primary shadow-[0_0_6px_0px] shadow-primary/60"
+          />
+        )}
+        <Warehouse
+          className={cn(
+            'size-[18px] shrink-0',
+            inInventory ? 'text-primary' : 'text-muted-foreground/70 group-hover:text-sidebar-accent-foreground',
+          )}
+        />
+      </Link>
+    )
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{linkEl}</TooltipTrigger>
+        <TooltipContent side="left" sideOffset={8}>
+          المخزون
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  return (
+    <div>
+      {/* الصف الرئيسي: كليك = الدخول لصفحة المخزون · علامة (+) = فتح/قفل الصفحات */}
+      <div
+        className={cn(
+          'group relative flex w-full items-center rounded-lg transition-all duration-150',
+          parentActive
+            ? 'bg-primary-subtle text-primary-subtle-foreground'
+            : inInventory
+              ? 'bg-sidebar-accent/60 text-sidebar-accent-foreground'
+              : 'text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+        )}
+      >
+        {(parentActive || inInventory) && (
+          <span
+            aria-hidden
+            className="absolute -right-2 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-l-full bg-primary shadow-[0_0_6px_0px] shadow-primary/60"
+          />
+        )}
+        <Link
+          href="/inventory"
+          onClick={onNavigate}
+          className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-right"
+        >
+          <Warehouse
+            className={cn(
+              'size-[18px] shrink-0 transition-colors',
+              parentActive || inInventory
+                ? 'text-primary'
+                : 'text-muted-foreground/70 group-hover:text-sidebar-accent-foreground',
+            )}
+          />
+          <span className="truncate text-sm font-medium">المخزون</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          aria-label={open ? 'إخفاء صفحات المخزون' : 'إظهار صفحات المخزون'}
+          className={cn(
+            'me-2 flex size-6 shrink-0 items-center justify-center rounded-md border transition-all duration-base',
+            'hover:bg-sidebar-accent active:scale-90',
+            inInventory || open
+              ? 'border-primary/25 bg-primary/10 text-primary'
+              : 'border-sidebar-border text-muted-foreground',
+          )}
+        >
+          <Plus
+            className={cn(
+              'size-3.5 transition-transform duration-base ease-out',
+              open && 'rotate-45',
+            )}
+          />
+        </button>
+      </div>
+
+      {/* الصفحات الفرعية — بتنفتح بحركة سلسة، وكل واحدة بلون هويتها */}
+      <div
+        className={cn(
+          'grid transition-all duration-base ease-out',
+          open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
+        )}
+      >
+        <div className="overflow-hidden">
+          <div className="relative ms-[26px] space-y-0.5 border-s border-sidebar-border/70 py-1.5 ps-2.5">
+            {INVENTORY_CHILDREN.map((child) => {
+              const active = pathname === child.path
+              return (
+                <Link
+                  key={child.path}
+                  href={child.path}
+                  onClick={onNavigate}
+                  aria-current={active ? 'page' : undefined}
+                  style={
+                    active
+                      ? ({
+                          backgroundColor: `${child.color}1a`,
+                          color: child.color,
+                          ['--dot' as string]: child.color,
+                        } as React.CSSProperties)
+                      : ({ ['--dot' as string]: child.color } as React.CSSProperties)
+                  }
+                  className={cn(
+                    'relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-[13px] font-semibold transition-colors',
+                    active
+                      ? 'font-bold'
+                      : 'text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'size-2 shrink-0 rounded-full transition-transform',
+                      active ? 'scale-110' : 'scale-90 opacity-60',
+                    )}
+                    style={{ backgroundColor: 'var(--dot)' }}
+                  />
+                  <span className="truncate">{child.label}</span>
+                  {active && (
+                    <span
+                      aria-hidden
+                      className="absolute -start-[11px] top-1/2 size-1.5 -translate-y-1/2 rounded-full ring-4 ring-sidebar"
+                      style={{ backgroundColor: 'var(--dot)' }}
+                    />
+                  )}
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function ShopAvatar({ logoPath }: { logoPath?: string | null }) {
@@ -222,6 +405,7 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
 
   const mainItems = MAIN_GROUP.filter((it) => hasModule(it.module))
   const manageItems = MANAGE_GROUP.filter((it) => hasModule(it.module))
+  const showInventory = hasModule('inventory')
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -242,6 +426,9 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
                 <NavButton item={it} active={pathname === it.path} collapsed={collapsed} />
               </div>
             ))}
+            {showInventory && (
+              <InventoryGroup collapsed={collapsed} pathname={pathname} onNavigate={onNavigate} />
+            )}
           </div>
 
           {!collapsed && (

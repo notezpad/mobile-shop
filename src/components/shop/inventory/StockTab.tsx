@@ -299,7 +299,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate font-medium leading-tight">{p.name}</p>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        <p className="mt-0.5 text-xs text-muted-foreground">
                           {branchName(p.branchId) ?? 'بدون فرع'}
                         </p>
                       </div>
@@ -346,7 +346,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                     {/* شبكة البيانات: كمية/حد أدنى/تكلفة/سعر */}
                     <div className="mt-3 grid grid-cols-4 gap-1 border-t border-border/60 pt-2 text-center">
                       <div>
-                        <p className="text-[10px] text-muted-foreground">الكمية</p>
+                        <p className="text-xs text-muted-foreground">الكمية</p>
                         {out ? (
                           <Badge variant="destructive">نفد</Badge>
                         ) : low ? (
@@ -356,15 +356,15 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                         )}
                       </div>
                       <div>
-                        <p className="text-[10px] text-muted-foreground">الحد الأدنى</p>
+                        <p className="text-xs text-muted-foreground">الحد الأدنى</p>
                         <p className="text-xs tabular-nums text-muted-foreground">{p.minQuantity}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-muted-foreground">التكلفة</p>
+                        <p className="text-xs text-muted-foreground">التكلفة</p>
                         <p className="text-xs tabular-nums text-muted-foreground">{formatCurrency(p.cost)}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-muted-foreground">السعر</p>
+                        <p className="text-xs text-muted-foreground">السعر</p>
                         <p className="text-xs font-semibold tabular-nums">{formatCurrency(p.price)}</p>
                       </div>
                     </div>
@@ -518,7 +518,7 @@ function AdjustDialog({
               className="text-lg font-bold"
             />
             {!isIn && product.quantity > 0 && (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 المتاح: {product.quantity}
                 {lossPreview > 0 && (
                   <> — قيمة الخسارة المتوقعة: <b className="text-destructive">{formatCurrency(lossPreview)}</b></>
@@ -690,7 +690,7 @@ function ExchangeDialog({
         <div key={l.productId} className="flex items-center gap-2 rounded-md border bg-muted/30 p-2">
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{l.name}</p>
-            <p className="text-[11px] text-muted-foreground">تكلفة الوحدة: {formatCurrency(l.cost)}</p>
+            <p className="text-xs text-muted-foreground">تكلفة الوحدة: {formatCurrency(l.cost)}</p>
           </div>
           <Input
             type="number"

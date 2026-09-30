@@ -1,16 +1,146 @@
 'use client'
 
 /**
- * مكوّنات بصرية مشتركة لصفحة المخزون وتبويباتها.
- * نفس لغة تصميم صفحة المصروفات: StatTile ملوّنة، شرائح فلترة دائرية،
- * قوائم مجمّعة باليوم، وحالات فارغة موحّدة.
+ * أدوات مشتركة لصفحات المخزون.
+ * كل صفحة لها هوية بصرية مستقلة (انظر ACCENT)، وهنا فقط الأدوات العامة:
+ * تنسيق، تجميع بالأيام، عدّاد كمية، مفتاح تبديل، حالة فارغة، كروت التنقّل
+ * بين الصفحات، وحركات CSS.
  */
 
 import * as React from 'react'
-import type { LucideIcon } from 'lucide-react'
+import Link from 'next/link'
+import {
+  Minus,
+  Plus,
+  Warehouse,
+  ArrowUpDown,
+  Truck,
+  ScanLine,
+  type LucideIcon,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-/* ───────────── أدوات تنسيق ───────────── */
+/* ───────────── ألوان هوية كل جزء ───────────── */
+
+export const ACCENT = {
+  stock: '#10b981', // مستودع — أخضر
+  movements: '#0ea5e9', // دفتر حركة — سماوي
+  transfers: '#f59e0b', // لوجستيات — كهرماني
+  stocktake: '#8b5cf6', // جرد — بنفسجي
+  up: '#10b981',
+  down: '#f43f5e',
+} as const
+
+/* ───────────── تسميات مشتركة (تصدير Excel / شارات) ───────────── */
+
+export const MOVEMENT_TYPE_LABELS: Record<string, string> = {
+  in: 'وارد',
+  out: 'صادر',
+  adjust: 'تعديل يدوي',
+  damage: 'هالك',
+  sale: 'بيع',
+  return: 'مرتجع',
+  transfer_in: 'تحويل وارد',
+  transfer_out: 'تحويل صادر',
+  stocktake: 'تسوية جرد',
+}
+
+export const TRANSFER_STATUS_LABELS: Record<string, string> = {
+  pending: 'معلّق',
+  completed: 'مكتمل',
+  cancelled: 'ملغي',
+}
+
+export const STOCKTAKE_STATUS_LABELS: Record<string, string> = {
+  draft: 'مسودة',
+  committed: 'معتمد',
+}
+
+/* ───────────── صفحات المخزون + كروت التنقّل بينها ───────────── */
+
+export type InventoryPageKey = 'stock' | 'movements' | 'transfers' | 'stocktake'
+
+export const INVENTORY_PAGES: {
+  key: InventoryPageKey
+  href: string
+  label: string
+  desc: string
+  icon: LucideIcon
+  color: string
+}[] = [
+  { key: 'stock', href: '/inventory', label: 'المخزون', desc: 'الأصناف والكميات', icon: Warehouse, color: ACCENT.stock },
+  { key: 'movements', href: '/inventory/movements', label: 'الحركات', desc: 'دفتر الوارد والصادر', icon: ArrowUpDown, color: ACCENT.movements },
+  { key: 'transfers', href: '/inventory/transfers', label: 'التحويلات', desc: 'شحنات بين الفروع', icon: Truck, color: ACCENT.transfers },
+  { key: 'stocktake', href: '/inventory/stocktake', label: 'الجرد', desc: 'عدّ وتسوية', icon: ScanLine, color: ACCENT.stocktake },
+]
+
+/**
+ * كروت التنقّل بين صفحات المخزون — نفس شكل كروت التبويبات القديمة اللي
+ * بانت للمستخدم، لكن كل كارت بقى Link لصفحة مستقلة، والكارت النشط
+ * بياخد حدود وخلفية بلون هوية صفحته.
+ */
+export function InventoryCrossNav({
+  active,
+  counts,
+}: {
+  active: InventoryPageKey
+  counts: Partial<Record<InventoryPageKey, { text?: string; alert?: boolean }>>
+}) {
+  return (
+    <nav aria-label="صفحات المخزون" className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+      {INVENTORY_PAGES.map((p) => {
+        const isActive = p.key === active
+        const c = counts[p.key]
+        return (
+          <Link
+            key={p.key}
+            href={p.href}
+            aria-current={isActive ? 'page' : undefined}
+            style={{ ['--tab' as string]: p.color }}
+            className={cn(
+              'group relative flex flex-row items-center justify-start gap-3 overflow-hidden rounded-2xl border bg-card px-3.5 py-3 text-start shadow-xs',
+              'transition-all hover:-translate-y-0.5 hover:shadow-md',
+              isActive
+                ? 'border-[color:var(--tab)] bg-[color-mix(in_oklab,var(--tab)_9%,var(--card))] shadow-md dark:bg-[color-mix(in_oklab,var(--tab)_14%,var(--card))]'
+                : 'hover:border-[color-mix(in_oklab,var(--tab)_45%,var(--border))]',
+            )}
+          >
+            <span
+              className={cn(
+                'flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors',
+                isActive
+                  ? 'bg-[color:var(--tab)] text-white'
+                  : 'bg-[color-mix(in_oklab,var(--tab)_14%,transparent)] text-[color:var(--tab)]',
+              )}
+            >
+              <p.icon className="!size-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-extrabold leading-tight text-foreground">{p.label}</span>
+              <span
+                className={cn(
+                  'mt-0.5 flex items-center gap-1.5 text-xs font-medium',
+                  c?.alert ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground',
+                )}
+              >
+                {c?.alert && <span className="inv-blink size-1.5 rounded-full bg-amber-500" />}
+                {c?.text ?? p.desc}
+              </span>
+            </span>
+            <span
+              className={cn(
+                'absolute inset-x-0 bottom-0 h-[3px] origin-center bg-[color:var(--tab)] transition-transform duration-base',
+                isActive ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-50',
+              )}
+            />
+          </Link>
+        )
+      })}
+    </nav>
+  )
+}
+
+/* ───────────── تنسيق ───────────── */
 
 export const num = (n: number) =>
   n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
@@ -20,14 +150,12 @@ const pad = (n: number) => String(n).padStart(2, '0')
 export const toISODate = (d: Date) =>
   `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 
-/** مفتاح اليوم المحلي (YYYY-MM-DD) من تاريخ ISO */
 export function dayKeyOf(iso: string): string {
   const d = new Date(iso)
   if (isNaN(d.getTime())) return 'unknown'
   return toISODate(d)
 }
 
-/** عنوان اليوم: اليوم / أمس / تاريخ كامل */
 export function dayLabel(key: string): string {
   if (key === 'unknown') return 'بدون تاريخ'
   const today = new Date()
@@ -40,7 +168,6 @@ export function dayLabel(key: string): string {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
-    year: 'numeric',
   })
 }
 
@@ -63,7 +190,13 @@ export const fullDateLabel = (iso: string | null | undefined) => {
   })
 }
 
-/** تجميع عناصر مرتّبة حسب اليوم مع الحفاظ على الترتيب الأصلي */
+export const shortDateLabel = (iso: string | null | undefined) => {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' })
+}
+
 export function groupByDay<T>(items: T[], getIso: (item: T) => string) {
   const map = new Map<string, T[]>()
   for (const it of items) {
@@ -75,162 +208,152 @@ export function groupByDay<T>(items: T[], getIso: (item: T) => string) {
   return Array.from(map.entries()).map(([key, list]) => ({ key, items: list }))
 }
 
-export const countWord = (n: number, one: string, few: string) =>
-  n > 2 && n < 11 ? few : one
+/* ───────────── حركات CSS (مرة واحدة في الصفحة) ───────────── */
 
-/* ───────────── StatTile ───────────── */
+export function InventoryStyles() {
+  return (
+    <style>{`
+      @keyframes inv-dash { to { stroke-dashoffset: 12; } }
+      @keyframes inv-laser { 0% { left: 3%; } 50% { left: 97%; } 100% { left: 3%; } }
+      @keyframes inv-pop { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+      @keyframes inv-stamp { from { opacity: 0; transform: scale(1.7) rotate(-16deg); } to { opacity: .92; transform: scale(1) rotate(var(--r, -8deg)); } }
+      @keyframes inv-cell { from { opacity: 0; transform: scale(.55); } to { opacity: 1; transform: none; } }
+      @keyframes inv-blink { 50% { opacity: .25; } }
+      .inv-dash { stroke-dasharray: 6 6; animation: inv-dash 900ms linear infinite; }
+      .inv-laser { animation: inv-laser 2.6s ease-in-out infinite; }
+      .inv-pop { animation: inv-pop 260ms var(--ease-out, ease-out) both; }
+      .inv-stamp { animation: inv-stamp 420ms var(--ease-spring, ease-out) both; }
+      .inv-cell { animation: inv-cell 380ms var(--ease-spring, ease-out) both; }
+      .inv-blink { animation: inv-blink 1.4s ease-in-out infinite; }
+      @media (prefers-reduced-motion: reduce) {
+        .inv-dash, .inv-laser, .inv-pop, .inv-stamp, .inv-cell, .inv-blink { animation: none !important; }
+        .inv-stamp { opacity: .92; transform: rotate(var(--r, -8deg)); }
+      }
+    `}</style>
+  )
+}
 
-export function StatTile({
-  icon: Icon,
-  label,
+/* ───────────── مفتاح تبديل (Segmented) ───────────── */
+
+export function Segmented<T extends string>({
   value,
-  unit,
-  foot,
+  onChange,
+  options,
+  accent,
+  className,
+}: {
+  value: T
+  onChange: (v: T) => void
+  options: { value: T; label: string; count?: number; color?: string }[]
+  accent: string
+  className?: string
+}) {
+  return (
+    <div
+      role="group"
+      className={cn('inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-muted p-1', className)}
+    >
+      {options.map((o) => {
+        const active = o.value === value
+        return (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(o.value)}
+            className={cn(
+              'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-all',
+              active ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground',
+            )}
+            style={active ? { color: accent } : undefined}
+          >
+            {o.color && <span className="size-2 rounded-full" style={{ backgroundColor: o.color }} />}
+            {o.label}
+            {o.count !== undefined && (
+              <span
+                className="rounded-md px-1.5 text-[10px] tabular-nums"
+                style={
+                  active
+                    ? { backgroundColor: `${accent}1f`, color: accent }
+                    : { backgroundColor: 'var(--muted)', color: 'var(--muted-foreground)' }
+                }
+              >
+                {o.count}
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ───────────── عدّاد كمية + / − ───────────── */
+
+export function QtyStepper({
+  value,
+  onChange,
+  min = 0,
+  max,
+  size = 'md',
   accent,
 }: {
-  icon: LucideIcon
-  label: string
-  value: string
-  unit?: string
-  foot?: React.ReactNode
-  accent: string
+  value: number
+  onChange: (v: number) => void
+  min?: number
+  max?: number
+  size?: 'md' | 'lg'
+  accent?: string
 }) {
+  const box = size === 'lg' ? 'size-11' : 'size-9'
+  const input = size === 'lg' ? 'h-11 w-20 text-xl' : 'h-9 w-16 text-base'
+  const clamp = (v: number) => Math.min(max ?? Infinity, Math.max(min, v))
   return (
-    <div
-      className="group relative flex flex-col overflow-hidden rounded-2xl border p-4 shadow-xs transition-all duration-base ease-out hover:-translate-y-0.5 hover:shadow-md"
-      style={{
-        borderColor: `${accent}33`,
-        background: `linear-gradient(135deg, ${accent}1f 0%, transparent 70%)`,
-      }}
-    >
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          bottom: -22,
-          left: -22,
-          opacity: 0.08,
-          color: accent,
-          pointerEvents: 'none',
-        }}
+    <div className="inline-flex items-center overflow-hidden rounded-xl border bg-background" dir="ltr">
+      <button
+        type="button"
+        aria-label="إنقاص"
+        onClick={() => onChange(clamp(value - 1))}
+        disabled={value <= min}
+        className={cn(box, 'flex items-center justify-center text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30')}
       >
-        <Icon style={{ width: 96, height: 96 }} strokeWidth={1.5} />
-      </div>
-      <span
-        className="absolute inset-x-4 top-0 h-0.5 rounded-b-full"
-        style={{ backgroundColor: accent }}
+        <Minus className="size-4" />
+      </button>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => onChange(clamp(parseInt(e.target.value, 10) || min))}
+        className={cn(
+          input,
+          'border-x bg-transparent text-center font-extrabold tabular-nums outline-none focus:bg-muted/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
+        )}
+        style={accent ? { color: accent } : undefined}
       />
-
-      <div className="relative flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-muted-foreground">{label}</p>
-        <div
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl"
-          style={{ backgroundColor: `${accent}26`, color: accent }}
-        >
-          <Icon className="size-[18px]" />
-        </div>
-      </div>
-
-      <div className="relative mt-3 flex items-baseline gap-1.5">
-        <span className="truncate text-xl font-extrabold tracking-tight tabular-nums sm:text-2xl">
-          {value}
-        </span>
-        {unit && <span className="text-xs font-medium text-muted-foreground">{unit}</span>}
-      </div>
-
-      {foot && <div className="relative mt-2.5 text-[11px]">{foot}</div>}
+      <button
+        type="button"
+        aria-label="زيادة"
+        onClick={() => onChange(clamp(value + 1))}
+        disabled={max !== undefined && value >= max}
+        className={cn(box, 'flex items-center justify-center text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30')}
+      >
+        <Plus className="size-4" />
+      </button>
     </div>
   )
 }
 
-/* ───────────── FilterChip ───────────── */
+/* ───────────── رقم بإشارة (آمن ضد لخبطة اتجاه النص) ───────────── */
 
-export function FilterChip({
-  active,
-  onClick,
-  label,
-  color,
-  count,
-}: {
-  active: boolean
-  onClick: () => void
-  label: string
-  color?: string
-  count?: number
-}) {
+export function Signed({ value, className }: { value: number; className?: string }) {
+  const sign = value > 0 ? '+' : value < 0 ? '-' : ''
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
-        active
-          ? 'border-primary bg-primary text-primary-foreground shadow-sm'
-          : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
-      )}
-    >
-      {color && <span className="size-2 rounded-full" style={{ backgroundColor: color }} />}
-      {label}
-      {count !== undefined && (
-        <span
-          className={cn(
-            'rounded-full px-1.5 text-[10px] font-semibold tabular-nums',
-            active ? 'bg-primary-foreground/20' : 'bg-muted text-muted-foreground',
-          )}
-        >
-          {count}
-        </span>
-      )}
-    </button>
-  )
-}
-
-/* ───────────── TintIcon (أيقونة داخل مربع ملوّن) ───────────── */
-
-export function TintIcon({
-  icon: Icon,
-  color,
-  size = 'md',
-}: {
-  icon: LucideIcon
-  color: string
-  size?: 'sm' | 'md' | 'lg'
-}) {
-  const box =
-    size === 'lg' ? 'size-12 rounded-2xl' : size === 'sm' ? 'size-8 rounded-lg' : 'size-10 rounded-xl'
-  const ic = size === 'lg' ? 'size-6' : size === 'sm' ? 'size-4' : 'size-5'
-  return (
-    <div
-      className={cn('flex shrink-0 items-center justify-center', box)}
-      style={{ backgroundColor: `${color}1f`, color }}
-    >
-      <Icon className={ic} />
-    </div>
-  )
-}
-
-/* ───────────── عنوان مجموعة اليوم ───────────── */
-
-export function DayHeading({
-  label,
-  count,
-  right,
-}: {
-  label: string
-  count: number
-  right?: React.ReactNode
-}) {
-  return (
-    <div className="flex items-center justify-between px-1">
-      <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-        <span className="size-1.5 rounded-full bg-primary" />
-        {label}
-        <span className="text-xs font-normal text-muted-foreground">
-          · {count} {countWord(count, 'عملية', 'عمليات')}
-        </span>
-      </h3>
-      {right}
-    </div>
+    <span dir="ltr" className={cn('inline-flex items-baseline tabular-nums', className)}>
+      {sign && <span>{sign}</span>}
+      <span>{num(Math.abs(value))}</span>
+    </span>
   )
 }
 
@@ -240,52 +363,28 @@ export function EmptyState({
   icon: Icon,
   title,
   hint,
+  accent,
   action,
 }: {
   icon: LucideIcon
   title: string
   hint?: string
+  accent: string
   action?: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 py-14 text-center">
-      <div className="flex size-16 items-center justify-center rounded-3xl bg-muted text-muted-foreground">
+    <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed py-14 text-center">
+      <div
+        className="flex size-16 items-center justify-center rounded-3xl"
+        style={{ backgroundColor: `${accent}1a`, color: accent }}
+      >
         <Icon className="size-8" />
       </div>
       <div>
-        <p className="text-base font-semibold">{title}</p>
+        <p className="text-base font-bold">{title}</p>
         {hint && <p className="mt-1 text-sm text-muted-foreground">{hint}</p>}
       </div>
       {action}
-    </div>
-  )
-}
-
-/* ───────────── رأس بطاقة النموذج ───────────── */
-
-export function PanelTitle({
-  icon: Icon,
-  title,
-  hint,
-  accent = '#10b981',
-  right,
-}: {
-  icon: LucideIcon
-  title: string
-  hint?: string
-  accent?: string
-  right?: React.ReactNode
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex items-center gap-3">
-        <TintIcon icon={Icon} color={accent} />
-        <div>
-          <h2 className="text-base font-bold leading-tight">{title}</h2>
-          {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
-        </div>
-      </div>
-      {right}
     </div>
   )
 }

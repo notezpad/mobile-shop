@@ -24,6 +24,11 @@ import {
   Calculator,
   Crown,
   CalendarDays,
+  Pencil,
+  SlidersHorizontal,
+  Repeat,
+  AlertTriangle,
+  Check,
   type LucideIcon,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -50,6 +55,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Calendar } from '@/components/ui/calendar'
+import { ar } from 'date-fns/locale'
 import { DonutChart } from '@/components/charts/donut-chart'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
@@ -89,6 +97,9 @@ const CATEGORY_META: Record<string, { icon: LucideIcon; color: string }> = {
 const metaOf = (cat: string) =>
   CATEGORY_META[cat] ?? { icon: Receipt, color: '#64748b' }
 
+// نوع الهالك بيتسجل آلياً من حركة المخزون فقط — مش بيتظهر في نموذج الإضافة/التعديل
+const FORM_CATEGORIES = CATEGORIES.filter((c) => c !== 'هالك وتالف')
+
 const QUICK_AMOUNTS = [50, 100, 200, 500, 1000]
 
 interface ExpenseRow {
@@ -109,38 +120,69 @@ interface ExpensesResponse {
 
 type Period = 'all' | 'today' | 'week' | 'month'
 
+interface BudgetRow {
+  category: string
+  monthlyLimit: number
+  spent: number
+}
+
+interface RecurringItem {
+  id: number
+  category: string
+  amount: number
+  note: string | null
+  dayOfMonth: number
+  postedThisMonth: boolean
+  due: boolean
+}
+
 /* ───────────────────────── أدوات مساعدة ───────────────────────── */
 
 const pad = (n: number) => String(n).padStart(2, '0')
-const toISODate = (d: Date) =>
+
+/** "YYYY-MM-DD" بتوقيت المحل (مش بتوقيت الجهاز) — نفس منطق السيرفر في tenantTime.ts */
+function tzDateStr(d: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d)
+  const get = (t: string) => parts.find((p) => p.type === t)!.value
+  return `${get('year')}-${get('month')}-${get('day')}`
+}
+
+/** إضافة/طرح أيام على تاريخ نصي YYYY-MM-DD من غير أي تأثر بتوقيت الجهاز */
+function addDays(dateStr: string, n: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10)
+}
+
+/** YYYY-MM-DD (نص) ← Date محلي للعرض في منتقي التاريخ */
+function parseDateStr(str: string): Date {
+  const [y, m, d] = str.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+const localDateStr = (d: Date) =>
   `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 
-function periodRange(p: Period): { from: string; to: string } {
-  const now = new Date()
-  if (p === 'today') return { from: toISODate(now), to: toISODate(now) }
-  if (p === 'week') {
-    const s = new Date(now)
-    s.setDate(s.getDate() - 6)
-    return { from: toISODate(s), to: toISODate(now) }
-  }
-  if (p === 'month') {
-    return { from: toISODate(new Date(now.getFullYear(), now.getMonth(), 1)), to: toISODate(now) }
-  }
+function periodRange(p: Period, tz: string): { from: string; to: string } {
+  const today = tzDateStr(new Date(), tz)
+  if (p === 'today') return { from: today, to: today }
+  if (p === 'week') return { from: addDays(today, -6), to: today }
+  if (p === 'month') return { from: `${today.slice(0, 8)}01`, to: today }
   return { from: '', to: '' }
 }
 
-function dayLabel(key: string): string {
-  const today = toISODate(new Date())
-  const y = new Date()
-  y.setDate(y.getDate() - 1)
+function dayLabel(key: string, tz: string): string {
+  const today = tzDateStr(new Date(), tz)
   if (key === today) return 'اليوم'
-  if (key === toISODate(y)) return 'أمس'
-  const [yy, mm, dd] = key.split('-').map(Number)
-  return formatArabicDate(new Date(yy, mm - 1, dd))
+  if (key === addDays(today, -1)) return 'أمس'
+  return formatArabicDate(parseDateStr(key))
 }
 
-const timeLabel = (iso: string) =>
-  new Date(iso).toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit' })
+const timeLabel = (iso: string, tz: string) =>
+  new Date(iso).toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit', timeZone: tz })
 
 const num = (n: number) =>
   n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
@@ -173,6 +215,8 @@ export function ExpensesView() {
   const [loading, setLoading] = React.useState(true)
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
+  // توقيت المحل (مش توقيت الجهاز) — نفس اللي بيستخدمه السيرفر في الفلاتر
+  const tz = useShopStore((s) => s.branding.timezone) || 'Africa/Cairo'
 
   // نموذج الإضافة
   const [addOpen, setAddOpen] = React.useState(false)
@@ -189,6 +233,26 @@ export function ExpensesView() {
 
   const [deleteId, setDeleteId] = React.useState<number | null>(null)
   const [deleting, setDeleting] = React.useState(false)
+
+  // تعديل مصروف (نفس نافذة الإضافة)
+  const [editing, setEditing] = React.useState<ExpenseRow | null>(null)
+
+  // الميزانية الشهرية
+  const [budgets, setBudgets] = React.useState<BudgetRow[]>([])
+  const [budgetOpen, setBudgetOpen] = React.useState(false)
+  const [budgetDraft, setBudgetDraft] = React.useState<Record<string, string>>({})
+  const [budgetSaving, setBudgetSaving] = React.useState(false)
+
+  // المصروفات المتكررة
+  const [recurring, setRecurring] = React.useState<RecurringItem[]>([])
+  const [recOpen, setRecOpen] = React.useState(false)
+  const [recCategory, setRecCategory] = React.useState<string>(FORM_CATEGORIES[0])
+  const [recAmount, setRecAmount] = React.useState('')
+  const [recDay, setRecDay] = React.useState('1')
+  const [recNote, setRecNote] = React.useState('')
+  const [recSaving, setRecSaving] = React.useState(false)
+  const [postingId, setPostingId] = React.useState<number | null>(null)
+  const [deleteRecId, setDeleteRecId] = React.useState<number | null>(null)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -211,17 +275,112 @@ export function ExpensesView() {
   }, [load])
 
   // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
-  useDataRefresh(['expenses'], load)
+  // الميزانيات والقوالب المتكررة: فشل تحميلها ما يعطّلش الصفحة (مثلاً قبل تنفيذ الـ migration)
+  const loadBudgets = React.useCallback(async () => {
+    try {
+      const r = await api<{ budgets: BudgetRow[] }>('/api/expenses/budgets')
+      setBudgets(r?.budgets ?? [])
+    } catch {
+      /* silent */
+    }
+  }, [])
+
+  const loadRecurring = React.useCallback(async () => {
+    try {
+      const r = await api<{ items: RecurringItem[] }>('/api/expenses/recurring')
+      setRecurring(r?.items ?? [])
+    } catch {
+      /* silent */
+    }
+  }, [])
+
+  React.useEffect(() => {
+    loadBudgets()
+    loadRecurring()
+  }, [loadBudgets, loadRecurring])
+
+  const refreshAll = React.useCallback(() => {
+    load()
+    loadBudgets()
+    loadRecurring()
+  }, [load, loadBudgets, loadRecurring])
+
+  useDataRefresh(['expenses'], refreshAll)
 
   const resetForm = () => {
     setAmount('')
     setNote('')
   }
 
+  const openAdd = () => {
+    setEditing(null)
+    setCategory(FORM_CATEGORIES[0])
+    resetForm()
+    setAddOpen(true)
+  }
+
+  const openEdit = (e: ExpenseRow) => {
+    setEditing(e)
+    setCategory(FORM_CATEGORIES.includes(e.category as any) ? e.category : FORM_CATEGORIES[0])
+    setAmount(String(e.amount))
+    setNote(e.note ?? '')
+    setAddOpen(true)
+  }
+
+  /** تطبيق التعديل محلياً على القايمة والإجماليات (بدون انتظار السيرفر) */
+  const applyLocalEdit = (id: number, cat: string, amt: number, nt: string | null) => {
+    setData((prev) => {
+      if (!prev) return prev
+      const list = prev.expenses.map((x) => (x.id === id ? { ...x, category: cat, amount: amt, note: nt } : x))
+      const byCategory: Record<string, number> = {}
+      let sum = 0
+      for (const x of list) {
+        byCategory[x.category] = (byCategory[x.category] ?? 0) + x.amount
+        sum += x.amount
+      }
+      return { ...prev, expenses: list, total: sum, byCategory }
+    })
+  }
+
+  const submitEdit = async (amt: number) => {
+    if (!editing) return
+    const target = editing
+    const cleanNote = note.trim() || null
+    setSaving(true)
+    try {
+      await api(`/api/expenses/${target.id}`, {
+        method: 'PATCH',
+        body: { category, amount: amt, note: cleanNote },
+      })
+      applyLocalEdit(target.id, category, amt, cleanNote)
+      toast.success('تم تعديل المصروف')
+      setAddOpen(false)
+      setEditing(null)
+      resetForm()
+      if (typeof navigator === 'undefined' || navigator.onLine) refreshAll()
+    } catch (e: any) {
+      if (e?.message?.includes('تم الحفظ') || e?.message?.includes('offline')) {
+        applyLocalEdit(target.id, category, amt, cleanNote)
+        toast.success('تم تعديل المصروف (offline — سيتم المزامنة لاحقاً)')
+        setAddOpen(false)
+        setEditing(null)
+        resetForm()
+      } else {
+        toast.error(e?.message || 'فشل التعديل')
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const submit = async () => {
     const amt = parseFloat(amount)
     if (isNaN(amt) || amt <= 0) {
       toast.error('المبلغ يجب أن يكون أكبر من صفر')
+      return
+    }
+    if (editing) {
+      await submitEdit(amt)
       return
     }
     setSaving(true)
@@ -258,7 +417,7 @@ export function ExpensesView() {
       toast.success('تم تسجيل المصروف')
       resetForm()
       setAddOpen(false)
-      if (typeof navigator === 'undefined' || navigator.onLine) load()
+      if (typeof navigator === 'undefined' || navigator.onLine) refreshAll()
     } catch (e: any) {
       if (e?.message?.includes('تم الحفظ') || e?.message?.includes('offline')) {
         toast.success('تم تسجيل المصروف (offline — سيتم المزامنة لاحقاً)')
@@ -283,6 +442,96 @@ export function ExpensesView() {
       }
     } finally {
       setSaving(false)
+    }
+  }
+
+  /* ───── الميزانية الشهرية ───── */
+
+  const openBudgets = () => {
+    const draft: Record<string, string> = {}
+    for (const c of CATEGORIES) {
+      const b = budgets.find((x) => x.category === c)
+      draft[c] = b ? String(b.monthlyLimit) : ''
+    }
+    setBudgetDraft(draft)
+    setBudgetOpen(true)
+  }
+
+  const saveBudgets = async () => {
+    setBudgetSaving(true)
+    try {
+      await api('/api/expenses/budgets', { method: 'PUT', body: { limits: budgetDraft } })
+      toast.success('تم حفظ الحدود الشهرية')
+      setBudgetOpen(false)
+      loadBudgets()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل حفظ الحدود')
+    } finally {
+      setBudgetSaving(false)
+    }
+  }
+
+  /* ───── المصروفات المتكررة ───── */
+
+  const openRecurring = () => {
+    setRecCategory(FORM_CATEGORIES[0])
+    setRecAmount('')
+    setRecDay('1')
+    setRecNote('')
+    setRecOpen(true)
+  }
+
+  const saveRecurring = async () => {
+    const amt = parseFloat(recAmount)
+    if (isNaN(amt) || amt <= 0) {
+      toast.error('المبلغ يجب أن يكون أكبر من صفر')
+      return
+    }
+    setRecSaving(true)
+    try {
+      await api('/api/expenses/recurring', {
+        method: 'POST',
+        body: {
+          category: recCategory,
+          amount: amt,
+          dayOfMonth: parseInt(recDay, 10) || 1,
+          note: recNote.trim() || null,
+        },
+      })
+      toast.success('تم إضافة المصروف المتكرر')
+      setRecOpen(false)
+      loadRecurring()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل الحفظ')
+    } finally {
+      setRecSaving(false)
+    }
+  }
+
+  const postRecurring = async (id: number) => {
+    setPostingId(id)
+    try {
+      await api(`/api/expenses/recurring/${id}/post`, { method: 'POST' })
+      toast.success('تم تسجيل المصروف')
+      if (typeof navigator === 'undefined' || navigator.onLine) refreshAll()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل التسجيل')
+      loadRecurring()
+    } finally {
+      setPostingId(null)
+    }
+  }
+
+  const confirmDeleteRecurring = async () => {
+    if (!deleteRecId) return
+    try {
+      await api(`/api/expenses/recurring/${deleteRecId}`, { method: 'DELETE' })
+      toast.success('تم حذف المصروف المتكرر')
+      setDeleteRecId(null)
+      loadRecurring()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل الحذف')
+      setDeleteRecId(null)
     }
   }
 
@@ -314,7 +563,7 @@ export function ExpensesView() {
       await api(`/api/expenses/${deleteId}`, { method: 'DELETE' })
       toast.success('تم حذف المصروف')
       setDeleteId(null)
-      if (typeof navigator === 'undefined' || navigator.onLine) load()
+      if (typeof navigator === 'undefined' || navigator.onLine) refreshAll()
     } catch (e: any) {
       if (e?.message?.includes('تم الحفظ') || e?.message?.includes('offline')) {
         toast.success('تم حذف المصروف (offline — سيتم المزامنة لاحقاً)')
@@ -360,7 +609,7 @@ export function ExpensesView() {
   const groups = React.useMemo(() => {
     const map = new Map<string, ExpenseRow[]>()
     for (const e of visible) {
-      const k = toISODate(new Date(e.createdAt))
+      const k = tzDateStr(new Date(e.createdAt), tz)
       const arr = map.get(k)
       if (arr) arr.push(e)
       else map.set(k, [e])
@@ -372,11 +621,11 @@ export function ExpensesView() {
         items,
         sum: items.reduce((s, x) => s + x.amount, 0),
       }))
-  }, [visible])
+  }, [visible, tz])
 
   const activePeriod: Period | null = (() => {
     for (const p of ['all', 'today', 'week', 'month'] as Period[]) {
-      const r = periodRange(p)
+      const r = periodRange(p, tz)
       if (r.from === from && r.to === to) return p
     }
     return null
@@ -392,7 +641,7 @@ export function ExpensesView() {
   }
 
   const applyPeriod = (p: Period) => {
-    const r = periodRange(p)
+    const r = periodRange(p, tz)
     setFrom(r.from)
     setTo(r.to)
   }
@@ -420,7 +669,7 @@ export function ExpensesView() {
         { header: 'بواسطة', key: 'user', format: 'text' },
       ],
       rows: data.expenses.map((e) => ({
-        date: new Date(e.createdAt).toLocaleString('ar-EG'),
+        date: new Date(e.createdAt).toLocaleString('ar-EG', { timeZone: tz }),
         category: e.category,
         amount: e.amount,
         note: e.note || '-',
@@ -431,14 +680,14 @@ export function ExpensesView() {
   }
 
   /* ───── إحصائيات الهيرو ───── */
-  const todayKey = toISODate(new Date())
+  const todayKey = tzDateStr(new Date(), tz)
   const stats = (() => {
     const perDay = new Map<string, number>()
     let todaySum = 0
     let todayCount = 0
     let maxExpense = 0
     for (const e of expenses) {
-      const k = toISODate(new Date(e.createdAt))
+      const k = tzDateStr(new Date(e.createdAt), tz)
       perDay.set(k, (perDay.get(k) ?? 0) + e.amount)
       if (k === todayKey) {
         todaySum += e.amount
@@ -451,18 +700,25 @@ export function ExpensesView() {
     const avgOther = otherDays > 0 ? (total - todaySum) / otherDays : 0
     const vsAvg = todaySum > 0 && avgOther > 0 ? ((todaySum - avgOther) / avgOther) * 100 : null
     const week = Array.from({ length: 7 }).map((_, i) => {
-      const d = new Date()
-      d.setDate(d.getDate() - (6 - i))
-      const key = toISODate(d)
+      const key = addDays(todayKey, i - 6)
+      const [yy, mm, dd] = key.split('-').map(Number)
       return {
         key,
-        label: d.toLocaleDateString('ar-EG', { weekday: 'short' }),
+        label: new Date(Date.UTC(yy, mm - 1, dd, 12)).toLocaleDateString('ar-EG', {
+          weekday: 'short',
+          timeZone: 'UTC',
+        }),
         sum: perDay.get(key) ?? 0,
         isToday: key === todayKey,
       }
     })
     return { todaySum, todayCount, maxExpense, activeDays, vsAvg, week }
   })()
+  const budgetRows = budgets
+    .map((b) => ({ ...b, pct: b.monthlyLimit > 0 ? (b.spent / b.monthlyLimit) * 100 : 0 }))
+    .sort((a, b) => b.pct - a.pct)
+  const overBudgets = budgetRows.filter((b) => b.pct >= 100)
+  const dueItems = recurring.filter((r) => r.due)
   const topShare = topCategory && total > 0 ? (topCategory[1] / total) * 100 : 0
   const topColor = topCategory ? metaOf(topCategory[0]).color : '#ef4444'
   const noData = loading && !data
@@ -516,7 +772,7 @@ export function ExpensesView() {
                 <FileSpreadsheet className="size-4" />
                 تصدير Excel
               </Button>
-              <Button variant="gradient" size="lg" onClick={() => setAddOpen(true)}>
+              <Button variant="gradient" size="lg" onClick={openAdd}>
                 <Plus className="size-4" />
                 مصروف جديد
               </Button>
@@ -600,6 +856,49 @@ export function ExpensesView() {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* ═════════ القايمة (يمين) ═════════ */}
         <div className="space-y-4 lg:col-span-2">
+          {/* تنبيه تجاوز الميزانية */}
+          {overBudgets.length > 0 && (
+            <div className="animate-in-up flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive-subtle p-3.5 text-destructive-subtle-foreground">
+              <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-bold">
+                  تجاوزت الحد الشهري في {overBudgets.length} {overBudgets.length > 2 ? 'بنود' : 'بند'}
+                </p>
+                <p className="mt-0.5 text-xs opacity-90">
+                  {overBudgets.map((b) => `${b.category} (+${num(b.spent - b.monthlyLimit)} جنيه)`).join(' • ')}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* مصروفات متكررة مستحقة */}
+          {dueItems.length > 0 && (
+            <div className="animate-in-up overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent">
+              <div className="flex items-center gap-2 border-b border-amber-500/20 px-4 py-2.5">
+                <Repeat className="size-4 text-amber-600 dark:text-amber-400" />
+                <p className="text-sm font-bold">
+                  {dueItems.length} {dueItems.length > 2 ? 'مصروفات' : 'مصروف'} متكررة مستحقة هذا الشهر
+                </p>
+              </div>
+              <div className="divide-y divide-amber-500/15">
+                {dueItems.map((r) => (
+                  <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
+                    <CategoryIcon category={r.category} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold leading-tight">{r.category}</p>
+                      {r.note && <p className="truncate text-xs text-muted-foreground">{r.note}</p>}
+                    </div>
+                    <span className="text-sm font-bold tabular-nums">{num(r.amount)} جنيه</span>
+                    <Button size="sm" onClick={() => postRecurring(r.id)} disabled={postingId === r.id}>
+                      {postingId === r.id ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                      سجّل الآن
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* الفلاتر */}
           <Card className="animate-in-up stagger-1 gap-4 py-4">
             <CardContent className="space-y-3 px-4">
@@ -644,25 +943,13 @@ export function ExpensesView() {
                   <Label htmlFor="exp-from" className="text-xs text-muted-foreground">
                     من
                   </Label>
-                  <Input
-                    id="exp-from"
-                    type="date"
-                    value={from}
-                    onChange={(e) => setFrom(e.target.value)}
-                    className="h-8 w-[9.5rem] text-xs"
-                  />
+                  <DatePickerField id="exp-from" value={from} onChange={setFrom} placeholder="من بداية السجل" />
                 </div>
                 <div className="flex items-center gap-2">
                   <Label htmlFor="exp-to" className="text-xs text-muted-foreground">
                     إلى
                   </Label>
-                  <Input
-                    id="exp-to"
-                    type="date"
-                    value={to}
-                    onChange={(e) => setTo(e.target.value)}
-                    className="h-8 w-[9.5rem] text-xs"
-                  />
+                  <DatePickerField id="exp-to" value={to} onChange={setTo} placeholder="حتى اليوم" />
                 </div>
                 {hasFilters && (
                   <Button variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground">
@@ -722,7 +1009,7 @@ export function ExpensesView() {
                     مسح الفلاتر
                   </Button>
                 ) : (
-                  <Button variant="gradient" onClick={() => setAddOpen(true)}>
+                  <Button variant="gradient" onClick={openAdd}>
                     <Plus className="size-4" />
                     مصروف جديد
                   </Button>
@@ -736,7 +1023,7 @@ export function ExpensesView() {
                   <div className="flex items-center justify-between px-1">
                     <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
                       <span className="size-1.5 rounded-full bg-primary" />
-                      {dayLabel(g.key)}
+                      {dayLabel(g.key, tz)}
                       <span className="text-xs font-normal text-muted-foreground">
                         · {g.items.length} {g.items.length > 2 && g.items.length < 11 ? 'عمليات' : 'عملية'}
                       </span>
@@ -776,7 +1063,7 @@ export function ExpensesView() {
                             )}
                             <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
                               <span dir="ltr" className="tabular-nums">
-                                {timeLabel(e.createdAt)}
+                                {timeLabel(e.createdAt, tz)}
                               </span>
                               {e.userName && (
                                 <>
@@ -807,15 +1094,26 @@ export function ExpensesView() {
                                 <Lock className="size-4" />
                               </span>
                             ) : (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8 text-muted-foreground opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                                onClick={() => setDeleteId(e.id)}
-                                title="حذف"
-                              >
-                                <Trash2 className="size-4" />
-                              </Button>
+                              <div className="flex items-center opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8 text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                                  onClick={() => openEdit(e)}
+                                  title="تعديل"
+                                >
+                                  <Pencil className="size-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                  onClick={() => setDeleteId(e.id)}
+                                  title="حذف"
+                                >
+                                  <Trash2 className="size-4" />
+                                </Button>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -835,7 +1133,7 @@ export function ExpensesView() {
         </div>
 
         {/* ═════════ التوزيع (يسار) ═════════ */}
-        <aside className="lg:sticky lg:top-4 lg:self-start">
+        <aside className="space-y-5">
           <Card className="animate-in-up stagger-2 gap-5 py-5">
             <CardContent className="space-y-5 px-5">
               <div>
@@ -903,6 +1201,133 @@ export function ExpensesView() {
               )}
             </CardContent>
           </Card>
+
+          {/* الميزانية الشهرية */}
+          <Card className="animate-in-up stagger-3 gap-4 py-5">
+            <CardContent className="space-y-4 px-5">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h2 className="text-base font-bold">الميزانية الشهرية</h2>
+                  <p className="text-xs text-muted-foreground">الصرف هذا الشهر مقابل الحد المحدد</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={openBudgets}>
+                  <SlidersHorizontal className="size-3.5" />
+                  ضبط الحدود
+                </Button>
+              </div>
+
+              {budgetRows.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={openBudgets}
+                  className="w-full rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground transition-colors hover:bg-muted/50"
+                >
+                  حدّد حد شهري لكل نوع وهنحذّرك لما الصرف يعدّيه
+                </button>
+              ) : (
+                <ul className="space-y-3.5">
+                  {budgetRows.map((b) => {
+                    const over = b.pct >= 100
+                    const warn = !over && b.pct >= 80
+                    const barColor = over ? '#ef4444' : warn ? '#f59e0b' : '#10b981'
+                    return (
+                      <li key={b.category} className="space-y-1.5">
+                        <div className="flex items-center gap-2.5">
+                          <CategoryIcon category={b.category} size="sm" />
+                          <span className="flex-1 truncate text-sm font-medium">{b.category}</span>
+                          {over && (
+                            <Badge variant="destructive" size="sm">
+                              تجاوز
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full transition-all duration-slow ease-out"
+                            style={{ width: `${Math.min(Math.max(b.pct, 2), 100)}%`, backgroundColor: barColor }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] tabular-nums text-muted-foreground">
+                          <span>
+                            <span className="font-semibold text-foreground">{num(b.spent)}</span> من {num(b.monthlyLimit)} جنيه
+                          </span>
+                          <span className={cn(over && 'font-semibold text-destructive')}>{Math.round(b.pct)}%</span>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* المصروفات المتكررة */}
+          <Card className="animate-in-up stagger-4 gap-4 py-5">
+            <CardContent className="space-y-4 px-5">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h2 className="text-base font-bold">مصروفات متكررة</h2>
+                  <p className="text-xs text-muted-foreground">إيجار ومرتبات وغيرها — تسجّلها بضغطة</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={openRecurring}>
+                  <Plus className="size-3.5" />
+                  إضافة
+                </Button>
+              </div>
+
+              {recurring.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={openRecurring}
+                  className="w-full rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground transition-colors hover:bg-muted/50"
+                >
+                  أضف مصروف بيتكرر كل شهر علشان يفكّرك بيه
+                </button>
+              ) : (
+                <ul className="space-y-2">
+                  {recurring.map((r) => (
+                    <li key={r.id} className="group flex items-center gap-2.5 rounded-xl border p-2.5">
+                      <CategoryIcon category={r.category} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold leading-tight">
+                          {r.category}
+                          <span className="ms-1.5 text-xs font-normal tabular-nums text-muted-foreground">
+                            {num(r.amount)} جنيه
+                          </span>
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {r.postedThisMonth ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                              <Check className="size-3" />
+                              اتسجّل هذا الشهر
+                            </span>
+                          ) : r.due ? (
+                            <span className="font-semibold text-amber-600 dark:text-amber-400">مستحق الآن</span>
+                          ) : (
+                            <>يستحق يوم {r.dayOfMonth} من الشهر</>
+                          )}
+                        </p>
+                      </div>
+                      {r.due && (
+                        <Button size="sm" onClick={() => postRecurring(r.id)} disabled={postingId === r.id}>
+                          {postingId === r.id ? <Loader2 className="size-3.5 animate-spin" /> : 'سجّل'}
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => setDeleteRecId(r.id)}
+                        title="حذف القالب"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
         </aside>
       </div>
 
@@ -910,7 +1335,7 @@ export function ExpensesView() {
       <Button
         variant="gradient"
         size="icon-lg"
-        onClick={() => setAddOpen(true)}
+        onClick={openAdd}
         className="fixed bottom-5 left-5 z-30 rounded-full shadow-xl sm:hidden"
         aria-label="مصروف جديد"
       >
@@ -918,16 +1343,25 @@ export function ExpensesView() {
       </Button>
 
       {/* ═════════ نافذة إضافة مصروف ═════════ */}
-      <Dialog open={addOpen} onOpenChange={(o) => !saving && setAddOpen(o)}>
+      <Dialog
+        open={addOpen}
+        onOpenChange={(o) => {
+          if (saving) return
+          setAddOpen(o)
+          if (!o) setEditing(null)
+        }}
+      >
         <DialogContent className="max-h-[92vh] gap-0 overflow-y-auto p-0 sm:max-w-lg">
           <DialogHeader className="border-b bg-gradient-to-br from-rose-500/10 to-amber-500/10 p-5 text-start">
             <DialogTitle className="flex items-center gap-2 text-lg">
               <span className="flex size-9 items-center justify-center rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400">
                 <Receipt className="size-5" />
               </span>
-              تسجيل مصروف جديد
+              {editing ? 'تعديل المصروف' : 'تسجيل مصروف جديد'}
             </DialogTitle>
-            <DialogDescription>هيتخصم المبلغ من الخزنة مباشرة.</DialogDescription>
+            <DialogDescription>
+              {editing ? 'أي تغيير في المبلغ بيتعدّل في الخزنة تلقائياً.' : 'هيتخصم المبلغ من الخزنة مباشرة.'}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5 p-5">
@@ -970,31 +1404,7 @@ export function ExpensesView() {
             {/* النوع */}
             <div className="space-y-2">
               <Label>النوع</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {CATEGORIES.map((c) => {
-                  const active = category === c
-                  const { color } = metaOf(c)
-                  return (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setCategory(c)}
-                      className={cn(
-                        'flex flex-col items-center gap-1.5 rounded-xl border p-2.5 text-center text-xs font-medium transition-all',
-                        active ? 'shadow-sm' : 'bg-background text-muted-foreground hover:bg-muted/60',
-                      )}
-                      style={
-                        active
-                          ? { borderColor: color, backgroundColor: `${color}14`, color }
-                          : undefined
-                      }
-                    >
-                      <CategoryIcon category={c} size="sm" />
-                      <span className="leading-tight">{c}</span>
-                    </button>
-                  )
-                })}
-              </div>
+              <CategoryPicker value={category} onChange={setCategory} />
             </div>
 
             {/* ملاحظة */}
@@ -1011,16 +1421,162 @@ export function ExpensesView() {
           </div>
 
           <DialogFooter className="flex-row gap-2 border-t bg-muted/30 p-4 sm:justify-between">
-            <Button variant="ghost" onClick={() => setAddOpen(false)} disabled={saving}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setAddOpen(false)
+                setEditing(null)
+              }}
+              disabled={saving}
+            >
               إلغاء
             </Button>
             <Button variant="gradient" size="lg" onClick={submit} disabled={saving} className="min-w-36">
-              {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-              حفظ المصروف
+              {saving ? <Loader2 className="size-4 animate-spin" /> : editing ? <Check className="size-4" /> : <Plus className="size-4" />}
+              {editing ? 'حفظ التعديل' : 'حفظ المصروف'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ═════════ نافذة الحدود الشهرية ═════════ */}
+      <Dialog open={budgetOpen} onOpenChange={(o) => !budgetSaving && setBudgetOpen(o)}>
+        <DialogContent className="max-h-[92vh] gap-0 overflow-y-auto p-0 sm:max-w-md">
+          <DialogHeader className="border-b bg-gradient-to-br from-emerald-500/10 to-sky-500/10 p-5 text-start">
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <span className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                <SlidersHorizontal className="size-5" />
+              </span>
+              الحدود الشهرية
+            </DialogTitle>
+            <DialogDescription>اترك الخانة فاضية لو مش عايز حد للنوع ده.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2.5 p-5">
+            {CATEGORIES.map((c) => (
+              <div key={c} className="flex items-center gap-3">
+                <CategoryIcon category={c} size="sm" />
+                <span className="flex-1 text-sm font-medium">{c}</span>
+                <div className="relative w-36">
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    dir="ltr"
+                    placeholder="بدون حد"
+                    value={budgetDraft[c] ?? ''}
+                    onChange={(e) => setBudgetDraft((d) => ({ ...d, [c]: e.target.value }))}
+                    className="h-9 pe-12 text-left tabular-nums"
+                  />
+                  <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[11px] text-muted-foreground">
+                    جنيه
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="flex-row gap-2 border-t bg-muted/30 p-4 sm:justify-between">
+            <Button variant="ghost" onClick={() => setBudgetOpen(false)} disabled={budgetSaving}>
+              إلغاء
+            </Button>
+            <Button variant="gradient" size="lg" onClick={saveBudgets} disabled={budgetSaving} className="min-w-36">
+              {budgetSaving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+              حفظ الحدود
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═════════ نافذة مصروف متكرر ═════════ */}
+      <Dialog open={recOpen} onOpenChange={(o) => !recSaving && setRecOpen(o)}>
+        <DialogContent className="max-h-[92vh] gap-0 overflow-y-auto p-0 sm:max-w-lg">
+          <DialogHeader className="border-b bg-gradient-to-br from-amber-500/10 to-rose-500/10 p-5 text-start">
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <span className="flex size-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                <Repeat className="size-5" />
+              </span>
+              مصروف متكرر جديد
+            </DialogTitle>
+            <DialogDescription>
+              مش بيتسجل لوحده — بيظهر لك "مستحق" في يومه وبتضغط "سجّل الآن".
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5 p-5">
+            <div className="space-y-2">
+              <Label>النوع</Label>
+              <CategoryPicker value={recCategory} onChange={setRecCategory} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="rec-amount">المبلغ</Label>
+                <Input
+                  id="rec-amount"
+                  type="number"
+                  inputMode="decimal"
+                  min={0.01}
+                  dir="ltr"
+                  placeholder="0.00"
+                  value={recAmount}
+                  onChange={(e) => setRecAmount(e.target.value)}
+                  className="h-10 text-left font-semibold tabular-nums"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rec-day">يوم الاستحقاق (١ – ٢٨)</Label>
+                <Input
+                  id="rec-day"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={28}
+                  dir="ltr"
+                  value={recDay}
+                  onChange={(e) => setRecDay(e.target.value)}
+                  className="h-10 text-left font-semibold tabular-nums"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="rec-note">ملاحظات</Label>
+              <Input
+                id="rec-note"
+                value={recNote}
+                onChange={(e) => setRecNote(e.target.value)}
+                placeholder="اختياري — مثال: إيجار المحل"
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex-row gap-2 border-t bg-muted/30 p-4 sm:justify-between">
+            <Button variant="ghost" onClick={() => setRecOpen(false)} disabled={recSaving}>
+              إلغاء
+            </Button>
+            <Button variant="gradient" size="lg" onClick={saveRecurring} disabled={recSaving} className="min-w-36">
+              {recSaving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+              حفظ
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═════════ تأكيد حذف قالب متكرر ═════════ */}
+      <AlertDialog open={deleteRecId !== null} onOpenChange={(o) => !o && setDeleteRecId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف المصروف المتكرر</AlertDialogTitle>
+            <AlertDialogDescription>
+              هيتحذف القالب بس، والمصروفات اللي اتسجلت منه قبل كده هتفضل زي ما هي.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteRecurring}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ═════════ تأكيد الحذف ═════════ */}
       <AlertDialog open={deleteId !== null} onOpenChange={(o) => !o && setDeleteId(null)}>
@@ -1078,14 +1634,14 @@ function StatTile({
         aria-hidden
         style={{
           position: 'absolute',
-          bottom: -22,
-          left: -22,
-          opacity: 0.08,
+          bottom: -18,
+          left: -18,
+          opacity: 0.05,
           color: accent,
           pointerEvents: 'none',
         }}
       >
-        <Icon style={{ width: 96, height: 96 }} strokeWidth={1.5} />
+        <Icon style={{ width: 80, height: 80 }} strokeWidth={1.5} />
       </div>
       {/* شريط لوني علوي */}
       <span
@@ -1164,6 +1720,96 @@ function WeekBars({
           )
         })}
       </div>
+    </div>
+  )
+}
+
+/** منتقي تاريخ عربي (بديل حقل التاريخ الافتراضي للمتصفح mm/dd/yyyy) — القيمة نص YYYY-MM-DD */
+function DatePickerField({
+  id,
+  value,
+  onChange,
+  placeholder,
+}: {
+  id?: string
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+}) {
+  const [open, setOpen] = React.useState(false)
+  const selected = value ? parseDateStr(value) : undefined
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          id={id}
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(
+            'h-8 w-[10.5rem] justify-between gap-2 px-2.5 text-xs font-normal',
+            !value && 'text-muted-foreground',
+          )}
+        >
+          <span className="truncate">{selected ? formatArabicDate(selected) : placeholder}</span>
+          <CalendarDays className="size-3.5 shrink-0 opacity-70" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-auto p-0">
+        <Calendar
+          mode="single"
+          locale={ar}
+          dir="rtl"
+          selected={selected}
+          defaultMonth={selected}
+          onSelect={(d) => {
+            onChange(d ? localDateStr(d) : '')
+            setOpen(false)
+          }}
+        />
+        {value && (
+          <div className="border-t p-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-xs"
+              onClick={() => {
+                onChange('')
+                setOpen(false)
+              }}
+            >
+              مسح التاريخ
+            </Button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/** شبكة اختيار النوع (بدون الهالك — بيتسجل آلياً من المخزون) */
+function CategoryPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {FORM_CATEGORIES.map((c) => {
+        const active = value === c
+        const { color } = metaOf(c)
+        return (
+          <button
+            key={c}
+            type="button"
+            onClick={() => onChange(c)}
+            className={cn(
+              'flex flex-col items-center gap-1.5 rounded-xl border p-2.5 text-center text-xs font-medium transition-all',
+              active ? 'shadow-sm' : 'bg-background text-muted-foreground hover:bg-muted/60',
+            )}
+            style={active ? { borderColor: color, backgroundColor: `${color}14`, color } : undefined}
+          >
+            <CategoryIcon category={c} size="sm" />
+            <span className="leading-tight">{c}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }
