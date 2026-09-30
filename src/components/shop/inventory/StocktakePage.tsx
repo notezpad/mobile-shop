@@ -1,13 +1,12 @@
 'use client'
 
 /**
- * صفحة الجرد (/inventory/stocktake) — هوية الجرد البنفسجية.
- * وحدة المسح والعدّ (بتصميم فاتح معبّر — استبدلت النسخة السوداء القديمة)
- * + كروت التنقّل + كروت الأصناف المعدودة + أرشيف أوراق الجرد.
+ * صفحة الجرد (/inventory/stocktake) — محطة عدّ عملية بهوية تركواز ومرجاني.
+ * وحدة المسح والعدّ + كروت التنقّل + كروت الأصناف المعدودة + أرشيف أوراق الجرد.
  */
 
 import * as React from 'react'
-import { ScanLine, FileSpreadsheet, ClipboardList } from 'lucide-react'
+import { ScanLine, FileSpreadsheet, ClipboardList, PackageCheck, Scale } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
@@ -57,41 +56,54 @@ export function StocktakePage() {
     <div className="space-y-5">
       <InventoryStyles />
 
-      {/* ═════════ شريط الهوية — عدّادة الجرد البنفسجية ═════════ */}
-      <section className="animate-in-up relative overflow-hidden rounded-3xl border bg-card">
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-500/[0.09] via-transparent to-fuchsia-500/[0.05]" />
-        <div aria-hidden className="pointer-events-none absolute -top-24 -end-16 size-72 rounded-full bg-violet-500/15 blur-3xl" />
-        <div aria-hidden className="pointer-events-none absolute -bottom-28 -start-10 size-64 rounded-full bg-purple-400/10 blur-3xl" />
-
-        <div className="relative flex flex-wrap items-center gap-x-5 gap-y-4 p-5 sm:p-6">
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-violet-500 text-white shadow-md shadow-violet-500/30">
-            <ScanLine className="size-6" />
-          </span>
-
-          <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-black tracking-tight sm:text-2xl">
-              الجرد <span className="text-violet-600 dark:text-violet-400">· عدّ وتسوية</span>
-            </h1>
-            <p className="mt-1 text-sm font-medium text-muted-foreground">
-              امسح البضاعة الفعلية واعتمد الفروقات عشان الكميات تضبط
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="rounded-2xl border border-violet-500/25 bg-violet-500/[0.07] px-4 py-2 text-center">
-              <p className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
-                <ClipboardList className="size-3" />
-                أوراق الجرد
-              </p>
-              <p className="text-2xl font-black tabular-nums text-violet-700 dark:text-violet-300">
-                {num(stocktakes.length)}
+      {/* ═════════ عنوان محطة الجرد ═════════ */}
+      <section className="animate-in-up overflow-hidden rounded-2xl border border-stocktake/20 bg-card shadow-sm">
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="relative flex items-center gap-4 overflow-hidden bg-stocktake px-5 py-6 text-stocktake-foreground sm:px-7">
+            <div aria-hidden className="absolute inset-y-0 start-0 w-1.5 bg-stocktake-warm" />
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-stocktake-foreground/12 ring-1 ring-stocktake-foreground/20">
+              <ScanLine className="size-6" />
+            </span>
+            <div className="min-w-0">
+              <p className="mb-1 text-xs font-bold text-stocktake-foreground/70">محطة العمل</p>
+              <h1 className="text-2xl font-black sm:text-3xl">جرد المخزون</h1>
+              <p className="mt-1 text-sm font-medium text-stocktake-foreground/75">
+                امسح الصنف، راجع العدد الفعلي، ثم اعتمد التسوية
               </p>
             </div>
-            <Button variant="outline" onClick={exportExcel} disabled={stocktakes.length === 0} className="h-10">
-              <FileSpreadsheet className="size-4" />
-              تصدير Excel
-            </Button>
           </div>
+
+          <div className="grid grid-cols-2 border-t border-stocktake/15 bg-stocktake-soft lg:min-w-[360px] lg:border-s lg:border-t-0">
+            <div className="flex items-center gap-3 border-e border-stocktake/15 px-5 py-4">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-card text-stocktake shadow-xs">
+                <ClipboardList className="size-5" />
+              </span>
+              <div>
+                <p className="text-xs font-bold text-muted-foreground">أوراق الجرد</p>
+                <p className="text-2xl font-black tabular-nums text-stocktake">{num(stocktakes.length)}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-center p-4">
+              <Button variant="outline" onClick={exportExcel} disabled={stocktakes.length === 0} className="h-11 w-full border-stocktake/25 bg-card text-stocktake hover:bg-stocktake/10">
+                <FileSpreadsheet className="size-4" />
+                تصدير Excel
+              </Button>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 border-t border-stocktake/15 bg-card text-xs sm:grid-cols-4">
+          <div className="flex items-center gap-2 border-e border-b border-stocktake/10 px-4 py-3 sm:border-b-0">
+            <PackageCheck className="size-4 text-stocktake" />
+            <span className="text-muted-foreground">الأصناف</span>
+            <b className="ms-auto tabular-nums">{num(stats.totalItems)}</b>
+          </div>
+          <div className="flex items-center gap-2 border-b border-stocktake/10 px-4 py-3 sm:border-e sm:border-b-0">
+            <Scale className="size-4 text-stocktake-warm" />
+            <span className="text-muted-foreground">المسودات</span>
+            <b className="ms-auto tabular-nums">{num(stats.draftStocktakes)}</b>
+          </div>
+          <div className="hidden sm:block" />
+          <div className="hidden sm:block" />
         </div>
       </section>
 

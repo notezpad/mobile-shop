@@ -22,6 +22,7 @@ import {
   Lock,
   Receipt,
   CalendarDays,
+  Clock,
   MoreVertical,
   Pencil,
   SlidersHorizontal,
@@ -612,8 +613,6 @@ export function ExpensesView() {
     )
   }, [expenses, search])
 
-  const maxVisible = React.useMemo(() => visible.reduce((m, e) => Math.max(m, e.amount), 1), [visible])
-
   const groups = React.useMemo(() => {
     const map = new Map<string, ExpenseRow[]>()
     for (const e of visible) {
@@ -624,11 +623,17 @@ export function ExpensesView() {
     }
     return Array.from(map.entries())
       .sort((a, b) => (a[0] < b[0] ? 1 : -1))
-      .map(([key, items]) => ({
-        key,
-        items,
-        sum: items.reduce((s, x) => s + x.amount, 0),
-      }))
+      .map(([key, items]) => {
+        const byCat: Record<string, number> = {}
+        let sum = 0
+        for (const x of items) {
+          byCat[x.category] = (byCat[x.category] ?? 0) + x.amount
+          sum += x.amount
+        }
+        const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1])
+        const biggest = items.reduce((m, x) => Math.max(m, x.amount), 0)
+        return { key, items, sum, cats, biggest }
+      })
   }, [visible, tz])
 
   const activePeriod: Period | null = (() => {
@@ -1020,53 +1025,77 @@ export function ExpensesView() {
                 const relative = label === 'اليوم' || label === 'أمس'
                 return (
                   <Card key={g.key} className="animate-in-up gap-0 overflow-hidden py-0">
-                    {/* رأس اليوم */}
-                    <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2.5">
-                      <div className="flex items-baseline gap-2">
-                        <h3 className="text-sm font-bold text-foreground">{label}</h3>
-                        <span className="text-xs text-muted-foreground">
-                          {relative ? `${formatArabicDate(parseDateStr(g.key))} · ` : ''}
-                          {g.items.length} {g.items.length > 2 && g.items.length < 11 ? 'عمليات' : 'عملية'}
-                        </span>
+                    {/* رأس اليوم: العنوان + إجمالي + شريط تركيبة اليوم بألوان الأنواع */}
+                    <div className="space-y-3.5 border-b bg-muted/30 px-4 py-4">
+                      <div className="flex items-end justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-extrabold leading-tight text-foreground">{label}</h3>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {relative ? `${formatArabicDate(parseDateStr(g.key))} · ` : ''}
+                            {g.items.length} {g.items.length > 2 && g.items.length < 11 ? 'عمليات' : 'عملية'}
+                          </p>
+                        </div>
+                        <div className="text-end">
+                          <p className="text-[11px] text-muted-foreground">إجمالي اليوم</p>
+                          <p className="text-2xl font-extrabold leading-tight tabular-nums text-foreground">
+                            <span className="me-0.5 text-rose-500">−</span>
+                            {num(g.sum)}
+                            <span className="ms-1 text-xs font-medium text-muted-foreground">جنيه</span>
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        إجمالي اليوم{' '}
-                        <span className="text-sm font-bold tabular-nums text-foreground">{formatCurrency(g.sum)}</span>
-                      </p>
+
+                      <div className="space-y-2">
+                        <div className="flex h-2 gap-0.5 overflow-hidden rounded-full">
+                          {g.cats.map(([cat, v]) => (
+                            <span
+                              key={cat}
+                              title={`${cat}: ${num(v)} جنيه`}
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${(v / g.sum) * 100}%`,
+                                minWidth: 6,
+                                backgroundColor: metaOf(cat).color,
+                              }}
+                            />
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                          {g.cats.map(([cat, v]) => (
+                            <span key={cat} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                              <span className="size-2 rounded-full" style={{ backgroundColor: metaOf(cat).color }} />
+                              {cat}
+                              <span className="font-semibold tabular-nums text-foreground">{num(v)}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
                     <div className="divide-y">
                       {g.items.map((e) => {
                         const locked = e.locked ?? e.source === 'damage'
                         const { icon: Icon, color } = metaOf(e.category)
-                        const share = total > 0 ? (e.amount / total) * 100 : 0
-                        const barW = Math.max((e.amount / maxVisible) * 100, 5)
+                        const dayShare = g.sum > 0 ? (e.amount / g.sum) * 100 : 0
+                        const isBiggest = g.items.length >= 3 && e.amount === g.biggest
                         return (
                           <div
                             key={e.id}
-                            className="group relative flex items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-muted/40"
+                            className="group flex items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/40"
                           >
-                            {/* شريط الوزن: عرضه بيتناسب مع حجم المصروف — الأكبر يبان من أول نظرة */}
-                            <span
-                              aria-hidden
-                              className="pointer-events-none absolute inset-y-0 transition-[width] duration-slow ease-out"
-                              style={{
-                                insetInlineStart: 0,
-                                width: `${barW}%`,
-                                background: `linear-gradient(to left, ${color}22, ${color}00)`,
-                              }}
-                            />
+                            {/* أيقونة النوع داخل حلقة = حصة العملية من إجمالي اليوم */}
+                            <ShareRing pct={dayShare} color={color}>
+                              <Icon className="size-[18px]" />
+                            </ShareRing>
 
-                            <span
-                              className="relative flex size-11 shrink-0 items-center justify-center rounded-2xl"
-                              style={{ backgroundColor: `${color}1c`, color }}
-                            >
-                              <Icon className="size-5" />
-                            </span>
-
-                            <div className="relative min-w-0 flex-1">
+                            <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                <p className="font-semibold leading-tight">{e.category}</p>
+                                <p className="text-[15px] font-bold leading-tight">{e.category}</p>
+                                {isBiggest && (
+                                  <span className="rounded-md bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600 dark:text-rose-400">
+                                    الأكبر
+                                  </span>
+                                )}
                                 {locked && (
                                   <Badge variant="warning" size="sm">
                                     <Lock />
@@ -1074,42 +1103,48 @@ export function ExpensesView() {
                                   </Badge>
                                 )}
                               </div>
-                              {e.note && (
-                                <p className="mt-0.5 line-clamp-1 text-sm text-muted-foreground">{e.note}</p>
-                              )}
-                              {/* على الموبايل: الوقت والموظف تحت الملاحظة */}
-                              <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground md:hidden">
-                                <span dir="ltr" className="tabular-nums">
-                                  {timeLabel(e.createdAt, tz)}
+
+                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                                  <Clock className="size-3" />
+                                  <span dir="ltr" className="tabular-nums">
+                                    {timeLabel(e.createdAt, tz)}
+                                  </span>
                                 </span>
-                                {e.userName && <span>· {e.userName}</span>}
-                              </p>
+                                {e.userName && (
+                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                                    <span className="flex size-4 items-center justify-center rounded-full bg-background text-[9px] font-bold text-foreground">
+                                      {e.userName.trim().charAt(0)}
+                                    </span>
+                                    {e.userName}
+                                  </span>
+                                )}
+                              </div>
+
+                              {e.note && (
+                                <p
+                                  className="mt-2 line-clamp-2 border-s-2 ps-2.5 text-sm text-muted-foreground"
+                                  style={{ borderColor: `${color}66` }}
+                                >
+                                  {e.note}
+                                </p>
+                              )}
                             </div>
 
-                            {/* الوقت والموظف (شاشات كبيرة) */}
-                            <div className="relative hidden shrink-0 flex-col items-end gap-0.5 text-xs text-muted-foreground md:flex">
-                              <span dir="ltr" className="font-medium tabular-nums text-foreground/80">
-                                {timeLabel(e.createdAt, tz)}
-                              </span>
-                              {e.userName && <span>{e.userName}</span>}
-                            </div>
-
-                            {/* المبلغ */}
-                            <div className="relative w-24 shrink-0 text-end sm:w-28">
-                              <p className="text-lg font-extrabold leading-tight tabular-nums text-foreground">
+                            <div className="w-28 shrink-0 text-end">
+                              <p className="text-xl font-extrabold leading-tight tabular-nums text-foreground">
                                 <span className="me-0.5 text-rose-500">−</span>
                                 {num(e.amount)}
                               </p>
-                              <p className="text-[10px] tabular-nums text-muted-foreground">
-                                جنيه · {share.toFixed(share >= 10 ? 0 : 1)}%
+                              <p className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">
+                                جنيه · {dayShare.toFixed(dayShare >= 10 ? 0 : 1)}% من اليوم
                               </p>
                             </div>
 
-                            {/* الإجراءات */}
                             {locked ? (
                               <span
                                 title="مصروف هالك مرتبط بحركة مخزون — لا يُعدَّل ولا يُحذف من هنا"
-                                className="relative flex size-8 shrink-0 items-center justify-center text-muted-foreground/60"
+                                className="flex size-8 shrink-0 items-center justify-center text-muted-foreground/60"
                               >
                                 <Lock className="size-4" />
                               </span>
@@ -1119,7 +1154,7 @@ export function ExpensesView() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="relative size-8 shrink-0 text-muted-foreground"
+                                    className="size-8 shrink-0 text-muted-foreground"
                                     aria-label="خيارات"
                                   >
                                     <MoreVertical className="size-4" />
@@ -1631,7 +1666,51 @@ export function ExpensesView() {
 
 /* ───────────────────────── مكوّنات صغيرة ───────────────────────── */
 
-/** خانة رقم داخل شريط الهيرو الداكن */
+/** حلقة تقدّم حوالين أيقونة النوع — بتوضّح حصة العملية من إجمالي اليوم */
+function ShareRing({
+  pct,
+  color,
+  children,
+}: {
+  pct: number
+  color: string
+  children: React.ReactNode
+}) {
+  const r = 22
+  const c = 2 * Math.PI * r
+  const dash = (Math.max(Math.min(pct, 100), 3) / 100) * c
+  return (
+    <div className="relative flex size-14 shrink-0 items-center justify-center">
+      <svg
+        viewBox="0 0 52 52"
+        className="absolute inset-0 size-full text-muted"
+        style={{ transform: 'rotate(-90deg)' }}
+        aria-hidden
+      >
+        <circle cx="26" cy="26" r={r} fill="none" stroke="currentColor" strokeWidth="3.5" />
+        <circle
+          cx="26"
+          cy="26"
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${c}`}
+          style={{ transition: 'stroke-dasharray 0.6s ease' }}
+        />
+      </svg>
+      <span
+        className="relative flex size-9 items-center justify-center rounded-full"
+        style={{ backgroundColor: `${color}1c`, color }}
+      >
+        {children}
+      </span>
+    </div>
+  )
+}
+
+/** خانة رقم داخل شريط الهيرو */
 function HeroStat({
   label,
   value,

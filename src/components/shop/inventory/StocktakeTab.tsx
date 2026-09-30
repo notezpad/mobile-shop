@@ -13,6 +13,9 @@ import {
   Check,
   AlertCircle,
   CornerDownLeft,
+  PackageOpen,
+  Hash,
+  Scale,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -90,7 +93,7 @@ function MatchRing({ value, total }: { value: number; total: number }) {
   return (
     <div className="relative size-[8rem] shrink-0">
       <svg viewBox="0 0 100 100" className="size-full -rotate-90">
-        <circle cx="50" cy="50" r={R} fill="none" stroke="rgba(139,92,246,0.15)" strokeWidth="9" />
+        <circle cx="50" cy="50" r={R} fill="none" stroke="var(--stocktake-soft)" strokeWidth="9" />
         <circle
           cx="50"
           cy="50"
@@ -115,9 +118,9 @@ function MatchRing({ value, total }: { value: number; total: number }) {
   )
 }
 
-// حقول فاتحة بهوية بنفسجية بدل الحقول الداكنة القديمة
+// حقول محطة الجرد بهوية تركواز واضحة
 const unitField =
-  'border-violet-500/20 bg-violet-500/[0.04] text-foreground placeholder:text-muted-foreground/70 focus-visible:border-violet-400 focus-visible:ring-violet-400/25 dark:border-violet-500/25 dark:bg-violet-500/[0.08]'
+  'border-stocktake/25 bg-card text-foreground placeholder:text-muted-foreground/70 focus-visible:border-stocktake focus-visible:ring-stocktake/20'
 
 export function StocktakeTab({ stocktakes, branches, products, userBranchId, onChanged }: Props) {
   // 🛡️ 2026-09-14: branchId, items, note live in the Zustand store with
@@ -253,31 +256,19 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
 
   return (
     <div className="space-y-6">
-      {/* ═════════ وحدة المسح — هوية الجرد البنفسجية الفاتحة ═════════ */}
-      <section className="animate-in-up relative overflow-hidden rounded-3xl border border-violet-500/25 bg-card shadow-sm">
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-500/[0.08] via-transparent to-fuchsia-500/[0.05]" />
-        <div aria-hidden className="pointer-events-none absolute -top-24 -end-16 size-72 rounded-full bg-violet-500/15 blur-3xl" />
-        <div aria-hidden className="pointer-events-none absolute -bottom-28 -start-10 size-64 rounded-full bg-indigo-400/10 blur-3xl" />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-70"
-          style={{
-            backgroundImage: 'radial-gradient(rgba(139,92,246,0.10) 1px, transparent 1.2px)',
-            backgroundSize: '18px 18px',
-          }}
-        />
-
-        <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_auto]">
-          <div className="space-y-4">
+      {/* ═════════ وحدة المسح ═════════ */}
+      <section className="animate-in-up overflow-hidden rounded-2xl border border-stocktake/20 bg-card shadow-sm">
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-5 p-5 sm:p-7">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-violet-500 text-white shadow-md shadow-violet-500/30">
+              <span className="flex size-11 items-center justify-center rounded-xl bg-stocktake text-stocktake-foreground shadow-sm">
                 <ScanLine className="size-[22px]" />
               </span>
               <div>
-                <h2 className="text-xl font-black leading-tight">وحدة الجرد</h2>
+                <h2 className="text-xl font-black leading-tight">مسح وإضافة صنف</h2>
                 <p className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                  <span className="inv-blink size-2 rounded-full bg-emerald-500" />
-                  جاهزة — كل مسح = +1 للعدد الفعلي
+                  <span className="inv-blink size-2 rounded-full bg-stocktake" />
+                  جاهز للمسح — كل قراءة تزيد العدد الفعلي واحدًا
                 </p>
               </div>
             </div>
@@ -287,7 +278,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                 <Select value={effectiveBranchId} onValueChange={setBranchId}>
                   <SelectTrigger className={cn('h-11 w-full', unitField)} aria-label="الفرع">
                     <span className="flex items-center gap-2">
-                      <Building2 className="size-4 text-violet-500 dark:text-violet-400" />
+                      <Building2 className="size-4 text-stocktake" />
                       <SelectValue placeholder="اختر الفرع" />
                     </span>
                   </SelectTrigger>
@@ -299,7 +290,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                 </Select>
               ) : (
                 <div className={cn('flex h-11 items-center gap-2 rounded-md border px-3 text-sm font-medium', unitField)}>
-                  <Building2 className="size-4 text-violet-500 dark:text-violet-400" />
+                  <Building2 className="size-4 text-stocktake" />
                   {branches.find((b) => b.id === userBranchId)?.name ?? '—'}
                 </div>
               )}
@@ -311,11 +302,10 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
               />
             </div>
 
-            {/* حقل المسح + الليزر */}
-            <form onSubmit={handleScan} className="relative overflow-hidden rounded-2xl border-2 border-violet-400/60 bg-violet-500/[0.05] p-1.5 shadow-[0_0_0_4px_rgba(139,92,246,0.08)] dark:border-violet-400/40">
-              <span aria-hidden className="inv-laser pointer-events-none absolute inset-y-1.5 w-0.5 rounded-full bg-rose-500 shadow-[0_0_12px_3px_rgba(244,63,94,0.55)]" />
+            <form onSubmit={handleScan} className="relative overflow-hidden rounded-xl border-2 border-stocktake bg-stocktake-soft p-1.5 ring-4 ring-stocktake/10">
+              <span aria-hidden className="inv-laser pointer-events-none absolute inset-y-1.5 w-0.5 rounded-full bg-stocktake-warm shadow-[0_0_12px_3px_color-mix(in_oklab,var(--stocktake-warm)_45%,transparent)]" />
               <div className="relative flex items-center gap-2">
-                <ScanLine className="ms-3 size-6 shrink-0 text-violet-500 dark:text-violet-400" />
+                <ScanLine className="ms-3 size-6 shrink-0 text-stocktake" />
                 <input
                   ref={inputRef}
                   autoFocus
@@ -326,7 +316,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                   style={{ outline: 'none', boxShadow: 'none', border: 0 }}
                   className="h-12 min-w-0 flex-1 bg-transparent font-mono text-lg text-foreground placeholder:font-sans placeholder:text-muted-foreground/70"
                 />
-                <Button type="submit" disabled={!scan.trim()} className="h-11 shrink-0 rounded-xl bg-violet-500 px-5 text-white hover:bg-violet-600">
+                <Button type="submit" disabled={!scan.trim()} className="h-11 shrink-0 rounded-lg bg-stocktake px-5 text-stocktake-foreground hover:bg-stocktake-strong">
                   <CornerDownLeft className="size-4" />
                   Enter
                 </Button>
@@ -336,15 +326,15 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
             {/* آخر صنف */}
             <div className="min-h-[3.5rem]">
               {last ? (
-                <div key={last.n} className="inv-pop flex items-center gap-3 rounded-xl border border-violet-500/25 bg-violet-500/[0.07] px-3 py-2.5">
-                  <span className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                <div key={last.n} className="inv-pop flex items-center gap-3 rounded-xl border border-stocktake/25 bg-stocktake-soft px-3 py-2.5">
+                  <span className="flex size-9 items-center justify-center rounded-lg bg-stocktake/15 text-stocktake">
                     <Check className="size-4" />
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-muted-foreground">آخر صنف تم مسحه</p>
                     <p className="truncate text-[15px] font-bold">{last.name}</p>
                   </div>
-                  <span className="font-mono text-3xl font-black tabular-nums text-violet-600 dark:text-violet-400">×{last.qty}</span>
+                  <span className="font-mono text-3xl font-black tabular-nums text-stocktake">×{last.qty}</span>
                 </div>
               ) : (
                 <p className="px-1 pt-2 text-sm text-muted-foreground">لسه ما تمّ مسح أي صنف في الجلسة دي…</p>
@@ -353,10 +343,10 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
           </div>
 
           {/* العدّادات الرقمية */}
-          <div className="flex items-center justify-center gap-5 rounded-2xl border border-violet-500/20 bg-violet-500/[0.04] p-4 lg:flex-col lg:justify-center lg:px-7">
+          <aside className="flex items-center justify-center gap-5 border-t border-stocktake/15 bg-stocktake-soft p-5 lg:flex-col lg:border-s lg:border-t-0 lg:px-7">
             <MatchRing value={matchedCount} total={items.length} />
             <div className="grid grid-cols-3 gap-5 text-center lg:gap-6">
-              <Digit label="معدود" value={pad3(items.length)} className="text-violet-600 dark:text-violet-400" />
+              <Digit label="معدود" value={pad3(items.length)} className="text-stocktake" />
               <Digit label="مطابق" value={pad3(matchedCount)} className="text-emerald-600 dark:text-emerald-400" />
               <Digit label="فرق" value={pad3(diffCount)} className={diffCount ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'} />
             </div>
@@ -368,24 +358,24 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                 </span>
               </p>
             </div>
-          </div>
+          </aside>
         </div>
 
         {items.length > 0 && (
-          <div className="relative flex flex-wrap items-center justify-between gap-3 border-t border-violet-500/15 bg-violet-500/[0.04] px-5 py-3.5 sm:px-7">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stocktake/15 bg-card-muted px-5 py-3.5 sm:px-7">
             <p className="text-sm text-muted-foreground">
               الاعتماد بيعدّل كميات المخزون حسب العدّ الفعلي ·{' '}
               <span dir="ltr" className="font-mono font-bold text-foreground"><Signed value={totalDiff} /></span> وحدة
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button variant="ghost" onClick={resetForm} disabled={saving} className="text-muted-foreground hover:bg-violet-500/10 hover:text-foreground">
+              <Button variant="ghost" onClick={resetForm} disabled={saving} className="text-muted-foreground hover:bg-stocktake/10 hover:text-foreground">
                 مسح الكل
               </Button>
-              <Button variant="outline" onClick={() => submit(false)} disabled={saving} className="border-violet-500/30 bg-background text-foreground hover:bg-violet-500/10">
+              <Button variant="outline" onClick={() => submit(false)} disabled={saving} className="border-stocktake/30 bg-background text-foreground hover:bg-stocktake/10">
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                 حفظ مسودة
               </Button>
-              <Button onClick={() => submit(true)} disabled={saving} className="bg-emerald-500 text-white hover:bg-emerald-600">
+              <Button onClick={() => submit(true)} disabled={saving} className="bg-stocktake text-stocktake-foreground hover:bg-stocktake-strong">
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
                 اعتماد وتسوية
               </Button>
@@ -397,10 +387,11 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
       {/* ═════════ كروت العدّ ═════════ */}
       {items.length > 0 && (
         <section className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-base font-extrabold">
-              الأصناف المعدودة <span className="text-sm font-medium text-muted-foreground">· {items.length}</span>
-            </h3>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stocktake/15 pb-3">
+            <div>
+              <p className="text-xs font-bold text-stocktake">بطاقات الجرد الحالية</p>
+              <h3 className="text-lg font-black">الأصناف المعدودة <span className="text-sm font-medium text-muted-foreground">· {items.length}</span></h3>
+            </div>
             <Segmented<'all' | 'diff' | 'match'>
               value={view}
               onChange={setView}
@@ -418,32 +409,42 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
               const c = diffColor(diff)
               const max = Math.max(it.systemQty, it.countedQty, 1)
               return (
-                <article
+                 <article
                   key={it.productId}
-                  className="relative overflow-hidden rounded-2xl border bg-card p-4 transition-shadow hover:shadow-md"
-                  style={{ borderTopWidth: 4, borderTopColor: c }}
+                   className="group relative overflow-hidden rounded-2xl border border-stocktake/15 bg-card shadow-xs transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-stocktake/35 hover:shadow-md"
                 >
-                  <div className="flex items-start gap-2">
+                   <div className="flex items-start gap-3 border-b border-stocktake/10 bg-stocktake-soft p-4">
+                     <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-card text-stocktake shadow-xs ring-1 ring-stocktake/15">
+                       <PackageOpen className="size-5" />
+                     </span>
                     <div className="min-w-0 flex-1">
-                      <h4 className="truncate text-[15px] font-bold leading-tight">{it.name}</h4>
-                      <p dir="ltr" className="mt-0.5 truncate text-start font-mono text-xs text-muted-foreground">{it.barcode || '—'}</p>
+                       <div className="mb-1 flex items-center gap-2">
+                         <span className="rounded-md bg-stocktake px-1.5 py-0.5 text-[10px] font-extrabold text-stocktake-foreground">بطاقة صنف</span>
+                         <span className="font-mono text-[10px] font-bold text-muted-foreground">#{String(it.productId).padStart(4, '0')}</span>
+                       </div>
+                       <h4 className="truncate text-base font-black leading-tight">{it.name}</h4>
+                       <p dir="ltr" className="mt-1 flex items-center gap-1 truncate text-start font-mono text-xs text-muted-foreground"><Hash className="size-3" />{it.barcode || 'بدون باركود'}</p>
                     </div>
-                    <button
-                      type="button"
+                     <Button
+                       type="button" variant="ghost" size="icon"
                       onClick={() => removeItem(it.productId)}
                       title="حذف"
-                      className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                       className="size-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                     >
                       <Trash2 className="size-3.5" />
-                    </button>
+                     </Button>
                   </div>
 
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <div className="text-center">
-                      <p className="text-xs text-muted-foreground">النظام</p>
-                      <p className="font-mono text-2xl font-black tabular-nums text-muted-foreground">{num(it.systemQty)}</p>
+                   <div className="p-4">
+                     <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+                     <div className="rounded-xl border border-border bg-card-muted p-3">
+                       <p className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground"><Scale className="size-3.5" /> رصيد النظام</p>
+                       <p className="mt-1 font-mono text-2xl font-black tabular-nums text-foreground">{num(it.systemQty)}</p>
                     </div>
-                    <QtyStepper value={it.countedQty} min={0} onChange={(v) => setCounted(it.productId, v)} accent={c} />
+                     <div className="text-center">
+                       <p className="mb-1.5 text-xs font-black text-stocktake">العدد الفعلي</p>
+                       <QtyStepper value={it.countedQty} min={0} onChange={(v) => setCounted(it.productId, v)} accent={c} />
+                     </div>
                   </div>
 
                   {/* مقارنة بصرية */}
@@ -456,7 +457,8 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                     </div>
                   </div>
 
-                  <div className="mt-2.5 flex items-center justify-end">
+                   <div className="mt-3 flex items-center justify-between border-t border-dashed pt-3">
+                     <span className="text-xs font-bold text-muted-foreground">نتيجة المطابقة</span>
                     {diff === 0 ? (
                       <span className="inline-flex items-center gap-1 text-xs font-bold" style={{ color: VIOLET }}>
                         <Check className="size-3.5" /> مطابق
@@ -466,7 +468,8 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                         <Signed value={diff} />
                       </span>
                     )}
-                  </div>
+                   </div>
+                   </div>
                 </article>
               )
             })}
@@ -481,7 +484,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="flex items-center gap-2 text-base font-extrabold">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-violet-500/15 text-violet-600 dark:text-violet-400">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-stocktake/15 text-stocktake">
               <ClipboardList className="size-4" />
             </span>
             أرشيف الجرد
@@ -549,7 +552,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                     </div>
 
                     <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-amber-400/40">
-                      <div className="h-full rounded-full bg-violet-500" style={{ width: `${pct}%` }} />
+                      <div className="h-full rounded-full bg-stocktake" style={{ width: `${pct}%` }} />
                     </div>
                     <div className="mt-1.5 flex items-center justify-between text-xs text-muted-foreground">
                       <span>{matched} مطابق · {st.items.length - matched} بفرق</span>
@@ -617,8 +620,8 @@ function StocktakeDetailDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent mobileSheet className="overflow-hidden p-0 sm:max-w-[640px]">
-        <div className="relative border-b bg-gradient-to-br from-violet-500/[0.12] via-transparent to-fuchsia-500/[0.07] p-5">
-          <div aria-hidden className="pointer-events-none absolute -top-16 -end-10 size-48 rounded-full bg-violet-500/15 blur-3xl" />
+        <div className="relative border-b border-stocktake/15 bg-stocktake-soft p-5">
+          <div aria-hidden className="pointer-events-none absolute inset-y-0 start-0 w-1 bg-stocktake-warm" />
           <DialogHeader className="relative">
             <DialogTitle className="flex items-start justify-between gap-3 text-foreground">
               <span>
@@ -633,7 +636,7 @@ function StocktakeDetailDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="relative mt-4 grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-xl border border-violet-500/15 bg-violet-500/[0.06] p-2.5">
+            <div className="rounded-xl border border-stocktake/15 bg-card p-2.5">
               <p className="text-xs text-muted-foreground">الأصناف</p>
               <p className="font-mono text-xl font-black tabular-nums">{stocktake.items.length}</p>
             </div>

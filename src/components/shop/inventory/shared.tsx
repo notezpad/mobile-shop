@@ -26,7 +26,7 @@ export const ACCENT = {
   stock: '#10b981', // مستودع — أخضر
   movements: '#0ea5e9', // دفتر حركة — سماوي
   transfers: '#f59e0b', // لوجستيات — كهرماني
-  stocktake: '#8b5cf6', // جرد — بنفسجي
+  stocktake: '#0f766e', // جرد — تركواز
   up: '#10b981',
   down: '#f43f5e',
 } as const

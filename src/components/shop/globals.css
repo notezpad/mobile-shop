@@ -613,15 +613,21 @@
    CUSTOM SCROLLBAR — Refined 2026
    Hidden by default, appears on hover with emerald gradient
    ============================================================ */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-  transition: scrollbar-color 0.3s ease;
-}
+/* ⚠️ These defaults live in @layer base so Tailwind's layered
+   transition utilities (transition-all, duration-*, …) can override
+   them. Unlayered, this `transition` shorthand silently kills every
+   Tailwind transition in the app (unlayered > @layer in the cascade). */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color 0.3s ease;
+  }
 
-*:hover,
-*:focus-within {
-  scrollbar-color: oklch(0.57 0.18 162 / 0.4) transparent;
+  *:hover,
+  *:focus-within {
+    scrollbar-color: oklch(0.57 0.18 162 / 0.4) transparent;
+  }
 }
 
 *::-webkit-scrollbar {
@@ -666,6 +672,41 @@
 }
 *::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+/* ============================================================
+   .scrollbar-none — hard-hide a scroll container's scrollbar
+   Unlayered so it wins over the custom-scrollbar defaults above
+   in every browser (covers standard + WebKit legacy).
+   ============================================================ */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* ============================================================
+   submenu-in — entrance for the sidebar inventory sub-pages.
+   Runs when the wrapper flips from display:none → block, so it
+   works regardless of any transition utility availability.
+   ============================================================ */
+@keyframes submenu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.submenu-in {
+  animation: submenu-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* ============================================================
