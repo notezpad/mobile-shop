@@ -10,6 +10,9 @@ Disallow: /customers
 Disallow: /suppliers
 Disallow: /purchases
 Disallow: /inventory
+Disallow: /movements
+Disallow: /transfers
+Disallow: /stocktake
 Disallow: /finance
 Disallow: /expenses
 Disallow: /cash

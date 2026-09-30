@@ -9,6 +9,9 @@ import {
   Wallet,
   TrendingDown,
   TrendingUp,
+  ShoppingBag,
+  Phone,
+  HandCoins,
 } from 'lucide-react'
 import {
   Dialog,
@@ -23,18 +26,10 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs'
-import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,7 +43,7 @@ import {
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useDataRefresh } from '@/lib/offline/data-events'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrency } from '@/lib/format'
 import { DateTimeCell } from './DateTimeCell'
 import { PaymentDialog } from './PaymentDialog'
 
@@ -64,7 +59,7 @@ function methodBadgeClass(method: string): string {
     case 'cash':
       return 'bg-success-subtle text-success-subtle-foreground border-success-subtle'
     case 'vodafone_cash':
-      return 'bg-destructive-subtle text-destructive-subtle-foreground border-red-200'
+      return 'bg-destructive-subtle text-destructive-subtle-foreground border-transparent'
     case 'instapay':
       return 'bg-info-subtle text-info-subtle-foreground border-info-subtle'
     case 'fawry':
@@ -139,6 +134,9 @@ type TimelineRow =
       note: string | null
     }
 
+const num = (n: number) =>
+  n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+
 function StatBox({
   icon: Icon,
   label,
@@ -150,20 +148,61 @@ function StatBox({
   value: string
   tone?: 'default' | 'success' | 'danger'
 }) {
-  const toneClass =
-    tone === 'success'
-      ? 'text-success-subtle-foreground bg-success-subtle border-success-subtle'
-      : tone === 'danger'
-        ? 'text-destructive bg-destructive/5 border-destructive/20'
-        : 'text-foreground bg-muted/40 border-border'
+  const color = tone === 'success' ? '#10b981' : tone === 'danger' ? '#f43f5e' : '#0ea5e9'
   return (
-    <div className={`rounded-lg border p-3 ${toneClass}`}>
-      <div className="flex items-center gap-2">
-        <Icon className="size-4 opacity-70" />
-        <p className="text-xs font-medium opacity-80">{label}</p>
+    <div className="flex items-center gap-3 rounded-2xl border bg-card p-3.5">
+      <span
+        className="flex size-10 shrink-0 items-center justify-center rounded-xl"
+        style={{ backgroundColor: `${color}1c`, color }}
+      >
+        <Icon className="size-5" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+        <p className="mt-0.5 truncate text-lg font-extrabold leading-tight tabular-nums text-foreground">{value}</p>
       </div>
-      <p className="mt-1 text-lg font-bold tabular-nums">{value}</p>
     </div>
+  )
+}
+
+/** أيقونة نوع الحركة داخل مربع ملوّن */
+function KindIcon({ kind }: { kind: 'sale' | 'payment' }) {
+  const color = kind === 'sale' ? '#0ea5e9' : '#10b981'
+  const Icon = kind === 'sale' ? ShoppingBag : HandCoins
+  return (
+    <span
+      className="flex size-11 shrink-0 items-center justify-center rounded-2xl"
+      style={{ backgroundColor: `${color}1c`, color }}
+    >
+      <Icon className="size-5" />
+    </span>
+  )
+}
+
+const colorOf = (name: string) => {
+  const colors = ['#0ea5e9', '#6366f1', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#14b8a6', '#f97316']
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  return colors[h % colors.length]
+}
+
+function EmptyNote({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed py-10 text-center text-sm text-muted-foreground">
+      <Receipt className="size-6 opacity-50" />
+      {children}
+    </div>
+  )
+}
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <Badge
+      variant={status === 'مرتجعة' ? 'danger' : status === 'مكتملة' ? 'success' : 'secondary'}
+      size="sm"
+    >
+      {status}
+    </Badge>
   )
 }
 
@@ -249,37 +288,63 @@ export function CustomerDetailDialog({
     }
   }
 
+  const avatarColor = colorOf(detail?.name ?? initialName ?? '')
+  const displayName = detail?.name ?? initialName ?? '—'
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         mobileSheet
         className="flex h-[92dvh] flex-col gap-0 overflow-hidden bg-background p-0 sm:h-auto sm:max-h-[90dvh] sm:max-w-4xl"
       >
-        <DialogHeader className="shrink-0 border-b bg-background px-4 pb-3 pt-5 text-start sm:px-6 sm:pt-6 sm:pb-4">
-          <DialogTitle className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-col gap-1">
-              <span className="text-lg font-bold sm:text-xl">
-                {detail?.name ?? initialName ?? '—'}
+        {/* ═════════ الهيدر: هوية العملاء (سماوي) + بطاقة الرصيد ═════════ */}
+        <DialogHeader
+          className="shrink-0 border-b p-4 text-start sm:p-6"
+          style={{ background: `linear-gradient(135deg, ${avatarColor}38, ${avatarColor}0d 70%)` }}
+        >
+          <DialogTitle className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3.5">
+              <span
+                className="flex size-16 shrink-0 items-center justify-center rounded-3xl text-2xl font-extrabold text-white ring-4 ring-background"
+                style={{ background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}bb)`, boxShadow: `0 10px 24px -8px ${avatarColor}99` }}
+              >
+                {displayName.trim().charAt(0) || '?'}
               </span>
-              <span className="text-xs font-normal text-muted-foreground">
-                {detail?.phone ? (
-                  <span dir="ltr">{detail.phone}</span>
-                ) : (
-                  'لا يوجد رقم هاتف'
-                )}
-              </span>
+              <div className="flex min-w-0 flex-col gap-1">
+                <span className="truncate text-lg font-extrabold sm:text-xl">{displayName}</span>
+                <span className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
+                  <Phone className="size-3" />
+                  {detail?.phone ? (
+                    <span dir="ltr" className="tabular-nums">{detail.phone}</span>
+                  ) : (
+                    'لا يوجد رقم هاتف'
+                  )}
+                </span>
+              </div>
             </div>
-            <div className="text-left">
+
+            <div
+              className={cn(
+                'min-w-[150px] rounded-2xl border px-4 py-2.5 text-start',
+                balance > 0
+                  ? 'border-rose-500/25 bg-rose-500/5'
+                  : balance < 0
+                    ? 'border-sky-500/25 bg-sky-500/5'
+                    : 'bg-muted/40',
+              )}
+            >
               <p className="text-[11px] font-medium text-muted-foreground">الرصيد الحالي</p>
-              <p className={`text-xl font-extrabold tabular-nums sm:text-2xl ${balanceTone}`}>
-                {formatCurrency(balance)}
-              </p>
+              <div className="flex items-baseline gap-1.5">
+                <span className={cn('text-2xl font-extrabold tabular-nums sm:text-3xl', balanceTone)}>
+                  {formatCurrency(balance)}
+                </span>
+              </div>
               {balance > 0 ? (
-                <span className="text-[11px] text-destructive">مدين</span>
+                <Badge variant="danger" size="sm" className="mt-1">مدين</Badge>
               ) : balance < 0 ? (
-                <span className="text-[11px] text-success-subtle-foreground">له رصيد دائن</span>
+                <Badge variant="info" size="sm" className="mt-1">له رصيد دائن</Badge>
               ) : (
-                <span className="text-[11px] text-muted-foreground">مسوّى</span>
+                <Badge variant="secondary" size="sm" className="mt-1">مسوّى</Badge>
               )}
             </div>
           </DialogTitle>
@@ -291,11 +356,11 @@ export function CustomerDetailDialog({
         {/* 🛡️ 2026-09-15: Added relative + z-[1] to ensure content stays
             above background page elements (fixes "items inside each other"
             visual bug where background table text bleeds through). */}
-        <div className="relative z-[1] min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background px-4 pb-6 sm:px-6">
+        <div className="relative z-[1] min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background px-4 pb-6 pt-4 sm:px-6">
           {loading ? (
-            <div className="space-y-3 py-4">
+            <div className="space-y-3 py-2">
               {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
+                <Skeleton key={i} className="h-16 w-full rounded-xl" />
               ))}
             </div>
           ) : !detail ? (
@@ -304,22 +369,24 @@ export function CustomerDetailDialog({
             </p>
           ) : (
             <Tabs value={tab} onValueChange={setTab} className="w-full">
-              <TabsList className="sticky top-0 z-10 mb-3 w-full">
-                <TabsTrigger value="account" className="flex-1">
+              <TabsList className="sticky top-0 z-10 mb-4 h-11 w-full rounded-xl border bg-muted/60 p-1 backdrop-blur">
+                <TabsTrigger value="account" className="flex-1 rounded-lg">
                   <Receipt className="size-4" />
                   كشف حساب
                 </TabsTrigger>
-                <TabsTrigger value="sales" className="flex-1">
+                <TabsTrigger value="sales" className="flex-1 rounded-lg">
+                  <ShoppingBag className="size-4" />
                   المبيعات
                 </TabsTrigger>
-                <TabsTrigger value="payments" className="flex-1">
+                <TabsTrigger value="payments" className="flex-1 rounded-lg">
+                  <Wallet className="size-4" />
                   الدفعات
                 </TabsTrigger>
               </TabsList>
 
               {/* ===== Account Summary Tab ===== */}
-              <TabsContent value="account" className="space-y-3">
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 [&>*:last-child]:col-span-2 sm:[&>*:last-child]:col-span-1">
+              <TabsContent value="account" className="space-y-4">
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3">
                   <StatBox
                     icon={TrendingUp}
                     label="إجمالي المشتريات"
@@ -341,223 +408,159 @@ export function CustomerDetailDialog({
 
                 {/* 🛡️ 2026-09-15: Card-based timeline instead of table —
                     prevents column overlap on narrow dialogs. */}
-                <div className="space-y-2">
+                <div className="overflow-hidden rounded-2xl border bg-card">
+                  <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2.5">
+                    <h3 className="text-sm font-bold">سجل الحركات</h3>
+                    <span className="text-xs text-muted-foreground">{timeline.length} حركة</span>
+                  </div>
                   {timeline.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">لا توجد حركات</p>
+                    <div className="p-4"><EmptyNote>لا توجد حركات</EmptyNote></div>
                   ) : (
-                    timeline.map((row, i) => {
-                      if (row.kind === 'sale') {
-                        const itemsText = row.items
-                          .map((it) => `${it.name}×${it.quantity}`)
-                          .join('، ')
-                        const debt = Math.max(0, row.total - row.paid)
+                    <div className="divide-y">
+                      {timeline.map((row, i) => {
+                        if (row.kind === 'sale') {
+                          const itemsText = row.items
+                            .map((it) => `${it.name}×${it.quantity}`)
+                            .join('، ')
+                          const debt = Math.max(0, row.total - row.paid)
+                          return (
+                            <div
+                              key={`s-${row.saleId}-${i}`}
+                              className="flex items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-muted/40"
+                            >
+                              <KindIcon kind="sale" />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                  <p className="font-semibold leading-tight">{row.invoiceNo ?? `#${row.saleId}`}</p>
+                                  <Badge variant="info" size="sm">بيع</Badge>
+                                </div>
+                                <p className="mt-0.5 line-clamp-1 text-sm text-muted-foreground">{itemsText}</p>
+                                {row.paid > 0 && (
+                                  <p className="mt-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                                    دفع كاش: {formatCurrency(row.paid)}
+                                  </p>
+                                )}
+                                <p className="mt-1 text-[11px] text-muted-foreground">
+                                  <DateTimeCell date={row.date} />
+                                </p>
+                              </div>
+                              <div className="shrink-0 text-end">
+                                {debt > 0 ? (
+                                  <p className="whitespace-nowrap text-base font-extrabold tabular-nums text-rose-600 dark:text-rose-400">
+                                    <span className="me-0.5">+</span>
+                                    {num(debt)}
+                                  </p>
+                                ) : (
+                                  <p className="whitespace-nowrap text-sm font-semibold text-muted-foreground">مسوّى</p>
+                                )}
+                                <p className="text-[10px] text-muted-foreground">مدين</p>
+                              </div>
+                            </div>
+                          )
+                        }
+                        // payment row
                         return (
                           <div
-                            key={`s-${row.saleId}-${i}`}
-                            className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3"
+                            key={`p-${i}`}
+                            className="flex items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-muted/40"
                           >
-                            {/* Type badge */}
-                            <Badge
-                              variant="outline"
-                              className="mt-0.5 shrink-0 bg-info-subtle text-info-subtle-foreground border-info-subtle"
-                            >
-                              بيع
-                            </Badge>
-                            {/* Details */}
+                            <KindIcon kind="payment" />
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm">
-                                <span className="font-medium">{row.invoiceNo ?? `#${row.saleId}`}</span>
-                                <span className="text-muted-foreground"> — {itemsText}</span>
-                              </p>
-                              {row.paid > 0 && (
-                                <p className="mt-0.5 text-xs text-success-subtle-foreground">
-                                  دفع كاش: {formatCurrency(row.paid)}
-                                </p>
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <p className="font-semibold leading-tight">دفعة</p>
+                                <span
+                                  className={`inline-block rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${methodBadgeClass(
+                                    row.method
+                                  )}`}
+                                >
+                                  {METHOD_LABELS[row.method] || row.method}
+                                </span>
+                              </div>
+                              {row.note && (
+                                <p className="mt-0.5 line-clamp-1 text-sm text-muted-foreground">{row.note}</p>
                               )}
-                              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                              <p className="mt-1 text-[11px] text-muted-foreground">
                                 <DateTimeCell date={row.date} />
                               </p>
                             </div>
-                            {/* Amount — right side, never overlaps */}
-                            <div className="shrink-0 text-left">
-                              {debt > 0 ? (
-                                <span className="inline-block rounded-md bg-destructive/10 px-2 py-1 text-sm font-bold tabular-nums text-destructive whitespace-nowrap">
-                                  {formatCurrency(debt)}
-                                </span>
-                              ) : (
-                                <span className="inline-block rounded-md bg-muted px-2 py-1 text-sm font-medium tabular-nums text-muted-foreground whitespace-nowrap">
-                                  مسوّى
-                                </span>
-                              )}
-                              <p className="mt-1 text-[10px] text-muted-foreground">مدين</p>
+                            <div className="shrink-0 text-end">
+                              <p className="whitespace-nowrap text-base font-extrabold tabular-nums text-emerald-600 dark:text-emerald-400">
+                                <span className="me-0.5">−</span>
+                                {num(row.amount)}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">دائن</p>
                             </div>
                           </div>
                         )
-                      }
-                      // payment row
-                      return (
-                        <div
-                          key={`p-${i}`}
-                          className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3"
-                        >
-                          <Badge
-                            variant="outline"
-                            className="mt-0.5 shrink-0 bg-success-subtle text-success-subtle-foreground border-success-subtle"
-                          >
-                            دفعة
-                          </Badge>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm">
-                              <span
-                                className={`inline-block rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${methodBadgeClass(
-                                  row.method
-                                )}`}
-                              >
-                                {METHOD_LABELS[row.method] || row.method}
-                              </span>
-                              {row.note && (
-                                <span className="text-muted-foreground"> — {row.note}</span>
-                              )}
-                            </p>
-                            <p className="mt-0.5 text-[11px] text-muted-foreground">
-                              <DateTimeCell date={row.date} />
-                            </p>
-                          </div>
-                          <div className="shrink-0 text-left">
-                            <span className="inline-block rounded-md bg-success-subtle px-2 py-1 text-sm font-bold tabular-nums text-success-subtle-foreground whitespace-nowrap">
-                              {formatCurrency(row.amount)}
-                            </span>
-                            <p className="mt-1 text-[10px] text-muted-foreground">دائن</p>
-                          </div>
-                        </div>
-                      )
-                    })
+                      })}
+                    </div>
                   )}
                 </div>
               </TabsContent>
 
               {/* ===== Sales Tab ===== */}
               <TabsContent value="sales">
-                <Card className="hidden overflow-hidden py-0 md:block">
-                  <CardContent className="p-0">
-                    <div className="overflow-x-auto" dir="ltr">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="min-w-[80px] w-[80px]">الفاتورة</TableHead>
-                            <TableHead className="min-w-[180px] w-[180px] whitespace-nowrap">التاريخ</TableHead>
-                            <TableHead className="min-w-[80px] w-[80px] text-center whitespace-nowrap">الأصناف</TableHead>
-                            <TableHead className="min-w-[90px] w-[90px] text-center whitespace-nowrap">الإجمالي</TableHead>
-                            <TableHead className="min-w-[90px] w-[90px] text-center whitespace-nowrap">المدفوع</TableHead>
-                            <TableHead className="min-w-[80px] w-[80px] text-center">الحالة</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {detail.sales.length === 0 ? (
-                            <TableRow>
-                              <TableCell
-                                colSpan={6}
-                                className="py-8 text-center text-muted-foreground"
-                              >
-                                لا توجد مبيعات
-                              </TableCell>
-                            </TableRow>
-                          ) : (
-                            detail.sales.map((s) => (
-                              <TableRow key={s.id}>
-                                <TableCell className="font-medium">
-                                  {s.invoiceNo ?? `#${s.id}`}
-                                </TableCell>
-                                <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                                  <DateTimeCell date={s.createdAt} />
-                                </TableCell>
-                                <TableCell className="text-center tabular-nums">
-                                  {s.items.length}
-                                </TableCell>
-                                <TableCell className="text-center font-semibold tabular-nums">
-                                  {formatCurrency(s.total)}
-                                </TableCell>
-                                <TableCell className="text-center tabular-nums text-success-subtle-foreground">
-                                  {formatCurrency(s.paid)}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  <Badge
-                                    variant={
-                                      s.status === 'مرتجعة'
-                                        ? 'destructive'
-                                        : 'secondary'
-                                    }
-                                    className={
-                                      s.status === 'مكتملة'
-                                        ? 'bg-primary/10 text-primary'
-                                        : ''
-                                    }
-                                  >
-                                    {s.status}
-                                  </Badge>
-                                </TableCell>
-                              </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
-                {/* موبايل: كروت بدل الجدول */}
-                <div className="space-y-2 md:hidden">
+                <div className="overflow-hidden rounded-2xl border bg-card">
+                  <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2.5">
+                    <h3 className="text-sm font-bold">فواتير العميل</h3>
+                    <span className="text-xs text-muted-foreground">{detail.sales.length} فاتورة</span>
+                  </div>
                   {detail.sales.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">لا توجد مبيعات</p>
+                    <div className="p-4"><EmptyNote>لا توجد مبيعات</EmptyNote></div>
                   ) : (
-                    detail.sales.map((s) => (
-                      <div key={s.id} className="rounded-lg border bg-card p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium">{s.invoiceNo ?? `#${s.id}`}</p>
-                            <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    <div className="divide-y">
+                      {detail.sales.map((s) => (
+                        <div
+                          key={s.id}
+                          className="flex items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-muted/40"
+                        >
+                          <KindIcon kind="sale" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <p className="font-semibold leading-tight">{s.invoiceNo ?? `#${s.id}`}</p>
+                              <StatusBadge status={s.status} />
+                            </div>
+                            <p className="mt-0.5 text-sm text-muted-foreground">
+                              <span className="tabular-nums">{s.items.length}</span> {s.items.length > 2 && s.items.length < 11 ? 'أصناف' : 'صنف'}
+                            </p>
+                            <p className="mt-1 text-[11px] text-muted-foreground">
                               <DateTimeCell date={s.createdAt} />
                             </p>
                           </div>
-                          <Badge
-                            variant={s.status === 'مرتجعة' ? 'destructive' : 'secondary'}
-                            className={s.status === 'مكتملة' ? 'bg-primary/10 text-primary' : ''}
-                          >
-                            {s.status}
-                          </Badge>
-                        </div>
-                        <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
-                          <div>
-                            <p className="text-muted-foreground">الأصناف</p>
-                            <p className="font-semibold tabular-nums">{s.items.length}</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">الإجمالي</p>
-                            <p className="font-semibold tabular-nums">{formatCurrency(s.total)}</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">المدفوع</p>
-                            <p className="font-semibold tabular-nums text-success-subtle-foreground">{formatCurrency(s.paid)}</p>
+                          <div className="shrink-0 text-end">
+                            <p className="whitespace-nowrap text-base font-extrabold tabular-nums text-foreground">
+                              {num(s.total)}
+                              <span className="ms-1 text-[10px] font-medium text-muted-foreground">جنيه</span>
+                            </p>
+                            <p className="whitespace-nowrap text-[11px] tabular-nums text-emerald-600 dark:text-emerald-400">
+                              مدفوع {num(s.paid)}
+                            </p>
                           </div>
                         </div>
-                      </div>
-                    ))
+                      ))}
+                    </div>
                   )}
                 </div>
               </TabsContent>
 
               {/* ===== Payments Tab ===== */}
-              <TabsContent value="payments" className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm text-muted-foreground">
-                    إجمالي الدفعات:{' '}
-                    <span className="font-semibold text-success-subtle-foreground tabular-nums">
-                      {formatCurrency(
-                        detail.payments.reduce((s, p) => s + p.amount, 0)
-                      )}
+              <TabsContent value="payments" className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-3.5">
+                  <div className="flex items-center gap-3">
+                    <span className="flex size-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                      <HandCoins className="size-5" />
                     </span>
-                  </p>
+                    <div>
+                      <p className="text-[11px] font-medium text-muted-foreground">إجمالي الدفعات</p>
+                      <p className="text-lg font-extrabold leading-tight tabular-nums text-emerald-600 dark:text-emerald-400">
+                        {formatCurrency(
+                          detail.payments.reduce((s, p) => s + p.amount, 0)
+                        )}
+                      </p>
+                    </div>
+                  </div>
                   <Button
-                    size="sm"
+                    variant="gradient"
                     onClick={() => setPayOpen(true)}
                     disabled={!detail}
                   >
@@ -565,107 +568,54 @@ export function CustomerDetailDialog({
                     تسجيل دفعة
                   </Button>
                 </div>
-                <Card className="hidden overflow-hidden py-0 md:block">
-                  <CardContent className="p-0">
-                    <div className="overflow-x-auto" dir="ltr">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="min-w-[160px] w-[160px] whitespace-nowrap">التاريخ</TableHead>
-                            <TableHead className="min-w-[90px] w-[90px] text-center whitespace-nowrap">المبلغ</TableHead>
-                            <TableHead className="min-w-[90px] w-[90px] text-center whitespace-nowrap">الطريقة</TableHead>
-                            <TableHead className="min-w-[100px] w-[100px]">ملاحظات</TableHead>
-                            <TableHead className="min-w-[60px] w-[60px] text-center">إجراء</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {detail.payments.length === 0 ? (
-                            <TableRow>
-                              <TableCell
-                                colSpan={5}
-                                className="py-8 text-center text-muted-foreground"
-                              >
-                                لا توجد دفعات — سجّل أول دفعة الآن
-                              </TableCell>
-                            </TableRow>
-                          ) : (
-                            detail.payments.map((p) => (
-                              <TableRow key={p.id}>
-                                <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                                  <DateTimeCell date={p.createdAt} />
-                                </TableCell>
-                                <TableCell className="text-center font-semibold tabular-nums text-success-subtle-foreground">
-                                  {formatCurrency(p.amount)}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  <span
-                                    className={`inline-block rounded-md border px-2 py-0.5 text-[11px] font-medium ${methodBadgeClass(
-                                      p.method
-                                    )}`}
-                                  >
-                                    {METHOD_LABELS[p.method] || p.method}
-                                  </span>
-                                </TableCell>
-                                <TableCell className="text-sm text-muted-foreground">
-                                  {p.note ?? '—'}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                    onClick={() => setDeletePaymentId(p.id)}
-                                    title="حذف الدفعة"
-                                  >
-                                    <Trash2 className="size-4" />
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
-                {/* موبايل: كروت بدل الجدول */}
-                <div className="space-y-2 md:hidden">
+
+                <div className="overflow-hidden rounded-2xl border bg-card">
+                  <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2.5">
+                    <h3 className="text-sm font-bold">سجل الدفعات</h3>
+                    <span className="text-xs text-muted-foreground">{detail.payments.length} دفعة</span>
+                  </div>
                   {detail.payments.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">
-                      لا توجد دفعات — سجّل أول دفعة الآن
-                    </p>
+                    <div className="p-4"><EmptyNote>لا توجد دفعات — سجّل أول دفعة الآن</EmptyNote></div>
                   ) : (
-                    detail.payments.map((p) => (
-                      <div key={p.id} className="flex items-center gap-3 rounded-lg border bg-card p-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="divide-y">
+                      {detail.payments.map((p) => (
+                        <div
+                          key={p.id}
+                          className="group flex items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-muted/40"
+                        >
+                          <KindIcon kind="payment" />
+                          <div className="min-w-0 flex-1">
                             <span
-                              className={`inline-block rounded-md border px-2 py-0.5 text-[11px] font-medium ${methodBadgeClass(p.method)}`}
+                              className={`inline-block rounded-md border px-2 py-0.5 text-[11px] font-medium ${methodBadgeClass(
+                                p.method
+                              )}`}
                             >
                               {METHOD_LABELS[p.method] || p.method}
                             </span>
-                            <span className="text-[11px] text-muted-foreground">
+                            {p.note && (
+                              <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">{p.note}</p>
+                            )}
+                            <p className="mt-1 text-[11px] text-muted-foreground">
                               <DateTimeCell date={p.createdAt} />
-                            </span>
+                            </p>
                           </div>
-                          {p.note && (
-                            <p className="mt-1 truncate text-xs text-muted-foreground">{p.note}</p>
-                          )}
+                          <p className="shrink-0 whitespace-nowrap text-base font-extrabold tabular-nums text-emerald-600 dark:text-emerald-400">
+                            {num(p.amount)}
+                            <span className="ms-1 text-[10px] font-medium text-muted-foreground">جنيه</span>
+                          </p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => setDeletePaymentId(p.id)}
+                            title="حذف الدفعة"
+                            aria-label="حذف الدفعة"
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
                         </div>
-                        <span className="shrink-0 text-sm font-bold tabular-nums text-success-subtle-foreground">
-                          {formatCurrency(p.amount)}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-9 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => setDeletePaymentId(p.id)}
-                          title="حذف الدفعة"
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                    ))
+                      ))}
+                    </div>
                   )}
                 </div>
               </TabsContent>
@@ -713,7 +663,7 @@ export function CustomerDetailDialog({
         </AlertDialog>
 
         {/* 🛡️ 2026-09-13: Close button (replaces the X icon we removed). */}
-        <div className="flex justify-end border-t px-6 py-3">
+        <div className="flex shrink-0 justify-end border-t bg-muted/30 px-6 py-3">
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             إغلاق
           </Button>

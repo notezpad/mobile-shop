@@ -41,7 +41,7 @@ const INVENTORY_CHILDREN: { path: string; label: string; color: string }[] = [
   { path: '/inventory', label: 'حالة المخزون', color: '#10b981' },
   { path: '/inventory/movements', label: 'الحركات', color: '#0ea5e9' },
   { path: '/inventory/transfers', label: 'التحويلات', color: '#f59e0b' },
-  { path: '/inventory/stocktake', label: 'الجرد', color: '#8b5cf6' },
+  { path: '/inventory/stocktake', label: 'الجرد', color: '#2563eb' },
 ]
 
 const MAIN_GROUP: NavItem[] = [
@@ -132,11 +132,13 @@ function InventoryGroup({
   onNavigate?: () => void
 }) {
   const inInventory = pathname.startsWith('/inventory')
-  // بيتفتح تلقائياً أول ما تدخل أي صفحة من صفحات المخزون، وتفضل مفتوحة
-  // على ذوقك لحد ما تقفلها بنفسك.
+  // بيتفتح تلقائياً أول ما تدخل قسم المخزون من برّه، لكن لو قفلتها بإيدك
+  // والتنقّل بين صفحات المخزون نفسها — بنحترم اختك ومش بنفتحها تاني.
   const [open, setOpen] = React.useState(inInventory)
+  const wasInInventory = React.useRef(inInventory)
   React.useEffect(() => {
-    if (inInventory) setOpen(true)
+    if (inInventory && !wasInInventory.current) setOpen(true)
+    wasInInventory.current = inInventory
   }, [inInventory])
 
   const parentActive = pathname === '/inventory'
@@ -233,15 +235,14 @@ function InventoryGroup({
         </button>
       </div>
 
-      {/* الصفحات الفرعية — بتنفتح بحركة سلسة، وكل واحدة بلون هويتها */}
+      {/* الصفحات الفرعية — تقفيل بـ display:none مباشرة (inline style):
+          مفيش فراغ وهمي في أي متصفح حتى لو فشل تحميل أي CSS،
+          والفتح ليه حركة دخول ناعمة بـ keyframes. */}
       <div
-        className={cn(
-          'grid transition-all duration-base ease-out',
-          open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
-        )}
+        style={{ display: open ? 'block' : 'none' }}
+        className={open ? 'submenu-in' : undefined}
       >
-        <div className="overflow-hidden">
-          <div className="relative ms-[26px] space-y-0.5 border-s border-sidebar-border/70 py-1.5 ps-2.5">
+        <div className="relative ms-[26px] space-y-0.5 border-s border-sidebar-border/70 py-1.5 ps-2.5">
             {INVENTORY_CHILDREN.map((child) => {
               const active = pathname === child.path
               return (
@@ -285,7 +286,6 @@ function InventoryGroup({
                 </Link>
               )
             })}
-          </div>
         </div>
       </div>
     </div>
@@ -418,7 +418,7 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
       >
         <Brand collapsed={collapsed} />
 
-        <nav className="flex-1 overflow-y-auto px-2 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <nav className="sidebar-nav flex-1 overflow-y-auto px-2 py-3">
           {!collapsed && <SectionLabel label="الرئيسية" />}
           <div className="space-y-0.5">
             {mainItems.map((it) => (

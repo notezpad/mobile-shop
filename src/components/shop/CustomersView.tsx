@@ -8,14 +8,34 @@ import {
   Search,
   Trash2,
   Eye,
-  TrendingDown,
   FileSpreadsheet,
-  ChevronLeft,
-  ChevronRight,
+  Users,
+  UserPlus,
+  Phone,
+  MoreVertical,
+  Check,
+  X,
+  ShoppingBag,
+  CheckCircle2,
+  Crown,
+  ReceiptText,
+  BarChart3,
+  Percent,
+  Receipt,
+  UserCheck,
+  UserX,
+  Clock,
+  Wallet,
+  AlertCircle,
+  CalendarDays,
+  ArrowUpDown,
+  ChevronDown,
+  User,
 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -27,17 +47,15 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { formatCurrency, formatDate } from '@/lib/format'
-import { DateTimeCell } from './DateTimeCell'
+import { formatCurrency, formatArabicDate } from '@/lib/format'
 import { useConfirm } from './ConfirmDialogProvider'
 import { CustomerDetailDialog } from './CustomerDetailDialog'
 import { useShopStore } from '@/lib/store'
@@ -167,326 +185,445 @@ export function CustomersView() {
     }
   }
 
+  // آخر نسخة كاملة من القائمة (من غير بحث) — الإحصائيات بتعتمد عليها علشان متتغيّرش وقت البحث
+  const [fullList, setFullList] = React.useState<Customer[]>([])
+  React.useEffect(() => {
+    if (!search.trim()) setFullList(customers)
+  }, [customers, search])
+  const base = fullList.length > 0 ? fullList : customers
+
   // Total outstanding debt = sum of positive balances
   const totalDebt = React.useMemo(
-    () =>
-      customers.reduce(
-        (s, c) => s + (c.balance > 0 ? c.balance : 0),
-        0
-      ),
-    [customers]
+    () => base.reduce((s, c) => s + (c.balance > 0 ? c.balance : 0), 0),
+    [base]
   )
 
+  /* ───────── أرقام العرض فقط (مشتقة من نفس البيانات — بدون أي منطق جديد) ───────── */
+  const view = React.useMemo(() => {
+    const debtors = base.filter((c) => c.balance > 0)
+    const top = [...debtors].sort((x, y) => y.balance - x.balance)
+    const purchases = base.reduce((s, c) => s + (c.totalPurchases ?? 0), 0)
+    const salesCount = base.reduce((s, c) => s + (c._count?.sales ?? 0), 0)
+    const credits = base.filter((c) => c.balance < 0)
+    const age = (c: Customer) => (c.lastSaleAt ? daysSince(c.lastSaleAt) : Infinity)
+    const lateDebtors = debtors.filter((c) => age(c) > 30)
+    const idle = base.filter((c) => age(c) > 30)
+    const buckets = [
+      { label: 'حتى ٧ أيام', color: '#10b981', sum: 0, n: 0 },
+      { label: '٨ – ٣٠ يوم', color: '#f59e0b', sum: 0, n: 0 },
+      { label: '٣١ – ٩٠ يوم', color: '#f97316', sum: 0, n: 0 },
+      { label: 'أكتر من ٩٠ يوم', color: '#f43f5e', sum: 0, n: 0 },
+    ]
+    for (const c of debtors) {
+      const d = age(c)
+      const i = d <= 7 ? 0 : d <= 30 ? 1 : d <= 90 ? 2 : 3
+      buckets[i].sum += c.balance
+      buckets[i].n += 1
+    }
+    const buyers = [...base]
+      .filter((c) => (c.totalPurchases ?? 0) > 0)
+      .sort((x, y) => (y.totalPurchases ?? 0) - (x.totalPurchases ?? 0))
+    return {
+      debtorsCount: debtors.length,
+      top,
+      maxDebt: top[0]?.balance ?? 0,
+      purchases,
+      salesCount,
+      avgInvoice: salesCount > 0 ? purchases / salesCount : 0,
+      avgCustomer: base.length > 0 ? purchases / base.length : 0,
+      collectionPct: purchases > 0 ? Math.min(Math.max(((purchases - totalDebt) / purchases) * 100, 0), 100) : 0,
+      lateDebt: lateDebtors.reduce((s, c) => s + c.balance, 0),
+      lateCount: lateDebtors.length,
+      idleCount: idle.length,
+      creditSum: credits.reduce((s, c) => s + Math.abs(c.balance), 0),
+      creditCount: credits.length,
+      buckets,
+      buyers,
+      // أفضل عميل = الأعلى مشتريات (بيظهر بس لو فيه أكتر من عميل)
+      topBuyerId: base.length >= 2 && buyers[0] ? buyers[0].id : null,
+    }
+  }, [base, totalDebt])
+
+  /* ───────── الفلاتر والترتيب (عرض فقط على القايمة اللي اتحمّلت) ───────── */
+  const [status, setStatus] = React.useState<StatusFilter>('all')
+  const [sort, setSort] = React.useState<SortKey>('default')
+  const counts = React.useMemo(
+    () => ({
+      all: customers.length,
+      debt: customers.filter((c) => c.balance > 0).length,
+      clear: customers.filter((c) => c.balance === 0).length,
+      credit: customers.filter((c) => c.balance < 0).length,
+      idle: customers.filter((c) => (c.lastSaleAt ? daysSince(c.lastSaleAt) : Infinity) > 30).length,
+    }),
+    [customers]
+  )
+  const shown = React.useMemo(() => {
+    let rows = customers.filter((c) => {
+      if (status === 'debt') return c.balance > 0
+      if (status === 'clear') return c.balance === 0
+      if (status === 'credit') return c.balance < 0
+      if (status === 'idle') return (c.lastSaleAt ? daysSince(c.lastSaleAt) : Infinity) > 30
+      return true
+    })
+    if (sort !== 'default') {
+      rows = [...rows].sort((x, y) => {
+        if (sort === 'debt') return y.balance - x.balance
+        if (sort === 'purchases') return (y.totalPurchases ?? 0) - (x.totalPurchases ?? 0)
+        if (sort === 'recent')
+          return (y.lastSaleAt ? new Date(y.lastSaleAt).getTime() : 0) - (x.lastSaleAt ? new Date(x.lastSaleAt).getTime() : 0)
+        return x.name.localeCompare(y.name, 'ar')
+      })
+    }
+    return rows
+  }, [customers, status, sort])
+  const hasFilters = status !== 'all' || sort !== 'default' || search.trim() !== ''
+  const clearFilters = () => {
+    setStatus('all')
+    setSort('default')
+    setSearch('')
+  }
+  const shownDebt = shown.reduce((s, c) => s + (c.balance > 0 ? c.balance : 0), 0)
+  const shownPurchases = shown.reduce((s, c) => s + (c.totalPurchases ?? 0), 0)
+
+  const [statsOpen, setStatsOpen] = React.useState(true)
+  const noData = loading && customers.length === 0
+  const openAdd = () => {
+    setEditing(null)
+    setDialogOpen(true)
+  }
+  const openEdit = (c: Customer) => {
+    setEditing(c)
+    setDialogOpen(true)
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-bold">العملاء</h1>
-          <p className="text-sm text-muted-foreground">
-            سجل العملاء وأرصدتهم والدفعات
-          </p>
+    <div className="space-y-5">
+      {/* ═════════ Hero — "دفتر الديون": لوحة مضغوطة بصف واحد ═════════ */}
+      <section
+        className="animate-in-up relative overflow-hidden rounded-3xl border bg-card text-card-foreground shadow-sm"
+        style={{
+          background:
+            'radial-gradient(620px 240px at 100% 0%, rgba(14,165,233,0.15), transparent), radial-gradient(520px 240px at 0% 100%, rgba(99,102,241,0.10), transparent)',
+        }}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-70"
+          style={{
+            backgroundImage: 'radial-gradient(rgba(14,165,233,0.16) 1px, transparent 1.2px)',
+            backgroundSize: '16px 16px',
+            maskImage: 'linear-gradient(to left, black, transparent 65%)',
+            WebkitMaskImage: 'linear-gradient(to left, black, transparent 65%)',
+          }}
+        />
+
+        <div className="relative flex flex-wrap items-center gap-x-8 gap-y-5 p-5 sm:p-6">
+          <div className="min-w-[230px]">
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-indigo-500 text-white shadow-md shadow-sky-500/25">
+                <Users className="size-[18px]" />
+              </span>
+              <div>
+                <h1 className="text-lg font-extrabold leading-tight">العملاء</h1>
+                <p className="text-[11px] text-muted-foreground">سجل العملاء وأرصدتهم والدفعات</p>
+              </div>
+            </div>
+            <p className="mt-4 text-[11px] font-medium text-muted-foreground">إجمالي المستحق عند العملاء</p>
+            <div className="flex items-baseline gap-2">
+              <span className="bg-gradient-to-l from-sky-600 to-indigo-600 bg-clip-text text-5xl font-extrabold tracking-tight tabular-nums text-transparent dark:from-sky-300 dark:to-indigo-300">
+                {noData ? '—' : num(totalDebt)}
+              </span>
+              <span className="text-base font-semibold text-muted-foreground">جنيه</span>
+            </div>
+          </div>
+
+          <div className="min-w-[280px] flex-1">
+            <DebtSpread rows={view.top} total={totalDebt} hidden={noData} />
+          </div>
+
+          <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-col lg:items-stretch">
+            <Button variant="gradient" size="lg" onClick={openAdd}>
+              <Plus className="size-4" />
+              عميل جديد
+            </Button>
+            <Button variant="outline" onClick={exportExcel} disabled={customers.length === 0}>
+              <FileSpreadsheet className="size-4" />
+              تصدير Excel
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={exportExcel} disabled={customers.length === 0}>
-            <FileSpreadsheet className="size-4" />
-            تصدير Excel
-          </Button>
-          <Button
-            onClick={() => {
-              setEditing(null)
-              setDialogOpen(true)
-            }}
+      </section>
+
+      {/* ═════════ مركز الإحصائيات ═════════ */}
+      {base.length > 0 && (
+        <section className="animate-in-up stagger-1 space-y-4">
+          <button
+            type="button"
+            onClick={() => setStatsOpen((o) => !o)}
+            aria-expanded={statsOpen}
+            className="group flex w-full items-center gap-2.5 rounded-2xl border bg-card px-3.5 py-2.5 text-start shadow-sm transition-colors hover:bg-muted/40"
           >
-            <Plus className="size-4" />
-            عميل جديد
-          </Button>
-        </div>
-      </div>
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400">
+              <BarChart3 className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-extrabold leading-tight">إحصائيات العملاء</h2>
+              <p className="text-[11px] text-muted-foreground">صورة سريعة عن ديونك ومبيعاتك وعملائك</p>
+            </div>
+            {/* ملخص مختصر يظهر وقت الطي */}
+            {!statsOpen && (
+              <div className="hidden items-center gap-2 text-[11px] sm:flex">
+                <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 font-semibold text-emerald-600 dark:text-emerald-400">
+                  تحصيل {view.purchases > 0 ? `${Math.round(view.collectionPct)}%` : '—'}
+                </span>
+                <span className="rounded-full bg-rose-500/10 px-2.5 py-1 font-semibold text-rose-600 dark:text-rose-400">
+                  متأخر {num(view.lateDebt)}
+                </span>
+                <span className="rounded-full bg-amber-500/10 px-2.5 py-1 font-semibold text-amber-600 dark:text-amber-400">
+                  خاملون {num(view.idleCount)}
+                </span>
+              </div>
+            )}
+            <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+              {statsOpen ? 'إخفاء' : 'عرض'}
+              <ChevronDown className={cn('size-4 transition-transform duration-base', statsOpen && 'rotate-180')} />
+            </span>
+          </button>
 
-      {/* Summary card */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-              <Pencil className="size-5" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">إجمالي العملاء</p>
-              <p className="text-lg font-bold tabular-nums">
-                {customers.length}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-destructive/20">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
-              <TrendingDown className="size-5" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">
-                إجمالي ديون العملاء
-              </p>
-              <p className="text-lg font-bold tabular-nums text-destructive">
-                {loading ? '—' : formatCurrency(totalDebt)}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-success-subtle text-success-subtle-foreground">
-              <Badge variant="outline" className="border-0 bg-transparent p-0 text-sm">
-                ✓
-              </Badge>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">عملاء بلا ديون</p>
-              <p className="text-lg font-bold tabular-nums">
-                {customers.filter((c) => c.balance <= 0).length}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-destructive/20">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
-              <Badge variant="outline" className="border-0 bg-transparent p-0 text-sm">
-                !
-              </Badge>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">عملاء عليهم آجل</p>
-              <p className="text-lg font-bold tabular-nums text-destructive">
-                {customers.filter((c) => c.balance > 0).length}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          {statsOpen && (
+            <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <KpiTile
+              color="#6366f1" icon={ShoppingBag} label="إجمالي المشتريات"
+              value={num(view.purchases)} unit="جنيه"
+              sub={`${num(view.salesCount)} فاتورة من ${num(base.length)} ${base.length > 2 && base.length < 11 ? 'عملاء' : 'عميل'}`}
+            />
+            <KpiTile
+              color="#10b981" icon={Percent} label="نسبة التحصيل"
+              value={view.purchases > 0 ? `${view.collectionPct.toFixed(view.collectionPct >= 10 ? 0 : 1)}%` : '—'}
+              sub={view.purchases > 0 ? `اتحصّل ${num(Math.max(view.purchases - totalDebt, 0))} جنيه` : 'لسه مفيش مشتريات'}
+              progress={view.purchases > 0 ? view.collectionPct : undefined}
+            />
+            <KpiTile
+              color="#14b8a6" icon={Receipt} label="متوسط قيمة الفاتورة"
+              value={num(Math.round(view.avgInvoice))} unit="جنيه"
+              sub={`على ${num(view.salesCount)} فاتورة`}
+            />
+            <KpiTile
+              color="#8b5cf6" icon={UserCheck} label="متوسط مشتريات العميل"
+              value={num(Math.round(view.avgCustomer))} unit="جنيه"
+              sub="لكل عميل في السجل"
+            />
+            <KpiTile
+              color="#f43f5e" icon={Clock} label="ديون متأخرة +٣٠ يوم"
+              value={num(view.lateDebt)} unit="جنيه"
+              sub={view.lateCount > 0 ? `على ${num(view.lateCount)} ${view.lateCount > 2 && view.lateCount < 11 ? 'عملاء' : 'عميل'} من غير تعامل` : 'مفيش ديون متأخرة'}
+              progress={totalDebt > 0 ? (view.lateDebt / totalDebt) * 100 : undefined}
+              progressLabel={totalDebt > 0 ? `${Math.round((view.lateDebt / totalDebt) * 100)}% من الديون` : undefined}
+            />
+            <KpiTile
+              color="#f59e0b" icon={UserX} label="عملاء خاملون +٣٠ يوم"
+              value={num(view.idleCount)} unit="عميل"
+              sub={base.length > 0 ? `${Math.round((view.idleCount / base.length) * 100)}% من العملاء من غير تعامل` : ''}
+              progress={base.length > 0 ? (view.idleCount / base.length) * 100 : undefined}
+            />
+            <KpiTile
+              color="#0ea5e9" icon={Wallet} label="أرصدة دائنة للعملاء"
+              value={num(view.creditSum)} unit="جنيه"
+              sub={view.creditCount > 0 ? `${num(view.creditCount)} عميل ليهم فلوس عندك` : 'مفيش أرصدة دائنة'}
+            />
+            <KpiTile
+              color="#ec4899" icon={AlertCircle} label="عملاء عليهم آجل"
+              value={num(view.debtorsCount)} unit="عميل"
+              sub={base.length > 0 ? `${Math.round((view.debtorsCount / base.length) * 100)}% من العملاء` : ''}
+              progress={base.length > 0 ? (view.debtorsCount / base.length) * 100 : undefined}
+            />
+          </div>
 
-      <Card>
-        <CardContent className="p-3">
-          <div className="relative max-w-sm">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <div className="grid gap-3 lg:grid-cols-2">
+            {view.buyers.length >= 2 && (
+              <TopBuyers rows={view.buyers.slice(0, 5)} total={view.purchases} onOpen={(c) => setDetailCustomer(c)} />
+            )}
+            <div className={cn(view.buyers.length < 2 && 'lg:col-span-2')}>
+              <DebtAging buckets={view.buckets} total={totalDebt} />
+            </div>
+          </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ═════════ الفلاتر ═════════ */}
+      <div className="animate-in-up stagger-2 space-y-3 rounded-2xl border bg-card p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="بحث بالاسم أو الهاتف..."
-              className="pr-9"
+              className="h-10 rounded-xl pr-10 pl-9"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute top-1/2 left-2.5 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="مسح البحث"
+              >
+                <X className="size-4" />
+              </button>
+            )}
           </div>
-        </CardContent>
-      </Card>
+          <span className="inline-flex items-center gap-1.5 rounded-full border bg-background px-3 py-2 text-xs font-semibold text-muted-foreground">
+            <Users className="size-3.5" />
+            <span className="tabular-nums text-foreground">{num(shown.length)}</span>
+            من {num(customers.length)}
+          </span>
+        </div>
 
-      <Card className="overflow-hidden py-0">
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="space-y-2 p-4">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
+        {/* حالة الحساب */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="me-1 text-[11px] font-semibold text-muted-foreground">الحالة</span>
+          <FilterPill active={status === 'all'} onClick={() => setStatus('all')} count={counts.all}>
+            الكل
+          </FilterPill>
+          <FilterPill active={status === 'debt'} onClick={() => setStatus(status === 'debt' ? 'all' : 'debt')} count={counts.debt} color="#f43f5e">
+            عليهم آجل
+          </FilterPill>
+          <FilterPill active={status === 'clear'} onClick={() => setStatus(status === 'clear' ? 'all' : 'clear')} count={counts.clear} color="#10b981">
+            مسوّى
+          </FilterPill>
+          <FilterPill active={status === 'credit'} onClick={() => setStatus(status === 'credit' ? 'all' : 'credit')} count={counts.credit} color="#0ea5e9">
+            رصيد دائن
+          </FilterPill>
+          <FilterPill active={status === 'idle'} onClick={() => setStatus(status === 'idle' ? 'all' : 'idle')} count={counts.idle} color="#f59e0b">
+            خاملون +٣٠ يوم
+          </FilterPill>
+        </div>
+
+        {/* الترتيب */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="me-1 inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
+            <ArrowUpDown className="size-3" />
+            ترتيب
+          </span>
+          {(
+            [
+              ['debt', 'الأعلى مديونية'],
+              ['purchases', 'الأكثر مشتريات'],
+              ['recent', 'الأحدث تعاملاً'],
+              ['name', 'الاسم (أ – ي)'],
+            ] as [SortKey, string][]
+          ).map(([k, l]) => (
+            <FilterPill key={k} active={sort === k} onClick={() => setSort(sort === k ? 'default' : k)} color="#6366f1">
+              {l}
+            </FilterPill>
+          ))}
+        </div>
+
+        {hasFilters && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span>
+                النتائج: <b className="tabular-nums text-foreground">{num(shown.length)}</b> عميل
+              </span>
+              <span>
+                مستحق: <b className="tabular-nums text-rose-600 dark:text-rose-400">{formatCurrency(shownDebt)}</b>
+              </span>
+              <span>
+                مشتريات: <b className="tabular-nums text-foreground">{formatCurrency(shownPurchases)}</b>
+              </span>
             </div>
-          ) : (
-            <div className="hidden overflow-x-auto lg:block" dir="ltr">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10 text-center">#</TableHead>
-                    <TableHead>الاسم</TableHead>
-                    <TableHead className="w-36">الهاتف</TableHead>
-                    <TableHead className="w-32 text-center">الرصيد</TableHead>
-                    <TableHead className="w-32 text-center">إجمالي المشتريات</TableHead>
-                    <TableHead className="w-24 text-center">عدد المبيعات</TableHead>
-                    <TableHead className="w-52">آخر تعامل</TableHead>
-                    <TableHead className="w-32 text-center">إجراءات</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {customers.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={8}
-                        className="py-8 text-center text-muted-foreground"
-                      >
-                        لا يوجد عملاء
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    customers.map((c, index) => (
-                      <TableRow key={c.id}>
-                        <TableCell className="text-center font-mono text-xs">
-                          {index + 1}
-                        </TableCell>
-                        <TableCell className="font-medium">{c.name}</TableCell>
-                        <TableCell className="text-muted-foreground text-xs">
-                          {c.phone ?? '—'}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge
-                            variant="outline"
-                            className={
-                              c.balance > 0
-                                ? 'border-destructive/20 bg-destructive/5 text-destructive tabular-nums'
-                                : 'border-success-subtle bg-success-subtle text-success-subtle-foreground tabular-nums'
-                            }
-                          >
-                            {formatCurrency(c.balance)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center tabular-nums">
-                          {formatCurrency(c.totalPurchases ?? 0)}
-                        </TableCell>
-                        <TableCell className="text-center tabular-nums">
-                          {c._count?.sales ?? 0}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-xs">
-                          {c.lastSaleAt ? <DateTimeCell date={c.lastSaleAt} /> : '—'}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8"
-                              onClick={() => setDetailCustomer(c)}
-                              title="كشف حساب"
-                            >
-                              <Eye className="size-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8"
-                              onClick={() => {
-                                setEditing(c)
-                                setDialogOpen(true)
-                              }}
-                              title="تعديل"
-                            >
-                              <Pencil className="size-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 text-destructive hover:text-destructive"
-                              onClick={() => remove(c.id)}
-                              title="حذف"
-                            >
-                              <Trash2 className="size-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <X className="size-4" />
+              مسح الفلاتر
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* ═════════ كروت العملاء ═════════ */}
+      {loading && customers.length === 0 ? (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-5">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-[340px] w-full rounded-3xl" />
+          ))}
+        </div>
+      ) : shown.length === 0 ? (
+        <Card className="animate-in-up">
+          <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
+            <div className="flex size-16 items-center justify-center rounded-3xl bg-muted text-muted-foreground">
+              <Users className="size-8" />
             </div>
+            <div>
+              <p className="text-base font-semibold">
+                {hasFilters ? 'مفيش نتائج مطابقة' : 'لسه مفيش عملاء'}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {hasFilters
+                  ? 'جرّب تغيّر الفلاتر أو كلمة البحث'
+                  : 'ضيف أول عميل علشان تتابع حسابه ومشترياته'}
+              </p>
+            </div>
+            {hasFilters ? (
+              <Button variant="outline" onClick={clearFilters}>
+                مسح الفلاتر
+              </Button>
+            ) : (
+              <Button variant="gradient" onClick={openAdd}>
+                <Plus className="size-4" />
+                عميل جديد
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <div
+          className={cn(
+            'grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-5',
+            loading && 'opacity-60 transition-opacity',
           )}
-          {/*
-            نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
-          */}
-          {!loading && (
-            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
-              {customers.length === 0 ? (
-                <p className="col-span-full py-8 text-center text-muted-foreground">
-                  لا يوجد عملاء
-                </p>
-              ) : (
-                customers.map((c, index) => {
-                  const hasDebt = c.balance > 0
-                  return (
-                    <div key={c.id} className="rounded-lg border bg-card p-3 hover:bg-muted/30 dark:hover:bg-muted/20">
-                      <div className="flex items-start gap-3">
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-subtle text-base font-bold text-primary-subtle-foreground">
-                          {c.name?.charAt(0) ?? '?'}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-mono text-[10px] text-muted-foreground">
-                              #{index + 1}
-                            </span>
-                            <p className="truncate font-medium leading-tight">{c.name}</p>
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {c.phone ?? 'بدون هاتف'}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8"
-                            onClick={() => setDetailCustomer(c)}
-                            title="كشف حساب"
-                          >
-                            <Eye className="size-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8"
-                            onClick={() => {
-                              setEditing(c)
-                              setDialogOpen(true)
-                            }}
-                            title="تعديل"
-                          >
-                            <Pencil className="size-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 text-destructive hover:text-destructive"
-                            onClick={() => remove(c.id)}
-                            title="حذف"
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-2 text-center">
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">الرصيد</p>
-                          <Badge
-                            variant="outline"
-                            className={
-                              hasDebt
-                                ? 'border-destructive/20 bg-destructive/5 text-destructive tabular-nums'
-                                : 'border-success-subtle bg-success-subtle text-success-subtle-foreground tabular-nums'
-                            }
-                          >
-                            {formatCurrency(c.balance)}
-                          </Badge>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">إجمالي المشتريات</p>
-                          <p className="text-xs font-semibold tabular-nums">
-                            {formatCurrency(c.totalPurchases ?? 0)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">عدد المبيعات</p>
-                          <p className="text-xs font-semibold tabular-nums">
-                            {c._count?.sales ?? 0}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                        <span>آخر تعامل:</span>
-                        <span className="font-medium">
-                          {c.lastSaleAt ? <DateTimeCell date={c.lastSaleAt} /> : '—'}
-                        </span>
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
+        >
+          {shown.map((c, i) => (
+            <CustomerCard
+              key={c.id}
+              c={c}
+              index={i}
+              isTop={c.id === view.topBuyerId}
+              onOpen={() => setDetailCustomer(c)}
+              onEdit={() => openEdit(c)}
+              onDelete={() => remove(c.id)}
+            />
+          ))}
+          {!hasFilters && (
+            <button
+              type="button"
+              onClick={openAdd}
+              className="animate-in-up group flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-border bg-card/40 p-6 text-center transition-all duration-base ease-out hover:-translate-y-1.5 hover:border-sky-500/60 hover:bg-sky-500/5"
+            >
+              <span className="flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-500 text-white shadow-lg shadow-sky-500/25 transition-transform duration-base group-hover:scale-110 group-hover:rotate-90">
+                <Plus className="size-6" />
+              </span>
+              <span>
+                <span className="block text-sm font-bold">إضافة عميل جديد</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">سجّل اسمه ورقمه وابدأ حسابه</span>
+              </span>
+            </button>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      )}
+
+      {/* زر عائم للموبايل */}
+      <Button
+        variant="gradient"
+        size="icon-lg"
+        onClick={openAdd}
+        className="fixed bottom-5 left-5 z-30 rounded-full shadow-xl sm:hidden"
+        aria-label="عميل جديد"
+      >
+        <Plus className="size-6" />
+      </Button>
 
       <CustomerDialog
         open={dialogOpen}
@@ -505,6 +642,518 @@ export function CustomersView() {
         customerName={detailCustomer?.name}
       />
     </div>
+  )
+}
+
+/* ───────────────────────── مكوّنات صغيرة ───────────────────────── */
+
+const num = (n: number) =>
+  n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+
+// لون ثابت لكل عميل (من الاسم) — نفس العميل دايماً بنفس اللون
+const AVATAR_COLORS = ['#0ea5e9', '#6366f1', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#14b8a6', '#f97316']
+function colorOf(name: string): string {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  return AVATAR_COLORS[h % AVATAR_COLORS.length]
+}
+
+type StatusFilter = 'all' | 'debt' | 'clear' | 'credit' | 'idle'
+type SortKey = 'default' | 'debt' | 'purchases' | 'recent' | 'name'
+
+const daysSince = (iso: string) => (Date.now() - new Date(iso).getTime()) / 86_400_000
+
+/** قرص فلتر بعدّاد — نفس عائلة أقراص الخزنة بس بلون لكل حالة */
+function FilterPill({
+  active,
+  onClick,
+  children,
+  count,
+  color,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+  count?: number
+  color?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+        active
+          ? color
+            ? 'border-transparent text-white shadow-sm'
+            : 'border-primary bg-primary text-primary-foreground shadow-sm'
+          : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
+      )}
+      style={active && color ? { backgroundColor: color } : undefined}
+    >
+      {color && !active && <i className="size-2 rounded-full" style={{ backgroundColor: color }} />}
+      {children}
+      {count !== undefined && (
+        <span
+          className={cn(
+            'min-w-5 rounded-full px-1.5 text-center text-[10px] font-bold tabular-nums',
+            active ? 'bg-white/25' : 'bg-muted text-foreground/70',
+          )}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  )
+}
+
+/** بطاقة مؤشر إحصائي — حد علوي ملوّن + علامة مائية + شريط تقدّم اختياري */
+function KpiTile({
+  color,
+  icon: Icon,
+  label,
+  value,
+  unit,
+  sub,
+  progress,
+  progressLabel,
+}: {
+  color: string
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
+  label: string
+  value: string
+  unit?: string
+  sub?: string
+  progress?: number
+  progressLabel?: string
+}) {
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl border border-t-2 bg-card p-4 transition-shadow hover:shadow-md"
+      style={{ borderTopColor: color, backgroundImage: `linear-gradient(135deg, ${color}14, transparent 60%)` }}
+    >
+      <Icon
+        strokeWidth={1.25}
+        className="pointer-events-none absolute -bottom-4 -start-3 size-24 opacity-[0.07]"
+      />
+      <div className="relative">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium text-muted-foreground">{label}</p>
+          <span
+            className="flex size-8 shrink-0 items-center justify-center rounded-xl"
+            style={{ backgroundColor: `${color}1f`, color }}
+          >
+            <Icon className="size-4" />
+          </span>
+        </div>
+        <p className="mt-2 truncate text-2xl font-extrabold tabular-nums">
+          {value}
+          {unit && <span className="ms-1 text-[11px] font-medium text-muted-foreground">{unit}</span>}
+        </p>
+        {sub && <p className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">{sub}</p>}
+        {progress !== undefined && (
+          <div className="mt-2.5 flex items-center gap-2">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ backgroundColor: `${color}22` }}>
+              <div
+                className="h-full rounded-full transition-[width] duration-slow ease-out"
+                style={{ width: `${Math.min(100, Math.max(progress, 2))}%`, backgroundColor: color }}
+              />
+            </div>
+            <span className="text-[10px] font-bold tabular-nums" style={{ color }}>
+              {progressLabel ?? `${Math.round(progress)}%`}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** أفضل العملاء بالمشتريات — ترتيب بميداليات وأعمدة نسبية */
+function TopBuyers({
+  rows,
+  total,
+  onOpen,
+}: {
+  rows: Customer[]
+  total: number
+  onOpen: (c: Customer) => void
+}) {
+  const medals = ['#f59e0b', '#94a3b8', '#c2410c']
+  const max = rows[0]?.totalPurchases ?? 0
+  return (
+    <div className="rounded-2xl border bg-card p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-sm font-bold">
+          <Crown className="size-4 text-amber-500" />
+          أفضل العملاء بالمشتريات
+        </h3>
+        <span className="text-[11px] text-muted-foreground">اضغط لفتح كشف الحساب</span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">لسه مفيش مشتريات مسجّلة</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {rows.map((r, i) => {
+            const v = r.totalPurchases ?? 0
+            const color = medals[i] ?? '#0ea5e9'
+            return (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  onClick={() => onOpen(r)}
+                  className="flex w-full items-center gap-3 rounded-xl p-2 text-start transition-colors hover:bg-muted/60"
+                >
+                  <span
+                    className="flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-extrabold text-white"
+                    style={{ backgroundColor: color }}
+                  >
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-semibold">{r.name}</span>
+                      <span className="shrink-0 text-sm font-extrabold tabular-nums">{num(v)}</span>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full transition-[width] duration-slow ease-out"
+                          style={{ width: `${max > 0 ? Math.max((v / max) * 100, 4) : 0}%`, backgroundColor: color }}
+                        />
+                      </div>
+                      <span className="w-9 text-end text-[10px] tabular-nums text-muted-foreground">
+                        {total > 0 ? `${Math.round((v / total) * 100)}%` : ''}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** أعمار الديون — المديونية موزّعة حسب الوقت من آخر تعامل مع العميل */
+function DebtAging({
+  buckets,
+  total,
+}: {
+  buckets: { label: string; color: string; sum: number; n: number }[]
+  total: number
+}) {
+  return (
+    <div className="rounded-2xl border bg-card p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-sm font-bold">
+          <CalendarDays className="size-4 text-rose-500" />
+          أعمار الديون
+        </h3>
+        <span className="text-[11px] text-muted-foreground">من آخر تعامل مع العميل</span>
+      </div>
+      {total <= 0 ? (
+        <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+          <CheckCircle2 className="size-5 text-emerald-500" />
+          مفيش ديون حالياً
+        </div>
+      ) : (
+        <>
+          <div className="flex h-3 gap-0.5 overflow-hidden rounded-full">
+            {buckets.map(
+              (b) =>
+                b.sum > 0 && (
+                  <div
+                    key={b.label}
+                    title={`${b.label}: ${formatCurrency(b.sum)}`}
+                    className="h-full min-w-[6px] transition-all duration-slow ease-out first:rounded-s-full last:rounded-e-full"
+                    style={{ width: `${(b.sum / total) * 100}%`, backgroundColor: b.color }}
+                  />
+                ),
+            )}
+          </div>
+          <ul className="mt-3 space-y-2">
+            {buckets.map((b) => (
+              <li key={b.label} className={cn('flex items-center gap-2.5 text-sm transition-opacity', b.sum <= 0 && 'opacity-35')}>
+                <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
+                <span className="flex-1 font-medium">{b.label}</span>
+                <span className="text-[11px] tabular-nums text-muted-foreground">
+                  {b.n} {b.n > 2 && b.n < 11 ? 'عملاء' : 'عميل'}
+                </span>
+                <span className="w-24 text-end font-bold tabular-nums">{formatCurrency(b.sum)}</span>
+                <span className="w-9 text-end text-[11px] tabular-nums text-muted-foreground">
+                  {Math.round((b.sum / total) * 100)}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** توزيع المديونية على العملاء (مدينين +٢) أو تركيز على المدين الوحيد / رسالة "مفيش ديون" */
+function DebtSpread({
+  rows,
+  total,
+  hidden,
+}: {
+  rows: Customer[]
+  total: number
+  hidden?: boolean
+}) {
+  if (hidden) return <div />
+  if (rows.length === 0) {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border border-dashed bg-card/60 p-4 text-sm text-muted-foreground">
+        <CheckCircle2 className="size-5 text-emerald-500" />
+        مفيش ديون على أي عميل حالياً
+      </div>
+    )
+  }
+  if (rows.length === 1) {
+    const r = rows[0]
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border bg-card/70 p-3.5">
+        <span
+          className="flex size-11 shrink-0 items-center justify-center rounded-2xl text-lg font-extrabold text-white"
+          style={{ background: `linear-gradient(135deg, ${colorOf(r.name)}, ${shade(colorOf(r.name), 0.35)})` }}
+        >
+          <User className="size-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] text-muted-foreground">المدين الوحيد</p>
+          <p className="truncate text-sm font-bold">{r.name}</p>
+        </div>
+        <div className="text-end">
+          <p className="text-lg font-extrabold tabular-nums text-rose-600 dark:text-rose-400">{num(r.balance)}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {r.lastSaleAt ? `آخر تعامل منذ ${Math.floor(daysSince(r.lastSaleAt))} يوم` : 'جنيه'}
+          </p>
+        </div>
+      </div>
+    )
+  }
+  const shown = rows.slice(0, 5)
+  const restSum = rows.slice(5).reduce((s, r) => s + r.balance, 0)
+  return (
+    <div className="min-w-0 rounded-2xl border bg-card/70 p-4">
+      <div className="mb-2.5 flex items-center justify-between">
+        <p className="text-xs font-semibold text-foreground/80">توزيع المديونية</p>
+        <p className="text-[11px] text-muted-foreground">
+          {rows.length} {rows.length > 2 && rows.length < 11 ? 'مدينين' : 'مدين'}
+        </p>
+      </div>
+      <div className="flex h-3.5 gap-0.5 overflow-hidden rounded-full">
+        {shown.map((r) => (
+          <div
+            key={r.id}
+            title={`${r.name}: ${formatCurrency(r.balance)}`}
+            className="h-full min-w-[6px] rounded-sm transition-all duration-slow ease-out first:rounded-s-full"
+            style={{ width: `${(r.balance / (total || 1)) * 100}%`, backgroundColor: colorOf(r.name) }}
+          />
+        ))}
+        {restSum > 0 && (
+          <div
+            title={`آخرون: ${formatCurrency(restSum)}`}
+            className="h-full min-w-[6px] rounded-e-full bg-muted-foreground/30"
+            style={{ width: `${(restSum / (total || 1)) * 100}%` }}
+          />
+        )}
+      </div>
+      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
+        {shown.map((r) => (
+          <li key={r.id} className="flex items-center gap-1.5 text-[11px]">
+            <span className="size-2 rounded-full" style={{ backgroundColor: colorOf(r.name) }} />
+            <span className="max-w-[88px] truncate font-medium text-foreground/80">{r.name}</span>
+            <span className="tabular-nums text-muted-foreground">
+              {((r.balance / (total || 1)) * 100).toFixed(0)}%
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** يغمّق لون hex بنسبة (0–1) — لتدرج وجه البطاقة */
+function shade(hex: string, amt: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  const f = (v: number) => Math.max(0, Math.round(v * (1 - amt)))
+  const r = f((n >> 16) & 255)
+  const g = f((n >> 8) & 255)
+  const b = f(n & 255)
+  return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`
+}
+
+/** كارت العميل — بطاقة حساب: وجه بلون العميل (شريحة + اسم + هاتف + رصيد) وتحته ظهر بالأرقام والأزرار */
+function CustomerCard({
+  c,
+  index,
+  isTop,
+  onOpen,
+  onEdit,
+  onDelete,
+}: {
+  c: Customer
+  index: number
+  isTop?: boolean
+  onOpen: () => void
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const color = colorOf(c.name)
+  const hasDebt = c.balance > 0
+  const hasCredit = c.balance < 0
+  const tone = hasDebt ? '#e11d48' : hasCredit ? '#0284c7' : '#059669'
+  const purchases = c.totalPurchases ?? 0
+  const unpaidPct = hasDebt && purchases > 0 ? Math.min((c.balance / purchases) * 100, 100) : 0
+  const sales = c._count?.sales ?? 0
+  const lastDeal = c.lastSaleAt
+    ? new Date(c.lastSaleAt).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' })
+    : '—'
+
+  return (
+    <article
+      className="animate-in-up group flex flex-col overflow-hidden rounded-3xl border bg-card shadow-sm transition-all duration-base ease-out hover:-translate-y-1.5 hover:shadow-2xl"
+      style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
+    >
+      {/* ═══ وجه البطاقة ═══ */}
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`كشف حساب ${c.name}`}
+        className="relative block overflow-hidden p-5 text-start text-white outline-none"
+        style={{ background: `linear-gradient(135deg, ${color} 0%, ${shade(color, 0.38)} 100%)` }}
+      >
+        {/* زخارف */}
+        <span aria-hidden className="absolute -top-16 -left-12 size-48 rounded-full bg-white/10 transition-transform duration-slow ease-out group-hover:scale-110" />
+        <span aria-hidden className="absolute -bottom-24 right-6 size-56 rounded-full bg-white/[0.07]" />
+        <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+
+        <div className="relative flex items-start justify-between gap-3">
+          {/* الشريحة */}
+          <span aria-hidden className="flex h-7 w-10 flex-col justify-center gap-[3px] rounded-md bg-gradient-to-br from-amber-200 to-amber-400 px-1.5 shadow-inner">
+            <span className="h-px bg-amber-700/40" />
+            <span className="h-px bg-amber-700/40" />
+            <span className="h-px bg-amber-700/40" />
+          </span>
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-bold shadow-sm"
+            style={{ color: tone }}
+          >
+            <span className="size-1.5 rounded-full" style={{ backgroundColor: tone }} />
+            {hasDebt ? 'عليه آجل' : hasCredit ? 'رصيد دائن' : 'مسوّى'}
+          </span>
+        </div>
+
+        {/* الرصيد */}
+        <div className="relative mt-6">
+          <p className="text-[11px] font-medium text-white/75">
+            {hasDebt ? 'المستحق عليه' : hasCredit ? 'رصيده الدائن' : 'الرصيد'}
+          </p>
+          <p className="mt-0.5 text-4xl font-extrabold leading-none tracking-tight tabular-nums drop-shadow-sm">
+            {num(Math.abs(c.balance))}
+            <span className="ms-1.5 text-sm font-semibold text-white/75">جنيه</span>
+          </p>
+          {hasDebt && purchases > 0 && (
+            <div className="mt-3">
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/25">
+                <div
+                  className="h-full rounded-full bg-white transition-all duration-slow ease-out"
+                  style={{ width: `${Math.max(unpaidPct, 4)}%` }}
+                />
+              </div>
+              <p className="mt-1 text-[10px] text-white/75">
+                {unpaidPct.toFixed(unpaidPct >= 10 ? 0 : 1)}% من مشترياته لسه مدفعش
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* الاسم + الهاتف */}
+        <div className="relative mt-6 flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-lg font-extrabold leading-tight">{c.name}</p>
+            <p dir="ltr" className="mt-1 truncate text-start font-mono text-xs tracking-[0.14em] text-white/80">
+              {c.phone ?? '— — —'}
+            </p>
+          </div>
+          {isTop ? (
+            <span
+              title="أفضل عميل — الأعلى مشتريات"
+              className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-br from-amber-200 to-amber-400 px-3 text-[11px] font-extrabold text-amber-900 shadow-md"
+            >
+              <Crown className="size-4" />
+              أفضل عميل
+            </span>
+          ) : (
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 ring-1 ring-white/30 backdrop-blur">
+              <ReceiptText className="size-[18px]" />
+            </span>
+          )}
+        </div>
+      </button>
+
+      {/* ═══ ظهر البطاقة ═══ */}
+      <div className="flex flex-1 flex-col gap-3 p-4">
+        <div className="grid grid-cols-3 divide-x divide-x-reverse text-center">
+          <div className="px-1">
+            <p className="text-[10px] text-muted-foreground">الفواتير</p>
+            <p className="mt-0.5 text-sm font-extrabold tabular-nums">{num(sales)}</p>
+          </div>
+          <div className="px-1">
+            <p className="text-[10px] text-muted-foreground">المشتريات</p>
+            <p className="mt-0.5 text-sm font-extrabold tabular-nums">{num(purchases)}</p>
+          </div>
+          <div className="px-1">
+            <p className="text-[10px] text-muted-foreground">آخر تعامل</p>
+            <p className="mt-0.5 text-sm font-extrabold">{lastDeal}</p>
+          </div>
+        </div>
+
+        <div className="mt-auto flex items-center gap-2">
+          <Button variant="outline" className="flex-1 rounded-xl font-semibold" onClick={onOpen}>
+            <Eye className="size-4" />
+            كشف الحساب
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-9 rounded-xl border text-muted-foreground"
+            onClick={onEdit}
+            title="تعديل"
+            aria-label="تعديل"
+          >
+            <Pencil className="size-4" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-9 rounded-xl border text-muted-foreground"
+                aria-label="خيارات"
+              >
+                <MoreVertical className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem
+                onClick={onDelete}
+                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+              >
+                <Trash2 className="size-4" />
+                حذف
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </article>
   )
 }
 
@@ -555,13 +1204,22 @@ function CustomerDialog({ open, onOpenChange, initial, onSaved }: Props) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[420px]">
-        <DialogHeader>
-          <DialogTitle>{initial ? 'تعديل عميل' : 'عميل جديد'}</DialogTitle>
+    <Dialog open={open} onOpenChange={(o) => !saving && onOpenChange(o)}>
+      <DialogContent className="max-h-[92vh] gap-0 overflow-y-auto p-0 sm:max-w-md">
+        <DialogHeader className="border-b bg-gradient-to-br from-sky-500/10 to-indigo-500/10 p-5 text-start">
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400">
+              {initial ? <Pencil className="size-5" /> : <UserPlus className="size-5" />}
+            </span>
+            {initial ? 'تعديل عميل' : 'عميل جديد'}
+          </DialogTitle>
+          <DialogDescription>
+            {initial ? 'عدّل بيانات العميل — رصيده ومشترياته زي ما هم.' : 'سجّل بيانات العميل علشان تتابع حسابه ومشترياته.'}
+          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-1.5">
+
+        <div className="space-y-5 p-5">
+          <div className="space-y-2">
             <Label htmlFor="c-name">
               الاسم <span className="text-destructive">*</span>
             </Label>
@@ -569,24 +1227,32 @@ function CustomerDialog({ open, onOpenChange, initial, onSaved }: Props) {
               id="c-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !saving && submit()}
+              className="h-11"
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <Label htmlFor="c-phone">الهاتف</Label>
-            <Input
-              id="c-phone"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="اختياري"
-            />
+            <div className="relative">
+              <Phone className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="c-phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !saving && submit()}
+                placeholder="اختياري"
+                className="h-11 pr-9"
+              />
+            </div>
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+
+        <DialogFooter className="flex-row gap-2 border-t bg-muted/30 p-4 sm:justify-between">
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
             إلغاء
           </Button>
-          <Button onClick={submit} disabled={saving}>
-            {saving && <Loader2 className="size-4 animate-spin" />}
+          <Button variant="gradient" size="lg" onClick={submit} disabled={saving} className="min-w-32">
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
             حفظ
           </Button>
         </DialogFooter>

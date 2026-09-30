@@ -691,6 +691,48 @@
 }
 
 /* ============================================================
+   .sidebar-nav — the sidebar's scroll area.
+   Keeps the site-wide hover-reveal scrollbar: hidden at rest,
+   a slim green thumb fades in when you hover / scroll the nav.
+   (It must NOT get .scrollbar-none — that hard-hides it forever.)
+   ============================================================ */
+.sidebar-nav {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.sidebar-nav:hover,
+.sidebar-nav:focus-within {
+  scrollbar-color: oklch(0.57 0.18 162 / 0.45) transparent;
+}
+.dark .sidebar-nav:hover,
+.dark .sidebar-nav:focus-within {
+  scrollbar-color: oklch(0.74 0.16 162 / 0.4) transparent;
+}
+.sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 100px;
+  border: 1px solid transparent;
+  background-clip: content-box;
+  transition: background-color 0.3s ease;
+}
+.sidebar-nav:hover::-webkit-scrollbar-thumb,
+.sidebar-nav:focus-within::-webkit-scrollbar-thumb {
+  background-color: oklch(0.57 0.18 162 / 0.4);
+}
+.sidebar-nav:hover::-webkit-scrollbar-thumb:hover {
+  background-color: oklch(0.57 0.18 162 / 0.7);
+}
+.dark .sidebar-nav:hover::-webkit-scrollbar-thumb {
+  background-color: oklch(0.74 0.16 162 / 0.4);
+}
+
+/* ============================================================
    submenu-in — entrance for the sidebar inventory sub-pages.
    Runs when the wrapper flips from display:none → block, so it
    works regardless of any transition utility availability.
