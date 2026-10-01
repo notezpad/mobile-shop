@@ -1,28 +1,25 @@
 'use client'
 
 import * as React from 'react'
-import { ImagePlus, Loader2, Save, Upload, Sparkles, Calendar, CalendarDays, AlertTriangle, CheckCircle2, Printer, Bell, Ticket } from 'lucide-react'
+import {
+  ImagePlus, Loader2, Save, Sparkles, CalendarDays, CheckCircle2, Printer, Bell,
+  SlidersHorizontal, Store, Receipt, BadgeCheck, Percent, Calculator, Undo2,
+} from 'lucide-react'
 import { PrinterSettingsDialog } from './PrinterSettingsDialog'
 import { RedeemCodeCard } from './RedeemCodeCard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
-import { formatCurrency } from '@/lib/format'
+import { formatCurrency, formatNumber } from '@/lib/format'
 import { useDataRefresh } from '@/lib/offline/data-events'
+import { Panel, Led, Toggle, SettingRow, Field, INK_FIELD, INK_BTN, INK_BTN_OUTLINE } from './settings-ui'
 
 interface TenantData {
   id: string
@@ -38,6 +35,16 @@ interface TenantData {
   retailEnabled: boolean
   dynamicRetailPricingEnabled: boolean
   defaultRetailMarginPercent: number
+}
+
+interface SubInfo {
+  planName: string
+  planCode: string
+  period: string
+  endDate: string
+  daysLeft: number | null
+  expired: boolean
+  expiringSoon: boolean
 }
 
 // بلاد التشغيل الحالية/المحتملة للمحلات — القائمة دي بس اقتراحات سريعة
@@ -60,24 +67,92 @@ const TIMEZONE_OPTIONS = [
   { value: 'America/New_York', label: 'نيويورك (أمريكا)' },
 ]
 
+// الحقول اللي بتتحفظ بزر «حفظ» (وبنتتبّع تغييراتها) + اسمها في شريط التغييرات
+const TRACKED: { key: keyof TenantData; label: string }[] = [
+  { key: 'logoPath', label: 'الشعار' },
+  { key: 'shopName', label: 'اسم المحل' },
+  { key: 'phone', label: 'التليفون' },
+  { key: 'address', label: 'العنوان' },
+  { key: 'invoicePrefix', label: 'بادئة الفواتير' },
+  { key: 'timezone', label: 'المنطقة الزمنية' },
+  { key: 'commissionVodafoneCash', label: 'عمولة المحافظ' },
+  { key: 'commissionInstapay', label: 'عمولة انستاباي' },
+  { key: 'commissionFawry', label: 'عمولة فوري' },
+  { key: 'dynamicRetailPricingEnabled', label: 'التسعير التلقائي' },
+  { key: 'defaultRetailMarginPercent', label: 'هامش الربح' },
+]
+
+function fmtTz(d: Date, timeZone: string, opts: Intl.DateTimeFormatOptions) {
+  try {
+    return new Intl.DateTimeFormat('en-GB', { timeZone, ...opts }).format(d)
+  } catch {
+    return '—'
+  }
+}
+
+/** ساعة حيّة بتحدّث نفسها كل ١٥ ثانية */
+function useNow() {
+  const [now, setNow] = React.useState(() => new Date())
+  React.useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 15000)
+    return () => clearInterval(id)
+  }, [])
+  return now
+}
+
+/** حقل رقمي بيحتفظ بنص الكتابة (عشان تكتب 0.5 من غير ما يتحوّل لـ 0) */
+function NumInput({
+  value, onChange, suffix, min = 0, disabled,
+}: {
+  value: number
+  onChange: (n: number) => void
+  suffix?: string
+  min?: number
+  disabled?: boolean
+}) {
+  const [text, setText] = React.useState(String(value))
+  React.useEffect(() => {
+    if ((parseFloat(text) || 0) !== value) setText(String(value))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+  return (
+    <div className="relative">
+      <Input
+        type="number"
+        inputMode="decimal"
+        min={min}
+        step="0.1"
+        value={text}
+        disabled={disabled}
+        onChange={(e) => {
+          setText(e.target.value)
+          const n = parseFloat(e.target.value)
+          onChange(Number.isFinite(n) ? n : 0)
+        }}
+        className={cn(INK_FIELD, 'pe-9 tabular-nums')}
+      />
+      {suffix && (
+        <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-xs font-bold text-muted-foreground">
+          {suffix}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export function SettingsView() {
   const [data, setData] = React.useState<TenantData | null>(null)
+  const [saved, setSaved] = React.useState<TenantData | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
   const fileRef = React.useRef<HTMLInputElement>(null)
   const [printerDialogOpen, setPrinterDialogOpen] = React.useState(false)
+  const [sampleAmount, setSampleAmount] = React.useState(1000)
+  const now = useNow()
 
   // Subscription info — loaded separately from /api/subscription
-  const [sub, setSub] = React.useState<{
-    planName: string
-    planCode: string
-    period: string
-    endDate: string
-    daysLeft: number | null
-    expired: boolean
-    expiringSoon: boolean
-  } | null>(null)
+  const [sub, setSub] = React.useState<SubInfo | null>(null)
   const [subLoading, setSubLoading] = React.useState(true)
   const setShopName = useShopStore((s) => s.setShopName)
   const setBranding = useShopStore((s) => s.setBranding)
@@ -87,16 +162,8 @@ export function SettingsView() {
   const hasFinance = enabledModules.includes('finance')
 
   // 🛡️ 2026-09-27: single source of truth for refreshing subscription data.
-  // Previously every caller (initial load, RedeemCodeCard.onRedeemed, the
-  // now-removed PlanSwitcher.onSwitched) only did `setSub(d)` — updating
-  // THIS component's own local badge/expiry display but never touching the
-  // global `plan.{enabledModules,capabilities}` in useShopStore. Every other
-  // page (ProductsView, Sidebar, ...) reads capabilities from that global
-  // store, so after redeeming a code tied to a different plan, this page
-  // would correctly show the new plan name while the rest of the app kept
-  // running on the OLD capabilities until a hard refresh — e.g. the
-  // "variants" (sizes/colors) capability silently missing from ProductsView
-  // even though no product data was touched. This helper updates both.
+  // بتحدّث الـ state المحلي + الـ store العام (plan/capabilities) مع بعض، عشان
+  // باقي الصفحات (ProductsView, Sidebar, ...) متفضلش على الباقة القديمة.
   const refreshSubscription = React.useCallback(() => {
     return api<any>('/api/subscription')
       .then((d) => {
@@ -132,6 +199,7 @@ export function SettingsView() {
     try {
       const d = await api<TenantData>('/api/tenant')
       setData(d)
+      setSaved(d)
     } catch (e: any) {
       toast.error(e?.message || 'فشل تحميل الإعدادات')
     } finally {
@@ -143,13 +211,22 @@ export function SettingsView() {
     load()
   }, [load])
 
-  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
-  useDataRefresh(['settings'], load)
+  // التغييرات غير المحفوظة
+  const changed = React.useMemo(
+    () => (data && saved ? TRACKED.filter((t) => data[t.key] !== saved[t.key]) : []),
+    [data, saved]
+  )
+  const dirty = changed.length > 0
+  const dirtyRef = React.useRef(false)
+  dirtyRef.current = dirty
 
-  const update = <K extends keyof TenantData>(
-    key: K,
-    value: TenantData[K]
-  ) => {
+  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
+  // (ومبنمسحش اللي المستخدم كتبه ولسه ماحفظهوش)
+  useDataRefresh(['settings'], () => {
+    if (!dirtyRef.current) load()
+  })
+
+  const update = <K extends keyof TenantData>(key: K, value: TenantData[K]) => {
     setData((prev) => (prev ? { ...prev, [key]: value } : prev))
   }
 
@@ -171,24 +248,20 @@ export function SettingsView() {
   }
 
   const save = async () => {
-    if (!data) return
+    if (!data || saving) return
     setSaving(true)
     try {
-      const out: TenantData = await api('/api/tenant', {
-        method: 'PUT',
-        body: data,
-      })
+      const out: TenantData = await api('/api/tenant', { method: 'PUT', body: data })
       setData(out)
+      setSaved(out)
       setShopName(out.shopName)
       setBranding({
         phone: out.phone,
         address: out.address,
         logoPath: out.logoPath,
         invoicePrefix: out.invoicePrefix,
-        // 🛡️ 2026-09-27: من غير السطر ده، تغيير المنطقة الزمنية من هنا كان
-        // بيتخزن في الـ DB بس مش بينعكس على الساعة/التاريخ في التولبار
-        // فوق إلا بعد ريفريش كامل للصفحة، لأن LiveClock بياخد القيمة من
-        // الـ store مباشرة.
+        // 🛡️ 2026-09-27: من غير السطر ده، تغيير المنطقة الزمنية كان بيتخزن في
+        // الـ DB بس مش بينعكس على الساعة في التولبار إلا بعد ريفريش كامل.
         timezone: out.timezone,
       })
       toast.success('تم حفظ الإعدادات')
@@ -199,389 +272,457 @@ export function SettingsView() {
     }
   }
 
-  if (loading) {
+  // Ctrl/⌘ + S
+  const saveRef = React.useRef(save)
+  saveRef.current = save
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        if (dirtyRef.current) saveRef.current()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  if (loading && !data) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-96 w-full" />
+      <div className="space-y-5">
+        <Skeleton className="h-16 w-72 rounded-2xl" />
+        <div className="grid gap-5 lg:grid-cols-12">
+          <Skeleton className="h-96 rounded-2xl lg:col-span-7" />
+          <Skeleton className="h-96 rounded-2xl lg:col-span-5" />
+          <Skeleton className="h-64 rounded-2xl lg:col-span-7" />
+          <Skeleton className="h-64 rounded-2xl lg:col-span-5" />
+        </div>
       </div>
     )
   }
 
+  const tz = data?.timezone || 'Africa/Cairo'
+  const prefix = (data?.invoicePrefix || 'INV').trim() || 'INV'
+  const margin = data?.defaultRetailMarginPercent ?? 20
+  const retailOn = data?.dynamicRetailPricingEnabled ?? false
+  const commissions: { key: 'commissionVodafoneCash' | 'commissionInstapay' | 'commissionFawry'; label: string }[] = [
+    { key: 'commissionVodafoneCash', label: 'المحافظ الإلكترونية' },
+    { key: 'commissionInstapay', label: 'انستاباي' },
+    { key: 'commissionFawry', label: 'محفظة فوري' },
+  ]
+
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">الإعدادات</h1>
-        <p className="text-sm text-muted-foreground">
-          بيانات المحل وعمولات الخدمات المالية
-        </p>
-      </div>
-
-      {/* ─── الاشتراك الحالي ─── */}
-      {subLoading ? (
-        <div className="rounded-xl border border-border bg-card p-5 animate-pulse space-y-4">
-          <div className="flex justify-between items-center">
-            <div className="space-y-2"><div className="h-2.5 w-20 rounded bg-muted" /><div className="h-5 w-36 rounded bg-muted" /></div>
-            <div className="h-7 w-16 rounded-full bg-muted" />
+    <div className="space-y-5 pb-24">
+      {/* ═════════ رأس الغرفة ═════════ */}
+      <header className="animate-in-up motion-reduce:animate-none">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <span className="flex size-12 items-center justify-center rounded-2xl bg-foreground text-background shadow-md">
+              <SlidersHorizontal className="size-6" />
+            </span>
+            <div>
+              <p dir="ltr" className="text-start text-[10px] font-semibold uppercase leading-none tracking-[0.25em] text-muted-foreground/80">
+                Control room
+              </p>
+              <h1 className="mt-1 text-2xl font-extrabold leading-tight">الإعدادات</h1>
+              <p className="text-xs text-muted-foreground">بيانات المحل، الاشتراك، الإشعارات والتسعير</p>
+            </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">{[0,1,2].map(i => <div key={i} className="h-14 rounded-lg bg-muted" />)}</div>
-          <div className="h-2 w-full rounded-full bg-muted" />
-          <div className="flex gap-2"><div className="h-9 w-28 rounded-lg bg-muted" /><div className="h-9 w-36 rounded-lg bg-muted" /></div>
+
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold">
+              <Led tone={dirty ? 'warn' : 'on'} pulse={dirty} />
+              {dirty ? `${formatNumber(changed.length)} تغيير غير محفوظ` : 'كل التغييرات محفوظة'}
+            </span>
+            <Button onClick={save} disabled={!dirty || saving} className={cn('rounded-xl', INK_BTN)}>
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+              حفظ
+            </Button>
+          </div>
         </div>
-      ) : sub && (() => {
-        const isExpired   = sub.expired
-        const isSoon      = sub.expiringSoon
-        const totalDays   = sub.period === 'monthly' ? 30 : sub.period === 'yearly' ? 365 : sub.period === 'trial' ? 14 : 30
-        const progressPct = Math.min(100, Math.round((Math.max(0, totalDays - (sub.daysLeft ?? 0)) / totalDays) * 100))
-        const periodLabel = sub.period === 'monthly' ? 'شهري' : sub.period === 'yearly' ? 'سنوي' : sub.period === 'trial' ? 'تجربة مجانية' : sub.period
-        const endDate     = sub.endDate ? new Date(sub.endDate).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'
-        const btnLabel    = isExpired ? 'اشترك الآن' : isSoon ? 'تجديد الاشتراك' : 'ترقية الباقة'
+        {/* مسطرة قياس — توقيع الهوية */}
+        <div
+          aria-hidden
+          className="mt-4 h-2 w-full text-foreground/25"
+          style={{
+            backgroundImage: 'repeating-linear-gradient(to right, currentColor 0 1px, transparent 1px 10px)',
+            maskImage: 'linear-gradient(to left, black, transparent 85%)',
+            WebkitMaskImage: 'linear-gradient(to left, black, transparent 85%)',
+          }}
+        />
+      </header>
 
-        const c = isExpired
-          ? { solid: '#dc2626', light: '#fee2e2', border: '#fecaca', text: '#991b1b', label: 'منتهي',        bar: '#ef4444' }
-          : isSoon
-          ? { solid: '#d97706', light: '#fef3c7', border: '#fde68a', text: '#92400e', label: 'ينتهي قريباً', bar: '#f59e0b' }
-          : { solid: '#059669', light: '#d1fae5', border: '#a7f3d0', text: '#065f46', label: 'فعّال',         bar: '#10b981' }
-
-        return (
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
-
-            {/* شريط اللون العلوي */}
-            <div className="h-1 w-full" style={{ background: c.solid }} />
-
-            <div className="p-5 space-y-4">
-
-              {/* اسم الباقة + الحالة */}
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[11px] text-muted-foreground mb-0.5">الاشتراك الحالي · {periodLabel}</p>
-                  <p className="text-xl font-bold text-foreground">{sub.planName || '—'}</p>
-                </div>
-                <span className="shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold"
-                  style={{ background: c.light, borderColor: c.border, color: c.text }}>
-                  <span className="size-1.5 rounded-full" style={{ background: c.solid }} />
-                  {c.label}
+      <div className="grid gap-5 lg:grid-cols-12">
+        {/* ═════════ هوية المحل ═════════ */}
+        <Panel
+          tag="Identity"
+          title="بيانات المحل"
+          hint="الاسم والشعار والعنوان بيظهروا على الفواتير المطبوعة"
+          icon={Store}
+          className="stagger-1 lg:col-span-7"
+        >
+          <div className="flex flex-col gap-5 sm:flex-row">
+            <div className="flex shrink-0 flex-col items-center gap-2">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) handleUpload(f)
+                  e.target.value = ''
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                aria-label="رفع شعار المحل"
+                className="group relative flex size-28 items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed bg-muted/40 text-muted-foreground outline-none transition-colors hover:border-foreground/50 focus-visible:ring-[3px] focus-visible:ring-foreground/20"
+              >
+                {data?.logoPath ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={data.logoPath} alt="الشعار" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="flex flex-col items-center gap-1 text-[11px] font-semibold">
+                    <ImagePlus className="size-6" />
+                    رفع الشعار
+                  </span>
+                )}
+                <span
+                  className={cn(
+                    'absolute inset-0 flex items-center justify-center bg-foreground/70 text-background transition-opacity',
+                    uploading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100'
+                  )}
+                >
+                  {uploading ? <Loader2 className="size-5 animate-spin" /> : <span className="text-xs font-bold">{data?.logoPath ? 'تغيير' : 'اختيار صورة'}</span>}
                 </span>
-              </div>
+              </button>
+              {data?.logoPath ? (
+                <button type="button" onClick={() => update('logoPath', null)} className="text-[11px] font-semibold text-rose-600 hover:underline dark:text-rose-400">
+                  إزالة الشعار
+                </button>
+              ) : (
+                <span className="text-[10px] text-muted-foreground">PNG · JPG · WEBP</span>
+              )}
+            </div>
 
-              {/* 3 خلايا معلومات */}
-              <div className="grid grid-cols-3 gap-2">
-                {([
-                  { label: 'الفترة',          value: periodLabel,  color: undefined },
-                  { label: 'تاريخ الانتهاء',  value: endDate,      color: undefined },
-                  { label: 'الأيام المتبقية', value: sub.daysLeft != null ? (isExpired ? 'منتهي' : `${sub.daysLeft} يوم`) : '—', color: c.text },
-                ] as { label: string; value: string; color: string | undefined }[]).map((cell, i) => (
-                  <div key={i} className="rounded-lg bg-muted/50 border border-border px-3 py-2.5">
-                    <p className="text-[10px] text-muted-foreground mb-1">{cell.label}</p>
-                    <p className="text-sm font-semibold leading-tight text-foreground"
-                      style={cell.color ? { color: cell.color } : undefined}>
-                      {cell.value}
+            <div className="grid flex-1 gap-4 sm:grid-cols-2">
+              <Field label="اسم المحل">
+                <Input className={INK_FIELD} value={data?.shopName ?? ''} onChange={(e) => update('shopName', e.target.value)} />
+              </Field>
+              <Field label="تليفون المحل">
+                <Input className={INK_FIELD} dir="ltr" inputMode="tel" value={data?.phone ?? ''} onChange={(e) => update('phone', e.target.value || null)} />
+              </Field>
+              <Field label="العنوان" className="sm:col-span-2">
+                <Input className={INK_FIELD} value={data?.address ?? ''} onChange={(e) => update('address', e.target.value || null)} />
+              </Field>
+              <Field label="بادئة الفواتير">
+                <Input className={cn(INK_FIELD, 'font-mono uppercase')} dir="ltr" value={data?.invoicePrefix ?? 'INV'} onChange={(e) => update('invoicePrefix', e.target.value)} />
+              </Field>
+              <Field label="المنطقة الزمنية للمحل">
+                <Select value={tz} onValueChange={(v) => update('timezone', v)}>
+                  <SelectTrigger className={cn(INK_FIELD, 'w-full')}>
+                    <SelectValue placeholder="اختر المنطقة الزمنية" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIMEZONE_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <p className="flex items-center gap-2 rounded-xl border border-dashed px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
+                <Led tone="on" pulse />
+                <span>
+                  الساعة دلوقتي في المحل:{' '}
+                  <b dir="ltr" className="tabular-nums text-foreground">{fmtTz(now, tz, { hour: '2-digit', minute: '2-digit', hour12: false })}</b>
+                  {' '}— على أساسها بيتحسب «اليوم» و«الشهر» في لوحة المعلومات والتقارير.
+                </span>
+              </p>
+            </div>
+          </div>
+        </Panel>
+
+        {/* ═════════ معاينة الفاتورة ═════════ */}
+        <Panel
+          tag="Live preview"
+          title="معاينة الفاتورة"
+          hint="بتتغيّر قدامك لحظة ما تكتب"
+          icon={Receipt}
+          className="stagger-2 lg:col-span-5"
+          bodyClassName="flex items-start justify-center bg-[radial-gradient(rgb(0_0_0/0.06)_1px,transparent_1.2px)] [background-size:14px_14px] dark:bg-[radial-gradient(rgb(255_255_255/0.07)_1px,transparent_1.2px)]"
+        >
+          <div
+            className="w-full max-w-[270px] bg-white px-5 pb-9 pt-5 text-stone-900 shadow-lg"
+            style={{
+              WebkitMask: 'conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%',
+              mask: 'conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%',
+            }}
+          >
+            <div className="flex flex-col items-center text-center">
+              {data?.logoPath ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={data.logoPath} alt="" className="size-12 rounded-lg object-cover" />
+              ) : (
+                <span className="flex size-12 items-center justify-center rounded-lg bg-stone-900 text-xl font-extrabold text-white">
+                  {(data?.shopName || 'م').trim().charAt(0)}
+                </span>
+              )}
+              <p className="mt-2 text-sm font-extrabold leading-tight">{data?.shopName || 'اسم المحل'}</p>
+              {data?.address && <p className="mt-0.5 text-[11px] leading-snug text-stone-500">{data.address}</p>}
+              {data?.phone && <p dir="ltr" className="mt-0.5 text-[11px] tabular-nums text-stone-500">{data.phone}</p>}
+            </div>
+            <div className="my-3 border-t border-dashed border-stone-300" />
+            <div className="space-y-1 text-[11px] tabular-nums">
+              <div className="flex justify-between"><span>صنف تجريبي × 2</span><span>300</span></div>
+              <div className="flex justify-between text-stone-500"><span>صنف آخر × 1</span><span>150</span></div>
+            </div>
+            <div className="my-3 border-t border-dashed border-stone-300" />
+            <div className="flex items-baseline justify-between text-sm font-extrabold tabular-nums">
+              <span>الإجمالي</span><span>450 جنيه</span>
+            </div>
+            <div className="my-3 border-t border-dashed border-stone-300" />
+            <div className="space-y-0.5 text-center text-[10px] text-stone-500">
+              <p dir="ltr" className="font-mono text-xs font-bold tracking-wider text-stone-900">{prefix}-000124</p>
+              <p dir="ltr" className="tabular-nums">{fmtTz(now, tz, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</p>
+              <p>شكراً لزيارتكم</p>
+            </div>
+          </div>
+        </Panel>
+
+        {/* ═════════ الاشتراك ═════════ */}
+        {(subLoading || sub) && (
+          <Panel
+            tag="Subscription"
+            title="الاشتراك الحالي"
+            icon={BadgeCheck}
+            className="stagger-3 lg:col-span-7"
+            aside={
+              sub && (
+                <span className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-bold">
+                  <Led tone={sub.expired ? 'off' : sub.expiringSoon ? 'warn' : 'on'} />
+                  {sub.expired ? 'منتهي' : sub.expiringSoon ? 'ينتهي قريباً' : 'فعّال'}
+                </span>
+              )
+            }
+          >
+            {!sub ? (
+              <Skeleton className="h-32 w-full rounded-xl" />
+            ) : (
+              <SubscriptionBody sub={sub} />
+            )}
+          </Panel>
+        )}
+
+        {/* ═════════ كود الاشتراك ═════════ */}
+        <div className={cn('stagger-4', sub || subLoading ? 'lg:col-span-5' : 'lg:col-span-12')}>
+          <RedeemCodeCard
+            onRedeemed={() => {
+              // نحدّث الاشتراك (الـ state المحلي + الـ store) بعد التفعيل — الكود ممكن يكون لباقة مختلفة
+              setSubLoading(true)
+              refreshSubscription().finally(() => setSubLoading(false))
+            }}
+          />
+        </div>
+
+        {/* ═════════ الإشعارات ═════════ */}
+        <div className="stagger-5 lg:col-span-6">
+          <NotificationSettingsCard />
+        </div>
+
+        {/* ═════════ التسعير التلقائي ═════════ */}
+        <Panel
+          tag="Pricing"
+          title="تسعير القطعة التلقائي"
+          hint="سعر «قطعة» في نقطة البيع = التكلفة + هامش الربح بدل السعر الثابت. أسعار وحدات الجملة (ربع دستة، نص دستة، دستة...) بتفضل زي ما هي."
+          icon={Calculator}
+          className="stagger-5 lg:col-span-6"
+          bodyClassName="space-y-3.5"
+        >
+          <SettingRow
+            title="تفعيل التسعير التلقائي للقطعة"
+            desc="السعر بيتحدّث فوراً في نقطة البيع لحظة اختيار وحدة «قطعة»"
+            on={retailOn}
+          >
+            <Toggle label="تفعيل التسعير التلقائي للقطعة" checked={retailOn} onChange={(v) => update('dynamicRetailPricingEnabled', v)} disabled={saving} />
+          </SettingRow>
+
+          <Field label="نسبة هامش الربح الافتراضية" hint="تُطبَّق على أي منتج ملوش نسبة مخصصة. وتقدر تخصص نسبة لمنتج معين من بياناته.">
+            <NumInput value={margin} onChange={(n) => update('defaultRetailMarginPercent', n)} suffix="%" />
+          </Field>
+
+          {/* معادلة حيّة */}
+          <div className={cn('flex items-stretch gap-2 text-center transition-opacity', !retailOn && 'opacity-45')}>
+            {[
+              { l: 'التكلفة', v: '100' },
+              { l: `هامش ${formatNumber(margin)}%`, v: `+${formatNumber(Math.round(margin * 100) / 100)}` },
+              { l: 'سعر القطعة', v: formatNumber(Math.round((100 + margin) * 100) / 100), strong: true },
+            ].map((c, i) => (
+              <React.Fragment key={c.l}>
+                {i > 0 && <span className="self-center text-sm font-bold text-muted-foreground">{i === 2 ? '=' : '+'}</span>}
+                <div className={cn('flex-1 rounded-xl border px-2 py-2', c.strong ? 'border-foreground bg-foreground text-background' : 'border-dashed')}>
+                  <p className={cn('text-[10px] font-semibold', c.strong ? 'text-background/70' : 'text-muted-foreground')}>{c.l}</p>
+                  <p className="text-lg font-extrabold tabular-nums leading-tight">{i === 1 ? c.v.replace('+', '') : c.v}</p>
+                </div>
+              </React.Fragment>
+            ))}
+          </div>
+        </Panel>
+
+        {/* ═════════ عمولات الخدمات المالية ═════════ */}
+        {hasFinance && (
+          <Panel
+            tag="Fees"
+            title="عمولات الخدمات المالية"
+            hint="النسبة اللي بتتحسب على كل معاملة حسب وسيلة الدفع"
+            icon={Percent}
+            className="stagger-6 lg:col-span-8"
+            aside={
+              <label className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground">
+                جرّب مبلغ
+                <Input
+                  type="number"
+                  min={0}
+                  value={sampleAmount}
+                  onChange={(e) => setSampleAmount(Math.max(0, parseFloat(e.target.value) || 0))}
+                  className={cn(INK_FIELD, 'h-8 w-24 text-center tabular-nums')}
+                />
+              </label>
+            }
+          >
+            <div className="grid gap-3 sm:grid-cols-3">
+              {commissions.map((c) => {
+                const pct = data?.[c.key] ?? 0
+                return (
+                  <div key={c.key} className="space-y-2.5 rounded-xl border bg-background/50 p-3.5">
+                    <Field label={c.label}>
+                      <NumInput value={pct} onChange={(n) => update(c.key, n)} suffix="%" />
+                    </Field>
+                    <p className="flex items-baseline justify-between border-t border-dashed pt-2 text-[11px] text-muted-foreground">
+                      <span>على {formatNumber(sampleAmount)}</span>
+                      <b className="text-sm tabular-nums text-foreground">{formatCurrency((sampleAmount * pct) / 100)}</b>
                     </p>
                   </div>
-                ))}
-              </div>
-
-              {/* شريط التقدم */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-[11px] text-muted-foreground">
-                  <span>مدة الاشتراك المستهلكة</span>
-                  <span>{progressPct}%</span>
-                </div>
-                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                  <div className="h-full rounded-full transition-all duration-700"
-                    style={{ width: `${progressPct}%`, background: c.bar }} />
-                </div>
-              </div>
-
-              {/* أزرار */}
-              <div className="flex flex-wrap gap-2 pt-1 border-t border-border">
-                <a href="/pricing"
-                  className="inline-flex h-9 items-center rounded-lg px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90 mt-3"
-                  style={{ background: c.solid }}>
-                  {btnLabel}
-                </a>
-                <a href="/pricing"
-                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted mt-3">
-                  <CalendarDays className="size-3.5 text-muted-foreground" />
-                  اشتراك سنوي
-                  <span className="text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none"
-                    style={{ background: '#d1fae5', color: '#065f46', border: '1px solid #a7f3d0' }}>
-                    وفّر 17%
-                  </span>
-                </a>
-              </div>
-
+                )
+              })}
             </div>
+          </Panel>
+        )}
+
+        {/* ═════════ الطابعة ═════════ */}
+        <Panel
+          tag="Hardware"
+          title="الطابعة الحرارية"
+          hint="إعدادات طابعة ESC/POS للفواتير الحرارية"
+          icon={Printer}
+          className={cn('stagger-6', hasFinance ? 'lg:col-span-4' : 'lg:col-span-12')}
+          bodyClassName="flex flex-wrap items-center justify-between gap-3"
+        >
+          <div className="flex flex-wrap gap-1.5">
+            {['58mm', '80mm', 'ESC/POS'].map((t) => (
+              <span key={t} dir="ltr" className="rounded-md border border-dashed px-2 py-1 font-mono text-[11px] font-semibold text-muted-foreground">{t}</span>
+            ))}
           </div>
-        )
-      })()}
-
-      {/* 🛡️ 2026-09-21: Redeem Code card — lets the user apply an activation
-          code (generated by the admin from the admin panel) to activate or
-          renew their subscription. Visible to ALL users (not just expired),
-          so users can stack a renewal code while still active. */}
-      <RedeemCodeCard
-        onRedeemed={() => {
-          // Refresh subscription data (local badge + global store) after a
-          // successful redeem — a code can be tied to a different plan than
-          // the one the tenant is currently on.
-          setSubLoading(true)
-          refreshSubscription().finally(() => setSubLoading(false))
-        }}
-      />
-
-      {/* 🛡️ 2026-09-27: PlanSwitcher removed — it was a self-testing tool
-          for migrating legacy `trial` tenants to a canonical plan, and it's
-          no longer needed day-to-day. It also had a real bug: switching
-          only updated this page's own local `sub` state, not the global
-          plan/capabilities in useShopStore — so pages like ProductsView
-          (which read capabilities from the store) wouldn't reflect the new
-          plan until a hard refresh, making a successful switch LOOK like it
-          silently lost the "variants" (colors/sizes) capability. No product
-          data was ever touched by switching plans — it was purely a stale
-          UI-state bug. See PlanSwitcher's old definition (kept below,
-          unused) if this ever needs to come back for a specific tenant. */}
-
-      {/* 🛡️ 2026-09-17: Notification settings — connected to /api/notifications/settings */}
-      <NotificationSettingsCard />
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">بيانات المحل</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="flex size-20 items-center justify-center overflow-hidden rounded-lg border bg-muted">
-              {data?.logoPath ? (
-                <img
-                  src={data.logoPath}
-                  alt="الشعار"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <ImagePlus className="size-8 text-muted-foreground" />
-              )}
-            </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) handleUpload(f)
-                e.target.value = ''
-              }}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-            >
-              {uploading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Upload className="size-4" />
-              )}
-              اختيار صورة
-            </Button>
-            {data?.logoPath && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={() => update('logoPath', null)}
-              >
-                إزالة
-              </Button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="اسم المحل">
-              <Input
-                value={data?.shopName ?? ''}
-                onChange={(e) => update('shopName', e.target.value)}
-              />
-            </Field>
-            <Field label="تليفون المحل">
-              <Input
-                value={data?.phone ?? ''}
-                onChange={(e) =>
-                  update('phone', e.target.value || null)
-                }
-              />
-            </Field>
-            <Field label="العنوان" full>
-              <Input
-                value={data?.address ?? ''}
-                onChange={(e) =>
-                  update('address', e.target.value || null)
-                }
-              />
-            </Field>
-            <Field label="بادئة الفواتير">
-              <Input
-                value={data?.invoicePrefix ?? 'INV'}
-                onChange={(e) => update('invoicePrefix', e.target.value)}
-              />
-            </Field>
-            <Field label="المنطقة الزمنية للمحل" full>
-              <Select
-                value={data?.timezone || 'Africa/Cairo'}
-                onValueChange={(v) => update('timezone', v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="اختر المنطقة الزمنية" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIMEZONE_OPTIONS.map((tz) => (
-                    <SelectItem key={tz.value} value={tz.value}>
-                      {tz.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="mt-1 text-xs text-muted-foreground">
-                على أساسها بيتحسب "اليوم" و"الشهر" في لوحة المعلومات والتقارير — مهم لو المحل خارج توقيت القاهرة.
-              </p>
-            </Field>
-          </div>
-        </CardContent>
-      </Card>
-
-      {hasFinance && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">عمولات الخدمات المالية (%)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <Field label="عمولة محافظ إلكترونية %">
-                <Input
-                  type="number"
-                  step="0.1"
-                  value={String(data?.commissionVodafoneCash ?? 0)}
-                  onChange={(e) =>
-                    update(
-                      'commissionVodafoneCash',
-                      parseFloat(e.target.value) || 0
-                    )
-                  }
-                />
-              </Field>
-              <Field label="عمولة انستاباي %">
-                <Input
-                  type="number"
-                  step="0.1"
-                  value={String(data?.commissionInstapay ?? 0)}
-                  onChange={(e) =>
-                    update(
-                      'commissionInstapay',
-                      parseFloat(e.target.value) || 0
-                    )
-                  }
-                />
-              </Field>
-              <Field label="عمولة محفظة فوري %">
-                <Input
-                  type="number"
-                  step="0.1"
-                  value={String(data?.commissionFawry ?? 0)}
-                  onChange={(e) =>
-                    update(
-                      'commissionFawry',
-                      parseFloat(e.target.value) || 0
-                    )
-                  }
-                />
-              </Field>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ─── التسعير الديناميكي للقطاعي (Unit-Based Dynamic Pricing) ─── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">تسعير القطعة التلقائي</CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">
-            لما تفعّلها، سعر بيع «قطعة» في نقطة البيع بيتحسب تلقائياً = سعر التكلفة + نسبة هامش الربح، بدل السعر الثابت المدخل يدوياً. أسعار وحدات الجملة (ربع دستة، نص دستة، دستة...) بتفضل زي ما هي دايماً ومتأثرش بالتفعيل ده.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
-            <div className="flex-1">
-              <p className="text-sm font-medium">تفعيل التسعير التلقائي للقطعة</p>
-              <p className="text-xs text-muted-foreground">
-                السعر بيتحدّث فوراً في نقطة البيع لحظة اختيار وحدة «قطعة»
-              </p>
-            </div>
-            <Switch
-              checked={data?.dynamicRetailPricingEnabled ?? false}
-              onCheckedChange={(v) => update('dynamicRetailPricingEnabled', v === true)}
-              disabled={saving}
-            />
-          </div>
-          <Field label="نسبة هامش الربح الافتراضية %">
-            <Input
-              type="number"
-              min={0}
-              step="0.1"
-              value={String(data?.defaultRetailMarginPercent ?? 20)}
-              onChange={(e) =>
-                update('defaultRetailMarginPercent', parseFloat(e.target.value) || 0)
-              }
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              تُطبَّق على أي منتج ملوش نسبة مخصصة له. يمكن تخصيص نسبة مختلفة لمنتج معين من داخل بيانات المنتج نفسه.
-            </p>
-          </Field>
-        </CardContent>
-      </Card>
-
-      {/* ─── الطابعة الحرارية ─── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">الطابعة الحرارية</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-3 text-sm text-muted-foreground">
-            اضبط إعدادات طابعة ESC/POS للفواتير الحرارية (58mm / 80mm)
-          </p>
-          <Button variant="outline" onClick={() => setPrinterDialogOpen(true)} className="gap-2">
+          <Button variant="outline" onClick={() => setPrinterDialogOpen(true)} className={cn('gap-2 rounded-xl', INK_BTN_OUTLINE)}>
             <Printer className="size-4" />
             إعدادات الطابعة
           </Button>
-        </CardContent>
-      </Card>
+        </Panel>
+      </div>
 
-      <PrinterSettingsDialog
-        open={printerDialogOpen}
-        onOpenChange={setPrinterDialogOpen}
-      />
+      <PrinterSettingsDialog open={printerDialogOpen} onOpenChange={setPrinterDialogOpen} />
 
-      <div className="flex justify-end">
-        <Button size="lg" onClick={save} disabled={saving}>
-          {saving ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Save className="size-4" />
-          )}
-          حفظ الإعدادات
-        </Button>
+      {/* ═════════ شريط التغييرات العائم ═════════ */}
+      {dirty && (
+        <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4">
+          <div className="animate-in-up pointer-events-auto flex max-w-full items-center gap-3 rounded-2xl border border-background/10 bg-foreground py-2 pe-2 ps-4 text-background shadow-xl">
+            <Led tone="warn" pulse />
+            <div className="min-w-0">
+              <p className="text-sm font-bold leading-tight">{formatNumber(changed.length)} تغيير غير محفوظ</p>
+              <p className="hidden max-w-[260px] truncate text-[11px] text-background/60 sm:block">
+                {changed.slice(0, 3).map((c) => c.label).join(' · ')}{changed.length > 3 ? ' …' : ''}
+              </p>
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => setData(saved)} disabled={saving} className="gap-1.5 rounded-xl text-background/80 hover:bg-background/10 hover:text-background">
+              <Undo2 className="size-3.5" />
+              تراجع
+            </Button>
+            <Button size="sm" onClick={save} disabled={saving} className="gap-1.5 rounded-xl bg-background text-foreground hover:bg-background/90">
+              {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+              حفظ
+              <kbd dir="ltr" className="hidden rounded border border-foreground/15 px-1 font-mono text-[10px] text-foreground/60 md:inline">Ctrl S</kbd>
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── الاشتراك: عدّاد دائري بالأيام المتبقية ───────────────────────────
+function SubscriptionBody({ sub }: { sub: SubInfo }) {
+  const totalDays = sub.period === 'yearly' ? 365 : sub.period === 'trial' ? 14 : 30
+  const left = sub.expired ? 0 : Math.max(0, sub.daysLeft ?? 0)
+  const remaining = Math.min(1, left / totalDays)
+  const R = 46
+  const C = 2 * Math.PI * R
+  const stroke = sub.expired ? 'stroke-rose-500' : sub.expiringSoon ? 'stroke-amber-500' : 'stroke-emerald-500'
+  const periodLabel = sub.period === 'monthly' ? 'شهري' : sub.period === 'yearly' ? 'سنوي' : sub.period === 'trial' ? 'تجربة مجانية' : sub.period
+  const endDate = sub.endDate
+    ? new Date(sub.endDate).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })
+    : '—'
+  const btnLabel = sub.expired ? 'اشترك الآن' : sub.expiringSoon ? 'تجديد الاشتراك' : 'ترقية الباقة'
+
+  return (
+    <div className="flex flex-col items-center gap-6 sm:flex-row">
+      <div className="relative size-32 shrink-0">
+        <svg viewBox="0 0 112 112" className="size-full -rotate-90" aria-hidden>
+          <circle cx="56" cy="56" r={R} fill="none" strokeWidth="8" className="stroke-muted" />
+          <circle
+            cx="56" cy="56" r={R} fill="none" strokeWidth="8" strokeLinecap="round"
+            strokeDasharray={C} strokeDashoffset={C * (1 - remaining)}
+            className={cn('transition-[stroke-dashoffset] duration-700', stroke)}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-3xl font-extrabold leading-none tabular-nums">{sub.daysLeft != null ? (sub.expired ? '0' : formatNumber(left)) : '—'}</span>
+          <span className="mt-1 text-[10px] font-semibold text-muted-foreground">{sub.expired ? 'منتهي' : 'يوم متبقي'}</span>
+        </div>
+      </div>
+
+      <div className="w-full min-w-0 flex-1 space-y-4">
+        <div>
+          <p className="text-[11px] font-semibold text-muted-foreground">الباقة</p>
+          <p className="truncate text-xl font-extrabold leading-tight">{sub.planName || '—'}</p>
+        </div>
+        <div className="grid grid-cols-2 divide-x divide-x-reverse rounded-xl border border-dashed">
+          <div className="px-3.5 py-2.5">
+            <p className="text-[10px] text-muted-foreground">الفترة</p>
+            <p className="text-sm font-bold">{periodLabel}</p>
+          </div>
+          <div className="px-3.5 py-2.5">
+            <p className="text-[10px] text-muted-foreground">تاريخ الانتهاء</p>
+            <p className="text-sm font-bold">{endDate}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <a href="/pricing" className={cn('inline-flex h-9 items-center rounded-xl px-4 text-sm font-semibold transition-colors', INK_BTN)}>
+            {btnLabel}
+          </a>
+          <a href="/pricing" className={cn('inline-flex h-9 items-center gap-2 rounded-xl border px-4 text-sm font-medium transition-colors', INK_BTN_OUTLINE)}>
+            <CalendarDays className="size-3.5 text-muted-foreground" />
+            اشتراك سنوي
+            <span className="rounded-md border border-dashed px-1.5 py-0.5 text-[10px] font-bold leading-none">وفّر 17%</span>
+          </a>
+        </div>
       </div>
     </div>
   )
 }
 
 // ─── NotificationSettings (2026-09-17) ────────────────────────────
-// Connected to /api/notifications/settings (GET + PUT).
-// Previously: the notification preferences existed in the DB (Tenant model)
-// and were read by checkLowStockAndNotify / checkExpiringSubscriptions,
-// but there was NO UI to change them. They were stuck at their defaults.
-// Now: the user can toggle them from the Settings page.
+// Connected to /api/notifications/settings (GET + PUT). كل مفتاح بيتحفظ فورًا.
 function NotificationSettingsCard() {
   const [prefs, setPrefs] = React.useState<{
     notifyLowStock: boolean
@@ -618,12 +759,9 @@ function NotificationSettingsCard() {
     setPrefs({ ...prefs, [key]: value })
     setSaving(true)
     try {
-      await api('/api/notifications/settings', {
-        method: 'PUT',
-        body: { [key]: value },
-      })
+      await api('/api/notifications/settings', { method: 'PUT', body: { [key]: value } })
       toast.success(value ? 'تم تفعيل الإشعار' : 'تم تعطيل الإشعار')
-    } catch (e: any) {
+    } catch {
       // Revert on error
       setPrefs({ ...prefs, [key]: !value })
       toast.error('فشل تحديث الإعداد')
@@ -633,84 +771,30 @@ function NotificationSettingsCard() {
   }
 
   if (loading || !prefs) {
-    return <Skeleton className="h-48 w-full" />
+    return <Skeleton className="h-64 w-full rounded-2xl" />
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Bell className="size-4 text-primary" />
-          إعدادات الإشعارات
-        </CardTitle>
-        <p className="text-xs text-muted-foreground mt-1">
-          تحكم في أنواع الإشعارات التي تظهر في جرس الإشعارات
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Notify low stock */}
-        <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
-          <div className="flex-1">
-            <p className="text-sm font-medium">تنبيهات نقص المخزون</p>
-            <p className="text-xs text-muted-foreground">إشعار عند وصول أي منتج للحد الأدنى</p>
-          </div>
-          <Switch
-            checked={prefs.notifyLowStock}
-            onCheckedChange={(v) => toggle('notifyLowStock', v === true)}
-            disabled={saving}
-          />
-        </div>
-
-        {/* Notify expiring subscription */}
-        <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
-          <div className="flex-1">
-            <p className="text-sm font-medium">تنبيهات انتهاء الاشتراك</p>
-            <p className="text-xs text-muted-foreground">إشعار قبل انتهاء الاشتراك بـ 7 أيام</p>
-          </div>
-          <Switch
-            checked={prefs.notifyExpiringSubscription}
-            onCheckedChange={(v) => toggle('notifyExpiringSubscription', v === true)}
-            disabled={saving}
-          />
-        </div>
-
-        {/* Notify new sales — backend not yet implemented */}
-        <div className="flex items-center justify-between gap-3 rounded-lg border p-3 opacity-60">
-          <div className="flex-1">
-            <p className="text-sm font-medium flex items-center gap-2">
-              إشعارات المبيعات الجديدة
-              <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800">
-                قريباً
-              </span>
-            </p>
-            <p className="text-xs text-muted-foreground">إشعار عند كل عملية بيع جديدة — سيُفعَّل في تحديث قادم</p>
-          </div>
-          <Switch
-            checked={false}
-            disabled
-          />
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function Field({
-  label,
-  children,
-  full,
-}: {
-  label: string
-  children: React.ReactNode
-  full?: boolean
-}) {
-  return (
-    <div className={full ? 'sm:col-span-2' : ''}>
-      <div className="space-y-1.5">
-        <Label>{label}</Label>
-        {children}
-      </div>
-    </div>
+    <Panel
+      tag="Alerts"
+      title="إعدادات الإشعارات"
+      hint="تحكم في أنواع الإشعارات التي تظهر في جرس الإشعارات"
+      icon={Bell}
+      className="h-full"
+      bodyClassName="space-y-3"
+      aside={<span className="rounded-md border border-dashed px-1.5 py-1 text-[10px] font-semibold text-muted-foreground">يُحفظ فورًا</span>}
+    >
+      <SettingRow title="تنبيهات نقص المخزون" desc="إشعار عند وصول أي منتج للحد الأدنى" on={prefs.notifyLowStock}>
+        <Toggle label="تنبيهات نقص المخزون" checked={prefs.notifyLowStock} onChange={(v) => toggle('notifyLowStock', v)} disabled={saving} />
+      </SettingRow>
+      <SettingRow title="تنبيهات انتهاء الاشتراك" desc="إشعار قبل انتهاء الاشتراك بـ 7 أيام" on={prefs.notifyExpiringSubscription}>
+        <Toggle label="تنبيهات انتهاء الاشتراك" checked={prefs.notifyExpiringSubscription} onChange={(v) => toggle('notifyExpiringSubscription', v)} disabled={saving} />
+      </SettingRow>
+      {/* backend not yet implemented */}
+      <SettingRow title="إشعارات المبيعات الجديدة" desc="إشعار عند كل عملية بيع جديدة — سيُفعَّل في تحديث قادم" badge="قريباً" muted>
+        <Toggle label="إشعارات المبيعات الجديدة" checked={false} onChange={() => {}} disabled />
+      </SettingRow>
+    </Panel>
   )
 }
 

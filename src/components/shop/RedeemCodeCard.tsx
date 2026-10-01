@@ -11,10 +11,9 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
+import { Panel, Led, INK_BTN, INK_BTN_OUTLINE } from './settings-ui'
 import { api } from '@/lib/api'
 import { useShopStore } from '@/lib/store'
 import { toast } from 'sonner'
@@ -103,157 +102,124 @@ export function RedeemCodeCard({
     window.location.reload()
   }
 
+  const statusTone = isExpired ? 'off' : isExpiringSoon ? 'warn' : daysLeft != null ? 'on' : 'idle'
+  const statusText = isExpired
+    ? 'منتهي'
+    : isExpiringSoon
+      ? `ينتهي خلال ${daysLeft} يوم`
+      : daysLeft != null
+        ? `فعّال — ${daysLeft} يوم متبقي`
+        : '—'
+
   return (
-    <Card className="overflow-hidden border-primary/30">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <div className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <Ticket className="size-4" />
-          </div>
-          تطبيق كود اشتراك
-        </CardTitle>
-        <p className="text-xs text-muted-foreground mt-1">
-          عندك كود تفعيل من الإدارة؟ أدخله هنا لتفعيل أو تجديد اشتراكك. الكود صالح للاستخدام مرة واحدة.
+    <Panel
+      tag="Activation"
+      title="تطبيق كود اشتراك"
+      hint="عندك كود تفعيل من الإدارة؟ أدخله هنا لتفعيل أو تجديد اشتراكك. الكود صالح للاستخدام مرة واحدة."
+      icon={Ticket}
+      className="h-full"
+      bodyClassName="space-y-4"
+    >
+      {/* ── حالة الاشتراك ── */}
+      <div className="flex items-center justify-between gap-2 rounded-xl border border-dashed px-3.5 py-2.5">
+        <span className="flex items-center gap-2 text-xs font-semibold">
+          <Led tone={statusTone} pulse={statusTone === 'off' || statusTone === 'warn'} />
+          {statusText}
+        </span>
+        {subscription.planName && (
+          <span className="truncate text-xs font-medium text-muted-foreground">{subscription.planName}</span>
+        )}
+      </div>
+
+      {/* ── خانة الكود: شكل «شريط تذكرة» ── */}
+      <div className="space-y-2">
+        <Input
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="ABCD-EFGH-IJKL"
+          dir="ltr"
+          className="h-12 rounded-xl border-dashed bg-background/60 text-center font-mono text-lg uppercase tracking-[0.3em] hover:border-foreground/30 focus-visible:border-foreground focus-visible:ring-foreground/10"
+          maxLength={32}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !busy) {
+              e.preventDefault()
+              handleRedeem()
+            }
+          }}
+          disabled={busy}
+        />
+        <p className="text-center text-[11px] text-muted-foreground">
+          أدخل الكود كما هو — الأحرف الإنجليزية تُحوّل تلقائياً لأحرف كبيرة
         </p>
-      </CardHeader>
+      </div>
 
-      <CardContent className="space-y-4">
-        {/* ── Status pill ─────────────────────────────────── */}
-        <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">حالة الاشتراك:</span>
-            {isExpired ? (
-              <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800">
-                <AlertTriangle className="size-3 ml-1" />
-                منتهي
-              </Badge>
-            ) : isExpiringSoon ? (
-              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800">
-                ينتهي خلال {daysLeft} يوم
-              </Badge>
-            ) : daysLeft != null ? (
-              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800">
-                <CheckCircle2 className="size-3 ml-1" />
-                فعّال — {daysLeft} يوم متبقي
-              </Badge>
-            ) : (
-              <Badge variant="outline">—</Badge>
-            )}
-          </div>
-          {subscription.planName && (
-            <span className="text-xs font-medium text-muted-foreground">
-              {subscription.planName}
-            </span>
-          )}
-        </div>
+      <Button onClick={handleRedeem} disabled={busy || !code.trim()} className={`w-full gap-1.5 rounded-xl ${INK_BTN}`} size="lg">
+        {busy ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
+        {busy ? 'جارٍ التفعيل...' : 'تفعيل الكود'}
+      </Button>
 
-        {/* ── Code input + button ─────────────────────────── */}
-        <div className="space-y-2">
-          <Input
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="ABCDEFGHIJKL"
-            dir="ltr"
-            className="font-mono text-center text-lg tracking-[0.3em] uppercase"
-            maxLength={32}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !busy) {
-                e.preventDefault()
-                handleRedeem()
-              }
-            }}
-            disabled={busy}
-          />
-          <p className="text-[11px] text-muted-foreground text-center">
-            أدخل الكود كما هو — الأحرف الإنجليزية تُحوّل تلقائياً لأحرف كبيرة
-          </p>
-        </div>
-
-        <Button
-          onClick={handleRedeem}
-          disabled={busy || !code.trim()}
-          className="w-full gap-1.5"
-          size="lg"
-        >
-          {busy ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <KeyRound className="size-4" />
-          )}
-          {busy ? 'جارٍ التفعيل...' : 'تفعيل الكود'}
-        </Button>
-
-        {/* ── Success result ──────────────────────────────── */}
-        <AnimatePresence>
-          {result && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden"
-            >
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950/40">
-                <div className="flex items-start gap-3">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900">
-                    <CheckCircle2 className="size-5 text-emerald-700 dark:text-emerald-300" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-emerald-900 dark:text-emerald-100">
-                      تم تفعيل الاشتراك بنجاح
+      {/* ── نتيجة التفعيل ── */}
+      <AnimatePresence>
+        {result && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="rounded-xl border border-foreground/25 bg-foreground/[0.03] p-4">
+              <div className="flex items-start gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
+                  <CheckCircle2 className="size-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-2 text-sm font-extrabold">
+                    <Led tone="on" />
+                    تم تفعيل الاشتراك بنجاح
+                  </p>
+                  <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
+                    <p>
+                      الباقة: <span className="font-bold text-foreground">{result.subscription.planName}</span>
                     </p>
-                    <div className="mt-1.5 space-y-1 text-xs text-emerald-800 dark:text-emerald-200">
-                      <p>
-                        الباقة: <span className="font-semibold">{result.subscription.planName}</span>
-                      </p>
-                      <p>
-                        ينتهي في:{' '}
-                        <span className="font-semibold">
-                          {new Date(result.subscription.endDate).toLocaleDateString('ar-EG', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric',
-                          })}
-                        </span>
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-3 gap-1.5 border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-900 dark:text-emerald-100 dark:hover:bg-emerald-800"
-                      onClick={handleRefresh}
-                    >
-                      <RotateCcw className="size-3.5" />
-                      تحديث الصفحة لتفعيل الاشتراك
-                    </Button>
+                    <p>
+                      ينتهي في:{' '}
+                      <span className="font-bold text-foreground">
+                        {new Date(result.subscription.endDate).toLocaleDateString('ar-EG', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </span>
+                    </p>
                   </div>
+                  <Button size="sm" variant="outline" className={`mt-3 gap-1.5 rounded-lg ${INK_BTN_OUTLINE}`} onClick={handleRefresh}>
+                    <RotateCcw className="size-3.5" />
+                    تحديث الصفحة لتفعيل الاشتراك
+                  </Button>
                 </div>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        {/* ── Helper text ─────────────────────────────────── */}
-        {isExpired && (
-          <div className="rounded-lg border border-red-200 bg-red-50/50 p-3 dark:border-red-800 dark:bg-red-950/20">
-            <p className="text-xs text-red-800 dark:text-red-200 flex items-start gap-2">
-              <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
-              <span>
-                اشتراكك منتهي — الميزات متوقفة. أدخل كود تفعيل صالح لاستعادة الخدمة،
-                أو تواصل مع الإدارة للحصول على كود جديد.
-              </span>
-            </p>
-          </div>
-        )}
-        {!isExpired && !isExpiringSoon && (
-          <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-            <Sparkles className="size-3 shrink-0" />
-            <span>
-              تلميح: يمكنك تطبيق كود تجديد قبل انتهاء اشتراكك الحالي — سيتم إلغاء
-              الاشتراك القديم وإنشاء جديد بنفس الباقة والمدة المحددة في الكود.
-            </span>
-          </p>
-        )}
-      </CardContent>
-    </Card>
+      {/* ── تلميحات ── */}
+      {isExpired && (
+        <p className="flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/[0.06] p-3 text-xs leading-relaxed text-rose-700 dark:text-rose-300">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            اشتراكك منتهي — الميزات متوقفة. أدخل كود تفعيل صالح لاستعادة الخدمة، أو تواصل مع الإدارة للحصول على كود جديد.
+          </span>
+        </p>
+      )}
+      {!isExpired && !isExpiringSoon && (
+        <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
+          <Sparkles className="mt-0.5 size-3 shrink-0" />
+          <span>
+            تلميح: يمكنك تطبيق كود تجديد قبل انتهاء اشتراكك الحالي — سيتم إلغاء الاشتراك القديم وإنشاء جديد بنفس الباقة والمدة المحددة في الكود.
+          </span>
+        </p>
+      )}
+    </Panel>
   )
 }
