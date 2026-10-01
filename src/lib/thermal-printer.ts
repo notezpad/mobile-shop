@@ -87,6 +87,9 @@ export interface ThermalReceiptData {
   date: string
   items: { name: string; qty: number; price: number; total: number }[]
   total: number
+  /** POS v2: total before discount + discount amount (optional). */
+  subtotal?: number
+  discount?: number
   paid: number
   remaining: number
   customerName?: string
@@ -166,6 +169,12 @@ function buildEscPosReceipt(data: ThermalReceiptData, settings: PrinterSettings)
   bytes.push(LF)
 
   // Totals
+  if ((data.discount ?? 0) > 0.009 && data.subtotal != null) {
+    bytes.push(...textToBytes(padLine('المجموع', '', '', plainMoney(data.subtotal), cols)))
+    bytes.push(LF)
+    bytes.push(...textToBytes(padLine('خصم', '', '', '-' + plainMoney(data.discount as number), cols)))
+    bytes.push(LF)
+  }
   bytes.push(...CMD.boldOn)
   bytes.push(...textToBytes(padLine('الإجمالي', '', '', plainMoney(data.total), cols)))
   bytes.push(LF)
@@ -298,6 +307,7 @@ export function printThermalReceiptBrowser(data: ThermalReceiptData, settings: P
   </table>
   <div class="separator"></div>
   <div class="totals">
+    ${(data.discount ?? 0) > 0.009 && data.subtotal != null ? `<div class="row"><span>المجموع</span><span>${formatCurrency(data.subtotal)} ج.م</span></div><div class="row"><span>خصم</span><span>- ${formatCurrency(data.discount as number)} ج.م</span></div>` : ''}
     <div class="row"><span>الإجمالي</span><span>${formatCurrency(data.total)} ج.م</span></div>
     <div class="row"><span>المدفوع</span><span>${formatCurrency(data.paid)} ج.م</span></div>
     ${data.remaining > 0 ? `<div class="row"><span>المتبقي</span><span>${formatCurrency(data.remaining)} ج.م</span></div>` : ''}

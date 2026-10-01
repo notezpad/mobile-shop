@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { allocateRefund } from '@/lib/pos/pricing'
 import { db, withDb } from '@/lib/db'
-import { requireAdmin, authErrorResponse } from '@/lib/auth'
-import { createPrincipalCashEntry } from '@/lib/commission'
+import { requireAuth, authErrorResponse } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +11,7 @@ async function __GET(
 ) {
   let session
   try {
-    session = await requireAdminFallback()
+    session = await requireAuth()
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
@@ -32,50 +32,35 @@ async function __GET(
   return NextResponse.json(sale)
 }
 
-// GET stays readable by any authenticated user; DELETE is the money-moving one.
-async function requireAdminFallback() {
-  const { requireAuth } = await import('@/lib/auth')
-  return requireAuth()
-}
-
 /**
- * 🛡️ 2026-09-30 (v3): whole-invoice refund — rebuilt on the supplier-return
- * safety model.
+ * 🛡️ 2026-09-15 (v2): Major accounting audit fixes.
  *
- * What changed vs. v2 and why:
+ * Bug #1: Cash drawer refund used `sale.total` (full invoice amount) instead
+ *         of `sale.paid` (the amount that actually entered the drawer).
+ *         If customer bought 200 and paid 50 (credit 150), the original sale
+ *         added +50 to the drawer, but the DELETE was refunding -200, so
+ *         the drawer lost 150 EGP that was never in it.
+ *         → Fix: refund only `sale.paid` (cash that actually entered).
  *
- *  1. ADMIN ONLY now. This endpoint refunds real cash out of the drawer;
- *     before, any employee could trigger it.
+ * Bug #2: Variant stock not restored. If sale had items with `variantId`,
+ *         the original deductStock decremented `ProductVariant.quantity`
+ *         (not `Product.quantity`), but the restore was incrementing
+ *         `Product.quantity` — leading to phantom inventory.
+ *         → Fix: branch on `variantId` — restore variant OR product, then
+ *         re-sync the parent product's quantity.
  *
- *  2. 🐛 C1 FIX — the customer balance was over-reversed by exactly the
- *     amount of every post-sale payment. v2 did:
- *       step 2: balance += Σ SalePayment.amount      (undo payment bookings)
- *       step 5: balance −= max(0, total − (paid + Σpayments))  ← paid ALREADY
- *               includes the linked payments (payments POST increments it),
- *               so the payments were subtracted twice.
- *     The correct reversal of the sale's own booking (+ (total − paidAtSale))
- *     is: balance −= (total − paidAtSale), where paidAtSale = sale.paid −
- *     Σ(linked SalePayment.amount). Post-sale payments are undone separately
- *     by their own +amount (their booking was −amount). Net effect on the
- *     customer = −(outstanding of this sale) — never more, never less.
+ * Bug #6: Separate payments weren't reversed. If customer made a payment
+ *         via /api/payments (creates SalePayment + Customer.balance -= X),
+ *         the DELETE sale was only refunding `sale.paid` (initial sale-time
+ *         payment), not the subsequent payments.
+ *         → Fix: also reverse all linked SalePayment rows + their CashEntries
+ *         + customer balance increments for each reversed payment.
  *
- *  3. Double-refund race fixed: the "already returned?" check now happens
- *     INSIDE the transaction as an atomic claim
- *     (UPDATE … WHERE status <> 'مرتجعة') — a concurrent second request
- *     claims 0 rows and fails with 409.
- *
- *  4. Blocked when the invoice has any SaleReturn record (partial returns
- *     already restored some stock and credited the customer) — finish the
- *     return from the returns flow instead of mixing two accounting paths.
- *
- *  5. Stock is restored by the NET quantity (quantity − returnedQty) —
- *     consistent with the new partial-return engine (sale-return.ts).
- *
- *  6. Every refund till entry keeps a payment METHOD (sale.paymentMethod /
- *     the original payment's method) so per-method drawer balances stay right.
- *
- *  7. Linked customer payments are soft-CANCELLED (status/cancelledAt/By)
- *     instead of leaving live payment rows pointing at a dead invoice.
+ * Bug #4-related: Customer balance reversal was using `sale.total - sale.paid`
+ *         which is the CREDIT portion at sale time. After payments, this is
+ *         stale. The correct reversal is: customer balance should be
+ *         decremented by the unpaid credit portion AFTER all payments
+ *         (i.e., `max(0, sale.total - totalPaid)`).
  */
 async function __DELETE(
   _req: NextRequest,
@@ -83,7 +68,7 @@ async function __DELETE(
 ) {
   let session
   try {
-    session = await requireAdmin()
+    session = await requireAuth()
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
@@ -95,10 +80,15 @@ async function __DELETE(
     return NextResponse.json({ error: 'معرف غير صالح' }, { status: 400 })
   }
 
+  // Load the sale with ALL related data we need to reverse correctly:
+  // - items (to restore stock — including variantId)
+  // - customer (to know if there's a credit balance to reverse)
+  // - payments (SalePayment rows — to reverse post-sale payments)
+  // - payments.cashEntry (to mirror-reverse each payment's cash entry)
   const sale = await db.sale.findUnique({
     where: { id: sid },
     include: {
-      items: { include: { variant: true } },
+      items: { include: { product: true, variant: true } },
       customer: true,
       payments: { include: { cashEntry: true } },
     },
@@ -112,165 +102,158 @@ async function __DELETE(
       { status: 400 }
     )
   }
-  // 🛡️ Block when a partial return already went through the returns flow —
-  // mixing the two accounting paths would double-restore stock/credit.
-  const existingReturns = await db.saleReturn.count({
-    where: { tenantId: session.tenantId, saleId: sid },
-  })
-  if (existingReturns > 0) {
-    return NextResponse.json(
-      { error: 'الفاتورة فيها مرتجع جزئي مسجل — أكمل إرجاع الباقي من شاشة المرتجعات بدل حذف الفاتورة كلها' },
-      { status: 409 },
-    )
-  }
 
-  // 🛡️ C1 fix — paidAtSale excludes the linked post-sale payments (they
-  // incremented Sale.paid when they were linked).
-  const linkedTotal = sale.payments.reduce((sum, p) => sum + p.amount, 0)
-  const paidAtSale = sale.paid - linkedTotal
-  const creditReversal = Math.max(0, sale.total - paidAtSale)
-  const totalCashRefund = sale.paid // everything that entered the drawer for this sale
+  // 🛡️ Calculate the correct accounting numbers BEFORE the transaction:
+  //   totalPaid = sale.paid (at sale time) + sum of all SalePayment.amount
+  //   cashToRefund = totalPaid (everything that entered the drawer)
+  //   customerBalanceToReverse = max(0, sale.total - totalPaid) — unpaid portion
+  const postSalePaymentsTotal = sale.payments.reduce(
+    (sum, p) => sum + p.amount,
+    0
+  )
+  const totalPaid = sale.paid + postSalePaymentsTotal
+  const unpaidCredit = Math.max(0, sale.total - totalPaid)
 
-  class AlreadyReturned extends Error {}
+  await db.$transaction(async (tx) => {
+    // ─── Step 1: Restore stock (Bug #2 fix) ───
+    for (const it of sale.items) {
+      // 🛡️ productId might be null if the product was hard-deleted via
+      // mode=archive (Bug #6 in v3 — nullable productId). If so, skip
+      // stock restoration — the product doesn't exist anymore.
+      if (it.productId == null) continue
 
-  try {
-    await db.$transaction(async (tx) => {
-      // ─── Step 0: claim the refund ATOMICALLY (double-click guard) ───
-      const claimed = await tx.sale.updateMany({
-        where: { id: sid, tenantId: session.tenantId, status: { not: 'مرتجعة' } },
-        data: { status: 'مرتجعة' },
+      if (it.variantId && it.variant) {
+        // 🛡️ Bug #2: Variant stock restore — the original deductStock
+        // decremented ProductVariant.quantity, so we restore to the
+        // variant (not the parent product).
+        await tx.productVariant.update({
+          where: { id: it.variantId },
+          data: { quantity: { increment: it.quantity } },
+        })
+        // Re-sync the parent product's quantity = sum of variant quantities.
+        // This keeps Product.quantity consistent with the sum of its variants.
+        const allVariants = await tx.productVariant.findMany({
+          where: { productId: it.productId },
+          select: { quantity: true },
+        })
+        const variantSum = allVariants.reduce((s, v) => s + v.quantity, 0)
+        await tx.product.update({
+          where: { id: it.productId },
+          data: { quantity: variantSum },
+        })
+      } else {
+        // No variant — just restore the parent product's quantity directly.
+        await tx.product.update({
+          where: { id: it.productId },
+          data: { quantity: { increment: it.quantity } },
+        })
+      }
+      // 🛡️ Audit trail: create a StockMovement for the stock return.
+      await tx.stockMovement.create({
+        data: {
+          tenantId: session.tenantId,
+          branchId: sale.branchId ?? null,
+          productId: it.productId,
+          type: 'return',
+          quantity: it.quantity, // positive: stock is being restored
+          refType: 'sale',
+          refId: sid,
+          note: `مرتجع فاتورة ${sale.invoiceNo ?? sid}`,
+          userId: session.userId,
+        },
       })
-      if (claimed.count !== 1) throw new AlreadyReturned()
+    }
 
-      // ─── Step 1: Restore stock (net of already-returned quantities) ───
-      for (const it of sale.items) {
-        const restoreQty = it.quantity - it.returnedQty
-        if (restoreQty <= 0) continue
-        if (it.productId == null) continue
-
-        if (it.variantId && it.variant) {
-          await tx.productVariant.update({
-            where: { id: it.variantId },
-            data: { quantity: { increment: restoreQty } },
-          })
-          const allVariants = await tx.productVariant.findMany({
-            where: { productId: it.productId },
-            select: { quantity: true },
-          })
-          const variantSum = allVariants.reduce((s, v) => s + v.quantity, 0)
-          await tx.product.update({
-            where: { id: it.productId },
-            data: { quantity: variantSum },
-          })
-        } else {
-          await tx.product.update({
-            where: { id: it.productId },
-            data: { quantity: { increment: restoreQty } },
-          })
-        }
-        await tx.stockMovement.create({
+    // ─── Step 2: Reverse each post-sale payment (Bug #6 fix) ───
+    // Each SalePayment has its own CashEntry (positive, in the drawer).
+    // We need to create a MIRROR negative CashEntry for each one, AND
+    // increment Customer.balance (since the payment had decremented it).
+    for (const p of sale.payments) {
+      // Mirror-reverse the cash entry
+      if (p.cashEntry) {
+        await tx.cashEntry.create({
           data: {
             tenantId: session.tenantId,
-            branchId: sale.branchId ?? null,
-            productId: it.productId,
-            type: 'return',
-            quantity: restoreQty,
-            refType: 'sale',
-            refId: sid,
-            note: `مرتجع فاتورة ${sale.invoiceNo ?? sid}`,
+            source: 'refund',
+            refId: p.cashEntry.id, // link back to the original payment's cash entry
+            amount: -p.cashEntry.amount,
+            note: `عكس دفعة فاتورة ${sale.invoiceNo ?? sid}`,
             userId: session.userId,
           },
         })
       }
-
-      // ─── Step 2: Undo each linked post-sale payment ───
-      // Their booking was: balance −= amount, cash +amount (with method).
-      // Undo: balance += amount (below), cash mirrored −amount (same method),
-      // the Payment row is soft-cancelled, the SalePayment link removed.
-      const reversedEntryIds: number[] = []
-      for (const p of sale.payments) {
-        if (p.cashEntry) {
-          reversedEntryIds.push(p.cashEntry.id)
-          await tx.cashEntry.create({
-            data: {
-              tenantId: session.tenantId,
-              source: 'refund',
-              refId: p.cashEntry.id,
-              amount: -p.cashEntry.amount,
-              method: p.cashEntry.method, // 🛡️ keep per-method balances right
-              note: `عكس دفعة فاتورة ${sale.invoiceNo ?? sid}`,
-              userId: session.userId,
-            },
-          })
-        }
-        await tx.salePayment.delete({ where: { id: p.id } })
-      }
-
-      // Soft-cancel the Payment rows whose cash entries we just reversed
-      // (payment → cashEntry: source 'payment', refId = payment id).
-      if (reversedEntryIds.length > 0) {
-        const paymentEntries = await tx.cashEntry.findMany({
-          where: {
-            id: { in: reversedEntryIds },
-            source: 'payment',
-          },
-          select: { refId: true },
-        })
-        const paymentIds = [...new Set(paymentEntries.map((e) => e.refId).filter((v): v is number => v != null))]
-        for (const pid of paymentIds) {
-          await tx.payment.updateMany({
-            where: { id: pid, tenantId: session.tenantId, status: 'active' },
-            data: {
-              status: 'cancelled',
-              cancelledAt: new Date(),
-              cancelledBy: session.userId,
-              note: `ملغية تلقائياً — مرتجع فاتورة ${sale.invoiceNo ?? sid}`,
-            },
-          })
-        }
-      }
-
-      // ─── Step 3: Refund the sale-time payment (cash that entered then) ───
-      if (paidAtSale > 0) {
-        await createPrincipalCashEntry(tx, {
-          tenantId: session.tenantId,
-          userId: session.userId,
-          method: sale.paymentMethod, // 🛡️ same way the money came in
-          source: 'refund',
-          refId: sid,
-          amount: -paidAtSale,
-          note: `مرتجع دفعة فاتورة ${sale.invoiceNo ?? sid}`,
-        })
-      }
-
-      // ─── Step 4: Reverse the customer's credit (C1-correct formula) ───
-      if (sale.customerId && creditReversal > 0) {
+      // Restore customer balance (the payment had decremented it)
+      if (sale.customerId) {
         await tx.customer.update({
           where: { id: sale.customerId },
-          data: { balance: { decrement: creditReversal } },
+          data: { balance: { increment: p.amount } },
         })
       }
-
-      // ─── Step 5: finalize the sale row (paid → 0, refunded ← what came in) ───
-      await tx.sale.update({
-        where: { id: sid },
-        data: { paid: 0, refunded: totalCashRefund },
+      // Mark the SalePayment as reversed (soft-delete via status)
+      await tx.salePayment.update({
+        where: { id: p.id },
+        data: { note: `reversed-by-sale-delete-${sid} | ${p.note ?? ''}`.substring(0, 500) },
       })
-    })
-  } catch (e) {
-    if (e instanceof AlreadyReturned) {
-      return NextResponse.json({ error: 'البيع مرتجع بالفعل' }, { status: 409 })
     }
-    throw e
-  }
+
+    // ─── Step 3: Mark sale as refunded ───
+    await tx.sale.update({
+      where: { id: sid },
+      data: {
+        status: 'مرتجعة',
+        // Reset paid to 0 since the sale is now fully reversed
+        paid: 0,
+      },
+    })
+
+    // ─── Step 4: Refund the initial sale-time payment (Bug #1 fix) ───
+    // 🛡️ Bug #1 fix: refund `sale.paid` (NOT sale.total). The `sale.paid`
+    // is the amount that actually entered the drawer at sale time. Refunding
+    // `sale.total` would lose money that was never in the drawer (the credit
+    // portion).
+    if (sale.paid > 0) {
+      // POS v2 sales record one drawer entry PER payment method. Refund through the same
+      // methods (كاش back out of cash, إنستاباي out of إنستاباي…), proportionally, so the
+      // total is still exactly `sale.paid` (which already reflects any partial returns).
+      // Legacy sales have a single method-less entry → one method-less refund, as before.
+      const originalEntries = await tx.cashEntry.findMany({
+        where: { tenantId: session.tenantId, source: 'sale', refId: sid },
+        select: { method: true, amount: true },
+      })
+      const slices = allocateRefund(originalEntries, sale.paid)
+      for (const sl of slices) {
+        await tx.cashEntry.create({
+          data: {
+            tenantId: session.tenantId,
+            source: 'refund',
+            refId: sid,
+            amount: -sl.amount, // 🛡️ Bug #1 fix: sums to -sale.paid, NOT -sale.total
+            method: sl.method,
+            note: `مرتجع دفعة فاتورة ${sale.invoiceNo ?? sid}`,
+            userId: session.userId,
+          },
+        })
+      }
+    }
+
+    // ─── Step 5: Reverse customer's credit balance ───
+    // 🛡️ Bug #4 fix: use the ACTUAL unpaid credit (after all payments),
+    // not the stale sale-time credit (`sale.total - sale.paid`).
+    if (sale.customerId && unpaidCredit > 0) {
+      await tx.customer.update({
+        where: { id: sale.customerId },
+        data: { balance: { decrement: unpaidCredit } },
+      })
+    }
+  })
 
   return NextResponse.json({
     ok: true,
     reversed: {
-      sale_paid: paidAtSale,
-      post_sale_payments: linkedTotal,
-      total_cash_refunded: totalCashRefund,
-      customer_credit_reversed: creditReversal,
+      sale_paid: sale.paid,
+      post_sale_payments: postSalePaymentsTotal,
+      total_cash_refunded: totalPaid,
+      customer_credit_reversed: unpaidCredit,
     },
   })
 }

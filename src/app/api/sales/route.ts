@@ -1,45 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
-import type { Session } from '@/lib/auth'
 import { requireCapability, featureErrorResponse } from '@/lib/features'
 import { deductStock } from '@/lib/deduct-stock'
-import { getTenantTimezone, localDateStrToUtcBounds, dateStrInTz } from '@/lib/tenantTime'
-import type { Prisma } from '@prisma/client'
+import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
+import { approvalNeeded, computeDiscount, discountScale, round2, validatePayments, type Tender } from '@/lib/pos/pricing'
+import { verifyManagerPin } from '@/lib/pos/approval'
+import { computeDynamicRetailPrice } from '@/lib/retail-pricing'
 
 export const dynamic = 'force-dynamic'
 
-/**
- * 🛡️ 2026-09-30: توليد رقم الفاتورة جوه الـ transaction نفسه.
- *
- * المشكلة: الرقم كان بيتحسب بره الـ transaction (قراءة أعلى رقم ثم كتابة)،
- * فكاشيرين بيفطوا في نفس اللحظة بيقرّوا نفس الرقم ويتكتب مرتين (تكرار).
- * الحل: القراءة جوه الـ tx + فهرس فريد `@@unique([tenantId, invoiceNo])`
- * في الداتابيز كضمانة أخيرة — لو حصل تضارب، الـ POST بيعيد المحاولة
- * برقم جديد (retry على P2002). والسنة دلوقتي بتوقيت المحل (Tenant.timezone)
- * مش توقيت السيرفر.
- */
 async function nextInvoiceNo(
   prefix: string,
-  tenantId: string,
-  tx: Prisma.TransactionClient,
-  year: number,
+  tenantId: string
 ): Promise<string> {
-  const start = `${prefix}-${year}-`
+  const year = new Date().getFullYear()
   // Read only the latest invoice number (uses the index) instead of counting
   // every invoice of the year; avoids duplicate numbers after deletions.
-  const last = await tx.sale.findFirst({
+  const start = `${prefix}-${year}-`
+  const last = await db.sale.findFirst({
     where: { tenantId, invoiceNo: { startsWith: start } },
     orderBy: { id: 'desc' },
     select: { invoiceNo: true },
   })
   const lastSeq = last?.invoiceNo ? parseInt(last.invoiceNo.slice(start.length), 10) || 0 : 0
   const seq = (lastSeq + 1).toString().padStart(5, '0')
-  return `${start}${seq}`
+  return `${prefix}-${year}-${seq}`
 }
 
 export async function GET(req: NextRequest) {
-  let session: Session
+  let session
   try {
     session = await requireAuth()
   } catch (e) {
@@ -70,9 +60,11 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(200, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)))
     const skip  = (page - 1) * limit
 
+    const invoice = searchParams.get('invoice')?.trim()
     const where = {
       tenantId: session.tenantId,
       ...(from || to ? { createdAt } : {}),
+      ...(invoice ? { invoiceNo: { contains: invoice } } : {}),
     }
 
     const [sales, total] = await Promise.all([
@@ -109,7 +101,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  let session: Session
+  let session
   try {
     session = await requireAuth()
   } catch (e) {
@@ -124,38 +116,27 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     )
   }
-  const paid = Number(body.paid ?? 0) || 0
-  // 🛡️ 2026-09-30 (C4): paid سالب كان بيزوّد دين العميل بمقداره ويخصم الخزنة — مرفوض.
-  if (!Number.isFinite(paid) || paid < 0) {
-    return NextResponse.json({ error: 'المبلغ المدفوع غير صالح' }, { status: 400 })
-  }
-  // 🛡️ 2026-09-30 (C12): طريقة دفع مبلغ البيع — زي أمر الشراء بالظبط،
-  // عشان الخزنة تتفصل كاش / محافظ / انستاباي على أكبر تدفق فلوس في النظام.
-  const SALE_METHODS = new Set(['cash', 'vodafone_cash', 'instapay', 'fawry'])
-  const paymentMethod = body.paymentMethod === undefined || body.paymentMethod === null || body.paymentMethod === ''
-    ? 'cash'
-    : String(body.paymentMethod)
-  if (!SALE_METHODS.has(paymentMethod)) {
-    return NextResponse.json({ error: 'طريقة الدفع غير صالحة' }, { status: 400 })
-  }
-  // 🛡️ 2026-09-30 (M10): تاريخ استحقاق اختياري للفاتورة الآجلة.
-  let dueDate: Date | null = null
-  if (body.dueDate) {
-    const d = new Date(body.dueDate)
-    if (isNaN(d.getTime())) {
-      return NextResponse.json({ error: 'تاريخ الاستحقاق غير صالح' }, { status: 400 })
-    }
-    dueDate = d
-  }
-  // 🛡️ 2026-09-30 (M7): مفتاح عدم التكرار للأوفلاين — retry لنفس الفاتورة بيرجّع
-  // الفاتورة الأصلية بدل ما يعمل خصم مخزن وخزنة ودين مكرر.
-  const clientRef = body.clientRef ? String(body.clientRef).slice(0, 64) : null
+  // Legacy clients send a single `paid` number; POS v2 sends `payments: [{method, amount}]`.
+  const legacyPaid = Number(body.paid ?? 0) || 0
+  const usesPaymentsArray = Array.isArray(body.payments)
+  const note = typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 500) : null
+  const approvalPin = typeof body.approvalPin === 'string' ? body.approvalPin : null
+  const clientRef = typeof body.clientRef === 'string' && body.clientRef.trim() ? body.clientRef.trim().slice(0, 64) : null
   let customerId: number | null = null
   if (body.customerId) {
     customerId = parseInt(body.customerId, 10) || null
   }
 
   return withDb(async () => {
+    // Idempotency: the same clientRef always returns the invoice already created for it.
+    if (clientRef) {
+      const dup = await db.sale.findFirst({
+        where: { tenantId: session.tenantId, clientRef },
+        include: { items: { include: { variant: true } }, customer: true },
+      })
+      if (dup) return NextResponse.json(dup, { status: 200 })
+    }
+
     // load products scoped to tenant
     const ids = body.items
       .map((i: any) => parseInt(i.productId, 10))
@@ -222,7 +203,12 @@ export async function POST(req: NextRequest) {
       // FIXED: load tenant prefix in parallel instead of after everything else
       db.tenant.findUnique({
         where: { id: session.tenantId },
-        select: { invoicePrefix: true },
+        select: {
+          invoicePrefix: true,
+          posEmployeeMaxDiscountPct: true,
+          dynamicRetailPricingEnabled: true,
+          defaultRetailMarginPercent: true,
+        },
       }),
     ])
 
@@ -260,6 +246,8 @@ export async function POST(req: NextRequest) {
     }
 
     let total = 0
+    // Shelf-price total (what these lines list for) — the baseline the cashier discount limit is measured against.
+    let listTotal = 0
 
     const itemsData: Array<{
       productId: number
@@ -290,6 +278,11 @@ export async function POST(req: NextRequest) {
       let totalPieces = qty
       let unitFactor = 1
       let variantId: number | null = null
+      const dynamicRetail = computeDynamicRetailPrice(
+        { cost: p.cost, retailMarginPercent: (p as any).retailMarginPercent ?? null },
+        { dynamicRetailPricingEnabled: !!tenant?.dynamicRetailPricingEnabled, defaultRetailMarginPercent: tenant?.defaultRetailMarginPercent ?? 20 },
+      )
+      let listPerEntered = dynamicRetail ?? p.price // per piece, or per unit once a unit is chosen below
 
       // If this line is a specific color/size, validate it and use ITS stock
       // as the ceiling — not the product's aggregate quantity. Selling a
@@ -321,6 +314,7 @@ export async function POST(req: NextRequest) {
         unitQuantity = qty
         unitFactor = unit.factor
         totalPieces = unit.factor * qty
+        listPerEntered = unit.price ?? p.price * unit.factor // unpriced unit → flat piece price × factor (never the dynamic one)
       }
 
       const stockCeiling = variantId != null ? (variantMap.get(variantId)!.quantity) : p.quantity
@@ -336,13 +330,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `سعر غير صالح للمنتج ${p.name}` }, { status: 400 })
       }
       total += price * qty
+      listTotal += listPerEntered * qty
 
       const pricePerPiece = price / unitFactor
 
       itemsData.push({
         productId: p.id,
         name: p.name,
-        price: pricePerPiece,
+        price: pricePerPiece, // scaled below if the invoice has a discount
         cost: p.cost,
         quantity: totalPieces,
         unitsEntered: qty,
@@ -353,160 +348,165 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    if (paid < total && !customerId) {
+    // ── Invoice discount ─────────────────────────────────────────────
+    // Spread proportionally into the per-piece item prices, so profit reports,
+    // returns (refund at item.price) and the drawer stay correct with no other change.
+    // Without a discount `total` is left exactly as before (no rounding change).
+    const subtotal = total
+    const disc = computeDiscount(subtotal, body.discount)
+    if (!disc.ok) return NextResponse.json({ error: disc.error }, { status: 400 })
+    const discountAmount = disc.amount
+    if (discountAmount > 0) {
+      const k = discountScale(subtotal, discountAmount)
+      for (const it of itemsData) it.price = it.price * k
+      total = round2(subtotal - discountAmount)
+    }
+
+    // ── Manager approval ─────────────────────────────────────────────
+    // A cashier who ends up too far below shelf price (invoice discount OR hand-edited prices)
+    // needs the manager PIN. Enforced HERE — the screen only mirrors it for a nicer flow.
+    let approvalNote: string | null = null
+    const appr = approvalNeeded({
+      role: session.role,
+      maxPct: tenant?.posEmployeeMaxDiscountPct ?? 100,
+      listTotal,
+      netTotal: total,
+    })
+    if (appr.needed) {
+      const pctText = `${Math.round(appr.pct * 10) / 10}%`
+      if (!approvalPin) {
+        return NextResponse.json(
+          { error: `الخصم الفعلي ${pctText} أعلى من المسموح — يلزم موافقة المدير`, code: 'APPROVAL_REQUIRED', pct: appr.pct },
+          { status: 403 },
+        )
+      }
+      const v = await verifyManagerPin(session.tenantId, approvalPin)
+      if (!v.ok) {
+        return NextResponse.json({ error: v.error, code: v.code, remaining: v.remaining }, { status: 403 })
+      }
+      approvalNote = `بموافقة المدير (خصم فعلي ${pctText})`
+    }
+
+    // ── Payments (per method) ────────────────────────────────────────
+    let tenders: Tender[] | null = null
+    let paid: number
+    if (usesPaymentsArray) {
+      const v = validatePayments(body.payments, total)
+      if (!v.ok) return NextResponse.json({ error: v.error }, { status: 400 })
+      tenders = v.payments
+      paid = v.paid
+    } else {
+      paid = Math.min(Math.max(legacyPaid, 0), total) // legacy: never record more than the invoice
+    }
+
+    const creditAmount = total - paid > 0.005 ? total - paid : 0
+    if (creditAmount > 0 && !customerId) {
       return NextResponse.json(
         { error: 'البيع بالآجل لازم يكون مرتبط بعميل' },
         { status: 400 }
       )
     }
 
-    // 🛡️ 2026-09-30 (C5 — قرار تجاري: ترفض): مدفوع أكبر من الإجمالي مرفوض.
-    // قبل كده الفرق كان بيضيع من الحسابات (بيخلش الخزنة ومفيش رصيد دائن للعميل).
-    if (paid > total + 0.005) {
-      return NextResponse.json(
-        { error: `المدفوع (${paid}) أكبر من إجمالي الفاتورة (${Math.round(total * 100) / 100}) — لو العميل دفع زيادة سجلها دفعة على حسابه` },
-        { status: 400 }
-      )
-    }
-
-    // 🛡️ 2026-09-30 (M10): الحد الائتماني — لو العميل متحدد له حد وبيع آجل
-    // هيعديه، البيع يترفض (بدون فرض ولا استثناء تلقائي).
-    if (customerId && paid < total && customerCheck?.creditLimit != null) {
-      const projected = (customerCheck.balance ?? 0) + (total - paid)
-      if (projected > customerCheck.creditLimit + 0.005) {
-        return NextResponse.json(
-          { error: `بيع آجل هيعدي الحد الائتماني للعميل ${customerCheck.name} (الحد: ${customerCheck.creditLimit}، الرصيد الحالي: ${customerCheck.balance}، إجمالي بعد البيع: ${Math.round(projected * 100) / 100})` },
-          { status: 400 }
-        )
-      }
-    }
-
-    // 🛡️ 2026-09-30 (M7): idempotency — نفس clientRef؟ رجّع الفاتورة الأصلية.
-    if (clientRef) {
-      const existing = await db.sale.findUnique({
-        where: { tenantId_clientRef: { tenantId: session.tenantId, clientRef } },
-        include: { items: true, customer: true },
-      })
-      if (existing) {
-        return NextResponse.json(existing, { status: 200 })
-      }
-    }
-
     const prefix = tenant?.invoicePrefix || 'INV'
-    // 🛡️ 2026-09-30: توليد الرقم جوه الـ tx + إعادة المحاولة عند التضارب
-    const tz = await getTenantTimezone(session.tenantId)
-    const invYear = parseInt(dateStrInTz(new Date(), tz).slice(0, 4), 10)
+    const invoiceNo = await nextInvoiceNo(prefix, session.tenantId)
 
-    let sale: Awaited<ReturnType<typeof createSaleTx>> | null = null
-    const MAX_ATTEMPTS = 5
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      try {
-        sale = await createSaleTx(prefix, invYear)
-        break
-      } catch (e: any) {
-        // 🛡️ تضارب فريد متزامن: لو السبب clientRef (أوفلاين أرسل نفس الفاتورة
-        // مرتين) → النسخة الأصلية اتحفظ بالفعل، رجّعها بدل إعادة المحاولة.
-        if (e?.code === 'P2002' && clientRef) {
-          const existing = await db.sale.findUnique({
-            where: { tenantId_clientRef: { tenantId: session.tenantId, clientRef } },
-            include: { items: true, customer: true },
-          })
-          if (existing) {
-            return NextResponse.json(existing, { status: 200 })
-          }
-        }
-        // تضارب في الرقم الفريد (فاتورة متزامنة معانا) → جرّب تاني برقم أعلى
-        if (e?.code === 'P2002' && attempt < MAX_ATTEMPTS) continue
-        throw e
-      }
-    }
-
-    async function createSaleTx(prefix: string, year: number) {
-      return db.$transaction(async (tx) => {
-        const invoiceNo = await nextInvoiceNo(prefix, session.tenantId, tx, year)
-        const created = await tx.sale.create({
-          data: {
-            tenantId: session.tenantId,
-            branchId: session.branchId ?? null,
-            invoiceNo,
-            customerId,
-            userId: session.userId,
-            total,
-            paid,
-            paymentMethod,
-            dueDate,
-            clientRef,
-            status: 'مكتملة',
-            items: {
-              create: itemsData.map((i) => ({
-                productId: i.productId,
-                name: i.name,
-                price: i.price,
-                cost: i.cost,
-                quantity: i.quantity,
-                unitId: i.unitId,
-                unitLabel: i.unitLabel,
-                unitQuantity: i.unitQuantity,
-                variantId: i.variantId,
-              })),
-            },
+    let sale
+    try {
+    sale = await db.$transaction(async (tx) => {
+      const created = await tx.sale.create({
+        data: {
+          tenantId: session.tenantId,
+          branchId: session.branchId ?? null,
+          invoiceNo,
+          customerId,
+          userId: session.userId,
+          total,
+          paid,
+          subtotal: discountAmount > 0 ? round2(subtotal) : null,
+          discount: discountAmount,
+          note: [note, approvalNote].filter(Boolean).join(' | ').slice(0, 500) || null,
+          clientRef,
+          status: 'مكتملة',
+          items: {
+            create: itemsData.map((i) => ({
+              productId: i.productId,
+              name: i.name,
+              price: i.price,
+              cost: i.cost,
+              quantity: i.quantity,
+              unitId: i.unitId,
+              unitLabel: i.unitLabel,
+              unitQuantity: i.unitQuantity,
+              variantId: i.variantId,
+            })),
           },
-          include: { items: { include: { variant: true } }, customer: true },
+        },
+        include: { items: { include: { variant: true } }, customer: true },
+      })
+
+      for (const it of itemsData) {
+        await deductStock(tx, {
+          tenantId: session.tenantId,
+          branchId: session.branchId ?? null,
+          userId: session.userId,
+          productId: it.productId,
+          quantity: it.unitsEntered,
+          unitId: it.unitId,
+          variantId: it.variantId,
+          refType: 'sale',
+          refId: created.id,
+          note: `فاتورة ${invoiceNo}`,
         })
+      }
 
-        for (const it of itemsData) {
-          // 🛡️ 2026-09-30 (X2): كل بيع بيسجل حركة مخزون من نوع 'sale' — كان
-          // دفتر الحركات طرف واحد (البيع أكبر حركة خروج ومفيش منها أي أثر).
-          await deductStock(tx, {
-            tenantId: session.tenantId,
-            branchId: session.branchId ?? null,
-            userId: session.userId,
-            productId: it.productId,
-            quantity: it.unitsEntered,
-            unitId: it.unitId,
-            variantId: it.variantId,
-            refType: 'sale',
-            refId: created.id,
-            note: `فاتورة ${invoiceNo}`,
-          })
-          await tx.stockMovement.create({
-            data: {
-              tenantId: session.tenantId,
-              branchId: session.branchId ?? null,
-              productId: it.productId,
-              type: 'sale',
-              quantity: -it.quantity, // pieces (unit factor already applied)
-              refType: 'sale',
-              refId: created.id,
-              note: `فاتورة ${invoiceNo} — ${it.name}`,
-              userId: session.userId,
-            },
-          })
-        }
+      if (customerId && creditAmount > 0) {
+        await tx.customer.update({
+          where: { id: customerId },
+          data: { balance: { increment: creditAmount } },
+        })
+      }
 
-        if (customerId && paid < total) {
-          await tx.customer.update({
-            where: { id: customerId },
-            data: { balance: { increment: total - paid } },
-          })
-        }
-
-        if (paid > 0) {
+      // One drawer entry per payment method (كاش ≠ فودافون كاش ≠ إنستاباي ≠ كارد).
+      // Legacy clients (no payments array) keep the old single, method-less entry.
+      if (tenders) {
+        for (const t of tenders) {
           await tx.cashEntry.create({
             data: {
               tenantId: session.tenantId,
               source: 'sale',
               refId: created.id,
-              amount: paid,
-              method: paymentMethod, // 🛡️ C12: الخزنة بتتفصل بطريقة الدفع
+              amount: t.amount,
+              method: t.method,
               note: `بيع فاتورة ${invoiceNo}`,
               userId: session.userId,
             },
           })
         }
+      } else if (paid > 0) {
+        await tx.cashEntry.create({
+          data: {
+            tenantId: session.tenantId,
+            source: 'sale',
+            refId: created.id,
+            amount: paid,
+            note: `بيع فاتورة ${invoiceNo}`,
+            userId: session.userId,
+          },
+        })
+      }
 
-        return created
-      }, { maxWait: 10000, timeout: 20000 }) // default 5s was too short over a remote DB → sale hung/failed
+      return created
+    }, { maxWait: 10000, timeout: 20000 }) // default 5s was too short over a remote DB → sale hung/failed
+    } catch (e: any) {
+      // Two identical requests raced past the clientRef check → the unique index stopped the 2nd one.
+      if (clientRef && e?.code === 'P2002') {
+        const dup = await db.sale.findFirst({
+          where: { tenantId: session.tenantId, clientRef },
+          include: { items: { include: { variant: true } }, customer: true },
+        })
+        if (dup) return NextResponse.json(dup, { status: 200 })
+      }
+      throw e
     }
 
     return NextResponse.json(sale, { status: 201 })

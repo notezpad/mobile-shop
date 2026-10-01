@@ -26,6 +26,34 @@ async function __PUT(
     return NextResponse.json({ error: 'المستخدم غير موجود' }, { status: 404 })
   }
 
+  // 🛡️ حماية القفل (2026-10-01): المحل ما يفضلش من غير مدير نشط، والمستخدم
+  // ما يوقف أو يخفّض صلاحية حسابه بنفسه. بتغطي مفتاح الإيقاف في صفحة المستخدمين.
+  const deactivating = body.active !== undefined && !body.active && existing.active
+  const demoting = body.role !== undefined && body.role !== 'ADMIN' && existing.role === 'ADMIN'
+  if (deactivating || demoting) {
+    if (existing.id === session.userId) {
+      return NextResponse.json(
+        {
+          error: deactivating
+            ? 'لا يمكنك تعطيل حسابك بنفسك'
+            : 'لا يمكنك تخفيض صلاحية حسابك بنفسك',
+        },
+        { status: 400 }
+      )
+    }
+    if (existing.role === 'ADMIN' && existing.active) {
+      const activeAdmins = await db.user.count({
+        where: { tenantId: session.tenantId, role: 'ADMIN', active: true },
+      })
+      if (activeAdmins <= 1) {
+        return NextResponse.json(
+          { error: 'لا يمكن تعطيل أو تخفيض آخر مدير نشط في المحل' },
+          { status: 400 }
+        )
+      }
+    }
+  }
+
   const data: any = {}
   if (body.name !== undefined) {
     const name = String(body.name).trim()
@@ -103,6 +131,13 @@ async function __DELETE(
   const existing = await db.user.findUnique({ where: { id } })
   if (!existing || existing.tenantId !== session.tenantId) {
     return NextResponse.json({ error: 'المستخدم غير موجود' }, { status: 404 })
+  }
+  // 🛡️ ما نسمحش للمستخدم يعطّل حسابه بنفسه
+  if (existing.id === session.userId) {
+    return NextResponse.json(
+      { error: 'لا يمكنك تعطيل حسابك بنفسك' },
+      { status: 400 }
+    )
   }
   // Don't deactivate the last active admin in a tenant
   if (existing.role === 'ADMIN') {

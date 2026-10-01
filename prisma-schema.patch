@@ -1,0 +1,71 @@
+--- a/prisma/schema.prisma	2026-09-28 09:29:10.000000000 +0000
++++ b/prisma/schema.prisma	2026-10-01 08:33:12.062218986 +0000
+@@ -39,6 +39,13 @@
+   // Unit-Based Dynamic Pricing (retail piece price = cost + margin%).
+   dynamicRetailPricingEnabled Boolean @default(false)
+   defaultRetailMarginPercent  Float   @default(20)
++
++  // POS v2 — Phase 3 (all optional/defaulted: a shop that never touches these behaves exactly as before)
++  posRequireShift            Boolean   @default(false)  // POS asks the cashier to open a shift before selling
++  posEmployeeMaxDiscountPct  Float     @default(100)    // cashiers (EMPLOYEE) need the manager PIN above this effective discount %. 100 = no limit
++  posManagerPinHash          String?                    // PBKDF2 hash of the manager approval PIN (4–8 digits)
++  posPinFailCount            Int       @default(0)
++  posPinLockedUntil          DateTime?
+   status                 String    @default("active")
+   ownerEmail             String?
+   ownerPhone             String?
+@@ -54,6 +61,7 @@
+   maintenanceOrders MaintenanceOrder[]
+   transactions      Transaction[]
+   cashEntries       CashEntry[]
++  cashShifts        CashShift[]
+   payments          Payment[]
+   subscriptions     Subscription[]
+   activationCodes   ActivationCode[]
+@@ -409,12 +417,21 @@
+   status     String   @default("مكتملة")
+   createdAt  DateTime @default(now())
+ 
++  // POS v2 (2026-09-29) — all optional/defaulted, so every existing row and report is untouched.
++  // An invoice discount is already folded into SaleItem.price at sale time; these are display-only.
++  subtotal   Float?               // before discount (null on old invoices)
++  discount   Float    @default(0) // discount amount in currency
++  note       String?
++  // Idempotency key sent by the POS: a retry/replay of the same sale (offline outbox, flaky network) can never create a second invoice.
++  clientRef  String?
++
+   tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+   branch   Branch?       @relation(fields: [branchId], references: [id])
+   customer Customer?     @relation(fields: [customerId], references: [id])
+   items    SaleItem[]
+   payments SalePayment[]
+ 
++  @@unique([tenantId, clientRef])
+   @@index([tenantId])
+   @@index([tenantId, createdAt])
+   @@index([branchId])
+@@ -674,3 +691,24 @@
+   @@index([isRead])
+   @@index([createdAt])
+ }
++
++// POS v2 — Phase 3: a cashier's till session. Expected cash is computed from the user's
++// own drawer movements (CashEntry.userId, method cash/legacy-null) between openedAt and closing.
++model CashShift {
++  id           Int       @id @default(autoincrement())
++  tenantId     String
++  branchId     Int?
++  userId       String
++  openedAt     DateTime  @default(now())
++  closedAt     DateTime?
++  openingCash  Float
++  expectedCash Float?   // computed by the server at close
++  countedCash  Float?   // what the cashier actually counted
++  difference   Float?   // counted − expected (negative = shortage)
++  note         String?
++
++  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
++
++  @@index([tenantId, userId, closedAt])
++  @@index([tenantId, openedAt])
++}
