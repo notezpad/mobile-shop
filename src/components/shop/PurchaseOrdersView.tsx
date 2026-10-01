@@ -1,28 +1,23 @@
 'use client'
 
+/**
+ * المشتريات — هوية "شريط الباركود".
+ * خامة الصفحة: بترول/سماوي غامق + كربون (مفيش بنفسجي، ومفيش تكرار لألوان
+ * العملاء/الموردين/المصروفات/الخزنة/الفروع).
+ * العنصر المميّز: شريط باركود يومي — كل خط = مشتريات يوم، والضغط عليه يفلتر اليوم.
+ */
+
 import * as React from 'react'
-import { FileSpreadsheet, Plus, RotateCcw, Search, X } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
+import { ChevronDown, FileSpreadsheet, Plus, RotateCcw, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PurchaseOrderDialog } from './PurchaseOrderDialog'
 import { PurchaseReturnDialog } from './PurchaseReturnDialog'
-import { DateTimeCell } from './DateTimeCell'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { useDataRefresh } from '@/lib/offline/data-events'
@@ -48,12 +43,30 @@ interface PurchaseOrder {
   items: OrderItem[]
 }
 
+// تاريخ بتوقيت جهاز المحل (مش UTC) — نفس منطق النسخة السابقة
+const toISODate = (d: Date) =>
+  new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+
+const dayLabel = (key: string) =>
+  new Date(`${key}T12:00:00`).toLocaleDateString('ar-EG', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
+
+const timeLabel = (iso: string) =>
+  new Date(iso).toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit' })
+
+const isReturned = (o: PurchaseOrder) => o.status === 'مرتجعة'
+
 export function PurchaseOrdersView() {
   const [orders, setOrders] = React.useState<PurchaseOrder[]>([])
   const [loading, setLoading] = React.useState(true)
   const [query, setQuery] = React.useState('')
   const [from, setFrom] = React.useState('')
   const [to, setTo] = React.useState('')
+  const [day, setDay] = React.useState<string | null>(null)
+  const [openId, setOpenId] = React.useState<number | null>(null)
   const [returnId, setReturnId] = React.useState<number | null>(null)
   const [newOpen, setNewOpen] = React.useState(false)
   const shopName = useShopStore((s) => s.shopName)
@@ -66,8 +79,7 @@ export function PurchaseOrdersView() {
       if (f) params.set('from', f)
       if (t) params.set('to', t)
       const qs = params.toString()
-      const data = await api<PurchaseOrder[]>(`/api/purchase-orders${qs ? `?${qs}` : ''}`)
-      setOrders(data)
+      setOrders(await api<PurchaseOrder[]>(`/api/purchase-orders${qs ? `?${qs}` : ''}`))
     } catch (e: any) {
       toast.error(e?.message || 'فشل تحميل المشتريات')
     } finally {
@@ -80,45 +92,55 @@ export function PurchaseOrdersView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
   useDataRefresh(['purchase-orders'], () => load(from, to))
 
   const applyRange = (f: string, t: string) => {
     setFrom(f)
     setTo(t)
+    setDay(null)
     load(f, t)
   }
-
-  // 🕐 2026-09-30: التاريخ بتوقيت جهاز المحل (مش UTC). قبل كده
-  // `toISOString()` كان بيقطع بتوقيت UTC، فزرار "النهاردة" قبل الساعة 2
-  // صباحاً بتوقيت القاهرة كان يبعت تاريخ إمبارح — والسيرفر كمان كان
-  // بيفسّره بتوقيت السيرفر. دلوقتي التاريخ المحلي هو المرسَل، والسيرفر
-  // بيفسّره بتوقيت المحل المسجّل (Tenant.timezone).
-  const toISODate = (d: Date) => {
-    const off = d.getTimezoneOffset()
-    return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10)
-  }
-
-  const quickToday = () => {
-    const today = toISODate(new Date())
-    applyRange(today, today)
-  }
-  const quickLast7Days = () => {
+  const quick = (daysBack: number | 'month') => {
     const end = new Date()
     const start = new Date()
-    start.setDate(start.getDate() - 6)
+    if (daysBack === 'month') start.setDate(1)
+    else start.setDate(start.getDate() - daysBack)
     applyRange(toISODate(start), toISODate(end))
   }
-  const quickThisMonth = () => {
-    const now = new Date()
-    const start = new Date(now.getFullYear(), now.getMonth(), 1)
-    applyRange(toISODate(start), toISODate(now))
-  }
-  const clearRange = () => applyRange('', '')
 
-  const filtered = query.trim()
-    ? orders.filter((o) => (o.orderNo ?? String(o.id)).includes(query.trim()))
-    : orders
+  // ── البيانات المشتقة ──
+  const byQuery = React.useMemo(() => {
+    const q = query.trim()
+    return q ? orders.filter((o) => (o.orderNo ?? String(o.id)).includes(q)) : orders
+  }, [orders, query])
+
+  const filtered = day ? byQuery.filter((o) => toISODate(new Date(o.createdAt)) === day) : byQuery
+
+  const strip = React.useMemo(() => {
+    const m = new Map<string, number>()
+    byQuery.forEach((o) => {
+      if (isReturned(o)) return
+      const k = toISODate(new Date(o.createdAt))
+      m.set(k, (m.get(k) ?? 0) + o.total)
+    })
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-32)
+  }, [byQuery])
+  const stripMax = Math.max(1, ...strip.map(([, v]) => v))
+
+  const live = filtered.filter((o) => !isReturned(o))
+  const sumTotal = live.reduce((s, o) => s + o.total, 0)
+  const sumPaid = live.reduce((s, o) => s + o.paid, 0)
+  const sumDue = Math.max(0, sumTotal - sumPaid)
+  const paidPct = sumTotal > 0 ? Math.min(100, (sumPaid / sumTotal) * 100) : 0
+
+  const groups = React.useMemo(() => {
+    const m = new Map<string, PurchaseOrder[]>()
+    filtered.forEach((o) => {
+      const k = toISODate(new Date(o.createdAt))
+      m.set(k, [...(m.get(k) ?? []), o])
+    })
+    return [...m.entries()]
+  }, [filtered])
 
   const returnOrder = returnId !== null ? orders.find((o) => o.id === returnId) ?? null : null
 
@@ -161,296 +183,283 @@ export function PurchaseOrdersView() {
     })
   }
 
+  const chip =
+    'h-8 rounded-full px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-cyan-600/10 hover:text-cyan-800 dark:hover:text-cyan-200 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40'
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="space-y-5">
+      {/* العنوان + الإجراءات */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">المشتريات</h1>
-          <p className="text-sm text-muted-foreground">
-            سجل أوامر الشراء من الموردين — كاش أو آجل
-          </p>
+          <h1 className="text-2xl font-extrabold tracking-tight">المشتريات</h1>
+          <p className="text-sm text-muted-foreground">أوامر الشراء من الموردين، كاش أو آجل</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={exportExcel} disabled={filtered.length === 0}>
             <FileSpreadsheet className="size-4" />
             تصدير Excel
           </Button>
-          <Button onClick={() => setNewOpen(true)}>
+          <Button
+            onClick={() => setNewOpen(true)}
+            className="bg-cyan-700 text-white hover:bg-cyan-600 focus-visible:ring-cyan-600/40"
+          >
             <Plus className="size-4" />
             أمر شراء جديد
           </Button>
         </div>
       </div>
 
-      <Card>
-        <CardContent className="flex flex-wrap items-end gap-2 p-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs">بحث</Label>
-            <div className="relative w-[220px]">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="بحث برقم أمر الشراء..."
-                className="pr-9"
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">من تاريخ</Label>
-            <Input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="w-[160px]"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">إلى تاريخ</Label>
-            <Input
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="w-[160px]"
-            />
-          </div>
-          <Button variant="outline" onClick={() => load(from, to)}>
-            تصفية
-          </Button>
-          <div className="mx-1 h-8 w-px bg-border" />
-          <Button variant="ghost" size="sm" onClick={quickToday}>
-            اليوم
-          </Button>
-          <Button variant="ghost" size="sm" onClick={quickLast7Days}>
-            آخر 7 أيام
-          </Button>
-          <Button variant="ghost" size="sm" onClick={quickThisMonth}>
-            هذا الشهر
-          </Button>
-          {(from || to) && (
-            <Button variant="ghost" size="sm" onClick={clearRange}>
-              <X className="size-3.5" />
-              مسح
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+      {/* اللوح الداكن: الأرقام + شريط الباركود */}
+      <section className="overflow-hidden rounded-3xl bg-cyan-950 text-cyan-50 shadow-lg ring-1 ring-cyan-900">
+        <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
+          <div className="min-w-0">
+            <p className="text-sm text-cyan-200/80">
+              {day ? `مشتريات ${dayLabel(day)}` : 'إجمالي المشتريات'}
+            </p>
+            <p className="mt-1 text-5xl font-extrabold leading-none tracking-tight tabular-nums">
+              {loading ? '…' : sumTotal.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+              <span className="ms-2 text-base font-semibold text-cyan-200/70">جنيه</span>
+            </p>
 
-      {(from || to) && (
-        <p className="text-xs text-muted-foreground">
-          عرض المشتريات من {from || 'البداية'} إلى {to || 'اليوم'} — {filtered.length} أمر
-        </p>
-      )}
-
-      <Card className="overflow-hidden py-0">
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="space-y-2 p-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : (
-            <div className="hidden overflow-x-auto lg:block" dir="ltr">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10 text-center">#</TableHead>
-                    <TableHead className="w-[132px]">رقم الأمر</TableHead>
-                    <TableHead className="w-52">التاريخ</TableHead>
-                    <TableHead>المورد</TableHead>
-                    <TableHead className="w-28">بواسطة</TableHead>
-                    <TableHead className="w-28 text-center">الإجمالي</TableHead>
-                    <TableHead className="w-28 text-center">المدفوع</TableHead>
-                    <TableHead className="w-24 text-center">الآجل</TableHead>
-                    <TableHead className="w-20 text-center">الكمية</TableHead>
-                    <TableHead className="w-24 text-center">الحالة</TableHead>
-                    <TableHead className="w-20 text-center">إجراءات</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={11}
-                        className="py-8 text-center text-muted-foreground"
-                      >
-                        لا توجد مشتريات
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filtered.map((o, index) => (
-                      <TableRow key={o.id}>
-                        <TableCell className="text-center font-mono text-xs">
-                          {index + 1}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {o.orderNo ?? `#${o.id}`}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-xs">
-                          <DateTimeCell date={o.createdAt} />
-                        </TableCell>
-                        <TableCell>
-                          {o.supplier ? (
-                            o.supplier.name
-                          ) : (
-                            <span className="text-muted-foreground text-xs">
-                              بدون مورد
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-xs">
-                          {o.userName ?? '—'}
-                        </TableCell>
-                        <TableCell className="text-center font-semibold tabular-nums">
-                          {formatCurrency(o.total)}
-                        </TableCell>
-                        <TableCell className="text-center tabular-nums">
-                          {formatCurrency(o.paid)}
-                        </TableCell>
-                        <TableCell
-                          className={cn(
-                            'text-center tabular-nums font-semibold',
-                            o.total - o.paid > 0 && 'text-destructive'
-                          )}
-                        >
-                          {formatCurrency(o.total - o.paid)}
-                        </TableCell>
-                        <TableCell className="text-center tabular-nums text-muted-foreground">
-                          {o.items.reduce((sum, it) => sum + it.quantity, 0)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge
-                            variant={o.status === 'مرتجعة' ? 'destructive' : 'secondary'}
-                            className={
-                              o.status === 'مكتملة' ? 'bg-primary/10 text-primary' : ''
-                            }
-                          >
-                            {o.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {o.status !== 'مرتجعة' && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 text-destructive hover:text-destructive"
-                              onClick={() => setReturnId(o.id)}
-                              title="مرتجع للمورد"
-                            >
-                              <RotateCcw className="size-4" />
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-
-          {/*
-            نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
-          */}
-          {!loading && (
-            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
-              {filtered.length === 0 ? (
-                <p className="col-span-full py-8 text-center text-muted-foreground">
-                  لا توجد مشتريات
+            {/* مدفوع / آجل */}
+            <div className="mt-6">
+              <div
+                className="flex h-2.5 overflow-hidden rounded-full bg-cyan-900"
+                role="img"
+                aria-label={`المدفوع ${Math.round(paidPct)}٪ من الإجمالي`}
+              >
+                <div className="bg-cyan-300 transition-[width] duration-500" style={{ width: `${paidPct}%` }} />
+                <div className="flex-1 bg-[repeating-linear-gradient(-45deg,transparent_0_4px,rgba(251,191,36,.55)_4px_8px)]" />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-x-8 gap-y-2 text-sm">
+                <p>
+                  <span className="text-cyan-200/70">مدفوع </span>
+                  <b className="tabular-nums">{formatCurrency(sumPaid)}</b>
                 </p>
-              ) : (
-                filtered.map((o, index) => {
-                  const due = o.total - o.paid
-                  const itemCount = o.items.reduce((sum, it) => sum + it.quantity, 0)
-                  const isReturned = o.status === 'مرتجعة'
-                  return (
-                    <div key={o.id} className={cn('rounded-lg border bg-card p-3', isReturned && 'opacity-60')}>
-                      {/* رأس الكارت: رقم الأمر + شارة الحالة */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-mono text-[10px] text-muted-foreground">
-                              #{index + 1}
-                            </span>
-                            <p className="font-medium leading-tight">
-                              {o.orderNo ?? `#${o.id}`}
-                            </p>
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            <DateTimeCell date={o.createdAt} />
-                          </p>
-                        </div>
-                        <Badge
-                          variant={isReturned ? 'destructive' : 'secondary'}
-                          className={o.status === 'مكتملة' ? 'bg-primary/10 text-primary' : ''}
-                        >
-                          {o.status}
-                        </Badge>
-                      </div>
+                <p>
+                  <span className="text-amber-300/90">آجل للموردين </span>
+                  <b className="tabular-nums">{formatCurrency(sumDue)}</b>
+                </p>
+                <p>
+                  <span className="text-cyan-200/70">الأوامر </span>
+                  <b className="tabular-nums">{live.length}</b>
+                </p>
+              </div>
+            </div>
+          </div>
 
-                      {/* المورد + بواسطة */}
-                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                        <span className="text-muted-foreground">المورد:</span>
-                        <span className="font-medium">
-                          {o.supplier ? o.supplier.name : 'بدون مورد'}
-                        </span>
-                        {o.userName && (
-                          <>
-                            <span className="text-muted-foreground">بواسطة:</span>
-                            <span className="font-medium">{o.userName}</span>
-                          </>
-                        )}
-                      </div>
-
-                      {/* شبكة البيانات: إجمالي/مدفوع/آجل */}
-                      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-2 text-center">
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">الإجمالي</p>
-                          <p className="font-semibold tabular-nums">
-                            {formatCurrency(o.total)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">المدفوع</p>
-                          <p className="tabular-nums">{formatCurrency(o.paid)}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">الآجل</p>
-                          <p
-                            className={cn(
-                              'font-semibold tabular-nums',
-                              due > 0 && 'text-destructive'
-                            )}
-                          >
-                            {formatCurrency(due)}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* الكمية + إجراء */}
-                      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                        <span>الكمية: {itemCount}</span>
-                        {!isReturned && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-7 text-destructive hover:text-destructive"
-                            onClick={() => setReturnId(o.id)}
-                            title="مرتجع للمورد"
-                          >
-                            <RotateCcw className="size-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })
+          {/* شريط الباركود اليومي */}
+          <div className="min-w-0">
+            <div className="flex items-center justify-between text-xs text-cyan-200/70">
+              <span>{strip.length > 0 ? `آخر ${strip.length} يوم فيه مشتريات` : 'مفيش مشتريات في الفترة دي'}</span>
+              {day && (
+                <button
+                  onClick={() => setDay(null)}
+                  className="inline-flex items-center gap-1 rounded-full bg-cyan-900 px-2.5 py-1 text-cyan-50 hover:bg-cyan-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+                >
+                  <X className="size-3" />
+                  عرض كل الأيام
+                </button>
               )}
             </div>
+            <div className="mt-3 flex h-28 items-end gap-[3px] overflow-x-auto" role="group" aria-label="المشتريات اليومية">
+              {strip.map(([k, v]) => {
+                const active = day === k
+                return (
+                  <button
+                    key={k}
+                    onClick={() => setDay(active ? null : k)}
+                    title={`${dayLabel(k)}: ${formatCurrency(v)}`}
+                    aria-pressed={active}
+                    className="group flex h-full min-w-[7px] flex-1 items-end focus-visible:outline-none"
+                  >
+                    <span
+                      className={cn(
+                        'block w-full rounded-[2px] transition-colors group-focus-visible:ring-2 group-focus-visible:ring-cyan-300',
+                        active
+                          ? 'bg-amber-300'
+                          : day
+                            ? 'bg-cyan-800 group-hover:bg-cyan-500'
+                            : 'bg-cyan-300/90 group-hover:bg-white'
+                      )}
+                      style={{ height: `${Math.max(8, (v / stripMax) * 100)}%` }}
+                    />
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* الفلاتر */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full sm:w-[230px]">
+          <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="رقم أمر الشراء"
+            aria-label="بحث برقم أمر الشراء"
+            className="pr-9"
+          />
+        </div>
+        <Input type="date" aria-label="من تاريخ" value={from} onChange={(e) => setFrom(e.target.value)} className="w-[150px]" />
+        <Input type="date" aria-label="إلى تاريخ" value={to} onChange={(e) => setTo(e.target.value)} className="w-[150px]" />
+        <Button variant="outline" onClick={() => applyRange(from, to)}>
+          تصفية
+        </Button>
+        <div className="flex items-center gap-1 rounded-full bg-muted/60 p-1">
+          <button className={chip} onClick={() => quick(0)}>اليوم</button>
+          <button className={chip} onClick={() => quick(6)}>آخر 7 أيام</button>
+          <button className={chip} onClick={() => quick('month')}>هذا الشهر</button>
+          {(from || to) && (
+            <button className={chip} onClick={() => applyRange('', '')}>
+              مسح
+            </button>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      {/* السجل مجمّع باليوم */}
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-2xl" />
+          ))}
+        </div>
+      ) : groups.length === 0 ? (
+        <div className="rounded-3xl border border-dashed py-14 text-center">
+          <p className="font-semibold">مفيش أوامر شراء هنا</p>
+          <p className="mt-1 text-sm text-muted-foreground">غيّر الفلتر أو سجّل أول أمر شراء.</p>
+          <Button onClick={() => setNewOpen(true)} className="mt-4 bg-cyan-700 text-white hover:bg-cyan-600">
+            <Plus className="size-4" />
+            أمر شراء جديد
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {groups.map(([k, list]) => {
+            const dayTotal = list.filter((o) => !isReturned(o)).reduce((s, o) => s + o.total, 0)
+            return (
+              <section key={k} className="relative ps-6">
+                <span aria-hidden className="absolute inset-y-2 start-[7px] w-px bg-cyan-700/25" />
+                <header className="mb-2 flex items-baseline justify-between gap-3">
+                  <h2 className="text-sm font-bold">{dayLabel(k)}</h2>
+                  <span className="text-xs tabular-nums text-muted-foreground">{formatCurrency(dayTotal)}</span>
+                </header>
+
+                <ul className="space-y-2">
+                  {list.map((o) => {
+                    const returned = isReturned(o)
+                    const due = Math.max(0, o.total - o.paid)
+                    const pct = o.total > 0 ? Math.min(100, (o.paid / o.total) * 100) : 100
+                    const open = openId === o.id
+                    const qty = o.items.reduce((s, it) => s + it.quantity, 0)
+                    return (
+                      <li key={o.id} className="relative">
+                        <span
+                          aria-hidden
+                          className={cn(
+                            'absolute -start-[21px] top-6 size-3 rounded-full border-2 border-background',
+                            returned ? 'bg-slate-400' : due > 0 ? 'bg-amber-500' : 'bg-cyan-600'
+                          )}
+                        />
+                        <div className={cn('rounded-2xl border bg-card transition-shadow', open && 'shadow-md', returned && 'opacity-65')}>
+                          <div className="flex items-stretch">
+                            <button
+                              onClick={() => setOpenId(open ? null : o.id)}
+                              aria-expanded={open}
+                              className="grid min-w-0 flex-1 gap-x-6 gap-y-3 rounded-2xl p-4 text-start focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+                            >
+                              <div className="min-w-0">
+                                <p className="flex flex-wrap items-center gap-2">
+                                  <b className="font-extrabold tabular-nums">{o.orderNo ?? `#${o.id}`}</b>
+                                  {returned && (
+                                    <span className="rounded-md bg-slate-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                                      مرتجعة
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="mt-0.5 truncate text-sm">
+                                  {o.supplier?.name ?? <span className="text-muted-foreground">بدون مورد</span>}
+                                </p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  {timeLabel(o.createdAt)}
+                                  {o.userName ? ` — ${o.userName}` : ''}
+                                  {` — ${qty} قطعة`}
+                                </p>
+                              </div>
+
+                              <div className="min-w-0">
+                                <p className={cn('text-lg font-extrabold tabular-nums', returned && 'line-through')}>
+                                  {formatCurrency(o.total)}
+                                </p>
+                                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-amber-500/25">
+                                  <div className="h-full rounded-full bg-cyan-600" style={{ width: `${pct}%` }} />
+                                </div>
+                                <p className="mt-1.5 text-xs text-muted-foreground">
+                                  {due > 0 && !returned ? (
+                                    <>
+                                      متبقي للمورد <b className="tabular-nums text-amber-700 dark:text-amber-400">{formatCurrency(due)}</b>
+                                    </>
+                                  ) : (
+                                    'مدفوع بالكامل'
+                                  )}
+                                </p>
+                              </div>
+                            </button>
+
+                            <div className="flex flex-col items-center justify-between gap-1 border-s px-2 py-3">
+                              <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', open && 'rotate-180')} aria-hidden />
+                              {!returned && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => setReturnId(o.id)}
+                                  title="مرتجع للمورد"
+                                  aria-label="مرتجع للمورد"
+                                >
+                                  <RotateCcw className="size-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+
+                          {open && (
+                            <div className="border-t bg-cyan-600/[0.04] px-4 py-3">
+                              <ul className="divide-y divide-border/60 text-sm">
+                                {o.items.map((it) => (
+                                  <li key={it.id} className="flex items-baseline justify-between gap-3 py-1.5">
+                                    <span className="min-w-0 truncate">
+                                      {it.name}
+                                      {!!it.returnedQty && (
+                                        <span className="ms-2 text-xs text-destructive">مرتجع {it.returnedQty}</span>
+                                      )}
+                                    </span>
+                                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                                      {it.quantity} × {formatCurrency(it.cost)}
+                                    </span>
+                                    <b className="w-28 shrink-0 text-end tabular-nums">{formatCurrency(it.quantity * it.cost)}</b>
+                                  </li>
+                                ))}
+                              </ul>
+                              {o.paymentMethod && (
+                                <p className="mt-2 text-xs text-muted-foreground">طريقة الدفع: {o.paymentMethod}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+            )
+          })}
+        </div>
+      )}
 
       <PurchaseReturnDialog
         open={returnId !== null}
@@ -462,11 +471,7 @@ export function PurchaseOrdersView() {
         onDone={() => load(from, to)}
       />
 
-      <PurchaseOrderDialog
-        open={newOpen}
-        onOpenChange={setNewOpen}
-        onSaved={() => load(from, to)}
-      />
+      <PurchaseOrderDialog open={newOpen} onOpenChange={setNewOpen} onSaved={() => load(from, to)} />
     </div>
   )
 }
