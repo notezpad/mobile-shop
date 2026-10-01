@@ -196,10 +196,10 @@ export function ReportsView() {
   }, [report])
 
   const chapters = [
-    { id: 'ch-rhythm', n: '٠١', label: 'الإيقاع' },
-    { id: 'ch-leaders', n: '٠٢', label: 'الأبطال' },
-    { id: 'ch-stock', n: '٠٣', label: 'المخزون' },
-    ...(hasFinance ? [{ id: 'ch-finance', n: '٠٤', label: 'المالية' }] : []),
+    { id: 'ch-rhythm', n: '01', label: 'الإيقاع' },
+    { id: 'ch-leaders', n: '02', label: 'الأبطال' },
+    { id: 'ch-stock', n: '03', label: 'المخزون' },
+    ...(hasFinance ? [{ id: 'ch-finance', n: '04', label: 'المالية' }] : []),
   ]
   const branchLabel =
     branchId === 'all' ? 'كل الفروع' : report?.branches.find((b) => String(b.id) === branchId)?.name ?? 'فرع'
@@ -208,7 +208,7 @@ export function ReportsView() {
   return (
     <div className="space-y-6">
       {/* ═════════ شريط التحكم — زجاجي لاصق ═════════ */}
-      <div className="animate-in-up sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-2xl border bg-background/80 p-2 shadow-sm backdrop-blur-md">
+      <div className="animate-in-up sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-2xl border bg-background/80 p-2 shadow-sm backdrop-blur-md">
         <div className="flex rounded-xl bg-muted p-1">
           {(['today', 'week', 'month', 'all'] as const).map((p) => (
             <button
@@ -262,7 +262,7 @@ export function ReportsView() {
                 تقرير الأداء
               </span>
               <CalendarDays className="size-3.5" />
-              {from || to ? `${from || 'بداية النشاط'} ← ${to || 'الآن'}` : 'من بداية النشاط'} · {branchLabel}
+              {from && from === to ? from.split('-').reverse().join('/') : from || to ? `${from ? from.split('-').reverse().join('/') : 'بداية النشاط'} ← ${to ? to.split('-').reverse().join('/') : 'الآن'}` : 'من بداية النشاط'} · {branchLabel}
             </p>
             <h1 className="max-w-4xl text-2xl font-extrabold leading-[1.9] tracking-tight sm:text-3xl sm:leading-[1.9]">
               {r.salesCount === 0 ? (
@@ -315,10 +315,10 @@ export function ReportsView() {
 
             <div className="min-w-0 space-y-12">
               {/* ───── ٠١ الإيقاع ───── */}
-              <Chapter id="ch-rhythm" n="٠١" title="إيقاع البيع" hint="امتى بتبيع، وبإيه بيدفعوا، وإيه اللي بيتباع">
+              <Chapter id="ch-rhythm" n="01" title="إيقاع البيع" hint="امتى بتبيع، وبإيه بيدفعوا، وإيه اللي بيتباع">
                 <div className="grid gap-4 lg:grid-cols-2">
                   <Panel title="إيقاع الأسبوع" hint="متوسط مبيعات كل يوم — الأغمق = الأقوى">
-                    {ins && ins.avgs.some((a) => a.n) ? (
+                    {ins && r.salesTrend.length >= 7 ? (
                       <>
                         <div className="grid grid-cols-7 gap-1.5">
                           {ins.avgs.map((a) => {
@@ -339,7 +339,7 @@ export function ReportsView() {
                         {ins.best && <p className="mt-3 text-[11px] text-muted-foreground">أقوى يوم بالتاريخ: <b className="text-foreground">{shortDate(ins.best.date)}</b> — {formatCurrency(ins.best.total)}</p>}
                       </>
                     ) : (
-                      <Empty t="لا توجد مبيعات كفاية لرسم الإيقاع" />
+                      <Empty t="محتاج أسبوع من البيانات على الأقل لرسم الإيقاع — وسّع المدى" />
                     )}
                   </Panel>
 
@@ -362,7 +362,7 @@ export function ReportsView() {
               </Chapter>
 
               {/* ───── ٠٢ الأبطال ───── */}
-              <Chapter id="ch-leaders" n="٠٢" title="الأبطال" hint="المنتجات والعملاء اللي شايلين الفترة">
+              <Chapter id="ch-leaders" n="02" title="الأبطال" hint="المنتجات والعملاء اللي شايلين الفترة">
                 <div className="grid gap-4 lg:grid-cols-5">
                   <Panel title="أفضل المنتجات" hint="الشريط = الإيراد · الجزء الملوّن = الربح · النسبة = الهامش" className="lg:col-span-3">
                     {r.topProducts.length > 0 ? (
@@ -421,7 +421,7 @@ export function ReportsView() {
               </Chapter>
 
               {/* ───── ٠٣ المخزون ───── */}
-              <Chapter id="ch-stock" n="٠٣" title="المخزون" hint="قيمة اللي على الرف، واللي لازم يتزوّد">
+              <Chapter id="ch-stock" n="03" title="المخزون" hint="قيمة اللي على الرف، واللي لازم يتزوّد">
                 <div className="grid gap-4 lg:grid-cols-2">
                   <Panel title="قيمة المخزون" hint="التكلفة مقابل الربح المتوقع عند البيع">
                     {r.stockValuePrice > 0 ? (
@@ -469,7 +469,7 @@ export function ReportsView() {
 
               {/* ───── ٠٤ المالية ───── */}
               {hasFinance && (
-                <Chapter id="ch-finance" n="٠٤" title="المالية" hint="من هامش البيع لحد الصافي، وإيه اللي ليك وعليك">
+                <Chapter id="ch-finance" n="04" title="المالية" hint="من هامش البيع لحد الصافي، وإيه اللي ليك وعليك">
                   <div className="grid gap-4 lg:grid-cols-2">
                     <Panel title="جسر الأرباح" hint={`هامش المبيعات + الصيانة (${num(r.maintenanceCount)} أمر) − المصروفات`} className="lg:col-span-2">
                       <Waterfall
@@ -528,7 +528,7 @@ export function ReportsView() {
 /* ═════════════════════ مكوّنات الهوية ═════════════════════ */
 
 function Hl({ children }: { children: React.ReactNode }) {
-  return <mark className="rounded-lg bg-gradient-to-l from-violet-500/20 to-fuchsia-500/20 px-1.5 py-0.5 font-extrabold text-foreground">{children}</mark>
+  return <span className="box-decoration-clone rounded-lg bg-gradient-to-l from-violet-500/20 to-fuchsia-500/20 px-1.5 py-0.5 font-extrabold text-foreground">{children}</span>
 }
 
 function Chip({ children, icon, tone }: { children: React.ReactNode; icon: React.ReactNode; tone?: 'warn' }) {
@@ -544,7 +544,7 @@ function Chapter({ id, n, title, hint, children }: { id: string; n: string; titl
   return (
     <section id={id} className="animate-in-up scroll-mt-24 space-y-4">
       <div className="flex items-end gap-3">
-        <span className="bg-clip-text text-5xl font-black leading-none tabular-nums text-transparent" style={{ backgroundImage: `linear-gradient(to bottom, ${V}, ${F})` }}>{n}</span>
+        <span dir="ltr" className="bg-clip-text text-5xl font-black leading-none tabular-nums text-transparent" style={{ backgroundImage: `linear-gradient(to bottom, ${V}, ${F})` }}>{n}</span>
         <div className="pb-0.5">
           <h2 className="text-lg font-extrabold leading-tight">{title}</h2>
           <p className="text-[11px] text-muted-foreground">{hint}</p>
@@ -720,7 +720,7 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
       </div>
 
       <div dir="ltr" className="h-72 px-2 pt-4">
-        {t.length > 0 ? (
+        {t.length > 1 ? (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={t} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
               <defs>
@@ -735,6 +735,13 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
               {m !== 'total' && <Area type="monotone" dataKey="profit" stroke={F} strokeWidth={2.5} fill="url(#rpt-gf)" />}
             </AreaChart>
           </ResponsiveContainer>
+        ) : t.length === 1 ? (
+          <div dir="rtl" className="flex h-full flex-col items-center justify-center gap-1 text-center">
+            <p className="text-xs text-muted-foreground">يوم واحد في الفترة · {shortDate(t[0].date)}</p>
+            <p className="text-5xl font-extrabold tabular-nums tracking-tight">{formatCurrency(t[0].total)}</p>
+            <p className="text-sm font-semibold text-fuchsia-600 dark:text-fuchsia-400">ربح {formatCurrency(t[0].profit)}</p>
+            <p className="mt-2 text-[11px] text-muted-foreground">وسّع المدى (أسبوع / شهر) علشان يظهر المنحنى</p>
+          </div>
         ) : (
           <p className="flex h-full items-center justify-center text-sm text-muted-foreground">لا توجد مبيعات في هذه الفترة</p>
         )}
