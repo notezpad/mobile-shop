@@ -1,12 +1,12 @@
 'use client'
 
 import * as React from 'react'
-import { ArrowDownRight, ArrowUpRight, CalendarDays, Crown, FileText, PackageX, Sparkles } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, CalendarDays, ChevronDown, FileText, Sparkles } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency, formatNumber } from '@/lib/format'
@@ -100,12 +100,12 @@ export function ReportsView() {
   const shopBranding = useShopStore((s) => s.branding)
   const enabledModules = useShopStore((s) => s.plan.enabledModules)
   const hasFinance = enabledModules.includes('finance')
-  const [from, setFrom] = React.useState('')
-  const [to, setTo] = React.useState('')
+  const [from, setFrom] = React.useState(() => rangeFor('month')[0])
+  const [to, setTo] = React.useState(() => rangeFor('month')[1])
   const [branchId, setBranchId] = React.useState<string>('all')
   const [report, setReport] = React.useState<Report | null>(null)
   const [loading, setLoading] = React.useState(true)
-  const [activePreset, setActivePreset] = React.useState<'today' | 'week' | 'month' | 'all' | null>('month')
+  const [activePreset, setActivePreset] = React.useState<PresetKey | null>('month')
   const [active, setActive] = React.useState('ch-rhythm')
 
   const load = React.useCallback(async () => {
@@ -129,26 +129,6 @@ export function ReportsView() {
 
   // live refresh — التقرير بيجمع مبيعات ومصروفات وخزنة ومنتجات
   useDataRefresh(['sales', 'expenses', 'cash', 'products'], load)
-
-  const setQuickRange = (preset: 'today' | 'week' | 'month' | 'all') => {
-    setActivePreset(preset)
-    const now = new Date()
-    if (preset === 'today') {
-      setFrom(pad(now))
-      setTo(pad(now))
-    } else if (preset === 'week') {
-      const s = new Date(now)
-      s.setDate(now.getDate() - 6)
-      setFrom(pad(s))
-      setTo(pad(now))
-    } else if (preset === 'month') {
-      setFrom(pad(new Date(now.getFullYear(), now.getMonth(), 1)))
-      setTo(pad(now))
-    } else {
-      setFrom('')
-      setTo('')
-    }
-  }
 
   const exportPdf = () => {
     if (!report) return
@@ -207,44 +187,12 @@ export function ReportsView() {
 
   return (
     <div className="space-y-6">
-      {/* ═════════ شريط التحكم — زجاجي لاصق ═════════ */}
-      <div className="animate-in-up sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-2xl border bg-background/80 p-2 shadow-sm backdrop-blur-md">
-        <div className="flex rounded-xl bg-muted p-1">
-          {(['today', 'week', 'month', 'all'] as const).map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setQuickRange(p)}
-              className={cn(
-                'rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-base ease-out',
-                activePreset === p ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {p === 'today' ? 'اليوم' : p === 'week' ? 'أسبوع' : p === 'month' ? 'شهر' : 'الكل'}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setActivePreset(null) }} className="h-9 w-[132px] rounded-xl text-xs" aria-label="من" />
-          <span className="text-xs text-muted-foreground">←</span>
-          <Input type="date" value={to} onChange={(e) => { setTo(e.target.value); setActivePreset(null) }} className="h-9 w-[132px] rounded-xl text-xs" aria-label="إلى" />
-        </div>
-        {r && r.branches.length > 1 && (
-          <Select value={branchId} onValueChange={setBranchId}>
-            <SelectTrigger className="h-9 w-[140px] rounded-xl text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">كل الفروع</SelectItem>
-              {r.branches.map((b) => (
-                <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        <Button onClick={exportPdf} disabled={loading || !r} className="ms-auto h-9 rounded-xl border-0 text-white shadow-md shadow-violet-600/25" style={{ background: GRAD }}>
-          <FileText className="size-4" />
-          تصدير PDF
-        </Button>
-      </div>
+      <FilterBar
+        from={from} to={to} setFrom={setFrom} setTo={setTo}
+        preset={activePreset} setPreset={setActivePreset}
+        branchId={branchId} setBranchId={setBranchId} branches={r?.branches ?? []}
+        loading={loading} disabled={loading || !r} onExport={exportPdf}
+      />
 
       {!r ? (
         <div className="space-y-5">
@@ -254,42 +202,7 @@ export function ReportsView() {
         </div>
       ) : (
         <div className={cn('space-y-6 transition-opacity duration-base', loading && 'opacity-60')}>
-          {/* ═════════ الافتتاحية: جملة مولَّدة من الأرقام ═════════ */}
-          <header className="animate-in-up space-y-3 px-1">
-            <p className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold text-white" style={{ background: GRAD }}>
-                <Sparkles className="size-3" />
-                تقرير الأداء
-              </span>
-              <CalendarDays className="size-3.5" />
-              {from && from === to ? from.split('-').reverse().join('/') : from || to ? `${from ? from.split('-').reverse().join('/') : 'بداية النشاط'} ← ${to ? to.split('-').reverse().join('/') : 'الآن'}` : 'من بداية النشاط'} · {branchLabel}
-            </p>
-            <h1 className="max-w-4xl text-2xl font-extrabold leading-[1.9] tracking-tight sm:text-3xl sm:leading-[1.9]">
-              {r.salesCount === 0 ? (
-                'مفيش مبيعات مسجّلة في الفترة دي — جرّب توسّع المدى الزمني أو غيّر الفرع.'
-              ) : (
-                <>
-                  حقق المحل <Hl>{num(Math.round(r.totalSales))} جنيه</Hl> مبيعات من <Hl>{num(r.salesCount)} فاتورة</Hl>
-                  {r.changes.totalSales != null && (
-                    <>
-                      ، {r.changes.totalSales >= 0 ? 'بارتفاع' : 'بانخفاض'} <Hl>{Math.abs(r.changes.totalSales).toFixed(0)}٪</Hl> عن الفترة السابقة
-                    </>
-                  )}
-                  . {r.netProfit >= 0 ? 'وصافي الربح' : 'وصافي الخسارة'} بعد المصروفات <Hl>{num(Math.round(Math.abs(r.netProfit)))} جنيه</Hl> بهامش{' '}
-                  <Hl>{(ins?.netMargin ?? 0).toFixed(0)}٪</Hl>.
-                </>
-              )}
-            </h1>
-            <div className="flex flex-wrap gap-2 text-[11px] font-semibold">
-              {ins?.best && ins.best.total > 0 && (
-                <Chip icon={<Crown className="size-3" />}>أقوى يوم {shortDate(ins.best.date)} · {formatCurrency(ins.best.total)}</Chip>
-              )}
-              {r.topProducts[0] && <Chip icon={<Sparkles className="size-3" />}>الأكثر إيراداً: {r.topProducts[0].name}</Chip>}
-              {r.lowStockCount > 0 && (
-                <Chip tone="warn" icon={<PackageX className="size-3" />}>{num(r.lowStockCount)} صنف تحت الحد الأدنى</Chip>
-              )}
-            </div>
-          </header>
+          <Hero r={r} ins={ins} hasFinance={hasFinance} shop={shopName} range={rangeText(from, to)} branch={branchLabel} />
 
           {/* ═════════ المسرح: المنحنى + شريط الإشارات ═════════ */}
           <Stage r={r} ins={ins} />
@@ -525,19 +438,272 @@ export function ReportsView() {
   )
 }
 
+/* ═════════════════════ الفلتر والهيرو (النسخة الجديدة) ═════════════════════ */
+
+type PresetKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'year' | 'all'
+const PRESETS: { k: PresetKey; l: string }[] = [
+  { k: 'today', l: 'اليوم' },
+  { k: 'yesterday', l: 'امبارح' },
+  { k: '7d', l: 'آخر 7 أيام' },
+  { k: '30d', l: 'آخر 30 يوم' },
+  { k: 'month', l: 'الشهر ده' },
+  { k: 'lastMonth', l: 'الشهر اللي فات' },
+  { k: 'year', l: 'السنة دي' },
+  { k: 'all', l: 'كل الفترة' },
+]
+const QUICK: PresetKey[] = ['today', '7d', 'month', 'all']
+
+function rangeFor(k: PresetKey): [string, string] {
+  const n = new Date()
+  const y = n.getFullYear()
+  const m = n.getMonth()
+  const ago = (d: number) => new Date(y, m, n.getDate() - d)
+  switch (k) {
+    case 'today': return [pad(n), pad(n)]
+    case 'yesterday': return [pad(ago(1)), pad(ago(1))]
+    case '7d': return [pad(ago(6)), pad(n)]
+    case '30d': return [pad(ago(29)), pad(n)]
+    case 'month': return [pad(new Date(y, m, 1)), pad(n)]
+    case 'lastMonth': return [pad(new Date(y, m - 1, 1)), pad(new Date(y, m, 0))]
+    case 'year': return [pad(new Date(y, 0, 1)), pad(n)]
+    default: return ['', '']
+  }
+}
+
+const dmy = (iso: string) => iso.split('-').reverse().join('/')
+function rangeText(from: string, to: string) {
+  if (!from && !to) return 'من بداية النشاط'
+  if (from && from === to) return dmy(from)
+  return `${from ? dmy(from) : 'البداية'} ← ${to ? dmy(to) : 'الآن'}`
+}
+function daysIn(from: string, to: string) {
+  if (!from || !to) return null
+  const [a, b] = [from, to].map((s) => {
+    const [y, m, d] = s.split('-').map(Number)
+    return new Date(y, m - 1, d).getTime()
+  })
+  return Math.round((b - a) / 86400000) + 1
+}
+
+function FilterBar({
+  from, to, setFrom, setTo, preset, setPreset, branchId, setBranchId, branches, loading, disabled, onExport,
+}: {
+  from: string; to: string; setFrom: (v: string) => void; setTo: (v: string) => void
+  preset: PresetKey | null; setPreset: (k: PresetKey | null) => void
+  branchId: string; setBranchId: (v: string) => void; branches: Branch[]
+  loading: boolean; disabled: boolean; onExport: () => void
+}) {
+  const days = daysIn(from, to)
+  const apply = (k: PresetKey) => {
+    const [f, t] = rangeFor(k)
+    setFrom(f); setTo(t); setPreset(k)
+  }
+  return (
+    <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-2xl border bg-background/80 p-2 shadow-sm backdrop-blur-xl">
+      <Popover>
+        <PopoverTrigger asChild>
+          <button type="button" className="flex h-10 items-center gap-2 rounded-xl border bg-card px-3 text-xs font-bold transition-colors hover:bg-muted/60">
+            <CalendarDays className="size-4 text-violet-600 dark:text-violet-400" />
+            <span className="tabular-nums">{rangeText(from, to)}</span>
+            {days && <span className="rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-700 dark:text-violet-300">{days} يوم</span>}
+            <ChevronDown className="size-3.5 opacity-60" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-[310px] rounded-2xl p-3">
+          <div className="grid grid-cols-2 gap-1.5">
+            {PRESETS.map((p) => (
+              <button
+                key={p.k}
+                type="button"
+                onClick={() => apply(p.k)}
+                className={cn('rounded-xl border px-3 py-2 text-xs font-semibold transition-colors', preset === p.k ? 'border-transparent text-white' : 'hover:bg-muted/60')}
+                style={preset === p.k ? { background: GRAD } : undefined}
+              >
+                {p.l}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3">
+            <label className="space-y-1 text-[11px] font-medium text-muted-foreground">من
+              <Input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPreset(null) }} className="h-9 rounded-xl text-xs" />
+            </label>
+            <label className="space-y-1 text-[11px] font-medium text-muted-foreground">إلى
+              <Input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPreset(null) }} className="h-9 rounded-xl text-xs" />
+            </label>
+          </div>
+        </PopoverContent>
+      </Popover>
+
+      <div className="flex rounded-xl bg-muted p-1">
+        {QUICK.map((k) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => apply(k)}
+            className={cn('rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-base ease-out', preset === k ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+          >
+            {PRESETS.find((p) => p.k === k)!.l}
+          </button>
+        ))}
+      </div>
+
+      {branches.length > 1 && (
+        <div className="flex max-w-full items-center gap-1 overflow-x-auto">
+          {[{ id: 'all', name: 'كل الفروع' }, ...branches.map((b) => ({ id: String(b.id), name: b.name }))].map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => setBranchId(b.id)}
+              className={cn('shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors', branchId === b.id ? 'border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300' : 'text-muted-foreground hover:bg-muted/60')}
+            >
+              {b.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <span className="hidden items-center gap-1.5 text-[11px] font-medium text-muted-foreground md:flex">
+        <span className={cn('size-2 rounded-full', loading ? 'animate-pulse bg-amber-500' : 'bg-emerald-500')} />
+        {loading ? 'بيحدّث…' : 'مباشر'}
+      </span>
+
+      <Button onClick={onExport} disabled={disabled} className="ms-auto h-10 rounded-xl border-0 text-white shadow-md shadow-violet-600/25" style={{ background: GRAD }}>
+        <FileText className="size-4" />
+        تصدير PDF
+      </Button>
+    </div>
+  )
+}
+
+function Hero({
+  r, ins, hasFinance, shop, range, branch,
+}: {
+  r: Report
+  ins: { best: { date: string; total: number } | null; netMargin: number; expRatio: number } | null
+  hasFinance: boolean; shop: string; range: string; branch: string
+}) {
+  const netMargin = ins?.netMargin ?? 0
+  const ch = r.changes.totalSales
+  const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+  const verdict =
+    r.salesCount === 0 ? { t: 'مفيش بيانات', d: 'مفيش مبيعات في الفترة دي', c: '#94a3b8' }
+    : r.netProfit < 0 ? { t: 'خسارة', d: 'المصروفات أكبر من الربح', c: '#f43f5e' }
+    : netMargin < 10 ? { t: 'ربح ضعيف', d: 'هامش الصافي أقل من 10٪', c: '#f59e0b' }
+    : (ch ?? 0) < 0 ? { t: 'مستقر', d: 'ربح كويس والمبيعات أقل من السابقة', c: V }
+    : { t: 'أداء قوي', d: 'ربح صحي ومبيعات في صعود', c: '#10b981' }
+
+  const extra: React.ReactNode[] = []
+  const low = r.lowStockProducts[0]
+  if (r.lowStockCount > 0 && low)
+    extra.push(<>⚠️ <Hl>{num(r.lowStockCount)} صنف</Hl> تحت الحد الأدنى — أولهم «{low.name}» فاضل منه {num(low.quantity)}.</>)
+  if (hasFinance && (r.customersReceivable > 0 || r.suppliersPayable > 0))
+    extra.push(<>ليك عند العملاء <Hl>{num(Math.round(r.customersReceivable))} جنيه</Hl> وعليك للموردين <Hl>{num(Math.round(r.suppliersPayable))} جنيه</Hl>.</>)
+  if (ins?.best && ins.best.total > 0 && r.salesTrend.length > 1)
+    extra.push(<>أقوى يوم كان <Hl>{shortDate(ins.best.date)}</Hl> بمبيعات <Hl>{num(Math.round(ins.best.total))} جنيه</Hl>.</>)
+  if (r.topProducts[0])
+    extra.push(<>أكتر منتج جايب إيراد «{r.topProducts[0].name}» بـ <Hl>{num(Math.round(r.topProducts[0].total))} جنيه</Hl>.</>)
+
+  const bubbles: React.ReactNode[] =
+    r.salesCount === 0
+      ? ['مفيش مبيعات مسجّلة في الفترة دي — جرّب توسّع المدى أو غيّر الفرع.']
+      : [
+          <>
+            حقق المحل <Hl>{num(Math.round(r.totalSales))} جنيه</Hl> مبيعات من <Hl>{num(r.salesCount)} فاتورة</Hl>
+            {ch != null && <>، {ch >= 0 ? 'بارتفاع' : 'بانخفاض'} <Hl>{Math.abs(ch).toFixed(0)}٪</Hl> عن الفترة السابقة</>}.
+          </>,
+          <>
+            {r.netProfit >= 0 ? 'وصافي الربح' : 'وصافي الخسارة'} بعد المصروفات <Hl>{num(Math.round(Math.abs(r.netProfit)))} جنيه</Hl> بهامش <Hl>{netMargin.toFixed(0)}٪</Hl>
+            {(ins?.expRatio ?? 0) > 0 && <>، والمصروفات واخدة {(ins?.expRatio ?? 0).toFixed(0)}٪ من المبيعات</>}.
+          </>,
+          ...extra.slice(0, 2),
+        ]
+
+  const asks = [
+    { l: 'أنهي أيام أحسن؟', id: 'ch-rhythm' },
+    { l: 'إيه أكتر حاجة بتتباع؟', id: 'ch-leaders' },
+    { l: 'المخزون عامل إيه؟', id: 'ch-stock' },
+    ...(hasFinance ? [{ l: 'الفلوس رايحة فين؟', id: 'ch-finance' }] : []),
+  ]
+
+  return (
+    <section className="animate-in-up relative overflow-hidden rounded-3xl border bg-card shadow-sm">
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-24 -end-10 size-80 rounded-full bg-violet-500/25 blur-3xl" />
+        <div className="absolute -bottom-28 start-1/3 size-72 rounded-full bg-fuchsia-500/20 blur-3xl" />
+        <div className="absolute top-8 start-0 size-60 rounded-full bg-cyan-400/15 blur-3xl" />
+        <div className="absolute inset-0 opacity-50" style={{ backgroundImage: 'radial-gradient(rgba(124,58,237,0.18) 1px, transparent 1.2px)', backgroundSize: '18px 18px', maskImage: 'linear-gradient(to left, black, transparent 55%)', WebkitMaskImage: 'linear-gradient(to left, black, transparent 55%)' }} />
+      </div>
+
+      <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_230px]">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <span className="relative flex size-12 shrink-0 items-center justify-center">
+              <span className="absolute inset-0 animate-ping rounded-full bg-violet-500/30 motion-reduce:hidden" />
+              <span className="relative flex size-12 items-center justify-center rounded-full shadow-lg shadow-violet-500/30" style={{ background: 'conic-gradient(from 180deg, #7c3aed, #d946ef, #06b6d4, #7c3aed)' }}>
+                <span className="absolute inset-[3px] rounded-full bg-card/80 backdrop-blur" />
+                <Sparkles className="relative size-5 text-violet-600 dark:text-violet-300" />
+              </span>
+            </span>
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-extrabold leading-tight">محلل {shop || 'المحل'}</h1>
+              <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                <CalendarDays className="size-3" />
+                جهّزت لك ملخص <b className="tabular-nums text-foreground/80">{range}</b> · {branch}
+              </p>
+            </div>
+          </div>
+
+          <div key={`${r.totalSales}-${r.salesCount}-${range}-${branch}`} className="mt-5 space-y-2.5">
+            {bubbles.map((b, i) => (
+              <p
+                key={i}
+                style={{ animationDelay: `${250 + i * 600}ms` }}
+                className="animate-in-up motion-reduce:animate-none w-fit max-w-3xl rounded-2xl rounded-ss-md border bg-background/70 px-4 py-2.5 text-base font-semibold leading-[2.1] backdrop-blur-sm sm:text-lg sm:leading-[2.1]"
+              >
+                {b}
+              </p>
+            ))}
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            {asks.map((a, i) => (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => jump(a.id)}
+                style={{ animationDelay: `${250 + (bubbles.length + i) * 150}ms` }}
+                className="animate-in-up motion-reduce:animate-none rounded-full border border-violet-500/30 bg-violet-500/5 px-3.5 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-500/15 dark:text-violet-300"
+              >
+                {a.l}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <aside className="flex flex-row items-center gap-4 rounded-2xl border bg-background/60 p-4 backdrop-blur-sm lg:flex-col lg:justify-center lg:text-center">
+          <div className="relative shrink-0">
+            <Ring p={netMargin} color={verdict.c} className="size-24" />
+            <span className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-xl font-extrabold tabular-nums">{r.salesCount ? Math.round(netMargin) : '—'}<span className="text-xs">٪</span></span>
+              <span className="text-[9px] font-semibold text-muted-foreground">هامش الصافي</span>
+            </span>
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium text-muted-foreground">حالة الفترة</p>
+            <p className="text-2xl font-extrabold leading-tight" style={{ color: verdict.c }}>{verdict.t}</p>
+            <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{verdict.d}</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+  )
+}
+
 /* ═════════════════════ مكوّنات الهوية ═════════════════════ */
 
 function Hl({ children }: { children: React.ReactNode }) {
   return <span className="box-decoration-clone rounded-lg bg-gradient-to-l from-violet-500/20 to-fuchsia-500/20 px-1.5 py-0.5 font-extrabold text-foreground">{children}</span>
-}
-
-function Chip({ children, icon, tone }: { children: React.ReactNode; icon: React.ReactNode; tone?: 'warn' }) {
-  return (
-    <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5', tone === 'warn' ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'bg-card text-muted-foreground')}>
-      {icon}
-      {children}
-    </span>
-  )
 }
 
 function Chapter({ id, n, title, hint, children }: { id: string; n: string; title: string; hint: string; children: React.ReactNode }) {
@@ -645,12 +811,12 @@ function Spark({ v }: { v: number[] }) {
   )
 }
 
-function Ring({ p, color }: { p: number; color: string }) {
+function Ring({ p, color, className }: { p: number; color: string; className?: string }) {
   const R = 15
   const C = 2 * Math.PI * R
   const c = Math.max(0, Math.min(100, p))
   return (
-    <svg viewBox="0 0 40 40" className="size-12 -rotate-90">
+    <svg viewBox="0 0 40 40" className={cn('-rotate-90', className ?? 'size-12')}>
       <circle cx="20" cy="20" r={R} fill="none" strokeWidth="5" className="stroke-muted" />
       <circle cx="20" cy="20" r={R} fill="none" strokeWidth="5" strokeLinecap="round" stroke={color} strokeDasharray={C} strokeDashoffset={C - (C * c) / 100} className="transition-[stroke-dashoffset] duration-slow ease-out" />
     </svg>
