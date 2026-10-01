@@ -35,12 +35,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatArabicDateTime, formatCurrency, formatNumber } from '@/lib/format'
@@ -112,6 +107,12 @@ const SORT_LABELS: Record<SortKey, string> = {
   oldest: 'الأقدم أولاً',
   value: 'الأكبر قيمة',
   due: 'الأكبر متبقي',
+}
+const SORT_HINTS: Record<SortKey, string> = {
+  recent: 'آخر أمر اتسجّل يظهر في الأول',
+  oldest: 'الأقدم في الأول — مفيد لمتابعة القديم',
+  value: 'الفواتير الكبيرة قبل الصغيرة',
+  due: 'اللي عليه متبقي أكبر قبل غيره',
 }
 const GROUP_LABELS: Record<GroupBy, string> = {
   day: 'يوم',
@@ -300,21 +301,53 @@ export function PurchaseOrdersView() {
   }, [orders])
   const C = (o: PurchaseOrder) => calcs.get(o.id)!
 
-  const suppliers = React.useMemo(() => {
-    const m = new Map<string, number>()
-    orders.forEach((o) => m.set(supplierKey(o), (m.get(supplierKey(o)) ?? 0) + 1))
-    return [...m.entries()].sort((a, b) => b[1] - a[1])
-  }, [orders])
-  const methods = React.useMemo(() => {
-    const m = new Map<string, number>()
-    orders.forEach((o) => o.paymentMethod && m.set(o.paymentMethod, (m.get(o.paymentMethod) ?? 0) + 1))
-    return [...m.entries()].sort((a, b) => b[1] - a[1])
-  }, [orders])
-  const users = React.useMemo(() => {
-    const m = new Map<string, number>()
-    orders.forEach((o) => o.userName && m.set(o.userName, (m.get(o.userName) ?? 0) + 1))
-    return [...m.entries()].sort((a, b) => b[1] - a[1])
-  }, [orders])
+  // خيارات القوائم المنسدلة — كل خيار معاه عدد الأوامر + معلومة تفيد في القرار
+  const supplierOpts = React.useMemo<PickOption[]>(() => {
+    const m = new Map<string, { n: number; due: number }>()
+    orders.forEach((o) => {
+      const k = supplierKey(o)
+      const e = m.get(k) ?? { n: 0, due: 0 }
+      e.n += 1
+      e.due += calcs.get(o.id)!.due
+      m.set(k, e)
+    })
+    return [...m.entries()]
+      .sort((a, b) => b[1].due - a[1].due || b[1].n - a[1].n)
+      .map(([k, e]) => ({
+        value: k,
+        label: k === NO_SUPPLIER ? 'شراء بدون مورد' : k,
+        count: e.n,
+        noSupplier: k === NO_SUPPLIER,
+        hint: e.due > 0 ? `متبقي ${formatCurrency(e.due)}` : 'مفيش متبقي',
+        tone: (e.due > 0 ? 'due' : 'muted') as 'due' | 'muted',
+      }))
+  }, [orders, calcs])
+  const methodOpts = React.useMemo<PickOption[]>(() => {
+    const m = new Map<string, { n: number; paid: number }>()
+    orders.forEach((o) => {
+      if (!o.paymentMethod) return
+      const e = m.get(o.paymentMethod) ?? { n: 0, paid: 0 }
+      e.n += 1
+      e.paid += calcs.get(o.id)!.paidNet
+      m.set(o.paymentMethod, e)
+    })
+    return [...m.entries()]
+      .sort((a, b) => b[1].n - a[1].n)
+      .map(([k, e]) => ({ value: k, label: methodLabel(k) ?? k, count: e.n, hint: `مدفوع ${formatCurrency(e.paid)}`, tone: 'muted' as const }))
+  }, [orders, calcs])
+  const userOpts = React.useMemo<PickOption[]>(() => {
+    const m = new Map<string, { n: number; net: number }>()
+    orders.forEach((o) => {
+      if (!o.userName) return
+      const e = m.get(o.userName) ?? { n: 0, net: 0 }
+      e.n += 1
+      e.net += calcs.get(o.id)!.net
+      m.set(o.userName, e)
+    })
+    return [...m.entries()]
+      .sort((a, b) => b[1].n - a[1].n)
+      .map(([k, e]) => ({ value: k, label: k, count: e.n, hint: `صافي ${formatCurrency(e.net)}`, tone: 'muted' as const }))
+  }, [orders, calcs])
 
   // كل الفلاتر ما عدا حالة التسوية (علشان أرقام الشريط تفضل ثابتة)
   const base = React.useMemo(() => {
@@ -598,24 +631,29 @@ export function PurchaseOrdersView() {
             )}
           </label>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-11 rounded-2xl">
-                <ArrowUpDown className="size-4" />
+          <Picker
+            align="end"
+            title="ترتيب السجل"
+            subtitle="الترتيب جوّه كل مجموعة"
+            icon={ArrowUpDown}
+            options={(Object.keys(SORT_LABELS) as SortKey[]).map((k) => ({ value: k, label: SORT_LABELS[k], hint: SORT_HINTS[k], tone: 'muted' as const }))}
+            selected={sort}
+            onSelect={(v) => v && setSort(v as SortKey)}
+            trigger={(open) => (
+              <button
+                type="button"
+                className={cn(
+                  'inline-flex h-11 items-center gap-2 rounded-2xl border bg-background px-3.5 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40',
+                  open && 'border-cyan-600 ring-[3px] ring-cyan-600/25'
+                )}
+              >
+                <ArrowUpDown className="size-4 text-cyan-700 dark:text-cyan-300" />
                 <span className="text-muted-foreground">ترتيب:</span>
                 <span className="font-semibold">{SORT_LABELS[sort]}</span>
-                <ChevronDown className="size-4 text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-48">
-              {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
-                <DropdownMenuItem key={k} onClick={() => setSort(k)} className="justify-between gap-4">
-                  {SORT_LABELS[k]}
-                  {sort === k && <Check className="size-4 text-cyan-700" />}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <ChevronDown className={cn('size-4 text-muted-foreground transition-transform motion-reduce:transition-none', open && 'rotate-180')} />
+              </button>
+            )}
+          />
 
           <div className="flex h-11 items-center gap-0.5 rounded-2xl border bg-background p-1" role="group" aria-label="تجميع السجل">
             <Layers className="ms-1.5 size-4 text-muted-foreground" aria-hidden />
@@ -711,19 +749,39 @@ export function PurchaseOrdersView() {
           <Facet
             icon={Truck}
             label="المورد"
-            value={supplier ? (supplier === NO_SUPPLIER ? 'بدون مورد' : supplier) : null}
-            options={suppliers.map(([k, n]) => ({ value: k, label: k === NO_SUPPLIER ? 'بدون مورد' : k, count: n }))}
+            title="اختر المورد"
+            subtitle="مرتّبين بالأكتر متبقياً عليك"
+            options={supplierOpts}
+            selected={supplier}
             onPick={setSupplier}
+            allLabel="كل الموردين"
+            allCount={orders.length}
+            searchable={supplierOpts.length > 5}
+            searchPlaceholder="ابحث باسم المورد…"
           />
           <Facet
             icon={Wallet}
             label="طريقة الدفع"
-            value={method ? methodLabel(method) : null}
-            options={methods.map(([k, n]) => ({ value: k, label: methodLabel(k) ?? k, count: n }))}
+            title="طريقة الدفع"
+            subtitle="الأوامر اللي اتدفع فيها حاجة"
+            options={methodOpts}
+            selected={method}
             onPick={setMethod}
+            allLabel="كل الطرق"
+            allCount={methodOpts.reduce((s, o) => s + (o.count ?? 0), 0)}
           />
-          {users.length > 1 && (
-            <Facet icon={User} label="بواسطة" value={by} options={users.map(([k, n]) => ({ value: k, label: k, count: n }))} onPick={setBy} />
+          {userOpts.length > 1 && (
+            <Facet
+              icon={User}
+              label="بواسطة"
+              title="مين سجّل الأمر"
+              subtitle="حسب الموظف"
+              options={userOpts}
+              selected={by}
+              onPick={setBy}
+              allLabel="كل الموظفين"
+              allCount={userOpts.reduce((s, o) => s + (o.count ?? 0), 0)}
+            />
           )}
 
           <TogglePill active={onlyReturned} onClick={() => setOnlyReturned((v) => !v)} icon={RotateCcw}>
@@ -937,54 +995,329 @@ function SettlementBar({
   )
 }
 
+interface PickOption {
+  value: string
+  label: string
+  count?: number
+  hint?: string
+  tone?: 'due' | 'muted'
+  noSupplier?: boolean
+}
+
+/** قائمة اختيار بتصميم الصفحة: رأس بترولي + بحث + صفوف فيها معلومة + تنقّل بالأسهم */
+function Picker({
+  trigger,
+  title,
+  subtitle,
+  icon: Icon,
+  options,
+  selected,
+  onSelect,
+  allLabel,
+  allCount,
+  searchable,
+  searchPlaceholder,
+  align = 'start',
+}: {
+  trigger: (open: boolean) => React.ReactNode
+  title: string
+  subtitle?: string
+  icon: React.ComponentType<{ className?: string }>
+  options: PickOption[]
+  selected: string | null
+  onSelect: (v: string | null) => void
+  allLabel?: string
+  allCount?: number
+  searchable?: boolean
+  searchPlaceholder?: string
+  align?: 'start' | 'end'
+}) {
+  const [open, setOpen] = React.useState(false)
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>{trigger(open)}</PopoverTrigger>
+      <PopoverContent
+        align={align}
+        sideOffset={8}
+        className="w-[min(21rem,92vw)] overflow-hidden rounded-2xl border-cyan-900/20 p-0 shadow-2xl"
+      >
+        <PickerBody
+          title={title}
+          subtitle={subtitle}
+          icon={Icon}
+          options={options}
+          selected={selected}
+          allLabel={allLabel}
+          allCount={allCount}
+          searchable={searchable}
+          searchPlaceholder={searchPlaceholder}
+          onSelect={(v) => {
+            onSelect(v)
+            setOpen(false)
+          }}
+        />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function PickerBody({
+  title,
+  subtitle,
+  icon: Icon,
+  options,
+  selected,
+  onSelect,
+  allLabel,
+  allCount,
+  searchable,
+  searchPlaceholder,
+}: {
+  title: string
+  subtitle?: string
+  icon: React.ComponentType<{ className?: string }>
+  options: PickOption[]
+  selected: string | null
+  onSelect: (v: string | null) => void
+  allLabel?: string
+  allCount?: number
+  searchable?: boolean
+  searchPlaceholder?: string
+}) {
+  const [q, setQ] = React.useState('')
+  const listRef = React.useRef<HTMLDivElement>(null)
+  const needle = q.trim().toLowerCase()
+  const shown = needle ? options.filter((o) => o.label.toLowerCase().includes(needle)) : options
+  const hasAll = !!allLabel
+
+  const move = (dir: 1 | -1) => {
+    const rows = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[data-row]') ?? [])
+    if (rows.length === 0) return
+    const i = rows.indexOf(document.activeElement as HTMLButtonElement)
+    rows[i === -1 ? (dir === 1 ? 0 : rows.length - 1) : Math.min(rows.length - 1, Math.max(0, i + dir))]?.focus()
+  }
+
+  return (
+    <div onKeyDown={(e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); move(1) }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1) }
+    }}>
+      {/* الرأس */}
+      <div className="flex items-center gap-3 bg-cyan-950 px-4 py-3 text-cyan-50">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-cyan-800/70">
+          <Icon className="size-4 text-cyan-200" />
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-extrabold">{title}</p>
+          {subtitle && <p className="truncate text-[11px] text-cyan-200/70">{subtitle}</p>}
+        </div>
+      </div>
+
+      {/* البحث */}
+      {searchable && (
+        <div className="border-b bg-muted/30 p-2.5">
+          <label className="relative flex h-9 items-center rounded-xl border bg-background focus-within:border-cyan-600 focus-within:ring-[3px] focus-within:ring-cyan-600/25">
+            <Search className="pointer-events-none absolute right-3 size-3.5 text-muted-foreground" aria-hidden />
+            <input
+              autoFocus
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={searchPlaceholder ?? 'بحث…'}
+              aria-label={searchPlaceholder ?? 'بحث'}
+              className="h-full w-full bg-transparent pe-3 text-sm outline-none placeholder:text-muted-foreground/80"
+              style={{ paddingInlineStart: '2.25rem' }}
+            />
+          </label>
+        </div>
+      )}
+
+      {/* الصفوف */}
+      <div ref={listRef} role="listbox" className="max-h-72 space-y-0.5 overflow-y-auto p-1.5">
+        {hasAll && !needle && (
+          <Row2 on={selected === null} onClick={() => onSelect(null)} lead={<Layers className="size-4" />} label={allLabel!} count={allCount} />
+        )}
+        {shown.map((o) => (
+          <Row2
+            key={o.value}
+            on={selected === o.value}
+            onClick={() => onSelect(!hasAll && selected === o.value ? o.value : selected === o.value ? null : o.value)}
+            lead={
+              o.noSupplier ? (
+                <Truck className="size-4" />
+              ) : (
+                <span className="text-sm font-extrabold">{o.label.trim().charAt(0)}</span>
+              )
+            }
+            label={o.label}
+            count={o.count}
+            hint={o.hint}
+            tone={o.tone}
+            plainLead={!hasAll}
+          />
+        ))}
+        {shown.length === 0 && (
+          <p className="px-3 py-8 text-center text-sm text-muted-foreground">مفيش نتايج بالاسم ده</p>
+        )}
+      </div>
+
+      {hasAll && selected !== null && (
+        <div className="border-t bg-muted/30 p-1.5">
+          <button
+            type="button"
+            onClick={() => onSelect(null)}
+            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40"
+          >
+            <X className="size-3.5" />
+            مسح الاختيار
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Row2({
+  on,
+  onClick,
+  lead,
+  label,
+  count,
+  hint,
+  tone,
+  plainLead,
+}: {
+  on: boolean
+  onClick: () => void
+  lead: React.ReactNode
+  label: string
+  count?: number
+  hint?: string
+  tone?: 'due' | 'muted'
+  plainLead?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={on}
+      data-row
+      onClick={onClick}
+      className={cn(
+        'group flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-start transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40',
+        on ? 'bg-cyan-600/10' : 'hover:bg-muted/70 focus-visible:bg-muted/70'
+      )}
+    >
+      {!plainLead && (
+        <span
+          className={cn(
+            'flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors',
+            on ? 'bg-cyan-700 text-white' : 'bg-cyan-700/10 text-cyan-800 group-hover:bg-cyan-700/15 dark:text-cyan-200'
+          )}
+        >
+          {lead}
+        </span>
+      )}
+      <span className="min-w-0 flex-1">
+        <span className={cn('block truncate text-sm', on ? 'font-extrabold' : 'font-semibold')}>{label}</span>
+        {hint && (
+          <span
+            className={cn(
+              'block truncate text-[11px] tabular-nums',
+              tone === 'due' ? 'font-semibold text-amber-700 dark:text-amber-300' : 'text-muted-foreground'
+            )}
+          >
+            {hint}
+          </span>
+        )}
+      </span>
+      {count !== undefined && (
+        <span className="shrink-0 rounded-full bg-muted px-2 text-[11px] font-extrabold tabular-nums text-muted-foreground">{count}</span>
+      )}
+      <span
+        aria-hidden
+        className={cn(
+          'flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors',
+          on ? 'border-cyan-700 bg-cyan-700 text-white' : 'border-transparent text-transparent'
+        )}
+      >
+        <Check className="size-3" />
+      </span>
+    </button>
+  )
+}
+
 function Facet({
   icon: Icon,
   label,
-  value,
+  title,
+  subtitle,
   options,
+  selected,
   onPick,
+  allLabel,
+  allCount,
+  searchable,
+  searchPlaceholder,
 }: {
   icon: React.ComponentType<{ className?: string }>
   label: string
-  value: string | null
-  options: { value: string; label: string; count: number }[]
+  title: string
+  subtitle?: string
+  options: PickOption[]
+  selected: string | null
   onPick: (v: string | null) => void
+  allLabel: string
+  allCount?: number
+  searchable?: boolean
+  searchPlaceholder?: string
 }) {
-  const current = options.find((o) => o.label === value)?.value ?? null
+  const current = selected ? options.find((o) => o.value === selected) : null
+  const active = !!selected
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+    <span
+      className={cn(
+        'inline-flex h-8 max-w-[240px] items-center rounded-full border text-xs font-semibold transition-colors',
+        active ? 'border-cyan-600 bg-cyan-600/10 text-cyan-900 dark:text-cyan-100' : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
+      )}
+    >
+      <Picker
+        title={title}
+        subtitle={subtitle}
+        icon={Icon}
+        options={options}
+        selected={selected}
+        onSelect={onPick}
+        allLabel={allLabel}
+        allCount={allCount}
+        searchable={searchable}
+        searchPlaceholder={searchPlaceholder}
+        trigger={(open) => (
+          <button
+            type="button"
+            disabled={options.length === 0}
+            className={cn(
+              'inline-flex h-full min-w-0 items-center gap-1.5 rounded-full ps-3 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 disabled:opacity-45',
+              active ? 'pe-1.5' : 'pe-3',
+              open && 'text-foreground'
+            )}
+          >
+            <Icon className="size-3.5 shrink-0" />
+            <span className="truncate">{current ? `${label}: ${current.label}` : label}</span>
+            <ChevronDown className={cn('size-3.5 shrink-0 opacity-60 transition-transform motion-reduce:transition-none', open && 'rotate-180')} />
+          </button>
+        )}
+      />
+      {active && (
         <button
           type="button"
-          disabled={options.length === 0}
-          className={cn(
-            'inline-flex h-8 max-w-[220px] items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 disabled:opacity-45',
-            value ? 'border-cyan-600 bg-cyan-600/10 text-cyan-900 dark:text-cyan-100' : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
-          )}
+          onClick={() => onPick(null)}
+          aria-label={`مسح فلتر ${label}`}
+          className="me-1 ms-0.5 flex size-5 shrink-0 items-center justify-center rounded-full hover:bg-cyan-600/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600/50"
         >
-          <Icon className="size-3.5 shrink-0" />
-          <span className="truncate">{value ? `${label}: ${value}` : label}</span>
-          <ChevronDown className="size-3.5 shrink-0 opacity-60" />
+          <X className="size-3" />
         </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="max-h-72 min-w-52 overflow-y-auto">
-        {value && (
-          <DropdownMenuItem onClick={() => onPick(null)} className="text-muted-foreground">
-            <X className="size-4" />
-            الكل
-          </DropdownMenuItem>
-        )}
-        {options.map((o) => (
-          <DropdownMenuItem key={o.value} onClick={() => onPick(current === o.value ? null : o.value)} className="justify-between gap-4">
-            <span className="truncate">{o.label}</span>
-            <span className="flex items-center gap-2">
-              <span className="text-xs tabular-nums text-muted-foreground">{o.count}</span>
-              {current === o.value && <Check className="size-4 text-cyan-700" />}
-            </span>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      )}
+    </span>
   )
 }
 
@@ -1090,7 +1423,7 @@ function Slip({
                 <span className="truncate">{o.supplier?.name ?? <span className="font-medium text-muted-foreground">شراء بدون مورد</span>}</span>
               </p>
             )}
-            <p className={cn('flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground', showSupplier ? 'mt-1.5' : 'mt-2.5')}>
+            <p className={cn('flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] font-medium text-foreground/70', showSupplier ? 'mt-1.5' : 'mt-2.5')}>
               <span className="tabular-nums">
                 {showDate ? `${new Date(o.createdAt).toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'short' })} · ` : ''}
                 {timeLabel(o.createdAt)}
@@ -1104,7 +1437,7 @@ function Slip({
 
           {/* قيمة الفاتورة — عمود ثابت علشان الأرقام تتحاذى */}
           <div className="flex items-baseline justify-between gap-3 md:block">
-            <p className="text-[11px] font-semibold text-muted-foreground">قيمة الفاتورة</p>
+            <p className="text-xs font-semibold text-foreground/70">قيمة الفاتورة</p>
             <p className={cn('text-xl font-extrabold leading-tight tabular-nums md:mt-0.5 md:text-2xl', c.fully && 'text-muted-foreground line-through')}>
               {num(o.total)}
               <span className="ms-1 text-xs font-semibold text-muted-foreground">جنيه</span>
@@ -1123,14 +1456,14 @@ function Slip({
               <div className="bg-[repeating-linear-gradient(-45deg,#f59e0b_0_4px,#fde68a_4px_8px)]" style={{ width: `${pDue}%` }} />
             </div>
 
-            <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-              {c.paidNet > 0 && <Legend dot="bg-cyan-600" label="مدفوع" value={formatCurrency(c.paidNet)} sub={paidSub || undefined} />}
+            <dl className="mt-3 flex flex-wrap gap-2">
+              {c.paidNet > 0 && <Legend kind="paid" label="مدفوع" value={formatCurrency(c.paidNet)} sub={paidSub || undefined} />}
               {c.returnedValue > 0 && (
-                <Legend dot="bg-slate-400" label="مرتجع" value={formatCurrency(c.returnedValue)} sub={`${formatNumber(c.returnedQty)} قطعة`} />
+                <Legend kind="ret" label="مرتجع" value={formatCurrency(c.returnedValue)} sub={`${formatNumber(c.returnedQty)} قطعة`} />
               )}
-              {c.due > 0 && <Legend dot="bg-amber-500" label="متبقي للمورد" value={formatCurrency(c.due)} strong tone={c.late ? 'late' : 'due'} />}
-              {c.credit > 0 && <Legend dot="bg-sky-500" label="زيادة عند المورد" value={formatCurrency(c.credit)} />}
-              {c.due <= 0 && c.credit <= 0 && !c.fully && c.paidNet <= 0 && <span className="text-muted-foreground">مفيش مبالغ</span>}
+              {c.due > 0 && <Legend kind={c.late ? 'late' : 'due'} label="متبقي للمورد" value={formatCurrency(c.due)} />}
+              {c.credit > 0 && <Legend kind="credit" label="زيادة عند المورد" value={formatCurrency(c.credit)} />}
+              {c.due <= 0 && c.credit <= 0 && !c.fully && c.paidNet <= 0 && <span className="text-sm font-medium text-foreground/70">مفيش مبالغ</span>}
             </dl>
           </div>
         </button>
@@ -1261,33 +1594,33 @@ function Slip({
   )
 }
 
+const LEGEND_STYLE = {
+  paid: { dot: 'bg-cyan-600', chip: 'bg-cyan-600/10 ring-cyan-600/20', value: 'text-cyan-900 dark:text-cyan-100' },
+  ret: { dot: 'bg-slate-500', chip: 'bg-slate-500/10 ring-slate-500/20', value: 'text-slate-800 dark:text-slate-100' },
+  due: { dot: 'bg-amber-500', chip: 'bg-amber-500/15 ring-amber-500/30', value: 'text-amber-800 dark:text-amber-200' },
+  late: { dot: 'bg-rose-500', chip: 'bg-rose-500/10 ring-rose-500/25', value: 'text-rose-700 dark:text-rose-200' },
+  credit: { dot: 'bg-sky-500', chip: 'bg-sky-500/10 ring-sky-500/25', value: 'text-sky-800 dark:text-sky-200' },
+} as const
+
 function Legend({
-  dot,
+  kind,
   label,
   value,
   sub,
-  strong,
-  tone,
 }: {
-  dot: string
+  kind: keyof typeof LEGEND_STYLE
   label: string
   value: string
   sub?: string
-  strong?: boolean
-  tone?: 'due' | 'late'
 }) {
+  const st = LEGEND_STYLE[kind]
   return (
-    <div className="flex items-center gap-1.5">
-      <span aria-hidden className={cn('size-2 shrink-0 rounded-full', dot)} />
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd
-        className={cn(
-          'font-bold tabular-nums',
-          strong && (tone === 'late' ? 'text-rose-600 dark:text-rose-300' : 'text-amber-700 dark:text-amber-300')
-        )}
-      >
-        {value}
-        {sub && <span className="ms-1 font-normal text-muted-foreground">· {sub}</span>}
+    <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl px-3 py-1.5 ring-1 ring-inset', st.chip)}>
+      <span aria-hidden className={cn('size-2.5 shrink-0 rounded-full', st.dot)} />
+      <dt className="text-[13px] font-semibold text-foreground/80">{label}</dt>
+      <dd className="flex items-baseline gap-1.5">
+        <span className={cn('text-[15px] font-extrabold tabular-nums', st.value)}>{value}</span>
+        {sub && <span className="text-xs font-medium text-foreground/65">· {sub}</span>}
       </dd>
     </div>
   )
