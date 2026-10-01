@@ -24,7 +24,8 @@ import {
   Filter,
   Layers,
   PackageCheck,
-  Phone,
+  Copy,
+  Smartphone,
   Plus,
   RotateCcw,
   Search,
@@ -1500,7 +1501,7 @@ function Slip({
           {/* الأصناف + المرتجع */}
           <div className="min-w-0 space-y-4">
             <div>
-              <p className="mb-2 text-xs font-bold text-muted-foreground">الأصناف المستلمة</p>
+              <p className="mb-2 text-xs font-bold text-foreground/70">الأصناف المستلمة</p>
               <div className="overflow-hidden rounded-xl border bg-card">
                 <div className="grid grid-cols-[minmax(0,1fr)_3.5rem_5.5rem_6rem] gap-2 border-b bg-muted/50 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
                   <span>الصنف</span>
@@ -1551,35 +1552,73 @@ function Slip({
 
           {/* بيانات الأمر */}
           <div className="min-w-0 space-y-3">
-            <p className="text-xs font-bold text-muted-foreground">بيانات الأمر</p>
-            <dl className="space-y-2.5 rounded-xl border bg-card p-3.5 text-sm">
-              <Row label="المورد">
-                <span className="font-semibold">{o.supplier?.name ?? 'شراء بدون مورد'}</span>
-              </Row>
-              {o.supplier?.phone && (
-                <Row label="الهاتف">
-                  <a
-                    href={`tel:${o.supplier.phone}`}
-                    className="inline-flex items-center gap-1.5 font-semibold tabular-nums text-cyan-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600/40 dark:text-cyan-300"
-                  >
-                    <Phone className="size-3.5" />
-                    <bdi dir="ltr">{o.supplier.phone}</bdi>
-                  </a>
-                </Row>
-              )}
-              <Row label="التاريخ">
-                <span className="tabular-nums">
-                  <bdi>{when.d}</bdi>
-                  <span className="text-muted-foreground"> · </span>
-                  <bdi>{when.t}</bdi>
-                </span>
-              </Row>
-              <Row label="مرّ عليه">
-                <span className={cn(c.late && 'font-bold text-rose-600 dark:text-rose-300')}>{ageText(c.age)}</span>
-              </Row>
-              <Row label="سجّله">{o.userName ?? '—'}</Row>
-              <Row label="الدفع">{m ?? (c.paidNet > 0 ? '—' : 'لم يُدفع شيء')}</Row>
-            </dl>
+            <p className="text-xs font-bold text-foreground/70">بيان الأمر</p>
+            <div className="overflow-hidden rounded-2xl border bg-card">
+              {/* المورد */}
+              <div className="p-3.5">
+                <div className="flex items-center gap-3">
+                  {o.supplier ? (
+                    <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-cyan-950 text-lg font-extrabold text-cyan-50 dark:bg-cyan-700">
+                      {o.supplier.name.trim().charAt(0)}
+                    </span>
+                  ) : (
+                    <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-dashed text-muted-foreground">
+                      <Truck className="size-5" aria-hidden />
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-semibold text-foreground/60">المورد</p>
+                    <p className="truncate text-base font-extrabold leading-tight">{o.supplier?.name ?? 'شراء بدون مورد'}</p>
+                    {o.supplier?.phone && (
+                      <bdi dir="ltr" className="mt-0.5 inline-block text-sm font-semibold tabular-nums tracking-wide text-foreground/75">
+                        {o.supplier.phone}
+                      </bdi>
+                    )}
+                  </div>
+                </div>
+
+                {o.supplier?.phone && (
+                  <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                    <a
+                      href={`tel:${o.supplier.phone}`}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-cyan-700 px-4 text-sm font-bold text-white transition-colors hover:bg-cyan-600 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40"
+                    >
+                      <Smartphone className="size-4" aria-hidden />
+                      اتصال بالمورد
+                    </a>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(o.supplier!.phone!)
+                          toast.success('تم نسخ رقم المورد')
+                        } catch {
+                          toast.error('تعذّر النسخ')
+                        }
+                      }}
+                      aria-label="نسخ رقم المورد"
+                      title="نسخ الرقم"
+                      className="flex size-10 items-center justify-center rounded-xl border bg-background text-foreground/70 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40"
+                    >
+                      <Copy className="size-4" aria-hidden />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* معلومات الأمر */}
+              <div className="grid grid-cols-2 gap-px border-t bg-border">
+                <Fact label="التاريخ" value={when.d} sub={when.t} />
+                <Fact
+                  label="مرّ عليه"
+                  value={ageText(c.age)}
+                  sub={c.due > 0 ? (c.late ? 'عدّى حد التأخير' : 'لسه فيه متبقي') : 'مفيش متبقي'}
+                  tone={c.late ? 'late' : undefined}
+                />
+                <Fact label="سجّله" value={o.userName ?? '—'} />
+                <Fact label="طريقة الدفع" value={m ?? (c.paidNet > 0 ? '—' : 'لم يُدفع شيء')} />
+              </div>
+            </div>
 
             {canReturn && (
               <Button variant="outline" onClick={onReturn} className="w-full">
@@ -1626,11 +1665,12 @@ function Legend({
   )
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Fact({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'late' }) {
   return (
-    <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-baseline gap-3">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-words">{children}</dd>
+    <div className="min-w-0 bg-card px-3.5 py-3">
+      <p className="text-[11px] font-semibold text-foreground/60">{label}</p>
+      <p className={cn('mt-0.5 truncate text-sm font-extrabold tabular-nums', tone === 'late' && 'text-rose-600 dark:text-rose-300')}>{value}</p>
+      {sub && <p className="mt-0.5 truncate text-xs font-medium tabular-nums text-foreground/65">{sub}</p>}
     </div>
   )
 }
