@@ -10,7 +10,7 @@ import {
   Eye,
   FileSpreadsheet,
   Truck,
-  Phone,
+  Smartphone,
   MoreVertical,
   Check,
   X,
@@ -855,11 +855,9 @@ export function SuppliersView() {
                         >
                           {c.name?.charAt(0) ?? '?'}
                         </span>
-                        <span className="truncate font-semibold group-hover:text-orange-600 dark:group-hover:text-orange-400">{c.name}</span>
+                        <span title={c.name} className="truncate font-semibold group-hover:text-orange-600 dark:group-hover:text-orange-400">{c.name}</span>
                       </button>
-                      <span dir="ltr" className="truncate text-start font-mono text-xs text-muted-foreground">
-                        {c.phone ?? '—'}
-                      </span>
+                      <PhoneTag phone={c.phone} size="sm" />
                       <span className="flex items-center gap-2">
                         <i className="size-2 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />
                         <b className="tabular-nums" style={{ color: t.color }}>
@@ -959,6 +957,49 @@ const SORT_LABELS: Record<SortKey, string> = {
 }
 
 const daysSince = (iso: string) => (Date.now() - new Date(iso).getTime()) / 86_400_000
+
+// أي رقم بيتعرض بأرقام إنجليزية (٠١٠… → 010…) حتى لو اتكتب بأرقام عربية
+const toLatinDigits = (v: string) =>
+  v.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+
+/** الهاتف: شارة أيقونة حديثة (موبايل — مش سماعة بتتقلب في RTL) + الرقم بولد LTR */
+function PhoneTag({
+  phone,
+  size = 'md',
+  className,
+}: {
+  phone: string | null
+  size?: 'sm' | 'md'
+  className?: string
+}) {
+  const sm = size === 'sm'
+  if (!phone?.trim()) {
+    return (
+      <span className={cn('inline-flex items-center gap-1.5 text-xs text-muted-foreground/70', className)}>
+        <span className={cn('flex shrink-0 items-center justify-center rounded-md bg-muted', sm ? 'size-5' : 'size-6')}>
+          <Smartphone className={sm ? 'size-3' : 'size-3.5'} />
+        </span>
+        بدون هاتف
+      </span>
+    )
+  }
+  return (
+    <span dir="ltr" className={cn('inline-flex max-w-full items-center gap-1.5', className)}>
+      <span
+        aria-hidden
+        className={cn(
+          'flex shrink-0 items-center justify-center rounded-md bg-orange-500/12 text-orange-600 dark:bg-orange-400/15 dark:text-orange-400',
+          sm ? 'size-5' : 'size-6',
+        )}
+      >
+        <Smartphone className={sm ? 'size-3' : 'size-3.5'} strokeWidth={2.25} />
+      </span>
+      <span className={cn('truncate font-bold tracking-wide tabular-nums text-foreground/90', sm ? 'text-xs' : 'text-[13px]')}>
+        {toLatinDigits(phone.trim())}
+      </span>
+    </span>
+  )
+}
 
 /** قرص فلتر بعدّاد */
 function FilterPill({
@@ -1104,7 +1145,7 @@ function PayPriority({
               {r.name?.charAt(0) ?? '?'}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold">{r.name}</p>
+              <p title={r.name} className="truncate text-[13px] font-semibold">{r.name}</p>
               <div className="mt-1 h-1 overflow-hidden rounded-full bg-orange-200/70 dark:bg-stone-700">
                 <div
                   className="h-full rounded-full bg-orange-500"
@@ -1168,7 +1209,7 @@ function TopSources({
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-semibold">{r.name}</span>
+                    <span title={r.name} className="truncate text-sm font-semibold">{r.name}</span>
                     <span className="shrink-0 text-sm font-extrabold tabular-nums">{num(v)}</span>
                   </div>
                   <div className="mt-1.5 flex items-center gap-2">
@@ -1303,13 +1344,8 @@ function SupplierSlip({
               {c.name?.charAt(0) ?? '?'}
             </span>
             <div className="min-w-0 flex-1 pt-0.5">
-              <p className="truncate text-lg font-extrabold leading-tight">{c.name}</p>
-              <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Phone className="size-3 shrink-0" />
-                <span dir={c.phone ? 'ltr' : undefined} className="truncate font-mono tracking-wider">
-                  {c.phone ?? 'بدون هاتف'}
-                </span>
-              </p>
+              <p className="text-lg font-extrabold leading-snug break-words [overflow-wrap:anywhere]">{c.name}</p>
+              <PhoneTag phone={c.phone} className="mt-1.5" />
             </div>
           </div>
 
@@ -1518,7 +1554,7 @@ function SupplierDialog({ open, onOpenChange, initial, onSaved }: Props) {
           <div className="space-y-2">
             <Label htmlFor="s-phone">الهاتف</Label>
             <div className="relative">
-              <Phone className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Smartphone className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="s-phone"
                 value={phone}
