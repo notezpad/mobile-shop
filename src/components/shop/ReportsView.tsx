@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { ArrowDownRight, ArrowUpRight, CalendarDays, ChevronDown, FileText, Sparkles } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowDownRight, ArrowUpRight, CalendarDays, CheckCircle2, ChevronDown, FileText, Inbox, Sparkles } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { formatCurrency, formatNumber } from '@/lib/format'
+import { formatCurrency as fmtCur, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
 import { BRAND, baseDocStyles, fmt as fmtMoney, openPrintWindow } from '@/lib/print'
@@ -80,7 +80,10 @@ const V = '#7c3aed'
 const F = '#d946ef'
 const GRAD = `linear-gradient(to left, ${V}, ${F})`
 const MIX = [V, F, '#06b6d4', '#f59e0b']
-const num = formatNumber
+// LRM قبل الرقم: علامة السالب تفضل على شمال الرقم في الـ RTL (بدل "670-")
+const LRM = '\u200E'
+const num = (n: number | null | undefined) => LRM + formatNumber(n)
+const formatCurrency = (n: number | null | undefined) => LRM + fmtCur(n)
 const WD = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
 const WD_ORDER = [6, 0, 1, 2, 3, 4, 5] // السبت → الجمعة
 const dow = (iso: string) => {
@@ -196,12 +199,12 @@ export function ReportsView() {
 
       {!r ? (
         <div className="space-y-5">
-          <Skeleton className="h-28 w-full rounded-3xl" />
+          <Skeleton className="h-[380px] w-full rounded-3xl" />
           <Skeleton className="h-[420px] w-full rounded-3xl" />
           <Skeleton className="h-64 w-full rounded-3xl" />
         </div>
       ) : (
-        <div className={cn('space-y-6 transition-opacity duration-base', loading && 'opacity-60')}>
+        <div className={cn('space-y-6 transition-opacity duration-base', loading && 'opacity-70')}>
           <Hero r={r} ins={ins} hasFinance={hasFinance} shop={shopName} range={rangeText(from, to)} branch={branchLabel} />
 
           {/* ═════════ المسرح: المنحنى + شريط الإشارات ═════════ */}
@@ -209,15 +212,19 @@ export function ReportsView() {
 
           {/* ═════════ فهرس الفصول + المحتوى ═════════ */}
           <div className="grid gap-6 lg:grid-cols-[132px_minmax(0,1fr)]">
-            <nav className="flex gap-1.5 overflow-x-auto lg:sticky lg:top-24 lg:flex-col lg:self-start lg:overflow-visible" aria-label="فصول التقرير">
+            <nav className="flex gap-1.5 overflow-x-auto lg:sticky lg:top-24 lg:flex-col lg:gap-0 lg:self-start lg:overflow-visible lg:border-s" aria-label="فصول التقرير">
+              <p className="hidden px-3 pb-2 text-[10px] font-bold tracking-wide text-muted-foreground/70 lg:block">فصول التقرير</p>
               {chapters.map((c) => (
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => document.getElementById(c.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  aria-current={active === c.id ? 'true' : undefined}
                   className={cn(
-                    'flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-start text-xs font-semibold transition-colors',
-                    active === c.id ? 'bg-gradient-to-l from-violet-600/15 to-fuchsia-500/15 text-foreground' : 'text-muted-foreground hover:bg-muted/60',
+                    'flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-start text-xs font-semibold transition-colors lg:-ms-px lg:rounded-none lg:rounded-e-xl lg:border-s-2 lg:border-transparent',
+                    active === c.id
+                      ? 'bg-gradient-to-l from-violet-600/15 to-fuchsia-500/10 text-foreground lg:border-violet-600'
+                      : 'text-muted-foreground hover:bg-muted/60',
                   )}
                 >
                   <span className={cn('font-black tabular-nums', active === c.id ? 'text-violet-600 dark:text-violet-400' : 'text-muted-foreground/50')}>{c.n}</span>
@@ -374,7 +381,7 @@ export function ReportsView() {
                         ))}
                       </ul>
                     ) : (
-                      <Empty t="كل المنتجات فوق الحد الأدنى 👍" />
+                      <Empty ok t="كل المنتجات فوق الحد الأدنى" />
                     )}
                   </Panel>
                 </div>
@@ -499,81 +506,77 @@ function FilterBar({
     setFrom(f); setTo(t); setPreset(k)
   }
   return (
-    <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-2xl border bg-background/80 p-2 shadow-sm backdrop-blur-xl">
-      <Popover>
-        <PopoverTrigger asChild>
-          <button type="button" className="flex h-10 items-center gap-2 rounded-xl border bg-card px-3 text-xs font-bold transition-colors hover:bg-muted/60">
-            <CalendarDays className="size-4 text-violet-600 dark:text-violet-400" />
-            <span className="tabular-nums">{rangeText(from, to)}</span>
-            {days && <span className="rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-700 dark:text-violet-300">{days} يوم</span>}
-            <ChevronDown className="size-3.5 opacity-60" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-[310px] rounded-2xl p-3">
-          <div className="grid grid-cols-2 gap-1.5">
-            {PRESETS.map((p) => (
-              <button
-                key={p.k}
-                type="button"
-                onClick={() => apply(p.k)}
-                className={cn('rounded-xl border px-3 py-2 text-xs font-semibold transition-colors', preset === p.k ? 'border-transparent text-white' : 'hover:bg-muted/60')}
-                style={preset === p.k ? { background: GRAD } : undefined}
-              >
-                {p.l}
-              </button>
-            ))}
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3">
-            <label className="space-y-1 text-[11px] font-medium text-muted-foreground">من
-              <Input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPreset(null) }} className="h-9 rounded-xl text-xs" />
-            </label>
-            <label className="space-y-1 text-[11px] font-medium text-muted-foreground">إلى
-              <Input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPreset(null) }} className="h-9 rounded-xl text-xs" />
-            </label>
-          </div>
-        </PopoverContent>
-      </Popover>
+    <div className="sticky top-2 z-20 overflow-hidden rounded-2xl border bg-background/80 shadow-sm backdrop-blur-xl">
+      <style>{`@keyframes rpt-slide{0%{transform:translateX(-120%)}100%{transform:translateX(420%)}}`}</style>
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 p-2">
+        <Popover>
+          <PopoverTrigger asChild>
+            <button type="button" className="flex h-10 items-center gap-2 rounded-xl border bg-card px-3 text-xs font-bold shadow-xs transition-colors hover:bg-muted/60">
+              <CalendarDays className="size-4 text-violet-600 dark:text-violet-400" />
+              <span className="tabular-nums">{rangeText(from, to)}</span>
+              {days && <span className="rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-700 dark:text-violet-300">{days} يوم</span>}
+              <ChevronDown className="size-3.5 opacity-60" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-[310px] rounded-2xl p-3">
+            <div className="grid grid-cols-2 gap-1.5">
+              {PRESETS.map((p) => (
+                <button
+                  key={p.k}
+                  type="button"
+                  onClick={() => apply(p.k)}
+                  className={cn('rounded-xl border px-3 py-2 text-xs font-semibold transition-colors', preset === p.k ? 'border-transparent text-white' : 'hover:bg-muted/60')}
+                  style={preset === p.k ? { background: GRAD } : undefined}
+                >
+                  {p.l}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3">
+              <label className="space-y-1 text-[11px] font-medium text-muted-foreground">من
+                <Input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPreset(null) }} className="h-9 rounded-xl text-xs" />
+              </label>
+              <label className="space-y-1 text-[11px] font-medium text-muted-foreground">إلى
+                <Input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPreset(null) }} className="h-9 rounded-xl text-xs" />
+              </label>
+            </div>
+          </PopoverContent>
+        </Popover>
 
-      <div className="flex rounded-xl bg-muted p-1">
-        {QUICK.map((k) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => apply(k)}
-            className={cn('rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-base ease-out', preset === k ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
-          >
-            {PRESETS.find((p) => p.k === k)!.l}
-          </button>
-        ))}
+        <Seg<PresetKey>
+          label="الفترة السريعة"
+          value={QUICK.includes(preset as PresetKey) ? preset : null}
+          onChange={apply}
+          options={QUICK.map((k) => ({ v: k, l: PRESETS.find((p) => p.k === k)!.l }))}
+        />
+
+        {branches.length > 1 && (
+          <Seg<string>
+            label="الفرع"
+            value={branchId}
+            onChange={setBranchId}
+            options={[{ v: 'all', l: 'كل الفروع' }, ...branches.map((b) => ({ v: String(b.id), l: b.name }))]}
+          />
+        )}
+
+        <span className="ms-auto hidden items-center gap-1.5 rounded-full bg-muted/70 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground md:flex" aria-live="polite">
+          <span className={cn('size-2 rounded-full', loading ? 'animate-pulse bg-amber-500' : 'bg-emerald-500')} />
+          {loading ? 'بيحدّث…' : 'مباشر'}
+        </span>
+
+        <Button onClick={onExport} disabled={disabled} className="h-10 rounded-xl border-0 text-white shadow-md shadow-violet-600/25 max-md:ms-auto" style={{ background: GRAD }}>
+          <FileText className="size-4" />
+          تصدير PDF
+        </Button>
       </div>
 
-      {branches.length > 1 && (
-        <div className="flex max-w-full items-center gap-1 overflow-x-auto">
-          {[{ id: 'all', name: 'كل الفروع' }, ...branches.map((b) => ({ id: String(b.id), name: b.name }))].map((b) => (
-            <button
-              key={b.id}
-              type="button"
-              onClick={() => setBranchId(b.id)}
-              className={cn('shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors', branchId === b.id ? 'border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300' : 'text-muted-foreground hover:bg-muted/60')}
-            >
-              {b.name}
-            </button>
-          ))}
-        </div>
+      {loading && (
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden motion-reduce:hidden">
+          <span className="block h-full w-1/4 rounded-full" style={{ background: GRAD, animation: 'rpt-slide 1.1s ease-in-out infinite' }} />
+        </span>
       )}
-
-      <span className="hidden items-center gap-1.5 text-[11px] font-medium text-muted-foreground md:flex">
-        <span className={cn('size-2 rounded-full', loading ? 'animate-pulse bg-amber-500' : 'bg-emerald-500')} />
-        {loading ? 'بيحدّث…' : 'مباشر'}
-      </span>
-
-      <Button onClick={onExport} disabled={disabled} className="ms-auto h-10 rounded-xl border-0 text-white shadow-md shadow-violet-600/25" style={{ background: GRAD }}>
-        <FileText className="size-4" />
-        تصدير PDF
-      </Button>
     </div>
-  )
-}
+  )}
 
 function Hero({
   r, ins, hasFinance, shop, range, branch,
@@ -586,17 +589,22 @@ function Hero({
   const ch = r.changes.totalSales
   const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
+  // tx = لون النص (أغمق في الفاتح عشان التباين) · c = لون الشكل (نقطة/مقياس/توهّج)
   const verdict =
-    r.salesCount === 0 ? { t: 'مفيش بيانات', d: 'مفيش مبيعات في الفترة دي', c: '#94a3b8' }
-    : r.netProfit < 0 ? { t: 'خسارة', d: 'المصروفات أكبر من الربح', c: '#f43f5e' }
-    : netMargin < 10 ? { t: 'ربح ضعيف', d: 'هامش الصافي أقل من 10٪', c: '#f59e0b' }
-    : (ch ?? 0) < 0 ? { t: 'مستقر', d: 'ربح كويس والمبيعات أقل من السابقة', c: V }
-    : { t: 'أداء قوي', d: 'ربح صحي ومبيعات في صعود', c: '#10b981' }
+    r.salesCount === 0 ? { t: 'مفيش بيانات', d: 'مفيش مبيعات في الفترة دي', c: '#94a3b8', tx: 'text-slate-500 dark:text-slate-400' }
+    : r.netProfit < 0 ? { t: 'خسارة', d: 'المصروفات أكبر من الربح', c: '#f43f5e', tx: 'text-rose-600 dark:text-rose-400' }
+    : netMargin < 10 ? { t: 'ربح ضعيف', d: 'هامش الصافي أقل من 10٪', c: '#f59e0b', tx: 'text-amber-700 dark:text-amber-400' }
+    : (ch ?? 0) < 0 ? { t: 'مستقر', d: 'ربح كويس والمبيعات أقل من السابقة', c: V, tx: 'text-violet-700 dark:text-violet-300' }
+    : { t: 'أداء قوي', d: 'ربح صحي ومبيعات في صعود', c: '#10b981', tx: 'text-emerald-700 dark:text-emerald-400' }
 
+  const loss = r.netProfit < 0
+  const topExp = r.expensesByCategory?.[0]
   const extra: React.ReactNode[] = []
+  if (loss && topExp && topExp.amount > 0)
+    extra.push(<>أكبر بند في المصروفات «{topExp.category}» بـ <Hl tone="bad">{num(Math.round(topExp.amount))} جنيه</Hl> — أول حاجة تراجعها.</>)
   const low = r.lowStockProducts[0]
   if (r.lowStockCount > 0 && low)
-    extra.push(<>⚠️ <Hl>{num(r.lowStockCount)} صنف</Hl> تحت الحد الأدنى — أولهم «{low.name}» فاضل منه {num(low.quantity)}.</>)
+    extra.push(<><AlertTriangle className="me-1 inline size-[1.05em] -translate-y-0.5 text-amber-500" /><Hl tone="warn">{num(r.lowStockCount)} صنف</Hl> تحت الحد الأدنى — أولهم «{low.name}» {low.quantity === 0 ? 'خلص خالص' : <>فاضل منه {num(low.quantity)}</>}.</>)
   if (hasFinance && (r.customersReceivable > 0 || r.suppliersPayable > 0))
     extra.push(<>ليك عند العملاء <Hl>{num(Math.round(r.customersReceivable))} جنيه</Hl> وعليك للموردين <Hl>{num(Math.round(r.suppliersPayable))} جنيه</Hl>.</>)
   if (ins?.best && ins.best.total > 0 && r.salesTrend.length > 1)
@@ -604,18 +612,26 @@ function Hero({
   if (r.topProducts[0])
     extra.push(<>أكتر منتج جايب إيراد «{r.topProducts[0].name}» بـ <Hl>{num(Math.round(r.topProducts[0].total))} جنيه</Hl>.</>)
 
+  const mAbs = Math.abs(Math.round(netMargin))
   const bubbles: React.ReactNode[] =
     r.salesCount === 0
       ? ['مفيش مبيعات مسجّلة في الفترة دي — جرّب توسّع المدى أو غيّر الفرع.']
       : [
           <>
-            حقق المحل <Hl>{num(Math.round(r.totalSales))} جنيه</Hl> مبيعات من <Hl>{num(r.salesCount)} فاتورة</Hl>
-            {ch != null && <>، {ch >= 0 ? 'بارتفاع' : 'بانخفاض'} <Hl>{Math.abs(ch).toFixed(0)}٪</Hl> عن الفترة السابقة</>}.
+            المحل باع بـ <Hl>{num(Math.round(r.totalSales))} جنيه</Hl> من <Hl>{num(r.salesCount)} فاتورة</Hl>
+            {ch != null && <>، {ch >= 0 ? 'أعلى' : 'أقل'} بـ <Hl tone={ch >= 0 ? 'good' : 'bad'}>{Math.abs(ch).toFixed(0)}٪</Hl> من الفترة اللي فاتت</>}.
           </>,
-          <>
-            {r.netProfit >= 0 ? 'وصافي الربح' : 'وصافي الخسارة'} بعد المصروفات <Hl>{num(Math.round(Math.abs(r.netProfit)))} جنيه</Hl> بهامش <Hl>{netMargin.toFixed(0)}٪</Hl>
-            {(ins?.expRatio ?? 0) > 0 && <>، والمصروفات واخدة {(ins?.expRatio ?? 0).toFixed(0)}٪ من المبيعات</>}.
-          </>,
+          loss ? (
+            <>
+              لكن بعد خصم المصروفات الحساب خسران <Hl tone="bad">{num(Math.round(Math.abs(r.netProfit)))} جنيه</Hl>، يعني بتخسر <Hl tone="bad">{mAbs} جنيه</Hl> من كل 100 جنيه مبيعات
+              {(ins?.expRatio ?? 0) > 0 && <>، والمصروفات واخدة {(ins?.expRatio ?? 0).toFixed(0)}٪ من المبيعات</>}.
+            </>
+          ) : (
+            <>
+              وبعد خصم المصروفات فضل لك <Hl tone={netMargin < 10 ? 'warn' : 'good'}>{num(Math.round(r.netProfit))} جنيه</Hl> صافي ربح، يعني <Hl tone={netMargin < 10 ? 'warn' : 'good'}>{mAbs} جنيه</Hl> من كل 100 جنيه مبيعات
+              {(ins?.expRatio ?? 0) > 0 && <>، والمصروفات واخدة {(ins?.expRatio ?? 0).toFixed(0)}٪ منها</>}.
+            </>
+          ),
           ...extra.slice(0, 2),
         ]
 
@@ -635,11 +651,11 @@ function Hero({
         <div className="absolute inset-0 opacity-50" style={{ backgroundImage: 'radial-gradient(rgba(124,58,237,0.18) 1px, transparent 1.2px)', backgroundSize: '18px 18px', maskImage: 'linear-gradient(to left, black, transparent 55%)', WebkitMaskImage: 'linear-gradient(to left, black, transparent 55%)' }} />
       </div>
 
-      <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_264px]">
+      <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
             <span className="relative flex size-12 shrink-0 items-center justify-center">
-              <span className="absolute inset-0 animate-ping rounded-full bg-violet-500/30 motion-reduce:hidden" />
+              <span className="absolute inset-0 animate-[ping_1.6s_cubic-bezier(0,0,0.2,1)_3] rounded-full bg-violet-500/30 motion-reduce:hidden" />
               <span className="relative flex size-12 items-center justify-center rounded-full shadow-lg shadow-violet-500/30" style={{ background: 'conic-gradient(from 180deg, #7c3aed, #d946ef, #06b6d4, #7c3aed)' }}>
                 <span className="absolute inset-[3px] rounded-full bg-card/80 backdrop-blur" />
                 <Sparkles className="relative size-5 text-violet-600 dark:text-violet-300" />
@@ -658,7 +674,7 @@ function Hero({
             {bubbles.map((b, i) => (
               <p
                 key={i}
-                style={{ animationDelay: `${250 + i * 600}ms` }}
+                style={{ animationDelay: `${80 + i * 140}ms` }}
                 className="animate-in-up motion-reduce:animate-none w-fit max-w-3xl rounded-2xl rounded-ss-md border bg-background/70 px-4 py-2.5 text-base font-semibold leading-[2.1] backdrop-blur-sm sm:text-lg sm:leading-[2.1]"
               >
                 {b}
@@ -672,10 +688,13 @@ function Hero({
                 key={a.id}
                 type="button"
                 onClick={() => jump(a.id)}
-                style={{ animationDelay: `${250 + (bubbles.length + i) * 150}ms` }}
+                style={{ animationDelay: `${80 + (bubbles.length + i) * 90}ms` }}
                 className="animate-in-up motion-reduce:animate-none rounded-full border border-violet-500/30 bg-violet-500/5 px-3.5 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-500/15 dark:text-violet-300"
               >
-                {a.l}
+                <span className="inline-flex items-center gap-1.5">
+                  {a.l}
+                  <ArrowDown className="size-3 opacity-60" />
+                </span>
               </button>
             ))}
           </div>
@@ -700,7 +719,7 @@ function VerdictCard({
 }: {
   r: Report
   netMargin: number
-  verdict: { t: string; d: string; c: string }
+  verdict: { t: string; d: string; c: string; tx: string }
 }) {
   const has = r.salesCount > 0
   const earned = Math.max(0, r.netProfit + r.totalExpenses) // الربح قبل خصم المصروفات
@@ -712,7 +731,7 @@ function VerdictCard({
   const netNeg = r.netProfit < 0
 
   return (
-    <aside className="relative flex flex-col gap-5 overflow-hidden rounded-2xl border bg-background/60 p-4 backdrop-blur-sm sm:p-5">
+    <aside className="relative flex flex-col justify-between gap-5 overflow-hidden rounded-2xl border bg-background/60 p-4 backdrop-blur-sm sm:p-5">
       <span
         aria-hidden
         className="pointer-events-none absolute -top-12 -end-12 size-36 rounded-full opacity-25 blur-2xl"
@@ -725,7 +744,7 @@ function VerdictCard({
           <span className="size-2 rounded-full" style={{ backgroundColor: verdict.c }} />
           حالة الفترة
         </p>
-        <p className="mt-1.5 text-3xl font-black leading-none" style={{ color: verdict.c }}>
+        <p className={cn('mt-1.5 text-3xl font-black leading-none', verdict.tx)}>
           {verdict.t}
         </p>
         <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{verdict.d}</p>
@@ -735,7 +754,7 @@ function VerdictCard({
       <div className="relative">
         <div className="flex items-baseline justify-between gap-2">
           <span className="text-[11px] font-medium text-muted-foreground">هامش الصافي</span>
-          <span dir="ltr" className="text-2xl font-extrabold leading-none tabular-nums" style={{ color: has ? verdict.c : undefined }}>
+          <span dir="ltr" className={cn('text-2xl font-extrabold leading-none tabular-nums', has && verdict.tx)}>
             {has ? `${netMargin < 0 ? '−' : ''}${m}٪` : '—'}
           </span>
         </div>
@@ -746,6 +765,7 @@ function VerdictCard({
             <span className="h-full bg-emerald-500" style={{ width: '40%' }} />
           </div>
           <span aria-hidden className="absolute -top-1 left-1/2 h-4 w-px bg-foreground/40" />
+          <span aria-hidden className="absolute -top-0.5 h-3 w-px bg-foreground/20" style={{ left: '60%' }} />
           {has && (
             <span
               aria-hidden
@@ -754,10 +774,10 @@ function VerdictCard({
             />
           )}
         </div>
-        <div dir="ltr" className="mt-1.5 flex justify-between text-[10px] text-muted-foreground">
-          <span>خسارة</span>
-          <span>٠</span>
-          <span>ربح</span>
+        <div dir="ltr" className="mt-1.5 grid grid-cols-3 text-[10px] text-muted-foreground">
+          <span className="text-left">خسارة</span>
+          <span className="text-center">0</span>
+          <span className="text-right">ربح · 10٪+ صحي</span>
         </div>
       </div>
 
@@ -795,8 +815,16 @@ function FlowBar({ label, value, max, fill }: { label: string; value: number; ma
   )
 }
 
-function Hl({ children }: { children: React.ReactNode }) {
-  return <span className="box-decoration-clone rounded-lg bg-gradient-to-l from-violet-500/20 to-fuchsia-500/20 px-1.5 py-0.5 font-extrabold text-foreground">{children}</span>
+const HL_TONES = {
+  neutral: 'from-violet-500/20 to-fuchsia-500/20',
+  good: 'from-emerald-500/25 to-emerald-500/10',
+  bad: 'from-rose-500/25 to-rose-500/10',
+  warn: 'from-amber-500/30 to-amber-500/10',
+} as const
+
+/** تظليل الرقم بلون معناه: أخضر = كويس · أحمر = مشكلة · أصفر = انتبه · بنفسجي = معلومة */
+function Hl({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: keyof typeof HL_TONES }) {
+  return <span className={cn('box-decoration-clone rounded-lg bg-gradient-to-l px-1.5 py-0.5 font-extrabold text-foreground', HL_TONES[tone])}>{children}</span>
 }
 
 function Chapter({ id, n, title, hint, children }: { id: string; n: string; title: string; hint: string; children: React.ReactNode }) {
@@ -827,7 +855,50 @@ function Panel({ title, hint, className, children }: { title: string; hint?: str
   )
 }
 
-const Empty = ({ t }: { t: string }) => <p className="py-8 text-center text-sm text-muted-foreground">{t}</p>
+const Empty = ({ t, ok }: { t: string; ok?: boolean }) => (
+  <div className="flex flex-col items-center gap-2 py-8 text-center">
+    <span className={cn('flex size-10 items-center justify-center rounded-2xl', ok ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-muted text-muted-foreground')}>
+      {ok ? <CheckCircle2 className="size-5" /> : <Inbox className="size-5" />}
+    </span>
+    <p className="text-sm text-muted-foreground">{t}</p>
+  </div>
+)
+
+/** مفتاح اختيار موحّد: بيتستخدم في الفلتر والمنحنى عشان الشكل يبقى واحد */
+function Seg<T extends string>({
+  value, onChange, options, label, className,
+}: {
+  value: T | null
+  onChange: (v: T) => void
+  options: { v: T; l: string }[]
+  label: string
+  className?: string
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className={cn('inline-flex max-w-full gap-0.5 overflow-x-auto rounded-xl bg-muted/70 p-1 ring-1 ring-inset ring-border/60', className)}>
+      {options.map((o) => {
+        const on = value === o.v
+        return (
+          <button
+            key={o.v}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(o.v)}
+            className={cn(
+              'shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-base ease-out',
+              on
+                ? 'bg-card text-violet-700 shadow-sm ring-1 ring-violet-500/20 dark:text-violet-300'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {o.l}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 function Row({ label, value, tone }: { label: string; value: number; tone?: 'pos' | 'neg' }) {
   return (
@@ -922,7 +993,7 @@ function Delta({ v }: { v: number | null }) {
   return (
     <span className={cn('inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold', up ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400')}>
       {up ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
-      {Math.abs(v).toFixed(0)}%
+      {Math.abs(v).toFixed(0)}٪
     </span>
   )
 }
@@ -934,7 +1005,7 @@ function Signal({ label, value, unit, delta, children }: { label: string; value:
         <div className="min-w-0">
           <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
           <p className="mt-1 flex items-baseline gap-1 truncate">
-            <span className="text-2xl font-extrabold tabular-nums tracking-tight">{value}</span>
+            <span dir="ltr" className="text-2xl font-extrabold tabular-nums tracking-tight">{value}</span>
             {unit && <span className="text-xs font-semibold text-muted-foreground">{unit}</span>}
           </p>
           {delta != null && <div className="mt-1.5 flex items-center gap-1.5"><Delta v={delta} /><span className="text-[10px] text-muted-foreground">عن السابقة</span></div>}
@@ -971,11 +1042,12 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
           <h2 className="text-base font-extrabold">منحنى المبيعات والربح</h2>
           <p className="text-[11px] text-muted-foreground">يوم بيوم — مرّر على الرسم لتفاصيل اليوم</p>
         </div>
-        <div className="flex rounded-xl bg-muted p-1 text-xs font-semibold">
-          {([['both', 'الاثنين'], ['total', 'المبيعات'], ['profit', 'الربح']] as const).map(([k, l]) => (
-            <button key={k} type="button" onClick={() => setM(k)} className={cn('rounded-lg px-3 py-1.5 transition-all duration-base', m === k ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground')}>{l}</button>
-          ))}
-        </div>
+        <Seg<'both' | 'total' | 'profit'>
+          label="نوع المنحنى"
+          value={m}
+          onChange={setM}
+          options={[{ v: 'both', l: 'الاثنين' }, { v: 'total', l: 'المبيعات' }, { v: 'profit', l: 'الربح' }]}
+        />
       </div>
 
       <div dir="ltr" className="h-72 px-2 pt-4">
@@ -1012,8 +1084,8 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
         </Signal>
         <Signal label="صافي الربح" value={num(Math.round(r.netProfit))} unit="جنيه" delta={r.changes.netProfit}>
           <div className="relative">
-            <Ring p={ins?.netMargin ?? 0} color={(ins?.netMargin ?? 0) >= 0 ? V : '#f43f5e'} />
-            <span className="absolute inset-0 flex items-center justify-center text-[10px] font-extrabold tabular-nums">{Math.round(ins?.netMargin ?? 0)}٪</span>
+            <Ring p={Math.abs(ins?.netMargin ?? 0)} color={(ins?.netMargin ?? 0) >= 0 ? V : '#f43f5e'} />
+            <span dir="ltr" className="absolute inset-0 flex items-center justify-center text-[10px] font-extrabold tabular-nums">{(ins?.netMargin ?? 0) < 0 ? '−' : ''}{Math.abs(Math.round(ins?.netMargin ?? 0))}٪</span>
           </div>
         </Signal>
         <Signal label="عدد الفواتير" value={num(r.salesCount)} delta={r.changes.salesCount}>
