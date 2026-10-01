@@ -123,13 +123,13 @@ const PERIOD_LABELS: Record<Exclude<Period, 'custom'>, string> = {
   '7': '٧ أيام',
   month: 'الشهر ده',
   '90': '٩٠ يوم',
-  all: 'الأحدث',
+  all: 'الكل',
 }
 
 const KIND_META: Record<Kind, { label: string; short: string; sub: string }> = {
-  settled: { label: 'مسدّدة', short: 'مسدّدة', sub: 'صافي مسدّد' },
-  partial: { label: 'عليها باقي', short: 'عليها باقي', sub: 'متبقي' },
-  unpaid: { label: 'آجلة بالكامل', short: 'آجلة', sub: 'متبقي' },
+  settled: { label: 'مسدّدة', short: 'مسدّدة', sub: 'قيمتها بعد المرتجع' },
+  partial: { label: 'عليها باقي', short: 'عليها باقي', sub: 'متبقي عليها' },
+  unpaid: { label: 'آجلة بالكامل', short: 'آجلة', sub: 'متبقي عليها' },
 }
 
 /* ───────────────────────── دوال مساعدة ───────────────────────── */
@@ -148,7 +148,13 @@ const daysBetween = (iso: string) => {
   return Math.max(0, Math.round((db - da) / 86400000))
 }
 
-const ageLabel = (d: number) => (d === 0 ? 'النهارده' : d === 1 ? 'إمبارح' : `من ${d} يوم`)
+const ageText = (d: number) =>
+  d === 0 ? 'أقل من يوم' : d === 1 ? 'يوم واحد' : d === 2 ? 'يومين' : d <= 10 ? `${d} أيام` : `${d} يوم`
+
+const fullDate = (iso: string) => ({
+  d: new Date(iso).toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }),
+  t: new Date(iso).toLocaleTimeString('ar-EG-u-nu-latn', { hour: 'numeric', minute: '2-digit' }),
+})
 
 const timeLabel = (iso: string) =>
   new Date(iso).toLocaleTimeString('ar-EG-u-nu-latn', { hour: 'numeric', minute: '2-digit' })
@@ -465,6 +471,21 @@ export function PurchaseOrdersView() {
     })
   }
 
+  const periodText =
+    query || activeFilters
+      ? 'في النتائج الحالية'
+      : period === 'today'
+        ? 'النهارده'
+        : period === '7'
+          ? 'في آخر ٧ أيام'
+          : period === 'month'
+            ? 'الشهر ده'
+            : period === '90'
+              ? 'في آخر ٩٠ يوم'
+              : period === 'custom'
+                ? 'في الفترة المحددة'
+                : 'على كل المشتريات'
+
   const paidPct = sums.net > 0 ? Math.min(100, (sums.paidNet / sums.net) * 100) : sums.gross > 0 ? 100 : 0
 
   /* ───────────────────────── الواجهة ───────────────────────── */
@@ -491,12 +512,12 @@ export function PurchaseOrdersView() {
 
       {/* ═════════ شريط الحساب ═════════ */}
       <section className="overflow-hidden rounded-3xl bg-cyan-950 text-cyan-50 shadow-lg ring-1 ring-cyan-900">
-        <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <div className="grid items-center gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
           {/* المتبقي — الرقم اللي يهمّك */}
           <div className="min-w-0">
             <p className="flex items-center gap-2 text-sm text-cyan-200/80">
               <Wallet className="size-4 text-amber-300" aria-hidden />
-              متبقي للموردين {query || activeFilters ? 'في النتائج الحالية' : 'في الفترة دي'}
+              متبقي للموردين {periodText}
             </p>
             <p className="mt-2 text-5xl font-extrabold leading-none tracking-tight text-amber-300 tabular-nums sm:text-6xl">
               {loading ? '…' : num(sums.due)}
@@ -597,7 +618,8 @@ export function PurchaseOrdersView() {
           </DropdownMenu>
 
           <div className="flex h-11 items-center gap-0.5 rounded-2xl border bg-background p-1" role="group" aria-label="تجميع السجل">
-            <Layers className="mx-1.5 size-4 text-muted-foreground" aria-hidden />
+            <Layers className="ms-1.5 size-4 text-muted-foreground" aria-hidden />
+            <span className="me-1 hidden text-xs text-muted-foreground lg:inline">تجميع</span>
             {(Object.keys(GROUP_LABELS) as GroupBy[]).map((k) => (
               <button
                 key={k}
@@ -674,7 +696,7 @@ export function PurchaseOrdersView() {
         <div>
           <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
             <PackageCheck className="size-3.5" />
-            حالة التسوية — الجزء الأكبر = قيمة أكبر
+            حالة التسوية — الشريط يوضّح نصيب كل حالة من القيمة
           </p>
           <SettlementBar segs={segs} status={status} onPick={(k) => setStatus(status === k ? null : k)} />
         </div>
@@ -770,21 +792,21 @@ export function PurchaseOrdersView() {
                   <header className="mb-3 flex items-center gap-3">
                     {groupBy === 'supplier' && (
                       <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-cyan-700/10 text-sm font-extrabold text-cyan-800 dark:text-cyan-200">
-                        {g.title.trim().charAt(0)}
+                        {g.key === NO_SUPPLIER ? <Truck className="size-4" aria-hidden /> : g.title.trim().charAt(0)}
                       </span>
                     )}
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 max-w-[60%] shrink-0">
                       <h2 className="truncate text-sm font-extrabold">{g.title}</h2>
                       <p className="text-xs text-muted-foreground">
                         {g.list.length} أمر · صافي <span className="tabular-nums">{formatCurrency(gNet)}</span>
                       </p>
                     </div>
+                    <span aria-hidden className="h-px min-w-6 flex-1 bg-border" />
                     {gDue > 0 && (
                       <span className="shrink-0 rounded-full bg-amber-500/15 px-3 py-1 text-xs font-bold tabular-nums text-amber-800 dark:text-amber-300">
                         متبقي {formatCurrency(gDue)}
                       </span>
                     )}
-                    <span aria-hidden className="hidden h-px flex-1 bg-border sm:block" />
                   </header>
                 )}
 
@@ -847,67 +869,70 @@ function SettlementBar({
   const kinds: Kind[] = ['settled', 'partial', 'unpaid']
   const total = kinds.reduce((s, k) => s + segs[k].net, 0)
   const cnt = kinds.reduce((s, k) => s + segs[k].n, 0)
-  const weight = (k: Kind) => {
-    const share = total > 0 ? segs[k].net / total : cnt > 0 ? segs[k].n / cnt : 1 / 3
-    return Math.max(0.22, share)
-  }
-  const cols = kinds.map((k) => `minmax(104px,${weight(k).toFixed(3)}fr)`).join(' ')
+  const share = (k: Kind) => (total > 0 ? segs[k].net / total : cnt > 0 ? segs[k].n / cnt : 0)
 
-  const tone: Record<Kind, { bar: string; on: string; text: string }> = {
-    settled: {
-      bar: 'bg-cyan-600',
-      on: 'border-cyan-600 bg-cyan-600/10',
-      text: 'text-cyan-800 dark:text-cyan-200',
-    },
-    partial: {
-      bar: 'bg-amber-400',
-      on: 'border-amber-500 bg-amber-500/10',
-      text: 'text-amber-800 dark:text-amber-300',
-    },
+  const tone: Record<Kind, { fill: string; dot: string; on: string; text: string }> = {
+    settled: { fill: 'bg-cyan-600', dot: 'bg-cyan-600', on: 'border-cyan-600 bg-cyan-600/10', text: 'text-cyan-800 dark:text-cyan-200' },
+    partial: { fill: 'bg-amber-400', dot: 'bg-amber-400', on: 'border-amber-500 bg-amber-500/10', text: 'text-amber-800 dark:text-amber-300' },
     unpaid: {
-      bar: 'bg-[repeating-linear-gradient(-45deg,#f59e0b_0_5px,#fde68a_5px_10px)]',
+      fill: 'bg-[repeating-linear-gradient(-45deg,#f59e0b_0_5px,#fde68a_5px_10px)]',
+      dot: 'bg-[repeating-linear-gradient(-45deg,#f59e0b_0_3px,#fde68a_3px_6px)]',
       on: 'border-amber-600 bg-amber-600/10',
       text: 'text-amber-900 dark:text-amber-200',
     },
   }
 
   return (
-    <div
-      className="grid grid-cols-3 gap-1.5 sm:[grid-template-columns:var(--cols)]"
-      style={{ ['--cols' as string]: cols }}
-      role="group"
-      aria-label="فلتر حالة التسوية"
-    >
-      {kinds.map((k) => {
-        const s = segs[k]
-        const on = status === k
-        return (
-          <button
-            key={k}
-            type="button"
-            onClick={() => onPick(k)}
-            aria-pressed={on}
-            disabled={s.n === 0 && !on}
-            className={cn(
-              'group relative overflow-hidden rounded-2xl border bg-background p-3 text-start transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 disabled:cursor-not-allowed disabled:opacity-45',
-              on ? tone[k].on : 'hover:bg-muted/50'
-            )}
-          >
-            <span aria-hidden className={cn('absolute inset-x-0 top-0 h-1.5', tone[k].bar)} />
-            <span className="mt-1 flex items-center justify-between gap-2">
-              <span className={cn('truncate text-xs font-bold', on && tone[k].text)}>
-                <span className="sm:hidden">{KIND_META[k].short}</span>
-                <span className="hidden sm:inline">{KIND_META[k].label}</span>
+    <div>
+      {/* شريط النِّسب: حجم كل جزء = حجم قيمته */}
+      <div className="mb-2 flex h-2 gap-0.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+        {kinds.map((k) =>
+          segs[k].n > 0 ? (
+            <span
+              key={k}
+              className={cn('h-full transition-[flex-grow,opacity] duration-500 motion-reduce:transition-none', tone[k].fill, status && status !== k && 'opacity-25')}
+              style={{ flexGrow: Math.max(0.02, share(k)), flexBasis: 0 }}
+            />
+          ) : null
+        )}
+      </div>
+
+      <div className="grid grid-cols-3 gap-2" role="group" aria-label="فلتر حالة التسوية">
+        {kinds.map((k) => {
+          const s = segs[k]
+          const on = status === k
+          const pct = Math.round(share(k) * 100)
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => onPick(k)}
+              aria-pressed={on}
+              disabled={s.n === 0 && !on}
+              className={cn(
+                'rounded-2xl border bg-background p-3 text-start transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 disabled:cursor-not-allowed disabled:opacity-45',
+                on ? tone[k].on : 'hover:bg-muted/50'
+              )}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className={cn('flex min-w-0 items-center gap-1.5 text-xs font-bold', on && tone[k].text)}>
+                  <span aria-hidden className={cn('size-2.5 shrink-0 rounded-full', tone[k].dot)} />
+                  <span className="truncate">
+                    <span className="sm:hidden">{KIND_META[k].short}</span>
+                    <span className="hidden sm:inline">{KIND_META[k].label}</span>
+                  </span>
+                </span>
+                <span className="rounded-full bg-muted px-1.5 text-[11px] font-extrabold tabular-nums">{s.n}</span>
               </span>
-              <span className="rounded-full bg-muted px-1.5 text-[11px] font-extrabold tabular-nums">{s.n}</span>
-            </span>
-            <span className="mt-1.5 block truncate text-base font-extrabold tabular-nums sm:text-lg">
-              {s.n === 0 ? '—' : num(s.amount)}
-            </span>
-            <span className="block truncate text-[11px] text-muted-foreground">{s.n === 0 ? 'مفيش' : KIND_META[k].sub}</span>
-          </button>
-        )
-      })}
+              <span className="mt-1.5 block truncate text-lg font-extrabold tabular-nums sm:text-xl">{s.n === 0 ? '—' : num(s.amount)}</span>
+              <span className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                <span className="truncate">{s.n === 0 ? 'مفيش' : KIND_META[k].sub}</span>
+                {s.n > 0 && pct > 0 && <span className="shrink-0 tabular-nums">{pct}٪</span>}
+              </span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -1019,21 +1044,25 @@ function Slip({
   const pRet = T > 0 ? Math.min(100, (c.returnedValue / T) * 100) : 0
   const pDue = T > 0 ? Math.max(0, 100 - pPaid - pRet) : 0
   const m = methodLabel(o.paymentMethod)
-  const rail = c.fully ? 'border-s-slate-400' : c.kind === 'settled' ? 'border-s-cyan-600' : c.late ? 'border-s-rose-500' : 'border-s-amber-500'
+  const rail = c.fully ? 'bg-slate-400' : c.kind === 'settled' ? 'bg-cyan-600' : c.late ? 'bg-rose-500' : 'bg-amber-500'
   const refundBack = o.refunded ?? 0
   const creditBack = Math.max(0, round2(c.returnedValue - refundBack))
   const canReturn = o.status !== 'مرتجعة' && !c.fully
   const id = `slip-${o.id}`
+  const when = fullDate(o.createdAt)
+  const paidSub = [m, refundBack > 0 ? `بعد استرداد ${num(refundBack)}` : null].filter(Boolean).join(' · ')
 
   return (
-    <li className={cn('overflow-hidden rounded-2xl border border-s-4 bg-card transition-shadow', rail, open && 'shadow-md', c.fully && 'bg-muted/30')}>
+    <li className={cn('relative overflow-hidden rounded-2xl border bg-card transition-shadow', open && 'shadow-md', c.fully && 'bg-muted/30')}>
+      <span aria-hidden className={cn('absolute inset-y-4 start-0 w-1.5 rounded-e-full', rail)} />
+
       <div className="flex items-stretch">
         <button
           type="button"
           onClick={onToggle}
           aria-expanded={open}
           aria-controls={id}
-          className="grid min-w-0 flex-1 gap-x-8 gap-y-4 p-4 text-start focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-cyan-600/40 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.3fr)] md:p-5"
+          className="grid min-w-0 flex-1 items-center gap-x-8 gap-y-4 p-4 ps-6 text-start focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-cyan-600/40 md:grid-cols-[minmax(0,1fr)_9rem_minmax(0,1.25fr)] md:p-5 md:ps-7"
         >
           {/* الهوية */}
           <div className="min-w-0">
@@ -1049,10 +1078,16 @@ function Slip({
             </div>
             {showSupplier && (
               <p className="mt-2.5 flex items-center gap-2 text-sm font-bold">
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-cyan-700/10 text-xs font-extrabold text-cyan-800 dark:text-cyan-200">
-                  {(o.supplier?.name ?? '؟').trim().charAt(0)}
-                </span>
-                <span className="truncate">{o.supplier?.name ?? <span className="font-medium text-muted-foreground">بدون مورد</span>}</span>
+                {o.supplier ? (
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-cyan-700/10 text-xs font-extrabold text-cyan-800 dark:text-cyan-200">
+                    {o.supplier.name.trim().charAt(0)}
+                  </span>
+                ) : (
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-dashed text-muted-foreground">
+                    <Truck className="size-3.5" aria-hidden />
+                  </span>
+                )}
+                <span className="truncate">{o.supplier?.name ?? <span className="font-medium text-muted-foreground">شراء بدون مورد</span>}</span>
               </p>
             )}
             <p className={cn('flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground', showSupplier ? 'mt-1.5' : 'mt-2.5')}>
@@ -1067,45 +1102,50 @@ function Slip({
             </p>
           </div>
 
+          {/* قيمة الفاتورة — عمود ثابت علشان الأرقام تتحاذى */}
+          <div className="flex items-baseline justify-between gap-3 md:block">
+            <p className="text-[11px] font-semibold text-muted-foreground">قيمة الفاتورة</p>
+            <p className={cn('text-xl font-extrabold leading-tight tabular-nums md:mt-0.5 md:text-2xl', c.fully && 'text-muted-foreground line-through')}>
+              {num(o.total)}
+              <span className="ms-1 text-xs font-semibold text-muted-foreground">جنيه</span>
+            </p>
+          </div>
+
           {/* مقياس التسوية */}
           <div className="min-w-0">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-xs text-muted-foreground">قيمة الفاتورة</span>
-              <b className={cn('text-xl font-extrabold tabular-nums', c.fully && 'text-muted-foreground line-through')}>{formatCurrency(o.total)}</b>
-            </div>
-
             <div
-              className="mt-2 flex h-2.5 overflow-hidden rounded-full bg-muted"
+              className="flex h-2.5 overflow-hidden rounded-full bg-muted"
               role="img"
               aria-label={`مدفوع ${num(c.paidNet)}، مرتجع ${num(c.returnedValue)}، متبقي ${num(c.due)}`}
             >
               <div className="bg-cyan-600 transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${pPaid}%` }} />
               <div className="bg-slate-400" style={{ width: `${pRet}%` }} />
-              <div
-                className="bg-[repeating-linear-gradient(-45deg,#f59e0b_0_4px,#fde68a_4px_8px)]"
-                style={{ width: `${pDue}%` }}
-              />
+              <div className="bg-[repeating-linear-gradient(-45deg,#f59e0b_0_4px,#fde68a_4px_8px)]" style={{ width: `${pDue}%` }} />
             </div>
 
-            <dl className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-              {c.paidNet > 0 && (
-                <Legend dot="bg-cyan-600" label="مدفوع" value={formatCurrency(c.paidNet)} sub={m ?? undefined} />
-              )}
+            <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+              {c.paidNet > 0 && <Legend dot="bg-cyan-600" label="مدفوع" value={formatCurrency(c.paidNet)} sub={paidSub || undefined} />}
               {c.returnedValue > 0 && (
                 <Legend dot="bg-slate-400" label="مرتجع" value={formatCurrency(c.returnedValue)} sub={`${formatNumber(c.returnedQty)} قطعة`} />
               )}
-              {c.due > 0 && (
-                <Legend dot="bg-amber-500" label="متبقي للمورد" value={formatCurrency(c.due)} strong tone={c.late ? 'late' : 'due'} />
-              )}
+              {c.due > 0 && <Legend dot="bg-amber-500" label="متبقي للمورد" value={formatCurrency(c.due)} strong tone={c.late ? 'late' : 'due'} />}
               {c.credit > 0 && <Legend dot="bg-sky-500" label="زيادة عند المورد" value={formatCurrency(c.credit)} />}
               {c.due <= 0 && c.credit <= 0 && !c.fully && c.paidNet <= 0 && <span className="text-muted-foreground">مفيش مبالغ</span>}
             </dl>
           </div>
         </button>
 
-        <div className="flex w-12 shrink-0 flex-col items-center justify-between border-s py-3">
-          <ChevronDown className={cn('size-4 text-muted-foreground transition-transform motion-reduce:transition-none', open && 'rotate-180')} aria-hidden />
-          {canReturn && (
+        <div className="flex w-14 shrink-0 flex-col items-center justify-between gap-2 border-s py-3">
+          <button
+            type="button"
+            onClick={onToggle}
+            tabIndex={-1}
+            aria-hidden
+            className={cn('flex size-8 items-center justify-center rounded-full bg-muted/70 text-muted-foreground transition-colors hover:bg-muted', open && 'bg-cyan-600/15 text-cyan-800 dark:text-cyan-200')}
+          >
+            <ChevronDown className={cn('size-4 transition-transform motion-reduce:transition-none', open && 'rotate-180')} />
+          </button>
+          {canReturn ? (
             <Button
               variant="ghost"
               size="icon-sm"
@@ -1116,84 +1156,97 @@ function Slip({
             >
               <RotateCcw className="size-4" />
             </Button>
+          ) : (
+            <span className="size-8" aria-hidden />
           )}
         </div>
       </div>
 
       {open && (
-        <div id={id} className="grid gap-5 border-t bg-cyan-600/[0.035] p-4 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] md:p-5">
-          {/* الأصناف */}
-          <div className="min-w-0">
-            <p className="mb-2 text-xs font-bold text-muted-foreground">الأصناف المستلمة</p>
-            <div className="overflow-hidden rounded-xl border bg-card">
-              <div className="grid grid-cols-[minmax(0,1fr)_3.5rem_5.5rem_6rem] gap-2 border-b bg-muted/50 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
-                <span>الصنف</span>
-                <span className="text-center">الكمية</span>
-                <span className="text-end">التكلفة</span>
-                <span className="text-end">القيمة</span>
-              </div>
-              <ul className="divide-y">
-                {o.items.map((it) => {
-                  const rq = it.returnedQty ?? 0
-                  return (
-                    <li key={it.id} className="grid grid-cols-[minmax(0,1fr)_3.5rem_5.5rem_6rem] items-center gap-2 px-3 py-2.5 text-sm">
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{it.name}</p>
-                        {rq > 0 && (
-                          <p className="mt-0.5 inline-flex items-center gap-1 rounded bg-slate-500/15 px-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                            <RotateCcw className="size-3" />
-                            رجع {formatNumber(rq)} من {formatNumber(it.quantity)}
-                          </p>
-                        )}
-                      </div>
-                      <span className="text-center tabular-nums">{formatNumber(it.quantity)}</span>
-                      <span className="text-end tabular-nums text-muted-foreground">{formatCurrency(it.cost)}</span>
-                      <span className="text-end font-bold tabular-nums">{formatCurrency(it.quantity * it.cost)}</span>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-          </div>
-
-          {/* بيانات الأمر */}
+        <div id={id} className="grid gap-5 border-t bg-cyan-600/[0.035] p-4 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] md:p-5">
+          {/* الأصناف + المرتجع */}
           <div className="min-w-0 space-y-4">
             <div>
-              <p className="mb-2 text-xs font-bold text-muted-foreground">بيانات الأمر</p>
-              <dl className="space-y-2 rounded-xl border bg-card p-3 text-sm">
-                <Row label="المورد">
-                  <span className="truncate font-semibold">{o.supplier?.name ?? 'بدون مورد'}</span>
-                </Row>
-                {o.supplier?.phone && (
-                  <Row label="رقمه">
-                    <a
-                      href={`tel:${o.supplier.phone}`}
-                      className="inline-flex items-center gap-1.5 font-semibold tabular-nums text-cyan-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600/40 dark:text-cyan-300"
-                      dir="ltr"
-                    >
-                      <Phone className="size-3.5" />
-                      {o.supplier.phone}
-                    </a>
-                  </Row>
-                )}
-                <Row label="التاريخ">
-                  <span className="tabular-nums">{formatArabicDateTime(o.createdAt)}</span>
-                </Row>
-                <Row label="عمره">
-                  <span className={cn(c.late && 'font-bold text-rose-600 dark:text-rose-300')}>{ageLabel(c.age)}</span>
-                </Row>
-                <Row label="سجّله">{o.userName ?? '—'}</Row>
-                <Row label="الدفع">{m ?? (c.paidNet > 0 ? '—' : 'لم يُدفع شيء')}</Row>
-              </dl>
+              <p className="mb-2 text-xs font-bold text-muted-foreground">الأصناف المستلمة</p>
+              <div className="overflow-hidden rounded-xl border bg-card">
+                <div className="grid grid-cols-[minmax(0,1fr)_3.5rem_5.5rem_6rem] gap-2 border-b bg-muted/50 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
+                  <span>الصنف</span>
+                  <span className="text-center">الكمية</span>
+                  <span className="text-end">التكلفة</span>
+                  <span className="text-end">القيمة</span>
+                </div>
+                <ul className="divide-y">
+                  {o.items.map((it) => {
+                    const rq = it.returnedQty ?? 0
+                    return (
+                      <li key={it.id} className="grid grid-cols-[minmax(0,1fr)_3.5rem_5.5rem_6rem] items-center gap-2 px-3 py-2.5 text-sm">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{it.name}</p>
+                          {rq > 0 && (
+                            <p className="mt-0.5 inline-flex items-center gap-1 rounded bg-slate-500/15 px-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                              <RotateCcw className="size-3" />
+                              رجع {formatNumber(rq)} من {formatNumber(it.quantity)}
+                            </p>
+                          )}
+                        </div>
+                        <span className="text-center tabular-nums">{formatNumber(it.quantity)}</span>
+                        <span className="text-end tabular-nums text-muted-foreground">{formatCurrency(it.cost)}</span>
+                        <span className="text-end font-bold tabular-nums">{formatCurrency(it.quantity * it.cost)}</span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
             </div>
 
             {c.returnedValue > 0 && (
               <div className="rounded-xl border border-dashed border-slate-400/60 bg-slate-500/[0.06] p-3 text-xs leading-relaxed">
                 <p className="mb-1 font-bold text-slate-700 dark:text-slate-200">إزاي اتسوّى المرتجع</p>
-                {refundBack > 0 && <p>استرديت <b className="tabular-nums">{formatCurrency(refundBack)}</b> من المورد.</p>}
-                {creditBack > 0 && <p>اتخصم <b className="tabular-nums">{formatCurrency(creditBack)}</b> من حسابك عنده.</p>}
+                {refundBack > 0 && (
+                  <p>
+                    استرديت <b className="tabular-nums">{formatCurrency(refundBack)}</b> من المورد.
+                  </p>
+                )}
+                {creditBack > 0 && (
+                  <p>
+                    اتخصم <b className="tabular-nums">{formatCurrency(creditBack)}</b> من حسابك عنده.
+                  </p>
+                )}
               </div>
             )}
+          </div>
+
+          {/* بيانات الأمر */}
+          <div className="min-w-0 space-y-3">
+            <p className="text-xs font-bold text-muted-foreground">بيانات الأمر</p>
+            <dl className="space-y-2.5 rounded-xl border bg-card p-3.5 text-sm">
+              <Row label="المورد">
+                <span className="font-semibold">{o.supplier?.name ?? 'شراء بدون مورد'}</span>
+              </Row>
+              {o.supplier?.phone && (
+                <Row label="الهاتف">
+                  <a
+                    href={`tel:${o.supplier.phone}`}
+                    className="inline-flex items-center gap-1.5 font-semibold tabular-nums text-cyan-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600/40 dark:text-cyan-300"
+                  >
+                    <Phone className="size-3.5" />
+                    <bdi dir="ltr">{o.supplier.phone}</bdi>
+                  </a>
+                </Row>
+              )}
+              <Row label="التاريخ">
+                <span className="tabular-nums">
+                  <bdi>{when.d}</bdi>
+                  <span className="text-muted-foreground"> · </span>
+                  <bdi>{when.t}</bdi>
+                </span>
+              </Row>
+              <Row label="مرّ عليه">
+                <span className={cn(c.late && 'font-bold text-rose-600 dark:text-rose-300')}>{ageText(c.age)}</span>
+              </Row>
+              <Row label="سجّله">{o.userName ?? '—'}</Row>
+              <Row label="الدفع">{m ?? (c.paidNet > 0 ? '—' : 'لم يُدفع شيء')}</Row>
+            </dl>
 
             {canReturn && (
               <Button variant="outline" onClick={onReturn} className="w-full">
@@ -1242,9 +1295,9 @@ function Legend({
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 truncate text-end">{children}</dd>
+    <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-baseline gap-3">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words">{children}</dd>
     </div>
   )
 }
