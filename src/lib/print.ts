@@ -14,10 +14,6 @@ export interface PrintableSale {
   createdAt: string | Date
   items: PrintableSaleItem[]
   customer?: { name: string; phone?: string | null } | null
-  /** POS v2: invoice total BEFORE discount + the discount amount (item prices shown are the original, pre-discount ones). */
-  subtotal?: number | null
-  discount?: number | null
-  note?: string | null
 }
 
 export interface ShopInfo {
@@ -40,12 +36,6 @@ export function fmtDate(d: string | Date) {
   if (isNaN(date.getTime())) return ''
   const pad = (x: number) => String(x).padStart(2, '0')
   return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-/** Keeps dates, phone numbers, and other left-to-right values readable when
- * embedded inside the app's right-to-left printable documents. */
-export function printLtr(value: string | number): string {
-  return `<span dir="ltr" style="display:inline-block;unicode-bidi:isolate;white-space:nowrap">${escapeHtml(String(value))}</span>`
 }
 
 /** Shared brand tokens so every printed/exported document (invoice, report,
@@ -210,7 +200,6 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
 
         <div class="totals-wrap">
           <div class="totals">
-            ${(sale.discount ?? 0) > 0.009 && sale.subtotal != null ? `<div class="row"><span>المجموع قبل الخصم</span><span>${fmt(sale.subtotal)} ج.م</span></div><div class="row"><span>خصم</span><span style="color:${BRAND.red}">- ${fmt(sale.discount as number)} ج.م</span></div>` : ''}
             <div class="row"><span>الإجمالي</span><span>${fmt(sale.total)} ج.م</span></div>
             <div class="row"><span>المدفوع</span><span>${fmt(sale.paid)} ج.م</span></div>
             ${remaining > 0.009 ? `<div class="row"><span>المتبقي</span><span style="color:${BRAND.red}">${fmt(remaining)} ج.م</span></div>` : ''}
@@ -508,6 +497,19 @@ export function printListReportHtml(opts: ListReportOptions, shop?: ShopInfo): s
 
 function emptyRow(colspan: number, message: string): string {
   return `<tr><td colspan="${colspan}" style="text-align:center;color:${BRAND.sub};padding:22px 8px">${escapeHtml(message)}</td></tr>`
+}
+
+/**
+ * Cell value for ListReport rows that must render Left-To-Right inside the RTL
+ * printed table (dates, numbers, phones, tracking codes).
+ *
+ * Contract fix (2026-09-30): ListReportOptions.rows is string[][] — JSX spans
+ * passed by Cash/Finance/Maintenance views interpolated as "[object Object]"
+ * in printListReportHtml's raw `${cell}` template. Views must pass plain
+ * strings/HTML; use this helper (never JSX) for LTR-isolated cells.
+ */
+export function printLtr(text: string): string {
+  return `<span dir="ltr" style="unicode-bidi:isolate">${escapeHtml(text)}</span>`
 }
 
 function escapeHtml(s: string): string {

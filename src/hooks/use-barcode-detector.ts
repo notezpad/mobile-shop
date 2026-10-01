@@ -28,8 +28,6 @@ interface UseBarcodeDetectorOptions {
   onDetect: (code: string) => void
   /** Formats to detect — defaults to common ones used in retail. */
   formats?: string[]
-  /** Optional visible <video> to render the camera preview into (otherwise a hidden 1px one is created). */
-  previewRef?: React.RefObject<HTMLVideoElement | null>
 }
 
 interface UseBarcodeDetectorResult {
@@ -54,7 +52,6 @@ type BarcodeDetectorLike = {
 export function useBarcodeDetector({
   onDetect,
   formats = ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'],
-  previewRef,
 }: UseBarcodeDetectorOptions): UseBarcodeDetectorResult {
   const [supported, setSupported] = React.useState(false)
   const [scanning, setScanning] = React.useState(false)
@@ -136,9 +133,6 @@ export function useBarcodeDetector({
         audio: false,
       })
       streamRef.current = stream
-
-      // A caller-provided visible preview wins over the hidden helper element.
-      if (previewRef?.current) videoRef.current = previewRef.current
 
       // Need a video element
       if (!videoRef.current) {
