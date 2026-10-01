@@ -635,7 +635,7 @@ function Hero({
         <div className="absolute inset-0 opacity-50" style={{ backgroundImage: 'radial-gradient(rgba(124,58,237,0.18) 1px, transparent 1.2px)', backgroundSize: '18px 18px', maskImage: 'linear-gradient(to left, black, transparent 55%)', WebkitMaskImage: 'linear-gradient(to left, black, transparent 55%)' }} />
       </div>
 
-      <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_230px]">
+      <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_264px]">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
             <span className="relative flex size-12 shrink-0 items-center justify-center">
@@ -681,26 +681,119 @@ function Hero({
           </div>
         </div>
 
-        <aside className="flex flex-row items-center gap-4 rounded-2xl border bg-background/60 p-4 backdrop-blur-sm lg:flex-col lg:justify-center lg:text-center">
-          <div className="relative shrink-0">
-            <Ring p={netMargin} color={verdict.c} className="size-24" />
-            <span className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-xl font-extrabold tabular-nums">{r.salesCount ? Math.round(netMargin) : '—'}<span className="text-xs">٪</span></span>
-              <span className="text-[9px] font-semibold text-muted-foreground">هامش الصافي</span>
-            </span>
-          </div>
-          <div className="min-w-0">
-            <p className="text-[11px] font-medium text-muted-foreground">حالة الفترة</p>
-            <p className="text-2xl font-extrabold leading-tight" style={{ color: verdict.c }}>{verdict.t}</p>
-            <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{verdict.d}</p>
-          </div>
-        </aside>
+        <VerdictCard r={r} netMargin={netMargin} verdict={verdict} />
       </div>
     </section>
   )
 }
 
 /* ═════════════════════ مكوّنات الهوية ═════════════════════ */
+
+/**
+ * VerdictCard — «ميزان الفترة»
+ * بدل الحلقة (اللي بتفضل فاضية لو الهامش بالسالب): مقياس ثنائي الاتجاه من -50٪ لـ +50٪
+ * بيبيّن مكان الهامش بين (خسارة / ربح ضعيف / ربح صحي)، وتحته معادلة الفترة
+ * (الربح قبل المصروفات − المصروفات = الصافي) عشان الحكم يتفهم من غير ما تفتح أي فصل.
+ */
+function VerdictCard({
+  r, netMargin, verdict,
+}: {
+  r: Report
+  netMargin: number
+  verdict: { t: string; d: string; c: string }
+}) {
+  const has = r.salesCount > 0
+  const earned = Math.max(0, r.netProfit + r.totalExpenses) // الربح قبل خصم المصروفات
+  const spent = Math.max(0, r.totalExpenses)
+  const max = Math.max(earned, spent, 1)
+  const clamped = Math.max(-50, Math.min(50, netMargin))
+  const pos = clamped + 50 // 0..100 من الشمال (المقياس رقمي فبيفضل LTR)
+  const m = Math.round(Math.abs(netMargin))
+  const netNeg = r.netProfit < 0
+
+  return (
+    <aside className="relative flex flex-col gap-5 overflow-hidden rounded-2xl border bg-background/60 p-4 backdrop-blur-sm sm:p-5">
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -top-12 -end-12 size-36 rounded-full opacity-25 blur-2xl"
+        style={{ backgroundColor: verdict.c }}
+      />
+
+      {/* الحكم */}
+      <div className="relative">
+        <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+          <span className="size-2 rounded-full" style={{ backgroundColor: verdict.c }} />
+          حالة الفترة
+        </p>
+        <p className="mt-1.5 text-3xl font-black leading-none" style={{ color: verdict.c }}>
+          {verdict.t}
+        </p>
+        <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{verdict.d}</p>
+      </div>
+
+      {/* مقياس الهامش */}
+      <div className="relative">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[11px] font-medium text-muted-foreground">هامش الصافي</span>
+          <span dir="ltr" className="text-2xl font-extrabold leading-none tabular-nums" style={{ color: has ? verdict.c : undefined }}>
+            {has ? `${netMargin < 0 ? '−' : ''}${m}٪` : '—'}
+          </span>
+        </div>
+        <div dir="ltr" className="relative mt-3 h-2 rounded-full">
+          <div className="absolute inset-0 flex overflow-hidden rounded-full opacity-35">
+            <span className="h-full bg-rose-500" style={{ width: '50%' }} />
+            <span className="h-full bg-amber-500" style={{ width: '10%' }} />
+            <span className="h-full bg-emerald-500" style={{ width: '40%' }} />
+          </div>
+          <span aria-hidden className="absolute -top-1 left-1/2 h-4 w-px bg-foreground/40" />
+          {has && (
+            <span
+              aria-hidden
+              className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] bg-card shadow-md transition-[left] duration-slow ease-out"
+              style={{ left: `${pos}%`, borderColor: verdict.c }}
+            />
+          )}
+        </div>
+        <div dir="ltr" className="mt-1.5 flex justify-between text-[10px] text-muted-foreground">
+          <span>خسارة</span>
+          <span>٠</span>
+          <span>ربح</span>
+        </div>
+      </div>
+
+      {/* معادلة الفترة */}
+      {has && (
+        <div className="relative space-y-2.5 border-t border-dashed pt-4">
+          <FlowBar label="الربح قبل المصروفات" value={earned} max={max} fill={GRAD} />
+          <FlowBar label="المصروفات" value={spent} max={max} fill="#f43f5e" />
+          <div className="flex items-center justify-between border-t pt-2.5">
+            <span className="text-xs font-bold">الصافي</span>
+            <span dir="ltr" className={cn('text-sm font-extrabold tabular-nums', netNeg ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
+              {netNeg ? '−' : ''}{num(Math.round(Math.abs(r.netProfit)))} جنيه
+            </span>
+          </div>
+        </div>
+      )}
+    </aside>
+  )
+}
+
+function FlowBar({ label, value, max, fill }: { label: string; value: number; max: number; fill: string }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-2 text-[11px]">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-bold tabular-nums">{num(Math.round(value))}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full transition-[width] duration-slow ease-out"
+          style={{ width: `${Math.max(value > 0 ? 4 : 0, (value / max) * 100)}%`, background: fill }}
+        />
+      </div>
+    </div>
+  )
+}
 
 function Hl({ children }: { children: React.ReactNode }) {
   return <span className="box-decoration-clone rounded-lg bg-gradient-to-l from-violet-500/20 to-fuchsia-500/20 px-1.5 py-0.5 font-extrabold text-foreground">{children}</span>
