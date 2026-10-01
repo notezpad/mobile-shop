@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { AlertTriangle, ArrowDown, ArrowDownRight, ArrowUpRight, CalendarDays, CheckCircle2, ChevronDown, FileText, Inbox, Sparkles } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowDownRight, ArrowUp, ArrowUpRight, CalendarDays, CheckCircle2, ChevronDown, FileText, Inbox, Sparkles } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -178,18 +178,30 @@ export function ReportsView() {
     }
   }, [report])
 
-  const chapters = [
-    { id: 'ch-rhythm', n: '01', label: 'الإيقاع' },
-    { id: 'ch-leaders', n: '02', label: 'الأبطال' },
-    { id: 'ch-stock', n: '03', label: 'المخزون' },
-    ...(hasFinance ? [{ id: 'ch-finance', n: '04', label: 'المالية' }] : []),
+  // كل فصل بياخد «لمحة» حيّة من بياناته تظهر في خريطة التقرير
+  const rr = report
+  const bestDay =
+    ins && rr && rr.salesTrend.length >= 7
+      ? ins.avgs.reduce((b, a) => (a.avg > b.avg ? a : b), ins.avgs[0])
+      : null
+  const chapters: ChapterItem[] = [
+    { id: 'ch-rhythm', n: '01', label: 'الإيقاع', tone: 'info',
+      note: bestDay && bestDay.avg > 0 ? `أقوى يوم: ${WD[bestDay.d]}` : rr ? `${num(rr.salesCount)} فاتورة في الفترة` : '' },
+    { id: 'ch-leaders', n: '02', label: 'الأبطال', tone: 'info',
+      note: rr?.topProducts[0] ? `الأول: ${rr.topProducts[0].name}` : 'مفيش مبيعات' },
+    { id: 'ch-stock', n: '03', label: 'المخزون', tone: rr && rr.lowStockCount > 0 ? 'warn' : 'ok',
+      note: rr && rr.lowStockCount > 0 ? `${num(rr.lowStockCount)} صنف تحت الحد` : 'كله فوق الحد الأدنى' },
+    ...(hasFinance
+      ? [{ id: 'ch-finance', n: '04', label: 'المالية', tone: (rr && rr.netProfit < 0 ? 'bad' : 'ok') as ChapterItem['tone'],
+          note: rr ? (rr.netProfit < 0 ? `خسارة ${num(Math.round(Math.abs(rr.netProfit)))} جنيه` : `صافي ربح ${num(Math.round(rr.netProfit))} جنيه`) : '' }]
+      : []),
   ]
   const branchLabel =
     branchId === 'all' ? 'كل الفروع' : report?.branches.find((b) => String(b.id) === branchId)?.name ?? 'فرع'
   const r = report
 
   return (
-    <div className="space-y-6">
+    <div id="rpt-top" className="space-y-6">
       <FilterBar
         from={from} to={to} setFrom={setFrom} setTo={setTo}
         preset={activePreset} setPreset={setActivePreset}
@@ -211,27 +223,8 @@ export function ReportsView() {
           <Stage r={r} ins={ins} />
 
           {/* ═════════ فهرس الفصول + المحتوى ═════════ */}
-          <div className="grid gap-6 lg:grid-cols-[132px_minmax(0,1fr)]">
-            <nav className="flex gap-1.5 overflow-x-auto lg:sticky lg:top-24 lg:flex-col lg:gap-0 lg:self-start lg:overflow-visible lg:border-s" aria-label="فصول التقرير">
-              <p className="hidden px-3 pb-2 text-[10px] font-bold tracking-wide text-muted-foreground/70 lg:block">فصول التقرير</p>
-              {chapters.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => document.getElementById(c.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                  aria-current={active === c.id ? 'true' : undefined}
-                  className={cn(
-                    'flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-start text-xs font-semibold transition-colors lg:-ms-px lg:rounded-none lg:rounded-e-xl lg:border-s-2 lg:border-transparent',
-                    active === c.id
-                      ? 'bg-gradient-to-l from-violet-600/15 to-fuchsia-500/10 text-foreground lg:border-violet-600'
-                      : 'text-muted-foreground hover:bg-muted/60',
-                  )}
-                >
-                  <span className={cn('font-black tabular-nums', active === c.id ? 'text-violet-600 dark:text-violet-400' : 'text-muted-foreground/50')}>{c.n}</span>
-                  {c.label}
-                </button>
-              ))}
-            </nav>
+          <div className="grid gap-6 lg:grid-cols-[176px_minmax(0,1fr)]">
+            <ChapterMap chapters={chapters} active={active} />
 
             <div className="min-w-0 space-y-12">
               {/* ───── ٠١ الإيقاع ───── */}
@@ -314,9 +307,10 @@ export function ReportsView() {
                     )}
                   </Panel>
 
-                  <Panel title="أفضل العملاء" hint="نسبة من إجمالي المبيعات" className="lg:col-span-2">
+                  <Panel title="أفضل العملاء" hint="نسبة من إجمالي المبيعات" className="flex flex-col lg:col-span-2">
                     {r.topCustomers.length > 0 ? (
-                      <ul className="space-y-3.5">
+                      <>
+<ul className="space-y-3.5">
                         {r.topCustomers.map((c, i) => (
                           <li key={i} className="flex items-center gap-3">
                             <span className="flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-extrabold text-white" style={{ background: GRAD }}>
@@ -333,6 +327,22 @@ export function ReportsView() {
                           </li>
                         ))}
                       </ul>
+                        {(() => {
+                          const share = Math.min(100, pct(r.topCustomers.reduce((t, c) => t + c.total, 0), r.totalSales))
+                          return (
+                            <div className="mt-auto border-t border-dashed pt-4">
+                              <div className="mb-1.5 flex items-baseline justify-between text-[11px]">
+                                <span className="text-muted-foreground">تركّز المبيعات في أفضل {num(r.topCustomers.length)} {r.topCustomers.length === 1 ? 'عميل' : 'عملاء'}</span>
+                                <b className="tabular-nums">{share.toFixed(0)}٪</b>
+                              </div>
+                              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                                <div className="h-full rounded-full" style={{ width: `${Math.max(3, share)}%`, background: GRAD }} />
+                              </div>
+                              <p className="mt-1.5 text-[10px] text-muted-foreground">الباقي مبيعات لعملاء تانيين أو بدون عميل</p>
+                            </div>
+                          )
+                        })()}
+                      </>
                     ) : (
                       <Empty t="لا توجد مبيعات مرتبطة بعملاء" />
                     )}
@@ -506,7 +516,7 @@ function FilterBar({
     setFrom(f); setTo(t); setPreset(k)
   }
   return (
-    <div className="sticky top-2 z-20 overflow-hidden rounded-2xl border bg-background/80 shadow-sm backdrop-blur-xl">
+    <div className="sticky top-0 z-20 overflow-hidden rounded-2xl border bg-background/80 shadow-sm backdrop-blur-xl">
       <style>{`@keyframes rpt-slide{0%{transform:translateX(-120%)}100%{transform:translateX(420%)}}`}</style>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 p-2">
         <Popover>
@@ -595,7 +605,7 @@ function Hero({
     : r.netProfit < 0 ? { t: 'خسارة', d: 'المصروفات أكبر من الربح', c: '#f43f5e', tx: 'text-rose-600 dark:text-rose-400' }
     : netMargin < 10 ? { t: 'ربح ضعيف', d: 'هامش الصافي أقل من 10٪', c: '#f59e0b', tx: 'text-amber-700 dark:text-amber-400' }
     : (ch ?? 0) < 0 ? { t: 'مستقر', d: 'ربح كويس والمبيعات أقل من السابقة', c: V, tx: 'text-violet-700 dark:text-violet-300' }
-    : { t: 'أداء قوي', d: 'ربح صحي ومبيعات في صعود', c: '#10b981', tx: 'text-emerald-700 dark:text-emerald-400' }
+    : { t: 'أداء قوي', d: ch == null ? 'ربح صحي بهامش كويس' : 'ربح صحي ومبيعات في صعود', c: '#10b981', tx: 'text-emerald-700 dark:text-emerald-400' }
 
   const loss = r.netProfit < 0
   const topExp = r.expensesByCategory?.[0]
@@ -811,6 +821,138 @@ function FlowBar({ label, value, max, fill }: { label: string; value: number; ma
           style={{ width: `${Math.max(value > 0 ? 4 : 0, (value / max) * 100)}%`, background: fill }}
         />
       </div>
+    </div>
+  )
+}
+
+type ChapterItem = { id: string; n: string; label: string; note: string; tone: 'ok' | 'warn' | 'bad' | 'info' }
+const TONE_DOT = { ok: 'bg-emerald-500', warn: 'bg-amber-500', bad: 'bg-rose-500', info: 'bg-violet-500' } as const
+
+/**
+ * ChapterMap — «خريطة التقرير»
+ * بدل قايمة روابط: خريطة مصغّرة للصفحة.
+ *  - ارتفاع كل شريط = ارتفاع الفصل الحقيقي في الصفحة (نسبة وتناسب)
+ *  - التعبئة بتنزل مع السكرول جوه كل فصل، والرقم فوق = نسبة اللي قريته من التقرير كله
+ *  - الفصل الحالي بيتفتح ويعرض لمحة حيّة من بياناته (أقوى يوم / الأول مبيعاً / أصناف ناقصة / الصافي)
+ * على الموبايل بتتحوّل لأزرار أفقية بشريط تقدّم تحتها.
+ */
+function ChapterMap({ chapters, active }: { chapters: ChapterItem[]; active: string }) {
+  const [m, setM] = React.useState<{ p: number[]; h: number[]; all: number }>({ p: [], h: [], all: 0 })
+  const key = chapters.map((c) => c.id).join()
+
+  React.useEffect(() => {
+    let raf = 0
+    const clamp01 = (x: number) => Math.max(0, Math.min(1, x))
+    const calc = () => {
+      raf = 0
+      const anchor = window.innerHeight * 0.3
+      const rects = key.split(',').map((id) => document.getElementById(id)?.getBoundingClientRect() ?? null)
+      const p = rects.map((r) => (r ? Math.round(clamp01((anchor - r.top) / Math.max(1, r.height)) * 100) : 0))
+      const h = rects.map((r) => (r ? Math.round(r.height) : 0))
+      const first = rects.find(Boolean)
+      const last = [...rects].reverse().find(Boolean)
+      const all = first && last ? Math.round(clamp01((anchor - first.top) / Math.max(1, last.bottom - first.top)) * 100) : 0
+      setM((prev) => (prev.all === all && prev.p.join() === p.join() && prev.h.join() === h.join() ? prev : { p, h, all }))
+    }
+    const on = () => { if (!raf) raf = requestAnimationFrame(calc) }
+    calc()
+    const t = window.setTimeout(calc, 500)
+    // capture: السكرول ممكن يكون جوه حاوية مش الـ window
+    document.addEventListener('scroll', on, true)
+    window.addEventListener('resize', on)
+    return () => {
+      clearTimeout(t)
+      if (raf) cancelAnimationFrame(raf)
+      document.removeEventListener('scroll', on, true)
+      window.removeEventListener('resize', on)
+    }
+  }, [key])
+
+  const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const sumH = m.h.reduce((a, b) => a + b, 0)
+  const seg = (i: number) => (sumH > 0 && m.h[i] ? Math.max(52, (m.h[i] / sumH) * 240) : 64)
+
+  return (
+    <div className="lg:sticky lg:top-24 lg:self-start">
+      {/* موبايل: أزرار أفقية بشريط تقدّم */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1 lg:hidden" role="group" aria-label="فصول التقرير">
+        {chapters.map((c, i) => {
+          const on = active === c.id
+          return (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => jump(c.id)}
+              aria-current={on ? 'true' : undefined}
+              className={cn(
+                'relative shrink-0 overflow-hidden rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors',
+                on ? 'border-violet-500/40 bg-violet-500/10 text-foreground' : 'text-muted-foreground',
+              )}
+            >
+              <span className="relative flex items-center gap-1.5">
+                <span dir="ltr" className={cn('font-black tabular-nums', on ? 'text-violet-600 dark:text-violet-400' : 'text-muted-foreground/50')}>{c.n}</span>
+                {c.label}
+              </span>
+              <span aria-hidden className="absolute inset-x-0 bottom-0 h-0.5 bg-muted">
+                <span className="block h-full transition-[width] duration-base" style={{ width: `${m.p[i] ?? 0}%`, background: GRAD }} />
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ديسكتوب: الخريطة */}
+      <nav className="hidden lg:block" aria-label="خريطة التقرير">
+        <div className="mb-3 flex items-baseline justify-between px-2">
+          <span className="text-[11px] font-extrabold">خريطة التقرير</span>
+          <span dir="ltr" className="rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-violet-700 dark:text-violet-300" title="نسبة اللي وصلت له من التقرير">
+            {m.all}٪
+          </span>
+        </div>
+
+        <ol className="space-y-1">
+          {chapters.map((c, i) => {
+            const on = active === c.id
+            return (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  onClick={() => jump(c.id)}
+                  aria-current={on ? 'true' : undefined}
+                  className={cn('group flex w-full gap-3 rounded-xl p-2 text-start transition-colors', on ? 'bg-violet-500/[0.07]' : 'hover:bg-muted/50')}
+                >
+                  <span aria-hidden className="relative w-1.5 shrink-0 overflow-hidden rounded-full bg-muted" style={{ minHeight: seg(i) }}>
+                    <span className="absolute inset-x-0 top-0 rounded-full transition-[height] duration-base ease-out" style={{ height: `${m.p[i] ?? 0}%`, background: `linear-gradient(to bottom, ${V}, ${F})` }} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span dir="ltr" className={cn('text-xs font-black tabular-nums', on ? 'bg-clip-text text-transparent' : 'text-muted-foreground/50')} style={on ? { backgroundImage: GRAD } : undefined}>{c.n}</span>
+                      <span className={cn('text-xs font-bold transition-colors', on ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground')}>{c.label}</span>
+                    </span>
+                    <span className={cn('grid transition-[grid-template-rows,opacity] duration-base ease-out', on ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0')}>
+                      <span className="overflow-hidden">
+                        <span className="mt-1.5 flex items-center gap-1.5 text-[10px] leading-snug text-muted-foreground">
+                          <i className={cn('size-1.5 shrink-0 rounded-full', TONE_DOT[c.tone])} />
+                          <span className="truncate">{c.note}</span>
+                        </span>
+                      </span>
+                    </span>
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ol>
+
+        <button
+          type="button"
+          onClick={() => document.getElementById('rpt-top')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          className="mt-2 flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowUp className="size-3" />
+          لأول التقرير
+        </button>
+      </nav>
     </div>
   )
 }
@@ -1084,7 +1226,7 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
         </Signal>
         <Signal label="صافي الربح" value={num(Math.round(r.netProfit))} unit="جنيه" delta={r.changes.netProfit}>
           <div className="relative">
-            <Ring p={Math.abs(ins?.netMargin ?? 0)} color={(ins?.netMargin ?? 0) >= 0 ? V : '#f43f5e'} />
+            <Ring className="size-14" p={Math.abs(ins?.netMargin ?? 0)} color={(ins?.netMargin ?? 0) >= 0 ? V : '#f43f5e'} />
             <span dir="ltr" className="absolute inset-0 flex items-center justify-center text-[10px] font-extrabold tabular-nums">{(ins?.netMargin ?? 0) < 0 ? '−' : ''}{Math.abs(Math.round(ins?.netMargin ?? 0))}٪</span>
           </div>
         </Signal>
