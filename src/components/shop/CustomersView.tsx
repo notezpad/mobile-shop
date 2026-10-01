@@ -30,7 +30,6 @@ import {
   CalendarDays,
   ArrowUpDown,
   ChevronDown,
-  User,
 } from 'lucide-react'
 import {
   Dialog,
@@ -337,8 +336,14 @@ export function CustomersView() {
             </div>
           </div>
 
-          <div className="min-w-[280px] flex-1">
-            <DebtSpread rows={view.top} total={totalDebt} hidden={noData} />
+          <div className="min-w-[300px] flex-1">
+            <HealthPanel
+              hidden={noData}
+              collected={Math.max(view.purchases - totalDebt, 0)}
+              recent={Math.max(totalDebt - view.lateDebt, 0)}
+              late={view.lateDebt}
+              topDebtor={view.top[0]}
+            />
           </div>
 
           <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-col lg:items-stretch">
@@ -441,12 +446,8 @@ export function CustomersView() {
           </div>
 
           <div className="grid gap-3 lg:grid-cols-2">
-            {view.buyers.length >= 2 && (
-              <TopBuyers rows={view.buyers.slice(0, 5)} total={view.purchases} onOpen={(c) => setDetailCustomer(c)} />
-            )}
-            <div className={cn(view.buyers.length < 2 && 'lg:col-span-2')}>
-              <DebtAging buckets={view.buckets} total={totalDebt} />
-            </div>
+            <TopBuyers rows={view.buyers.slice(0, 5)} total={view.purchases} onOpen={(c) => setDetailCustomer(c)} />
+            <DebtAging buckets={view.buckets} total={totalDebt} />
           </div>
             </div>
           )}
@@ -895,86 +896,108 @@ function DebtAging({
   )
 }
 
-/** توزيع المديونية على العملاء (مدينين +٢) أو تركيز على المدين الوحيد / رسالة "مفيش ديون" */
-function DebtSpread({
-  rows,
-  total,
+/** صحة التحصيل — عدّاد دائري + شريط واحد يقسّم مشتريات العملاء: محصّل / مستحق حديث / متأخر */
+function HealthPanel({
+  collected,
+  recent,
+  late,
+  topDebtor,
   hidden,
 }: {
-  rows: Customer[]
-  total: number
+  collected: number
+  recent: number
+  late: number
+  topDebtor?: Customer
   hidden?: boolean
 }) {
   if (hidden) return <div />
-  if (rows.length === 0) {
+  const denom = collected + recent + late
+  if (denom <= 0) {
     return (
       <div className="flex items-center gap-3 rounded-2xl border border-dashed bg-card/60 p-4 text-sm text-muted-foreground">
         <CheckCircle2 className="size-5 text-emerald-500" />
-        مفيش ديون على أي عميل حالياً
+        لسه مفيش مشتريات مسجّلة — أول فاتورة هتظهر هنا صحة التحصيل
       </div>
     )
   }
-  if (rows.length === 1) {
-    const r = rows[0]
-    return (
-      <div className="flex items-center gap-3 rounded-2xl border bg-card/70 p-3.5">
-        <span
-          className="flex size-11 shrink-0 items-center justify-center rounded-2xl text-lg font-extrabold text-white"
-          style={{ background: `linear-gradient(135deg, ${colorOf(r.name)}, ${shade(colorOf(r.name), 0.35)})` }}
-        >
-          <User className="size-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] text-muted-foreground">المدين الوحيد</p>
-          <p className="truncate text-sm font-bold">{r.name}</p>
-        </div>
-        <div className="text-end">
-          <p className="text-lg font-extrabold tabular-nums text-rose-600 dark:text-rose-400">{num(r.balance)}</p>
-          <p className="text-[10px] text-muted-foreground">
-            {r.lastSaleAt ? `آخر تعامل منذ ${Math.floor(daysSince(r.lastSaleAt))} يوم` : 'جنيه'}
-          </p>
-        </div>
-      </div>
-    )
-  }
-  const shown = rows.slice(0, 5)
-  const restSum = rows.slice(5).reduce((s, r) => s + r.balance, 0)
+  const pct = (collected / denom) * 100
+  const R = 38
+  const C = 2 * Math.PI * R
+  const segs = [
+    { label: 'محصّل', value: collected, color: '#10b981' },
+    { label: 'مستحق حديث', value: recent, color: '#f59e0b' },
+    { label: 'متأخر +٣٠ يوم', value: late, color: '#f43f5e' },
+  ]
   return (
-    <div className="min-w-0 rounded-2xl border bg-card/70 p-4">
-      <div className="mb-2.5 flex items-center justify-between">
-        <p className="text-xs font-semibold text-foreground/80">توزيع المديونية</p>
-        <p className="text-[11px] text-muted-foreground">
-          {rows.length} {rows.length > 2 && rows.length < 11 ? 'مدينين' : 'مدين'}
-        </p>
-      </div>
-      <div className="flex h-3.5 gap-0.5 overflow-hidden rounded-full">
-        {shown.map((r) => (
-          <div
-            key={r.id}
-            title={`${r.name}: ${formatCurrency(r.balance)}`}
-            className="h-full min-w-[6px] rounded-sm transition-all duration-slow ease-out first:rounded-s-full"
-            style={{ width: `${(r.balance / (total || 1)) * 100}%`, backgroundColor: colorOf(r.name) }}
+    <div className="flex items-center gap-4 rounded-2xl border bg-card/70 p-4">
+      {/* العدّاد */}
+      <div className="relative size-[104px] shrink-0">
+        <svg viewBox="0 0 100 100" className="size-full -rotate-90">
+          <circle cx="50" cy="50" r={R} fill="none" strokeWidth="11" className="stroke-muted" />
+          <circle
+            cx="50"
+            cy="50"
+            r={R}
+            fill="none"
+            strokeWidth="11"
+            strokeLinecap="round"
+            stroke="#10b981"
+            strokeDasharray={C}
+            strokeDashoffset={C - (C * Math.max(pct, 1)) / 100}
+            className="transition-[stroke-dashoffset] duration-slow ease-out"
           />
-        ))}
-        {restSum > 0 && (
-          <div
-            title={`آخرون: ${formatCurrency(restSum)}`}
-            className="h-full min-w-[6px] rounded-e-full bg-muted-foreground/30"
-            style={{ width: `${(restSum / (total || 1)) * 100}%` }}
-          />
-        )}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-2xl font-extrabold leading-none tabular-nums">
+            {pct.toFixed(pct >= 10 ? 0 : 1)}
+            <span className="text-xs font-bold">%</span>
+          </span>
+          <span className="mt-1 text-[10px] text-muted-foreground">تحصيل</span>
+        </div>
       </div>
-      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
-        {shown.map((r) => (
-          <li key={r.id} className="flex items-center gap-1.5 text-[11px]">
-            <span className="size-2 rounded-full" style={{ backgroundColor: colorOf(r.name) }} />
-            <span className="max-w-[88px] truncate font-medium text-foreground/80">{r.name}</span>
-            <span className="tabular-nums text-muted-foreground">
-              {((r.balance / (total || 1)) * 100).toFixed(0)}%
+
+      {/* الشريط + الشرح */}
+      <div className="min-w-0 flex-1">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold text-foreground/80">صحة التحصيل</p>
+          {topDebtor && (
+            <span className="truncate text-[11px] text-muted-foreground">
+              أكبر مدين:{' '}
+              <b className="font-bold text-foreground/80">{topDebtor.name}</b>{' '}
+              <span className="tabular-nums text-rose-600 dark:text-rose-400">{num(topDebtor.balance)}</span>
             </span>
-          </li>
-        ))}
-      </ul>
+          )}
+        </div>
+        <div className="flex h-3.5 gap-0.5 overflow-hidden rounded-full">
+          {segs.map(
+            (g) =>
+              g.value > 0 && (
+                <div
+                  key={g.label}
+                  title={`${g.label}: ${formatCurrency(g.value)}`}
+                  className="h-full min-w-[6px] transition-all duration-slow ease-out first:rounded-s-full last:rounded-e-full"
+                  style={{ width: `${(g.value / denom) * 100}%`, backgroundColor: g.color }}
+                />
+              ),
+          )}
+        </div>
+        <ul className="mt-3 grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+          {segs.map((g) => (
+            <li key={g.label} className={cn('min-w-0 text-[11px]', g.value <= 0 && 'opacity-40')}>
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: g.color }} />
+                <span className="truncate">{g.label}</span>
+              </span>
+              <span className="mt-0.5 block text-sm font-extrabold tabular-nums text-foreground">
+                {num(g.value)}
+                <span className="ms-1 text-[10px] font-medium text-muted-foreground">
+                  {Math.round((g.value / denom) * 100)}%
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   )
 }

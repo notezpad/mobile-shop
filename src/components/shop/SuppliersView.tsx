@@ -417,7 +417,14 @@ export function SuppliersView() {
           </div>
 
           <div className="min-w-[280px] flex-1">
-            <PayPriority rows={view.top} total={totalOwed} hidden={noData} onPay={setPayTarget} />
+            <PaymentHealth
+              hidden={noData}
+              paid={Math.max(view.purchases - totalOwed, 0)}
+              recent={Math.max(totalOwed - view.oldDebt, 0)}
+              old={view.oldDebt}
+              priority={view.top}
+              onPay={setPayTarget}
+            />
           </div>
 
           <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-col lg:items-stretch lg:justify-center">
@@ -528,12 +535,8 @@ export function SuppliersView() {
               </div>
 
               <div className="grid gap-3 lg:grid-cols-2">
-                {view.sources.length >= 2 && (
-                  <TopSources rows={view.sources.slice(0, 5)} total={view.purchases} onOpen={(c) => setDetailSupplier(c)} />
-                )}
-                <div className={cn(view.sources.length < 2 && 'lg:col-span-2')}>
-                  <PayableAging buckets={view.buckets} total={totalOwed} />
-                </div>
+                <TopSources rows={view.sources.slice(0, 5)} total={view.purchases} onOpen={(c) => setDetailSupplier(c)} />
+                <PayableAging buckets={view.buckets} total={totalOwed} />
               </div>
             </div>
           )}
@@ -1102,75 +1105,140 @@ function KpiTile({
   )
 }
 
-/** أولويات السداد (داخل الـ Hero) — أعلى ٣ موردين مستحقاً + زر سداد مباشر */
-function PayPriority({
-  rows,
-  total,
-  hidden,
+/** صحة السداد (داخل الـ Hero) — «ختم» دائري بنسبة السداد + شريط مقسّم بشريط تحذير للقديم + أولوية السداد بزر مباشر */
+function PaymentHealth({
+  paid,
+  recent,
+  old,
+  priority,
   onPay,
+  hidden,
 }: {
-  rows: Supplier[]
-  total: number
-  hidden?: boolean
+  paid: number
+  recent: number
+  old: number
+  priority: Supplier[]
   onPay: (s: Supplier) => void
+  hidden?: boolean
 }) {
   if (hidden) return <div />
-  if (rows.length === 0) {
+  const denom = paid + recent + old
+  if (denom <= 0) {
     return (
       <div className="flex h-full items-center gap-3 rounded-2xl border border-dashed border-orange-300 bg-white/60 p-4 text-sm text-stone-600 dark:border-stone-700 dark:bg-stone-800/40 dark:text-stone-300">
         <CheckCircle2 className="size-5 text-emerald-600 dark:text-emerald-400" />
-        مفيش مستحقات على أي مورد حالياً
+        لسه مفيش مشتريات مسجّلة — أول أمر شراء هتظهر هنا صحة السداد
       </div>
     )
   }
-  const list = rows.slice(0, 3)
+  const pct = (paid / denom) * 100
+  const R = 38
+  const C = 2 * Math.PI * R
+  const segs = [
+    { label: 'مسدَّد', value: paid, color: TONES.clear.color, bg: TONES.clear.color },
+    { label: 'مستحق عادي', value: recent, color: ACCENT, bg: ACCENT },
+    {
+      label: 'قديم +٣٠ يوم',
+      value: old,
+      color: '#be123c',
+      // شريط تحذير — نفس لغة شريط الشحن أعلى الـ Hero
+      bg: 'repeating-linear-gradient(-45deg, #be123c 0 6px, #fb7185 6px 12px)',
+    },
+  ]
+  const top = priority[0]
   return (
-    <div className="h-full min-w-0 rounded-2xl border border-orange-200 bg-white/70 p-3.5 backdrop-blur-sm dark:border-stone-700/80 dark:bg-stone-800/50">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="flex items-center gap-1.5 text-xs font-semibold text-stone-800 dark:text-stone-200">
-          <Flame className="size-3.5 text-orange-600 dark:text-orange-400" />
-          ابدأ بسداد
-        </p>
-        <p className="text-[11px] text-stone-500 dark:text-stone-400">
-          {rows.length > list.length ? `و${num(rows.length - list.length)} كمان` : 'الأعلى مستحقاً'}
-        </p>
-      </div>
-      <ul className="space-y-1.5">
-        {list.map((r) => (
-          <li key={r.id} className="flex items-center gap-2.5 rounded-xl bg-orange-50/80 p-2 dark:bg-stone-900/60">
-            <span
-              className="flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-extrabold text-white"
-              style={{ backgroundColor: colorOf(r.name) }}
-            >
-              {r.name?.charAt(0) ?? '?'}
+    <div className="flex h-full min-w-0 flex-col justify-between gap-3 rounded-2xl border border-orange-200 bg-white/70 p-4 backdrop-blur-sm dark:border-stone-700/80 dark:bg-stone-800/50">
+      <div className="flex items-center gap-4">
+        {/* الختم الدائري */}
+        <div className="relative size-[104px] shrink-0">
+          <svg viewBox="0 0 100 100" className="size-full -rotate-90">
+            <circle cx="50" cy="50" r="48" fill="none" strokeWidth="1" strokeDasharray="2 4" className="stroke-orange-400/60 dark:stroke-stone-500" />
+            <circle cx="50" cy="50" r={R} fill="none" strokeWidth="10" className="stroke-orange-200/80 dark:stroke-stone-700" />
+            <circle
+              cx="50"
+              cy="50"
+              r={R}
+              fill="none"
+              strokeWidth="10"
+              strokeLinecap="round"
+              stroke={TONES.clear.color}
+              strokeDasharray={C}
+              strokeDashoffset={C - (C * Math.max(pct, 1)) / 100}
+              className="transition-[stroke-dashoffset] duration-slow ease-out"
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-2xl font-extrabold leading-none tabular-nums">
+              {pct.toFixed(pct >= 10 ? 0 : 1)}
+              <span className="text-xs font-bold">%</span>
             </span>
-            <div className="min-w-0 flex-1">
-              <p title={r.name} className="truncate text-[13px] font-semibold">{r.name}</p>
-              <div className="mt-1 h-1 overflow-hidden rounded-full bg-orange-200/70 dark:bg-stone-700">
-                <div
-                  className="h-full rounded-full bg-orange-500"
-                  style={{ width: `${total > 0 ? Math.max((r.balance / total) * 100, 4) : 0}%` }}
-                />
-              </div>
-            </div>
-            <b className="shrink-0 text-sm tabular-nums text-orange-700 dark:text-orange-300">{num(r.balance)}</b>
-            <button
-              type="button"
-              onClick={() => onPay(r)}
-              className="flex h-8 shrink-0 items-center gap-1 rounded-lg bg-orange-600 px-2.5 text-[11px] font-bold text-white transition-colors hover:bg-orange-500 focus-visible:ring-[3px] focus-visible:ring-orange-400/50 focus-visible:outline-none"
-              aria-label={`سدّد دفعة لـ ${r.name}`}
-            >
-              <HandCoins className="size-3.5" />
-              سدّد
-            </button>
-          </li>
-        ))}
-      </ul>
+            <span className="mt-1 text-[10px] font-semibold tracking-wide text-stone-500 dark:text-stone-400">سداد</span>
+          </div>
+        </div>
+
+        {/* الشريط + الأرقام */}
+        <div className="min-w-0 flex-1">
+          <p className="mb-2 text-xs font-semibold text-stone-800 dark:text-stone-200">صحة السداد</p>
+          <div className="flex h-3.5 gap-0.5 overflow-hidden rounded-full">
+            {segs.map(
+              (g) =>
+                g.value > 0 && (
+                  <div
+                    key={g.label}
+                    title={`${g.label}: ${formatCurrency(g.value)}`}
+                    className="h-full min-w-[6px] transition-all duration-slow ease-out first:rounded-s-full last:rounded-e-full"
+                    style={{ width: `${(g.value / denom) * 100}%`, background: g.bg }}
+                  />
+                ),
+            )}
+          </div>
+          <ul className="mt-3 grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+            {segs.map((g) => (
+              <li key={g.label} className={cn('min-w-0 text-[11px]', g.value <= 0 && 'opacity-40')}>
+                <span className="flex items-center gap-1.5 text-stone-500 dark:text-stone-400">
+                  <span className="size-2 shrink-0 rounded-full" style={{ background: g.bg }} />
+                  <span className="truncate">{g.label}</span>
+                </span>
+                <span className="mt-0.5 block text-sm font-extrabold tabular-nums">
+                  {num(g.value)}
+                  <span className="ms-1 text-[10px] font-medium text-stone-500 dark:text-stone-400">
+                    {Math.round((g.value / denom) * 100)}%
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {/* أولوية السداد — خط تقطيع + زر سداد مباشر (نفس وظيفة «ابدأ بسداد» القديمة) */}
+      {top && (
+        <div className="flex items-center gap-2.5 border-t border-dashed border-orange-300/80 pt-3 dark:border-stone-600">
+          <Flame className="size-4 shrink-0 text-orange-600 dark:text-orange-400" />
+          <div className="min-w-0 flex-1 text-[11px] text-stone-500 dark:text-stone-400">
+            <span className="font-semibold text-stone-700 dark:text-stone-200">ابدأ بسداد</span>
+            {priority.length > 1 && <span> · و{num(priority.length - 1)} كمان</span>}
+            <p className="mt-0.5 truncate">
+              <b title={top.name} className="text-[13px] font-bold text-stone-900 dark:text-stone-50">{top.name}</b>{' '}
+              <span className="font-extrabold tabular-nums text-orange-700 dark:text-orange-300">{num(top.balance)}</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onPay(top)}
+            className="flex h-8 shrink-0 items-center gap-1 rounded-lg bg-orange-600 px-3 text-[11px] font-bold text-white transition-colors hover:bg-orange-500 focus-visible:ring-[3px] focus-visible:ring-orange-400/50 focus-visible:outline-none"
+            aria-label={`سدّد دفعة لـ ${top.name}`}
+          >
+            <HandCoins className="size-3.5" />
+            سدّد
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
-/** حصة الموردين من المشتريات — أعمدة نسبية */
+/** أكتر الموردين توريداً — ترتيب بأختام (برتقالي ← بني ← رمادي) + أعمدة نسبية + خط تقطيع بين الصفوف */
 function TopSources({
   rows,
   total,
@@ -1180,9 +1248,11 @@ function TopSources({
   total: number
   onOpen: (c: Supplier) => void
 }) {
+  // أختام المراكز الثلاثة الأولى بألوان الهوية: برتقالي الشحن · بني الكرتون · رمادي الحبر
+  const stamps = [ACCENT, '#b45309', '#78716c']
   const max = rows[0]?.totalPurchases ?? 0
   return (
-    <div className="rounded-2xl border bg-card p-4">
+    <div className="rounded-2xl border border-s-4 bg-card p-4" style={{ borderInlineStartColor: ACCENT }}>
       <div className="mb-3 flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-bold">
           <Boxes className="size-4 text-orange-500" />
@@ -1190,45 +1260,49 @@ function TopSources({
         </h3>
         <span className="text-[11px] text-muted-foreground">اضغط لفتح كشف الحساب</span>
       </div>
-      <ul className="space-y-1.5">
-        {rows.map((r, i) => {
-          const v = r.totalPurchases ?? 0
-          const color = colorOf(r.name)
-          return (
-            <li key={r.id}>
-              <button
-                type="button"
-                onClick={() => onOpen(r)}
-                className="flex w-full items-center gap-3 rounded-xl p-2 text-start transition-colors hover:bg-muted/60 focus-visible:ring-[3px] focus-visible:ring-orange-500/40 focus-visible:outline-none"
-              >
-                <span
-                  className="flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-extrabold text-white"
-                  style={{ backgroundColor: color }}
+      {rows.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">لسه مفيش مشتريات مسجّلة</p>
+      ) : (
+        <ul className="divide-y divide-dashed divide-orange-200/80 dark:divide-stone-700">
+          {rows.map((r, i) => {
+            const v = r.totalPurchases ?? 0
+            const color = stamps[i] ?? '#a8a29e'
+            return (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  onClick={() => onOpen(r)}
+                  className="flex w-full items-center gap-3 rounded-xl p-2 text-start transition-colors hover:bg-orange-500/[0.06] focus-visible:ring-[3px] focus-visible:ring-orange-500/40 focus-visible:outline-none"
                 >
-                  {i + 1}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span title={r.name} className="truncate text-sm font-semibold">{r.name}</span>
-                    <span className="shrink-0 text-sm font-extrabold tabular-nums">{num(v)}</span>
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full transition-[width] duration-slow ease-out"
-                        style={{ width: `${max > 0 ? Math.max((v / max) * 100, 4) : 0}%`, backgroundColor: color }}
-                      />
+                  <span
+                    className="flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-extrabold text-white ring-2 ring-offset-2 ring-offset-card"
+                    style={{ backgroundColor: color, ['--tw-ring-color' as string]: `${color}55` }}
+                  >
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span title={r.name} className="truncate text-sm font-semibold">{r.name}</span>
+                      <span className="shrink-0 text-sm font-extrabold tabular-nums">{num(v)}</span>
                     </div>
-                    <span className="w-9 text-end text-[11px] tabular-nums text-muted-foreground">
-                      {total > 0 ? `${Math.round((v / total) * 100)}%` : ''}
-                    </span>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full transition-[width] duration-slow ease-out"
+                          style={{ width: `${max > 0 ? Math.max((v / max) * 100, 4) : 0}%`, backgroundColor: color }}
+                        />
+                      </div>
+                      <span className="w-9 text-end text-[11px] tabular-nums text-muted-foreground">
+                        {total > 0 ? `${Math.round((v / total) * 100)}%` : ''}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
     </div>
   )
 }
