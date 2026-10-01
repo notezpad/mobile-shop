@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
+import { GoogleAnalytics } from "@/components/analytics";
 import {
   SITE_URL,
   SITE_NAME,
@@ -206,6 +207,9 @@ export default function RootLayout({
           <Toaster />
           <SonnerToaster position="top-center" richColors />
         </Providers>
+
+        {/* 📊 Google Analytics — بيغطي كل الصفحات تلقائياً من هنا */}
+        <GoogleAnalytics />
 
         {/* ⚡ Service Worker registration — moved to body as a client script.
             Next.js 16 warns about <script> tags inside <head> of a Server Component
