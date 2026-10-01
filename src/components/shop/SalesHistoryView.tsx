@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import {
-  ChevronLeft, ChevronRight, FileDown, FileSpreadsheet, Printer, ReceiptText,
+  Check, ChevronLeft, ChevronRight, FileDown, FileSpreadsheet, Printer, ReceiptText,
   RotateCcw, Search, X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -51,6 +51,17 @@ const PAGE_SIZE = 50
 const isReturned = (s: Sale) => s.status === 'مرتجعة'
 const invNo = (s: Sale) => s.invoiceNo ?? `#${s.id}`
 const qtyOf = (s: Sale) => s.items.reduce((n, it) => n + it.quantity, 0)
+/** رقم بدون كلمة «جنيه» — الوحدة بتتعرض صغيرة وخفيفة جنبه */
+const money = (n: number) => formatCurrency(n).replace(/\s*جنيه$/, '')
+/** INV-2026-00011 → السيريال الكبير (00011) + البادئة الصغيرة (INV-2026) زي دفاتر الفواتير */
+const splitNo = (s: Sale) => {
+  const m = invNo(s).match(/^(.*?)(\d+)$/)
+  return m ? { prefix: m[1].replace(/-$/, ''), serial: m[2] } : { prefix: '', serial: invNo(s) }
+}
+const preview = (s: Sale) => {
+  const names = s.items.map((i) => i.name)
+  return names.slice(0, 2).join('، ') + (names.length > 2 ? ` +${names.length - 2}` : '')
+}
 
 const timeOf = (iso: string) =>
   new Date(iso)
@@ -228,14 +239,21 @@ export function SalesHistoryView() {
           </dl>
 
           {days.length > 1 && (
-            <div className="hidden w-44 items-end gap-1 border-s border-dashed p-4 xl:flex" aria-hidden>
-              {[...days].reverse().slice(-14).map((d) => (
-                <span
+            <div className="hidden w-56 items-end justify-center gap-2 border-s border-dashed px-5 py-3 xl:flex">
+              {[...days].reverse().slice(-10).map((d) => (
+                <button
                   key={d.key}
+                  type="button"
                   title={`${formatArabicDate(new Date(`${d.key}T12:00:00`))} — ${formatCurrency(d.sum)}`}
-                  className="flex-1 rounded-t-sm bg-yellow-300/80 dark:bg-yellow-300/60"
-                  style={{ height: `${Math.max(8, (d.sum / maxDay) * 52)}px` }}
-                />
+                  onClick={() => document.getElementById(`day-${d.key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className="group flex max-w-[20px] flex-1 flex-col items-center gap-1"
+                >
+                  <span
+                    className={cn('w-full rounded-t-[3px] transition', d.sum === maxDay ? 'bg-yellow-400' : 'bg-yellow-300/60 group-hover:bg-yellow-300')}
+                    style={{ height: `${Math.max(6, (d.sum / maxDay) * 36)}px` }}
+                  />
+                  <span className="text-[9px] font-medium tabular-nums text-muted-foreground">{Number(d.key.slice(8))}</span>
+                </button>
               ))}
             </div>
           )}
@@ -297,8 +315,8 @@ export function SalesHistoryView() {
       </div>
 
       {/* ═════════ الدفتر: كعوب الفواتير + الإيصال ═════════ */}
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="space-y-5">
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="@container space-y-5">
           {loading ? (
             <div className="space-y-2">
               {Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-[68px] w-full rounded-xl" />)}
@@ -318,67 +336,95 @@ export function SalesHistoryView() {
             </div>
           ) : (
             days.map((d) => (
-              <section key={d.key}>
-                <header className="sticky top-0 z-10 -mx-1 mb-2 flex items-baseline justify-between bg-background/90 px-1 py-1.5 backdrop-blur">
-                  <h2 className="text-sm font-bold">{formatArabicDate(new Date(`${d.key}T12:00:00`))}</h2>
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {d.list.length} فاتورة · <b className="font-semibold text-foreground">{formatCurrency(d.sum)}</b>
+              <section key={d.key} id={`day-${d.key}`} className="scroll-mt-2">
+                <header className="sticky top-0 z-10 -mx-1 mb-2.5 flex items-baseline justify-between bg-background/95 px-1 pb-2 pt-1.5 backdrop-blur">
+                  <h2 className="text-[15px] font-extrabold">{formatArabicDate(new Date(`${d.key}T12:00:00`))}</h2>
+                  <span className="text-xs font-medium text-muted-foreground tabular-nums">
+                    {d.list.length} فاتورة <span className="mx-1 opacity-40">|</span>
+                    <b className="text-sm font-extrabold text-foreground">{money(d.sum)}</b> جنيه
+                  </span>
+                  <span aria-hidden className="absolute inset-x-1 bottom-0 h-0.5 rounded-full bg-border">
+                    <span className="block h-full rounded-full bg-yellow-400" style={{ width: `${(d.sum / maxDay) * 100}%` }} />
                   </span>
                 </header>
 
                 <ul className="space-y-2">
                   {d.list.map((s) => {
-                    const due = s.total - s.paid
                     const ret = isReturned(s)
                     const active = selected?.id === s.id
                     const open = selectedId === s.id
+                    const no = splitNo(s)
+                    const named = !!s.customer
                     return (
                       <li key={s.id}>
                         <button
-                          onClick={() => setSelectedId(open && !window.matchMedia('(min-width:1024px)').matches ? null : s.id)}
+                          onClick={() => setSelectedId(open && !window.matchMedia('(min-width:1280px)').matches ? null : s.id)}
                           aria-pressed={active}
+                          style={ret ? { backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 7px, color-mix(in oklab, currentColor 5%, transparent) 7px 8px)' } : undefined}
                           className={cn(
-                            'group relative grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 overflow-hidden rounded-xl border bg-card py-3 ps-5 pe-4 text-start transition',
-                            'hover:border-yellow-400/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/60',
-                            active && 'border-yellow-400 bg-yellow-50/60 shadow-sm dark:bg-yellow-300/[0.06]',
-                            ret && 'opacity-70'
+                            'group relative grid min-h-[84px] w-full overflow-hidden rounded-xl border bg-card text-start transition-all',
+                            'grid-cols-[104px_minmax(0,1fr)_auto] @xl:grid-cols-[112px_minmax(0,1fr)_170px_136px]',
+                            'hover:-translate-y-px hover:border-yellow-400/70 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/60',
+                            active && 'border-yellow-400 shadow-[0_8px_24px_-12px_rgb(250_204_21/0.7)]',
+                            ret && 'text-muted-foreground'
                           )}
                         >
-                          {/* كعب الدفتر: شريط ذهبي على الجنب + ثقبين */}
-                          <span aria-hidden className={cn('absolute inset-y-0 start-0 w-1.5 transition', active ? 'bg-yellow-300' : 'bg-border group-hover:bg-yellow-300/60')} />
-
-                          <span className="text-center leading-tight">
-                            <span className="block text-[11px] text-muted-foreground tabular-nums">{timeOf(s.createdAt)}</span>
-                            <span className="block text-sm font-bold tabular-nums">{invNo(s)}</span>
+                          {/* ① الكعب: الوقت + السيريال الكبير، بثقبين زي التذكرة */}
+                          <span
+                            className={cn(
+                              'relative flex flex-col items-center justify-center gap-0.5 border-e border-dashed px-2 py-3 transition-colors',
+                              active ? 'border-zinc-900/30 bg-yellow-300 text-zinc-900' : 'bg-muted/50'
+                            )}
+                          >
+                            <i aria-hidden className="absolute -end-[7px] -top-[7px] size-3.5 rounded-full border bg-background" />
+                            <i aria-hidden className="absolute -bottom-[7px] -end-[7px] size-3.5 rounded-full border bg-background" />
+                            <span className="text-[11px] font-medium tabular-nums opacity-70">{timeOf(s.createdAt)}</span>
+                            <span dir="ltr" className="text-xl font-extrabold leading-none tracking-tight tabular-nums">{no.serial}</span>
+                            {no.prefix && <span dir="ltr" className="text-[10px] font-medium tracking-wider opacity-60">{no.prefix}</span>}
                           </span>
 
-                          <span className="min-w-0">
-                            <span className={cn('block truncate text-sm font-semibold', ret && 'line-through decoration-destructive/60')}>
+                          {/* ② العميل + اللي اتباع */}
+                          <span className="flex min-w-0 flex-col justify-center gap-0.5 px-4 py-3">
+                            <span
+                              className={cn(
+                                'truncate text-[15px] leading-snug',
+                                named ? 'font-bold text-foreground' : 'font-medium text-muted-foreground',
+                                ret && 'line-through decoration-destructive/50'
+                              )}
+                            >
                               {s.customer?.name ?? 'عميل نقدي'}
                             </span>
-                            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+                            <span className="truncate text-[12.5px] text-foreground/70">{preview(s)}</span>
+                            <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                               <span>{qtyOf(s)} قطعة</span>
-                              {s.userName && <span>· {s.userName}</span>}
-                              {ret ? (
-                                <span className="font-semibold text-destructive">مرتجعة</span>
-                              ) : due > 0 ? (
-                                <span className="font-semibold text-destructive">باقي {formatCurrency(due)}</span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-success">
-                                  <span className="size-1.5 rounded-full bg-success" /> مدفوعة
-                                </span>
-                              )}
+                              {s.userName && (<><span className="size-[3px] rounded-full bg-current opacity-50" /><span>{s.userName}</span></>)}
+                              <span className="ms-auto @xl:hidden"><StatusChip sale={s} /></span>
                             </span>
                           </span>
 
-                          <span className="text-end">
-                            <span className="block text-base font-extrabold tabular-nums">{formatCurrency(s.total)}</span>
+                          {/* ③ الدفع: الطبيعي هادي، والاستثناء (باقي/مرتجع) هو اللي يلفت النظر */}
+                          <span className="hidden flex-col justify-center gap-1.5 px-2 py-3 @xl:flex">
+                            <StatusChip sale={s} />
+                            {!ret && s.total > s.paid && s.total > 0 && (
+                              <>
+                                <span className="h-1 w-full overflow-hidden rounded-full bg-destructive/15">
+                                  <span className="block h-full rounded-full bg-yellow-400" style={{ width: `${Math.min(100, Math.round((s.paid / s.total) * 100))}%` }} />
+                                </span>
+                                <span className="text-[10.5px] tabular-nums text-muted-foreground">اتدفع {Math.min(100, Math.round((s.paid / s.total) * 100))}%</span>
+                              </>
+                            )}
+                          </span>
+
+                          {/* ④ الإجمالي */}
+                          <span className="flex flex-col items-end justify-center px-4 py-3">
+                            <span className={cn('text-xl font-extrabold leading-none tabular-nums', ret && 'line-through decoration-1')}>{money(s.total)}</span>
+                            <span className="mt-1 text-[11px] font-medium text-muted-foreground">جنيه</span>
                           </span>
                         </button>
 
                         {/* موبايل/تابلت: الإيصال يفتح تحت الكعب */}
                         {open && (
-                          <div className="mt-2 lg:hidden">
+                          <div className="mt-2 xl:hidden">
                             <Receipt
                               sale={s} shopName={shopName}
                               onPrint={() => reprint(s)} onPdf={() => exportPdf(s)} onReturn={() => setPartialReturnSale(s)}
@@ -426,7 +472,7 @@ export function SalesHistoryView() {
         </div>
 
         {/* لوحة الإيصال — ديسكتوب فقط، ثابتة أثناء التمرير */}
-        <aside className="sticky top-4 hidden lg:block">
+        <aside className="sticky top-4 hidden xl:block">
           {selected && !loading ? (
             <Receipt
               key={selected.id}
@@ -469,6 +515,22 @@ export function SalesHistoryView() {
   )
 }
 
+/* ───────── حالة الدفع: المدفوع هادي، والاستثناء ملوّن ───────── */
+function StatusChip({ sale: s }: { sale: Sale }) {
+  const pill = 'inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-bold'
+  if (isReturned(s))
+    return <span className={cn(pill, 'bg-destructive-subtle text-destructive-subtle-foreground')}><RotateCcw className="size-3" /> مرتجعة</span>
+  if (s.total - s.paid > 0)
+    return <span className={cn(pill, 'bg-destructive-subtle text-destructive-subtle-foreground tabular-nums')}>باقي {formatCurrency(s.total - s.paid)}</span>
+  if ((s.refunded ?? 0) > 0)
+    return <span className={cn(pill, 'bg-warning-subtle text-warning-subtle-foreground')}>مرتجع جزئي</span>
+  return (
+    <span className="inline-flex items-center gap-1 text-[11.5px] font-medium text-muted-foreground">
+      <Check className="size-3.5 text-success" /> مدفوعة
+    </span>
+  )
+}
+
 /* ───────── رقم في الشريط العلوي (الماركر الأصفر تحت صافي المبيعات) ───────── */
 function Figure({ label, value, mark, danger }: { label: string; value: number; mark?: boolean; danger?: boolean }) {
   return (
@@ -476,7 +538,7 @@ function Figure({ label, value, mark, danger }: { label: string; value: number; 
       <dt className="text-[11px] font-medium text-muted-foreground">{label}</dt>
       <dd className={cn('mt-1 text-xl font-extrabold tabular-nums leading-none sm:text-2xl', danger && 'text-destructive')}>
         <span className={cn(mark && 'bg-gradient-to-t from-yellow-300/80 from-35% to-transparent to-35% px-0.5')}>
-          {formatCurrency(value).replace(' جنيه', '')}
+          {money(value)}
         </span>
         <span className="ms-1 text-xs font-semibold text-muted-foreground">جنيه</span>
       </dd>
@@ -510,8 +572,12 @@ function Receipt({
       >
         <div className="text-center">
           <p className="text-sm font-extrabold">{shopName}</p>
-          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400 tabular-nums">
-            فاتورة {invNo(s)} · {formatArabicDate(d)} · {timeOf(s.createdAt)}
+          <div className="mt-2 flex items-baseline justify-center gap-1.5">
+            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">فاتورة</span>
+            <span dir="ltr" className="text-2xl font-black leading-none tabular-nums">{splitNo(s).serial}</span>
+          </div>
+          <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400 tabular-nums">
+            {splitNo(s).prefix && <span dir="ltr" className="inline-block">{splitNo(s).prefix}</span>}{splitNo(s).prefix && ' · '}{formatArabicDate(d)} · {timeOf(s.createdAt)}
           </p>
         </div>
 

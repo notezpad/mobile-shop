@@ -113,7 +113,7 @@ export function RedeemCodeCard({
 
   return (
     <Panel
-      tag="Activation"
+      tag="04 / Activation"
       title="تطبيق كود اشتراك"
       hint="عندك كود تفعيل من الإدارة؟ أدخله هنا لتفعيل أو تجديد اشتراكك. الكود صالح للاستخدام مرة واحدة."
       icon={Ticket}
@@ -136,9 +136,9 @@ export function RedeemCodeCard({
         <Input
           value={code}
           onChange={(e) => setCode(e.target.value)}
-          placeholder="ABCD-EFGH-IJKL"
+          placeholder="ABCDEFGHIJKL"
           dir="ltr"
-          className="h-12 rounded-xl border-dashed bg-background/60 text-center font-mono text-lg uppercase tracking-[0.3em] hover:border-foreground/30 focus-visible:border-foreground focus-visible:ring-foreground/10"
+          className="h-12 rounded-xl border-dashed border-foreground/30 bg-muted/50 text-center font-mono text-lg uppercase tracking-[0.3em] hover:border-foreground/50 focus-visible:border-foreground focus-visible:bg-background focus-visible:ring-foreground/10"
           maxLength={32}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !busy) {
@@ -184,7 +184,7 @@ export function RedeemCodeCard({
                     <p>
                       ينتهي في:{' '}
                       <span className="font-bold text-foreground">
-                        {new Date(result.subscription.endDate).toLocaleDateString('ar-EG', {
+                        {new Date(result.subscription.endDate).toLocaleDateString('ar-EG-u-nu-latn', {
                           year: 'numeric',
                           month: 'long',
                           day: 'numeric',

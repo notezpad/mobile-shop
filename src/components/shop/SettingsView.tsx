@@ -3,7 +3,7 @@
 import * as React from 'react'
 import {
   ImagePlus, Loader2, Save, Sparkles, CalendarDays, CheckCircle2, Printer, Bell,
-  SlidersHorizontal, Store, Receipt, BadgeCheck, Percent, Calculator, Undo2,
+  SlidersHorizontal, Store, Receipt, BadgeCheck, Percent, Calculator, Undo2, Clock,
 } from 'lucide-react'
 import { PrinterSettingsDialog } from './PrinterSettingsDialog'
 import { RedeemCodeCard } from './RedeemCodeCard'
@@ -82,6 +82,14 @@ const TRACKED: { key: keyof TenantData; label: string }[] = [
   { key: 'defaultRetailMarginPercent', label: 'هامش الربح' },
 ]
 
+// أسماء الموديولات زي ما بتظهر في القائمة الجانبية (settings مش بنعرضها لأنها دايماً موجودة)
+const MODULE_LABELS: Record<string, string> = {
+  dashboard: 'لوحة المعلومات', pos: 'نقطة البيع', products: 'المنتجات', sales: 'سجل المبيعات',
+  maintenance: 'الصيانة', customers: 'العملاء', suppliers: 'الموردين', purchases: 'المشتريات',
+  inventory: 'المخزون', finance: 'المعاملات المالية', expenses: 'المصروفات', cash: 'الخزنة',
+  reports: 'التقارير', branches: 'الفروع', users: 'المستخدمين',
+}
+
 function fmtTz(d: Date, timeZone: string, opts: Intl.DateTimeFormatOptions) {
   try {
     return new Intl.DateTimeFormat('en-GB', { timeZone, ...opts }).format(d)
@@ -100,7 +108,7 @@ function useNow() {
   return now
 }
 
-/** حقل رقمي بيحتفظ بنص الكتابة (عشان تكتب 0.5 من غير ما يتحوّل لـ 0) */
+/** حقل رقمي بيحتفظ بنص الكتابة (عشان تكتب 0.5 من غير ما يتحوّل لـ 0) — الرقم في النص والعلامة على الطرف */
 function NumInput({
   value, onChange, suffix, min = 0, disabled,
 }: {
@@ -116,7 +124,7 @@ function NumInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value])
   return (
-    <div className="relative">
+    <div dir="ltr" className="relative">
       <Input
         type="number"
         inputMode="decimal"
@@ -129,10 +137,10 @@ function NumInput({
           const n = parseFloat(e.target.value)
           onChange(Number.isFinite(n) ? n : 0)
         }}
-        className={cn(INK_FIELD, 'pe-9 tabular-nums')}
+        className={cn(INK_FIELD, 'px-9 text-center text-base font-bold tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none')}
       />
       {suffix && (
-        <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-xs font-bold text-muted-foreground">
+        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-extrabold text-muted-foreground">
           {suffix}
         </span>
       )}
@@ -272,6 +280,17 @@ export function SettingsView() {
     }
   }
 
+  // تنبيه المتصفح لو قفل/عمل ريفريش وفيه تغييرات لسه ماتحفظتش
+  React.useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!dirtyRef.current) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [])
+
   // Ctrl/⌘ + S
   const saveRef = React.useRef(save)
   saveRef.current = save
@@ -311,56 +330,109 @@ export function SettingsView() {
   ]
 
   return (
-    <div className="space-y-5 pb-24">
-      {/* ═════════ رأس الغرفة ═════════ */}
-      <header className="animate-in-up motion-reduce:animate-none">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <span className="flex size-12 items-center justify-center rounded-2xl bg-foreground text-background shadow-md">
-              <SlidersHorizontal className="size-6" />
+    <div className="space-y-5 pb-6">
+      {/* ═════════ رأس الغرفة: شريط حبر داكن فيه هوية المحل وحالته ═════════ */}
+      <header className="animate-in-up motion-reduce:animate-none relative overflow-hidden rounded-3xl bg-stone-950 text-stone-50 shadow-lg dark:bg-stone-900 dark:ring-1 dark:ring-white/10">
+        {/* مسطرة قياس أعلى الشريط */}
+        <div
+          aria-hidden
+          className="h-2 w-full text-white/30"
+          style={{ backgroundImage: 'repeating-linear-gradient(to right, currentColor 0 1px, transparent 1px 10px)' }}
+        />
+        {/* شبكة رسم هندسي بتخفت ناحية الشمال */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.07]"
+          style={{
+            backgroundImage:
+              'linear-gradient(to right, #fff 1px, transparent 1px), linear-gradient(to bottom, #fff 1px, transparent 1px)',
+            backgroundSize: '28px 28px',
+            maskImage: 'linear-gradient(to right, black, transparent 70%)',
+            WebkitMaskImage: 'linear-gradient(to right, black, transparent 70%)',
+          }}
+        />
+
+        <div className="relative flex flex-wrap items-center justify-between gap-x-8 gap-y-5 px-5 pb-5 pt-4 sm:px-7 sm:pb-6">
+          <div className="flex items-center gap-4">
+            <span className="flex size-14 items-center justify-center rounded-2xl bg-stone-50 text-stone-950 shadow-md">
+              <SlidersHorizontal className="size-7" />
             </span>
             <div>
-              <p dir="ltr" className="text-start text-[10px] font-semibold uppercase leading-none tracking-[0.25em] text-muted-foreground/80">
+              <p dir="ltr" className="text-right text-[10px] font-bold uppercase leading-none tracking-[0.3em] text-stone-400">
                 Control room
               </p>
-              <h1 className="mt-1 text-2xl font-extrabold leading-tight">الإعدادات</h1>
-              <p className="text-xs text-muted-foreground">بيانات المحل، الاشتراك، الإشعارات والتسعير</p>
+              <h1 className="mt-1.5 text-3xl font-extrabold leading-none">الإعدادات</h1>
+              <p className="mt-1.5 text-xs text-stone-400">بيانات المحل، الاشتراك، الإشعارات والتسعير</p>
             </div>
           </div>
 
+          {/* ملخص حالة المحل */}
+          <div className="flex flex-wrap items-stretch gap-2.5">
+            {([
+              {
+                icon: Store,
+                label: 'المحل',
+                value: data?.shopName || '—',
+                led: null as null | 'on' | 'warn' | 'off',
+                ltr: false,
+              },
+              {
+                icon: BadgeCheck,
+                label: 'الباقة',
+                value: sub ? `${sub.planName || '—'}${sub.daysLeft != null && !sub.expired ? ` · ${formatNumber(sub.daysLeft)} يوم` : ''}` : '—',
+                led: (sub ? (sub.expired ? 'off' : sub.expiringSoon ? 'warn' : 'on') : null) as null | 'on' | 'warn' | 'off',
+                ltr: false,
+              },
+              {
+                icon: Clock,
+                label: 'ساعة المحل',
+                value: fmtTz(now, tz, { hour: '2-digit', minute: '2-digit', hour12: false }),
+                led: 'on' as null | 'on' | 'warn' | 'off',
+                ltr: true,
+              },
+            ]).map((c) => (
+              <div key={c.label} className="flex min-w-[120px] max-w-[240px] items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.07] px-3.5 py-2.5">
+                <c.icon className="size-4 shrink-0 text-stone-400" />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold text-stone-400">{c.label}</p>
+                  <p className="flex items-center gap-1.5 text-sm font-extrabold tabular-nums">
+                    {c.led && <Led tone={c.led} pulse={c.label === 'ساعة المحل'} />}
+                    <span dir={c.ltr ? 'ltr' : undefined} className="truncate">{c.value}</span>
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* الحفظ */}
           <div className="flex items-center gap-2.5">
-            <span className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/15 px-3 py-1.5 text-xs font-semibold text-stone-200">
               <Led tone={dirty ? 'warn' : 'on'} pulse={dirty} />
               {dirty ? `${formatNumber(changed.length)} تغيير غير محفوظ` : 'كل التغييرات محفوظة'}
             </span>
-            <Button onClick={save} disabled={!dirty || saving} className={cn('rounded-xl', INK_BTN)}>
+            <Button
+              onClick={save}
+              disabled={!dirty || saving}
+              className="rounded-xl border border-transparent bg-stone-50 font-bold text-stone-950 shadow-sm hover:bg-white disabled:border-white/15 disabled:bg-transparent disabled:text-stone-500 disabled:opacity-100"
+            >
               {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
               حفظ
             </Button>
           </div>
         </div>
-        {/* مسطرة قياس — توقيع الهوية */}
-        <div
-          aria-hidden
-          className="mt-4 h-2 w-full text-foreground/25"
-          style={{
-            backgroundImage: 'repeating-linear-gradient(to right, currentColor 0 1px, transparent 1px 10px)',
-            maskImage: 'linear-gradient(to left, black, transparent 85%)',
-            WebkitMaskImage: 'linear-gradient(to left, black, transparent 85%)',
-          }}
-        />
       </header>
 
       <div className="grid gap-5 lg:grid-cols-12">
         {/* ═════════ هوية المحل ═════════ */}
         <Panel
-          tag="Identity"
+          tag="01 / Identity"
           title="بيانات المحل"
           hint="الاسم والشعار والعنوان بيظهروا على الفواتير المطبوعة"
           icon={Store}
           className="stagger-1 lg:col-span-7"
+          bodyClassName="flex items-center"
         >
-          <div className="flex flex-col gap-5 sm:flex-row">
+          <div className="flex w-full flex-col gap-5 sm:flex-row">
             <div className="flex shrink-0 flex-col items-center gap-2">
               <input
                 ref={fileRef}
@@ -378,7 +450,7 @@ export function SettingsView() {
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
                 aria-label="رفع شعار المحل"
-                className="group relative flex size-28 items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed bg-muted/40 text-muted-foreground outline-none transition-colors hover:border-foreground/50 focus-visible:ring-[3px] focus-visible:ring-foreground/20"
+                className="group relative flex size-28 items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-foreground/30 bg-muted/50 text-muted-foreground outline-none transition-colors hover:border-foreground/50 focus-visible:ring-[3px] focus-visible:ring-foreground/20"
               >
                 {data?.logoPath ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -412,13 +484,13 @@ export function SettingsView() {
                 <Input className={INK_FIELD} value={data?.shopName ?? ''} onChange={(e) => update('shopName', e.target.value)} />
               </Field>
               <Field label="تليفون المحل">
-                <Input className={INK_FIELD} dir="ltr" inputMode="tel" value={data?.phone ?? ''} onChange={(e) => update('phone', e.target.value || null)} />
+                <Input className={cn(INK_FIELD, 'text-right')} dir="ltr" inputMode="tel" value={data?.phone ?? ''} onChange={(e) => update('phone', e.target.value || null)} />
               </Field>
               <Field label="العنوان" className="sm:col-span-2">
                 <Input className={INK_FIELD} value={data?.address ?? ''} onChange={(e) => update('address', e.target.value || null)} />
               </Field>
               <Field label="بادئة الفواتير">
-                <Input className={cn(INK_FIELD, 'font-mono uppercase')} dir="ltr" value={data?.invoicePrefix ?? 'INV'} onChange={(e) => update('invoicePrefix', e.target.value)} />
+                <Input className={cn(INK_FIELD, 'text-right font-mono uppercase')} dir="ltr" value={data?.invoicePrefix ?? 'INV'} onChange={(e) => update('invoicePrefix', e.target.value)} />
               </Field>
               <Field label="المنطقة الزمنية للمحل">
                 <Select value={tz} onValueChange={(v) => update('timezone', v)}>
@@ -446,15 +518,16 @@ export function SettingsView() {
 
         {/* ═════════ معاينة الفاتورة ═════════ */}
         <Panel
-          tag="Live preview"
+          tag="02 / Live preview"
           title="معاينة الفاتورة"
           hint="بتتغيّر قدامك لحظة ما تكتب"
           icon={Receipt}
           className="stagger-2 lg:col-span-5"
-          bodyClassName="flex items-start justify-center bg-[radial-gradient(rgb(0_0_0/0.06)_1px,transparent_1.2px)] [background-size:14px_14px] dark:bg-[radial-gradient(rgb(255_255_255/0.07)_1px,transparent_1.2px)]"
+          bodyClassName="flex items-center justify-center bg-stone-200/70 bg-[radial-gradient(rgb(0_0_0/0.10)_1px,transparent_1.2px)] [background-size:14px_14px] dark:bg-black/30 dark:bg-[radial-gradient(rgb(255_255_255/0.08)_1px,transparent_1.2px)]"
         >
+          <div className="w-full max-w-[270px]" style={{ filter: 'drop-shadow(0 8px 12px rgb(0 0 0 / 0.22))' }}>
           <div
-            className="w-full max-w-[270px] bg-white px-5 pb-9 pt-5 text-stone-900 shadow-lg"
+            className="w-full bg-white px-5 pb-9 pt-5 text-stone-900"
             style={{
               WebkitMask: 'conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%',
               mask: 'conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%',
@@ -489,15 +562,17 @@ export function SettingsView() {
               <p>شكراً لزيارتكم</p>
             </div>
           </div>
+          </div>
         </Panel>
 
         {/* ═════════ الاشتراك ═════════ */}
         {(subLoading || sub) && (
           <Panel
-            tag="Subscription"
+            tag="03 / Subscription"
             title="الاشتراك الحالي"
             icon={BadgeCheck}
             className="stagger-3 lg:col-span-7"
+            bodyClassName="flex items-center"
             aside={
               sub && (
                 <span className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-bold">
@@ -533,7 +608,7 @@ export function SettingsView() {
 
         {/* ═════════ التسعير التلقائي ═════════ */}
         <Panel
-          tag="Pricing"
+          tag="06 / Pricing"
           title="تسعير القطعة التلقائي"
           hint="سعر «قطعة» في نقطة البيع = التكلفة + هامش الربح بدل السعر الثابت. أسعار وحدات الجملة (ربع دستة، نص دستة، دستة...) بتفضل زي ما هي."
           icon={Calculator}
@@ -553,7 +628,11 @@ export function SettingsView() {
           </Field>
 
           {/* معادلة حيّة */}
-          <div className={cn('flex items-stretch gap-2 text-center transition-opacity', !retailOn && 'opacity-45')}>
+          <p className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground">
+            <Led tone={retailOn ? 'on' : 'idle'} />
+            {retailOn ? 'المعادلة المطبّقة حالياً على كل منتج ملوش نسبة مخصصة' : 'غير مفعّل حالياً — دي معاينة لشكل الحساب بعد التفعيل'}
+          </p>
+          <div className="flex items-stretch gap-2 text-center">
             {[
               { l: 'التكلفة', v: '100' },
               { l: `هامش ${formatNumber(margin)}%`, v: `+${formatNumber(Math.round(margin * 100) / 100)}` },
@@ -561,7 +640,7 @@ export function SettingsView() {
             ].map((c, i) => (
               <React.Fragment key={c.l}>
                 {i > 0 && <span className="self-center text-sm font-bold text-muted-foreground">{i === 2 ? '=' : '+'}</span>}
-                <div className={cn('flex-1 rounded-xl border px-2 py-2', c.strong ? 'border-foreground bg-foreground text-background' : 'border-dashed')}>
+                <div className={cn('flex-1 rounded-xl border px-2 py-2', c.strong ? 'border-foreground bg-foreground text-background shadow-sm' : 'border-dashed border-foreground/30 bg-muted/50')}>
                   <p className={cn('text-[10px] font-semibold', c.strong ? 'text-background/70' : 'text-muted-foreground')}>{c.l}</p>
                   <p className="text-lg font-extrabold tabular-nums leading-tight">{i === 1 ? c.v.replace('+', '') : c.v}</p>
                 </div>
@@ -573,29 +652,31 @@ export function SettingsView() {
         {/* ═════════ عمولات الخدمات المالية ═════════ */}
         {hasFinance && (
           <Panel
-            tag="Fees"
+            tag="07 / Fees"
             title="عمولات الخدمات المالية"
             hint="النسبة اللي بتتحسب على كل معاملة حسب وسيلة الدفع"
             icon={Percent}
             className="stagger-6 lg:col-span-8"
-            aside={
-              <label className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground">
-                جرّب مبلغ
+            bodyClassName="space-y-4"
+          >
+            <label className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-foreground/30 px-4 py-2.5 text-xs font-bold text-muted-foreground">
+              جرّب العمولة على مبلغ
+              <span className="w-32">
                 <Input
                   type="number"
                   min={0}
                   value={sampleAmount}
                   onChange={(e) => setSampleAmount(Math.max(0, parseFloat(e.target.value) || 0))}
-                  className={cn(INK_FIELD, 'h-8 w-24 text-center tabular-nums')}
+                  className={cn(INK_FIELD, 'h-9 text-center font-bold tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none')}
                 />
-              </label>
-            }
-          >
+              </span>
+              <span>جنيه</span>
+            </label>
             <div className="grid gap-3 sm:grid-cols-3">
               {commissions.map((c) => {
                 const pct = data?.[c.key] ?? 0
                 return (
-                  <div key={c.key} className="space-y-2.5 rounded-xl border bg-background/50 p-3.5">
+                  <div key={c.key} className="space-y-2.5 rounded-xl border border-foreground/15 bg-muted/40 p-3.5">
                     <Field label={c.label}>
                       <NumInput value={pct} onChange={(n) => update(c.key, n)} suffix="%" />
                     </Field>
@@ -612,19 +693,19 @@ export function SettingsView() {
 
         {/* ═════════ الطابعة ═════════ */}
         <Panel
-          tag="Hardware"
+          tag="08 / Hardware"
           title="الطابعة الحرارية"
           hint="إعدادات طابعة ESC/POS للفواتير الحرارية"
           icon={Printer}
           className={cn('stagger-6', hasFinance ? 'lg:col-span-4' : 'lg:col-span-12')}
-          bodyClassName="flex flex-wrap items-center justify-between gap-3"
+          bodyClassName="flex flex-col justify-between gap-5"
         >
           <div className="flex flex-wrap gap-1.5">
             {['58mm', '80mm', 'ESC/POS'].map((t) => (
-              <span key={t} dir="ltr" className="rounded-md border border-dashed px-2 py-1 font-mono text-[11px] font-semibold text-muted-foreground">{t}</span>
+              <span key={t} dir="ltr" className="rounded-lg border border-dashed border-foreground/30 bg-muted/50 px-2.5 py-1.5 font-mono text-xs font-bold text-foreground/80">{t}</span>
             ))}
           </div>
-          <Button variant="outline" onClick={() => setPrinterDialogOpen(true)} className={cn('gap-2 rounded-xl', INK_BTN_OUTLINE)}>
+          <Button variant="outline" onClick={() => setPrinterDialogOpen(true)} className={cn('h-11 w-full gap-2 rounded-xl font-bold', INK_BTN_OUTLINE)}>
             <Printer className="size-4" />
             إعدادات الطابعة
           </Button>
@@ -635,23 +716,23 @@ export function SettingsView() {
 
       {/* ═════════ شريط التغييرات العائم ═════════ */}
       {dirty && (
-        <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4">
-          <div className="animate-in-up pointer-events-auto flex max-w-full items-center gap-3 rounded-2xl border border-background/10 bg-foreground py-2 pe-2 ps-4 text-background shadow-xl">
+        <div role="status" aria-live="polite" className="pointer-events-none sticky bottom-4 z-30 flex justify-center">
+          <div className="animate-in-up pointer-events-auto flex max-w-full items-center gap-3 rounded-2xl border border-white/10 bg-stone-950 py-2 pe-2 ps-4 text-stone-50 shadow-2xl dark:bg-stone-800">
             <Led tone="warn" pulse />
             <div className="min-w-0">
               <p className="text-sm font-bold leading-tight">{formatNumber(changed.length)} تغيير غير محفوظ</p>
-              <p className="hidden max-w-[260px] truncate text-[11px] text-background/60 sm:block">
+              <p className="hidden max-w-[260px] truncate text-[11px] text-stone-400 sm:block">
                 {changed.slice(0, 3).map((c) => c.label).join(' · ')}{changed.length > 3 ? ' …' : ''}
               </p>
             </div>
-            <Button size="sm" variant="ghost" onClick={() => setData(saved)} disabled={saving} className="gap-1.5 rounded-xl text-background/80 hover:bg-background/10 hover:text-background">
+            <Button size="sm" variant="ghost" onClick={() => setData(saved)} disabled={saving} className="gap-1.5 rounded-xl text-stone-300 hover:bg-white/10 hover:text-white">
               <Undo2 className="size-3.5" />
               تراجع
             </Button>
-            <Button size="sm" onClick={save} disabled={saving} className="gap-1.5 rounded-xl bg-background text-foreground hover:bg-background/90">
+            <Button size="sm" onClick={save} disabled={saving} className="gap-1.5 rounded-xl bg-stone-50 font-bold text-stone-950 hover:bg-white">
               {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
               حفظ
-              <kbd dir="ltr" className="hidden rounded border border-foreground/15 px-1 font-mono text-[10px] text-foreground/60 md:inline">Ctrl S</kbd>
+              <kbd dir="ltr" className="hidden rounded border border-stone-950/20 px-1 font-mono text-[10px] text-stone-950/60 md:inline">Ctrl S</kbd>
             </Button>
           </div>
         </div>
@@ -662,6 +743,8 @@ export function SettingsView() {
 
 // ─── الاشتراك: عدّاد دائري بالأيام المتبقية ───────────────────────────
 function SubscriptionBody({ sub }: { sub: SubInfo }) {
+  const enabledModules = useShopStore((s) => s.plan.enabledModules)
+  const modules = enabledModules.filter((m) => MODULE_LABELS[m])
   const totalDays = sub.period === 'yearly' ? 365 : sub.period === 'trial' ? 14 : 30
   const left = sub.expired ? 0 : Math.max(0, sub.daysLeft ?? 0)
   const remaining = Math.min(1, left / totalDays)
@@ -670,12 +753,13 @@ function SubscriptionBody({ sub }: { sub: SubInfo }) {
   const stroke = sub.expired ? 'stroke-rose-500' : sub.expiringSoon ? 'stroke-amber-500' : 'stroke-emerald-500'
   const periodLabel = sub.period === 'monthly' ? 'شهري' : sub.period === 'yearly' ? 'سنوي' : sub.period === 'trial' ? 'تجربة مجانية' : sub.period
   const endDate = sub.endDate
-    ? new Date(sub.endDate).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })
+    ? new Date(sub.endDate).toLocaleDateString('ar-EG-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' })
     : '—'
   const btnLabel = sub.expired ? 'اشترك الآن' : sub.expiringSoon ? 'تجديد الاشتراك' : 'ترقية الباقة'
 
   return (
-    <div className="flex flex-col items-center gap-6 sm:flex-row">
+    <div className="w-full space-y-5">
+    <div className="flex w-full flex-col items-center gap-6 sm:flex-row">
       <div className="relative size-32 shrink-0">
         <svg viewBox="0 0 112 112" className="size-full -rotate-90" aria-hidden>
           <circle cx="56" cy="56" r={R} fill="none" strokeWidth="8" className="stroke-muted" />
@@ -717,6 +801,24 @@ function SubscriptionBody({ sub }: { sub: SubInfo }) {
           </a>
         </div>
       </div>
+    </div>
+
+    {modules.length > 0 && (
+      <div className="border-t border-dashed border-foreground/20 pt-4">
+        <p className="mb-2.5 flex items-center justify-between text-[11px] font-bold text-muted-foreground">
+          <span>الأقسام المفعّلة في باقتك</span>
+          <span className="tabular-nums">{formatNumber(modules.length)}</span>
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {modules.map((m) => (
+            <span key={m} className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/15 bg-muted/50 px-2.5 py-1 text-xs font-semibold">
+              <Led tone="on" className="size-1.5 shadow-none" />
+              {MODULE_LABELS[m]}
+            </span>
+          ))}
+        </div>
+      </div>
+    )}
     </div>
   )
 }
@@ -776,23 +878,23 @@ function NotificationSettingsCard() {
 
   return (
     <Panel
-      tag="Alerts"
+      tag="05 / Alerts"
       title="إعدادات الإشعارات"
       hint="تحكم في أنواع الإشعارات التي تظهر في جرس الإشعارات"
       icon={Bell}
       className="h-full"
-      bodyClassName="space-y-3"
+      bodyClassName="flex flex-col gap-3"
       aside={<span className="rounded-md border border-dashed px-1.5 py-1 text-[10px] font-semibold text-muted-foreground">يُحفظ فورًا</span>}
     >
-      <SettingRow title="تنبيهات نقص المخزون" desc="إشعار عند وصول أي منتج للحد الأدنى" on={prefs.notifyLowStock}>
+      <SettingRow className="flex-1" title="تنبيهات نقص المخزون" desc="إشعار عند وصول أي منتج للحد الأدنى" on={prefs.notifyLowStock}>
         <Toggle label="تنبيهات نقص المخزون" checked={prefs.notifyLowStock} onChange={(v) => toggle('notifyLowStock', v)} disabled={saving} />
       </SettingRow>
-      <SettingRow title="تنبيهات انتهاء الاشتراك" desc="إشعار قبل انتهاء الاشتراك بـ 7 أيام" on={prefs.notifyExpiringSubscription}>
+      <SettingRow className="flex-1" title="تنبيهات انتهاء الاشتراك" desc="إشعار قبل انتهاء الاشتراك بـ 7 أيام" on={prefs.notifyExpiringSubscription}>
         <Toggle label="تنبيهات انتهاء الاشتراك" checked={prefs.notifyExpiringSubscription} onChange={(v) => toggle('notifyExpiringSubscription', v)} disabled={saving} />
       </SettingRow>
       {/* backend not yet implemented */}
-      <SettingRow title="إشعارات المبيعات الجديدة" desc="إشعار عند كل عملية بيع جديدة — سيُفعَّل في تحديث قادم" badge="قريباً" muted>
-        <Toggle label="إشعارات المبيعات الجديدة" checked={false} onChange={() => {}} disabled />
+      <SettingRow className="flex-1" title="إشعارات المبيعات الجديدة" desc="إشعار عند كل عملية بيع جديدة — سيُفعَّل في تحديث قادم" badge="قريباً" muted>
+        <Toggle label="إشعارات المبيعات الجديدة" checked={false} onChange={() => {}} disabled stateLabel="قريباً" />
       </SettingRow>
     </Panel>
   )
