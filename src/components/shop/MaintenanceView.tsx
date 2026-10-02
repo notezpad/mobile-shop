@@ -412,7 +412,7 @@ export function MaintenanceView() {
         {/* شريط الليدات: أزرق ← كهرماني ← أخضر ← رمادي (بنفس ترتيب المراحل من اليمين) */}
         <span
           aria-hidden
-          className="absolute inset-x-0 top-0 h-0.5 bg-[linear-gradient(to_left,#38bdf8,#fbbf24,#10b981,#94a3b8)]"
+          className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(to_left,#38bdf8,#fbbf24,#10b981,#94a3b8)]"
         />
 
         <div className="flex flex-wrap items-stretch">
@@ -441,13 +441,15 @@ export function MaintenanceView() {
               value={money(stats.readyAmount)}
               unit="جنيه"
               sub={`${num(stats.counts[READY])} جهاز جاهز للتسليم`}
-              tone="ready"
+              tone={stats.readyAmount > 0 ? 'ready' : undefined}
+              dim={stats.readyAmount === 0}
             />
             <Kpi
               label="اتحصّل الشهر ده"
               value={money(stats.monthAmount)}
               unit="جنيه"
               sub={`${num(stats.monthCount)} جهاز اتسلّم`}
+              dim={stats.monthAmount === 0}
             />
             <Kpi
               label={`متأخرة +${STALE_DAYS} أيام`}
@@ -480,23 +482,28 @@ export function MaintenanceView() {
                 aria-selected={on}
                 onClick={() => chooseTab(t.key)}
                 className={cn(
-                  'relative flex min-w-[96px] flex-1 items-center justify-between gap-2 rounded-xl px-3.5 py-2.5 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50',
-                  on ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                  'relative flex min-w-[112px] flex-1 items-center justify-center gap-2.5 rounded-xl px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50',
+                  on ? 'bg-white/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white'
                 )}
               >
-                <span className="flex min-w-0 items-center gap-2 text-[13px] font-bold">
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'size-2.5 shrink-0 rounded-full',
-                      t.led,
-                      t.count > 0 ? t.glow : 'opacity-40'
-                    )}
-                  />
-                  <span className="truncate">{t.label}</span>
+                <span
+                  aria-hidden
+                  className={cn(
+                    'size-3 shrink-0 rounded-full ring-2 ring-white/10',
+                    t.led,
+                    t.count > 0 ? t.glow : 'opacity-30'
+                  )}
+                />
+                <span className="truncate text-[13px] font-bold">{t.label}</span>
+                <span
+                  className={cn(
+                    'min-w-[1.75rem] rounded-full px-2 py-0.5 text-center text-sm font-extrabold leading-none tabular-nums',
+                    t.count > 0 ? (on ? 'bg-white text-slate-950' : 'bg-white/15 text-white') : 'bg-white/5 text-slate-500'
+                  )}
+                >
+                  {t.count}
                 </span>
-                <span className="text-lg font-extrabold leading-none tabular-nums">{t.count}</span>
-                {on && <span aria-hidden className={cn('absolute inset-x-3 bottom-0 h-0.5 rounded-full', t.led)} />}
+                {on && <span aria-hidden className={cn('absolute inset-x-4 bottom-0 h-[3px] rounded-full', t.led)} />}
               </button>
             )
           })}
@@ -593,6 +600,7 @@ export function MaintenanceView() {
             noOrders={orders.length === 0}
             tab={tab}
             hasQuery={!!q}
+            showReset={!!q || tab !== 'active' || onlyLate}
             onNew={openNew}
             onReset={() => {
               setQuery('')
@@ -632,7 +640,7 @@ export function MaintenanceView() {
 /* ───────────────────────── رقم في لوحة الورشة ───────────────────────── */
 
 function Kpi({
-  label, value, unit, sub, tone, onClick, pressed,
+  label, value, unit, sub, tone, onClick, pressed, dim,
 }: {
   label: string
   value: string
@@ -641,6 +649,7 @@ function Kpi({
   tone?: 'ready' | 'late'
   onClick?: () => void
   pressed?: boolean
+  dim?: boolean
 }) {
   const body = (
     <>
@@ -649,7 +658,8 @@ function Kpi({
         className={cn(
           'mt-1 text-xl font-extrabold leading-none tabular-nums sm:text-2xl',
           tone === 'ready' && 'text-emerald-300',
-          tone === 'late' && 'text-amber-300'
+          tone === 'late' && 'text-amber-300',
+          dim && 'text-slate-400'
         )}
       >
         {value}
@@ -743,15 +753,15 @@ function Ticket({
         </div>
 
         {/* العطل */}
-        <p
-          className={cn(
-            'mt-3 line-clamp-2 min-h-[2.75rem] rounded-xl bg-muted/50 px-3 py-2 text-[12.5px] leading-relaxed',
-            o.issue ? 'text-foreground/80' : 'italic text-foreground/50'
-          )}
+        <div
+          className="mt-3 flex min-h-[2.75rem] items-start gap-2 rounded-xl border border-dashed bg-muted/40 px-3 py-2"
           title={o.issue || undefined}
         >
-          {o.issue || 'من غير وصف للعطل'}
-        </p>
+          <Wrench className="mt-0.5 size-3.5 shrink-0 text-foreground/45" aria-hidden />
+          <p className={cn('line-clamp-2 text-[12.5px] leading-relaxed', o.issue ? 'text-foreground/80' : 'italic text-foreground/50')}>
+            {o.issue || 'من غير وصف للعطل'}
+          </p>
+        </div>
 
         {/* العمر + التكلفة */}
         <div className="mt-3 flex items-center justify-between gap-3">
@@ -865,11 +875,12 @@ function Ticket({
 /* ───────────────────────── حالات فاضية ───────────────────────── */
 
 function Empty({
-  noOrders, tab, hasQuery, onNew, onReset,
+  noOrders, tab, hasQuery, showReset, onNew, onReset,
 }: {
   noOrders: boolean
   tab: Tab
   hasQuery: boolean
+  showReset: boolean
   onNew: () => void
   onReset: () => void
 }) {
@@ -889,14 +900,18 @@ function Empty({
         {noOrders ? 'الورشة فاضية' : hasQuery ? 'مفيش نتايج للبحث ده' : msg[tab]}
       </p>
       <p className="mx-auto mt-1 max-w-sm text-sm text-foreground/65">
-        {noOrders ? 'أول جهاز تستلمه هيظهر هنا على شكل تذكرة تتابعها لحد التسليم.' : 'غيّر التبويب أو امسح البحث والفلاتر.'}
+        {noOrders
+          ? 'أول جهاز تستلمه هيظهر هنا على شكل تذكرة تتابعها لحد التسليم.'
+          : !showReset
+            ? 'كل الأجهزة اتسلّمت — هتلاقيها في تبويب «مُسلَّم».'
+            : 'غيّر التبويب أو امسح البحث والفلاتر.'}
       </p>
       <div className="mt-5 flex flex-wrap justify-center gap-2">
         <Button onClick={onNew} className="rounded-xl bg-slate-950 font-bold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950">
           <Plus className="size-4" />
           استلام جهاز
         </Button>
-        {!noOrders && (
+        {!noOrders && showReset && (
           <Button variant="outline" onClick={onReset} className="rounded-xl">
             عرض اللي في الورشة
           </Button>
