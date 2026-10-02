@@ -95,11 +95,12 @@ const LATE_DAYS = 30
 const NO_SUPPLIER = '__none'
 const FETCH_CAP = 500
 
+// نفس تسميات باقي المشروع (PaymentDialog / الخزنة)
 const METHOD_LABELS: Record<string, string> = {
-  cash: 'نقدي',
-  vodafone_cash: 'فودافون كاش',
+  cash: 'كاش',
+  vodafone_cash: 'محافظ إلكترونية',
   instapay: 'انستاباي',
-  fawry: 'فوري',
+  fawry: 'محفظة إلكترونية',
 }
 const methodLabel = (m?: string | null) => (m ? METHOD_LABELS[m] ?? m : null)
 

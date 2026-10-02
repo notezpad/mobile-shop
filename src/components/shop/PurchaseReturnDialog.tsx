@@ -5,31 +5,26 @@
  * Pick items + quantities (or "return everything left"), say how much money the
  * supplier really hands back — the rest is deducted from what we owe him.
  * Used from both the purchases page and the supplier page.
+ *
+ * 2026-10: واجهة جديدة بهوية صفحة المشتريات (بترولي). المنطق والتحقق والـ API
+ * زي ما هم بالظبط — اتغيّر الشكل بس، وزاد اختيار صريح "يخصمها من حسابي / رجّع لي فلوس".
  */
 
 import * as React from "react";
-import { Loader2, RotateCcw } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Info, Loader2, RotateCcw, Truck, Wallet } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import {
+  DecimalInput,
+  DialogHero,
+  MethodPills,
+  SectionTitle,
+  Stepper,
+} from "./purchase-dialog-ui";
 
 export interface ReturnableItem {
   id: number;
@@ -49,14 +44,9 @@ export interface ReturnableOrder {
   items: ReturnableItem[];
 }
 
-const METHOD_OPTIONS = [
-  { value: "cash", label: "كاش" },
-  { value: "vodafone_cash", label: "محافظ إلكترونية" },
-  { value: "instapay", label: "انستاباي" },
-  { value: "fawry", label: "محفظة إلكترونية" },
-];
-
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+const num = (n: number) =>
+  n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 interface Props {
   open: boolean;
@@ -76,7 +66,10 @@ export function PurchaseReturnDialog({
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+      <DialogContent
+        mobileSheet
+        className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
+      >
         {/* DialogContent unmounts when closed, so ReturnForm (and all of its
             state) starts fresh on every open; `key` covers switching orders. */}
         {order && (
@@ -107,6 +100,8 @@ function ReturnForm({
   const [qtys, setQtys] = React.useState<Record<number, string>>({});
   const [refund, setRefund] = React.useState("");
   const [refundTouched, setRefundTouched] = React.useState(false);
+  // واجهة فقط: هل المستخدم اختار "المورد رجّع لي فلوس"؟
+  const [cashMode, setCashMode] = React.useState(false);
   const [method, setMethod] = React.useState(order.paymentMethod || "cash");
   const [note, setNote] = React.useState("");
   const [saving, setSaving] = React.useState(false);
@@ -114,6 +109,15 @@ function ReturnForm({
 
   const remainingOf = (it: ReturnableItem) =>
     Math.max(0, it.quantity - (it.returnedQty ?? 0));
+
+  const qtyOf = (it: ReturnableItem) =>
+    Math.min(
+      remainingOf(it),
+      Math.max(0, Math.floor(Number(qtys[it.id]) || 0)),
+    );
+
+  const setQty = (it: ReturnableItem, n: number) =>
+    setQtys((p) => ({ ...p, [it.id]: n > 0 ? String(n) : "" }));
 
   const lines = React.useMemo(() => {
     return order.items
@@ -129,6 +133,7 @@ function ReturnForm({
   }, [order, qtys]);
 
   const returnValue = round2(lines.reduce((s, l) => s + l.it.cost * l.q, 0));
+  const totalQty = lines.reduce((s, l) => s + l.q, 0);
 
   // 🛡️ 2026-09-30: the refund is NEVER assumed. Default = 0 → the supplier just
   // deducts the return from what we owe him and the till is untouched. Only if
@@ -147,6 +152,12 @@ function ReturnForm({
     round2(refundNum) > round2(maxRefund) ||
     (!hasSupplier && round2(refundNum) !== returnValue);
   const balanceDrop = round2(returnValue - refundNum);
+  const cashEmpty = hasSupplier && cashMode && refundNum <= 0;
+
+  const anyRemaining = order.items.some((it) => remainingOf(it) > 0);
+  const allSelected =
+    anyRemaining &&
+    order.items.every((it) => remainingOf(it) === 0 || qtyOf(it) === remainingOf(it));
 
   const setAll = () => {
     const next: Record<number, string> = {};
@@ -156,6 +167,26 @@ function ReturnForm({
     }
     setQtys(next);
   };
+
+  const chooseDeduct = () => {
+    setCashMode(false);
+    setRefundTouched(true);
+    setRefund("0");
+  };
+  const chooseCash = () => {
+    setCashMode(true);
+    setRefundTouched(true);
+    setRefund((prev) => (Number(prev) > 0 ? prev : ""));
+  };
+
+  const blockReason =
+    lines.length === 0
+      ? "اختار كمية من صنف واحد على الأقل"
+      : refundInvalid
+        ? `المبلغ المسترد لازم يكون بين صفر و ${formatCurrency(maxRefund)}`
+        : cashEmpty
+          ? "اكتب المبلغ اللي المورد رجّعه لك فعلاً"
+          : null;
 
   const submit = async () => {
     if (inFlight.current) return;
@@ -169,6 +200,10 @@ function ReturnForm({
           ? "الأمر غير مرتبط بمورد، لازم المبلغ المسترد يساوي قيمة المرتجع"
           : `المبلغ المسترد لازم يكون بين صفر و ${formatCurrency(maxRefund)} (المدفوع فعلاً ولم يُسترد)`,
       );
+      return;
+    }
+    if (cashEmpty) {
+      toast.error("اكتب المبلغ اللي المورد رجّعه لك، أو اختار الخصم من حسابك");
       return;
     }
     inFlight.current = true;
@@ -194,187 +229,367 @@ function ReturnForm({
     }
   };
 
-  const anyRemaining = order.items.some((it) => remainingOf(it) > 0);
-
   return (
     <>
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
-          <RotateCcw className="size-5 text-destructive" />
-          مرتجع للمورد — {order.orderNo ?? `#${order.id}`}
-        </DialogTitle>
-        <DialogDescription>
-          حدّد الأصناف والكميات اللي هترجعها. الكمية بتتسحب من المخزن.
-        </DialogDescription>
-      </DialogHeader>
+      <DialogHero
+        icon={RotateCcw}
+        title="مرتجع للمورد"
+        chip={order.orderNo ?? `#${order.id}`}
+        subtitle="الكمية المرتجعة بتتسحب من المخزن، وبعدها تحدّد القيمة هتتسوّى إزاي."
+      />
 
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">الأصناف</span>
-          {anyRemaining && (
-            <Button type="button" variant="outline" size="sm" onClick={setAll}>
-              إرجاع كل المتبقي
-            </Button>
-          )}
-        </div>
+      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain bg-muted/20 p-4 sm:p-6">
+        {/* ═════════ 1) الأصناف ═════════ */}
+        <section>
+          <SectionTitle
+            n={1}
+            aside={
+              anyRemaining && (
+                <button
+                  type="button"
+                  onClick={() => (allSelected ? setQtys({}) : setAll())}
+                  className="h-8 rounded-full border bg-background px-3 text-xs font-bold text-foreground/80 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40"
+                >
+                  {allSelected ? "إلغاء التحديد" : "رجّع كل المتبقي"}
+                </button>
+              )
+            }
+          >
+            الأصناف المراد إرجاعها
+          </SectionTitle>
 
-        <div className="divide-y rounded-lg border">
-          {order.items.map((it) => {
-            const remaining = remainingOf(it);
-            return (
-              <div key={it.id} className="flex items-center gap-3 p-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{it.name}</p>
-                  <p className="text-[11px] text-muted-foreground tabular-nums">
-                    {formatCurrency(it.cost)} × {it.quantity}
-                    {(it.returnedQty ?? 0) > 0 && (
-                      <span className="text-destructive">
-                        {" "}
-                        — مرتجع سابقاً: {it.returnedQty}
+          <ul className="space-y-2.5">
+            {order.items.map((it) => {
+              const remaining = remainingOf(it);
+              const prev = it.returnedQty ?? 0;
+              const q = qtyOf(it);
+              const on = q > 0;
+              const pctPrev = it.quantity > 0 ? (prev / it.quantity) * 100 : 0;
+              const pctNow = it.quantity > 0 ? (q / it.quantity) * 100 : 0;
+              const pctKeep = Math.max(0, 100 - pctPrev - pctNow);
+              return (
+                <li
+                  key={it.id}
+                  className={cn(
+                    "rounded-2xl border bg-card p-3.5 transition-colors",
+                    on && "border-cyan-600/60 bg-cyan-600/[0.045]",
+                    remaining <= 0 && "bg-muted/40",
+                  )}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3">
+                    <div className="min-w-[9rem] flex-1">
+                      <p className="truncate text-sm font-extrabold">{it.name}</p>
+                      <p className="mt-0.5 text-xs font-medium tabular-nums text-foreground/65">
+                        {formatCurrency(it.cost)} للقطعة · استلمت {it.quantity}
+                      </p>
+                    </div>
+
+                    {remaining > 0 ? (
+                      <div className="flex items-center gap-2">
+                        <Stepper
+                          value={q}
+                          min={0}
+                          max={remaining}
+                          onChange={(n) => setQty(it, n)}
+                          label={`كمية مرتجع ${it.name}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setQty(it, remaining)}
+                          disabled={q === remaining}
+                          className="h-10 rounded-xl border bg-background px-3 text-xs font-bold text-foreground/80 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background"
+                        >
+                          الكل
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="rounded-lg bg-slate-500/15 px-2.5 py-1 text-xs font-bold text-slate-700 dark:text-slate-200">
+                        مرتجع بالكامل
                       </span>
                     )}
+                  </div>
+
+                  {/* شريط الكمية: المتاح | هترجّعه الآن | رجع قبل كده */}
+                  <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-muted" aria-hidden>
+                    <span className="h-full bg-cyan-600" style={{ width: `${pctKeep}%` }} />
+                    <span
+                      className="h-full bg-rose-500 transition-[width] duration-300 motion-reduce:transition-none"
+                      style={{ width: `${pctNow}%` }}
+                    />
+                    <span className="h-full bg-slate-400" style={{ width: `${pctPrev}%` }} />
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs font-medium tabular-nums">
+                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-foreground/70">
+                      {remaining > 0 && (
+                        <span className="inline-flex items-center gap-1.5">
+                          <i aria-hidden className="size-2 rounded-full bg-cyan-600" />
+                          متاح للإرجاع {remaining} من {it.quantity}
+                        </span>
+                      )}
+                      {prev > 0 && (
+                        <span className="inline-flex items-center gap-1.5">
+                          <i aria-hidden className="size-2 rounded-full bg-slate-400" />
+                          رجع قبل كده {prev}
+                        </span>
+                      )}
+                    </span>
+                    {on && (
+                      <b className="text-sm font-extrabold text-rose-600 dark:text-rose-300">
+                        −{formatCurrency(q * it.cost)}
+                      </b>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
+        {/* ═════════ 2) التسوية ═════════ */}
+        <section>
+          <SectionTitle n={2}>التسوية</SectionTitle>
+
+          {lines.length === 0 ? (
+            <div className="rounded-2xl border border-dashed bg-card/60 px-4 py-8 text-center">
+              <RotateCcw className="mx-auto size-6 text-cyan-700/60" aria-hidden />
+              <p className="mt-2 text-sm font-bold">اختار كمية من صنف</p>
+              <p className="mt-0.5 text-xs font-medium text-foreground/65">
+                وهتظهر هنا قيمة المرتجع وإزاي هتتسوّى.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-2xl border bg-card">
+              <div className="flex items-center justify-between gap-3 bg-slate-500/[0.07] px-4 py-3.5">
+                <div>
+                  <p className="text-[11px] font-semibold text-foreground/60">قيمة المرتجع</p>
+                  <p className="text-2xl font-extrabold tabular-nums">
+                    {num(returnValue)}
+                    <span className="ms-1 text-xs font-semibold text-foreground/60">جنيه</span>
                   </p>
                 </div>
-                {remaining > 0 ? (
-                  <div className="flex items-center gap-1.5">
-                    <Input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      max={remaining}
-                      step={1}
-                      dir="ltr"
-                      value={qtys[it.id] ?? ""}
-                      placeholder="0"
-                      onChange={(e) =>
-                        setQtys((p) => ({ ...p, [it.id]: e.target.value }))
-                      }
-                      className="h-9 w-20 text-center tabular-nums"
-                      aria-label={`كمية مرتجع ${it.name}`}
-                    />
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      / {remaining}
-                    </span>
-                  </div>
+                <p className="text-xs font-semibold tabular-nums text-foreground/65">
+                  {totalQty} قطعة من {lines.length} صنف
+                </p>
+              </div>
+
+              <div className="space-y-4 p-4">
+                {hasSupplier ? (
+                  <>
+                    <p className="text-sm font-extrabold">المورد هيسوّي القيمة دي إزاي؟</p>
+                    <div role="radiogroup" aria-label="طريقة التسوية" className="grid gap-2.5 sm:grid-cols-2">
+                      <ChoiceCard
+                        on={!cashMode}
+                        onClick={chooseDeduct}
+                        icon={Truck}
+                        title="يخصمها من حسابي"
+                        desc="من اللي عليك للمورد — مفيش فلوس بتتحرك"
+                      />
+                      <ChoiceCard
+                        on={cashMode}
+                        disabled={paidNotRefunded <= 0}
+                        onClick={chooseCash}
+                        icon={Wallet}
+                        title="رجّع لي فلوس"
+                        desc={
+                          paidNotRefunded > 0
+                            ? `تقدر تسترد لحد ${formatCurrency(paidNotRefunded)} من اللي اتدفع`
+                            : "مفيش مدفوع على الأمر ده يتسترد"
+                        }
+                      />
+                    </div>
+
+                    {cashMode && (
+                      <div className="space-y-2.5 rounded-xl border border-dashed p-3.5">
+                        <label htmlFor="pr-refund" className="block text-xs font-bold">
+                          المبلغ اللي المورد رجّعه لك فعلاً
+                        </label>
+                        <DecimalInput
+                          id="pr-refund"
+                          value={refundNum}
+                          onChange={(n) => {
+                            setRefundTouched(true);
+                            setRefund(String(n));
+                          }}
+                          suffix="جنيه"
+                          invalid={refundInvalid}
+                        />
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          {maxRefund > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRefundTouched(true);
+                                setRefund(String(round2(maxRefund)));
+                              }}
+                              className="h-8 rounded-full border bg-background px-3 text-xs font-bold text-foreground/80 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40"
+                            >
+                              رجّع كل المبلغ ({formatCurrency(maxRefund)})
+                            </button>
+                          )}
+                          {refundInvalid && (
+                            <p className="text-xs font-semibold text-rose-600 dark:text-rose-300">
+                              المبلغ لازم يكون بين صفر و {formatCurrency(maxRefund)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 ) : (
-                  <span className="text-xs text-muted-foreground">
-                    مرتجع بالكامل
-                  </span>
+                  <div className="flex items-start gap-2.5 rounded-xl bg-cyan-600/[0.07] p-3 text-xs font-medium leading-relaxed text-foreground/80">
+                    <Info className="mt-0.5 size-4 shrink-0 text-cyan-700 dark:text-cyan-300" aria-hidden />
+                    الأمر ده مش مرتبط بمورد، فالقيمة كلها لازم ترجع فلوس للخزنة.
+                  </div>
+                )}
+
+                {refundNum > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-bold">استلمت الفلوس إزاي؟</p>
+                    <MethodPills value={method} onChange={setMethod} label="طريقة استلام المبلغ" />
+                  </div>
                 )}
               </div>
-            );
-          })}
-        </div>
 
-        <div className="grid gap-3 rounded-lg bg-muted/40 p-3 text-sm">
-          <div className="flex justify-between">
-            <span>قيمة المرتجع</span>
-            <span className="font-semibold tabular-nums">
-              {formatCurrency(returnValue)}
-            </span>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="pr-refund">
-              {hasSupplier
-                ? "الفلوس اللي المورد رجّعها لك فعلاً (سيبها 0 لو خصمها من حسابك بس)"
-                : "المبلغ المسترد (فلوس)"}
-            </Label>
-            <Input
-              id="pr-refund"
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="0.01"
-              dir="ltr"
-              className="text-left tabular-nums"
-              value={refundTouched ? refund : String(round2(defaultRefund))}
-              disabled={!hasSupplier}
-              onChange={(e) => {
-                setRefundTouched(true);
-                setRefund(e.target.value);
-              }}
-            />
-            {hasSupplier && maxRefund > 0 && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setRefundTouched(true);
-                  setRefund(String(round2(maxRefund)));
-                }}
-              >
-                المورد رجّع كل المبلغ ({formatCurrency(maxRefund)})
-              </Button>
-            )}
-            {refundInvalid && returnValue > 0 && (
-              <p className="text-xs text-destructive">
-                المبلغ لازم يكون بين صفر و {formatCurrency(maxRefund)}
-              </p>
-            )}
-          </div>
-
-          {refundNum > 0 && (
-            <div className="space-y-1.5">
-              <Label>طريقة استلام المبلغ</Label>
-              <Select value={method} onValueChange={setMethod}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {METHOD_OPTIONS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* النتيجة بعد التأكيد */}
+              <div className="space-y-3 border-t bg-muted/30 p-4">
+                <p className="text-xs font-bold text-foreground/70">بعد التأكيد</p>
+                {hasSupplier && (refundNum > 0 || balanceDrop > 0) && (
+                  <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+                    {refundNum > 0 && (
+                      <span className="h-full bg-cyan-600" style={{ flexGrow: refundNum, flexBasis: 0 }} />
+                    )}
+                    {balanceDrop > 0 && (
+                      <span className="h-full bg-amber-400" style={{ flexGrow: balanceDrop, flexBasis: 0 }} />
+                    )}
+                  </div>
+                )}
+                <ul className="space-y-2 text-sm">
+                  <ResultLine
+                    dot="bg-cyan-600"
+                    label="يدخل الخزنة"
+                    value={formatCurrency(refundNum > 0 ? refundNum : 0)}
+                  />
+                  {hasSupplier && (
+                    <ResultLine
+                      dot="bg-amber-400"
+                      label="يقل من المستحق للمورد"
+                      value={formatCurrency(Math.max(0, balanceDrop))}
+                    />
+                  )}
+                </ul>
+              </div>
             </div>
           )}
+        </section>
 
-          <div className="space-y-1 border-t pt-2 text-xs text-muted-foreground">
-            <div className="flex justify-between">
-              <span>يدخل الخزنة</span>
-              <span className="tabular-nums">
-                {formatCurrency(refundNum > 0 ? refundNum : 0)}
-              </span>
-            </div>
-            {hasSupplier && (
-              <div className="flex justify-between">
-                <span>يقل من المستحق للمورد</span>
-                <span className="tabular-nums">
-                  {formatCurrency(balanceDrop)}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="pr-note">ملاحظات</Label>
-          <Input
+        {/* ═════════ 3) ملاحظات ═════════ */}
+        <section>
+          <SectionTitle n={3}>ملاحظات</SectionTitle>
+          <input
             id="pr-note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="سبب المرتجع (اختياري)"
+            aria-label="سبب المرتجع"
+            className="h-11 w-full rounded-xl border bg-background px-3.5 text-sm outline-none transition-shadow placeholder:text-muted-foreground/80 focus:border-cyan-600 focus:ring-[3px] focus:ring-cyan-600/25"
           />
-        </div>
+        </section>
       </div>
 
-      <DialogFooter>
-        <Button
-          variant="destructive"
-          onClick={submit}
-          disabled={saving || lines.length === 0 || refundInvalid}
-        >
-          {saving && <Loader2 className="size-4 animate-spin" />}
-          تأكيد المرتجع
-        </Button>
-        <Button variant="outline" onClick={onClose} disabled={saving}>
-          إلغاء
-        </Button>
-      </DialogFooter>
+      {/* ═════════ الشريط السفلي ═════════ */}
+      <div className="shrink-0 border-t bg-card px-4 py-3 sm:px-6 sm:py-4">
+        {blockReason && (
+          <p className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+            <Info className="size-3.5 shrink-0" aria-hidden />
+            {blockReason}
+          </p>
+        )}
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold text-foreground/60">قيمة المرتجع</p>
+            <p className="truncate text-lg font-extrabold tabular-nums">{formatCurrency(returnValue)}</p>
+          </div>
+          <Button variant="outline" onClick={onClose} disabled={saving} className="h-11 rounded-xl px-5">
+            إلغاء
+          </Button>
+          <Button
+            onClick={submit}
+            disabled={saving || lines.length === 0 || refundInvalid || cashEmpty}
+            className="h-11 rounded-xl bg-cyan-950 px-6 font-bold text-white hover:bg-cyan-900 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 dark:bg-cyan-700 dark:hover:bg-cyan-600"
+          >
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+            تأكيد المرتجع
+          </Button>
+        </div>
+      </div>
     </>
+  );
+}
+
+/* ───────────── مكوّنات محلية ───────────── */
+
+function ChoiceCard({
+  on,
+  disabled,
+  onClick,
+  icon: Icon,
+  title,
+  desc,
+}: {
+  on: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={on}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "flex items-start gap-3 rounded-2xl border p-3.5 text-start transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 disabled:cursor-not-allowed disabled:opacity-50",
+        on
+          ? "border-cyan-600 bg-cyan-600/[0.08] ring-1 ring-cyan-600/40"
+          : "bg-background hover:bg-muted/60 disabled:hover:bg-background",
+      )}
+    >
+      <span
+        className={cn(
+          "flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors",
+          on ? "bg-cyan-700 text-white" : "bg-muted text-foreground/70",
+        )}
+      >
+        <Icon className="size-4" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-extrabold">{title}</span>
+        <span className="mt-0.5 block text-xs font-medium leading-relaxed text-foreground/65">
+          {desc}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function ResultLine({
+  dot,
+  label,
+  value,
+}: {
+  dot: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <li className="flex items-center gap-2.5">
+      <span aria-hidden className={cn("size-2.5 shrink-0 rounded-full", dot)} />
+      <span className="font-semibold text-foreground/80">{label}</span>
+      <span aria-hidden className="mb-0.5 h-px flex-1 border-b border-dotted border-foreground/25" />
+      <b className="font-extrabold tabular-nums">{value}</b>
+    </li>
   );
 }
