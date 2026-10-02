@@ -39,6 +39,7 @@ async function __GET() {
       retailEnabled: true,
       dynamicRetailPricingEnabled: true,
       defaultRetailMarginPercent: true,
+      productCardStyle: true,
     },
   })
   if (!tenant) {
@@ -117,6 +118,13 @@ async function __PUT(req: NextRequest) {
     data.defaultRetailMarginPercent = margin
   }
 
+  if (body.productCardStyle !== undefined) {
+    if (!['auto', 'image', 'compact'].includes(body.productCardStyle)) {
+      return NextResponse.json({ error: 'قيمة شكل البطاقة غير صحيحة' }, { status: 400 })
+    }
+    data.productCardStyle = body.productCardStyle
+  }
+
   const updated = await db.tenant.update({
     where: { id: session.tenantId },
     data,
@@ -134,6 +142,7 @@ async function __PUT(req: NextRequest) {
       retailEnabled: true,
       dynamicRetailPricingEnabled: true,
       defaultRetailMarginPercent: true,
+      productCardStyle: true,
     },
   })
   return NextResponse.json(updated)

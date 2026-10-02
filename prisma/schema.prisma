@@ -39,6 +39,8 @@ model Tenant {
   // Unit-Based Dynamic Pricing (retail piece price = cost + margin%).
   dynamicRetailPricingEnabled Boolean @default(false)
   defaultRetailMarginPercent  Float   @default(20)
+  // شكل بطاقة المنتج في صفحة المنتجات: 'auto' | 'image' | 'compact'
+  productCardStyle            String  @default("auto")
   status                 String    @default("active")
   ownerEmail             String?
   ownerPhone             String?

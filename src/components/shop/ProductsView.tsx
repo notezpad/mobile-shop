@@ -4,6 +4,7 @@ import * as React from 'react'
 import { ProductAvatar } from './ProductAvatar'
 import {
   AlertTriangle,
+  ArrowUpDown,
   ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
@@ -87,6 +88,8 @@ export function ProductsView() {
   const [search, setSearch] = React.useState('')
   const [category, setCategory] = React.useState('all')
   const [status, setStatus] = React.useState('all')
+  const [sort, setSort] = React.useState('newest')
+  const [lowOnly, setLowOnly] = React.useState(false)
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [initial, setInitial] = React.useState<Partial<ProductFormValues> | null>(null)
   const [catDialogOpen, setCatDialogOpen] = React.useState(false)
@@ -107,6 +110,21 @@ export function ProductsView() {
   const closeQuickAdd = useShopStore((s) => s.closeQuickAddProduct)
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
+
+  // شكل البطاقة المختار في الإعدادات: auto | image | compact
+  const [cardStyle, setCardStyle] = React.useState<'auto' | 'image' | 'compact'>('auto')
+  const loadCardStyle = React.useCallback(() => {
+    api<{ productCardStyle?: string }>('/api/tenant')
+      .then((d) => {
+        const v = d?.productCardStyle
+        if (v === 'auto' || v === 'image' || v === 'compact') setCardStyle(v)
+      })
+      .catch(() => {})
+  }, [])
+  React.useEffect(() => {
+    loadCardStyle()
+  }, [loadCardStyle])
+  useDataRefresh(['settings'], loadCardStyle)
 
   // طريقة العرض (بطاقات / قائمة) — تتحفظ في المتصفح
   const [view, setView] = React.useState<'tags' | 'list'>(() => {
@@ -151,6 +169,8 @@ export function ProductsView() {
       if (search.trim()) params.set('search', search.trim())
       if (category && category !== 'all') params.set('category', category)
       params.set('status', status)
+      if (sort !== 'newest') params.set('sort', sort)
+      if (lowOnly) params.set('stock', 'low')
       params.set('page', String(p))
       params.set('limit', String(PAGE_SIZE))
       const res = await api<{ data: Product[]; total: number; totalPages: number }>(`/api/products?${params.toString()}`)
@@ -166,7 +186,7 @@ export function ProductsView() {
     } finally {
       setLoading(false)
     }
-  }, [search, category, status, page, PAGE_SIZE])
+  }, [search, category, status, sort, lowOnly, page, PAGE_SIZE])
 
   React.useEffect(() => {
     loadCats()
@@ -175,7 +195,7 @@ export function ProductsView() {
   // Reset to page 1 when filters change
   React.useEffect(() => {
     setPage(1)
-  }, [search, category, status])
+  }, [search, category, status, sort, lowOnly])
 
   React.useEffect(() => {
     const t = setTimeout(() => loadProducts(page), 400)
@@ -463,7 +483,7 @@ export function ProductsView() {
         { header: 'التصنيف', key: 'category', format: 'text' },
         { header: 'الباركود', key: 'barcode', format: 'text' },
         { header: 'سعر البيع', key: 'price', format: 'currency' },
-        { header: 'سعر القطعة الفعلي', key: 'effectiveRetailPrice', format: 'currency' },
+        { header: 'سعر القطعة', key: 'effectiveRetailPrice', format: 'currency' },
         { header: 'التكلفة', key: 'cost', format: 'currency' },
         { header: 'الكمية المتاحة', key: 'quantity', format: 'int' },
         { header: 'الحد الأدنى', key: 'minQuantity', format: 'int' },
@@ -499,17 +519,22 @@ export function ProductsView() {
     ? [singlePrintProduct]
     : products.filter((p) => selectedIds.has(p.id))
 
-  const hasFilters = search.trim() !== '' || category !== 'all' || status !== 'all'
+  const hasFilters = search.trim() !== '' || category !== 'all' || status !== 'all' || lowOnly
   const clearFilters = () => {
     setSearch('')
     setCategory('all')
     setStatus('all')
+    setLowOnly(false)
   }
   const lowOnPage = products.filter((p) => p.active && p.quantity <= p.minQuantity).length
   const allSelected = products.length > 0 && selectedIds.size === products.length
-  // سعر القطعة الفعلي خاص بباقة الجملة (الاحترافية) فقط — القطاعي بيكتب سعره وخلاص
+  // سعر القطعة خاص بباقة الجملة (الاحترافية) فقط — القطاعي بيكتب سعره وخلاص
   const isWholesale = capabilities.includes('multi_unit')
   const selectionMode = selectedIds.size > 0
+  // تلقائي: بطاقة الصورة لو نص منتجات الصفحة على الأقل ليها صور، وإلا البطاقة المضغوطة
+  const imageShare = products.length > 0 ? products.filter((p) => !!p.imagePath).length / products.length : 0
+  const cardVariant: 'image' | 'compact' =
+    cardStyle === 'auto' ? (imageShare >= 0.5 ? 'image' : 'compact') : cardStyle
 
   const rowActions = (p: Product) => ({
     p,
@@ -540,11 +565,21 @@ export function ProductsView() {
               <span className="tabular-nums">
                 <b className="font-extrabold text-foreground">{total}</b> صنف
               </span>
-              {!loading && lowOnPage > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-warning-subtle px-2 py-0.5 text-[11px] font-bold text-warning-subtle-foreground">
+              {!loading && (lowOnly || lowOnPage > 0) && (
+                <button
+                  type="button"
+                  onClick={() => setLowOnly((v) => !v)}
+                  aria-pressed={lowOnly}
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold transition-colors',
+                    lowOnly
+                      ? 'bg-foreground text-background'
+                      : 'bg-warning-subtle text-warning-subtle-foreground hover:brightness-95'
+                  )}
+                >
                   <AlertTriangle className="size-3" />
-                  {lowOnPage} منخفض في الصفحة
-                </span>
+                  {lowOnly ? 'المنخفض فقط — إلغاء' : `${lowOnPage} منخفض في الصفحة — اعرضهم`}
+                </button>
               )}
             </p>
           </div>
@@ -638,6 +673,35 @@ export function ProductsView() {
           ))}
         </div>
 
+        <button
+          type="button"
+          aria-pressed={lowOnly}
+          onClick={() => setLowOnly((v) => !v)}
+          className={cn(
+            'inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors',
+            lowOnly ? 'bg-foreground text-background shadow-sm' : 'bg-muted/60 text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <AlertTriangle className="size-3.5" />
+          منخفض فقط
+        </button>
+
+        <Select value={sort} onValueChange={setSort}>
+          <SelectTrigger className="h-10 w-[160px] rounded-xl border-0 bg-muted/60 shadow-none" aria-label="ترتيب">
+            <ArrowUpDown className="size-3.5 text-muted-foreground" />
+            <SelectValue placeholder="الترتيب" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="newest">الأحدث أولاً</SelectItem>
+            <SelectItem value="name">الاسم (أ → ي)</SelectItem>
+            <SelectItem value="price_desc">السعر: الأعلى</SelectItem>
+            <SelectItem value="price_asc">السعر: الأقل</SelectItem>
+            <SelectItem value="qty_asc">المخزون: الأقل</SelectItem>
+            <SelectItem value="qty_desc">المخزون: الأعلى</SelectItem>
+            <SelectItem value="sold">الأكثر مبيعاً</SelectItem>
+          </SelectContent>
+        </Select>
+
         {/* تحديد الكل + طريقة العرض */}
         <label className="flex h-10 cursor-pointer items-center gap-2 rounded-xl px-2 text-xs font-bold text-muted-foreground hover:bg-muted/60">
           <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} disabled={products.length === 0} />
@@ -723,6 +787,7 @@ export function ProductsView() {
                 index={index}
                 selected={selectedIds.has(p.id)}
                 selectionMode={selectionMode}
+                variant={cardVariant}
                 onSelect={() => toggleSelect(p.id)}
                 {...rowActions(p)}
               />
@@ -742,7 +807,7 @@ export function ProductsView() {
                     <TableHead className="w-44">الباركود</TableHead>
                     <TableHead className="w-24 text-center">التكلفة</TableHead>
                     <TableHead className="w-28 text-center">السعر</TableHead>
-                    {isWholesale && <TableHead className="w-36 text-center">سعر القطعة الفعلي</TableHead>}
+                    {isWholesale && <TableHead className="w-36 text-center">سعر القطعة</TableHead>}
                     <TableHead className="w-48">المخزون</TableHead>
                     <TableHead className="w-20 text-center">مبيعات</TableHead>
                     <TableHead className="w-24 text-center">إجراءات</TableHead>
@@ -1093,12 +1158,15 @@ function ProductTag({
   index,
   selected,
   selectionMode,
+  variant,
   onSelect,
   ...actions
 }: ActionsProps & {
   index: number
   selected: boolean
   selectionMode: boolean
+  /** image: صورة كبيرة | compact: شريط مضغوط بصورة مصغّرة (لو موجودة) */
+  variant: 'image' | 'compact'
   onSelect: () => void
 }) {
   const { p, onEdit } = actions
@@ -1106,6 +1174,7 @@ function ProductTag({
   const ui = STOCK_UI[st]
   const profit = p.price - p.cost
   const margin = p.cost > 0 && p.price > 0 ? Math.round((profit / p.price) * 100) : null
+  const compact = variant === 'compact'
 
   return (
     <article
@@ -1144,7 +1213,35 @@ function ProductTag({
           </span>
         </div>
 
-        {/* الصورة + ملصق السعر */}
+        {compact ? (
+          /* بدون صورة كبيرة: صورة مصغّرة (أو حرف) + الاسم والتصنيف + ملصق السعر */
+          <div className="mx-3.5 mt-11 flex items-start gap-3">
+            <button
+              type="button"
+              onClick={onEdit}
+              aria-label={`تعديل ${p.name}`}
+              className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg text-start outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              <ProductAvatar name={p.name} imagePath={p.imagePath} size="sm" />
+              <span className="min-w-0">
+                <span className="line-clamp-2 text-[15px] font-extrabold leading-snug [overflow-wrap:anywhere]">{p.name}</span>
+                <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+                  {p.category || 'بدون تصنيف'}
+                  {!p.active && (
+                    <span className="rounded bg-foreground/80 px-1.5 py-0.5 text-[10px] font-bold text-background">معطّل</span>
+                  )}
+                </span>
+              </span>
+            </button>
+            <span className="shrink-0 rounded-lg bg-foreground px-2.5 py-1 text-background shadow-md">
+              <span className="text-lg font-extrabold leading-none tabular-nums">
+                {p.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+              </span>
+              <span className="ms-1 text-[10px] font-semibold opacity-70">جنيه</span>
+            </span>
+          </div>
+        ) : (
+          <>
         <button
           type="button"
           onClick={onEdit}
@@ -1165,8 +1262,12 @@ function ProductTag({
           )}
         </button>
 
+          </>
+        )}
+
         {/* البيانات */}
         <div className="space-y-2 px-4 pb-4 pt-3">
+          {!compact && (
           <div>
             <button type="button" onClick={onEdit} className="block w-full text-start outline-none">
               <h3 className="line-clamp-2 text-[15px] font-extrabold leading-snug [overflow-wrap:anywhere]">{p.name}</h3>
@@ -1179,10 +1280,11 @@ function ProductTag({
               )}
             </div>
           </div>
+          )}
 
           {actions.capabilities.includes('multi_unit') && (
           <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-foreground/20 px-2.5 py-1.5">
-            <span className="text-[11px] font-medium text-muted-foreground">سعر القطعة الفعلي</span>
+            <span className="text-[11px] font-medium text-muted-foreground">سعر القطعة</span>
             <span className="flex items-baseline gap-1.5 tabular-nums">
               <b className={cn('text-sm font-extrabold', p.dynamicRetailPrice != null ? 'text-primary' : 'text-muted-foreground')}>
                 {(p.dynamicRetailPrice ?? p.price).toLocaleString('en-US', { maximumFractionDigits: 2 })}

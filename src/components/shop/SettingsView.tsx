@@ -3,7 +3,7 @@
 import * as React from 'react'
 import {
   ImagePlus, Loader2, Save, Sparkles, CalendarDays, CheckCircle2, Printer, Bell,
-  SlidersHorizontal, Store, Receipt, BadgeCheck, Percent, Calculator, Undo2, Clock,
+  SlidersHorizontal, LayoutGrid, Store, Receipt, BadgeCheck, Percent, Calculator, Undo2, Clock,
 } from 'lucide-react'
 import { PrinterSettingsDialog } from './PrinterSettingsDialog'
 import { RedeemCodeCard } from './RedeemCodeCard'
@@ -35,6 +35,7 @@ interface TenantData {
   retailEnabled: boolean
   dynamicRetailPricingEnabled: boolean
   defaultRetailMarginPercent: number
+  productCardStyle: 'auto' | 'image' | 'compact'
 }
 
 interface SubInfo {
@@ -80,6 +81,7 @@ const TRACKED: { key: keyof TenantData; label: string }[] = [
   { key: 'commissionFawry', label: 'عمولة فوري' },
   { key: 'dynamicRetailPricingEnabled', label: 'التسعير التلقائي' },
   { key: 'defaultRetailMarginPercent', label: 'هامش الربح' },
+  { key: 'productCardStyle', label: 'شكل بطاقة المنتج' },
 ]
 
 // أسماء الموديولات زي ما بتظهر في القائمة الجانبية (settings مش بنعرضها لأنها دايماً موجودة)
@@ -653,6 +655,45 @@ export function SettingsView() {
             </div>
           </Panel>
         )}
+
+        {/* ═════════ شكل بطاقة المنتج ═════════ */}
+        <Panel
+          tag="09 / Products"
+          title="شكل بطاقة المنتج"
+          hint="بيأثر على صفحة المنتجات بس. لو أغلب منتجاتك من غير صور، اختار «بدون صورة» عشان تشوف منتجات أكتر في الشاشة."
+          icon={LayoutGrid}
+          className="stagger-5 lg:col-span-6"
+          bodyClassName="space-y-3"
+        >
+          <div role="radiogroup" aria-label="شكل بطاقة المنتج" className="grid gap-2 sm:grid-cols-3">
+            {(
+              [
+                ['auto', 'تلقائي', 'حسب وجود صور في المنتجات'],
+                ['image', 'بصورة', 'صورة كبيرة لكل منتج'],
+                ['compact', 'بدون صورة', 'مضغوطة — أنسب لو مفيش صور'],
+              ] as const
+            ).map(([v, label, desc]) => {
+              const on = (data?.productCardStyle ?? 'auto') === v
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  disabled={saving}
+                  onClick={() => update('productCardStyle', v)}
+                  className={cn(
+                    'rounded-xl border px-3 py-2.5 text-start transition-colors disabled:opacity-60',
+                    on ? 'border-foreground bg-foreground text-background shadow-sm' : 'border-dashed border-foreground/25 hover:bg-muted/60'
+                  )}
+                >
+                  <p className="text-sm font-extrabold">{label}</p>
+                  <p className={cn('mt-0.5 text-[11px]', on ? 'text-background/70' : 'text-muted-foreground')}>{desc}</p>
+                </button>
+              )
+            })}
+          </div>
+        </Panel>
 
         {/* ═════════ عمولات الخدمات المالية ═════════ */}
         {hasFinance && (

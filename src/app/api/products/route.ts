@@ -81,16 +81,64 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)))
     const skip  = (page - 1) * limit
 
-    const [products, total, retailPricingTenant] = await Promise.all([
-      db.product.findMany({ where, orderBy: { id: 'desc' }, skip, take: limit }),
-      db.product.count({ where }),
-      // Only need these two columns to compute dynamic retail pricing below —
-      // not the full tenant row.
-      db.tenant.findUnique({
-        where: { id: session.tenantId },
-        select: { dynamicRetailPricingEnabled: true, defaultRetailMarginPercent: true },
-      }),
-    ])
+    // ── Sorting + low-stock filter (Products management screen) ──
+    // sort: newest (default) | name | price_desc | price_asc | qty_asc | qty_desc | sold
+    // stock: 'low' → only products with quantity <= minQuantity (incl. out of stock)
+    // Both are applied BEFORE pagination so page 2 continues the same ordering.
+    const sortKey = searchParams.get('sort') || 'newest'
+    const lowOnly = searchParams.get('stock') === 'low'
+    const orderBy: any = (() => {
+      switch (sortKey) {
+        case 'name': return [{ name: 'asc' }, { id: 'desc' }]
+        case 'price_desc': return [{ price: 'desc' }, { id: 'desc' }]
+        case 'price_asc': return [{ price: 'asc' }, { id: 'desc' }]
+        case 'qty_asc': return [{ quantity: 'asc' }, { id: 'desc' }]
+        case 'qty_desc': return [{ quantity: 'desc' }, { id: 'desc' }]
+        default: return [{ id: 'desc' }]
+      }
+    })()
+
+    const tenantPromise = db.tenant.findUnique({
+      where: { id: session.tenantId },
+      select: { dynamicRetailPricingEnabled: true, defaultRetailMarginPercent: true },
+    })
+
+    let products: any[]
+    let total: number
+    if (lowOnly || sortKey === 'sold') {
+      // Prisma can't compare two columns in `where` (quantity <= minQuantity) and
+      // can't order by an aggregate, so the ordered id list is resolved in memory
+      // (ids + 2 small columns only), then just the requested page is loaded.
+      const slim = await db.product.findMany({
+        where,
+        orderBy,
+        select: { id: true, quantity: true, minQuantity: true },
+      })
+      let ids = slim.filter((r) => !lowOnly || r.quantity <= r.minQuantity).map((r) => r.id)
+      if (sortKey === 'sold' && ids.length > 0) {
+        const agg = await db.saleItem.groupBy({
+          by: ['productId'],
+          where: { productId: { in: ids } },
+          _sum: { quantity: true },
+        })
+        const sold = new Map(agg.filter((a) => a.productId != null).map((a) => [a.productId as number, a._sum.quantity ?? 0]))
+        const pos = new Map(ids.map((id, idx) => [id, idx]))
+        ids = [...ids].sort((a, b) => (sold.get(b) ?? 0) - (sold.get(a) ?? 0) || (pos.get(a)! - pos.get(b)!))
+      }
+      total = ids.length
+      const pageIds = ids.slice(skip, skip + limit)
+      const rows = pageIds.length > 0 ? await db.product.findMany({ where: { id: { in: pageIds } } }) : []
+      const byId = new Map(rows.map((r) => [r.id, r]))
+      products = pageIds.map((id) => byId.get(id)).filter(Boolean) as any[]
+    } else {
+      const [rows, count] = await Promise.all([
+        db.product.findMany({ where, orderBy, skip, take: limit }),
+        db.product.count({ where }),
+      ])
+      products = rows
+      total = count
+    }
+    const retailPricingTenant = await tenantPromise
 
     // If the search term is an EXACT match for one of this product's variant
     // barcodes (i.e. someone scanned a specific color/size's own label), tell
