@@ -37,7 +37,7 @@ import {
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { formatCurrency } from '@/lib/format'
+import { formatCurrency, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
 import { printSale } from '@/lib/print-client'
@@ -264,7 +264,7 @@ function loadDraft(): PosDraft | null {
 // the whole screen proportionally without transforms, so scrolling, focus and
 // hit-testing keep working. Text shrinks slower than spacing to stay legible.
 function densityVars(f: number): React.CSSProperties {
-  const tf = 0.4 + 0.6 * f
+  const tf = 0.74 + 0.26 * f // النص بيصغر ببطء: أقل مقاس مريح للقراءة على الكاشير
   const r = (n: number) => `${(n * tf).toFixed(4)}rem`
   return {
     '--spacing': `${(0.25 * f).toFixed(4)}rem`,
@@ -275,7 +275,7 @@ function densityVars(f: number): React.CSSProperties {
     '--text-xl': r(1.25),
     '--text-2xl': r(1.5),
     '--text-3xl': r(1.875),
-    '--fs-2xs': r(0.6875),
+    '--fs-2xs': r(0.75),
   } as React.CSSProperties
 }
 
@@ -283,16 +283,25 @@ function densityVars(f: number): React.CSSProperties {
    Small presentational helpers
    ──────────────────────────────────────────────────────────────── */
 
-/** Deterministic soft tint per product — درجات أخضر/تركواز/أزرق/كهرماني بس (من غير بنفسجي ولا وردي). */
+/** لون ثابت لكل منتج (أخضر/تركواز/أزرق/كهرماني/ترابي) — من غير بنفسجي ولا وردي. */
 const TINT_HUES = [152, 168, 186, 204, 28, 42, 12]
 function tintFor(name: string) {
   let h = 0
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 3600
   const hue = TINT_HUES[h % TINT_HUES.length]
   return {
-    background: `hsl(${hue} 38% 91%)`,
-    color: `hsl(${hue} 48% 27%)`,
+    backgroundColor: `hsl(${hue} 55% 84%)`,
+    backgroundImage: `linear-gradient(135deg, hsl(${hue} 60% 92%), hsl(${hue} 50% 78%))`,
+    color: `hsl(${hue} 60% 22%)`,
   }
+}
+
+/** حرفين من أول كلمتين في الاسم (أو أول حرفين لو كلمة واحدة) */
+function initialsOf(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return '؟'
+  if (words.length === 1) return Array.from(words[0]).slice(0, 2).join('')
+  return Array.from(words[0])[0] + Array.from(words[1])[0]
 }
 
 function ProductThumb({
@@ -318,14 +327,23 @@ function ProductThumb({
       </div>
     )
   }
-  const letter = name.trim().charAt(0) || '؟'
   return (
     <div
-      className={cn('flex shrink-0 items-center justify-center rounded-xl text-lg font-bold', className)}
+      className={cn(
+        'relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl text-lg font-extrabold',
+        className
+      )}
       style={tintFor(name)}
       aria-hidden
     >
-      {letter}
+      <span
+        className="pointer-events-none absolute inset-0 opacity-[0.10]"
+        style={{
+          backgroundImage:
+            'repeating-linear-gradient(135deg, currentColor 0 1px, transparent 1px 9px)',
+        }}
+      />
+      <span className="relative">{initialsOf(name)}</span>
     </div>
   )
 }
@@ -333,18 +351,18 @@ function ProductThumb({
 function StockBadge({ quantity }: { quantity: number }) {
   if (quantity <= 0)
     return (
-      <span className="rounded-full bg-danger-subtle px-2 py-0.5 text-[length:var(--fs-2xs,0.6875rem)] font-medium text-danger-subtle-foreground">
+      <span className="whitespace-nowrap rounded-full bg-danger-subtle px-2 py-0.5 text-[length:var(--fs-2xs,0.6875rem)] font-medium text-danger-subtle-foreground">
         نفد
       </span>
     )
   if (quantity <= LOW_STOCK_THRESHOLD)
     return (
-      <span className="rounded-full bg-warning-subtle px-2 py-0.5 text-[length:var(--fs-2xs,0.6875rem)] font-medium text-warning-subtle-foreground">
+      <span className="whitespace-nowrap rounded-full bg-warning-subtle px-2 py-0.5 text-[length:var(--fs-2xs,0.75rem)] font-medium text-warning-subtle-foreground">
         باقي {quantity}
       </span>
     )
   return (
-    <span className="rounded-full bg-muted px-2 py-0.5 text-[length:var(--fs-2xs,0.6875rem)] font-medium text-muted-foreground tabular-nums">
+    <span className="whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-[length:var(--fs-2xs,0.75rem)] font-medium text-muted-foreground tabular-nums">
       متاح {quantity}
     </span>
   )
@@ -1368,10 +1386,14 @@ export function POSView() {
     'flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm'
   const viewMode: 'cards' | 'compact' =
     viewPref === 'auto' ? (products.some((p) => p.imagePath) ? 'cards' : 'compact') : viewPref
+  const fewProducts = products.length > 0 && products.length <= 6
+  // الموبايل: عمودين للكروت (بدل كارت واحد طويل في كل صف)
   const gridCols =
     viewMode === 'compact'
-      ? 'grid-cols-[repeat(auto-fill,minmax(calc(var(--spacing)*52),1fr))]'
-      : 'grid-cols-[repeat(auto-fill,minmax(calc(var(--spacing)*38),1fr))]'
+      ? 'grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(calc(var(--spacing)*56),1fr))]'
+      : fewProducts
+        ? 'grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(calc(var(--spacing)*50),1fr))]'
+        : 'grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(calc(var(--spacing)*44),1fr))]'
 
   const productsPanel = (
     <section className={panelCls}>
@@ -1407,7 +1429,7 @@ export function POSView() {
                       'flex size-8 items-center justify-center transition-colors',
                       idx > 0 && 'border-s border-border',
                       viewMode === m.v
-                        ? 'bg-foreground text-background'
+                        ? 'bg-brand-600/15 text-brand-800 dark:text-brand-200'
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     )}
                   >
@@ -1426,8 +1448,8 @@ export function POSView() {
               ref={searchRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="ابحث بالاسم أو امسح الباركود…"
-              className="h-12 rounded-xl border-foreground/15 bg-muted/50 pr-10 pl-24 text-base focus-visible:border-brand-600 focus-visible:bg-background focus-visible:ring-brand-600/20"
+              placeholder="ابحث أو امسح الباركود…"
+              className="h-12 rounded-xl border-foreground/25 bg-card pr-10 pl-24 text-base shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] focus-visible:border-brand-600 focus-visible:ring-brand-600/20"
               autoFocus
               inputMode="search"
             />
@@ -1467,10 +1489,10 @@ export function POSView() {
                   type="button"
                   onClick={() => setCategory(c.id === 'all' ? 'all' : c.name)}
                   className={cn(
-                    'shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-semibold transition-colors',
+                    'shrink-0 rounded-full border-2 px-4 py-1.5 text-sm font-bold transition-colors',
                     active
-                      ? 'border-foreground bg-foreground text-background shadow-sm'
-                      : 'border-border bg-background text-muted-foreground hover:border-foreground/40 hover:text-foreground'
+                      ? 'border-brand-600 bg-brand-600/10 text-brand-800 shadow-sm dark:text-brand-200'
+                      : 'border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground'
                   )}
                 >
                   {c.name}
@@ -1565,8 +1587,8 @@ export function POSView() {
                         {formatCurrency(piecePrice(p))}
                       </span>
                     ) : (
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-base font-extrabold tabular-nums text-brand-700 dark:text-brand-300">
+                      <div className="flex flex-wrap items-center justify-between gap-x-1 gap-y-1">
+                        <span className="whitespace-nowrap text-base font-extrabold tabular-nums text-brand-700 dark:text-brand-300">
                           {formatCurrency(piecePrice(p))}
                         </span>
                         <StockBadge quantity={p.quantity} />
@@ -1579,6 +1601,21 @@ export function POSView() {
           </ul>
         )}
       </div>
+
+      <footer className="hidden items-center gap-4 border-t border-dashed border-foreground/20 bg-muted/40 px-3.5 py-2 text-sm text-muted-foreground xl:flex">
+        {[
+          ['/', 'بحث'],
+          ['Enter', 'إضافة بالباركود'],
+          ['F9', 'دفع وطباعة'],
+        ].map(([k, l]) => (
+          <span key={k} className="flex items-center gap-1.5">
+            <kbd className="rounded-md border border-foreground/20 bg-card px-1.5 py-0.5 text-[length:var(--fs-2xs,0.75rem)] font-bold text-foreground">
+              {k}
+            </kbd>
+            {l}
+          </span>
+        ))}
+      </footer>
     </section>
   )
 
@@ -1670,7 +1707,7 @@ export function POSView() {
                 {/* Stepper — forced LTR so it always reads  − 1 +  */}
                 <div
                   dir="ltr"
-                  className="flex shrink-0 items-center overflow-hidden rounded-xl border border-foreground/20 bg-background"
+                  className="flex shrink-0 items-center overflow-hidden rounded-xl border border-foreground/25 bg-card"
                 >
                   <button
                     type="button"
@@ -1725,7 +1762,7 @@ export function POSView() {
                 )}
 
                 <label
-                  className="flex h-9 w-28 shrink-0 items-center gap-1.5 rounded-xl border border-foreground/20 bg-background px-2.5 text-xs font-medium text-muted-foreground transition-colors focus-within:border-brand-600 focus-within:ring-2 focus-within:ring-brand-600/20 hover:border-foreground/40"
+                  className="flex h-9 w-28 shrink-0 items-center gap-1.5 rounded-xl border border-foreground/25 bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors focus-within:border-brand-600 focus-within:ring-2 focus-within:ring-brand-600/20 hover:border-foreground/40"
                   title="سعر القطعة (ممكن تعدّله)"
                 >
                   <span>السعر</span>
@@ -1752,21 +1789,21 @@ export function POSView() {
           title="راجع السلة"
           aside={
             <div className="flex items-center gap-2">
-              <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-muted px-1.5 text-xs font-extrabold tabular-nums">
-                {cart.length}
+              <span className="rounded-full bg-muted px-2.5 py-1 text-sm font-bold tabular-nums">
+                {cart.length} صنف
               </span>
               {cart.length > 0 && (
                 <button
                   type="button"
                   onClick={clearCart}
                   className={cn(
-                    'rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors',
+                    'rounded-lg border px-2.5 py-1 text-sm font-semibold transition-colors',
                     confirmClear
-                      ? 'bg-destructive text-white'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      ? 'border-destructive bg-destructive text-white'
+                      : 'border-border text-muted-foreground hover:border-destructive/50 hover:bg-danger-subtle hover:text-destructive'
                   )}
                 >
-                  {confirmClear ? 'اضغط للتأكيد' : 'تفريغ'}
+                  {confirmClear ? 'اضغط للتأكيد' : 'تفريغ السلة'}
                 </button>
               )}
             </div>
@@ -1806,14 +1843,40 @@ export function POSView() {
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain lg:max-h-[46dvh] xl:max-h-none">
         {cartLines}
       </div>
+
+      {cart.length > 0 && (
+        <footer className="space-y-1.5 border-t-2 border-dashed border-foreground/25 bg-muted/40 px-3.5 py-3 text-sm">
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span>عدد القطع</span>
+            <b className="tabular-nums text-foreground">{totalPieces}</b>
+          </div>
+          <div className="flex items-baseline justify-between border-t border-dashed border-foreground/20 pt-2">
+            <span className="font-bold">إجمالي السلة</span>
+            <span className="text-2xl font-extrabold tabular-nums">{formatCurrency(total)}</span>
+          </div>
+        </footer>
+      )}
     </section>
   )
 
-  const quickAmounts = [50, 100, 200, 500]
+  const quickAmounts = [50, 100, 200, 500, 1000]
+  const choiceCls = (active: boolean) =>
+    cn(
+      'relative flex flex-col items-center justify-center rounded-xl border-2 transition-colors',
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40',
+      active
+        ? 'border-brand-600 bg-brand-600/10 font-extrabold text-brand-800 shadow-sm dark:text-brand-200'
+        : 'border-foreground/15 bg-card font-bold text-muted-foreground hover:border-foreground/40 hover:text-foreground'
+    )
+  const checkMark = (
+    <span className="absolute end-1.5 top-1.5 flex size-4 items-center justify-center rounded-full bg-brand-600 text-white">
+      <Check className="size-3" strokeWidth={3} />
+    </span>
+  )
   const payBtn =
-    'rounded-lg border border-foreground/20 bg-background px-3 py-1.5 text-xs font-semibold tabular-nums transition-colors hover:border-foreground/50 hover:bg-muted disabled:opacity-40'
+    'rounded-lg border border-foreground/25 bg-card px-3 py-1.5 text-sm font-semibold tabular-nums transition-colors hover:border-foreground/50 hover:bg-muted disabled:opacity-40'
   const payInput =
-    'h-11 w-full rounded-xl border border-foreground/20 bg-background text-center text-lg font-extrabold tabular-nums outline-none transition-colors focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20'
+    'h-11 w-full rounded-xl border border-foreground/25 bg-card shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] placeholder:text-sm placeholder:font-medium placeholder:text-muted-foreground text-center text-lg font-extrabold tabular-nums outline-none transition-colors focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20'
 
   const paymentPanel = (
     <section className={panelCls}>
@@ -1821,25 +1884,23 @@ export function POSView() {
         <PanelHead n={3} tag="Checkout" title="ادفع" />
       </header>
 
-      <div className="flex-1 space-y-4 overflow-y-auto overscroll-contain p-3.5">
+      <div className="flex-1 space-y-3 overflow-y-auto overscroll-contain p-3.5">
         {/* شاشة الكاشير: الإجمالي هو أكبر وأوضح عنصر في الصفحة */}
-        <div className="relative overflow-hidden rounded-2xl bg-stone-950 p-4 text-stone-50 shadow-md ring-1 ring-black/10 dark:ring-white/10">
+        <div className="relative overflow-hidden rounded-2xl bg-stone-950 px-4 py-3 text-stone-50 shadow-md ring-1 ring-black/10 dark:ring-white/10">
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 opacity-[0.10]"
-            style={{
-              backgroundImage: 'repeating-linear-gradient(to bottom, #fff 0 1px, transparent 1px 4px)',
-            }}
+            className="pointer-events-none absolute -top-16 start-1/2 h-32 w-64 -translate-x-1/2 rounded-full bg-emerald-400/15 blur-3xl"
           />
           <div className="relative">
-            <div className="flex items-center justify-between gap-2 text-xs font-semibold text-stone-400">
+            <div className="flex items-center justify-between gap-2 text-sm font-semibold text-stone-300">
               <span>الإجمالي المستحق</span>
               <span className="tabular-nums">
                 {cart.length} صنف · {totalPieces} قطعة
               </span>
             </div>
-            <p className="mt-2 text-3xl font-extrabold leading-none tabular-nums text-emerald-300">
-              {formatCurrency(total)}
+            <p className="mt-2 flex items-baseline gap-2 leading-none tabular-nums text-emerald-300">
+              <span className="text-4xl font-extrabold tracking-tight">{formatNumber(Math.round(total * 100) / 100)}</span>
+              <span className="text-lg font-bold text-emerald-300/70">جنيه</span>
             </p>
             {!paidFull && (
               <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/10 pt-2.5 text-xs font-semibold tabular-nums">
@@ -1858,7 +1919,7 @@ export function POSView() {
 
         {/* العميل */}
         <div className="space-y-1.5">
-          <p className="text-xs font-bold text-muted-foreground">
+          <p className="text-sm font-bold text-foreground/75">
             العميل <span className="font-medium">(اختياري — مطلوب للبيع الآجل)</span>
           </p>
           {resolvedCustomer ? (
@@ -1913,7 +1974,7 @@ export function POSView() {
                 onBlur={() => setTimeout(() => setCustOpen(false), 150)}
                 placeholder="ابحث بالاسم أو رقم الهاتف"
                 className={cn(
-                  'h-10 rounded-xl border-foreground/15 bg-muted/50 pr-9 focus-visible:bg-background',
+                  'h-11 rounded-xl border-foreground/25 bg-card pr-9 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]',
                   creditNeedsCustomer && 'border-destructive focus-visible:ring-destructive/30'
                 )}
               />
@@ -1965,7 +2026,7 @@ export function POSView() {
         {/* وسيلة الدفع: بتحدد الدرج اللي الفلوس دخلت فيه
             (انستاباي وفوري اتشالوا من الكاشير بطلب صاحب المحل) */}
         <div className="space-y-1.5">
-          <p className="text-xs font-bold text-muted-foreground">وسيلة الدفع</p>
+          <p className="text-sm font-bold text-foreground/75">وسيلة الدفع</p>
           <div role="radiogroup" aria-label="وسيلة الدفع" className="grid grid-cols-2 gap-2">
             {[
               { v: 'cash', label: 'كاش', icon: Banknote },
@@ -1979,15 +2040,10 @@ export function POSView() {
                   role="radio"
                   aria-checked={active}
                   onClick={() => setPaymentMethod(m.v)}
-                  className={cn(
-                    'flex h-11 items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold transition-colors',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40',
-                    active
-                      ? 'border-brand-600 bg-brand-600 text-white shadow-sm'
-                      : 'border-foreground/15 bg-background text-muted-foreground hover:border-foreground/40 hover:text-foreground'
-                  )}
+                  className={cn(choiceCls(active), 'h-11 flex-row gap-2 text-base')}
                 >
-                  <m.icon className="size-4" />
+                  {active && checkMark}
+                  <m.icon className="size-5" />
                   {m.label}
                 </button>
               )
@@ -1997,12 +2053,8 @@ export function POSView() {
 
         {/* نوع الدفع: كامل / جزئي (الباقي آجل) */}
         <div className="space-y-1.5">
-          <p className="text-xs font-bold text-muted-foreground">نوع الدفع</p>
-          <div
-            role="radiogroup"
-            aria-label="نوع الدفع"
-            className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1 ring-1 ring-inset ring-border"
-          >
+          <p className="text-sm font-bold text-foreground/75">نوع الدفع</p>
+          <div role="radiogroup" aria-label="نوع الدفع" className="grid grid-cols-2 gap-2">
             {[
               { full: true, label: 'سداد كامل', hint: 'كامل المبلغ' },
               { full: false, label: 'سداد جزئي', hint: 'والباقي آجل' },
@@ -2018,24 +2070,11 @@ export function POSView() {
                     setPaidFull(m.full)
                     setPaidAmount(m.full ? 0 : total)
                   }}
-                  className={cn(
-                    'flex h-12 flex-col items-center justify-center rounded-lg px-2 leading-tight transition-all',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40',
-                    active
-                      ? 'bg-background shadow-sm ring-1 ring-foreground/15'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
+                  className={cn(choiceCls(active), 'h-12 leading-tight')}
                 >
-                  <span className="flex items-center gap-1.5 text-sm font-extrabold">
-                    <span
-                      className={cn(
-                        'size-2 rounded-full transition-colors',
-                        active ? (m.full ? 'bg-brand-500' : 'bg-warning') : 'bg-foreground/20'
-                      )}
-                    />
-                    {m.label}
-                  </span>
-                  <span className="text-xs font-medium opacity-80">{m.hint}</span>
+                  {active && checkMark}
+                  <span className="text-base">{m.label}</span>
+                  <span className="text-xs font-medium opacity-75">{m.hint}</span>
                 </button>
               )
             })}
@@ -2044,7 +2083,7 @@ export function POSView() {
 
         {paidFull ? (
           <div className="space-y-2">
-            <label className="block text-xs font-bold text-muted-foreground" htmlFor="received">
+            <label className="block text-sm font-bold text-foreground/75" htmlFor="received">
               المبلغ المستلم من العميل <span className="font-medium">(لحساب الباقي)</span>
             </label>
             <NumField
@@ -2064,8 +2103,9 @@ export function POSView() {
               >
                 المبلغ بالظبط
               </button>
-              {quickAmounts
-                .filter((a) => a >= total)
+              {Array.from(new Set(quickAmounts.map((st) => Math.ceil(total / st) * st)))
+                .filter((a) => a > total + 0.005)
+                .sort((x, y) => x - y)
                 .slice(0, 3)
                 .map((a) => (
                   <button key={a} type="button" onClick={() => setReceived(a)} className={payBtn}>
@@ -2074,14 +2114,11 @@ export function POSView() {
                 ))}
             </div>
             {shortBy > 0 && (
-              <div className="space-y-2 rounded-xl border border-warning/40 bg-warning-subtle px-3 py-2.5 text-sm text-warning-subtle-foreground">
-                <p className="flex items-start gap-1.5 font-semibold">
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                  <span>
-                    المستلم أقل من الإجمالي بـ{' '}
-                    <b className="tabular-nums">{formatCurrency(shortBy)}</b> — لو سجّلت «سداد كامل» هتتحسب
-                    الفاتورة مدفوعة بالكامل.
-                  </span>
+              <div className="flex items-center gap-2 rounded-xl border border-warning/40 bg-warning-subtle px-3 py-2 text-warning-subtle-foreground">
+                <AlertTriangle className="size-4 shrink-0" />
+                <p className="min-w-0 flex-1 text-sm font-semibold leading-snug">
+                  المستلم أقل بـ <b className="tabular-nums">{formatCurrency(shortBy)}</b>
+                  <span className="block text-xs font-medium opacity-80">سداد كامل = الفاتورة مدفوعة بالكامل</span>
                 </p>
                 <button
                   type="button"
@@ -2089,16 +2126,16 @@ export function POSView() {
                     setPaidFull(false)
                     setPaidAmount(typeof received === 'number' ? received : 0)
                   }}
-                  className="w-full rounded-lg bg-warning px-3 py-1.5 text-xs font-extrabold text-warning-foreground transition-opacity hover:opacity-90"
+                  className="shrink-0 rounded-lg bg-warning px-2.5 py-1.5 text-xs font-extrabold text-warning-foreground transition-opacity hover:opacity-90"
                 >
-                  سجّل الباقي آجل
+                  الباقي آجل
                 </button>
               </div>
             )}
           </div>
         ) : (
           <div className="space-y-2">
-            <label className="block text-xs font-bold text-muted-foreground" htmlFor="paid-amount">
+            <label className="block text-sm font-bold text-foreground/75" htmlFor="paid-amount">
               المبلغ المدفوع دلوقتي
             </label>
             <NumField
@@ -2126,7 +2163,7 @@ export function POSView() {
               </div>
             )}
             <div className="flex items-center gap-2">
-              <label className="shrink-0 text-xs font-bold text-muted-foreground" htmlFor="pos-due-date">
+              <label className="shrink-0 text-sm font-bold text-foreground/75" htmlFor="pos-due-date">
                 استحقاق الآجل <span className="font-medium">(اختياري)</span>
               </label>
               <Input
@@ -2134,7 +2171,7 @@ export function POSView() {
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="h-9 flex-1 rounded-lg text-xs"
+                className="h-9 flex-1 rounded-lg border-foreground/25 bg-card text-xs"
               />
             </div>
           </div>
@@ -2199,20 +2236,6 @@ export function POSView() {
             />
             {submitting ? 'جارٍ إتمام البيع…' : 'جاهز للبيع'}
           </span>
-          <span className="hidden items-center gap-3 text-xs text-muted-foreground xl:flex">
-            {[
-              ['/', 'بحث'],
-              ['Enter', 'باركود'],
-              ['F9', 'دفع'],
-            ].map(([k, l]) => (
-              <span key={k} className="flex items-center gap-1.5">
-                <kbd className="rounded-md border border-border bg-background px-1.5 py-0.5 text-[length:var(--fs-2xs,0.6875rem)] font-semibold">
-                  {k}
-                </kbd>
-                {l}
-              </span>
-            ))}
-          </span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -2274,7 +2297,7 @@ export function POSView() {
           </div>
           <Button
             size="sm"
-            className="h-9 rounded-xl bg-foreground font-bold text-background hover:bg-foreground/90"
+            className="h-9 rounded-xl border border-foreground/25 bg-card font-bold text-foreground shadow-sm hover:bg-muted"
             onClick={() => openQuickAddProduct()}
           >
             <Plus className="size-4" />

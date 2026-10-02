@@ -23,6 +23,8 @@ import {
   Ban,
   CalendarDays,
   ChevronDown,
+  Eye,
+  EyeOff,
   FileText,
   Inbox,
   Loader2,
@@ -107,7 +109,14 @@ const ROW_LIMIT = 500 // نفس take بتاع الـ API
 /* ───────────────────────── أدوات مساعدة ───────────────────────── */
 
 const LRM = '\u200E'
-const fmt = (n: number) => LRM + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+// فلوس: صحيح من غير كسور، وأي كسر يتعرض بخانتين (82.50 مش 82.5)
+const fmt = (n: number) =>
+  LRM + n.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })
+const fmtRate = (n: number) => LRM + String(n) // نسبة العمولة: 0.5 مش 0.50
+
+/** جمع عربي: معاملة واحدة · معاملتين · 3 معاملات · 11 معاملة */
+const countTxn = (n: number) =>
+  n === 1 ? 'معاملة واحدة' : n === 2 ? 'معاملتين' : n >= 3 && n <= 10 ? `${fmt(n)} معاملات` : `${fmt(n)} معاملة`
 const sgn = (n: number) => (n === 0 ? fmt(0) : `${LRM}${n > 0 ? '+' : '−'}${fmt(Math.abs(n)).replace(LRM, '')}`)
 const isCancelled = (t: Txn) => t.status === 'cancelled'
 const netOf = (t: Txn) => (t.kind === 'deposit' ? t.amount : -t.amount) + t.commission
@@ -201,6 +210,8 @@ export function FinanceView() {
   const [q, setQ] = React.useState('')
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [rates, setRates] = React.useState<Rates | null>(null)
+  const [flashId, setFlashId] = React.useState<number | null>(null)
+  const [showCancelled, setShowCancelled] = React.useState(true)
 
   // توقيت المحل ممكن يوصل بعد أول رسم — نعيد حساب «اليوم» وقتها
   React.useEffect(() => {
@@ -225,7 +236,6 @@ export function FinanceView() {
       const params = new URLSearchParams()
       if (from) params.set('from', from)
       if (to) params.set('to', to)
-      if (method !== 'all') params.set('method', method)
       const data = await api<Txn[]>(`/api/finance?${params.toString()}`)
       setRows(data)
     } catch (e: any) {
@@ -234,7 +244,7 @@ export function FinanceView() {
       setLoading(false)
       setLoadedOnce(true)
     }
-  }, [from, to, method])
+  }, [from, to])
 
   React.useEffect(() => {
     load()
@@ -275,14 +285,22 @@ export function FinanceView() {
   const visible = React.useMemo(() => {
     const t = q.trim().toLowerCase()
     return rows.filter((r) => {
+      if (method !== 'all' && r.method !== method) return false
       if (kind !== 'all' && r.kind !== kind) return false
+      if (!showCancelled && isCancelled(r)) return false
       if (t) {
-        const hay = `${r.note ?? ''} ${r.userName ?? ''} ${methodLabel(r.method)}`.toLowerCase()
+        const hay = `${r.note ?? ''} ${r.userName ?? ''} ${methodLabel(r.method)} ${r.amount} ${r.commission}`.toLowerCase()
         if (!hay.includes(t)) return false
       }
       return true
     })
-  }, [rows, kind, q])
+  }, [rows, method, kind, q, showCancelled])
+
+  // إجماليات «النتيجة» (بعد الفلاتر) — منفصلة عن إجماليات الفترة في الهيرو
+  const viewStats = React.useMemo(() => summarize(visible), [visible])
+
+  // أكبر مبلغ ظاهر — بيحدد طول الشريط في كل صف
+  const maxAmt = React.useMemo(() => Math.max(1, ...visible.map((r) => r.amount)), [visible])
 
   const groups = React.useMemo(() => {
     const map = new Map<string, Txn[]>()
@@ -295,11 +313,12 @@ export function FinanceView() {
     return Array.from(map, ([key, list]) => ({ key, list, s: summarize(list) }))
   }, [visible, tz])
 
-  const hasFilter = kind !== 'all' || q !== '' || method !== 'all'
+  const hasFilter = kind !== 'all' || q !== '' || method !== 'all' || !showCancelled
   const clearFilters = () => {
     setKind('all')
     setQ('')
     setMethod('all')
+    setShowCancelled(true)
   }
 
   const rangeText =
@@ -370,60 +389,62 @@ export function FinanceView() {
           style={{ backgroundImage: 'repeating-linear-gradient(-45deg, currentColor 0 1px, transparent 1px 11px)' }}
         />
 
-        <div className="relative grid lg:grid-cols-[minmax(0,1fr)_240px]">
+        <div className="relative grid lg:grid-cols-[minmax(0,1fr)_212px]">
           {/* الجنب الأساسي */}
-          <div className="space-y-5 p-5 sm:p-7">
-            <div className="flex items-center gap-3">
-              <span
-                className="flex size-10 items-center justify-center rounded-xl text-white shadow-md shadow-teal-600/25"
-                style={{ background: ACCENT }}
-              >
-                <Wallet className="size-5" />
-              </span>
-              <div>
-                <h1 className="text-lg font-extrabold leading-tight">المعاملات المالية</h1>
-                <p className="text-[11px] text-muted-foreground">إيداع وسحب المحافظ الإلكترونية والعمولات</p>
-              </div>
-            </div>
-
-            {/* الرقم المحوري */}
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">عمولة الفترة — ربح المحل من التحويلات</p>
-              <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                {firstLoad ? (
-                  <Skeleton className="h-14 w-48 rounded-xl" />
-                ) : (
+          <div className="space-y-4 p-5 sm:p-6">
+            <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+              {/* الهوية + الرقم المحوري */}
+              <div className="min-w-[250px]">
+                <div className="flex items-center gap-3">
                   <span
-                    dir="ltr"
-                    className="bg-clip-text text-5xl font-black leading-none tracking-tight tabular-nums text-transparent sm:text-6xl"
-                    style={{ backgroundImage: ACCENT }}
+                    className="flex size-10 items-center justify-center rounded-xl text-white shadow-md shadow-teal-600/25"
+                    style={{ background: ACCENT }}
                   >
-                    {fmt(stats.total.comm)}
+                    <Wallet className="size-5" />
                   </span>
-                )}
-                <span className="text-base font-semibold text-muted-foreground">جنيه</span>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                من <b className="text-foreground">{fmt(stats.total.n)}</b> معاملة · {rangeText}
-                {stats.cancelled > 0 && <span> · {fmt(stats.cancelled)} ملغية غير محسوبة</span>}
-              </p>
-            </div>
+                  <div>
+                    <h1 className="text-lg font-extrabold leading-tight">المعاملات المالية</h1>
+                    <p className="text-[11px] text-muted-foreground">إيداع وسحب المحافظ الإلكترونية والعمولات</p>
+                  </div>
+                </div>
 
-            {/* ملخص التدفق */}
-            <div className="grid grid-cols-3 gap-2">
-              <Tile label="إيداعات" value={fmt(stats.total.dep)} tone="in" />
-              <Tile label="سحوبات" value={fmt(stats.total.wd)} tone="out" />
-              <Tile
-                label="أثر الخزنة"
-                value={sgn(stats.net)}
-                tone={stats.net > 0 ? 'in' : stats.net < 0 ? 'out' : 'flat'}
-                hint="إيداع − سحب + عمولة"
-              />
+                <p className="mt-4 text-xs font-medium text-muted-foreground">عمولة الفترة — ربح المحل من التحويلات</p>
+                <div className="mt-1 flex items-baseline gap-2.5">
+                  {firstLoad ? (
+                    <Skeleton className="h-12 w-44 rounded-xl" />
+                  ) : (
+                    <span
+                      dir="ltr"
+                      className="bg-clip-text text-5xl font-black leading-none tracking-tight tabular-nums text-transparent"
+                      style={{ backgroundImage: ACCENT }}
+                    >
+                      {fmt(stats.total.comm)}
+                    </span>
+                  )}
+                  <span className="text-base font-semibold text-muted-foreground">جنيه</span>
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  من <b className="text-foreground">{countTxn(stats.total.n)}</b> · {rangeText}
+                  {stats.cancelled > 0 && <span> · {fmt(stats.cancelled)} ملغية غير محسوبة</span>}
+                </p>
+              </div>
+
+              {/* ملخص التدفق */}
+              <div className="grid min-w-[280px] flex-1 grid-cols-3 gap-2 lg:max-w-[500px]">
+                <Tile label="إيداعات" value={fmt(stats.total.dep)} tone={stats.total.dep > 0 ? 'in' : 'flat'} />
+                <Tile label="سحوبات" value={fmt(stats.total.wd)} tone={stats.total.wd > 0 ? 'out' : 'flat'} />
+                <Tile
+                  label="أثر الخزنة"
+                  value={sgn(stats.net)}
+                  tone={stats.net > 0 ? 'in' : stats.net < 0 ? 'out' : 'flat'}
+                  hint="إيداع − سحب + عمولة"
+                />
+              </div>
             </div>
 
             {/* مسارات التحويل */}
             <div>
-              <div className="mb-2.5 flex items-center justify-between">
+              <div className="mb-2 flex items-center justify-between">
                 <p className="text-xs font-bold">مسارات التحويل</p>
                 <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
                   <span className="inline-flex items-center gap-1.5">
@@ -436,9 +457,17 @@ export function FinanceView() {
                   </span>
                 </div>
               </div>
-              <div className="space-y-3">
+              <div className="grid gap-2.5 md:grid-cols-3">
                 {METHODS.map((m) => (
-                  <Lane key={m.key} m={m} b={stats.by[m.key] ?? emptyBucket()} scale={scale} muted={method !== 'all' && method !== m.key} />
+                  <Lane
+                    key={m.key}
+                    m={m}
+                    b={stats.by[m.key] ?? emptyBucket()}
+                    scale={scale}
+                    muted={method !== 'all' && method !== m.key}
+                    selected={method === m.key}
+                    onSelect={() => setMethod(method === m.key ? 'all' : m.key)}
+                  />
                 ))}
               </div>
               {rows.length >= ROW_LIMIT && (
@@ -451,7 +480,7 @@ export function FinanceView() {
           </div>
 
           {/* الجنب المقصوص (stub) */}
-          <div className="relative flex flex-col justify-center gap-2.5 border-t border-dashed p-5 lg:border-s lg:border-t-0 sm:p-6">
+          <div className="relative flex flex-col justify-center gap-2.5 border-t border-dashed p-5 sm:p-6 lg:border-s lg:border-t-0">
             <span aria-hidden className="absolute left-0 top-0 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border bg-background lg:left-auto lg:right-0 lg:translate-x-1/2" />
             <span aria-hidden className="absolute right-0 top-0 size-5 -translate-y-1/2 translate-x-1/2 rounded-full border bg-background lg:bottom-0 lg:top-auto lg:translate-y-1/2" />
             <Button
@@ -561,6 +590,21 @@ export function FinanceView() {
             ]}
           />
 
+          {stats.cancelled > 0 && (
+            <button
+              type="button"
+              aria-pressed={!showCancelled}
+              onClick={() => setShowCancelled((v) => !v)}
+              className={cn(
+                'flex h-10 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-colors',
+                showCancelled ? 'bg-card text-muted-foreground hover:text-foreground' : 'border-teal-500/40 bg-teal-500/10 text-teal-700 dark:text-teal-300'
+              )}
+            >
+              {showCancelled ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              {showCancelled ? 'إخفاء' : 'إظهار'} الملغية ({fmt(stats.cancelled)})
+            </button>
+          )}
+
           <div className="relative min-w-[170px] flex-1">
             <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -621,18 +665,30 @@ export function FinanceView() {
         </div>
       ) : (
         <div className={cn('space-y-4 transition-opacity', loading && 'opacity-70')}>
-          <p className="px-1 text-[11px] text-muted-foreground">
-            عرض {fmt(visible.length)} من {fmt(rows.length)} معاملة
-            {hasFilter && (
-              <button type="button" onClick={clearFilters} className="ms-2 font-semibold text-teal-600 hover:underline dark:text-teal-400">
+          {hasFilter ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-teal-500/25 bg-teal-500/5 px-3.5 py-2.5 text-[11px]" aria-live="polite">
+              <span className="font-bold text-teal-700 dark:text-teal-300">
+                نتيجة الفلتر: {countTxn(visible.length)} من {fmt(rows.length)}
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5 font-semibold tabular-nums">
+                {viewStats.total.dep > 0 && <Pill tone="in">إيداع {sgn(viewStats.total.dep)}</Pill>}
+                {viewStats.total.wd > 0 && <Pill tone="out">سحب {sgn(-viewStats.total.wd)}</Pill>}
+                {viewStats.total.comm > 0 && <Pill tone="acc">عمولة {sgn(viewStats.total.comm)}</Pill>}
+              </div>
+              <button type="button" onClick={clearFilters} className="ms-auto font-semibold text-teal-600 hover:underline dark:text-teal-400">
                 مسح الفلاتر
               </button>
-            )}
-          </p>
+            </div>
+          ) : (
+            <p className="px-1 text-[11px] text-muted-foreground">
+              عرض {fmt(visible.length)} من {countTxn(rows.length)}
+            </p>
+          )}
 
           <div className={cn('mx-px hidden px-3.5 text-[11px] font-semibold text-muted-foreground lg:grid', GRID)}>
             <span />
             <span>الوسيلة والتفاصيل</span>
+            <span />
             <span className="text-end">المبلغ</span>
             <span className="text-end">العمولة</span>
             <span className="text-end">أثر الخزنة</span>
@@ -643,7 +699,7 @@ export function FinanceView() {
             <section key={g.key} className="overflow-hidden rounded-2xl border bg-card shadow-sm">
               <header className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b bg-muted/30 px-3.5 py-2.5">
                 <h3 className="text-sm font-extrabold">{dayLabel(g.key, tz)}</h3>
-                <span className="text-[11px] text-muted-foreground">{fmt(g.list.length)} معاملة</span>
+                <span className="text-[11px] text-muted-foreground">{countTxn(g.list.length)}</span>
                 <div className="ms-auto flex flex-wrap items-center gap-1.5 text-[11px] font-semibold tabular-nums">
                   {g.s.total.dep > 0 && <Pill tone="in">إيداع {sgn(g.s.total.dep)}</Pill>}
                   {g.s.total.wd > 0 && <Pill tone="out">سحب {sgn(-g.s.total.wd)}</Pill>}
@@ -652,7 +708,7 @@ export function FinanceView() {
               </header>
               <ul className="divide-y">
                 {g.list.map((t, i) => (
-                  <TxnRow key={t.id} t={t} i={i} tz={tz} isAdmin={isAdmin} onCancel={cancelTxn} />
+                  <TxnRow key={t.id} t={t} i={i} tz={tz} isAdmin={isAdmin} onCancel={cancelTxn} maxAmt={maxAmt} flash={flashId === t.id} />
                 ))}
               </ul>
             </section>
@@ -660,7 +716,14 @@ export function FinanceView() {
         </div>
       )}
 
-      <TxnDialog open={dialogOpen} onOpenChange={setDialogOpen} rates={rates} onSaved={load} />
+      <TxnDialog open={dialogOpen} onOpenChange={setDialogOpen} rates={rates} onSaved={(id) => {
+          load()
+          if (id) {
+            setFlashId(id)
+            setTimeout(() => setFlashId(null), 2800)
+          }
+        }}
+      />
     </div>
   )
 }
@@ -668,7 +731,7 @@ export function FinanceView() {
 /* ───────────────────────── مكوّنات الهيرو والفلاتر ───────────────────────── */
 
 const GRID =
-  'grid-cols-[auto_minmax(0,1fr)_auto_32px] lg:grid-cols-[auto_minmax(0,1.6fr)_130px_110px_140px_32px] gap-x-3'
+  'grid-cols-[auto_minmax(0,1fr)_auto_32px] lg:grid-cols-[auto_minmax(0,1.3fr)_minmax(80px,1fr)_130px_100px_130px_32px] gap-x-4'
 
 function Tile({
   label,
@@ -713,35 +776,67 @@ function Pill({ tone, children }: { tone: 'in' | 'out' | 'acc'; children: React.
   )
 }
 
-/** مسار تحويل: شريط ثنائي الاتجاه — سحب شمال الصفر وإيداع يمينه */
+/** مسار تحويل: بطاقة صغيرة بشريط ثنائي الاتجاه — سحب شمال الصفر وإيداع يمينه */
 function Lane({
   m,
   b,
   scale,
   muted,
+  selected,
+  onSelect,
 }: {
   m: (typeof METHODS)[number]
   b: Bucket
   scale: number
   muted: boolean
+  selected: boolean
+  onSelect: () => void
 }) {
   const wd = (b.wd / scale) * 50
   const dep = (b.dep / scale) * 50
   const Icon = m.icon
   return (
-    <div className={cn('grid grid-cols-[104px_minmax(0,1fr)_76px] items-center gap-3 transition-opacity sm:grid-cols-[132px_minmax(0,1fr)_90px]', muted && 'opacity-40')}>
-      <div className="flex items-center gap-2">
-        <span
-          className="flex size-8 shrink-0 items-center justify-center rounded-xl"
-          style={{ backgroundColor: `${m.color}1f`, color: m.color }}
-        >
-          <Icon className="size-4" />
-        </span>
-        <span className="truncate text-xs font-bold">{m.label}</span>
+    <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+      title={selected ? 'اضغط لإلغاء فلتر الوسيلة' : `اضغط لعرض معاملات ${m.label} بس`}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelect()
+        }
+      }}
+      className={cn(
+        'cursor-pointer rounded-2xl border bg-background/60 p-3 transition-all hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500',
+        muted && 'opacity-45 hover:opacity-80'
+      )}
+      style={selected ? { borderColor: m.color, boxShadow: `0 0 0 1px ${m.color}` } : undefined}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className="flex size-8 shrink-0 items-center justify-center rounded-xl"
+            style={{ backgroundColor: `${m.color}1f`, color: m.color }}
+          >
+            <Icon className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-bold leading-tight">{m.label}</p>
+            <p className="text-[10px] leading-tight text-muted-foreground">{countTxn(b.n)}</p>
+          </div>
+        </div>
+        <div className="shrink-0 text-end">
+          <p className="text-[10px] leading-tight text-muted-foreground">عمولة</p>
+          <p dir="ltr" className={cn('text-left text-sm font-extrabold leading-tight tabular-nums', b.comm > 0 ? 'text-teal-700 dark:text-teal-300' : 'text-muted-foreground/60')}>
+            {b.comm > 0 ? sgn(b.comm) : '0'}
+          </p>
+        </div>
       </div>
 
-      <div dir="ltr">
-        <div className="relative h-2.5 rounded-full bg-muted/80">
+      <div dir="ltr" className="mt-3">
+        <div className="relative h-2 rounded-full bg-muted/80">
           <span aria-hidden className="absolute inset-y-[-3px] left-1/2 w-px bg-foreground/25" />
           {b.wd > 0 && (
             <span
@@ -760,13 +855,6 @@ function Lane({
           <span className={b.wd ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground/60'}>{b.wd ? sgn(-b.wd) : '0'}</span>
           <span className={b.dep ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/60'}>{b.dep ? sgn(b.dep) : '0'}</span>
         </div>
-      </div>
-
-      <div className="text-end">
-        <p dir="ltr" className={cn('text-left text-sm font-extrabold tabular-nums', b.comm > 0 ? 'text-teal-700 dark:text-teal-300' : 'text-muted-foreground/60')}>
-          {b.comm > 0 ? sgn(b.comm) : '0'}
-        </p>
-        <p className="text-[10px] text-muted-foreground">{fmt(b.n)} معاملة</p>
       </div>
     </div>
   )
@@ -837,12 +925,16 @@ function TxnRow({
   tz,
   isAdmin,
   onCancel,
+  maxAmt,
+  flash,
 }: {
   t: Txn
   i: number
   tz: string
   isAdmin: boolean
   onCancel: (id: number) => void
+  maxAmt: number
+  flash: boolean
 }) {
   const dep = t.kind === 'deposit'
   const cancelled = isCancelled(t)
@@ -853,9 +945,10 @@ function TxnRow({
   return (
     <li
       className={cn(
-        'group grid items-center gap-y-1 px-3.5 py-3 transition-colors hover:bg-muted/40 animate-in-up motion-reduce:animate-none',
+        'group grid items-center gap-y-1 px-3.5 py-3 transition-colors duration-700 hover:bg-muted/40 animate-in-up motion-reduce:animate-none',
         GRID,
-        cancelled && 'bg-muted/20'
+        cancelled && 'bg-muted/20',
+        flash && 'bg-teal-500/15 hover:bg-teal-500/15'
       )}
       style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}
     >
@@ -890,6 +983,16 @@ function TxnRow({
         </p>
       </div>
 
+      {/* شريط نسبي: بيملا المساحة الفاضية ويخلّي مقارنة المبالغ بالنظر */}
+      <div className="hidden lg:block" aria-hidden>
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted/70">
+          <div
+            className={cn('h-full rounded-full', cancelled ? 'bg-muted-foreground/30' : dep ? 'bg-emerald-500/70' : 'bg-rose-500/70')}
+            style={{ width: `${Math.max(4, (t.amount / maxAmt) * 100)}%` }}
+          />
+        </div>
+      </div>
+
       <div className="text-end">
         <p
           dir="ltr"
@@ -901,20 +1004,20 @@ function TxnRow({
           {sgn(money)}
         </p>
         {t.commission > 0 && (
-          <p className="text-[10px] text-muted-foreground lg:hidden">
+          <p className={cn('text-[10px] text-muted-foreground lg:hidden', cancelled && 'line-through')}>
             عمولة <bdi dir="ltr">{sgn(t.commission)}</bdi>
           </p>
         )}
       </div>
 
       <div className="hidden text-end lg:block">
-        <p dir="ltr" className={cn('text-left text-sm font-bold tabular-nums', cancelled || t.commission === 0 ? 'text-muted-foreground' : 'text-teal-700 dark:text-teal-300')}>
+        <p dir="ltr" className={cn('text-left text-sm font-bold tabular-nums', cancelled || t.commission === 0 ? 'text-muted-foreground' : 'text-teal-700 dark:text-teal-300', cancelled && 'line-through')}>
           {t.commission > 0 ? sgn(t.commission) : '—'}
         </p>
       </div>
 
       <div className="hidden text-end lg:block">
-        <p dir="ltr" className={cn('text-left text-sm font-extrabold tabular-nums', cancelled ? 'text-muted-foreground' : '')}>
+        <p dir="ltr" className={cn('text-left text-sm font-extrabold tabular-nums', cancelled ? 'text-muted-foreground' : net < 0 ? 'text-rose-600 dark:text-rose-400' : '')}>
           {cancelled ? '—' : sgn(net)}
         </p>
       </div>
@@ -950,7 +1053,7 @@ function TxnDialog({
   open: boolean
   onOpenChange: (o: boolean) => void
   rates: Rates | null
-  onSaved: () => void
+  onSaved: (newId?: number) => void
 }) {
   const [kind, setKind] = React.useState<'deposit' | 'withdraw'>('deposit')
   const [method, setMethod] = React.useState<MethodKey>('vodafone_cash')
@@ -983,12 +1086,12 @@ function TxnDialog({
     }
     setSaving(true)
     try {
-      await api('/api/finance', {
+      const created = await api<{ id?: number }>('/api/finance', {
         method: 'POST',
         body: { method, kind, amount: amt, note: note.trim() || null },
       })
       toast.success(`تمت إضافة ${dep ? 'إيداع' : 'سحب'} ${fmt(amt)} جنيه`)
-      onSaved()
+      onSaved(created?.id)
       if (another) {
         setAmountText('')
         setNote('')
@@ -1089,7 +1192,7 @@ function TxnDialog({
                       <Icon className="size-4" />
                     </span>
                     <span className="rounded-md bg-background/70 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
-                      {r == null ? '…' : r > 0 ? `${fmt(r)}٪` : '0٪'}
+                      {r == null ? '…' : r > 0 ? `${fmtRate(r)}٪` : '0٪'}
                     </span>
                   </span>
                   <span className="text-xs font-bold leading-tight">{m.label}</span>
@@ -1182,7 +1285,7 @@ function TxnDialog({
               <span aria-hidden className="absolute -top-2 start-0 size-4 -translate-x-1/2 rounded-full border bg-card rtl:translate-x-1/2" />
               <span aria-hidden className="absolute -bottom-2 start-0 size-4 -translate-x-1/2 rounded-full border bg-card rtl:translate-x-1/2" />
               <p className="text-[11px] font-medium text-muted-foreground">
-                العمولة{rate != null && rate > 0 && <span className="ms-1 text-[10px]">({fmt(rate)}٪)</span>}
+                العمولة{rate != null && rate > 0 && <span className="ms-1 text-[10px]">({fmtRate(rate)}٪)</span>}
               </p>
               <p dir="ltr" className="mt-0.5 text-right text-lg font-extrabold tabular-nums text-teal-700 dark:text-teal-300">
                 {commission == null ? '—' : commission > 0 ? sgn(commission) : '0'}
