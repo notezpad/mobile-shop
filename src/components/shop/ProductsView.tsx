@@ -507,6 +507,8 @@ export function ProductsView() {
   }
   const lowOnPage = products.filter((p) => p.active && p.quantity <= p.minQuantity).length
   const allSelected = products.length > 0 && selectedIds.size === products.length
+  // سعر القطعة الفعلي خاص بباقة الجملة (الاحترافية) فقط — القطاعي بيكتب سعره وخلاص
+  const isWholesale = capabilities.includes('multi_unit')
   const selectionMode = selectedIds.size > 0
 
   const rowActions = (p: Product) => ({
@@ -739,7 +741,8 @@ export function ProductsView() {
                     <TableHead>المنتج</TableHead>
                     <TableHead className="w-44">الباركود</TableHead>
                     <TableHead className="w-24 text-center">التكلفة</TableHead>
-                    <TableHead className="w-36 text-center">السعر</TableHead>
+                    <TableHead className="w-28 text-center">السعر</TableHead>
+                    {isWholesale && <TableHead className="w-36 text-center">سعر القطعة الفعلي</TableHead>}
                     <TableHead className="w-48">المخزون</TableHead>
                     <TableHead className="w-20 text-center">مبيعات</TableHead>
                     <TableHead className="w-24 text-center">إجراءات</TableHead>
@@ -784,15 +787,23 @@ export function ProductsView() {
                         <TableCell className="text-center tabular-nums text-muted-foreground">
                           {formatCurrency(p.cost)}
                         </TableCell>
-                        <TableCell className="text-center tabular-nums">
-                          <p className="font-extrabold">{formatCurrency(p.price)}</p>
-                          {p.dynamicRetailPrice != null && (
-                            <p className="text-[10px] text-primary">
-                              قطعة {formatCurrency(p.dynamicRetailPrice)}
-                              {p.retailMarginPercent != null ? ` (${p.retailMarginPercent}%)` : ''}
-                            </p>
-                          )}
+                        <TableCell className="text-center font-extrabold tabular-nums">
+                          {formatCurrency(p.price)}
                         </TableCell>
+                        {isWholesale && (
+                          <TableCell className="text-center tabular-nums">
+                            {p.dynamicRetailPrice != null ? (
+                              <div className="flex flex-col items-center gap-0.5">
+                                <span className="font-extrabold text-primary">{formatCurrency(p.dynamicRetailPrice)}</span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  تلقائي {p.retailMarginPercent != null ? `(${p.retailMarginPercent}%)` : ''}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">{formatCurrency(p.price)}</span>
+                            )}
+                          </TableCell>
+                        )}
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <span className={cn('w-10 text-lg font-extrabold tabular-nums', ui.text)}>{p.quantity}</span>
@@ -1166,14 +1177,24 @@ function ProductTag({
               ) : (
                 <span className="text-muted-foreground">بدون تصنيف</span>
               )}
-              {p.dynamicRetailPrice != null && (
-                <span className="font-bold tabular-nums text-primary">
-                  قطعة {p.dynamicRetailPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })}
-                  {p.retailMarginPercent != null ? ` · ${p.retailMarginPercent}%` : ''}
-                </span>
-              )}
             </div>
           </div>
+
+          {actions.capabilities.includes('multi_unit') && (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-foreground/20 px-2.5 py-1.5">
+            <span className="text-[11px] font-medium text-muted-foreground">سعر القطعة الفعلي</span>
+            <span className="flex items-baseline gap-1.5 tabular-nums">
+              <b className={cn('text-sm font-extrabold', p.dynamicRetailPrice != null ? 'text-primary' : 'text-muted-foreground')}>
+                {(p.dynamicRetailPrice ?? p.price).toLocaleString('en-US', { maximumFractionDigits: 2 })}
+              </b>
+              <span className="text-[10px] text-muted-foreground">
+                {p.dynamicRetailPrice != null
+                  ? `تلقائي${p.retailMarginPercent != null ? ` ${p.retailMarginPercent}%` : ''}`
+                  : 'نفس السعر'}
+              </span>
+            </span>
+          </div>
+          )}
 
           <div className="flex items-end justify-between gap-2">
             <div>

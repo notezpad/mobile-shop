@@ -167,7 +167,10 @@ export function SettingsView() {
   const setPlan = useShopStore((s) => s.setPlan)
   const setSubscription = useShopStore((s) => s.setSubscription)
   const enabledModules = useShopStore((s) => s.plan.enabledModules)
+  const capabilities = useShopStore((s) => s.plan.capabilities)
   const hasFinance = enabledModules.includes('finance')
+  // التسعير التلقائي للقطعة خاص بباقة الجملة (multi_unit) فقط
+  const hasWholesale = capabilities.includes('multi_unit')
 
   // 🛡️ 2026-09-27: single source of truth for refreshing subscription data.
   // بتحدّث الـ state المحلي + الـ store العام (plan/capabilities) مع بعض، عشان
@@ -607,47 +610,49 @@ export function SettingsView() {
         </div>
 
         {/* ═════════ التسعير التلقائي ═════════ */}
-        <Panel
-          tag="06 / Pricing"
-          title="تسعير القطعة التلقائي"
-          hint="سعر «قطعة» في نقطة البيع = التكلفة + هامش الربح بدل السعر الثابت. أسعار وحدات الجملة (ربع دستة، نص دستة، دستة...) بتفضل زي ما هي."
-          icon={Calculator}
-          className="stagger-5 lg:col-span-6"
-          bodyClassName="space-y-3.5"
-        >
-          <SettingRow
-            title="تفعيل التسعير التلقائي للقطعة"
-            desc="السعر بيتحدّث فوراً في نقطة البيع لحظة اختيار وحدة «قطعة»"
-            on={retailOn}
+        {hasWholesale && (
+          <Panel
+            tag="06 / Pricing"
+            title="تسعير القطعة التلقائي"
+            hint="سعر «قطعة» في نقطة البيع = التكلفة + هامش الربح بدل السعر الثابت. أسعار وحدات الجملة (ربع دستة، نص دستة، دستة...) بتفضل زي ما هي."
+            icon={Calculator}
+            className="stagger-5 lg:col-span-6"
+            bodyClassName="space-y-3.5"
           >
-            <Toggle label="تفعيل التسعير التلقائي للقطعة" checked={retailOn} onChange={(v) => update('dynamicRetailPricingEnabled', v)} disabled={saving} />
-          </SettingRow>
+            <SettingRow
+              title="تفعيل التسعير التلقائي للقطعة"
+              desc="السعر بيتحدّث فوراً في نقطة البيع لحظة اختيار وحدة «قطعة»"
+              on={retailOn}
+            >
+              <Toggle label="تفعيل التسعير التلقائي للقطعة" checked={retailOn} onChange={(v) => update('dynamicRetailPricingEnabled', v)} disabled={saving} />
+            </SettingRow>
 
-          <Field label="نسبة هامش الربح الافتراضية" hint="تُطبَّق على أي منتج ملوش نسبة مخصصة. وتقدر تخصص نسبة لمنتج معين من بياناته.">
-            <NumInput value={margin} onChange={(n) => update('defaultRetailMarginPercent', n)} suffix="%" />
-          </Field>
+            <Field label="نسبة هامش الربح الافتراضية" hint="تُطبَّق على أي منتج ملوش نسبة مخصصة. وتقدر تخصص نسبة لمنتج معين من بياناته.">
+              <NumInput value={margin} onChange={(n) => update('defaultRetailMarginPercent', n)} suffix="%" />
+            </Field>
 
-          {/* معادلة حيّة */}
-          <p className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground">
-            <Led tone={retailOn ? 'on' : 'idle'} />
-            {retailOn ? 'المعادلة المطبّقة حالياً على كل منتج ملوش نسبة مخصصة' : 'غير مفعّل حالياً — دي معاينة لشكل الحساب بعد التفعيل'}
-          </p>
-          <div className="flex items-stretch gap-2 text-center">
-            {[
-              { l: 'التكلفة', v: '100' },
-              { l: `هامش ${formatNumber(margin)}%`, v: `+${formatNumber(Math.round(margin * 100) / 100)}` },
-              { l: 'سعر القطعة', v: formatNumber(Math.round((100 + margin) * 100) / 100), strong: true },
-            ].map((c, i) => (
-              <React.Fragment key={c.l}>
-                {i > 0 && <span className="self-center text-sm font-bold text-muted-foreground">{i === 2 ? '=' : '+'}</span>}
-                <div className={cn('flex-1 rounded-xl border px-2 py-2', c.strong ? 'border-foreground bg-foreground text-background shadow-sm' : 'border-dashed border-foreground/30 bg-muted/50')}>
-                  <p className={cn('text-[10px] font-semibold', c.strong ? 'text-background/70' : 'text-muted-foreground')}>{c.l}</p>
-                  <p className="text-lg font-extrabold tabular-nums leading-tight">{i === 1 ? c.v.replace('+', '') : c.v}</p>
-                </div>
-              </React.Fragment>
-            ))}
-          </div>
-        </Panel>
+            {/* معادلة حيّة */}
+            <p className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground">
+              <Led tone={retailOn ? 'on' : 'idle'} />
+              {retailOn ? 'المعادلة المطبّقة حالياً على كل منتج ملوش نسبة مخصصة' : 'غير مفعّل حالياً — دي معاينة لشكل الحساب بعد التفعيل'}
+            </p>
+            <div className="flex items-stretch gap-2 text-center">
+              {[
+                { l: 'التكلفة', v: '100' },
+                { l: `هامش ${formatNumber(margin)}%`, v: `+${formatNumber(Math.round(margin * 100) / 100)}` },
+                { l: 'سعر القطعة', v: formatNumber(Math.round((100 + margin) * 100) / 100), strong: true },
+              ].map((c, i) => (
+                <React.Fragment key={c.l}>
+                  {i > 0 && <span className="self-center text-sm font-bold text-muted-foreground">{i === 2 ? '=' : '+'}</span>}
+                  <div className={cn('flex-1 rounded-xl border px-2 py-2', c.strong ? 'border-foreground bg-foreground text-background shadow-sm' : 'border-dashed border-foreground/30 bg-muted/50')}>
+                    <p className={cn('text-[10px] font-semibold', c.strong ? 'text-background/70' : 'text-muted-foreground')}>{c.l}</p>
+                    <p className="text-lg font-extrabold tabular-nums leading-tight">{i === 1 ? c.v.replace('+', '') : c.v}</p>
+                  </div>
+                </React.Fragment>
+              ))}
+            </div>
+          </Panel>
+        )}
 
         {/* ═════════ عمولات الخدمات المالية ═════════ */}
         {hasFinance && (

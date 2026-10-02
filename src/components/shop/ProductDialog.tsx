@@ -81,6 +81,8 @@ export function ProductDialog({
     onClose: () => onOpenChange(false),
   })
   const hasCollections = capabilities.includes('collections')
+  // نسبة هامش القطعة خاصة بباقة الجملة (multi_unit) فقط
+  const hasWholesale = capabilities.includes('multi_unit')
 
   // sync when opening / initial changes
   React.useEffect(() => {
@@ -143,7 +145,10 @@ export function ProductDialog({
         imagePath,
         branchId: branchId ? parseInt(branchId, 10) : null,
         collection: collection.trim() || null,
-        retailMarginPercent: retailMarginPercent.trim() !== '' ? parseFloat(retailMarginPercent) : null,
+        // الباقة الأساسية: الحقل مخفي فنسيبه خارج الطلب عشان ما نمسحش قيمة محفوظة
+        ...(hasWholesale
+          ? { retailMarginPercent: retailMarginPercent.trim() !== '' ? parseFloat(retailMarginPercent) : null }
+          : {}),
       }
       if (initial?.id) {
         await api(`/api/products/${initial.id}`, { method: 'PUT', body: payload })
@@ -297,6 +302,8 @@ export function ProductDialog({
             />
           </div>
 
+          {hasWholesale && (
+            <>
           {/* 5.5 retail margin override — dynamic pricing for the "قطعة" unit only */}
           <div className="col-span-2 space-y-1.5">
             <Label htmlFor="p-retail-margin">نسبة هامش ربح القطعة (اختياري)</Label>
@@ -313,6 +320,8 @@ export function ProductDialog({
               يُستخدم فقط لو التسعير التلقائي للقطعة مفعّل من الإعدادات. سيبه فاضي عشان يستخدم النسبة الافتراضية للمحل.
             </p>
           </div>
+            </>
+          )}
 
           {/* 6. quantity */}
           <div className="space-y-1.5">
