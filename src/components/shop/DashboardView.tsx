@@ -529,7 +529,7 @@ export function DashboardView() {
                 <Skeleton className="h-full w-full" />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={days} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
+                  <ComposedChart data={days} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
                     <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={11} />
 
@@ -540,12 +540,6 @@ export function DashboardView() {
                       axisLine={false}
                       fontSize={11}
                       width={46}
-                      label={{
-                        value: 'مبيعات',
-                        angle: -90,
-                        position: 'insideLeft',
-                        style: { fontSize: 10, fill: 'var(--muted-foreground)', textAnchor: 'middle' },
-                      }}
                     />
 
                     {/* محور يمين — للربح */}
@@ -556,12 +550,6 @@ export function DashboardView() {
                       axisLine={false}
                       fontSize={11}
                       width={46}
-                      label={{
-                        value: 'ربح',
-                        angle: 90,
-                        position: 'insideRight',
-                        style: { fontSize: 10, fill: 'var(--muted-foreground)', textAnchor: 'middle' },
-                      }}
                     />
 
                     <Tooltip
