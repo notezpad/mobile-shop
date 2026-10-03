@@ -877,6 +877,11 @@ function Receipt({
   const ret = isReturned(s)
   const due = s.total - s.paid
   const d = new Date(s.createdAt)
+  // فاتورة جملة (٣٠–٥٠ صنف): بحث جوّه الإيصال + عدّاد، والقايمة بتتمرّر لوحدها
+  const [itemQ, setItemQ] = React.useState('')
+  const bigInvoice = s.items.length > 8
+  const needle = itemQ.trim().toLowerCase()
+  const shownItems = needle ? s.items.filter((it) => it.name.toLowerCase().includes(needle)) : s.items
 
   return (
     <div className="animate-in-up">
@@ -910,8 +915,28 @@ function Receipt({
           </div>
         </div>
 
-        <ul className={cn('mt-3 max-h-[260px] space-y-2 overflow-y-auto pe-1', ret && 'opacity-60')}>
-          {s.items.map((it) => {
+        <div className="mt-3 flex items-center justify-between text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
+          <span>{s.items.length} صنف</span>
+          <span className="tabular-nums">{qtyOf(s)} قطعة</span>
+        </div>
+        {bigInvoice && (
+          <label className="relative mt-2 flex h-8 items-center rounded-lg border border-zinc-300 bg-white/70 focus-within:border-yellow-500 focus-within:ring-[3px] focus-within:ring-yellow-300/40 dark:border-zinc-700 dark:bg-zinc-800/60">
+            <Search className="pointer-events-none absolute start-2.5 size-3.5 text-zinc-500" aria-hidden />
+            <input
+              value={itemQ}
+              onChange={(e) => setItemQ(e.target.value)}
+              placeholder="دوّر في الأصناف…"
+              aria-label="بحث في أصناف الفاتورة"
+              className="h-full w-full bg-transparent pe-2 text-xs outline-none placeholder:text-zinc-500"
+              style={{ paddingInlineStart: '2rem' }}
+            />
+          </label>
+        )}
+        <ul className={cn('mt-2 max-h-[260px] space-y-2 overflow-y-auto pe-1', ret && 'opacity-60')}>
+          {shownItems.length === 0 && (
+            <li className="py-4 text-center text-xs text-zinc-500">مفيش صنف بالاسم ده</li>
+          )}
+          {shownItems.map((it) => {
             const l = displayLine(it)
             return (
               <li key={it.id} className="flex items-baseline gap-2 text-sm">

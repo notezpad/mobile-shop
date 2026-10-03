@@ -15,7 +15,7 @@
  */
 
 import * as React from 'react'
-import { Info, Loader2, RotateCcw, Users, Wallet } from 'lucide-react'
+import { Info, Loader2, RotateCcw, Search, Users, Wallet, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -59,6 +59,9 @@ interface Props {
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 const num = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 2 })
 
+/** من هنا وطالع: قايمة طويلة (فاتورة جملة) → صفوف مضغوطة + بحث + تمرير داخلي */
+const BIG_LIST = 8
+
 const ghostBtn =
   'rounded-full border bg-background text-xs font-bold text-foreground/80 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-400/50'
 
@@ -98,6 +101,8 @@ function ReturnForm({
   const [cashMode, setCashMode] = React.useState(false)
   const [refundMethod, setRefundMethod] = React.useState(sale.paymentMethod || 'cash')
   const [note, setNote] = React.useState('')
+  const [itemQ, setItemQ] = React.useState('')
+  const [onlySel, setOnlySel] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const inFlight = React.useRef(false) // حاجز صلب ضد الدوس المزدوج
 
@@ -141,6 +146,14 @@ function ReturnForm({
   const anyRemaining = items.some((it) => remainingOf(it) > 0)
   const allSelected =
     anyRemaining && items.every((it) => remainingOf(it) === 0 || qtyOf(it) === remainingOf(it))
+
+  const big = items.length > BIG_LIST
+  const needle = itemQ.trim().toLowerCase()
+  const shownItems = items.filter((it) => {
+    if (needle && !it.name.toLowerCase().includes(needle)) return false
+    if (big && onlySel && qtyOf(it) <= 0) return false
+    return true
+  })
 
   const setAll = () => {
     const next: Record<number, string> = {}
@@ -244,8 +257,58 @@ function ReturnForm({
             الأصناف المراد إرجاعها
           </SectionTitle>
 
-          <ul className="space-y-2.5">
-            {items.map((it) => {
+          {big && (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <label className="relative flex h-10 min-w-[11rem] flex-1 items-center rounded-xl border bg-background transition-shadow focus-within:border-yellow-500 focus-within:ring-[3px] focus-within:ring-yellow-400/30">
+                <Search className="pointer-events-none absolute start-3 size-4 text-foreground/60" aria-hidden />
+                <input
+                  value={itemQ}
+                  onChange={(e) => setItemQ(e.target.value)}
+                  placeholder={`دوّر في ${items.length} صنف…`}
+                  aria-label="بحث في أصناف الفاتورة"
+                  className="h-full w-full bg-transparent pe-9 text-sm outline-none placeholder:text-muted-foreground/80"
+                  style={{ paddingInlineStart: '2.5rem' }}
+                />
+                {itemQ && (
+                  <button
+                    type="button"
+                    onClick={() => setItemQ('')}
+                    aria-label="مسح البحث"
+                    className="absolute end-2 flex size-6 items-center justify-center rounded-full text-foreground/60 hover:bg-muted"
+                  >
+                    <X className="size-4" />
+                  </button>
+                )}
+              </label>
+              <button
+                type="button"
+                aria-pressed={onlySel}
+                onClick={() => setOnlySel((v) => !v)}
+                disabled={lines.length === 0 && !onlySel}
+                className={cn(
+                  ghostBtn,
+                  'h-10 px-3.5 disabled:cursor-not-allowed disabled:opacity-40',
+                  onlySel && 'border-yellow-500 bg-yellow-300/25 text-foreground'
+                )}
+              >
+                المحدد فقط ({lines.length})
+              </button>
+            </div>
+          )}
+
+          {shownItems.length === 0 && (
+            <p className="rounded-2xl border border-dashed bg-card/60 px-4 py-8 text-center text-sm font-medium text-foreground/65">
+              {onlySel && !needle ? 'لسه مختارتش أي صنف' : 'مفيش صنف بالاسم ده'}
+            </p>
+          )}
+
+          <ul
+            className={cn(
+              big ? 'max-h-[26rem] space-y-1.5 overflow-y-auto overscroll-contain rounded-2xl border bg-card p-1.5' : 'space-y-2.5',
+              shownItems.length === 0 && 'hidden'
+            )}
+          >
+            {shownItems.map((it) => {
               const remaining = remainingOf(it)
               const prev = it.returnedQty ?? 0
               const q = qtyOf(it)
@@ -253,6 +316,57 @@ function ReturnForm({
               const pctPrev = it.quantity > 0 ? (prev / it.quantity) * 100 : 0
               const pctNow = it.quantity > 0 ? (q / it.quantity) * 100 : 0
               const pctKeep = Math.max(0, 100 - pctPrev - pctNow)
+              if (big) {
+                return (
+                  <li
+                    key={it.id}
+                    className={cn(
+                      'flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-xl border border-transparent px-3 py-2 transition-colors',
+                      on ? 'border-yellow-400 bg-yellow-300/10' : 'hover:bg-muted/50',
+                      remaining <= 0 && 'opacity-60'
+                    )}
+                  >
+                    <div className="min-w-[8rem] flex-1">
+                      <p className="truncate text-sm font-bold">{it.name}</p>
+                      <p className="text-[11.5px] font-medium tabular-nums text-foreground/65">
+                        {formatCurrency(it.price)} · متاح {remaining} من {it.quantity}
+                        {prev > 0 && <span className="text-foreground/50"> · رجع {prev}</span>}
+                        {on && (
+                          <b className="ms-2 font-extrabold text-rose-600 dark:text-rose-300">
+                            −{formatCurrency(q * it.price)}
+                          </b>
+                        )}
+                      </p>
+                    </div>
+                    {remaining > 0 ? (
+                      <div className="flex items-center gap-2">
+                        <Stepper
+                          value={q}
+                          min={0}
+                          max={remaining}
+                          onChange={(n) => setQty(it, n)}
+                          label={`كمية مرتجع ${it.name}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setQty(it, remaining)}
+                          disabled={q === remaining}
+                          className={cn(
+                            ghostBtn,
+                            'h-10 rounded-xl px-3 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background'
+                          )}
+                        >
+                          الكل
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="rounded-lg bg-zinc-500/15 px-2.5 py-1 text-xs font-bold text-zinc-700 dark:text-zinc-200">
+                        مرتجع بالكامل
+                      </span>
+                    )}
+                  </li>
+                )
+              }
               return (
                 <li
                   key={it.id}

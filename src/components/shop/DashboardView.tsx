@@ -30,13 +30,12 @@ import {
 import Link from 'next/link'
 import {
   Bar,
-  ComposedChart,
+  BarChart as RechartsBarChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
-  Line,
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -496,7 +495,7 @@ export function DashboardView() {
             )}
           </div>
 
-          {/* منحنى المبيعات + الربح */}
+          {/* منحنى المبيعات */}
           <div className="min-w-0">
             <PanelTitle
               icon={Activity}
@@ -529,29 +528,15 @@ export function DashboardView() {
                 <Skeleton className="h-full w-full" />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={days} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
+                  <RechartsBarChart data={days} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
                     <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={11} />
-
-                    {/* محور شمال — للمبيعات */}
                     <YAxis
-                      yAxisId="sales"
                       tickLine={false}
                       axisLine={false}
                       fontSize={11}
-                      width={46}
+                      width={52}
                     />
-
-                    {/* محور يمين — للربح */}
-                    <YAxis
-                      yAxisId="profit"
-                      orientation="right"
-                      tickLine={false}
-                      axisLine={false}
-                      fontSize={11}
-                      width={46}
-                    />
-
                     <Tooltip
                       cursor={{ fill: 'color-mix(in srgb, var(--primary) 8%, transparent)' }}
                       formatter={(v: any, name: any) => [formatCurrency(Number(v)), name]}
@@ -563,38 +548,21 @@ export function DashboardView() {
                         fontFamily: 'inherit',
                       }}
                     />
-
                     <Bar
-                      yAxisId="sales"
                       dataKey="total"
                       name="المبيعات"
                       fill="var(--primary)"
                       radius={[8, 8, 0, 0]}
                       maxBarSize={44}
                     />
-                    <Line
-                      yAxisId="profit"
-                      type="monotone"
-                      dataKey="profit"
-                      name="الربح"
-                      stroke="var(--success)"
-                      strokeWidth={2}
-                      dot={{ r: 2.5, fill: 'var(--success)', strokeWidth: 0 }}
-                      activeDot={{ r: 4 }}
-                    />
-                  </ComposedChart>
+                  </RechartsBarChart>
                 </ResponsiveContainer>
               )}
             </div>
-            <div className="mt-1.5 flex items-center gap-4 ps-1 text-[11px] text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <span className="size-2.5 rounded-sm bg-primary" />
-                مبيعات
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-0.5 w-4 rounded-full bg-success" />
-                ربح
-              </span>
+            <div className="mt-1.5 flex items-center gap-1.5 ps-1 text-[11px] text-muted-foreground">
+              <span className="size-2.5 rounded-sm bg-primary" />
+              مبيعات
+              <span className="text-muted-foreground/60">— مرّر الماوس على أي يوم لعرض الربح</span>
             </div>
           </div>
         </div>
