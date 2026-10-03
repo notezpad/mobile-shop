@@ -573,7 +573,7 @@ export function PurchaseOrderDialog({
                       </div>
                       <ul
                         className={cn(
-                          manyItems
+                          cart.length > 4
                             ? 'max-h-[26rem] space-y-2 overflow-y-auto overscroll-contain rounded-2xl border bg-card/60 p-1.5'
                             : 'space-y-2.5'
                         )}

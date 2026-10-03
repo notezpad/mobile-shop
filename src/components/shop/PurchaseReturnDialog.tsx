@@ -122,7 +122,8 @@ function ReturnForm({
   const setQty = (it: ReturnableItem, n: number) =>
     setQtys((p) => ({ ...p, [it.id]: n > 0 ? String(n) : "" }));
 
-  const many = order.items.length > 8;
+  const many = order.items.length > 8; // بحث + "المحدد فقط"
+  const compact = order.items.length > 3; // صفوف مضغوطة + تمرير داخلي
   const needle = itemQ.trim().toLowerCase();
   const visibleItems = order.items.filter(
     (it) =>
@@ -316,7 +317,7 @@ function ReturnForm({
 
           <ul
             className={cn(
-              many
+              compact
                 ? "max-h-[20rem] space-y-1.5 overflow-y-auto overscroll-contain rounded-2xl border bg-card/60 p-1.5"
                 : "space-y-2.5",
             )}
@@ -334,7 +335,7 @@ function ReturnForm({
                   key={it.id}
                   className={cn(
                     "rounded-2xl border bg-card transition-colors",
-                    many ? "px-3.5 py-2.5" : "p-3.5",
+                    compact ? "px-3.5 py-2.5" : "p-3.5",
                     on && "border-cyan-600/60 bg-cyan-600/[0.045]",
                     remaining <= 0 && "bg-muted/40",
                   )}
@@ -343,7 +344,7 @@ function ReturnForm({
                     <div className="min-w-[9rem] flex-1">
                       <p className="truncate text-sm font-extrabold">{it.name}</p>
                       <p className="mt-0.5 text-xs font-medium tabular-nums text-foreground/65">
-                        {many
+                        {compact
                           ? `${formatCurrency(it.cost)} · متاح ${remaining} من ${it.quantity}${prev > 0 ? ` · رجع قبل كده ${prev}` : ""}`
                           : `${formatCurrency(it.cost)} للقطعة · استلمت ${it.quantity}`}
                       </p>
@@ -351,7 +352,7 @@ function ReturnForm({
 
                     {remaining > 0 ? (
                       <div className="flex items-center gap-2">
-                        {many && on && (
+                        {compact && on && (
                           <b className="text-sm font-extrabold tabular-nums text-rose-600 dark:text-rose-300">
                             −{formatCurrency(q * it.cost)}
                           </b>
@@ -379,7 +380,7 @@ function ReturnForm({
                     )}
                   </div>
 
-                  {!many && (
+                  {!compact && (
                     <>
                       {/* شريط الكمية: المتاح | هترجّعه الآن | رجع قبل كده */}
                       <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-muted" aria-hidden>

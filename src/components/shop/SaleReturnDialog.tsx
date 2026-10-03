@@ -147,7 +147,8 @@ function ReturnForm({
   const allSelected =
     anyRemaining && items.every((it) => remainingOf(it) === 0 || qtyOf(it) === remainingOf(it))
 
-  const big = items.length > BIG_LIST
+  const big = items.length > BIG_LIST // بحث + "المحدد فقط"
+  const compact = items.length > 3 // صفوف مضغوطة + تمرير داخلي
   const needle = itemQ.trim().toLowerCase()
   const shownItems = items.filter((it) => {
     if (needle && !it.name.toLowerCase().includes(needle)) return false
@@ -304,7 +305,7 @@ function ReturnForm({
 
           <ul
             className={cn(
-              big ? 'max-h-[17rem] space-y-1.5 overflow-y-auto overscroll-contain rounded-2xl border bg-card p-1.5' : 'space-y-2.5',
+              compact ? 'max-h-[17rem] space-y-1.5 overflow-y-auto overscroll-contain rounded-2xl border bg-card p-1.5' : 'space-y-2.5',
               shownItems.length === 0 && 'hidden'
             )}
           >
@@ -316,7 +317,7 @@ function ReturnForm({
               const pctPrev = it.quantity > 0 ? (prev / it.quantity) * 100 : 0
               const pctNow = it.quantity > 0 ? (q / it.quantity) * 100 : 0
               const pctKeep = Math.max(0, 100 - pctPrev - pctNow)
-              if (big) {
+              if (compact) {
                 return (
                   <li
                     key={it.id}
