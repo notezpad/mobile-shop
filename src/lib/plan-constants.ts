@@ -38,6 +38,10 @@ export const ALL_CAPABILITIES = [
   'variants',
   'returns_exchange',
   'loyalty',
+  // 🛡️ 2026-10-03: التسعير الديناميكي (cost + هامش %) — باقة احترافية فقط.
+  // الباقات الأساسية لا تستخدم هذه الميزة حتى لو كان Tenant.dynamicRetailPricingEnabled=true
+  // في الداتابيز (الـ migration أدناه يعمل reset لكلهم).
+  'dynamic_retail_pricing',
 ] as const
 
 export type Capability = (typeof ALL_CAPABILITIES)[number]
@@ -241,7 +245,15 @@ export function enforceVerticalRules(
       }
     }
   }
-  // For electronics plans we don't strip anything — the canonical seed
+  // 🛡️ 2026-10-03: التسعير الديناميكي (dynamic_retail_pricing) — باقة احترافية فقط.
+  // نشيله من الباقات الأساسية (electronics-basic, fashion-basic) حتى لو
+  // الداتابيز بتقول غير كده. ده يمنع أي bypass عبر API مباشرة.
+  // الباقات الاحترافية (electronics-pro, fashion-pro) بتاخده من seed الداتابيز؛
+  // enforceVerticalRules مش بتضيفه هنا عشان custom plans تقدر تتحكم فيه.
+  if (planCode === 'electronics-basic' || planCode === 'fashion-basic') {
+    capSet.delete('dynamic_retail_pricing')
+  }
+  // For electronics plans we don't strip anything else — the canonical seed
   // has the right modules and we don't want to override admin customizations.
   // The runtime just adds the critical modules (settings, users) which is
   // already handled by the caller.

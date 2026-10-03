@@ -5,6 +5,7 @@ import {
   requireAdmin,
   authErrorResponse,
 } from '@/lib/auth'
+import { getPlanContext } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,17 +106,29 @@ async function __PUT(req: NextRequest) {
   if (body.retailEnabled !== undefined)
     data.retailEnabled = Boolean(body.retailEnabled)
 
-  // Unit-Based Dynamic Pricing (Piece / قطعة = cost + margin%). Global
-  // on/off toggle + customizable default margin, per-product overrides
-  // live on Product.retailMarginPercent (see /api/products/[id]).
-  if (body.dynamicRetailPricingEnabled !== undefined)
-    data.dynamicRetailPricingEnabled = Boolean(body.dynamicRetailPricingEnabled)
-  if (body.defaultRetailMarginPercent !== undefined) {
-    const margin = Number(body.defaultRetailMarginPercent)
-    if (isNaN(margin) || margin < 0) {
-      return NextResponse.json({ error: 'نسبة هامش الربح غير صالحة' }, { status: 400 })
+  // 🛡️ 2026-10-03: التسعير الديناميكي (cost + هامش %) — باقة احترافية فقط.
+  // نتحقق من الـ capability قبل ما نسمح بأي تغيير على هذين الحقلين.
+  // لو الباقة أساسية ونفّذ أحد PATCH مباشرة على الـ API → 403.
+  if (
+    body.dynamicRetailPricingEnabled !== undefined ||
+    body.defaultRetailMarginPercent !== undefined
+  ) {
+    const planCtxTenant = await getPlanContext(session.tenantId)
+    if (!planCtxTenant.capabilities.includes('dynamic_retail_pricing')) {
+      return NextResponse.json(
+        { error: 'التسعير الديناميكي متاح للباقة الاحترافية فقط — يرجى ترقية الاشتراك' },
+        { status: 403 }
+      )
     }
-    data.defaultRetailMarginPercent = margin
+    if (body.dynamicRetailPricingEnabled !== undefined)
+      data.dynamicRetailPricingEnabled = Boolean(body.dynamicRetailPricingEnabled)
+    if (body.defaultRetailMarginPercent !== undefined) {
+      const margin = Number(body.defaultRetailMarginPercent)
+      if (isNaN(margin) || margin < 0) {
+        return NextResponse.json({ error: 'نسبة هامش الربح غير صالحة' }, { status: 400 })
+      }
+      data.defaultRetailMarginPercent = margin
+    }
   }
 
   if (body.productCardStyle !== undefined) {

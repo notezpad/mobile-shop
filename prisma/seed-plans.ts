@@ -71,7 +71,7 @@ const PLANS = [
     maxBranches: 5,
     businessType: 'electronics',
     enabledModules: ELECTRONICS_PRO,
-    capabilities: ['multi_unit', 'returns_exchange'], // 🛡️ 2026-09-30: + المرتجع للكل
+    capabilities: ['multi_unit', 'returns_exchange', 'dynamic_retail_pricing'], // 🛡️ 2026-10-03: + التسعير الديناميكي للاحترافية
     sortOrder: 20,
   },
   {
@@ -103,7 +103,7 @@ const PLANS = [
     // merchants. They sell by carton/lot (multi_unit), not by individual
     // piece with sizes/colors. If they want to sell by piece, they add a
     // unit with factor=1. So NO 'variants' capability here.
-    capabilities: ['collections', 'multi_unit', 'returns_exchange'], // 🛡️ 2026-09-30: + المرتجع للكل
+    capabilities: ['collections', 'multi_unit', 'returns_exchange', 'dynamic_retail_pricing'], // 🛡️ 2026-10-03: + التسعير الديناميكي للاحترافية
     sortOrder: 40,
   },
 ]

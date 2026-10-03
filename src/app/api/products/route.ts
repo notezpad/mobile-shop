@@ -98,10 +98,16 @@ export async function GET(req: NextRequest) {
       }
     })()
 
-    const tenantPromise = db.tenant.findUnique({
-      where: { id: session.tenantId },
-      select: { dynamicRetailPricingEnabled: true, defaultRetailMarginPercent: true },
-    })
+    // 🛡️ 2026-10-03: نجيب plan context وبيانات التسعير بالتوازي.
+    // الـ dynamicRetailPrice بيتحسب فقط لو الباقة فيها capability = dynamic_retail_pricing
+    // (باقة احترافية). لو الباقة أساسية نرجّع null وبالتالي الـ POS هيستخدم p.price العادي.
+    const [planCtxForGet, retailPricingTenant] = await Promise.all([
+      getPlanContext(session.tenantId),
+      db.tenant.findUnique({
+        where: { id: session.tenantId },
+        select: { dynamicRetailPricingEnabled: true, defaultRetailMarginPercent: true },
+      }),
+    ])
 
     let products: any[]
     let total: number
@@ -138,8 +144,6 @@ export async function GET(req: NextRequest) {
       products = rows
       total = count
     }
-    const retailPricingTenant = await tenantPromise
-
     // If the search term is an EXACT match for one of this product's variant
     // barcodes (i.e. someone scanned a specific color/size's own label), tell
     // the client which variant that is so the POS can add that exact one
@@ -176,13 +180,14 @@ export async function GET(req: NextRequest) {
       soldQuantity: soldMap.get(p.id) ?? 0,
       matchedVariantId: matchedVariantByProduct.get(p.id)?.id ?? null,
       matchedVariantLabel: matchedVariantByProduct.get(p.id)?.label ?? null,
-      // Unit-Based Dynamic Pricing: computed on read only, never persisted.
-      // null when the tenant hasn't enabled the feature — callers (POS) fall
-      // back to the flat p.price exactly like before this feature existed.
-      // Wholesale ProductUnit prices are completely untouched by this.
-      dynamicRetailPrice: retailPricingTenant
-        ? computeDynamicRetailPrice(p, retailPricingTenant)
-        : null,
+      // 🛡️ 2026-10-03: Unit-Based Dynamic Pricing — باقة احترافية فقط.
+      // الشرط مزدوج: الباقة لازم فيها capability = dynamic_retail_pricing
+      // + التينانت لازم فعّل الميزة من الإعدادات.
+      // لو أي شرط مش متحقق → null → الـ POS يستخدم p.price العادي.
+      dynamicRetailPrice:
+        planCtxForGet.capabilities.includes('dynamic_retail_pricing') && retailPricingTenant
+          ? computeDynamicRetailPrice(p, retailPricingTenant)
+          : null,
     }))
 
     return NextResponse.json({
@@ -246,10 +251,14 @@ export async function POST(req: NextRequest) {
         imagePath: body.imagePath ? String(body.imagePath) : null,
         branchId: session.branchId ?? (body.branchId ? parseInt(body.branchId, 10) : null),
         collection: body.collection ? String(body.collection).trim() || null : null,
-        // Unit-Based Dynamic Pricing: per-product override of the tenant's
-        // default retail margin %. null/omitted = use the tenant default.
+        // 🛡️ 2026-10-03: نسبة الهامش لكل منتج — باقة احترافية فقط.
+        // لو الباقة مش فيها dynamic_retail_pricing نحفظ null حتى لو الـ
+        // client بعت قيمة (UI مخفي، بس حماية السيرفر أهم).
         retailMarginPercent:
-          body.retailMarginPercent !== undefined && body.retailMarginPercent !== null && body.retailMarginPercent !== ''
+          planCtx.capabilities.includes('dynamic_retail_pricing') &&
+          body.retailMarginPercent !== undefined &&
+          body.retailMarginPercent !== null &&
+          body.retailMarginPercent !== ''
             ? Number(body.retailMarginPercent)
             : null,
       },
