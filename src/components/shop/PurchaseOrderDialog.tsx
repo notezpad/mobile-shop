@@ -571,7 +571,13 @@ export function PurchaseOrderDialog({
                         <span className="text-end">الإجمالي</span>
                         <span />
                       </div>
-                      <ul className="space-y-2.5">
+                      <ul
+                        className={cn(
+                          manyItems
+                            ? 'max-h-[26rem] space-y-2 overflow-y-auto overscroll-contain rounded-2xl border bg-card/60 p-1.5'
+                            : 'space-y-2.5'
+                        )}
+                      >
                         {shownCart.map((i) => {
                           const costChanged = Math.abs(i.cost - i.product.cost) > 0.001
                           return (

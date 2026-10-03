@@ -304,7 +304,7 @@ function ReturnForm({
 
           <ul
             className={cn(
-              big ? 'max-h-[26rem] space-y-1.5 overflow-y-auto overscroll-contain rounded-2xl border bg-card p-1.5' : 'space-y-2.5',
+              big ? 'max-h-[17rem] space-y-1.5 overflow-y-auto overscroll-contain rounded-2xl border bg-card p-1.5' : 'space-y-2.5',
               shownItems.length === 0 && 'hidden'
             )}
           >

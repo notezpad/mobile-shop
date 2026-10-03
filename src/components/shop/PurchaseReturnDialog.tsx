@@ -314,7 +314,13 @@ function ReturnForm({
             </div>
           )}
 
-          <ul className={cn(many ? "space-y-2" : "space-y-2.5")}>
+          <ul
+            className={cn(
+              many
+                ? "max-h-[20rem] space-y-1.5 overflow-y-auto overscroll-contain rounded-2xl border bg-card/60 p-1.5"
+                : "space-y-2.5",
+            )}
+          >
             {visibleItems.map((it) => {
               const remaining = remainingOf(it);
               const prev = it.returnedQty ?? 0;

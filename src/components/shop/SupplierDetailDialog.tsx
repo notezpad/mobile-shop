@@ -153,6 +153,15 @@ type TimelineRow =
       note: string | null
     }
 
+
+/** ملخص أصناف الحركة: أول صنفين + عدّاد الباقي (فواتير الجملة فيها ٣٠–٥٠ صنف) */
+function itemsPreview(items: { name: string; quantity: number }[]): string {
+  const head = items.slice(0, 2).map((it) => `${it.name}×${it.quantity}`).join('، ')
+  if (items.length <= 2) return head
+  const pieces = items.reduce((n, it) => n + it.quantity, 0)
+  return `${head} +${items.length - 2} صنف (${items.length} صنف · ${pieces} قطعة)`
+}
+
 function StatBox({
   icon: Icon,
   label,
@@ -389,9 +398,7 @@ export function SupplierDetailDialog({
                           ) : (
                             timeline.map((row, i) => {
                               if (row.kind === 'purchase') {
-                                const itemsText = row.items
-                                  .map((it) => `${it.name}×${it.quantity}`)
-                                  .join('، ')
+                                const itemsText = itemsPreview(row.items)
                                 // 🛡️ علينا = صافي الفاتورة بعد المرتجعات − الصافي المدفوع فعلاً
                                 const paidNet = Math.max(0, row.paid - row.refunded)
                                 const debt = Math.max(
@@ -492,7 +499,7 @@ export function SupplierDetailDialog({
                   ) : (
                     timeline.map((row, i) => {
                       if (row.kind === 'purchase') {
-                        const itemsText = row.items.map((it) => `${it.name}×${it.quantity}`).join('، ')
+                        const itemsText = itemsPreview(row.items)
                         // 🛡️ علينا = صافي الفاتورة بعد المرتجعات − الصافي المدفوع فعلاً
                         const paidNet = Math.max(0, row.paid - row.refunded)
                         const debt = Math.max(0, row.total - row.returnedValue - paidNet)

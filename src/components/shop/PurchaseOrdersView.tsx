@@ -1422,7 +1422,7 @@ function ItemsTable({ o, c }: { o: PurchaseOrder; c: Calc }) {
           </div>
         )}
 
-        <div className={cn(many && 'max-h-[26rem] overflow-y-auto overscroll-contain')}>
+        <div className={cn(many && 'max-h-[18rem] overflow-y-auto overscroll-contain')}>
           <div className={cn(ITEM_COLS, 'sticky top-0 z-10 border-b bg-muted px-4 py-2.5 text-[11px] font-bold text-foreground/70')}>
             <span>الصنف</span>
             <span className="text-center">الكمية</span>

@@ -137,6 +137,15 @@ type TimelineRow =
 const num = (n: number) =>
   n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 
+
+/** ملخص أصناف الحركة: أول صنفين + عدّاد الباقي (فواتير الجملة فيها ٣٠–٥٠ صنف) */
+function itemsPreview(items: { name: string; quantity: number }[]): string {
+  const head = items.slice(0, 2).map((it) => `${it.name}×${it.quantity}`).join('، ')
+  if (items.length <= 2) return head
+  const pieces = items.reduce((n, it) => n + it.quantity, 0)
+  return `${head} +${items.length - 2} صنف (${items.length} صنف · ${pieces} قطعة)`
+}
+
 function StatBox({
   icon: Icon,
   label,
@@ -419,9 +428,7 @@ export function CustomerDetailDialog({
                     <div className="divide-y">
                       {timeline.map((row, i) => {
                         if (row.kind === 'sale') {
-                          const itemsText = row.items
-                            .map((it) => `${it.name}×${it.quantity}`)
-                            .join('، ')
+                          const itemsText = itemsPreview(row.items)
                           const debt = Math.max(0, row.total - row.paid)
                           return (
                             <div
