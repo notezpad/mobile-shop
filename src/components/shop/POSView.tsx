@@ -7,6 +7,7 @@ import {
   CalendarDays,
   Check,
   ChevronLeft,
+  ChevronRight,
   Loader2,
   Maximize2,
   Minimize2,
@@ -500,19 +501,14 @@ const inDays = (n: number) => {
   d.setDate(d.getDate() + n)
   return d
 }
-const inOneMonth = () => {
-  const d = new Date()
-  d.setHours(12, 0, 0, 0)
-  d.setMonth(d.getMonth() + 1)
-  return d
-}
-
 function DueDatePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = React.useState(false)
   const presets = [
     { label: 'أسبوع', iso: toISODate(inDays(7)) },
+    { label: '10 أيام', iso: toISODate(inDays(10)) },
     { label: '15 يوم', iso: toISODate(inDays(15)) },
-    { label: 'شهر', iso: toISODate(inOneMonth()) },
+    { label: '20 يوم', iso: toISODate(inDays(20)) },
+    { label: '30 يوم', iso: toISODate(inDays(30)) },
   ]
   const selected = value ? fromISODate(value) : null
   const isPreset = presets.some((x) => x.iso === value)
@@ -522,7 +518,7 @@ function DueDatePicker({ value, onChange }: { value: string; onChange: (v: strin
   const rel = diff <= 0 ? 'النهارده' : diff === 1 ? 'بكرة' : `بعد ${diff} يوم`
   const chip = (on: boolean) =>
     cn(
-      'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors',
+      'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-1 py-1.5 text-sm font-semibold transition-colors',
       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40',
       on
         ? 'border-brand-600 bg-brand-600/10 text-brand-800 dark:text-brand-200'
@@ -534,7 +530,7 @@ function DueDatePicker({ value, onChange }: { value: string; onChange: (v: strin
       <p className="text-sm font-bold text-foreground/75">
         استحقاق الآجل <span className="font-medium">(اختياري)</span>
       </p>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="grid grid-cols-5 gap-1.5">
         {presets.map((x) => {
           const on = value === x.iso
           return (
@@ -549,11 +545,16 @@ function DueDatePicker({ value, onChange }: { value: string; onChange: (v: strin
             </button>
           )
         })}
-        <Popover open={open} onOpenChange={setOpen}>
+      </div>
+      <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
-            <button type="button" className={chip(!!value && !isPreset)} aria-label="اختيار تاريخ آخر من التقويم">
+            <button
+              type="button"
+              className={cn(chip(!!value && !isPreset), 'h-9 w-full px-3')}
+              aria-label="اختيار تاريخ مخصص من التقويم"
+            >
               <CalendarDays className="size-4" />
-              {value && !isPreset ? 'تاريخ مخصص' : 'تاريخ…'}
+              تاريخ مخصص
             </button>
           </PopoverTrigger>
           <PopoverContent align="start" collisionPadding={12} className="w-auto p-0">
@@ -578,7 +579,6 @@ function DueDatePicker({ value, onChange }: { value: string; onChange: (v: strin
             />
           </PopoverContent>
         </Popover>
-      </div>
       {selected && (
         <div className="flex items-center justify-between gap-2 rounded-xl bg-muted px-3 py-2 text-sm">
           <span className="flex min-w-0 items-center gap-2">
@@ -604,6 +604,10 @@ function DueDatePicker({ value, onChange }: { value: string; onChange: (v: strin
     </div>
   )
 }
+
+/** شريط تمرير نحيف وهادي (بدل الافتراضي الغليظ) — للقوائم اللي لازم تفضل بتتمرّر (السلة، لوحة الدفع) */
+const slimScroll =
+  '[scrollbar-width:thin] [scrollbar-color:oklch(0.57_0.18_162/0.35)_transparent] hover:[scrollbar-color:oklch(0.57_0.18_162/0.6)_transparent]'
 
 const selectCls =
   'h-8 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground outline-none transition-colors hover:border-border-strong focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20'
@@ -707,6 +711,84 @@ export function POSView() {
   const isFull = fullscreen && isDesktop
   const scale = isDesktop ? clamp(fit * (1 + 0.08 * sizeStep), 0.65, 1.3) : 1
 
+  /* ── ترقيم ذكي للمنتجات بدل شريط التمرير ─────────────────────────────
+     بنقيس المساحة المتاحة فعلاً (أعمدة × صفوف) ونعرض صفحة واحدة بالظبط تملا
+     الشاشة. على الشاشات الكبيرة (xl) بس — الموبايل/التابلت بيفضلوا بالتمرير الطبيعي. */
+  const isXl = useMediaQuery('(min-width: 1280px)')
+  const gridBoxRef = React.useRef<HTMLDivElement>(null)
+  const gridRef = React.useRef<HTMLUListElement>(null)
+  const [perPage, setPerPage] = React.useState(0) // 0 = لسه ماتقاسش
+  const [page, setPage] = React.useState(0)
+  const paged = isXl && !searchError && products.length > 0
+  const pageSize = perPage || 24
+  const pageCount = paged ? Math.max(1, Math.ceil(products.length / pageSize)) : 1
+  const safePage = Math.min(page, pageCount - 1)
+  const visibleProducts = paged
+    ? products.slice(safePage * pageSize, safePage * pageSize + pageSize)
+    : products
+  const hasImages = products.some((x) => x.imagePath)
+  const effMode: 'cards' | 'compact' =
+    viewPref === 'auto' ? (hasImages ? 'cards' : 'compact') : viewPref
+
+  React.useEffect(() => setPage(0), [query, category])
+
+  React.useLayoutEffect(() => {
+    const box = gridBoxRef.current
+    const grid = gridRef.current
+    if (!paged) {
+      if (grid) grid.style.gridAutoRows = ''
+      return
+    }
+    if (!box || !grid) return
+    const measure = () => {
+      if (grid.children.length === 0) return
+      const cs = getComputedStyle(box)
+      const availH = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
+      const gcs = getComputedStyle(grid)
+      const cols = Math.max(1, gcs.gridTemplateColumns.split(' ').filter(Boolean).length)
+      const gap = parseFloat(gcs.rowGap) || 10
+      // 1) نلغي أي ارتفاع صفوف سابق عشان نقيس الارتفاع الطبيعي (من غير تمدد) — مفيش دوران.
+      grid.style.gridAutoRows = ''
+      const kids = Array.from(grid.children) as HTMLElement[]
+      let naturalH = 0
+      if (effMode === 'cards') {
+        const first = kids[0]
+        const thumb = first.querySelector('[data-thumb]') as HTMLElement | null
+        naturalH = thumb
+          ? first.offsetHeight - thumb.offsetHeight + (thumb.offsetWidth * 10) / 16
+          : first.offsetHeight
+      } else {
+        // المدمج: أطول كارت في الصفحة (الأسماء الطويلة بتزوّد الارتفاع)
+        for (const k of kids) naturalH = Math.max(naturalH, k.offsetHeight)
+      }
+      if (naturalH <= 0 || availH <= 0) return
+      const rows = Math.max(1, Math.floor((availH + gap) / (naturalH + gap)))
+      setPerPage((prev) => (prev === cols * rows ? prev : cols * rows))
+      // 2) صفوف بارتفاع ثابت بتملا المساحة بالظبط: مفيش فراغ تحت ومفيش قصّ لآخر صف
+      grid.style.gridAutoRows = `${Math.floor((availH - gap * (rows - 1)) / rows)}px`
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(box)
+    return () => ro.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paged, effMode, scale, products, safePage])
+
+  // PageUp / PageDown للتنقل بين الصفحات (لما مفيش حقل بيتكتب فيه)
+  React.useEffect(() => {
+    if (!paged) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'PageDown' && e.key !== 'PageUp') return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
+      e.preventDefault()
+      setPage((p) => Math.max(0, Math.min(pageCount - 1, p + (e.key === 'PageDown' ? 1 : -1))))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [paged, pageCount])
+  const swipe = React.useRef<{ x: number; y: number } | null>(null)
+
   React.useEffect(() => writeLS('pos:sizeStep', sizeStep), [sizeStep])
   React.useEffect(() => writeLS('pos:fullscreen', fullscreen), [fullscreen])
   React.useEffect(() => {
@@ -787,7 +869,7 @@ export function POSView() {
     let cancelled = false
     const t = setTimeout(async () => {
       const url =
-        `/api/products?search=${encodeURIComponent(q)}&limit=40&pos=1` +
+        `/api/products?search=${encodeURIComponent(q)}&limit=100&pos=1` +
         (category !== 'all' ? `&category=${encodeURIComponent(category)}` : '')
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
@@ -852,6 +934,8 @@ export function POSView() {
   /* ── cart operations (logic unchanged) ──────────────────────── */
 
   const flashLine = (key: string) => {
+    // الصنف اللي اتضاف/اتزوّد يظهر في السلة حتى لو القائمة طويلة
+    window.setTimeout(() => document.getElementById(`cart-line-${key}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 60)
     setLastAddedKey(key)
     window.setTimeout(() => setLastAddedKey((k) => (k === key ? null : k)), 900)
   }
@@ -1503,8 +1587,7 @@ export function POSView() {
 
   const panelCls =
     'flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm'
-  const viewMode: 'cards' | 'compact' =
-    viewPref === 'auto' ? (products.some((p) => p.imagePath) ? 'cards' : 'compact') : viewPref
+  const viewMode = effMode
   const fewProducts = products.length > 0 && products.length <= 6
   // الموبايل: عمودين للكروت (بدل كارت واحد طويل في كل صف)
   const gridCols =
@@ -1707,7 +1790,26 @@ export function POSView() {
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 lg:max-h-[75dvh] xl:max-h-none">
+      <div
+        ref={gridBoxRef}
+        onTouchStart={(e) => {
+          swipe.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+        }}
+        onTouchEnd={(e) => {
+          const st = swipe.current
+          swipe.current = null
+          if (!st || !paged) return
+          const dx = e.changedTouches[0].clientX - st.x
+          const dy = e.changedTouches[0].clientY - st.y
+          if (Math.abs(dx) < 70 || Math.abs(dy) > 45) return
+          // RTL: السحب لليسار = الصفحة التالية
+          setPage((p) => Math.max(0, Math.min(pageCount - 1, p + (dx < 0 ? 1 : -1))))
+        }}
+        className={cn(
+          'min-h-0 flex-1 overscroll-contain p-3 lg:max-h-[75dvh] xl:max-h-none',
+          paged ? 'overflow-hidden' : cn('overflow-y-auto', slimScroll)
+        )}
+      >
         {searchError ? (
           <div className="flex flex-col items-center gap-2 py-16 text-center">
             <AlertTriangle className="size-8 text-destructive" />
@@ -1737,8 +1839,8 @@ export function POSView() {
             </Button>
           </div>
         ) : (
-          <ul className={cn('grid gap-2.5', gridCols)}>
-            {products.map((p) => {
+          <ul ref={gridRef} className={cn('grid gap-2.5', gridCols)}>
+            {visibleProducts.map((p) => {
               const inCart = cart
                 .filter((i) => i.product.id === p.id)
                 .reduce((s, i) => s + i.quantity, 0)
@@ -1766,23 +1868,41 @@ export function POSView() {
                     )}
                   >
                     {badge}
-                    <ProductThumb
-                      name={p.name}
-                      imagePath={p.imagePath}
-                      className={
-                        viewMode === 'compact' ? 'size-12 text-lg' : 'aspect-[16/10] w-full text-xl'
-                      }
-                    />
-                    <div className={cn('min-w-0', viewMode === 'compact' ? 'flex-1' : 'flex-1')}>
-                      <p className="line-clamp-2 text-sm font-semibold leading-snug">{p.name}</p>
-                      {p.matchedVariantLabel && (
-                        <p className="mt-0.5 truncate text-[length:var(--fs-2xs,0.6875rem)] font-medium text-brand-700 dark:text-brand-300">
-                          مطابقة: {p.matchedVariantLabel}
-                        </p>
+                    <div
+                      data-thumb
+                      className={cn(
+                        'relative',
+                        viewMode === 'cards' && 'aspect-[16/10] min-h-0 w-full flex-1'
                       )}
+                    >
+                      <ProductThumb
+                        name={p.name}
+                        imagePath={p.imagePath}
+                        className={viewMode === 'compact' ? 'size-12 text-lg' : 'h-full w-full text-xl'}
+                      />
+                      {viewMode === 'cards' && p.matchedVariantLabel && (
+                        <span className="absolute inset-x-1.5 bottom-1.5 truncate rounded-md bg-stone-950/80 px-1.5 py-0.5 text-center text-[length:var(--fs-2xs,0.75rem)] font-semibold text-white">
+                          {p.matchedVariantLabel}
+                        </span>
+                      )}
+                    </div>
+                    <div className={cn('min-w-0', viewMode === 'compact' && 'flex-1')}>
+                      <p
+                        className={cn(
+                          'line-clamp-2 text-sm font-semibold leading-snug',
+                          viewMode === 'cards' && 'min-h-[2.75em]'
+                        )}
+                      >
+                        {p.name}
+                      </p>
                       {viewMode === 'compact' && (
-                        <div className="mt-1">
+                        <div className="mt-1 flex items-center gap-1.5">
                           <StockBadge quantity={p.quantity} />
+                          {p.matchedVariantLabel && (
+                            <span className="min-w-0 truncate text-[length:var(--fs-2xs,0.75rem)] font-medium text-brand-700 dark:text-brand-300">
+                              {p.matchedVariantLabel}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1821,6 +1941,33 @@ export function POSView() {
             </span>
           ))}
         </div>
+        {paged && pageCount > 1 && (
+          <nav aria-label="صفحات المنتجات" className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setPage(Math.max(0, safePage - 1))}
+              disabled={safePage === 0}
+              className="flex size-9 items-center justify-center rounded-lg border border-foreground/20 bg-card text-foreground transition-colors hover:bg-muted disabled:opacity-35"
+              aria-label="الصفحة السابقة"
+              title="السابقة (PageUp)"
+            >
+              <ChevronRight className="size-5" />
+            </button>
+            <span className="min-w-[5rem] whitespace-nowrap text-center text-sm font-extrabold tabular-nums text-foreground">
+              {safePage + 1} <span className="font-medium text-muted-foreground">من</span> {pageCount}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage(Math.min(pageCount - 1, safePage + 1))}
+              disabled={safePage >= pageCount - 1}
+              className="flex size-9 items-center justify-center rounded-lg border border-foreground/20 bg-card text-foreground transition-colors hover:bg-muted disabled:opacity-35"
+              aria-label="الصفحة التالية"
+              title="التالية (PageDown)"
+            >
+              <ChevronLeft className="size-5" />
+            </button>
+          </nav>
+        )}
         <div className="ms-auto">{toolsDock}</div>
       </footer>
     </section>
@@ -1848,6 +1995,7 @@ export function POSView() {
           return (
             <li
               key={it.cartKey}
+              id={`cart-line-${it.cartKey}`}
               className={cn(
                 'space-y-2 px-3.5 py-3 transition-colors duration-700',
                 lastAddedKey === it.cartKey && 'bg-brand-600/10'
@@ -2047,7 +2195,7 @@ export function POSView() {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain lg:max-h-[46dvh] xl:max-h-none">
+      <div className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain lg:max-h-[46dvh] xl:max-h-none', slimScroll)}>
         {cartLines}
       </div>
 
@@ -2091,7 +2239,7 @@ export function POSView() {
         <PanelHead n={3} tag="Checkout" title="ادفع" aside={statusChip} />
       </header>
 
-      <div className="min-w-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden overscroll-contain p-3.5">
+      <div className={cn('min-w-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden overscroll-contain p-3.5', slimScroll)}>
         {/* شاشة الكاشير: الإجمالي هو أكبر وأوضح عنصر في الصفحة */}
         <div className="relative overflow-hidden rounded-2xl bg-stone-950 px-4 py-3 text-stone-50 shadow-md ring-1 ring-black/10 dark:ring-white/10">
           <div
@@ -2263,8 +2411,8 @@ export function POSView() {
           <p className="text-sm font-bold text-foreground/75">نوع الدفع</p>
           <div role="radiogroup" aria-label="نوع الدفع" className="grid grid-cols-2 gap-2">
             {[
-              { full: true, label: 'سداد كامل', hint: 'كامل المبلغ' },
-              { full: false, label: 'سداد جزئي', hint: 'والباقي آجل' },
+              { full: true, label: 'سداد كامل' },
+              { full: false, label: 'سداد جزئي' },
             ].map((m) => {
               const active = paidFull === m.full
               return (
@@ -2277,15 +2425,20 @@ export function POSView() {
                     setPaidFull(m.full)
                     setPaidAmount(m.full ? 0 : total)
                   }}
-                  className={cn(choiceCls(active), 'h-12 leading-tight')}
+                  className={cn(choiceCls(active), 'h-11 flex-row gap-2 text-base')}
                 >
                   {active && checkMark}
-                  <span className="text-base">{m.label}</span>
-                  <span className="text-xs font-medium opacity-75">{m.hint}</span>
+                  <span className="whitespace-nowrap">{m.label}</span>
                 </button>
               )
             })}
           </div>
+          {/* الشرح سطر واحد تحت الاختيارين (بدل سطر ثاني داخل كل زر كان بيلزق في الحد) */}
+          <p className="text-xs font-medium leading-snug text-muted-foreground">
+            {paidFull
+              ? 'العميل بيدفع كامل المبلغ دلوقتي.'
+              : 'العميل بيدفع جزء دلوقتي والباقي بيتسجل آجل عليه.'}
+          </p>
         </div>
 
         {paidFull ? (
