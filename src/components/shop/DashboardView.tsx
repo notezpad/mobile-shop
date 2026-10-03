@@ -30,12 +30,13 @@ import {
 import Link from 'next/link'
 import {
   Bar,
-  BarChart as RechartsBarChart,
+  ComposedChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
+  Line,
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -85,6 +86,14 @@ interface DashboardData {
     status: string
     receivedAt: string
   }[]
+  overdueInvoices: Array<{
+    id: number
+    invoiceNo: string | null
+    remaining: number
+    dueDate: string | null
+    customerName: string | null
+    customerPhone: string | null
+  }>
 }
 
 /* ───────── تاريخ ووقت بتوقيت المحل — نص هادي من غير كبسولة ───────── */
@@ -379,6 +388,10 @@ export function DashboardView() {
 
   const margin = weekTotal > 0 ? Math.round((weekProfit / weekTotal) * 100) : null
 
+  // 🛡️ ملخص الفواتير المتأخرة (لو موجودة)
+  const overdueTotal = (data?.overdueInvoices ?? []).reduce((a, i) => a + i.remaining, 0)
+  const hasOverdue = (data?.overdueInvoices?.length ?? 0) > 0
+
   return (
     <div className="space-y-5">
       {/* ═════════ Hero — مبيعات اليوم + منحنى الأيام الأخيرة ═════════ */}
@@ -483,7 +496,7 @@ export function DashboardView() {
             )}
           </div>
 
-          {/* منحنى المبيعات */}
+          {/* منحنى المبيعات + الربح */}
           <div className="min-w-0">
             <PanelTitle
               icon={Activity}
@@ -511,18 +524,49 @@ export function DashboardView() {
                 </div>
               }
             />
-            <div className="mt-3 h-52 w-full sm:h-56">
+            <div className="mt-3 h-48 w-full sm:h-52">
               {loadingFirst ? (
                 <Skeleton className="h-full w-full" />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <RechartsBarChart data={days} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
+                  <ComposedChart data={days} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
                     <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={11} />
-                    <YAxis tickLine={false} axisLine={false} fontSize={11} width={46} />
+
+                    {/* محور شمال — للمبيعات */}
+                    <YAxis
+                      yAxisId="sales"
+                      tickLine={false}
+                      axisLine={false}
+                      fontSize={11}
+                      width={46}
+                      label={{
+                        value: 'مبيعات',
+                        angle: -90,
+                        position: 'insideLeft',
+                        style: { fontSize: 10, fill: 'var(--muted-foreground)', textAnchor: 'middle' },
+                      }}
+                    />
+
+                    {/* محور يمين — للربح */}
+                    <YAxis
+                      yAxisId="profit"
+                      orientation="right"
+                      tickLine={false}
+                      axisLine={false}
+                      fontSize={11}
+                      width={46}
+                      label={{
+                        value: 'ربح',
+                        angle: 90,
+                        position: 'insideRight',
+                        style: { fontSize: 10, fill: 'var(--muted-foreground)', textAnchor: 'middle' },
+                      }}
+                    />
+
                     <Tooltip
                       cursor={{ fill: 'color-mix(in srgb, var(--primary) 8%, transparent)' }}
-                      formatter={(v: any) => [formatCurrency(Number(v)), 'المبيعات']}
+                      formatter={(v: any, name: any) => [formatCurrency(Number(v)), name]}
                       contentStyle={{
                         borderRadius: 12,
                         border: '1px solid var(--border)',
@@ -531,10 +575,38 @@ export function DashboardView() {
                         fontFamily: 'inherit',
                       }}
                     />
-                    <Bar dataKey="total" fill="var(--primary)" radius={[8, 8, 0, 0]} maxBarSize={44} />
-                  </RechartsBarChart>
+
+                    <Bar
+                      yAxisId="sales"
+                      dataKey="total"
+                      name="المبيعات"
+                      fill="var(--primary)"
+                      radius={[8, 8, 0, 0]}
+                      maxBarSize={44}
+                    />
+                    <Line
+                      yAxisId="profit"
+                      type="monotone"
+                      dataKey="profit"
+                      name="الربح"
+                      stroke="var(--success)"
+                      strokeWidth={2}
+                      dot={{ r: 2.5, fill: 'var(--success)', strokeWidth: 0 }}
+                      activeDot={{ r: 4 }}
+                    />
+                  </ComposedChart>
                 </ResponsiveContainer>
               )}
+            </div>
+            <div className="mt-1.5 flex items-center gap-4 ps-1 text-[11px] text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <span className="size-2.5 rounded-sm bg-primary" />
+                مبيعات
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-0.5 w-4 rounded-full bg-success" />
+                ربح
+              </span>
             </div>
           </div>
         </div>
@@ -593,6 +665,66 @@ export function DashboardView() {
           />
         </div>
       </section>
+
+      {/* ═════════ بانر الفواتير المتأخرة — يظهر بس لو فيه متأخرات ═════════ */}
+      {hasOverdue && (
+        <section className="overflow-hidden rounded-3xl border border-warning/40 bg-warning-subtle/40 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-warning/30 px-5 py-3.5">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-warning text-warning-foreground">
+                <AlertTriangle className="size-4" strokeWidth={2.5} />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-sm font-bold">فواتير متأخرة محتاجة تحصيل</h2>
+                <p className="text-[11px] text-muted-foreground">
+                  {data!.overdueInvoices.length} فاتورة • إجمالي{' '}
+                  <span className="font-bold text-warning-subtle-foreground">{formatCurrency(overdueTotal)}</span>
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/sales"
+              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-warning/40 bg-card px-2.5 text-[11px] font-bold text-warning-subtle-foreground transition-colors hover:bg-warning-subtle/60"
+            >
+              عرض الكل
+              <ArrowUpLeft className="size-3" />
+            </Link>
+          </div>
+          <ul className="divide-y divide-border">
+            {data!.overdueInvoices.slice(0, 3).map((inv) => {
+              const days = inv.dueDate
+                ? Math.max(0, Math.floor((Date.now() - new Date(inv.dueDate).getTime()) / 86400000))
+                : 0
+              return (
+                <li key={inv.id} className="flex items-center justify-between gap-3 px-5 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold">{inv.customerName ?? 'عميل'}</p>
+                    <p className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span className="tabular-nums">{inv.invoiceNo ?? `#${inv.id}`}</span>
+                      {days > 0 && (
+                        <>
+                          <span className="h-3 w-px bg-border" />
+                          <span className="font-semibold text-warning-subtle-foreground">
+                            متأخرة {days} يوم
+                          </span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-sm font-extrabold tabular-nums">
+                    {formatCurrency(inv.remaining)}
+                  </p>
+                </li>
+              )
+            })}
+            {data!.overdueInvoices.length > 3 && (
+              <li className="px-5 py-2 text-center text-[11px] font-semibold text-warning-subtle-foreground">
+                + {data!.overdueInvoices.length - 3} فواتير أخرى
+              </li>
+            )}
+          </ul>
+        </section>
+      )}
 
       {/* ═════════ أكثر المنتجات + المخزون المنخفض + الصيانة ═════════ */}
       <div className={cn('grid gap-4 md:grid-cols-2', hasMaintenance ? 'xl:grid-cols-3' : 'xl:grid-cols-2')}>
@@ -760,7 +892,7 @@ export function DashboardView() {
       {/* ═════════ آخر المبيعات + المركز المالي ═════════ */}
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       {/* ═════════ آخر المبيعات — سجل مجمّع بالأيام ═════════ */}
-      <section className="overflow-hidden rounded-3xl border bg-card shadow-sm">
+      <section className="overflow-hidden rounded-3xl border bg-card shadow-sm xl:flex xl:h-[620px] xl:flex-col">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
           <div>
             <PanelTitle icon={Receipt} title="آخر المبيعات" />
@@ -785,77 +917,80 @@ export function DashboardView() {
           </div>
         </div>
 
-        {loading && !data ? (
-          <div className="space-y-2 p-5">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full" />
-            ))}
-          </div>
-        ) : saleGroups.count === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 px-5 py-12 text-center">
-            <Receipt className="size-8 text-muted-foreground/50" />
-            <p className="text-sm font-medium text-muted-foreground">لا توجد مبيعات بعد</p>
-            <Link href="/pos" className="text-xs font-semibold text-primary hover:underline">
-              ابدأ أول فاتورة من نقطة البيع
-            </Link>
-          </div>
-        ) : (
-          saleGroups.groups.map((g) => (
-            <div key={g.key}>
-              <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/40 px-5 py-2 text-xs">
-                <span className="font-bold text-foreground/80">{g.label}</span>
-                <span className="flex items-center gap-3 text-muted-foreground">
-                  <span>{g.rows.length} فاتورة</span>
-                  <span className="font-bold tabular-nums text-foreground/80">{formatCurrency(g.total)}</span>
-                </span>
-              </div>
-              <ul className="divide-y divide-border">
-                {g.rows.map((s) => {
-                  const returned = s.status === 'مرتجعة'
-                  const done = s.status === 'مكتملة'
-                  const remaining = Math.max(0, (s.total ?? 0) - (s.paid ?? 0))
-                  const Icon = returned ? Undo2 : done ? Check : Clock
-                  const tone: Tone = returned ? 'danger' : done ? 'success' : 'warning'
-                  return (
-                    <li
-                      key={s.id}
-                      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-1 px-5 py-3.5 transition-colors hover:bg-muted/40 md:grid-cols-[auto_minmax(0,1.3fr)_minmax(0,1fr)_auto]"
-                    >
-                      <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl', TONE[tone].chip)}>
-                        <Icon className="size-4" strokeWidth={2.4} />
-                        <span className="sr-only">{s.status}</span>
-                      </span>
-
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold tabular-nums">{s.invoiceNo ?? `#${s.id}`}</p>
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {s.customerName ?? 'بدون عميل'}
-                        </p>
-                      </div>
-
-                      <DateStamp iso={s.createdAt} tz={tz} className="hidden md:inline-flex" />
-
-                      <div className="text-end">
-                        <p className={cn('text-[15px] font-extrabold tabular-nums', returned && 'text-muted-foreground line-through decoration-destructive/60')}>
-                          {formatCurrency(s.total)}
-                        </p>
-                        {returned ? (
-                          <p className="mt-0.5 text-[11px] font-bold text-destructive">مرتجعة</p>
-                        ) : remaining > 0 ? (
-                          <p className="mt-0.5 text-[11px] font-bold text-warning-subtle-foreground">
-                            متبقي {formatCurrency(remaining)}
-                          </p>
-                        ) : (
-                          <DateStamp iso={s.createdAt} tz={tz} className="md:hidden" />
-                        )}
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
+        {/* القائمة قابلة للتمرير جوّانيًا على شاشات كبيرة */}
+        <div className="min-h-0 flex-1 xl:overflow-y-auto">
+          {loading && !data ? (
+            <div className="space-y-2 p-5">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full" />
+              ))}
             </div>
-          ))
-        )}
+          ) : saleGroups.count === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 px-5 py-12 text-center">
+              <Receipt className="size-8 text-muted-foreground/50" />
+              <p className="text-sm font-medium text-muted-foreground">لا توجد مبيعات بعد</p>
+              <Link href="/pos" className="text-xs font-semibold text-primary hover:underline">
+                ابدأ أول فاتورة من نقطة البيع
+              </Link>
+            </div>
+          ) : (
+            saleGroups.groups.map((g) => (
+              <div key={g.key}>
+                <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/40 px-5 py-2 text-xs">
+                  <span className="font-bold text-foreground/80">{g.label}</span>
+                  <span className="flex items-center gap-3 text-muted-foreground">
+                    <span>{g.rows.length} فاتورة</span>
+                    <span className="font-bold tabular-nums text-foreground/80">{formatCurrency(g.total)}</span>
+                  </span>
+                </div>
+                <ul className="divide-y divide-border">
+                  {g.rows.map((s) => {
+                    const returned = s.status === 'مرتجعة'
+                    const done = s.status === 'مكتملة'
+                    const remaining = Math.max(0, (s.total ?? 0) - (s.paid ?? 0))
+                    const Icon = returned ? Undo2 : done ? Check : Clock
+                    const tone: Tone = returned ? 'danger' : done ? 'success' : 'warning'
+                    return (
+                      <li
+                        key={s.id}
+                        className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-1 px-5 py-3.5 transition-colors hover:bg-muted/40 md:grid-cols-[auto_minmax(0,1.3fr)_minmax(0,1fr)_auto]"
+                      >
+                        <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl', TONE[tone].chip)}>
+                          <Icon className="size-4" strokeWidth={2.4} />
+                          <span className="sr-only">{s.status}</span>
+                        </span>
+
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold tabular-nums">{s.invoiceNo ?? `#${s.id}`}</p>
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {s.customerName ?? 'بدون عميل'}
+                          </p>
+                        </div>
+
+                        <DateStamp iso={s.createdAt} tz={tz} className="hidden md:inline-flex" />
+
+                        <div className="text-end">
+                          <p className={cn('text-[15px] font-extrabold tabular-nums', returned && 'text-muted-foreground line-through decoration-destructive/60')}>
+                            {formatCurrency(s.total)}
+                          </p>
+                          {returned ? (
+                            <p className="mt-0.5 text-[11px] font-bold text-destructive">مرتجعة</p>
+                          ) : remaining > 0 ? (
+                            <p className="mt-0.5 text-[11px] font-bold text-warning-subtle-foreground">
+                              متبقي {formatCurrency(remaining)}
+                            </p>
+                          ) : (
+                            <DateStamp iso={s.createdAt} tz={tz} className="md:hidden" />
+                          )}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            ))
+          )}
+        </div>
       </section>
       {/* ═════════ المركز المالي — عمود جانبي ═════════ */}
       <section className="overflow-hidden rounded-3xl border bg-card shadow-sm">
