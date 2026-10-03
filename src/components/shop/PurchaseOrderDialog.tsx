@@ -8,7 +8,7 @@
  */
 
 import * as React from 'react'
-import { Check, ChevronDown, Info, Loader2, PackagePlus, Plus, Search, Trash2, Truck } from 'lucide-react'
+import { Check, ChevronDown, Info, Loader2, PackagePlus, Plus, Search, Trash2, Truck, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -83,11 +83,13 @@ export function PurchaseOrderDialog({
   const [newProductOpen, setNewProductOpen] = React.useState(false)
   const [newProductSeed, setNewProductSeed] = React.useState('')
   const [pendingToday, setPendingToday] = React.useState<ProductLite[]>([])
+  const [cartQ, setCartQ] = React.useState('')
   const searchRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
     if (!open) return
     setCart([])
+    setCartQ('')
     setQuery('')
     setResults([])
     setPayMode('full')
@@ -136,6 +138,11 @@ export function PurchaseOrderDialog({
 
   const total = cart.reduce((s, i) => s + i.cost * i.quantity, 0)
   const totalQty = cart.reduce((s, i) => s + i.quantity, 0)
+  const manyItems = cart.length > 8
+  const cartNeedle = cartQ.trim().toLowerCase()
+  const shownCart = cartNeedle
+    ? cart.filter((i) => i.product.name.toLowerCase().includes(cartNeedle) || (i.product.barcode ?? '').includes(cartNeedle))
+    : cart
   const noSupplier = supplierId === 'none'
   const selectedSupplier = !noSupplier ? suppliers.find((s) => String(s.id) === supplierId) : null
 
@@ -174,7 +181,7 @@ export function PurchaseOrderDialog({
       const toAdd = visiblePendingToday.filter(
         (p) => !prev.some((c) => c.product.id === p.id)
       )
-      return [...prev, ...toAdd.map((p) => ({ product: p, cost: p.cost, quantity: 1 }))]
+      return [...toAdd.map((p) => ({ product: p, cost: p.cost, quantity: 1 })), ...prev]
     })
   }
 
@@ -186,7 +193,7 @@ export function PurchaseOrderDialog({
           i.product.id === p.id ? { ...i, quantity: i.quantity + 1 } : i
         )
       }
-      return [...prev, { product: p, cost: p.cost, quantity: 1 }]
+      return [{ product: p, cost: p.cost, quantity: 1 }, ...prev]
     })
     setQuery('')
     setResults([])
@@ -534,6 +541,29 @@ export function PurchaseOrderDialog({
                     </div>
                   ) : (
                     <>
+                      {manyItems && (
+                        <label className="relative mb-2.5 flex h-10 items-center rounded-xl border bg-card focus-within:border-cyan-600 focus-within:ring-[3px] focus-within:ring-cyan-600/25">
+                          <Search className="pointer-events-none absolute right-3 size-4 text-muted-foreground" aria-hidden />
+                          <input
+                            value={cartQ}
+                            onChange={(e) => setCartQ(e.target.value)}
+                            placeholder={`ابحث في ${cart.length} صنف في السلة…`}
+                            aria-label="بحث في السلة"
+                            className="h-full w-full bg-transparent pe-8 text-sm outline-none placeholder:text-muted-foreground/80"
+                            style={{ paddingInlineStart: '2.5rem' }}
+                          />
+                          {cartQ && (
+                            <button
+                              type="button"
+                              onClick={() => setCartQ('')}
+                              aria-label="مسح البحث"
+                              className="absolute left-2 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                            >
+                              <X className="size-4" />
+                            </button>
+                          )}
+                        </label>
+                      )}
                       <div className={cn('mb-1.5 hidden gap-x-4 px-[0.8125rem] text-[11px] font-bold text-foreground/60 md:grid', CART_COLS)}>
                         <span>الصنف</span>
                         <span className="w-[8.5rem] text-center">الكمية</span>
@@ -542,7 +572,7 @@ export function PurchaseOrderDialog({
                         <span />
                       </div>
                       <ul className="space-y-2.5">
-                        {cart.map((i) => {
+                        {shownCart.map((i) => {
                           const costChanged = Math.abs(i.cost - i.product.cost) > 0.001
                           return (
                             <li key={i.product.id} className="rounded-2xl border bg-card p-3">
@@ -614,6 +644,11 @@ export function PurchaseOrderDialog({
                             </li>
                           )
                         })}
+                        {shownCart.length === 0 && (
+                          <li className="rounded-2xl border border-dashed bg-card/60 px-4 py-8 text-center text-sm font-medium text-foreground/65">
+                            مفيش صنف بالاسم ده في السلة
+                          </li>
+                        )}
                       </ul>
                     </>
                   )}

@@ -4,7 +4,6 @@ import * as React from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2, Menu, CalendarDays, Home, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import {
   Sheet,
   SheetClose,
@@ -108,11 +107,9 @@ function LiveClock({ timeZone }: { timeZone: string }) {
   const year = wall.year
 
   return (
-    <div className="inline-flex items-stretch shrink-0 rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-
+    <div className="inline-flex h-10 shrink-0 items-stretch overflow-hidden rounded-xl border border-border bg-card">
       {/* ── الوقت ── */}
-      <div className="flex items-center gap-2 px-3 py-1.5">
-        {/* Live dot */}
+      <div className="flex items-center gap-2 px-3">
         <span className="relative flex size-1.5 shrink-0">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
           <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
@@ -120,20 +117,16 @@ function LiveClock({ timeZone }: { timeZone: string }) {
         <div dir="ltr" className="flex items-baseline gap-px tabular-nums">
           <span className="text-sm font-bold tracking-tight text-foreground">{pad(h)}:{m}</span>
           <span className="text-[11px] font-medium text-muted-foreground/60">:{s}</span>
-          <span className="text-[10px] font-bold text-muted-foreground mr-1">{period}</span>
+          <span className="ml-1 text-[10px] font-bold text-muted-foreground">{period}</span>
         </div>
       </div>
 
-      {/* ── فاصل ── */}
-      <div className="w-px bg-border my-1.5 shrink-0" />
+      <div className="w-px shrink-0 bg-border" />
 
       {/* ── التاريخ ── */}
-      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/30">
-        <CalendarDays className="size-3 text-muted-foreground/50 shrink-0" />
-        <span
-          dir="rtl"
-          className="whitespace-nowrap text-[11px] font-semibold text-muted-foreground"
-        >
+      <div className="flex items-center gap-1.5 bg-muted/40 px-3">
+        <CalendarDays className="size-3.5 shrink-0 text-muted-foreground/60" />
+        <span dir="rtl" className="whitespace-nowrap text-xs font-semibold text-muted-foreground">
           {dayName}، {day} {month} {year}
         </span>
       </div>
@@ -269,16 +262,16 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
       <TrialExpiredBanner />
       <OfflineIndicator />
       {/* Mobile top bar */}
-      <header className="z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-card px-3 pt-[env(safe-area-inset-top)] shadow-sm lg:hidden">
+      <header className="z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-card/90 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-md lg:hidden">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <Button variant="ghost" size="icon" className="size-9 shrink-0" onClick={() => setMobileOpen(true)}>
+          <button type="button" aria-label="فتح القائمة" className="shell-icon-btn" onClick={() => setMobileOpen(true)}>
             <Menu className="size-5" />
-          </Button>
+          </button>
           {/* زر الرئيسية: نفس شكل لوجو السايدبار، يرجّع للوحة المعلومات */}
           <Link
             href="/dashboard"
             aria-label="الرئيسية — لوحة المعلومات"
-            className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-sm ring-1 ring-brand-500/20 transition-transform active:scale-90"
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-sm ring-1 ring-brand-500/20 transition-transform active:scale-90"
           >
             <Home className="size-[18px]" strokeWidth={1.9} />
           </Link>
@@ -330,7 +323,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         {/* Main content */}
         <div className="flex min-w-0 flex-1 flex-col min-h-0">
         {/* Desktop header */}
-        <header className="sticky top-0 z-20 hidden h-14 shrink-0 items-center justify-between border-b bg-card px-6 shadow-sm lg:flex">
+        <header className="sticky top-0 z-20 hidden h-16 shrink-0 items-center justify-between border-b bg-card/90 px-6 backdrop-blur-md lg:flex">
           <LiveClock timeZone={tenantTimezone || 'Africa/Cairo'} />
           <div className="flex items-center gap-2">
             <ThemeToggle />

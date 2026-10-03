@@ -1356,6 +1356,138 @@ function TogglePill({
   )
 }
 
+const MANY_ITEMS = 8
+
+/** جدول أصناف الأمر — بيتعامل مع الفواتير الطويلة (جملة 30–50 صنف): بحث، "المرتجع فقط"، تمرير داخلي، وعنوان وإجمالي ثابتين */
+function ItemsTable({ o, c }: { o: PurchaseOrder; c: Calc }) {
+  const [q, setQ] = React.useState('')
+  const [onlyRet, setOnlyRet] = React.useState(false)
+  const many = o.items.length > MANY_ITEMS
+  const retCount = o.items.filter((i) => (i.returnedQty ?? 0) > 0).length
+  const needle = q.trim().toLowerCase()
+  const shown = o.items.filter(
+    (it) => (!needle || it.name.toLowerCase().includes(needle)) && (!onlyRet || (it.returnedQty ?? 0) > 0)
+  )
+  const filtering = !!needle || onlyRet
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-xs font-bold text-foreground/70">الأصناف المستلمة</p>
+        {many && (
+          <span className="text-xs font-semibold tabular-nums text-foreground/65">
+            {filtering ? `عرض ${shown.length} من ${o.items.length}` : `${o.items.length} صنف`}
+          </span>
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border bg-card">
+        {many && (
+          <div className="flex flex-wrap items-center gap-2 border-b bg-card p-2.5">
+            <label className="relative flex h-9 min-w-[10rem] flex-1 items-center rounded-xl border bg-background focus-within:border-cyan-600 focus-within:ring-[3px] focus-within:ring-cyan-600/25">
+              <Search className="pointer-events-none absolute right-3 size-3.5 text-muted-foreground" aria-hidden />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="ابحث في أصناف الفاتورة…"
+                aria-label="بحث في أصناف الفاتورة"
+                className="h-full w-full bg-transparent pe-8 text-sm outline-none placeholder:text-muted-foreground/80"
+                style={{ paddingInlineStart: '2.25rem' }}
+              />
+              {q && (
+                <button
+                  type="button"
+                  onClick={() => setQ('')}
+                  aria-label="مسح البحث"
+                  className="absolute left-2 flex size-5 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </label>
+            {retCount > 0 && (
+              <button
+                type="button"
+                aria-pressed={onlyRet}
+                onClick={() => setOnlyRet((v) => !v)}
+                className={cn(
+                  'inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40',
+                  onlyRet ? 'border-cyan-600 bg-cyan-600/10 text-cyan-900 dark:text-cyan-100' : 'bg-background text-foreground/75 hover:bg-muted'
+                )}
+              >
+                <RotateCcw className="size-3.5" />
+                المرتجع فقط ({retCount})
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className={cn(many && 'max-h-[26rem] overflow-y-auto overscroll-contain')}>
+          <div className={cn(ITEM_COLS, 'sticky top-0 z-10 border-b bg-muted px-4 py-2.5 text-[11px] font-bold text-foreground/70')}>
+            <span>الصنف</span>
+            <span className="text-center">الكمية</span>
+            <span className="text-end">التكلفة</span>
+            <span className="text-end">القيمة</span>
+          </div>
+          <ul className="divide-y">
+            {shown.map((it) => {
+              const rq = it.returnedQty ?? 0
+              const keptPct = it.quantity > 0 ? ((it.quantity - rq) / it.quantity) * 100 : 100
+              return (
+                <li key={it.id} className={cn(ITEM_COLS, 'items-center px-4 py-3')}>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold">{it.name}</p>
+                    {rq > 0 && (
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <span className="flex h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-slate-400" aria-hidden>
+                          <span className="h-full bg-cyan-600" style={{ width: `${keptPct}%` }} />
+                        </span>
+                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                          رجع {formatNumber(rq)} من {formatNumber(it.quantity)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-center tabular-nums">
+                    <p className="text-sm font-bold">{formatNumber(it.quantity)}</p>
+                    {rq > 0 && <p className="text-xs font-bold text-slate-600 dark:text-slate-300">−{formatNumber(rq)}</p>}
+                  </div>
+                  <p className="text-end text-sm font-medium tabular-nums text-foreground/70">{formatCurrency(it.cost)}</p>
+                  <div className="text-end tabular-nums">
+                    <p className="text-sm font-extrabold">{formatCurrency(it.quantity * it.cost)}</p>
+                    {rq > 0 && <p className="text-xs font-bold text-slate-600 dark:text-slate-300">−{formatCurrency(rq * it.cost)}</p>}
+                  </div>
+                </li>
+              )
+            })}
+            {shown.length === 0 && (
+              <li className="px-4 py-8 text-center text-sm font-medium text-foreground/65">مفيش أصناف بالفلتر ده</li>
+            )}
+          </ul>
+        </div>
+
+        {c.returnedQty > 0 ? (
+          <div className={cn(ITEM_COLS, 'items-center border-t bg-cyan-600/[0.07] px-4 py-3 text-sm font-extrabold tabular-nums')}>
+            <span className="text-cyan-900 dark:text-cyan-100">الصافي بعد المرتجع</span>
+            <span className="text-center">{formatNumber(c.qty - c.returnedQty)}</span>
+            <span />
+            <span className="text-end">{formatCurrency(c.net)}</span>
+          </div>
+        ) : (
+          many && (
+            <div className={cn(ITEM_COLS, 'items-center border-t bg-cyan-600/[0.07] px-4 py-3 text-sm font-extrabold tabular-nums')}>
+              <span className="text-cyan-900 dark:text-cyan-100">إجمالي {o.items.length} صنف</span>
+              <span className="text-center">{formatNumber(c.qty)}</span>
+              <span />
+              <span className="text-end">{formatCurrency(o.total)}</span>
+            </div>
+          )
+        )}
+      </div>
+    </div>
+  )
+}
+
 /** إيصال استلام لأمر شراء واحد */
 function Slip({
   o,
@@ -1501,57 +1633,7 @@ function Slip({
         <div id={id} className="grid gap-5 border-t bg-cyan-600/[0.035] p-4 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] md:p-5">
           {/* الأصناف + المرتجع */}
           <div className="min-w-0 space-y-4">
-            <div>
-              <p className="mb-2 text-xs font-bold text-foreground/70">الأصناف المستلمة</p>
-              <div className="overflow-hidden rounded-2xl border bg-card">
-                <div className={cn(ITEM_COLS, 'border-b bg-muted/60 px-4 py-2.5 text-[11px] font-bold text-foreground/70')}>
-                  <span>الصنف</span>
-                  <span className="text-center">الكمية</span>
-                  <span className="text-end">التكلفة</span>
-                  <span className="text-end">القيمة</span>
-                </div>
-                <ul className="divide-y">
-                  {o.items.map((it) => {
-                    const rq = it.returnedQty ?? 0
-                    const keptPct = it.quantity > 0 ? ((it.quantity - rq) / it.quantity) * 100 : 100
-                    return (
-                      <li key={it.id} className={cn(ITEM_COLS, 'items-center px-4 py-3')}>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-bold">{it.name}</p>
-                          {rq > 0 && (
-                            <div className="mt-1.5 flex items-center gap-2">
-                              <span className="flex h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-slate-400" aria-hidden>
-                                <span className="h-full bg-cyan-600" style={{ width: `${keptPct}%` }} />
-                              </span>
-                              <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-                                رجع {formatNumber(rq)} من {formatNumber(it.quantity)}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="text-center tabular-nums">
-                          <p className="text-sm font-bold">{formatNumber(it.quantity)}</p>
-                          {rq > 0 && <p className="text-xs font-bold text-slate-600 dark:text-slate-300">−{formatNumber(rq)}</p>}
-                        </div>
-                        <p className="text-end text-sm font-medium tabular-nums text-foreground/70">{formatCurrency(it.cost)}</p>
-                        <div className="text-end tabular-nums">
-                          <p className="text-sm font-extrabold">{formatCurrency(it.quantity * it.cost)}</p>
-                          {rq > 0 && <p className="text-xs font-bold text-slate-600 dark:text-slate-300">−{formatCurrency(rq * it.cost)}</p>}
-                        </div>
-                      </li>
-                    )
-                  })}
-                </ul>
-                {c.returnedQty > 0 && (
-                  <div className={cn(ITEM_COLS, 'items-center border-t bg-cyan-600/[0.07] px-4 py-3 text-sm font-extrabold tabular-nums')}>
-                    <span className="text-cyan-900 dark:text-cyan-100">الصافي بعد المرتجع</span>
-                    <span className="text-center">{formatNumber(c.qty - c.returnedQty)}</span>
-                    <span />
-                    <span className="text-end">{formatCurrency(c.net)}</span>
-                  </div>
-                )}
-              </div>
-            </div>
+            <ItemsTable o={o} c={c} />
 
             {c.returnedValue > 0 && (
               <div>
@@ -1609,7 +1691,7 @@ function Slip({
           </div>
 
           {/* بيانات الأمر */}
-          <div className="min-w-0 space-y-3">
+          <div className="min-w-0 space-y-3 md:sticky md:top-3 md:self-start">
             <p className="text-xs font-bold text-foreground/70">بيان الأمر</p>
             <div className="overflow-hidden rounded-2xl border bg-card">
               {/* المورد */}

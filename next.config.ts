@@ -6,6 +6,8 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  // يخفي زر N الدايري بتاع وضع التطوير (مش بيظهر في الإنتاج أصلاً)
+  devIndicators: false,
   serverExternalPackages: [
     "@prisma/client",
     ".prisma/client",

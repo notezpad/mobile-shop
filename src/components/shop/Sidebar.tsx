@@ -1,12 +1,31 @@
 'use client'
 
+/**
+ * Sidebar — Premium 2026 Edition
+ * ==================================================
+ * Re-designed to match the rest of the in-app pages:
+ *  • Brand block with gradient ring + glow on the avatar
+ *  • Section labels (uppercase, letter-spaced, muted)
+ *  • Nav items with: hover lift, active emerald tint + right rail + glow
+ *  • Inventory sub-group with collapsible children and color dots
+ *  • Footer card: "النظام يعمل" status + plan pill + logout button
+ *  • Collapsed mode (md–lg): 64px icon rail with tooltips
+ *
+ * All colors come from the design tokens already defined in globals.css:
+ *   --sidebar, --sidebar-foreground, --sidebar-accent, --sidebar-border,
+ *   --primary, --primary-subtle, --brand-500/600, --success, --destructive
+ *
+ * Keeps the existing API (props: collapsed, onNavigate, className) and the
+ * existing module-gating logic from useShopStore + plan-constants.
+ */
+
 import * as React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, ShoppingCart, Package, Receipt, Wrench, Users, Truck,
   PackagePlus, Wallet, ReceiptText, Banknote, Warehouse, Building2,
-  BarChart3, Settings as SettingsIcon, UserCog, LogOut, Store, Plus,
+  BarChart3, Settings as SettingsIcon, UserCog, Power, ChevronLeft, Store, Plus,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -18,11 +37,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-// 🛡️ 2026-09-15: import CRITICAL_MODULES from plan-constants (CLIENT-SAFE).
-// DO NOT import from '@/lib/features' here — that file pulls in Prisma + `pg`
-// (the Postgres driver), which uses Node's `dns` module and breaks the
-// browser bundle. `plan-constants.ts` has no db imports and is safe for
-// client components.
 import { CRITICAL_MODULES } from '@/lib/plan-constants'
 
 interface NavItem {
@@ -30,18 +44,20 @@ interface NavItem {
   label: string
   icon: LucideIcon
   module: ViewKey
+  /** Optional tint accent for the icon (defaults to primary emerald). */
+  accent?: string
 }
 
 /**
- * 🛡️ 2026-09-30: صفحات المخزون بقت صفحات مستقلة بدل التبويبات —
- * عنصر "المخزون" في السايدبار بقى مجموعة قابلة للتوسيع بعلامة (+)
- * يخرج منها: المخزون / الحركات / التحويلات / الجرد، وكل صفحة بلون هويتها.
+ * Inventory sub-pages — each keeps its own color identity (matches the
+ * page-level hero tints in InventoryView/MovementsPage/TransfersPage/
+ * StocktakePage so the sidebar dot == the page accent).
  */
 const INVENTORY_CHILDREN: { path: string; label: string; color: string }[] = [
   { path: '/inventory', label: 'حالة المخزون', color: '#10b981' },
   { path: '/inventory/movements', label: 'الحركات', color: '#0ea5e9' },
   { path: '/inventory/transfers', label: 'التحويلات', color: '#f59e0b' },
-  { path: '/inventory/stocktake', label: 'الجرد', color: '#2563eb' },
+  { path: '/inventory/stocktake', label: 'الجرد', color: '#0d9488' },
 ]
 
 const MAIN_GROUP: NavItem[] = [
@@ -60,49 +76,79 @@ const MANAGE_GROUP: NavItem[] = [
   { path: '/expenses', label: 'المصروفات', icon: ReceiptText, module: 'expenses' },
   { path: '/cash', label: 'الخزنة', icon: Banknote, module: 'cash' },
   { path: '/reports', label: 'التقارير', icon: BarChart3, module: 'reports' },
-  { path: '/settings', label: 'الإعدادات', icon: SettingsIcon, module: 'settings' },
   { path: '/branches', label: 'الفروع', icon: Building2, module: 'branches' },
   { path: '/users', label: 'المستخدمين', icon: UserCog, module: 'users' },
+  { path: '/settings', label: 'الإعدادات', icon: SettingsIcon, module: 'settings' },
 ]
+
+/* ───────────────────────── helpers ───────────────────────── */
+
+function useActivePath() {
+  const pathname = usePathname() ?? ''
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(href + '/')
+  return { pathname, isActive }
+}
+
+/* ───────────────────────── NavButton ───────────────────────── */
 
 function NavButton({
   item,
   active,
   collapsed,
+  onNavigate,
 }: {
   item: NavItem
   active: boolean
   collapsed?: boolean
+  onNavigate?: () => void
 }) {
   const Icon = item.icon
 
   const linkEl = (
     <Link
       href={item.path}
+      onClick={onNavigate}
+      aria-current={active ? 'page' : undefined}
       className={cn(
-        'group relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
-        'h-11 text-right',
+        // base
+        'group relative flex w-full items-center gap-3 rounded-xl text-right transition-all duration-base ease-out',
+        'min-h-[40px] px-3 py-1.5 text-sm font-medium',
+        // active vs default
         active
           ? 'bg-primary-subtle text-primary-subtle-foreground'
-          : 'text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+          : [
+              'text-sidebar-foreground/70',
+              'hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+            ].join(' '),
         collapsed && 'justify-center px-0',
       )}
     >
-      {active && (
+      <span
+        className={cn(
+          'relative grid place-items-center size-8 shrink-0 rounded-lg transition-all duration-base',
+          active
+            ? 'bg-primary text-primary-foreground shadow-sm'
+            : 'text-muted-foreground/75 group-hover:text-sidebar-accent-foreground group-hover:bg-sidebar-accent/80',
+        )}
+      >
+        {/* subtle ring on hover for affordance */}
         <span
           aria-hidden
-          className="absolute -right-2 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-l-full bg-primary shadow-[0_0_6px_0px] shadow-primary/60"
+          className={cn(
+            'pointer-events-none absolute inset-0 rounded-lg ring-1 transition-opacity',
+            active ? 'opacity-0' : 'ring-foreground/5 opacity-0 group-hover:opacity-100',
+          )}
         />
+        <Icon
+          strokeWidth={active ? 2.2 : 2}
+          className="size-[18px]"
+        />
+      </span>
+
+      {!collapsed && (
+        <span className="flex-1 truncate">{item.label}</span>
       )}
-      <Icon
-        className={cn(
-          'size-[18px] shrink-0 transition-colors',
-          active
-            ? 'text-primary'
-            : 'text-muted-foreground/70 group-hover:text-sidebar-accent-foreground',
-        )}
-      />
-      {!collapsed && <span className="truncate">{item.label}</span>}
     </Link>
   )
 
@@ -120,20 +166,21 @@ function NavButton({
   return linkEl
 }
 
-/* ───────────── مجموعة المخزون القابلة للتوسيع (+) ───────────── */
+/* ───────────────────────── Inventory group (collapsible) ───────────────────────── */
 
 function InventoryGroup({
   collapsed,
-  pathname,
   onNavigate,
 }: {
   collapsed?: boolean
-  pathname: string
   onNavigate?: () => void
 }) {
+  const { pathname, isActive } = useActivePath()
   const inInventory = pathname.startsWith('/inventory')
-  // بيتفتح تلقائياً أول ما تدخل قسم المخزون من برّه، لكن لو قفلتها بإيدك
-  // والتنقّل بين صفحات المخزون نفسها — بنحترم اختك ومش بنفتحها تاني.
+  const parentActive = pathname === '/inventory'
+
+  // Auto-open when entering inventory from outside, but respect manual close
+  // when navigating *between* inventory sub-pages.
   const [open, setOpen] = React.useState(inInventory)
   const wasInInventory = React.useRef(inInventory)
   React.useEffect(() => {
@@ -141,31 +188,29 @@ function InventoryGroup({
     wasInInventory.current = inInventory
   }, [inInventory])
 
-  const parentActive = pathname === '/inventory'
-
-  /* ── الوضع المطوي (شريط الأيقونات): لينك عادي + Tooltip ── */
+  /* ── Collapsed mode: single icon link + tooltip ── */
   if (collapsed) {
     const linkEl = (
       <Link
         href="/inventory"
+        onClick={onNavigate}
+        aria-label="المخزون"
         className={cn(
-          'group relative flex size-11 items-center justify-center rounded-lg transition-all duration-150',
+          'group relative grid size-10 place-items-center rounded-xl transition-all duration-base',
           inInventory
-            ? 'bg-primary-subtle text-primary-subtle-foreground'
-            : 'text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+            ? 'bg-primary-subtle text-primary-subtle-foreground ring-1 ring-primary/15'
+            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
         )}
       >
         {inInventory && (
           <span
             aria-hidden
-            className="absolute -right-2 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-l-full bg-primary shadow-[0_0_6px_0px] shadow-primary/60"
+            className="absolute right-0 top-1/2 -translate-y-1/2 h-7 w-[3px] rounded-l-full bg-gradient-to-b from-brand-400 to-brand-600 shadow-[0_0_8px_0px] shadow-brand-500/60"
           />
         )}
         <Warehouse
-          className={cn(
-            'size-[18px] shrink-0',
-            inInventory ? 'text-primary' : 'text-muted-foreground/70 group-hover:text-sidebar-accent-foreground',
-          )}
+          strokeWidth={inInventory ? 2.4 : 2}
+          className={cn('size-[18px]', inInventory && 'text-primary')}
         />
       </Link>
     )
@@ -179,51 +224,62 @@ function InventoryGroup({
     )
   }
 
+  /* ── Expanded mode: parent row with chevron + collapsible children ── */
   return (
-    <div>
-      {/* الصف الرئيسي: كليك = الدخول لصفحة المخزون · علامة (+) = فتح/قفل الصفحات */}
+    <div className="relative">
+      {/* Parent row: click navigates to /inventory, (+) toggles children */}
       <div
         className={cn(
-          'group relative flex w-full items-center rounded-lg transition-all duration-150',
+          'group relative flex w-full items-center rounded-xl transition-all duration-base',
+          'min-h-[40px] text-right',
           parentActive
-            ? 'bg-primary-subtle text-primary-subtle-foreground'
+            ? 'bg-primary-subtle text-primary-subtle-foreground ring-1 ring-primary/15 shadow-[0_2px_8px_-2px_rgba(16,185,129,0.18)]'
             : inInventory
               ? 'bg-sidebar-accent/60 text-sidebar-accent-foreground'
-              : 'text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+              : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
         )}
       >
         {(parentActive || inInventory) && (
           <span
             aria-hidden
-            className="absolute -right-2 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-l-full bg-primary shadow-[0_0_6px_0px] shadow-primary/60"
+            className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 h-7 w-[3px] rounded-l-full bg-gradient-to-b from-brand-400 to-brand-600 shadow-[0_0_8px_0px] shadow-brand-500/60"
           />
         )}
+
         <Link
           href="/inventory"
           onClick={onNavigate}
-          className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-right"
+          aria-current={parentActive ? 'page' : undefined}
+          className="flex min-w-0 flex-1 items-center gap-3 px-3 py-1.5"
         >
-          <Warehouse
+          <span
             className={cn(
-              'size-[18px] shrink-0 transition-colors',
+              'relative grid place-items-center size-8 shrink-0 rounded-lg transition-all',
               parentActive || inInventory
-                ? 'text-primary'
-                : 'text-muted-foreground/70 group-hover:text-sidebar-accent-foreground',
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground/75 group-hover:text-sidebar-accent-foreground group-hover:bg-sidebar-accent/80',
             )}
-          />
-          <span className="truncate text-sm font-medium">المخزون</span>
+          >
+            <Warehouse
+              strokeWidth={parentActive || inInventory ? 2.4 : 2}
+              className={cn('size-[18px]', (parentActive || inInventory) && 'text-primary')}
+            />
+          </span>
+          <span className="flex-1 truncate text-sm font-medium">المخزون</span>
         </Link>
+
+        {/* Toggle button */}
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
           aria-label={open ? 'إخفاء صفحات المخزون' : 'إظهار صفحات المخزون'}
           className={cn(
-            'me-2 flex size-6 shrink-0 items-center justify-center rounded-md border transition-all duration-base',
-            'hover:bg-sidebar-accent active:scale-90',
+            'group/toggle me-1.5 flex size-7 shrink-0 items-center justify-center rounded-md transition-all',
+            'active:scale-90',
             inInventory || open
-              ? 'border-primary/25 bg-primary/10 text-primary'
-              : 'border-sidebar-border text-muted-foreground',
+              ? 'bg-primary/10 text-primary ring-1 ring-primary/15'
+              : 'text-muted-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
           )}
         >
           <Plus
@@ -235,74 +291,98 @@ function InventoryGroup({
         </button>
       </div>
 
-      {/* الصفحات الفرعية — تقفيل بـ display:none مباشرة (inline style):
-          مفيش فراغ وهمي في أي متصفح حتى لو فشل تحميل أي CSS،
-          والفتح ليه حركة دخول ناعمة بـ keyframes. */}
+      {/* Children — display:none toggling for zero-empty-space collapse */}
       <div
         style={{ display: open ? 'block' : 'none' }}
         className={open ? 'submenu-in' : undefined}
       >
-        <div className="relative ms-[26px] space-y-0.5 border-s border-sidebar-border/70 py-1.5 ps-2.5">
-            {INVENTORY_CHILDREN.map((child) => {
-              const active = pathname === child.path
-              return (
-                <Link
-                  key={child.path}
-                  href={child.path}
-                  onClick={onNavigate}
-                  aria-current={active ? 'page' : undefined}
-                  style={
-                    active
-                      ? ({
-                          backgroundColor: `${child.color}1a`,
-                          color: child.color,
-                          ['--dot' as string]: child.color,
-                        } as React.CSSProperties)
-                      : ({ ['--dot' as string]: child.color } as React.CSSProperties)
-                  }
-                  className={cn(
-                    'relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-[13px] font-semibold transition-colors',
-                    active
-                      ? 'font-bold'
-                      : 'text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                  )}
-                >
+        <div className="relative ms-[26px] mt-1 space-y-0.5 border-s border-sidebar-border/70 ps-3 pt-1 pb-1">
+          {INVENTORY_CHILDREN.map((child) => {
+            const active = pathname === child.path
+            return (
+              <Link
+                key={child.path}
+                href={child.path}
+                onClick={onNavigate}
+                aria-current={active ? 'page' : undefined}
+                style={
+                  {
+                    '--dot': child.color,
+                  } as React.CSSProperties
+                }
+                className={cn(
+                  'group/child relative flex min-h-[36px] items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-all',
+                  active
+                    ? 'font-bold'
+                    : 'text-sidebar-foreground/60 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+                )}
+              >
+                {/* Active tint background using the child's color */}
+                {active && (
                   <span
                     aria-hidden
-                    className={cn(
-                      'size-2 shrink-0 rounded-full transition-transform',
-                      active ? 'scale-110' : 'scale-90 opacity-60',
-                    )}
+                    className="pointer-events-none absolute inset-0 rounded-lg"
+                    style={{
+                      backgroundColor: `${child.color}14`,
+                      boxShadow: `inset 0 0 0 1px ${child.color}33`,
+                    }}
+                  />
+                )}
+                <span
+                  aria-hidden
+                  className={cn(
+                    'relative size-2 shrink-0 rounded-full transition-transform',
+                    active ? 'scale-110' : 'scale-90 opacity-60 group-hover/child:opacity-100',
+                  )}
+                  style={{ backgroundColor: 'var(--dot)' }}
+                />
+                <span className="relative truncate">{child.label}</span>
+                {active && (
+                  <span
+                    aria-hidden
+                    className="absolute -start-[13px] top-1/2 size-1.5 -translate-y-1/2 rounded-full ring-4 ring-sidebar"
                     style={{ backgroundColor: 'var(--dot)' }}
                   />
-                  <span className="truncate">{child.label}</span>
-                  {active && (
-                    <span
-                      aria-hidden
-                      className="absolute -start-[11px] top-1/2 size-1.5 -translate-y-1/2 rounded-full ring-4 ring-sidebar"
-                      style={{ backgroundColor: 'var(--dot)' }}
-                    />
-                  )}
-                </Link>
-              )
-            })}
+                )}
+              </Link>
+            )
+          })}
         </div>
       </div>
     </div>
   )
 }
 
-function ShopAvatar({ logoPath }: { logoPath?: string | null }) {
+/* ───────────────────────── Brand block ───────────────────────── */
+
+function ShopAvatar({ logoPath, collapsed }: { logoPath?: string | null; collapsed?: boolean }) {
   if (logoPath) {
     return (
-      <div className="shrink-0 size-9 overflow-hidden rounded-xl shadow-sm ring-1 ring-sidebar-border">
+      <div
+        className={cn(
+          'shrink-0 overflow-hidden rounded-2xl shadow-md ring-1 ring-sidebar-border',
+          collapsed ? 'size-10' : 'size-11',
+        )}
+      >
         <img src={logoPath} alt="شعار المحل" className="h-full w-full object-cover" />
       </div>
     )
   }
   return (
-    <div className="shrink-0 relative flex size-9 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-brand-600 to-brand-800 shadow-sm ring-1 ring-brand-500/20">
-      <Store className="relative size-[18px] text-white" strokeWidth={1.8} />
+    <div
+      className={cn(
+        'relative grid shrink-0 place-items-center overflow-hidden rounded-2xl',
+        'bg-gradient-to-br from-brand-500 via-brand-600 to-brand-800',
+        'shadow-md ring-1 ring-brand-400/30',
+        collapsed ? 'size-10' : 'size-11',
+      )}
+    >
+      {/* subtle inner glow */}
+      <span
+        aria-hidden
+        className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/20"
+      />
+      <Store className="relative size-5 text-white" strokeWidth={1.9} />
     </div>
   )
 }
@@ -313,81 +393,204 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
     <div
       className={cn(
-        'flex items-center gap-3 px-4 py-[14px] border-b border-sidebar-border',
+        'flex items-center gap-3 border-b border-sidebar-border px-4 py-3',
         collapsed && 'justify-center px-0',
       )}
     >
-      <ShopAvatar logoPath={logoPath} />
+      <ShopAvatar logoPath={logoPath} collapsed={collapsed} />
       {!collapsed && (
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-bold tracking-normal text-sidebar-foreground leading-tight">
+          <p
+            className="line-clamp-2 text-[20px] font-bold leading-[1.3] text-sidebar-foreground"
+            style={{ fontFamily: 'var(--font-brand), var(--font-cairo), sans-serif' }}
+            title={shopName}
+          >
             {shopName}
           </p>
-          <div className="mt-1.5 h-[2px] w-[50%] rounded-full bg-gradient-to-l from-brand-600 to-brand-400 opacity-80" />
         </div>
       )}
     </div>
   )
 }
 
+/* ───────────────────────── Section label ───────────────────────── */
+
 function SectionLabel({ label }: { label: string }) {
   return (
-    <p className="px-3 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 select-none">
+    <p className="select-none px-3 pb-1.5 pt-1 text-[11px] font-bold text-muted-foreground/70">
       {label}
     </p>
+  )
+}
+
+/* ───────────────────────── Footer ───────────────────────── */
+
+/* بداية الجلسة = وقت تحميل التطبيق (واحد لكل النسخ: عادي / مطوي / موبايل) */
+const SESSION_START = typeof window === 'undefined' ? 0 : Date.now()
+const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+
+/** حالة الشبكة الحقيقية من المتصفح — من غير أي ريكويست للسيرفر */
+function subscribeNetwork(cb: () => void) {
+  const conn = (navigator as any).connection
+  window.addEventListener('online', cb)
+  window.addEventListener('offline', cb)
+  conn?.addEventListener?.('change', cb)
+  return () => {
+    window.removeEventListener('online', cb)
+    window.removeEventListener('offline', cb)
+    conn?.removeEventListener?.('change', cb)
+  }
+}
+function networkSnapshot() {
+  const conn = (navigator as any).connection
+  return `${navigator.onLine ? 1 : 0}|${conn?.effectiveType ?? ''}`
+}
+
+function useNetwork() {
+  const snap = React.useSyncExternalStore(subscribeNetwork, networkSnapshot, () => '1|')
+  const [on, type] = snap.split('|')
+  const online = on === '1'
+  const bars = !online ? 0 : type === 'slow-2g' ? 1 : type === '2g' ? 2 : type === '3g' ? 3 : 4
+  return { online, bars, type: type ? type.toUpperCase().replace('SLOW-', '') : 'LIVE' }
+}
+
+function useSessionClock() {
+  const [secs, setSecs] = React.useState(0)
+  React.useEffect(() => {
+    const id = setInterval(() => setSecs(Math.floor((Date.now() - SESSION_START) / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(Math.floor(secs / 3600))}:${p(Math.floor((secs % 3600) / 60))}:${p(secs % 60)}`
+}
+
+function Led({ online }: { online: boolean }) {
+  const c = online ? 'bg-emerald-400' : 'bg-amber-400'
+  return (
+    <span className="relative grid size-7 shrink-0 place-items-center">
+      {online && <span className={cn('absolute inline-flex size-3 animate-ping rounded-full opacity-60', c)} />}
+      <span
+        className={cn('relative inline-flex size-2.5 rounded-full', c)}
+        style={{ boxShadow: `0 0 6px 0 ${online ? 'rgba(52,211,153,.6)' : 'rgba(251,191,36,.55)'}` }}
+      />
+    </span>
+  )
+}
+
+function SignalBars({ level }: { level: number }) {
+  return (
+    <span aria-hidden dir="ltr" className="flex h-4 shrink-0 items-end gap-[3px]">
+      {[5, 8, 11, 14].map((h, i) => (
+        <span
+          key={h}
+          className={cn('w-[3px] rounded-[1px] transition-colors', i < level ? 'bg-emerald-500' : 'bg-foreground/15')}
+          style={{ height: h }}
+        />
+      ))}
+    </span>
+  )
+}
+
+function StatusCard({ collapsed }: { collapsed?: boolean }) {
+  const { online, bars } = useNetwork()
+  const clock = useSessionClock()
+  const label = online ? 'متصل بالسيرفر' : 'غير متصل'
+
+  if (collapsed) {
+    return (
+      <div className="flex justify-center">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="grid size-11 place-items-center rounded-xl border border-sidebar-border bg-muted/50">
+              <Led online={online} />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="left" sideOffset={8}>
+            {label} · {clock}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-10 items-center gap-1.5 rounded-xl border border-sidebar-border bg-muted/50 px-2">
+      <Led online={online} />
+      <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-foreground">{label}</span>
+      {online && (
+        <span dir="ltr" className="text-[10.5px] tabular-nums text-muted-foreground" style={{ fontFamily: MONO }}>
+          {clock}
+        </span>
+      )}
+      <SignalBars level={bars} />
+    </div>
   )
 }
 
 function LogoutButton({ collapsed }: { collapsed?: boolean }) {
   const logout = useShopStore((s) => s.logout)
 
+  const iconTile = (size: string) => (
+    <span
+      className={cn(
+        'grid shrink-0 place-items-center rounded-xl bg-gradient-to-br from-red-500 to-red-700 text-white ring-1 ring-white/20',
+        'shadow-[0_4px_10px_-3px_rgba(239,68,68,0.65)] transition-transform duration-base group-hover:scale-105',
+        size,
+      )}
+    >
+      <Power className="size-4" strokeWidth={2.4} />
+    </span>
+  )
+
   const btn = (
     <button
       type="button"
       onClick={logout}
+      aria-label="تسجيل الخروج"
       className={cn(
-        'group flex w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-all duration-150',
-        'bg-destructive/10 text-destructive hover:bg-destructive hover:text-white',
-        'border border-destructive/20 hover:border-destructive',
-        'active:scale-[0.98] shadow-sm',
-        collapsed ? 'size-10 self-center p-0' : 'h-10 px-4',
+        'group relative flex w-full items-center overflow-hidden rounded-2xl border transition-all duration-base ease-out',
+        'border-red-500/30 bg-gradient-to-l from-red-500/12 to-red-500/[0.03] text-red-600 dark:text-red-400',
+        'hover:border-red-500 hover:from-red-600 hover:to-red-500 hover:text-white',
+        'hover:shadow-[0_10px_24px_-10px_rgba(239,68,68,0.7)] active:scale-[0.985]',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50',
+        collapsed ? 'size-11 justify-center rounded-xl' : 'min-h-[44px] gap-3 p-1.5 pe-3',
       )}
     >
-      <LogOut className="size-4 shrink-0 transition-colors" />
-      {!collapsed && <span>تسجيل الخروج</span>}
+      {collapsed ? iconTile('size-8') : (
+        <>
+          {iconTile('size-8')}
+          <span className="flex-1 text-right text-sm font-bold">تسجيل الخروج</span>
+          <ChevronLeft className="size-4 opacity-50 transition-transform duration-base group-hover:-translate-x-1 group-hover:opacity-100" />
+        </>
+      )}
     </button>
   )
 
   if (collapsed) {
     return (
-      <Tooltip>
-        <TooltipTrigger asChild>{btn}</TooltipTrigger>
-        <TooltipContent side="left" sideOffset={8}>
-          تسجيل الخروج
-        </TooltipContent>
-      </Tooltip>
+      <div className="flex justify-center">
+        <Tooltip>
+          <TooltipTrigger asChild>{btn}</TooltipTrigger>
+          <TooltipContent side="left" sideOffset={8}>
+            تسجيل الخروج
+          </TooltipContent>
+        </Tooltip>
+      </div>
     )
   }
-
   return btn
 }
 
 function SidebarFooter({ collapsed }: { collapsed?: boolean }) {
   return (
-    <div className="flex flex-col gap-1 px-2 py-3 border-t border-sidebar-border">
+    <div className="space-y-1.5 border-t border-sidebar-border px-2.5 py-2.5">
       <LogoutButton collapsed={collapsed} />
-      {!collapsed && (
-        <div className="flex items-center gap-2 px-3 pt-1">
-          <span className="relative inline-flex size-1.5 shrink-0">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
-            <span className="relative inline-flex size-1.5 rounded-full bg-success" />
-          </span>
-          <span className="text-[11px] font-medium text-success/80">النظام يعمل</span>
-        </div>
-      )}
+      <StatusCard collapsed={collapsed} />
     </div>
   )
 }
+
+/* ───────────────────────── Main Sidebar ───────────────────────── */
 
 export interface SidebarProps {
   collapsed?: boolean
@@ -396,7 +599,24 @@ export interface SidebarProps {
 }
 
 export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
-  const pathname = usePathname()
+  const { isActive } = useActivePath()
+  const navRef = React.useRef<HTMLElement>(null)
+  const [moreBelow, setMoreBelow] = React.useState(false)
+
+  // لو في عناصر تحت لسه ما ظهرتش: نضيف تلاشي أسفل القايمة يدل على السكرول
+  const measure = React.useCallback(() => {
+    const el = navRef.current
+    if (!el) return
+    setMoreBelow(el.scrollHeight - el.scrollTop - el.clientHeight > 6)
+  }, [])
+  React.useEffect(() => {
+    const el = navRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    Array.from(el.children).forEach((c) => ro.observe(c))
+    return () => ro.disconnect()
+  }, [measure])
   const enabledModules = useShopStore((s) => s.plan.enabledModules)
 
   const hasModule = (key: string) =>
@@ -412,37 +632,71 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
       <aside
         className={cn(
           'flex h-full flex-col bg-sidebar border-l border-sidebar-border',
-          collapsed ? 'w-[60px]' : 'w-[252px]',
+          'relative isolate',
+          collapsed ? 'w-[68px]' : 'w-[260px]',
           className,
         )}
       >
+        {/* Subtle ambient glow at the top — adds depth without distracting */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-32 bg-gradient-to-b from-brand-500/[0.04] to-transparent"
+        />
+
         <Brand collapsed={collapsed} />
 
-        <nav className="sidebar-nav flex-1 overflow-y-auto px-2 py-3">
+        <nav
+          ref={navRef}
+          onScroll={measure}
+          style={
+            moreBelow
+              ? {
+                  WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 36px), transparent)',
+                  maskImage: 'linear-gradient(to bottom, #000 calc(100% - 36px), transparent)',
+                }
+              : undefined
+          }
+          className={cn(
+            'sidebar-nav flex-1 overflow-y-auto overflow-x-hidden',
+            'px-2 py-2.5',
+          )}
+          aria-label="القائمة الرئيسية"
+        >
+          {/* Main section */}
           {!collapsed && <SectionLabel label="الرئيسية" />}
           <div className="space-y-0.5">
             {mainItems.map((it) => (
-              <div key={it.path} onClick={onNavigate}>
-                <NavButton item={it} active={pathname === it.path} collapsed={collapsed} />
-              </div>
+              <NavButton
+                key={it.path}
+                item={it}
+                active={isActive(it.path)}
+                collapsed={collapsed}
+                onNavigate={onNavigate}
+              />
             ))}
             {showInventory && (
-              <InventoryGroup collapsed={collapsed} pathname={pathname} onNavigate={onNavigate} />
+              <InventoryGroup collapsed={collapsed} onNavigate={onNavigate} />
             )}
           </div>
 
-          {!collapsed && (
-            <div className="mt-4">
+          {/* Manage section */}
+          {!collapsed ? (
+            <div className="mt-3">
               <SectionLabel label="الإدارة" />
             </div>
+          ) : (
+            <div className="my-3 mx-auto h-px w-7 bg-sidebar-border" />
           )}
-          {collapsed && <div className="my-3 mx-auto w-6 h-px bg-sidebar-border" />}
 
           <div className="space-y-0.5">
             {manageItems.map((it) => (
-              <div key={it.path} onClick={onNavigate}>
-                <NavButton item={it} active={pathname === it.path} collapsed={collapsed} />
-              </div>
+              <NavButton
+                key={it.path}
+                item={it}
+                active={isActive(it.path)}
+                collapsed={collapsed}
+                onNavigate={onNavigate}
+              />
             ))}
           </div>
         </nav>

@@ -11,7 +11,7 @@
  */
 
 import * as React from "react";
-import { Info, Loader2, RotateCcw, Truck, Wallet } from "lucide-react";
+import { Info, Loader2, RotateCcw, Search, Truck, Wallet, X } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -104,6 +104,9 @@ function ReturnForm({
   const [cashMode, setCashMode] = React.useState(false);
   const [method, setMethod] = React.useState(order.paymentMethod || "cash");
   const [note, setNote] = React.useState("");
+  // فواتير الجملة (أصناف كتير): بحث + "المحدد فقط"
+  const [itemQ, setItemQ] = React.useState("");
+  const [onlySel, setOnlySel] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const inFlight = React.useRef(false); // hard guard against double click
 
@@ -118,6 +121,14 @@ function ReturnForm({
 
   const setQty = (it: ReturnableItem, n: number) =>
     setQtys((p) => ({ ...p, [it.id]: n > 0 ? String(n) : "" }));
+
+  const many = order.items.length > 8;
+  const needle = itemQ.trim().toLowerCase();
+  const visibleItems = order.items.filter(
+    (it) =>
+      (!needle || it.name.toLowerCase().includes(needle)) &&
+      (!onlySel || qtyOf(it) > 0),
+  );
 
   const lines = React.useMemo(() => {
     return order.items
@@ -258,8 +269,53 @@ function ReturnForm({
             الأصناف المراد إرجاعها
           </SectionTitle>
 
-          <ul className="space-y-2.5">
-            {order.items.map((it) => {
+          {many && (
+            <div className="mb-2.5 flex flex-wrap items-center gap-2">
+              <label className="relative flex h-10 min-w-[10rem] flex-1 items-center rounded-xl border bg-card focus-within:border-cyan-600 focus-within:ring-[3px] focus-within:ring-cyan-600/25">
+                <Search className="pointer-events-none absolute right-3 size-4 text-muted-foreground" aria-hidden />
+                <input
+                  value={itemQ}
+                  onChange={(e) => setItemQ(e.target.value)}
+                  placeholder="ابحث في أصناف الفاتورة…"
+                  aria-label="بحث في أصناف الفاتورة"
+                  className="h-full w-full bg-transparent pe-8 text-sm outline-none placeholder:text-muted-foreground/80"
+                  style={{ paddingInlineStart: "2.5rem" }}
+                />
+                {itemQ && (
+                  <button
+                    type="button"
+                    onClick={() => setItemQ("")}
+                    aria-label="مسح البحث"
+                    className="absolute left-2 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <X className="size-4" />
+                  </button>
+                )}
+              </label>
+              <button
+                type="button"
+                aria-pressed={onlySel}
+                onClick={() => setOnlySel((v) => !v)}
+                disabled={lines.length === 0 && !onlySel}
+                className={cn(
+                  "inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 disabled:cursor-not-allowed disabled:opacity-45",
+                  onlySel
+                    ? "border-cyan-600 bg-cyan-600/10 text-cyan-900 dark:text-cyan-100"
+                    : "bg-card text-foreground/75 hover:bg-muted",
+                )}
+              >
+                المحدد فقط ({lines.length})
+              </button>
+              <span className="w-full text-xs font-semibold tabular-nums text-foreground/65 sm:w-auto">
+                {needle || onlySel
+                  ? `عرض ${visibleItems.length} من ${order.items.length}`
+                  : `${order.items.length} صنف`}
+              </span>
+            </div>
+          )}
+
+          <ul className={cn(many ? "space-y-2" : "space-y-2.5")}>
+            {visibleItems.map((it) => {
               const remaining = remainingOf(it);
               const prev = it.returnedQty ?? 0;
               const q = qtyOf(it);
@@ -271,7 +327,8 @@ function ReturnForm({
                 <li
                   key={it.id}
                   className={cn(
-                    "rounded-2xl border bg-card p-3.5 transition-colors",
+                    "rounded-2xl border bg-card transition-colors",
+                    many ? "px-3.5 py-2.5" : "p-3.5",
                     on && "border-cyan-600/60 bg-cyan-600/[0.045]",
                     remaining <= 0 && "bg-muted/40",
                   )}
@@ -280,12 +337,19 @@ function ReturnForm({
                     <div className="min-w-[9rem] flex-1">
                       <p className="truncate text-sm font-extrabold">{it.name}</p>
                       <p className="mt-0.5 text-xs font-medium tabular-nums text-foreground/65">
-                        {formatCurrency(it.cost)} للقطعة · استلمت {it.quantity}
+                        {many
+                          ? `${formatCurrency(it.cost)} · متاح ${remaining} من ${it.quantity}${prev > 0 ? ` · رجع قبل كده ${prev}` : ""}`
+                          : `${formatCurrency(it.cost)} للقطعة · استلمت ${it.quantity}`}
                       </p>
                     </div>
 
                     {remaining > 0 ? (
                       <div className="flex items-center gap-2">
+                        {many && on && (
+                          <b className="text-sm font-extrabold tabular-nums text-rose-600 dark:text-rose-300">
+                            −{formatCurrency(q * it.cost)}
+                          </b>
+                        )}
                         <Stepper
                           value={q}
                           min={0}
@@ -309,39 +373,48 @@ function ReturnForm({
                     )}
                   </div>
 
-                  {/* شريط الكمية: المتاح | هترجّعه الآن | رجع قبل كده */}
-                  <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-muted" aria-hidden>
-                    <span className="h-full bg-cyan-600" style={{ width: `${pctKeep}%` }} />
-                    <span
-                      className="h-full bg-rose-500 transition-[width] duration-300 motion-reduce:transition-none"
-                      style={{ width: `${pctNow}%` }}
-                    />
-                    <span className="h-full bg-slate-400" style={{ width: `${pctPrev}%` }} />
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs font-medium tabular-nums">
-                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-foreground/70">
-                      {remaining > 0 && (
-                        <span className="inline-flex items-center gap-1.5">
-                          <i aria-hidden className="size-2 rounded-full bg-cyan-600" />
-                          متاح للإرجاع {remaining} من {it.quantity}
+                  {!many && (
+                    <>
+                      {/* شريط الكمية: المتاح | هترجّعه الآن | رجع قبل كده */}
+                      <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-muted" aria-hidden>
+                        <span className="h-full bg-cyan-600" style={{ width: `${pctKeep}%` }} />
+                        <span
+                          className="h-full bg-rose-500 transition-[width] duration-300 motion-reduce:transition-none"
+                          style={{ width: `${pctNow}%` }}
+                        />
+                        <span className="h-full bg-slate-400" style={{ width: `${pctPrev}%` }} />
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs font-medium tabular-nums">
+                        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-foreground/70">
+                          {remaining > 0 && (
+                            <span className="inline-flex items-center gap-1.5">
+                              <i aria-hidden className="size-2 rounded-full bg-cyan-600" />
+                              متاح للإرجاع {remaining} من {it.quantity}
+                            </span>
+                          )}
+                          {prev > 0 && (
+                            <span className="inline-flex items-center gap-1.5">
+                              <i aria-hidden className="size-2 rounded-full bg-slate-400" />
+                              رجع قبل كده {prev}
+                            </span>
+                          )}
                         </span>
-                      )}
-                      {prev > 0 && (
-                        <span className="inline-flex items-center gap-1.5">
-                          <i aria-hidden className="size-2 rounded-full bg-slate-400" />
-                          رجع قبل كده {prev}
-                        </span>
-                      )}
-                    </span>
-                    {on && (
-                      <b className="text-sm font-extrabold text-rose-600 dark:text-rose-300">
-                        −{formatCurrency(q * it.cost)}
-                      </b>
-                    )}
-                  </div>
+                        {on && (
+                          <b className="text-sm font-extrabold text-rose-600 dark:text-rose-300">
+                            −{formatCurrency(q * it.cost)}
+                          </b>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </li>
               );
             })}
+            {visibleItems.length === 0 && (
+              <li className="rounded-2xl border border-dashed bg-card/60 px-4 py-8 text-center text-sm font-medium text-foreground/65">
+                مفيش أصناف بالفلتر ده
+              </li>
+            )}
           </ul>
         </section>
 

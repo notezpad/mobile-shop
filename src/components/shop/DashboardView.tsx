@@ -16,7 +16,18 @@ import {
   AlertCircle,
   Boxes,
   Truck,
+  CalendarDays,
+  ArrowUpLeft,
+  RefreshCw,
+  CheckCircle2,
+  Check,
+  Undo2,
+  Clock,
+  Receipt,
+  Minus,
+  TrendingDown,
 } from 'lucide-react'
+import Link from 'next/link'
 import {
   Bar,
   BarChart as RechartsBarChart,
@@ -28,25 +39,12 @@ import {
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Badge, StatusDot } from '@/components/ui/badge'
+import { StatusDot } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/format'
-import { DateTimeCell } from './DateTimeCell'
 import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
-import { KpiCard } from '@/components/bento/kpi-card'
-import { BentoGrid, BentoCell } from '@/components/bento/bento-grid'
-import { Sparkline } from '@/components/charts/sparkline'
-import { DonutChart } from '@/components/charts/donut-chart'
 import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface DashboardData {
@@ -89,6 +87,78 @@ interface DashboardData {
   }[]
 }
 
+/* ───────── تاريخ ووقت بتوقيت المحل — نص هادي من غير كبسولة ───────── */
+
+const AR_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
+
+function wallParts(d: Date, tz: string) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: false,
+  }).formatToParts(d)
+  const g = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0)
+  return { y: g('year'), mo: g('month'), d: g('day'), h: g('hour') % 24, mi: g('minute') }
+}
+
+function stampOf(iso: string | null | undefined, tz: string) {
+  const dt = iso ? new Date(iso) : null
+  if (!dt || isNaN(dt.getTime())) return null
+  const w = wallParts(dt, tz)
+  const key = `${w.y}-${String(w.mo).padStart(2, '0')}-${String(w.d).padStart(2, '0')}`
+  const now = wallParts(new Date(), tz)
+  const yest = wallParts(new Date(Date.now() - 864e5), tz)
+  const k = (p: { y: number; mo: number; d: number }) => `${p.y}-${String(p.mo).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`
+  const day =
+    key === k(now) ? 'اليوم'
+    : key === k(yest) ? 'أمس'
+    : `${w.d} ${AR_MONTHS[w.mo - 1]}${w.y !== now.y ? ` ${w.y}` : ''}`
+  const h12 = w.h % 12 || 12
+  return { key, day, time: `${h12}:${String(w.mi).padStart(2, '0')}`, period: w.h >= 12 ? 'م' : 'ص' }
+}
+
+function DateStamp({ iso, tz, className }: { iso: string | null | undefined; tz: string; className?: string }) {
+  const st = stampOf(iso, tz)
+  if (!st) return <span className="text-xs text-muted-foreground">—</span>
+  return (
+    <span className={cn('inline-flex items-baseline gap-1.5 whitespace-nowrap text-xs', className)}>
+      <span className="font-semibold text-foreground/75">{st.day}</span>
+      <span className="text-muted-foreground">
+        <span dir="ltr" className="tabular-nums">{st.time}</span> {st.period}
+      </span>
+    </span>
+  )
+}
+
+/* حالة بنقطة + نص — بدل الشارات الصلبة القديمة */
+type Tone = 'success' | 'warning' | 'danger' | 'info' | 'primary' | 'neutral'
+const TONE: Record<Tone, { chip: string; dot: string }> = {
+  success: { chip: 'bg-success-subtle text-success-subtle-foreground', dot: 'bg-success' },
+  warning: { chip: 'bg-warning-subtle text-warning-subtle-foreground', dot: 'bg-warning' },
+  danger: { chip: 'bg-destructive-subtle text-destructive-subtle-foreground', dot: 'bg-destructive' },
+  info: { chip: 'bg-info-subtle text-info-subtle-foreground', dot: 'bg-info' },
+  primary: { chip: 'bg-primary-subtle text-primary-subtle-foreground', dot: 'bg-primary' },
+  neutral: { chip: 'bg-muted text-muted-foreground', dot: 'bg-muted-foreground/60' },
+}
+
+function StatusChip({ tone, children }: { tone: Tone; children: React.ReactNode }) {
+  return (
+    <span className={cn('inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-bold', TONE[tone].chip)}>
+      <span className={cn('size-1.5 rounded-full', TONE[tone].dot)} />
+      {children}
+    </span>
+  )
+}
+
+function maintenanceTone(s: string): Tone {
+  switch (s) {
+    case 'مستلم': return 'info'
+    case 'قيد العمل': return 'warning'
+    case 'مكتمل': return 'primary'
+    case 'مُسلَّم': return 'success'
+    default: return 'neutral'
+  }
+}
+
 /* maintenanceStatusVariant — maps Arabic maintenance status strings to
  * badge variants. These strings come from the database (receivedAt, status)
  * and are user-facing, so they stay in Arabic. */
@@ -122,6 +192,63 @@ function rankBadgeStyle(rank: number): string {
   }
 }
 
+/* شريط أرقام: خلية بخط رفيع بدل كارت مستقل */
+function StatCell({
+  label,
+  value,
+  foot,
+  dot,
+  loading,
+  className,
+}: {
+  label: string
+  value: string
+  foot?: React.ReactNode
+  dot?: string
+  loading?: boolean
+  className?: string
+}) {
+  return (
+    <div className={cn('min-w-0 p-4 sm:p-5', className)}>
+      <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground sm:text-sm">
+        {dot && <span className={cn('size-2 shrink-0 rounded-full', dot)} />}
+        <span className="truncate">{label}</span>
+      </p>
+      {loading ? (
+        <Skeleton className="mt-2 h-7 w-28" />
+      ) : (
+        <p className="mt-1.5 truncate text-xl font-extrabold tracking-tight tabular-nums text-foreground sm:text-2xl">
+          {value}
+        </p>
+      )}
+      {foot && <div className="mt-1 text-[11px] text-muted-foreground sm:text-xs">{foot}</div>}
+    </div>
+  )
+}
+
+/* عنوان قسم موحّد */
+function PanelTitle({
+  icon: Icon,
+  title,
+  tone = 'text-primary',
+  action,
+}: {
+  icon: React.ElementType
+  title: string
+  tone?: string
+  action?: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <h2 className="flex items-center gap-2 text-[15px] font-bold">
+        <Icon className={cn('size-4', tone)} />
+        {title}
+      </h2>
+      {action}
+    </div>
+  )
+}
+
 export function DashboardView() {
   const [data, setData] = React.useState<DashboardData | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -129,6 +256,7 @@ export function DashboardView() {
   const user = useShopStore((s) => s.user)
   const enabledModules = useShopStore((s) => s.plan.enabledModules)
   const hasMaintenance = enabledModules.includes('maintenance')
+  const tz = useShopStore((s) => s.branding.timezone) || 'Africa/Cairo'
 
   const load = React.useCallback(async (days = chartDays) => {
     setLoading(true)
@@ -172,485 +300,534 @@ export function DashboardView() {
   // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
   useDataRefresh(['dashboard'], load)
 
-  // Build sparkline data from last7DaysSales — fallback to flat array if loading
-  const salesSparkData = data?.last7DaysSales?.map((d) => d.total) ?? []
-  const profitSparkData = data?.last7DaysSales?.map((d) => d.profit) ?? []
+  // آخر الفواتير مجمّعة بالأيام (بتوقيت المحل) — المرتجع مش بيدخل في الإجماليات
+  const saleGroups = (() => {
+    const rows = data?.last10Sales ?? []
+    const map = new Map<string, { key: string; label: string; rows: typeof rows; total: number }>()
+    for (const r of rows) {
+      const st = stampOf(r.createdAt, tz)
+      const key = st?.key ?? 'unknown'
+      if (!map.has(key)) map.set(key, { key, label: st?.day ?? '—', rows: [], total: 0 })
+      const g = map.get(key)!
+      g.rows.push(r)
+      if (r.status !== 'مرتجعة') g.total += r.total ?? 0
+    }
+    const groups = [...map.values()]
+    return { groups, count: rows.length, total: groups.reduce((a, g) => a + g.total, 0) }
+  })()
+
+  const days = data?.last7DaysSales ?? []
+  const loadingFirst = loading && !data
+  const weekProfit = days.reduce((a, d) => a + (d.profit || 0), 0)
+  const weekTotal = days.reduce((a, d) => a + (d.total || 0), 0)
+  // مقارنة اليوم بأمس وبمتوسط الأيام اللي قبله (من نفس بيانات المنحنى)
+  const prior = days.slice(0, -1)
+  const yesterdayTotal = prior.length ? prior[prior.length - 1].total : null
+  const avgPrior = prior.length ? prior.reduce((a, d) => a + (d.total || 0), 0) / prior.length : null
+  const compareRows =
+    days.length >= 2
+      ? [
+          { label: 'اليوم', v: data?.todaySales ?? 0, strong: true },
+          { label: 'أمس', v: yesterdayTotal ?? 0, strong: false },
+          { label: `متوسط ${prior.length} يوم`, v: avgPrior ?? 0, strong: false },
+        ]
+      : []
+  const compareMax = Math.max(1, ...compareRows.map((r) => r.v))
+  const margin = weekTotal > 0 ? Math.round((weekProfit / weekTotal) * 100) : null
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Welcome header */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
-            مرحباً، {user?.name ?? 'مستخدم'}
-          </h1>
-          <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
-            لوحة المعلومات — نظرة سريعة على أداء المحل اليوم
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-2">
-          {loading ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Activity className="size-4" />
-          )}
-          تحديث
-        </Button>
-      </div>
-
-      {/* === Row 1: 4 primary KPI cards (Bento style with sparklines) ===
-          These are the most-watched metrics — they get sparklines to show
-          7-day trend at a glance. Layout: 1 col on mobile, 2 on tablet, 4 on desktop. */}
-      <BentoGrid cols={4}>
-        <BentoCell className="animate-in-up stagger-1">
-          <KpiCard
-            title="مبيعات اليوم"
-            value={loading ? '...' : formatCurrency(data?.todaySales ?? 0)}
-            delta={{ value: 'اليوم', direction: 'up', label: `${data?.todaySalesCount ?? 0} فاتورة` }}
-            icon={<Banknote />}
-            variant="primary"
-            sparkline={salesSparkData.length > 0 ? <Sparkline data={salesSparkData} /> : undefined}
-          />
-        </BentoCell>
-        <BentoCell className="animate-in-up stagger-2">
-          <KpiCard
-            title="ربح اليوم"
-            value={loading ? '...' : formatCurrency(data?.todayProfit ?? 0)}
-            delta={{ value: 'صافي', direction: 'up' }}
-            icon={<TrendingUp />}
-            variant="success"
-            sparkline={profitSparkData.length > 0 ? <Sparkline data={profitSparkData} color="var(--success)" /> : undefined}
-          />
-        </BentoCell>
-        <BentoCell className="animate-in-up stagger-3">
-          <KpiCard
-            title="رصيد الخزنة"
-            value={loading ? '...' : formatCurrency(data?.cashBalance ?? 0)}
-            icon={<Wallet />}
-            variant="default"
-          />
-        </BentoCell>
-        <BentoCell className="animate-in-up stagger-4">
-          <KpiCard
-            title="تنبيهات مخزون"
-            value={loading ? '...' : String(data?.lowStockCount ?? 0)}
-            icon={<AlertTriangle />}
-            variant="warning"
-          />
-        </BentoCell>
-      </BentoGrid>
-
-      {/* === Row 2: secondary KPIs (smaller, no sparklines) ===
-          Monthly aggregates + customer/maintenance counts. */}
-      <BentoGrid cols={hasMaintenance ? 4 : 3}>
-        <BentoCell>
-          <KpiCard
-            title="مبيعات الشهر"
-            value={loading ? '...' : formatCurrency(data?.monthSales ?? 0)}
-            icon={<ShoppingBag />}
-            variant="default"
-          />
-        </BentoCell>
-        <BentoCell>
-          <KpiCard
-            title="ربح الشهر"
-            value={loading ? '...' : formatCurrency(data?.monthProfit ?? 0)}
-            icon={<TrendingUp />}
-            variant="success"
-          />
-        </BentoCell>
-        <BentoCell className={hasMaintenance ? undefined : 'col-span-2 lg:col-span-1'}>
-          <KpiCard
-            title="العملاء"
-            value={loading ? '...' : String(data?.customersCount ?? 0)}
-            icon={<Users />}
-            variant="info"
-          />
-        </BentoCell>
-        {hasMaintenance && (
-          <BentoCell>
-            <KpiCard
-              title="صيانة نشطة"
-              value={loading ? '...' : String(data?.activeMaintenance ?? 0)}
-              icon={<Wrench />}
-              variant="info"
-            />
-          </BentoCell>
-        )}
-      </BentoGrid>
-
-      {/* === Row 3: Bento layout — chart (2 cols) + top products (1 col, 2 rows) ===
-          The chart shows 7-day sales trend; top products sits beside it
-          spanning the same height for visual balance. */}
-      <BentoGrid cols={3}>
-        <BentoCell colSpan={2} className="animate-in-up stagger-2">
-          <Card variant="bento" className="h-full">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Activity className="size-4 text-primary" />
-                مبيعات آخر {chartDays} أيام
-              </CardTitle>
-              <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/40 p-0.5">
-                {([7, 14, 30] as const).map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => {
-                      setChartDays(d)
-                      load(d)
-                    }}
-                    className={cn(
-                      'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-                      chartDays === d
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {d}ي
-                  </button>
-                ))}
+    <div className="space-y-5">
+      {/* ═════════ Hero — مبيعات اليوم + منحنى الأيام الأخيرة ═════════ */}
+      <section className="overflow-hidden rounded-3xl border bg-card text-card-foreground shadow-sm">
+        <div
+          className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]"
+          style={{ background: 'radial-gradient(560px 220px at 100% 0%, color-mix(in srgb, var(--primary) 12%, transparent), transparent)' }}
+        >
+          {/* الرقم الأساسي */}
+          <div className="flex min-w-0 flex-col justify-between gap-5">
+            <div>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h1 className="text-lg font-bold tracking-tight sm:text-xl">
+                    مرحباً، {user?.name ?? 'مستخدم'}
+                  </h1>
+                  <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
+                    لوحة المعلومات — أداء المحل اليوم
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => load()}
+                  disabled={loading}
+                  className="shrink-0 gap-2"
+                >
+                  <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
+                  تحديث
+                </Button>
               </div>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <Skeleton className="h-64 w-full" />
+
+              <p className="mt-6 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <span className="size-2 rounded-full bg-primary" />
+                مبيعات اليوم
+              </p>
+              {loadingFirst ? (
+                <Skeleton className="mt-3 h-14 w-56" />
               ) : (
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RechartsBarChart
-                      data={data?.last7DaysSales ?? []}
-                      margin={{ top: 8, right: 8, left: 8, bottom: 0 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-                      <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={12} />
-                      <YAxis tickLine={false} axisLine={false} fontSize={12} width={50} />
-                      <Tooltip
-                        cursor={{ fill: 'oklch(0.57 0.18 162 / 0.08)' }}
-                        formatter={(v: any) => [formatCurrency(Number(v)), 'المبيعات']}
-                        contentStyle={{
-                          borderRadius: 8,
-                          border: '1px solid var(--border)',
-                          background: 'var(--popover)',
-                          color: 'var(--popover-foreground)',
-                          fontFamily: 'inherit',
-                        }}
-                      />
-                      <Bar dataKey="total" fill="var(--primary)" radius={[6, 6, 0, 0]} />
-                    </RechartsBarChart>
-                  </ResponsiveContainer>
+                <div className="mt-2 flex flex-wrap items-baseline gap-2">
+                  <span className="text-5xl font-extrabold tracking-tight tabular-nums sm:text-6xl">
+                    {Number(data?.todaySales ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-lg font-semibold text-muted-foreground">جنيه</span>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </BentoCell>
+              <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <CalendarDays className="size-3.5" />
+                  {data?.todaySalesCount ?? 0} فاتورة اليوم
+                </span>
+                {(() => {
+                  const pr = data?.todayProfit ?? 0
+                  const tone = pr > 0 ? TONE.success.chip : pr < 0 ? TONE.danger.chip : TONE.neutral.chip
+                  const PIcon = pr > 0 ? TrendingUp : pr < 0 ? TrendingDown : Minus
+                  return (
+                    <span className={cn('inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-semibold', tone)}>
+                      <PIcon className="size-3" />
+                      ربح {formatCurrency(pr)}
+                    </span>
+                  )
+                })()}
+              </p>
+            </div>
 
-        <BentoCell rowSpan={2} className="col-span-2 animate-in-up stagger-3 lg:col-span-1">
-          <Card variant="bento" className="h-full">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Trophy className="size-4 text-accent2-500" />
-                أكثر المنتجات مبيعاً
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Skeleton key={i} className="h-12 w-full" />
+            {compareRows.length > 0 && (
+              <div className="space-y-2.5 border-t border-border pt-4">
+                {compareRows.map((r) => (
+                  <div key={r.label} className="flex items-center gap-3 text-xs">
+                    <span className={cn('w-24 shrink-0', r.strong ? 'font-bold text-foreground' : 'text-muted-foreground')}>
+                      {r.label}
+                    </span>
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={cn('h-full rounded-full', r.strong ? 'bg-primary' : 'bg-muted-foreground/35')}
+                        style={{ width: r.v > 0 ? `${Math.max(3, (r.v / compareMax) * 100)}%` : '0%' }}
+                      />
+                    </div>
+                    <span className="w-24 shrink-0 text-end font-bold tabular-nums">{formatCurrency(Math.round(r.v))}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* منحنى المبيعات */}
+          <div className="min-w-0">
+            <PanelTitle
+              icon={Activity}
+              title={`مبيعات آخر ${chartDays} يوم`}
+              action={
+                <div className="flex items-center gap-0.5 rounded-xl border border-border bg-muted/50 p-0.5">
+                  {([7, 14, 30] as const).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => {
+                        setChartDays(d)
+                        load(d)
+                      }}
+                      className={cn(
+                        'rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors',
+                        chartDays === d
+                          ? 'bg-card text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {d} يوم
+                    </button>
                   ))}
                 </div>
-              ) : data?.topProducts?.length ? (
-                <ol className="space-y-2">
-                  {data.topProducts.map((p, i) => (
-                    <li
-                      key={p.name + i}
-                      className="flex items-center gap-3 rounded-lg border border-border bg-card-muted/40 p-2.5 transition-colors hover:bg-muted"
-                    >
+              }
+            />
+            <div className="mt-3 h-52 w-full sm:h-56">
+              {loadingFirst ? (
+                <Skeleton className="h-full w-full" />
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsBarChart data={days} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
+                    <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={11} />
+                    <YAxis tickLine={false} axisLine={false} fontSize={11} width={46} />
+                    <Tooltip
+                      cursor={{ fill: 'color-mix(in srgb, var(--primary) 8%, transparent)' }}
+                      formatter={(v: any) => [formatCurrency(Number(v)), 'المبيعات']}
+                      contentStyle={{
+                        borderRadius: 12,
+                        border: '1px solid var(--border)',
+                        background: 'var(--popover)',
+                        color: 'var(--popover-foreground)',
+                        fontFamily: 'inherit',
+                      }}
+                    />
+                    <Bar dataKey="total" fill="var(--primary)" radius={[8, 8, 0, 0]} maxBarSize={44} />
+                  </RechartsBarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* شريط الأرقام */}
+        <div className="grid grid-cols-2 border-t border-border lg:grid-cols-5">
+          <StatCell
+            className="border-b border-e lg:border-b-0"
+            label="رصيد الخزنة"
+            value={formatCurrency(data?.cashBalance ?? 0)}
+            loading={loadingFirst}
+            dot="bg-sky-500"
+          />
+          <StatCell
+            className="border-b lg:border-b-0 lg:border-e"
+            label="مبيعات الشهر"
+            value={formatCurrency(data?.monthSales ?? 0)}
+            loading={loadingFirst}
+            dot="bg-primary"
+          />
+          <StatCell
+            className="border-b border-e lg:border-b-0"
+            label="ربح الشهر"
+            value={formatCurrency(data?.monthProfit ?? 0)}
+            loading={loadingFirst}
+            dot="bg-emerald-500"
+            foot={margin !== null ? <span>هامش آخر {chartDays} يوم: {margin}%</span> : undefined}
+          />
+          <StatCell
+            className="border-b lg:border-b-0 lg:border-e"
+            label="العملاء"
+            value={String(data?.customersCount ?? 0)}
+            loading={loadingFirst}
+            dot="bg-teal-500"
+            foot={
+              <Link href="/customers" className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
+                عرض العملاء <ArrowUpLeft className="size-3" />
+              </Link>
+            }
+          />
+          <StatCell
+            className="col-span-2 lg:col-span-1"
+            label="تنبيهات المخزون"
+            value={String(data?.lowStockCount ?? 0)}
+            loading={loadingFirst}
+            dot={(data?.lowStockCount ?? 0) > 0 ? 'bg-amber-500' : 'bg-emerald-500'}
+            foot={
+              (data?.lowStockCount ?? 0) > 0 ? (
+                <Link href="/inventory" className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
+                  مراجعة المخزون <ArrowUpLeft className="size-3" />
+                </Link>
+              ) : (
+                <span>كل المنتجات فوق الحد الأدنى</span>
+              )
+            }
+          />
+        </div>
+      </section>
+
+      {/* ═════════ أكثر المنتجات + المخزون المنخفض + الصيانة ═════════ */}
+      <div className={cn('grid gap-4 md:grid-cols-2', hasMaintenance ? 'xl:grid-cols-3' : 'xl:grid-cols-2')}>
+        {/* أكثر المنتجات مبيعاً */}
+        <Card className="gap-4 rounded-3xl py-5 shadow-sm">
+          <CardHeader className="px-5">
+            <PanelTitle icon={Trophy} title="أكثر المنتجات مبيعاً" tone="text-amber-500" />
+            <p className="text-xs text-muted-foreground">آخر 30 يوم</p>
+          </CardHeader>
+          <CardContent className="px-5">
+            {loading && !data ? (
+              <div className="space-y-2">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-11 w-full" />
+                ))}
+              </div>
+            ) : data?.topProducts?.length ? (
+              <ol className="divide-y divide-border">
+                {data.topProducts.map((p, i) => {
+                  const maxQty = data.topProducts[0]?.quantity || 1
+                  return (
+                    <li key={p.name + i} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
                       <span
                         className={cn(
-                          'flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold border tabular-nums',
-                          rankBadgeStyle(i + 1)
+                          'flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-bold tabular-nums',
+                          rankBadgeStyle(i + 1),
                         )}
                       >
                         {i + 1}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{p.name}</p>
-                        <p className="text-xs text-muted-foreground tabular-nums">
-                          {p.quantity} قطعة — {formatCurrency(p.total)}
-                        </p>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <p className="truncate text-sm font-semibold">{p.name}</p>
+                          <p className="shrink-0 text-xs font-semibold tabular-nums">{formatCurrency(p.total)}</p>
+                        </div>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full bg-primary/80"
+                              style={{ width: `${Math.max(6, (p.quantity / maxQty) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                            {p.quantity} قطعة
+                          </span>
+                        </div>
                       </div>
                     </li>
-                  ))}
-                </ol>
-              ) : (
-                <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
-                  <span className="text-3xl">🛍️</span>
-                  <p className="text-sm font-medium text-muted-foreground">لا توجد مبيعات خلال آخر 30 يوماً</p>
-                  <a href="/pos" className="text-xs text-primary hover:underline">ابدأ البيع من نقطة البيع</a>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </BentoCell>
+                  )
+                })}
+              </ol>
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+                <ShoppingBag className="size-8 text-muted-foreground/50" />
+                <p className="text-sm font-medium text-muted-foreground">لا توجد مبيعات خلال آخر 30 يوم</p>
+                <Link href="/pos" className="text-xs font-semibold text-primary hover:underline">
+                  ابدأ البيع من نقطة البيع
+                </Link>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-        {/* === Row 4: Low stock + Active maintenance (2 cells side by side) === */}
-        <BentoCell className="col-span-2 animate-in-up stagger-4 lg:col-span-1">
-          <Card variant="bento" className="h-full border-destructive/20">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <AlertCircle className="size-4 text-destructive" />
-                مخزون منخفض
-              </CardTitle>
+        {/* مخزون منخفض */}
+        <Card className="gap-4 rounded-3xl py-5 shadow-sm">
+          <CardHeader className="px-5">
+            <PanelTitle
+              icon={AlertCircle}
+              title="مخزون منخفض"
+              tone="text-destructive"
+              action={
+                (data?.lowStockProducts?.length ?? 0) > 0 ? (
+                  <Link href="/inventory" className="text-xs font-semibold text-primary hover:underline">
+                    عرض الكل
+                  </Link>
+                ) : undefined
+              }
+            />
+            <p className="text-xs text-muted-foreground">المنتجات تحت الحد الأدنى</p>
+          </CardHeader>
+          <CardContent className="px-5">
+            {loading && !data ? (
+              <div className="space-y-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
+              </div>
+            ) : data?.lowStockProducts?.length ? (
+              <ul className="space-y-1.5">
+                {data.lowStockProducts.map((p) => (
+                  <li
+                    key={p.id}
+                    className="flex items-center gap-2.5 rounded-xl bg-destructive-subtle/50 px-3 py-2.5 text-sm"
+                  >
+                    <StatusDot status="danger" pulse />
+                    <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span>
+                    <span className="shrink-0 text-xs font-bold tabular-nums text-destructive-subtle-foreground">
+                      {p.quantity} / {p.minQuantity}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+                <CheckCircle2 className="size-8 text-success" />
+                <p className="text-sm font-medium text-muted-foreground">المخزون في مستوى جيد</p>
+                <p className="text-xs text-muted-foreground/70">لا توجد منتجات تحت الحد الأدنى</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* صيانة نشطة */}
+        {hasMaintenance && (
+          <Card className="gap-4 rounded-3xl py-5 shadow-sm md:col-span-2 xl:col-span-1">
+            <CardHeader className="px-5">
+              <PanelTitle
+                icon={Wrench}
+                title="صيانة نشطة"
+                action={
+                  <Link href="/maintenance" className="text-xs font-semibold text-primary hover:underline">
+                    عرض الكل
+                  </Link>
+                }
+              />
+              <p className="text-xs text-muted-foreground">أوامر الصيانة الجارية</p>
             </CardHeader>
-            <CardContent>
-              {loading ? (
+            <CardContent className="px-5">
+              {loading && !data ? (
                 <div className="space-y-2">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <Skeleton key={i} className="h-9 w-full" />
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="h-11 w-full" />
                   ))}
                 </div>
-              ) : data?.lowStockProducts?.length ? (
-                <ul className="space-y-1.5">
-                  {data.lowStockProducts.map((p) => (
-                    <li
-                      key={p.id}
-                      className="flex items-center gap-2.5 rounded-lg bg-destructive-subtle/40 px-3 py-2 text-sm"
-                    >
-                      <StatusDot status="danger" pulse />
-                      <span className="font-medium flex-1 truncate">{p.name}</span>
-                      <span className="font-mono text-xs text-destructive-subtle-foreground tabular-nums shrink-0">
-                        {p.quantity} / {p.minQuantity}
-                      </span>
+              ) : data?.activeMaintenanceOrders?.length ? (
+                <ul className="divide-y divide-border">
+                  {data.activeMaintenanceOrders.map((o) => (
+                    <li key={o.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold">{o.customerName}</p>
+                        <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="truncate">{o.device}</span>
+                          <span className="h-3 w-px shrink-0 bg-border" />
+                          <DateStamp iso={o.receivedAt} tz={tz} />
+                        </p>
+                      </div>
+                      <StatusChip tone={maintenanceTone(o.status)}>{o.status}</StatusChip>
                     </li>
                   ))}
                 </ul>
               ) : (
                 <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
-                  <span className="text-3xl">✅</span>
-                  <p className="text-sm font-medium text-muted-foreground">المخزون في مستوى جيد</p>
-                  <p className="text-xs text-muted-foreground/70">لا توجد منتجات تحت الحد الأدنى</p>
+                  <Wrench className="size-8 text-muted-foreground/50" />
+                  <p className="text-sm font-medium text-muted-foreground">لا توجد أوامر صيانة نشطة</p>
+                  <Link href="/maintenance" className="text-xs font-semibold text-primary hover:underline">
+                    إضافة أمر صيانة جديد
+                  </Link>
                 </div>
               )}
             </CardContent>
           </Card>
-        </BentoCell>
-
-        {hasMaintenance && (
-          <BentoCell className="col-span-2 animate-in-up stagger-5 lg:col-span-1">
-            <Card variant="bento" className="h-full">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Wrench className="size-4 text-primary" />
-                  صيانة نشطة
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className="space-y-2">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <Skeleton key={i} className="h-9 w-full" />
-                    ))}
-                  </div>
-                ) : data?.activeMaintenanceOrders?.length ? (
-                  <ul className="space-y-1.5">
-                    {data.activeMaintenanceOrders.map((o) => {
-                      const statusVariant = maintenanceStatusVariant(o.status)
-                      return (
-                        <li
-                          key={o.id}
-                          className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card-muted/40 px-3 py-2 text-sm"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate font-medium">
-                              #{o.id} {o.customerName} — {o.device}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              <DateTimeCell date={o.receivedAt} />
-                            </p>
-                          </div>
-                          <Badge variant={statusVariant.variant} size="sm">
-                            {o.status}
-                          </Badge>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                ) : (
-                  <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
-                    <span className="text-3xl">🔧</span>
-                    <p className="text-sm font-medium text-muted-foreground">لا توجد أوامر صيانة نشطة</p>
-                    <a href="/maintenance" className="text-xs text-primary hover:underline">إضافة أمر صيانة جديد</a>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </BentoCell>
         )}
-      </BentoGrid>
+      </div>
 
-      {/* === Row 5: Stock value summary (5 small KPIs) ===
-          Financial overview: stock value at cost vs. price, daily invoice count,
-          customer debt, supplier debt. These are secondary metrics so they get
-          plain StatCards (no sparklines). */}
-      <BentoGrid cols={4}>
-        <BentoCell>
-          <KpiCard
-            title="قيمة المخزون (تكلفة)"
-            value={loading ? '...' : formatCurrency(data?.stockValueCost ?? 0)}
-            icon={<Boxes />}
-            variant="default"
-          />
-        </BentoCell>
-        <BentoCell>
-          <KpiCard
-            title="قيمة المخزون (بيع)"
-            value={loading ? '...' : formatCurrency(data?.stockValuePrice ?? 0)}
-            icon={<Boxes />}
-            variant="primary"
-          />
-        </BentoCell>
-        <BentoCell>
-          <KpiCard
-            title="ديون العملاء"
-            value={loading ? '...' : formatCurrency(data?.totalOutstandingDebt ?? 0)}
-            icon={<AlertTriangle />}
-            variant="warning"
-          />
-        </BentoCell>
-        <BentoCell>
-          <KpiCard
-            title="مستحق الموردين"
-            value={loading ? '...' : formatCurrency(data?.totalSupplierDebt ?? 0)}
-            icon={<Truck />}
-            variant="warning"
-          />
-        </BentoCell>
-      </BentoGrid>
-
-      {/* === Row 6: Last 10 sales table === */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">آخر 10 مبيعات</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full" />
-              ))}
-            </div>
-          ) : (
-            <>
-              <div className="hidden lg:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-10 text-center">#</TableHead>
-                      <TableHead className="w-28">الفاتورة</TableHead>
-                      <TableHead className="w-40">العميل</TableHead>
-                      <TableHead className="w-52">الوقت</TableHead>
-                      <TableHead className="w-32 text-center">الإجمالي</TableHead>
-                      <TableHead className="w-28 text-center">الحالة</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data?.last10Sales?.length ? (
-                      data.last10Sales.map((s, index) => (
-                        <TableRow key={s.id}>
-                          <TableCell className="text-center font-mono text-xs">
-                            {index + 1}
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            {s.invoiceNo ?? `#${s.id}`}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-sm max-w-[160px] truncate">
-                            {s.customerName ?? '—'}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-xs">
-                            <DateTimeCell date={s.createdAt} />
-                          </TableCell>
-                          <TableCell className="text-center font-semibold tabular-nums">
-                            {formatCurrency(s.total)}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge
-                              variant={
-                                s.status === 'مرتجعة' ? 'danger' :
-                                s.status === 'مكتملة' ? 'success' : 'secondary'
-                              }
-                              size="sm"
-                            >
-                              {s.status}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell
-                          colSpan={6}
-                          className="py-8 text-center text-muted-foreground"
-                        >
-                          📊 لا توجد مبيعات بعد
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+      {/* ═════════ آخر المبيعات + المركز المالي ═════════ */}
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      {/* ═════════ آخر المبيعات — سجل مجمّع بالأيام ═════════ */}
+      <section className="overflow-hidden rounded-3xl border bg-card shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+          <div>
+            <PanelTitle icon={Receipt} title="آخر المبيعات" />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {saleGroups.count > 0 ? `آخر ${saleGroups.count} فاتورة` : 'لسه مفيش فواتير'}
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            {saleGroups.groups.length > 1 && (
+              <div>
+                <p className="text-[11px] font-medium text-muted-foreground">إجمالي المعروض</p>
+                <p className="text-lg font-extrabold tabular-nums leading-tight">{formatCurrency(saleGroups.total)}</p>
               </div>
+            )}
+            <Link
+              href="/sales"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-bold text-foreground transition-colors hover:border-primary/40 hover:bg-primary-subtle hover:text-primary-subtle-foreground"
+            >
+              سجل المبيعات
+              <ArrowUpLeft className="size-3.5" />
+            </Link>
+          </div>
+        </div>
 
-              {/*
-                نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
-              */}
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:hidden">
-                {data?.last10Sales?.length ? (
-                  data.last10Sales.map((s, index) => (
-                    <div key={s.id} className="flex items-center justify-between gap-2 rounded-lg border bg-card p-2.5">
+        {loading && !data ? (
+          <div className="space-y-2 p-5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-14 w-full" />
+            ))}
+          </div>
+        ) : saleGroups.count === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 px-5 py-12 text-center">
+            <Receipt className="size-8 text-muted-foreground/50" />
+            <p className="text-sm font-medium text-muted-foreground">لا توجد مبيعات بعد</p>
+            <Link href="/pos" className="text-xs font-semibold text-primary hover:underline">
+              ابدأ أول فاتورة من نقطة البيع
+            </Link>
+          </div>
+        ) : (
+          saleGroups.groups.map((g) => (
+            <div key={g.key}>
+              <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/40 px-5 py-2 text-xs">
+                <span className="font-bold text-foreground/80">{g.label}</span>
+                <span className="flex items-center gap-3 text-muted-foreground">
+                  <span>{g.rows.length} فاتورة</span>
+                  <span className="font-bold tabular-nums text-foreground/80">{formatCurrency(g.total)}</span>
+                </span>
+              </div>
+              <ul className="divide-y divide-border">
+                {g.rows.map((s) => {
+                  const returned = s.status === 'مرتجعة'
+                  const done = s.status === 'مكتملة'
+                  const remaining = Math.max(0, (s.total ?? 0) - (s.paid ?? 0))
+                  const Icon = returned ? Undo2 : done ? Check : Clock
+                  const tone: Tone = returned ? 'danger' : done ? 'success' : 'warning'
+                  return (
+                    <li
+                      key={s.id}
+                      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-1 px-5 py-3.5 transition-colors hover:bg-muted/40 md:grid-cols-[auto_minmax(0,1.3fr)_minmax(0,1fr)_auto]"
+                    >
+                      <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl', TONE[tone].chip)}>
+                        <Icon className="size-4" strokeWidth={2.4} />
+                        <span className="sr-only">{s.status}</span>
+                      </span>
+
                       <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-mono text-[10px] text-muted-foreground">
-                            #{index + 1}
-                          </span>
-                          <p className="truncate text-sm font-medium leading-tight">
-                            {s.invoiceNo ?? `#${s.id}`}
-                          </p>
-                        </div>
-                        {s.customerName && (
-                          <p className="mt-0.5 text-[10px] text-muted-foreground truncate">
-                            {s.customerName}
-                          </p>
-                        )}
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">
-                          <DateTimeCell date={s.createdAt} />
+                        <p className="truncate text-sm font-bold tabular-nums">{s.invoiceNo ?? `#${s.id}`}</p>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {s.customerName ?? 'بدون عميل'}
                         </p>
                       </div>
-                      <div className="shrink-0 text-left">
-                        <p className="text-sm font-semibold tabular-nums">
+
+                      <DateStamp iso={s.createdAt} tz={tz} className="hidden md:inline-flex" />
+
+                      <div className="text-end">
+                        <p className={cn('text-[15px] font-extrabold tabular-nums', returned && 'text-muted-foreground line-through decoration-destructive/60')}>
                           {formatCurrency(s.total)}
                         </p>
-                        <Badge
-                          variant={
-                            s.status === 'مرتجعة' ? 'danger' :
-                            s.status === 'مكتملة' ? 'success' : 'secondary'
-                          }
-                          size="sm"
-                        >
-                          {s.status}
-                        </Badge>
+                        {returned ? (
+                          <p className="mt-0.5 text-[11px] font-bold text-destructive">مرتجعة</p>
+                        ) : remaining > 0 ? (
+                          <p className="mt-0.5 text-[11px] font-bold text-warning-subtle-foreground">
+                            متبقي {formatCurrency(remaining)}
+                          </p>
+                        ) : (
+                          <DateStamp iso={s.createdAt} tz={tz} className="md:hidden" />
+                        )}
                       </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="col-span-full py-8 text-center text-muted-foreground">
-                    📊 لا توجد مبيعات بعد
-                  </p>
-                )}
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ))
+        )}
+      </section>
+      {/* ═════════ المركز المالي — عمود جانبي ═════════ */}
+      <section className="overflow-hidden rounded-3xl border bg-card shadow-sm">
+        <div className="flex items-center gap-2 border-b border-border px-5 py-4">
+          <Boxes className="size-4 text-primary" />
+          <h2 className="text-[15px] font-bold">المركز المالي</h2>
+        </div>
+        <ul className="divide-y divide-border">
+          {[
+            { label: 'المخزون (تكلفة)', v: data?.stockValueCost ?? 0, dot: 'bg-slate-400' },
+            { label: 'المخزون (بيع)', v: data?.stockValuePrice ?? 0, dot: 'bg-primary' },
+            { label: 'ديون العملاء', v: data?.totalOutstandingDebt ?? 0, dot: 'bg-amber-500' },
+            { label: 'مستحق الموردين', v: data?.totalSupplierDebt ?? 0, dot: 'bg-rose-500' },
+          ].map((r) => (
+            <li key={r.label} className="flex items-center justify-between gap-3 px-5 py-3.5">
+              <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className={cn('size-2 rounded-full', r.dot)} />
+                {r.label}
+              </span>
+              {loadingFirst ? (
+                <Skeleton className="h-5 w-20" />
+              ) : (
+                <span className="text-base font-extrabold tabular-nums">{formatCurrency(r.v)}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+        <div className="flex items-center justify-between gap-3 border-t border-border bg-primary-subtle/60 px-5 py-3.5">
+          <span className="text-xs font-semibold text-primary-subtle-foreground">الربح المتوقع من المخزون</span>
+          <span className="text-base font-extrabold tabular-nums text-primary-subtle-foreground">
+            {formatCurrency((data?.stockValuePrice ?? 0) - (data?.stockValueCost ?? 0))}
+          </span>
+        </div>
+      </section>
+      </div>
     </div>
   )
 }

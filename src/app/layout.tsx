@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Cairo } from "next/font/google";
+import { Cairo, IBM_Plex_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
@@ -13,6 +13,14 @@ import {
   SITE_DESCRIPTION,
   SUPPORT_PHONE,
 } from "@/lib/site";
+
+// خط هوية اسم المحل في السايدبار
+const brandFont = IBM_Plex_Sans_Arabic({
+  variable: "--font-brand",
+  subsets: ["arabic", "latin"],
+  weight: ["600", "700"],
+  display: "swap",
+});
 
 const cairo = Cairo({
   variable: "--font-cairo",
@@ -199,7 +207,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${cairo.variable} font-cairo antialiased bg-background text-foreground`}
+        className={`${cairo.variable} ${brandFont.variable} font-cairo antialiased bg-background text-foreground`}
         suppressHydrationWarning
       >
         <Providers>
