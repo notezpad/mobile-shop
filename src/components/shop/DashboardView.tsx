@@ -258,6 +258,34 @@ export function DashboardView() {
   const hasMaintenance = enabledModules.includes('maintenance')
   const tz = useShopStore((s) => s.branding.timezone) || 'Africa/Cairo'
 
+  // ⏰ تحية حسب ساعة المحل (بتوقيت الـ branding)
+  const greeting = React.useMemo(() => {
+    try {
+      const h = Number(
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: tz, hour: 'numeric', hour12: false,
+        }).format(new Date()),
+      ) % 24
+      if (h >= 5 && h < 12) return 'صباح الخير'
+      if (h >= 12 && h < 17) return 'نهارك سعيد'
+      if (h >= 17 && h < 21) return 'مساء الخير'
+      return 'سهرة موفقة'
+    } catch {
+      return 'أهلاً'
+    }
+  }, [tz])
+
+  // 📅 التاريخ بالعربي بتوقيت المحل
+  const todayAr = React.useMemo(() => {
+    try {
+      return new Intl.DateTimeFormat('ar-EG', {
+        timeZone: tz, weekday: 'long', day: 'numeric', month: 'long',
+      }).format(new Date())
+    } catch {
+      return ''
+    }
+  }, [tz])
+
   const load = React.useCallback(async (days = chartDays) => {
     setLoading(true)
     try {
@@ -333,6 +361,22 @@ export function DashboardView() {
         ]
       : []
   const compareMax = Math.max(1, ...compareRows.map((r) => r.v))
+
+  // 💡 سطر ذكي: مقارنة سريعة مع أمس
+  const insight = (() => {
+    const today = data?.todaySales ?? 0
+    if (loadingFirst) return null
+    if (yesterdayTotal === null || yesterdayTotal === 0) {
+      return today > 0
+        ? { text: 'أول حركة بيع النهاردة — يلا نكمل', tone: 'success' as const }
+        : { text: 'لسه مفيش مبيعات النهاردة', tone: 'neutral' as const }
+    }
+    const diff = ((today - yesterdayTotal) / yesterdayTotal) * 100
+    if (Math.abs(diff) < 1) return { text: 'زي أمس بالظبط', tone: 'neutral' as const }
+    if (diff > 0) return { text: `أعلى من أمس بـ ${Math.round(diff)}%`, tone: 'success' as const }
+    return { text: `أقل من أمس بـ ${Math.round(Math.abs(diff))}%`, tone: 'warning' as const }
+  })()
+
   const margin = weekTotal > 0 ? Math.round((weekProfit / weekTotal) * 100) : null
 
   return (
@@ -347,14 +391,33 @@ export function DashboardView() {
           <div className="flex min-w-0 flex-col justify-between gap-5">
             <div>
               <div className="flex items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <h1 className="text-lg font-bold tracking-tight sm:text-xl">
-                    مرحباً، {user?.name ?? 'مستخدم'}
+                    {greeting}، <span className="text-primary">{user?.name ?? 'مستخدم'}</span>
                   </h1>
-                  <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
-                    لوحة المعلومات — أداء المحل اليوم
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground sm:text-sm">
+                    <span>{todayAr}</span>
+                    {insight && (
+                      <>
+                        <span className="h-3 w-px bg-border" aria-hidden />
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-1 font-semibold',
+                            insight.tone === 'success' && 'text-success',
+                            insight.tone === 'warning' && 'text-warning-subtle-foreground',
+                            insight.tone === 'neutral' && 'text-muted-foreground',
+                          )}
+                        >
+                          {insight.tone === 'success' && <TrendingUp className="size-3" />}
+                          {insight.tone === 'warning' && <TrendingDown className="size-3" />}
+                          {insight.tone === 'neutral' && <Minus className="size-3" />}
+                          {insight.text}
+                        </span>
+                      </>
+                    )}
                   </p>
                 </div>
+
                 <Button
                   variant="outline"
                   size="sm"

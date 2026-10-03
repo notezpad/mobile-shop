@@ -4,6 +4,7 @@ import * as React from 'react'
 import {
   AlertTriangle,
   Banknote,
+  CalendarDays,
   Check,
   ChevronLeft,
   Loader2,
@@ -27,6 +28,9 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { arEG } from 'react-day-picker/locale'
 import {
   Dialog,
   DialogContent,
@@ -482,6 +486,121 @@ function PanelHead({
         </div>
       </div>
       {aside}
+    </div>
+  )
+}
+
+/* ─── تاريخ استحقاق الآجل: اختصارات سريعة + تقويم منبثق (بدل input type=date اللي كان بيكسر العرض) ─── */
+const toISODate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const fromISODate = (v: string) => new Date(`${v}T12:00:00`)
+const inDays = (n: number) => {
+  const d = new Date()
+  d.setHours(12, 0, 0, 0)
+  d.setDate(d.getDate() + n)
+  return d
+}
+const inOneMonth = () => {
+  const d = new Date()
+  d.setHours(12, 0, 0, 0)
+  d.setMonth(d.getMonth() + 1)
+  return d
+}
+
+function DueDatePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = React.useState(false)
+  const presets = [
+    { label: 'أسبوع', iso: toISODate(inDays(7)) },
+    { label: '15 يوم', iso: toISODate(inDays(15)) },
+    { label: 'شهر', iso: toISODate(inOneMonth()) },
+  ]
+  const selected = value ? fromISODate(value) : null
+  const isPreset = presets.some((x) => x.iso === value)
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+  const diff = selected ? Math.floor((selected.getTime() - startOfToday.getTime()) / 86_400_000) : 0
+  const rel = diff <= 0 ? 'النهارده' : diff === 1 ? 'بكرة' : `بعد ${diff} يوم`
+  const chip = (on: boolean) =>
+    cn(
+      'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors',
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40',
+      on
+        ? 'border-brand-600 bg-brand-600/10 text-brand-800 dark:text-brand-200'
+        : 'border-foreground/25 bg-card hover:border-foreground/50 hover:bg-muted'
+    )
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-bold text-foreground/75">
+        استحقاق الآجل <span className="font-medium">(اختياري)</span>
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {presets.map((x) => {
+          const on = value === x.iso
+          return (
+            <button
+              key={x.label}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onChange(on ? '' : x.iso)}
+              className={chip(on)}
+            >
+              {x.label}
+            </button>
+          )
+        })}
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button type="button" className={chip(!!value && !isPreset)} aria-label="اختيار تاريخ آخر من التقويم">
+              <CalendarDays className="size-4" />
+              {value && !isPreset ? 'تاريخ مخصص' : 'تاريخ…'}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" collisionPadding={12} className="w-auto p-0">
+            <Calendar
+              mode="single"
+              dir="rtl"
+              locale={arEG}
+              weekStartsOn={6}
+              formatters={{
+                // أسماء الأيام كاملة بتتداخل في خلية 32px — حرف واحد كفاية (ح ن ث ر خ ج س)
+                formatWeekdayName: (d) => d.toLocaleDateString('ar-EG', { weekday: 'narrow' }),
+              }}
+              selected={selected ?? undefined}
+              defaultMonth={selected ?? undefined}
+              disabled={{ before: startOfToday }}
+              onSelect={(d) => {
+                if (d) {
+                  onChange(toISODate(d))
+                  setOpen(false)
+                }
+              }}
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
+      {selected && (
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-muted px-3 py-2 text-sm">
+          <span className="flex min-w-0 items-center gap-2">
+            <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 leading-snug">
+              <span className="block font-semibold">
+                يستحق{' '}
+                {selected.toLocaleDateString('ar-EG-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </span>
+              <span className="block text-xs font-medium text-muted-foreground">{rel}</span>
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground"
+            aria-label="إزالة تاريخ الاستحقاق"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -1395,6 +1514,79 @@ export function POSView() {
         ? 'grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(calc(var(--spacing)*50),1fr))]'
         : 'grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(calc(var(--spacing)*44),1fr))]'
 
+  /* شريط الأدوات: بقى جوه مساحة البيع نفسها (أسفل الكتالوج) بدل هيدر مستقل بياكل ارتفاع الشاشة */
+  const dockBtn =
+    'flex size-9 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground'
+  const toolsDock = (
+    <div className="flex items-center overflow-hidden rounded-xl border border-foreground/20 bg-card">
+      <button
+        type="button"
+        onClick={() => setSoundOn((v) => !v)}
+        title={soundOn ? 'إيقاف صوت السكان' : 'تشغيل صوت السكان'}
+        aria-label={soundOn ? 'إيقاف صوت السكان' : 'تشغيل صوت السكان'}
+        aria-pressed={soundOn}
+        className={cn(dockBtn, soundOn && 'text-foreground')}
+      >
+        {soundOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+      </button>
+      {isDesktop && (
+        <div dir="ltr" role="group" aria-label="حجم العرض" className="flex items-center border-s border-foreground/15">
+          <button
+            type="button"
+            onClick={() => setSizeStep((v) => clamp(v - 1, -4, 6))}
+            className={dockBtn}
+            aria-label="تصغير الواجهة"
+            title="تصغير الواجهة"
+          >
+            <Minus className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setSizeStep(0)}
+            className="min-w-11 px-1 text-center text-xs font-bold tabular-nums text-muted-foreground hover:text-foreground"
+            title="الرجوع للحجم التلقائي"
+          >
+            {Math.round(scale * 100)}%
+          </button>
+          <button
+            type="button"
+            onClick={() => setSizeStep((v) => clamp(v + 1, -4, 6))}
+            className={dockBtn}
+            aria-label="تكبير الواجهة"
+            title="تكبير الواجهة"
+          >
+            <Plus className="size-3.5" />
+          </button>
+        </div>
+      )}
+      {isDesktop && (
+        <button
+          type="button"
+          onClick={() => setFullscreen((v) => !v)}
+          title={isFull ? 'خروج من ملء الشاشة (Esc)' : 'ملء الشاشة — يخفي القائمة الجانبية'}
+          aria-label={isFull ? 'خروج من ملء الشاشة' : 'ملء الشاشة'}
+          className={cn(dockBtn, 'border-s border-foreground/15', isFull && 'bg-brand-600/15 text-brand-800 dark:text-brand-200')}
+        >
+          {isFull ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+        </button>
+      )}
+    </div>
+  )
+
+  const statusChip = (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-bold',
+        submitting
+          ? 'border-warning/40 bg-warning-subtle text-warning-subtle-foreground'
+          : 'border-brand-600/25 bg-brand-600/10 text-brand-700 dark:text-brand-300'
+      )}
+    >
+      <span className={cn('size-1.5 rounded-full', submitting ? 'animate-pulse bg-warning' : 'bg-brand-500')} />
+      {submitting ? 'جارٍ الإتمام…' : 'جاهز'}
+    </span>
+  )
+
   const productsPanel = (
     <section className={panelCls}>
       <div className="space-y-3 border-b border-border p-3.5">
@@ -1441,7 +1633,8 @@ export function POSView() {
           }
         />
 
-        <form onSubmit={handleSearchSubmit}>
+        <div className="flex items-stretch gap-2">
+        <form onSubmit={handleSearchSubmit} className="min-w-0 flex-1">
           <div className="relative">
             <Search className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -1478,6 +1671,17 @@ export function POSView() {
             </div>
           </div>
         </form>
+        <button
+          type="button"
+          onClick={() => openQuickAddProduct()}
+          title="إضافة منتج جديد"
+          aria-label="إضافة منتج جديد"
+          className="flex h-12 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-foreground/25 bg-card px-3.5 text-sm font-bold shadow-sm transition-colors hover:border-brand-600/60 hover:bg-brand-600/[0.06]"
+        >
+          <Plus className="size-5" />
+          <span className="hidden 2xl:inline">منتج جديد</span>
+        </button>
+        </div>
 
         {categories.length > 0 && (
           <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none]">
@@ -1602,19 +1806,22 @@ export function POSView() {
         )}
       </div>
 
-      <footer className="hidden items-center gap-4 border-t border-dashed border-foreground/20 bg-muted/40 px-3.5 py-2 text-sm text-muted-foreground xl:flex">
-        {[
-          ['/', 'بحث'],
-          ['Enter', 'إضافة بالباركود'],
-          ['F9', 'دفع وطباعة'],
-        ].map(([k, l]) => (
-          <span key={k} className="flex items-center gap-1.5">
-            <kbd className="rounded-md border border-foreground/20 bg-card px-1.5 py-0.5 text-[length:var(--fs-2xs,0.75rem)] font-bold text-foreground">
-              {k}
-            </kbd>
-            {l}
-          </span>
-        ))}
+      <footer className="flex items-center justify-between gap-3 border-t border-dashed border-foreground/20 bg-muted/40 px-3 py-1.5 text-sm text-muted-foreground">
+        <div className="hidden items-center gap-4 xl:flex">
+          {[
+            ['/', 'بحث'],
+            ['Enter', 'إضافة بالباركود'],
+            ['F9', 'دفع وطباعة'],
+          ].map(([k, l]) => (
+            <span key={k} className="flex items-center gap-1.5">
+              <kbd className="rounded-md border border-foreground/20 bg-card px-1.5 py-0.5 text-[length:var(--fs-2xs,0.75rem)] font-bold text-foreground">
+                {k}
+              </kbd>
+              {l}
+            </span>
+          ))}
+        </div>
+        <div className="ms-auto">{toolsDock}</div>
       </footer>
     </section>
   )
@@ -1881,10 +2088,10 @@ export function POSView() {
   const paymentPanel = (
     <section className={panelCls}>
       <header className="border-b border-border px-3.5 py-3">
-        <PanelHead n={3} tag="Checkout" title="ادفع" />
+        <PanelHead n={3} tag="Checkout" title="ادفع" aside={statusChip} />
       </header>
 
-      <div className="flex-1 space-y-3 overflow-y-auto overscroll-contain p-3.5">
+      <div className="min-w-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden overscroll-contain p-3.5">
         {/* شاشة الكاشير: الإجمالي هو أكبر وأوضح عنصر في الصفحة */}
         <div className="relative overflow-hidden rounded-2xl bg-stone-950 px-4 py-3 text-stone-50 shadow-md ring-1 ring-black/10 dark:ring-white/10">
           <div
@@ -2162,18 +2369,7 @@ export function POSView() {
                 <span className="font-extrabold tabular-nums">{formatCurrency(remaining)}</span>
               </div>
             )}
-            <div className="flex items-center gap-2">
-              <label className="shrink-0 text-sm font-bold text-foreground/75" htmlFor="pos-due-date">
-                استحقاق الآجل <span className="font-medium">(اختياري)</span>
-              </label>
-              <Input
-                id="pos-due-date"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="h-9 flex-1 rounded-lg border-foreground/25 bg-card text-xs"
-              />
-            </div>
+            <DueDatePicker value={dueDate} onChange={setDueDate} />
           </div>
         )}
       </div>
@@ -2216,95 +2412,11 @@ export function POSView() {
       style={isDesktop ? densityVars(scale) : undefined}
       className={cn(
         isFull
-          ? 'fixed inset-0 z-40 flex flex-col gap-3 overflow-hidden bg-background p-4'
-          : 'space-y-3 pb-24 lg:pb-0'
+          ? 'fixed inset-0 z-40 flex flex-col gap-3 overflow-hidden bg-background p-3'
+          : 'space-y-3 pb-24 sm:-m-3 sm:space-y-2 lg:pb-0'
       )}
     >
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <h1 className="text-2xl font-extrabold tracking-tight">نقطة البيع</h1>
-          <span
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold',
-              submitting
-                ? 'border-warning/40 bg-warning-subtle text-warning-subtle-foreground'
-                : 'border-brand-600/25 bg-brand-600/10 text-brand-700 dark:text-brand-300'
-            )}
-          >
-            <span
-              className={cn('size-1.5 rounded-full', submitting ? 'animate-pulse bg-warning' : 'bg-brand-500')}
-            />
-            {submitting ? 'جارٍ إتمام البيع…' : 'جاهز للبيع'}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="flex items-center overflow-hidden rounded-xl border border-border bg-card">
-            <button
-              type="button"
-              onClick={() => setSoundOn((v) => !v)}
-              title={soundOn ? 'إيقاف صوت السكان' : 'تشغيل صوت السكان'}
-              aria-label={soundOn ? 'إيقاف صوت السكان' : 'تشغيل صوت السكان'}
-              aria-pressed={soundOn}
-              className={cn(
-                'flex size-9 items-center justify-center transition-colors hover:bg-muted',
-                soundOn ? 'text-foreground' : 'text-muted-foreground'
-              )}
-            >
-              {soundOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
-            </button>
-            {isDesktop && (
-              <div dir="ltr" role="group" aria-label="حجم العرض" className="flex items-center border-s border-border">
-                <button
-                  type="button"
-                  onClick={() => setSizeStep((v) => clamp(v - 1, -4, 6))}
-                  className="flex size-9 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  aria-label="تصغير الواجهة"
-                  title="تصغير الواجهة"
-                >
-                  <Minus className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSizeStep(0)}
-                  className="min-w-12 px-1 text-center text-xs font-semibold tabular-nums text-muted-foreground hover:text-foreground"
-                  title="الرجوع للحجم التلقائي"
-                >
-                  {Math.round(scale * 100)}%
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSizeStep((v) => clamp(v + 1, -4, 6))}
-                  className="flex size-9 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  aria-label="تكبير الواجهة"
-                  title="تكبير الواجهة"
-                >
-                  <Plus className="size-3.5" />
-                </button>
-              </div>
-            )}
-            {isDesktop && (
-              <button
-                type="button"
-                onClick={() => setFullscreen((v) => !v)}
-                title={isFull ? 'خروج من ملء الشاشة (Esc)' : 'ملء الشاشة — يخفي القائمة الجانبية'}
-                aria-label={isFull ? 'خروج من ملء الشاشة' : 'ملء الشاشة'}
-                className="flex size-9 items-center justify-center border-s border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                {isFull ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-              </button>
-            )}
-          </div>
-          <Button
-            size="sm"
-            className="h-9 rounded-xl border border-foreground/25 bg-card font-bold text-foreground shadow-sm hover:bg-muted"
-            onClick={() => openQuickAddProduct()}
-          >
-            <Plus className="size-4" />
-            منتج جديد
-          </Button>
-        </div>
-      </header>
+      <h1 className="sr-only">نقطة البيع</h1>
 
       {restoredNotice && cart.length > 0 && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-info-subtle bg-info-subtle px-3 py-2 text-sm text-info-subtle-foreground">
@@ -2329,7 +2441,7 @@ export function POSView() {
           'xl:grid-cols-[minmax(0,1fr)_calc(var(--spacing)*100)_calc(var(--spacing)*84)] xl:grid-rows-1',
           isFull
             ? 'min-h-0 flex-1 overflow-y-auto xl:overflow-visible'
-            : 'xl:h-[calc(100dvh-10.25rem)] xl:min-h-[calc(var(--spacing)*130)]'
+            : 'xl:h-[calc(100dvh-5.4rem)] xl:min-h-[calc(var(--spacing)*130)]'
         )}
       >
         <div className="flex min-h-0 flex-col lg:row-span-2 xl:row-span-1 [&>section]:flex-1">
