@@ -35,19 +35,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Dialog, DialogBody, DialogContent, DialogFooter } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { Barcode } from '../Barcode'
+import { StockHero, TONE, SecLabel, Pill, STOCK_FIELD, STOCK_RING, type StockTone } from './stock-dialog-ui'
 import type { Branch, InventoryProduct } from '../InventoryView'
 
 interface Props {
@@ -473,92 +468,140 @@ function AdjustDialog({
   const isIn = type === 'in'
   const isDamage = type === 'damage'
   const title = isDamage ? 'تسجيل هالك / تالف' : isIn ? 'إضافة كمية واردة' : 'خصم كمية صادرة'
+  const tone: StockTone = type
+  const t = TONE[tone]
+  const after = isIn ? product.quantity + qNum : product.quantity - qNum
+  const over = !isIn && qNum > product.quantity
+  const quicks = isIn ? [1, 5, 10, 50] : [1, 5, 10].filter((n) => n < product.quantity)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[440px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {isDamage ? (
-              <AlertTriangle className="size-5 text-warning-subtle-foreground" />
-            ) : isIn ? (
-              <ArrowDownToLine className="size-5 text-success-subtle-foreground" />
-            ) : (
-              <ArrowUpFromLine className="size-5 text-destructive-subtle-foreground" />
-            )}
-            {title}
-          </DialogTitle>
-          <DialogDescription>
-            المنتج: <span className="font-medium text-foreground">{product.name}</span>
-            {product.barcode && (
-              <span className="ml-2 font-mono text-xs" dir="ltr">({product.barcode})</span>
-            )}
-            <br />
-            الكمية الحالية: <span className="font-medium text-foreground">{product.quantity}</span>
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
+      <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[460px]">
+        <StockHero
+          tone={tone}
+          icon={isDamage ? AlertTriangle : isIn ? ArrowDownToLine : ArrowUpFromLine}
+          title={title}
+          subtitle={product.name}
+        />
+        <DialogBody className="space-y-4">
+          {/* بطاقة المنتج: الحالي ← بعد الحركة */}
+          <div className="flex items-center justify-between gap-3 rounded-2xl border bg-card px-4 py-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-extrabold">{product.name}</p>
+              {product.barcode && (
+                <p className="font-mono text-[11px] text-foreground/60" dir="ltr">{product.barcode}</p>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-2 text-center tabular-nums">
+              <div>
+                <p className="text-[10px] font-bold text-foreground/55">الحالية</p>
+                <p className="text-lg font-extrabold">{product.quantity}</p>
+              </div>
+              <span className="text-foreground/40">←</span>
+              <div>
+                <p className="text-[10px] font-bold text-foreground/55">بعد الحركة</p>
+                <p className={cn('text-lg font-extrabold', qNum > 0 ? (over ? 'text-destructive' : t.text) : 'text-foreground/35')}>
+                  {qNum > 0 ? after : '—'}
+                </p>
+              </div>
+            </div>
+          </div>
+
           {isDamage && (
-            <div className="rounded-md border border-warning-subtle bg-warning-subtle/40 p-2.5 text-xs leading-relaxed">
+            <div className="rounded-2xl bg-amber-500/10 p-3 text-xs font-medium leading-relaxed text-amber-900 dark:text-amber-200">
               تسجيل الهالك هيخصم الكمية من المخزون <b>وهيسجّل الخسارة تلقائياً</b> في
               المصروفات (فئة «هالك وتالف») بقيمة <b>الكمية × التكلفة الحالية</b> — فتظهر
               في صافي الربح. الخزنة مش هتتأثر (مفيش فلوس خرجت).
             </div>
           )}
-          <div className="space-y-1.5">
-            <Label>
-              الكمية {isDamage ? 'التالفة' : isIn ? 'الواردة' : 'الخارجة'} <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              type="number"
-              min={1}
-              value={qty}
-              onChange={e => setQty(e.target.value)}
-              autoFocus
-              placeholder="0"
-              className="text-lg font-bold"
-            />
-            {!isIn && product.quantity > 0 && (
-              <p className="text-xs text-muted-foreground">
-                المتاح: {product.quantity}
-                {lossPreview > 0 && (
-                  <> — قيمة الخسارة المتوقعة: <b className="text-destructive">{formatCurrency(lossPreview)}</b></>
-                )}
+
+          <section>
+            <SecLabel required>الكمية {isDamage ? 'التالفة' : isIn ? 'الواردة' : 'الخارجة'}</SecLabel>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                aria-label="إنقاص"
+                onClick={() => setQty(String(Math.max(0, qNum - 1) || ''))}
+                className={cn('flex size-12 shrink-0 items-center justify-center rounded-xl border bg-background hover:bg-muted', STOCK_RING)}
+              >
+                <Minus className="size-4" />
+              </button>
+              <input
+                dir="ltr"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+                autoFocus
+                placeholder="0"
+                className={cn(STOCK_FIELD, 'h-12 min-w-0 flex-1 text-center text-xl font-extrabold tabular-nums', over && 'border-destructive focus:border-destructive focus:ring-destructive/15')}
+              />
+              <button
+                type="button"
+                aria-label="زيادة"
+                onClick={() => setQty(String(qNum + 1))}
+                className={cn('flex size-12 shrink-0 items-center justify-center rounded-xl border bg-background hover:bg-muted', STOCK_RING)}
+              >
+                <Plus className="size-4" />
+              </button>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {quicks.map((n) => (
+                <Pill key={n} tone={tone} active={qNum === n} onClick={() => setQty(String(n))}>
+                  {n}
+                </Pill>
+              ))}
+              {!isIn && product.quantity > 0 && (
+                <Pill tone={tone} active={qNum === product.quantity} onClick={() => setQty(String(product.quantity))}>
+                  الكل ({product.quantity})
+                </Pill>
+              )}
+            </div>
+            {over && (
+              <p className="mt-1.5 text-[11px] font-bold text-destructive">
+                الكمية أكبر من المتاح ({product.quantity})
               </p>
             )}
-          </div>
-          <div className="space-y-1.5">
-            <Label>
-              السبب {!isIn && <span className="text-destructive">*</span>}
-            </Label>
-            <Select value={reason} onValueChange={setReason}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {reasons.map(r => (
-                  <SelectItem key={r} value={r}>{r}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>ملاحظة إضافية</Label>
+            {lossPreview > 0 && (
+              <p className="mt-1.5 text-xs font-medium text-foreground/70">
+                قيمة الخسارة المتوقعة: <b className="text-destructive">{formatCurrency(lossPreview)}</b>
+              </p>
+            )}
+          </section>
+
+          <section>
+            <SecLabel required={!isIn}>السبب</SecLabel>
+            <div className="flex flex-wrap gap-1.5">
+              {reasons.map((r) => (
+                <Pill key={r} tone={tone} active={reason === r} onClick={() => setReason(r)}>
+                  {r}
+                </Pill>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <SecLabel>ملاحظة إضافية</SecLabel>
             <Textarea
               rows={2}
               value={note}
               onChange={e => setNote(e.target.value)}
               placeholder="اختياري..."
+              className="rounded-xl"
             />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>إلغاء</Button>
+          </section>
+        </DialogBody>
+        <DialogFooter className="flex-row gap-2 border-t px-4 py-3 sm:px-6">
           <Button
             onClick={submit}
             disabled={saving}
-            className={isDamage ? 'bg-warning-subtle-foreground hover:bg-warning-subtle-foreground/90' : isIn ? 'bg-primary hover:bg-primary-hover' : 'bg-destructive hover:bg-destructive/90'}
+            className={cn('h-11 flex-1 rounded-xl font-extrabold', t.btn)}
           >
-            {saving && <Loader2 className="ml-1 size-4 animate-spin" />}
+            {saving && <Loader2 className="size-4 animate-spin" />}
             {isDamage ? 'تأكيد تسجيل الهالك' : isIn ? 'تأكيد الإضافة' : 'تأكيد الخصم'}
           </Button>
+          <Button variant="outline" className="h-11 rounded-xl" onClick={() => onOpenChange(false)}>إلغاء</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -572,6 +615,67 @@ interface ExchangeLineUI {
   name: string
   cost: number
   quantity: string
+}
+
+/** بحث صنف + إضافته (بدل القائمة الطويلة) */
+function ProductSearchPick({
+  items,
+  placeholder,
+  onPick,
+  showStock,
+}: {
+  items: InventoryProduct[]
+  placeholder: string
+  onPick: (id: number) => void
+  showStock?: boolean
+}) {
+  const [q, setQ] = React.useState('')
+  const s = q.trim().toLowerCase()
+  const results = React.useMemo(
+    () =>
+      s
+        ? items
+            .filter((p) => p.name.toLowerCase().includes(s) || (p.barcode || '').toLowerCase().includes(s))
+            .slice(0, 20)
+        : [],
+    [items, s]
+  )
+  return (
+    <div className="space-y-1.5">
+      <div className="relative">
+        <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-foreground/50" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={placeholder}
+          className={cn(STOCK_FIELD, 'ps-9')}
+        />
+      </div>
+      {s && (
+        <ul className="max-h-44 overflow-y-auto overscroll-contain rounded-xl border bg-popover">
+          {results.length === 0 ? (
+            <li className="px-3 py-3 text-center text-xs text-muted-foreground">مفيش نتائج</li>
+          ) : (
+            results.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onPick(p.id)
+                    setQ('')
+                  }}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-start text-sm hover:bg-muted"
+                >
+                  <span className="truncate font-bold">{p.name}</span>
+                  {showStock && <span className="shrink-0 text-[11px] font-bold tabular-nums text-foreground/60">متاح {p.quantity}</span>}
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </div>
+  )
 }
 
 function ExchangeDialog({
@@ -591,8 +695,6 @@ function ExchangeDialog({
   const [suppliers, setSuppliers] = React.useState<Array<{ id: number; name: string }>>([])
   const [outLines, setOutLines] = React.useState<ExchangeLineUI[]>([])
   const [inLines, setInLines] = React.useState<ExchangeLineUI[]>([])
-  const [pickOut, setPickOut] = React.useState('')
-  const [pickIn, setPickIn] = React.useState('')
   const [reason, setReason] = React.useState('')
   const [saving, setSaving] = React.useState(false)
 
@@ -600,8 +702,6 @@ function ExchangeDialog({
     if (open) {
       setOutLines([])
       setInLines([])
-      setPickOut('')
-      setPickIn('')
       setReason('')
       setSupplierId('')
       api<Array<{ id: number; name: string }>>('/api/suppliers')
@@ -668,126 +768,119 @@ function ExchangeDialog({
     kind: 'out' | 'in',
   ) => (
     <div className="space-y-2">
-      <Select
-        value={kind === 'out' ? pickOut : pickIn}
-        onValueChange={(v) => {
-          kind === 'out' ? setPickOut(v) : setPickIn(v)
-          addLine(setter, lines, v)
-        }}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder={kind === 'out' ? 'اختر صنف راجع للمورد...' : 'اختر صنف بديل من المورد...'} />
-        </SelectTrigger>
-        <SelectContent>
-          {(kind === 'out' ? available : products).map(p => (
-            <SelectItem key={p.id} value={String(p.id)}>
-              {p.name} {kind === 'out' ? `(متاح: ${p.quantity})` : ''}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {lines.map((l, idx) => (
-        <div key={l.productId} className="flex items-center gap-2 rounded-md border bg-muted/30 p-2">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{l.name}</p>
-            <p className="text-xs text-muted-foreground">تكلفة الوحدة: {formatCurrency(l.cost)}</p>
-          </div>
-          <Input
-            type="number"
-            min={1}
-            className="w-20"
-            value={l.quantity}
-            onChange={(e) => {
-              const v = e.target.value
-              setter(lines.map((x, i) => (i === idx ? { ...x, quantity: v } : x)))
-            }}
-          />
-          <Button
-            size="sm"
-            variant="ghost"
-            className="size-8 p-0 text-destructive"
-            onClick={() => setter(lines.filter((_, i) => i !== idx))}
-          >
-            <X className="size-4" />
-          </Button>
+      <ProductSearchPick
+        items={kind === 'out' ? available : products}
+        placeholder={kind === 'out' ? 'ابحث عن صنف راجع للمورد…' : 'ابحث عن صنف بديل من المورد…'}
+        showStock={kind === 'out'}
+        onPick={(id) => addLine(setter, lines, String(id))}
+      />
+      {lines.length > 0 && (
+        <div className={cn('space-y-1.5', lines.length > 3 && 'max-h-48 overflow-y-auto overscroll-contain pe-1')}>
+          {lines.map((l, idx) => {
+            const avail = kind === 'out' ? productById.get(l.productId)?.quantity ?? 0 : null
+            const over = avail !== null && (parseInt(l.quantity, 10) || 0) > avail
+            return (
+              <div key={l.productId} className="flex items-center gap-2 rounded-xl border bg-background p-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold">{l.name}</p>
+                  <p className={cn('text-[11px] font-medium', over ? 'text-destructive' : 'text-foreground/60')}>
+                    {over ? `أكبر من المتاح (${avail})` : `تكلفة الوحدة: ${formatCurrency(l.cost)}`}
+                  </p>
+                </div>
+                <input
+                  dir="ltr"
+                  type="number"
+                  min={1}
+                  value={l.quantity}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setter(lines.map((x, i) => (i === idx ? { ...x, quantity: v } : x)))
+                  }}
+                  className={cn(STOCK_FIELD, 'h-9 w-16 px-1 text-center font-bold tabular-nums', over && 'border-destructive')}
+                />
+                <button
+                  type="button"
+                  aria-label="حذف"
+                  onClick={() => setter(lines.filter((_, i) => i !== idx))}
+                  className="flex size-9 shrink-0 items-center justify-center rounded-xl text-foreground/60 hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            )
+          })}
         </div>
-      ))}
+      )}
     </div>
   )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Repeat className="size-5 text-primary" />
-            استبدال بضاعة مع مورد
-          </DialogTitle>
-          <DialogDescription>
-            بضاعة تالفة/مردودة تترجع للمورد وبضاعة بديلة تاخدها — فرق القيمة بيتحسب
-            تلقائياً على حساب المورد.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>
-              المورد <span className="text-destructive">*</span>
-            </Label>
+      <DialogContent mobileSheet className="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px]">
+        <StockHero
+          tone="swap"
+          icon={Repeat}
+          title="استبدال بضاعة مع مورد"
+          subtitle="تالف/مردود يرجع للمورد وبديل تاخده — فرق القيمة على حساب المورد"
+        />
+        <DialogBody className="space-y-4">
+          <section>
+            <SecLabel required>المورد</SecLabel>
             <Select value={supplierId} onValueChange={setSupplierId}>
-              <SelectTrigger><SelectValue placeholder="اختر المورد..." /></SelectTrigger>
+              <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="اختر المورد..." /></SelectTrigger>
               <SelectContent>
                 {suppliers.map(su => (
                   <SelectItem key={su.id} value={String(su.id)}>{su.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </section>
 
-          <div className="rounded-lg border p-3">
-            <p className="mb-2 text-sm font-medium text-destructive">١. بضاعة راجعة للمورد</p>
+          <section className="rounded-2xl border border-rose-500/30 bg-rose-500/[0.04] p-3">
+            <SecLabel aside={<span className="text-xs font-bold tabular-nums text-rose-700 dark:text-rose-300">{formatCurrency(valueOut)}</span>}>
+              <span className="me-1.5 inline-flex size-5 items-center justify-center rounded-full bg-rose-700 text-[11px] text-white">١</span>
+              بضاعة راجعة للمورد
+            </SecLabel>
             {lineEditor(outLines, setOutLines, 'out')}
-            <p className="mt-2 text-xs text-muted-foreground">
-              قيمة الصادر: <b className="text-destructive">{formatCurrency(valueOut)}</b>
-            </p>
-          </div>
+          </section>
 
-          <div className="rounded-lg border p-3">
-            <p className="mb-2 text-sm font-medium text-success-subtle-foreground">٢. بضاعة بديلة من المورد</p>
+          <section className="rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.04] p-3">
+            <SecLabel aside={<span className="text-xs font-bold tabular-nums text-emerald-700 dark:text-emerald-300">{formatCurrency(valueIn)}</span>}>
+              <span className="me-1.5 inline-flex size-5 items-center justify-center rounded-full bg-emerald-700 text-[11px] text-white">٢</span>
+              بضاعة بديلة من المورد
+            </SecLabel>
             {lineEditor(inLines, setInLines, 'in')}
-            <p className="mt-2 text-xs text-muted-foreground">
-              قيمة الوارد: <b className="text-success-subtle-foreground">{formatCurrency(valueIn)}</b>
-            </p>
-          </div>
+          </section>
 
-          <div className="rounded-md border bg-muted/40 p-2.5 text-sm">
-            فرق القيمة: <b>{formatCurrency(Math.abs(diff))}</b>{' '}
+          <div className="rounded-2xl bg-muted/60 px-4 py-3 text-sm">
+            <span className="text-foreground/65">فرق القيمة </span>
+            <b className="tabular-nums">{formatCurrency(Math.abs(diff))}</b>{' '}
             {diff === 0 ? (
-              <span className="text-muted-foreground">— استبدال متكافئ (مفيش أثر على حساب المورد)</span>
+              <span className="text-xs font-medium text-muted-foreground">— استبدال متكافئ (مفيش أثر على حساب المورد)</span>
             ) : diff > 0 ? (
-              <span className="text-destructive">— ستزيد عليك في الحساب</span>
+              <span className="text-xs font-bold text-rose-700 dark:text-rose-300">— هتزيد عليك في الحساب</span>
             ) : (
-              <span className="text-success-subtle-foreground">— هتقل حسابك عنده</span>
+              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">— هتقل حسابك عنده</span>
             )}
           </div>
 
-          <div className="space-y-1.5">
-            <Label>
-              سبب الاستبدال <span className="text-destructive">*</span>
-            </Label>
+          <section>
+            <SecLabel required>سبب الاستبدال</SecLabel>
             <Textarea
               rows={2}
               value={reason}
               onChange={e => setReason(e.target.value)}
               placeholder="مثال: 3 قطع تالفة بديلها قطع سليمة..."
+              className="rounded-xl"
             />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>إلغاء</Button>
-          <Button onClick={submit} disabled={saving} className="bg-primary hover:bg-primary-hover">
-            {saving && <Loader2 className="ml-1 size-4 animate-spin" />}
+          </section>
+        </DialogBody>
+        <DialogFooter className="flex-row gap-2 border-t px-4 py-3 sm:px-6">
+          <Button onClick={submit} disabled={saving} className={cn('h-11 flex-1 rounded-xl font-extrabold', TONE.swap.btn)}>
+            {saving && <Loader2 className="size-4 animate-spin" />}
             تأكيد الاستبدال
           </Button>
+          <Button variant="outline" className="h-11 rounded-xl" onClick={() => onOpenChange(false)}>إلغاء</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

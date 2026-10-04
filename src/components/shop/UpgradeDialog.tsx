@@ -13,17 +13,14 @@ import {
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
+import { Dialog, DialogBody, DialogContent } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCurrency } from '@/lib/format'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import { INK_BTN } from './settings-ui'
+import { DialogHero } from './product-dialog-ui'
 
 interface Plan {
   id: number
@@ -137,17 +134,13 @@ export function UpgradeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent mobileSheet className="max-w-2xl sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg">
-            <Sparkles className="size-5 text-primary" />
-            {mode === 'renew' ? 'تجديد الاشتراك' : 'ترقية الاشتراك'}
-          </DialogTitle>
-          <DialogDescription>
-            اختر الباقة والفترة المناسبتين لمحلك — الدفع الآمن عبر المحافظ الإلكترونية (Vodafone Cash, Instapay, Fawry)
-          </DialogDescription>
-        </DialogHeader>
-
+      <DialogContent mobileSheet className="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 max-w-2xl sm:max-w-3xl">
+        <DialogHero
+          icon={Sparkles}
+          title={mode === 'renew' ? 'تجديد الاشتراك' : 'ترقية الاشتراك'}
+          subtitle="اختر الباقة والفترة — الدفع الآمن عبر المحافظ الإلكترونية (Vodafone Cash, Instapay, Fawry)"
+        />
+        <DialogBody>
         {loading ? (
           <div className="space-y-3 py-4">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -157,21 +150,19 @@ export function UpgradeDialog({
         ) : (
           <div className="space-y-4">
             {/* ─── Period toggle ─────────────────────── */}
-            <div className="flex gap-2 rounded-lg bg-muted/40 p-1">
+            <div className="flex gap-1.5 rounded-2xl bg-muted/60 p-1">
               <Button
-                variant={period === 'monthly' ? 'default' : 'ghost'}
-                size="sm"
+                variant="ghost"
                 onClick={() => setPeriod('monthly')}
-                className="flex-1 gap-1.5"
+                className={cn('h-10 flex-1 gap-1.5 rounded-xl font-bold', period === 'monthly' ? INK_BTN + ' hover:text-background' : '')}
               >
                 <Calendar className="size-4" />
                 اشتراك شهري
               </Button>
               <Button
-                variant={period === 'yearly' ? 'default' : 'ghost'}
-                size="sm"
+                variant="ghost"
                 onClick={() => setPeriod('yearly')}
-                className="flex-1 gap-1.5"
+                className={cn('h-10 flex-1 gap-1.5 rounded-xl font-bold', period === 'yearly' ? INK_BTN + ' hover:text-background' : '')}
               >
                 <CalendarDays className="size-4" />
                 اشتراك سنوي
@@ -191,14 +182,15 @@ export function UpgradeDialog({
                     type="button"
                     key={p.id}
                     onClick={() => setSelectedPlanId(p.id)}
-                    className={`relative rounded-xl border p-3 text-right transition-all ${
+                    className={cn(
+                      'relative rounded-2xl border p-3.5 text-right transition-all focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-foreground/20',
                       isSelected
-                        ? 'border-primary bg-primary-subtle shadow-md ring-2 ring-primary/30'
-                        : 'border-border hover:border-primary/50 hover:bg-muted/30'
-                    }`}
+                        ? 'border-foreground bg-foreground/[0.04] shadow-md ring-1 ring-foreground'
+                        : 'border-border hover:border-foreground/40 hover:bg-muted/30'
+                    )}
                   >
                     {isSelected && (
-                      <span className="absolute -top-2 -left-2 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow">
+                      <span className="absolute -top-2 -left-2 flex size-6 items-center justify-center rounded-full bg-foreground text-background shadow">
                         <CheckCircle2 className="size-4" />
                       </span>
                     )}
@@ -211,7 +203,7 @@ export function UpgradeDialog({
                       </div>
                     </div>
                     <div className="mt-2 flex items-baseline gap-1">
-                      <span className="text-2xl font-extrabold text-primary">
+                      <span className="text-2xl font-extrabold tabular-nums">
                         {formatCurrency(price)}
                       </span>
                       <span className="text-[11px] text-muted-foreground">
@@ -222,7 +214,7 @@ export function UpgradeDialog({
                       <ul className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
                         {p.features.slice(0, 4).map((f, i) => (
                           <li key={i} className="flex items-start gap-1">
-                            <span className="mt-0.5 size-1 shrink-0 rounded-full bg-primary" />
+                            <span className="mt-1 size-1 shrink-0 rounded-full bg-foreground/60" />
                             <span className="truncate">{f}</span>
                           </li>
                         ))}
@@ -238,12 +230,12 @@ export function UpgradeDialog({
               <motion.div
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="rounded-lg border bg-muted/30 p-4"
+                className="rounded-2xl border border-dashed border-foreground/25 bg-card p-4"
               >
                 <div className="mb-3 flex items-center justify-between text-sm">
                   <div>
                     <p className="text-xs text-muted-foreground">المجموع المستحق</p>
-                    <p className="text-2xl font-bold tabular-nums text-primary">
+                    <p className="text-2xl font-extrabold tabular-nums">
                       {formatCurrency(selectedPrice)}
                     </p>
                   </div>
@@ -259,7 +251,7 @@ export function UpgradeDialog({
                   onClick={startCheckout}
                   disabled={busy}
                   size="lg"
-                  className="w-full gap-2"
+                  className={cn('h-12 w-full gap-2 rounded-xl font-extrabold', INK_BTN)}
                 >
                   {busy ? (
                     <Loader2 className="size-5 animate-spin" />
@@ -278,6 +270,7 @@ export function UpgradeDialog({
             )}
           </div>
         )}
+        </DialogBody>
       </DialogContent>
     </Dialog>
   )

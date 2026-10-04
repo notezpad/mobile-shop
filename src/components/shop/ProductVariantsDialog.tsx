@@ -1,21 +1,16 @@
 'use client'
 
 import * as React from 'react'
-import { Loader2, Plus, Sparkles, Trash2, Dices, Wand2 } from 'lucide-react'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Loader2, Plus, Search, Shirt, Sparkles, Trash2, Dices, Wand2 } from 'lucide-react'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useShopStore } from '@/lib/store'
-import { Textarea } from '@/components/ui/textarea'
+import { cn } from '@/lib/utils'
+import { useConfirm } from './ConfirmDialogProvider'
+import { DialogHero, Field, IconBtn, INK_INPUT, InkInput, LockedNote, SectionTitle } from './product-dialog-ui'
+import { INK_BTN, INK_BTN_OUTLINE } from './settings-ui'
 import { parseVariantText, type ParsedVariantRow } from '@/lib/variantParser'
 import { generateUniqueEan13 } from '@/lib/barcode'
 
@@ -36,6 +31,8 @@ interface Props {
 }
 
 export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }: Props) {
+  const confirm = useConfirm()
+  const [vq, setVq] = React.useState('')
   const [variants, setVariants] = React.useState<ProductVariant[]>([])
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -154,7 +151,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
 
   const removeVariant = async (id: number) => {
     if (!product) return
-    if (!confirm('حذف المتغير؟')) return
+    if (!(await confirm({ title: 'حذف المتغير؟' }))) return
     try {
       await api(`/api/products/${product.id}/variants/${id}`, { method: 'DELETE' })
       await load()
@@ -224,244 +221,264 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
     onChanged?.()
   }
 
+  const needle = vq.trim().toLowerCase()
+  const shownVariants = needle
+    ? variants.filter((v) =>
+        [v.size, v.color, v.barcode].some((x) => (x ?? '').toLowerCase().includes(needle))
+      )
+    : variants
+  const missingCount = variants.filter((v) => !v.barcode).length
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent mobileSheet className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>متغيرات المنتج — {product?.name}</DialogTitle>
-        </DialogHeader>
+      <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHero icon={Shirt} title="متغيرات المنتج" subtitle={product?.name} />
 
-        {!enabled ? (
-          <div className="rounded-md border border-warning-subtle bg-warning-subtle p-4 text-sm text-warning-subtle-foreground dark:border-warning-subtle dark:bg-warning-subtle/20 dark:text-warning-subtle-foreground">
-            ميزة المتغيرات (مقاسات/ألوان) متاحة في باقات الملابس والأحذية فقط.
-          </div>
-        ) : (
-          <>
-            <div className="space-y-2 rounded-md border p-3">
-              <Label className="flex items-center gap-1 text-xs">
-                <Sparkles className="size-3.5" />
-                مساعد الإدخال الذكي — اكتب الوصف بالعامية
-              </Label>
-              <Textarea
-                placeholder='مثال: كوتشي فلات أسود وكحلي مقاسات زوجي من 40 لـ 44 والكمية قطعتين'
-                value={smartText}
-                onChange={(e) => setSmartText(e.target.value)}
-                rows={2}
-              />
-              <div className="flex justify-end">
-                <Button type="button" size="sm" onClick={analyzeSmartText} disabled={!smartText.trim()}>
-                  <Sparkles className="size-4" />
-                  تحليل
-                </Button>
-              </div>
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain bg-muted/20 p-4 sm:p-6">
+          {!enabled ? (
+            <LockedNote>ميزة المتغيرات (مقاسات/ألوان) متاحة في باقات الملابس والأحذية فقط.</LockedNote>
+          ) : (
+            <>
+              {/* ═════════ 1) المساعد الذكي ═════════ */}
+              <section>
+                <SectionTitle n={1}>مساعد الإدخال الذكي</SectionTitle>
+                <div className="space-y-3 rounded-2xl border bg-card p-4">
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-foreground/70">
+                    <Sparkles className="size-3.5" aria-hidden />
+                    اكتب الوصف بالعامية وأنا أطلّع المقاسات والألوان والكميات.
+                  </p>
+                  <textarea
+                    placeholder="مثال: كوتشي فلات أسود وكحلي مقاسات زوجي من 40 لـ 44 والكمية قطعتين"
+                    value={smartText}
+                    onChange={(e) => setSmartText(e.target.value)}
+                    rows={2}
+                    aria-label="وصف المتغيرات"
+                    className={cn(INK_INPUT, 'h-auto min-h-[4.5rem] resize-y py-2.5 leading-relaxed')}
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      onClick={analyzeSmartText}
+                      disabled={!smartText.trim()}
+                      className={cn('h-10 rounded-xl px-5 font-bold', INK_BTN)}
+                    >
+                      <Sparkles className="size-4" />
+                      تحليل
+                    </Button>
+                  </div>
 
-              {preview && (
-                <div className="space-y-2 rounded-md border bg-muted/30 p-2">
-                  {previewWarnings.length > 0 && (
-                    <ul className="list-inside list-disc text-xs text-warning-subtle-foreground">
-                      {previewWarnings.map((w, i) => (
-                        <li key={i}>{w}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {preview.length === 0 ? (
-                    <p className="py-2 text-center text-sm text-muted-foreground">
-                      مقدرتش أطلّع متغيرات من الجملة دي، جرّب تعيد صياغتها
-                    </p>
-                  ) : (
-                    <>
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-muted-foreground">
-                            <th className="text-right font-medium">اللون</th>
-                            <th className="text-right font-medium">المقاس</th>
-                            <th className="text-center font-medium">الكمية</th>
-                            <th></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {preview.map((row, i) => (
-                            <tr key={i} className="border-t">
-                              <td className="py-1.5">{row.color ?? '—'}</td>
-                              <td>{row.size ?? '—'}</td>
-                              <td className="w-20 text-center">
-                                <Input
+                  {preview && (
+                    <div className="space-y-3 rounded-xl border bg-muted/30 p-3">
+                      {previewWarnings.length > 0 && (
+                        <ul className="list-inside list-disc text-xs font-medium text-warning-subtle-foreground">
+                          {previewWarnings.map((w, i) => (
+                            <li key={i}>{w}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {preview.length === 0 ? (
+                        <p className="py-2 text-center text-sm font-medium text-foreground/65">
+                          مقدرتش أطلّع متغيرات من الجملة دي، جرّب تعيد صياغتها
+                        </p>
+                      ) : (
+                        <>
+                          <ul className="max-h-60 divide-y overflow-y-auto overscroll-contain rounded-lg border bg-card">
+                            <li className="grid grid-cols-[1fr_1fr_5rem_2.25rem] gap-2 bg-muted/50 px-3 py-1.5 text-[11px] font-bold text-foreground/65">
+                              <span>اللون</span>
+                              <span>المقاس</span>
+                              <span className="text-center">الكمية</span>
+                              <span />
+                            </li>
+                            {preview.map((row, i) => (
+                              <li key={i} className="grid grid-cols-[1fr_1fr_5rem_2.25rem] items-center gap-2 px-3 py-1.5 text-sm font-semibold">
+                                <span className="truncate">{row.color ?? '—'}</span>
+                                <span className="truncate">{row.size ?? '—'}</span>
+                                <InkInput
+                                  num
+                                  size="sm"
                                   type="number"
                                   min={0}
+                                  aria-label="الكمية"
                                   value={row.quantity}
                                   onChange={(e) => updatePreviewQty(i, parseInt(e.target.value) || 0)}
-                                  className="h-7 text-center"
+                                  className="text-center"
                                 />
-                              </td>
-                              <td className="w-8">
-                                <Button size="icon" variant="ghost" onClick={() => removePreviewRow(i)}>
-                                  <Trash2 className="size-3.5 text-destructive" />
-                                </Button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <div className="flex justify-end gap-2">
-                        <Button variant="outline" size="sm" onClick={() => setPreview(null)}>
-                          إلغاء
-                        </Button>
-                        <Button size="sm" onClick={addAllPreviewRows} disabled={bulkSaving}>
-                          {bulkSaving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                          إضافة الكل ({preview.length})
-                        </Button>
-                      </div>
-                    </>
+                                <IconBtn label="حذف الصف" danger onClick={() => removePreviewRow(i)}>
+                                  <Trash2 className="size-3.5" />
+                                </IconBtn>
+                              </li>
+                            ))}
+                          </ul>
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" onClick={() => setPreview(null)} className="h-10 rounded-xl px-4">
+                              إلغاء
+                            </Button>
+                            <Button onClick={addAllPreviewRows} disabled={bulkSaving} className={cn('h-10 rounded-xl px-5 font-bold', INK_BTN)}>
+                              {bulkSaving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                              إضافة الكل ({preview.length})
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
+              </section>
 
-            <div className="grid grid-cols-1 gap-3 rounded-md border p-3 sm:grid-cols-5">
-              <div>
-                <Label className="text-xs">المقاس</Label>
-                <Input
-                  placeholder="S / 42"
-                  value={form.size}
-                  onChange={(e) => setForm({ ...form, size: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="text-xs">اللون</Label>
-                <Input
-                  placeholder="أحمر"
-                  value={form.color}
-                  onChange={(e) => setForm({ ...form, color: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="text-xs">الباركود</Label>
-                <div className="flex gap-1">
-                  <Input
-                    value={form.barcode}
-                    onChange={(e) => setForm({ ...form, barcode: e.target.value })}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    title="توليد باركود"
-                    onClick={() =>
-                      setForm((f) => ({ ...f, barcode: generateUniqueEan13(existingBarcodes) }))
-                    }
-                  >
-                    <Dices className="size-4" />
-                  </Button>
+              {/* ═════════ 2) إضافة متغير يدويًا ═════════ */}
+              <section>
+                <SectionTitle n={2}>إضافة متغير</SectionTitle>
+                <div className="grid grid-cols-2 gap-4 rounded-2xl border bg-card p-4 sm:grid-cols-4">
+                  <Field label="المقاس" htmlFor="v-size">
+                    <InkInput id="v-size" placeholder="S / 42" value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} />
+                  </Field>
+                  <Field label="اللون" htmlFor="v-color">
+                    <InkInput id="v-color" placeholder="أحمر" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} />
+                  </Field>
+                  <Field label="الكمية" htmlFor="v-qty" className="col-span-2 sm:col-span-1">
+                    <InkInput
+                      id="v-qty"
+                      num
+                      type="number"
+                      min={0}
+                      value={form.quantity}
+                      onChange={(e) => setForm({ ...form, quantity: parseInt(e.target.value) || 0 })}
+                    />
+                  </Field>
+                  <Field label="الباركود" htmlFor="v-barcode" className="col-span-2 sm:col-span-4">
+                    <div className="flex gap-2">
+                      <InkInput
+                        id="v-barcode"
+                        num
+                        wrapperClassName="flex-1"
+                        className="text-start"
+                        value={form.barcode}
+                        onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        title="توليد باركود"
+                        aria-label="توليد باركود"
+                        className={cn('h-11 rounded-xl px-3.5', INK_BTN_OUTLINE)}
+                        onClick={() => setForm((f) => ({ ...f, barcode: generateUniqueEan13(existingBarcodes) }))}
+                      >
+                        <Dices className="size-4" />
+                      </Button>
+                      <Button onClick={addVariant} disabled={saving} className={cn('h-11 rounded-xl px-5 font-bold', INK_BTN)}>
+                        {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                        إضافة
+                      </Button>
+                    </div>
+                  </Field>
                 </div>
-              </div>
-              <div>
-                <Label className="text-xs">الكمية</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={form.quantity}
-                  onChange={(e) => setForm({ ...form, quantity: parseInt(e.target.value) || 0 })}
-                />
-              </div>
-              <Button onClick={addVariant} disabled={saving} className="self-end">
-                {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                إضافة
-              </Button>
-            </div>
+              </section>
 
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">
-                {variants.length > 0 ? `${variants.length} متغير` : ''}
-              </p>
-              {variants.some((v) => !v.barcode) && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={generateMissingBarcodes}
-                  disabled={bulkGenerating}
+              {/* ═════════ 3) المتغيرات الحالية ═════════ */}
+              <section>
+                <SectionTitle
+                  n={3}
+                  aside={
+                    missingCount > 0 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={generateMissingBarcodes}
+                        disabled={bulkGenerating}
+                        className={cn('h-8 rounded-full px-3 text-xs font-bold', INK_BTN_OUTLINE)}
+                      >
+                        {bulkGenerating ? <Loader2 className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
+                        توليد الباركودات الناقصة ({missingCount})
+                      </Button>
+                    )
+                  }
                 >
-                  {bulkGenerating ? <Loader2 className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
-                  توليد الباركودات الناقصة
-                </Button>
-              )}
-            </div>
+                  المتغيرات الحالية
+                  {variants.length > 0 && (
+                    <span className="text-xs font-semibold tabular-nums text-foreground/65">· {variants.length}</span>
+                  )}
+                </SectionTitle>
 
-            <div className="max-h-80 overflow-y-auto">
-              {loading ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">جاري التحميل...</p>
-              ) : variants.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  لا توجد متغيرات بعد
-                </p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-muted-foreground">
-                      <th className="py-2 text-right font-medium">المقاس</th>
-                      <th className="text-right font-medium">اللون</th>
-                      <th className="text-right font-medium">الباركود</th>
-                      <th className="text-center font-medium">الكمية</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {variants.map((v) => (
-                      <tr key={v.id} className="border-b last:border-0">
-                        <td className="py-2">{v.size ?? '—'}</td>
-                        <td>{v.color ?? '—'}</td>
-                        <td className="font-mono text-xs">
+                {variants.length > 8 && (
+                  <label className="relative mb-2.5 flex h-10 items-center rounded-xl border bg-card focus-within:border-foreground focus-within:ring-[3px] focus-within:ring-foreground/10">
+                    <Search className="pointer-events-none absolute start-3 size-4 text-foreground/60" aria-hidden />
+                    <input
+                      value={vq}
+                      onChange={(e) => setVq(e.target.value)}
+                      placeholder={`دوّر في ${variants.length} متغير (مقاس / لون / باركود)…`}
+                      aria-label="بحث في المتغيرات"
+                      className="h-full w-full bg-transparent pe-3 text-sm outline-none placeholder:text-muted-foreground/80"
+                      style={{ paddingInlineStart: '2.5rem' }}
+                    />
+                  </label>
+                )}
+
+                {loading ? (
+                  <p className="rounded-2xl border border-dashed bg-card/60 py-8 text-center text-sm font-medium text-foreground/65">
+                    جاري التحميل...
+                  </p>
+                ) : variants.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed bg-card/60 px-4 py-8 text-center">
+                    <Shirt className="mx-auto size-6 text-foreground/40" aria-hidden />
+                    <p className="mt-2 text-sm font-bold">لا توجد متغيرات بعد</p>
+                  </div>
+                ) : (
+                  <ul className="max-h-[20rem] divide-y overflow-y-auto overscroll-contain rounded-2xl border bg-card">
+                    <li className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_5rem_2.25rem] gap-2 bg-muted px-3 py-2 text-[11px] font-bold text-foreground/70">
+                      <span>المقاس</span>
+                      <span>اللون</span>
+                      <span>الباركود</span>
+                      <span className="text-center">الكمية</span>
+                      <span />
+                    </li>
+                    {shownVariants.map((v) => (
+                      <li
+                        key={v.id}
+                        className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_5rem_2.25rem] items-center gap-2 px-3 py-1.5 text-sm"
+                      >
+                        <span className="truncate font-bold">{v.size ?? '—'}</span>
+                        <span className="truncate font-semibold">{v.color ?? '—'}</span>
+                        <span dir="ltr" className="truncate text-start font-mono text-xs text-foreground/75">
                           {v.barcode ?? (
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              className="size-6"
-                              title="توليد باركود"
+                            <IconBtn
+                              label="توليد باركود"
                               disabled={generatingId === v.id}
                               onClick={() => generateForVariant(v.id)}
                             >
-                              {generatingId === v.id
-                                ? <Loader2 className="size-3.5 animate-spin" />
-                                : <Dices className="size-3.5" />
-                              }
-                            </Button>
+                              {generatingId === v.id ? <Loader2 className="size-3.5 animate-spin" /> : <Dices className="size-3.5" />}
+                            </IconBtn>
                           )}
-                        </td>
-                        <td className="w-24 text-center">
-                          <Input
-                            type="number"
-                            min={0}
-                            value={v.quantity}
-                            onChange={(e) =>
-                              updateQty(v.id, parseInt(e.target.value) || 0)
-                            }
-                            className="h-8 text-center"
-                          />
-                        </td>
-                        <td className="w-10">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => removeVariant(v.id)}
-                          >
-                            <Trash2 className="size-4 text-destructive" />
-                          </Button>
-                        </td>
-                      </tr>
+                        </span>
+                        <InkInput
+                          num
+                          size="sm"
+                          type="number"
+                          min={0}
+                          aria-label={`كمية ${v.size ?? ''} ${v.color ?? ''}`}
+                          value={v.quantity}
+                          onChange={(e) => updateQty(v.id, parseInt(e.target.value) || 0)}
+                          className="text-center"
+                        />
+                        <IconBtn label="حذف المتغير" danger onClick={() => removeVariant(v.id)}>
+                          <Trash2 className="size-4" />
+                        </IconBtn>
+                      </li>
                     ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </>
-        )}
+                    {shownVariants.length === 0 && (
+                      <li className="px-4 py-8 text-center text-sm font-medium text-foreground/65">مفيش متغير بالبحث ده</li>
+                    )}
+                  </ul>
+                )}
+              </section>
+            </>
+          )}
+        </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <div className="flex shrink-0 justify-end border-t bg-card px-4 py-3 sm:px-6 sm:py-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="h-11 rounded-xl px-6">
             إغلاق
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )

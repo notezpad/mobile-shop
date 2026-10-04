@@ -90,10 +90,10 @@ export function ConfirmDialogProvider({ children }: { children: React.ReactNode 
             <div className="flex items-start gap-3">
               <span
                 className={cn(
-                  'flex size-9 shrink-0 items-center justify-center rounded-full',
+                  'flex size-10 shrink-0 items-center justify-center rounded-2xl ring-1',
                   destructive
-                    ? 'bg-destructive/10 text-destructive'
-                    : 'bg-primary/10 text-primary'
+                    ? 'bg-destructive/10 text-destructive ring-destructive/25'
+                    : 'bg-foreground/[0.06] text-foreground ring-foreground/15'
                 )}
               >
                 <AlertTriangle className="size-4.5" />
@@ -109,14 +109,16 @@ export function ConfirmDialogProvider({ children }: { children: React.ReactNode 
             </div>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={handleCancel}>
+            <AlertDialogCancel onClick={handleCancel} className="rounded-xl">
               {pending?.options.cancelText ?? 'إلغاء'}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirm}
               className={cn(
-                destructive &&
-                  buttonVariants({ variant: 'destructive' })
+                'rounded-xl font-bold',
+                destructive
+                  ? buttonVariants({ variant: 'destructive' })
+                  : 'bg-foreground text-background hover:bg-foreground/90'
               )}
             >
               {pending?.options.confirmText ?? (destructive ? 'حذف' : 'تأكيد')}

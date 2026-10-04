@@ -1,24 +1,12 @@
 'use client'
 
 import * as React from 'react'
-import { AlertTriangle, Loader2 } from 'lucide-react'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { AlertTriangle, Loader2, Minus, Plus, ShoppingBasket } from 'lucide-react'
+import { Dialog, DialogBody, DialogContent, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { cn } from '@/lib/utils'
+import { INK_BTN, INK_BTN_OUTLINE } from './settings-ui'
+import { DialogHero, Field, INK_RING, InkInput, SectionTitle } from './product-dialog-ui'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
@@ -170,117 +158,168 @@ export function POSItemPickerDialog({ open, onOpenChange, product, onConfirm }: 
     onOpenChange(false)
   }
 
+  const Pill = ({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'inline-flex h-10 items-center whitespace-nowrap rounded-xl border px-4 text-sm font-bold transition-colors',
+        INK_RING,
+        active ? 'border-foreground bg-foreground text-background' : 'bg-background hover:bg-muted'
+      )}
+    >
+      {children}
+    </button>
+  )
+
+  const showVariants = !isAssortment && variants.length > 0
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent mobileSheet className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{product.name}</DialogTitle>
-        </DialogHeader>
+      <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+        <DialogHero
+          icon={ShoppingBasket}
+          title={product.name}
+          chip="١ اختر"
+          subtitle={`السعر الأساسي ${formatCurrency(product.price)}`}
+        />
 
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="size-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {units.length > 0 && (
-              <div className="space-y-1.5">
-                <Label>وحدة البيع</Label>
-                <Select value={selectedUnit} onValueChange={handleUnitChange}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={PIECE_UNIT}>قطعة (أساسي)</SelectItem>
+        <DialogBody className="space-y-5">
+          {loading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              {units.length > 0 && (
+                <section>
+                  <SectionTitle>وحدة البيع</SectionTitle>
+                  <div className="flex flex-wrap gap-2">
+                    <Pill active={selectedUnit === PIECE_UNIT} onClick={() => handleUnitChange(PIECE_UNIT)}>
+                      قطعة
+                    </Pill>
                     {units.map((u) => (
-                      <SelectItem key={u.id} value={String(u.id)}>
+                      <Pill key={u.id} active={selectedUnit === String(u.id)} onClick={() => handleUnitChange(String(u.id))}>
                         {u.name}
-                      </SelectItem>
+                      </Pill>
                     ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {isAssortment && (
-              <div className="rounded-md border bg-muted/30 p-3 text-sm">
-                <p className="mb-1.5 font-medium">
-                  {unit!.name} دي بتشمل:
-                </p>
-                <p className="text-muted-foreground">
-                  {unit!.items
-                    .map((it) => `${it.quantity} ${variantLabelOf(it.variant)}`)
-                    .join(' + ')}
-                </p>
-                {lowStockWarnings.length > 0 && (
-                  <div className="mt-2 flex items-start gap-1.5 text-warning-subtle-foreground dark:text-warning-subtle-foreground">
-                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                    <p className="text-xs">
-                      تنبيه: مخزون {lowStockWarnings.join('، ')} هيوصل لحد قريب من الصفر بعد البيع ده
-                    </p>
                   </div>
-                )}
-              </div>
-            )}
+                  {!isAssortment && unit && (
+                    <p className="mt-2 text-xs font-medium text-foreground/65">
+                      كل {unit.name} = {factor} قطعة — إجمالي: {totalPieces} قطعة
+                    </p>
+                  )}
+                </section>
+              )}
 
-            {!isAssortment && variants.length > 0 && (
-              <div className="space-y-1.5">
-                <Label>المقاس / اللون</Label>
-                <Select value={selectedVariantId} onValueChange={setSelectedVariantId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="اختر المقاس/اللون" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {variants.map((v) => (
-                      <SelectItem key={v.id} value={String(v.id)}>
-                        {variantLabelOf(v)} — متاح: {v.quantity}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+              {isAssortment && (
+                <div className="rounded-2xl border border-dashed border-foreground/25 bg-card p-3.5 text-sm">
+                  <p className="mb-1.5 font-extrabold">{unit!.name} دي بتشمل:</p>
+                  <p className="font-medium text-foreground/70">
+                    {unit!.items.map((it) => `${it.quantity} ${variantLabelOf(it.variant)}`).join(' + ')}
+                  </p>
+                  {lowStockWarnings.length > 0 && (
+                    <div className="mt-2 flex items-start gap-1.5 rounded-xl bg-warning-subtle px-2.5 py-2 text-warning-subtle-foreground">
+                      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                      <p className="text-xs font-medium">
+                        تنبيه: مخزون {lowStockWarnings.join('، ')} هيوصل لحد قريب من الصفر بعد البيع ده
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
-            {!isAssortment && unit && (
-              <p className="text-xs text-muted-foreground">
-                كل {unit.name} = {factor} قطعة — إجمالي: {totalPieces} قطعة
-              </p>
-            )}
+              {showVariants && (
+                <section>
+                  <SectionTitle>المقاس / اللون</SectionTitle>
+                  <ul className="grid max-h-60 grid-cols-2 gap-2 overflow-y-auto overscroll-contain pb-1">
+                    {variants.map((v) => {
+                      const active = String(v.id) === selectedVariantId
+                      const out = v.quantity <= 0
+                      return (
+                        <li key={v.id}>
+                          <button
+                            type="button"
+                            disabled={out}
+                            onClick={() => setSelectedVariantId(String(v.id))}
+                            aria-pressed={active}
+                            className={cn(
+                              'flex w-full flex-col items-start gap-0.5 rounded-xl border px-3 py-2 text-start transition-colors',
+                              INK_RING,
+                              out && 'cursor-not-allowed opacity-45',
+                              active ? 'border-foreground bg-foreground text-background' : 'bg-background hover:bg-muted/60'
+                            )}
+                          >
+                            <span className="text-sm font-extrabold">{variantLabelOf(v)}</span>
+                            <span className={cn('text-[11px] font-bold tabular-nums', active ? 'text-background/70' : 'text-foreground/60')}>
+                              {out ? 'نفد' : `متاح ${v.quantity}`}
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>الكمية {unit ? `(${unit.name})` : ''}</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={qty}
-                  onChange={(e) => setQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                />
-                <p className="text-xs text-muted-foreground">متاح: {maxQuantity}</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label>السعر {unit ? '(للوحدة)' : ''}</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={price}
-                  onChange={(e) => setPrice(Math.max(0, parseFloat(e.target.value) || 0))}
-                />
-              </div>
-            </div>
+              <section>
+                <SectionTitle>الكمية والسعر</SectionTitle>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label={`الكمية ${unit ? `(${unit.name})` : ''}`} hint={`متاح: ${maxQuantity}`}>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        aria-label="إنقاص"
+                        onClick={() => setQty((q) => Math.max(1, q - 1))}
+                        className={cn('flex size-11 shrink-0 items-center justify-center rounded-xl border bg-background hover:bg-muted', INK_RING)}
+                      >
+                        <Minus className="size-4" />
+                      </button>
+                      <InkInput
+                        num
+                        type="number"
+                        min={1}
+                        value={qty}
+                        onChange={(e) => setQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                        wrapperClassName="min-w-0 flex-1"
+                        className="px-1 text-center"
+                      />
+                      <button
+                        type="button"
+                        aria-label="زيادة"
+                        onClick={() => setQty((q) => q + 1)}
+                        className={cn('flex size-11 shrink-0 items-center justify-center rounded-xl border bg-background hover:bg-muted', INK_RING)}
+                      >
+                        <Plus className="size-4" />
+                      </button>
+                    </div>
+                  </Field>
+                  <Field label={`السعر ${unit ? '(للوحدة)' : ''}`}>
+                    <InkInput
+                      num
+                      type="number"
+                      min={0}
+                      suffix="ج"
+                      value={price}
+                      onChange={(e) => setPrice(Math.max(0, parseFloat(e.target.value) || 0))}
+                    />
+                  </Field>
+                </div>
+              </section>
+            </>
+          )}
+        </DialogBody>
 
-            <div className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2 text-sm">
-              <span className="text-muted-foreground">الإجمالي</span>
-              <span className="font-bold">{formatCurrency(price * qty)}</span>
-            </div>
+        <DialogFooter className="flex-row items-center gap-2 border-t px-4 py-3 sm:px-6">
+          <div className="me-auto leading-tight">
+            <p className="text-[11px] font-bold text-foreground/60">الإجمالي</p>
+            <p className="text-lg font-extrabold tabular-nums">{formatCurrency(price * qty)}</p>
           </div>
-        )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" className={cn('h-11 rounded-xl', INK_BTN_OUTLINE)} onClick={() => onOpenChange(false)}>
             إلغاء
           </Button>
-          <Button onClick={confirm} disabled={loading || maxQuantity <= 0}>
+          <Button onClick={confirm} disabled={loading || maxQuantity <= 0} className={cn('h-11 rounded-xl px-5 font-extrabold', INK_BTN)}>
             إضافة للسلة
           </Button>
         </DialogFooter>

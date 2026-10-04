@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
+import { getPlanContext } from '@/lib/features'
 import { ensureCategory } from '../route'
 
 export const dynamic = 'force-dynamic'
@@ -95,6 +96,10 @@ export async function PUT(
     } else {
       barcode = existing.barcode
     }
+    // 🛡️ 2026-10-03: التسعير الديناميكي — باقة احترافية فقط.
+    const planCtxPatch = await getPlanContext(session.tenantId)
+    const hasDynamicRetail = planCtxPatch.capabilities.includes('dynamic_retail_pricing')
+
     const updated = await db.$transaction(async (tx) => {
       const row = await tx.product.update({
         where: { id: pid },
@@ -135,12 +140,15 @@ export async function PUT(
           // Unit-Based Dynamic Pricing: per-product override of the tenant's
           // default retail margin %. Sending null/'' clears the override back
           // to "use the tenant default".
-          retailMarginPercent:
-            body.retailMarginPercent !== undefined
+          // 🛡️ 2026-10-03: نسبة الهامش — باقة احترافية فقط.
+          // لو الباقة أساسية: نتجاهل أي قيمة جاية من الـ client ونفضل على الـ null.
+          retailMarginPercent: hasDynamicRetail
+            ? body.retailMarginPercent !== undefined
               ? (body.retailMarginPercent === null || body.retailMarginPercent === ''
                   ? null
                   : Number(body.retailMarginPercent))
-              : existing.retailMarginPercent,
+              : existing.retailMarginPercent
+            : null,
         },
       })
       // 🛡️ 2026-09-30 (X9): تغيير الكمية من شاشة المنتج بيتوثق كحركة 'adjust'

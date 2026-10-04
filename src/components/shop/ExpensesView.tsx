@@ -37,14 +37,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Dialog, DialogBody, DialogContent, DialogFooter } from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -72,6 +65,7 @@ import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { cn } from '@/lib/utils'
+import { ExpenseHero, ROSE_BTN } from './expense-dialog-ui'
 
 /* ───────────────────────── الأنواع والثوابت ───────────────────────── */
 
@@ -1411,20 +1405,14 @@ export function ExpensesView() {
           if (!o) setEditing(null)
         }}
       >
-        <DialogContent className="max-h-[92vh] gap-0 overflow-y-auto p-0 sm:max-w-lg">
-          <DialogHeader className="border-b bg-gradient-to-br from-rose-500/10 to-amber-500/10 p-5 text-start">
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <span className="flex size-9 items-center justify-center rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400">
-                <Receipt className="size-5" />
-              </span>
-              {editing ? 'تعديل المصروف' : 'تسجيل مصروف جديد'}
-            </DialogTitle>
-            <DialogDescription>
-              {editing ? 'أي تغيير في المبلغ بيتعدّل في الخزنة تلقائياً.' : 'هيتخصم المبلغ من الخزنة مباشرة.'}
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent mobileSheet className="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <ExpenseHero
+            icon={Receipt}
+            title={editing ? 'تعديل المصروف' : 'تسجيل مصروف جديد'}
+            subtitle={editing ? 'أي تغيير في المبلغ بيتعدّل في الخزنة تلقائياً.' : 'هيتخصم المبلغ من الخزنة مباشرة.'}
+          />
 
-          <div className="space-y-5 p-5">
+          <DialogBody className="space-y-5">
             {/* المبلغ */}
             <div className="space-y-2">
               <Label htmlFor="exp-amount">المبلغ</Label>
@@ -1478,7 +1466,7 @@ export function ExpensesView() {
                 placeholder="اختياري — مثال: فاتورة شهر أكتوبر"
               />
             </div>
-          </div>
+          </DialogBody>
 
           <DialogFooter className="flex-row gap-2 border-t bg-muted/30 p-4 sm:justify-between">
             <Button
@@ -1491,7 +1479,7 @@ export function ExpensesView() {
             >
               إلغاء
             </Button>
-            <Button variant="gradient" size="lg" onClick={submit} disabled={saving} className="min-w-36">
+            <Button size="lg" onClick={submit} disabled={saving} className={cn('min-w-36 rounded-xl font-extrabold', ROSE_BTN)}>
               {saving ? <Loader2 className="size-4 animate-spin" /> : editing ? <Check className="size-4" /> : <Plus className="size-4" />}
               {editing ? 'حفظ التعديل' : 'حفظ المصروف'}
             </Button>
@@ -1501,17 +1489,9 @@ export function ExpensesView() {
 
       {/* ═════════ نافذة الحدود الشهرية ═════════ */}
       <Dialog open={budgetOpen} onOpenChange={(o) => !budgetSaving && setBudgetOpen(o)}>
-        <DialogContent className="max-h-[92vh] gap-0 overflow-y-auto p-0 sm:max-w-md">
-          <DialogHeader className="border-b bg-gradient-to-br from-emerald-500/10 to-sky-500/10 p-5 text-start">
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <span className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-                <SlidersHorizontal className="size-5" />
-              </span>
-              الحدود الشهرية
-            </DialogTitle>
-            <DialogDescription>اترك الخانة فاضية لو مش عايز حد للنوع ده.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2.5 p-5">
+        <DialogContent mobileSheet className="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+          <ExpenseHero icon={SlidersHorizontal} title="الحدود الشهرية" subtitle="اترك الخانة فاضية لو مش عايز حد للنوع ده." />
+          <DialogBody className="space-y-2.5">
             {CATEGORIES.map((c) => (
               <div key={c} className="flex items-center gap-3">
                 <CategoryIcon category={c} size="sm" />
@@ -1533,12 +1513,12 @@ export function ExpensesView() {
                 </div>
               </div>
             ))}
-          </div>
+          </DialogBody>
           <DialogFooter className="flex-row gap-2 border-t bg-muted/30 p-4 sm:justify-between">
             <Button variant="ghost" onClick={() => setBudgetOpen(false)} disabled={budgetSaving}>
               إلغاء
             </Button>
-            <Button variant="gradient" size="lg" onClick={saveBudgets} disabled={budgetSaving} className="min-w-36">
+            <Button size="lg" onClick={saveBudgets} disabled={budgetSaving} className={cn('min-w-36 rounded-xl font-extrabold', ROSE_BTN)}>
               {budgetSaving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
               حفظ الحدود
             </Button>
@@ -1548,19 +1528,13 @@ export function ExpensesView() {
 
       {/* ═════════ نافذة مصروف متكرر ═════════ */}
       <Dialog open={recOpen} onOpenChange={(o) => !recSaving && setRecOpen(o)}>
-        <DialogContent className="max-h-[92vh] gap-0 overflow-y-auto p-0 sm:max-w-lg">
-          <DialogHeader className="border-b bg-gradient-to-br from-amber-500/10 to-rose-500/10 p-5 text-start">
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <span className="flex size-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
-                <Repeat className="size-5" />
-              </span>
-              مصروف متكرر جديد
-            </DialogTitle>
-            <DialogDescription>
-              مش بيتسجل لوحده — بيظهر لك "مستحق" في يومه وبتضغط "سجّل الآن".
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-5 p-5">
+        <DialogContent mobileSheet className="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <ExpenseHero
+            icon={Repeat}
+            title="مصروف متكرر جديد"
+            subtitle={'مش بيتسجل لوحده — بيظهر لك "مستحق" في يومه وبتضغط "سجّل الآن".'}
+          />
+          <DialogBody className="space-y-5">
             <div className="space-y-2">
               <Label>النوع</Label>
               <CategoryPicker value={recCategory} onChange={setRecCategory} />
@@ -1604,12 +1578,12 @@ export function ExpensesView() {
                 placeholder="اختياري — مثال: إيجار المحل"
               />
             </div>
-          </div>
+          </DialogBody>
           <DialogFooter className="flex-row gap-2 border-t bg-muted/30 p-4 sm:justify-between">
             <Button variant="ghost" onClick={() => setRecOpen(false)} disabled={recSaving}>
               إلغاء
             </Button>
-            <Button variant="gradient" size="lg" onClick={saveRecurring} disabled={recSaving} className="min-w-36">
+            <Button size="lg" onClick={saveRecurring} disabled={recSaving} className={cn('min-w-36 rounded-xl font-extrabold', ROSE_BTN)}>
               {recSaving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
               حفظ
             </Button>

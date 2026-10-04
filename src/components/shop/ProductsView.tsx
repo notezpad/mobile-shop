@@ -807,7 +807,8 @@ export function ProductsView() {
                     <TableHead className="w-44">الباركود</TableHead>
                     <TableHead className="w-24 text-center">التكلفة</TableHead>
                     <TableHead className="w-28 text-center">السعر</TableHead>
-                    {isWholesale && <TableHead className="w-36 text-center">سعر القطعة</TableHead>}
+                    {/* 🛡️ 2026-10-03: header عمود سعر القطعة — باقة احترافية فقط */}
+                    {capabilities.includes('dynamic_retail_pricing') && <TableHead className="w-36 text-center">سعر القطعة</TableHead>}
                     <TableHead className="w-48">المخزون</TableHead>
                     <TableHead className="w-20 text-center">مبيعات</TableHead>
                     <TableHead className="w-24 text-center">إجراءات</TableHead>
@@ -1282,7 +1283,8 @@ function ProductTag({
           </div>
           )}
 
-          {actions.capabilities.includes('multi_unit') && (
+          {/* 🛡️ 2026-10-03: عمود سعر القطعة — باقة احترافية فقط */}
+          {actions.capabilities.includes('dynamic_retail_pricing') && (
           <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-foreground/20 px-2.5 py-1.5">
             <span className="text-[11px] font-medium text-muted-foreground">سعر القطعة</span>
             <span className="flex items-baseline gap-1.5 tabular-nums">

@@ -32,13 +32,6 @@ import { Input } from '@/components/ui/input'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { arEG } from 'react-day-picker/locale'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
@@ -48,6 +41,7 @@ import { useShopStore } from '@/lib/store'
 import { printSale } from '@/lib/print-client'
 import { printThermalReceipt, getStoredPrinterSettings } from '@/lib/thermal-printer'
 import { ProductDialog } from './ProductDialog'
+import { POSVariantPickerDialog } from './POSVariantPickerDialog'
 
 /* ────────────────────────────────────────────────────────────────
    Types (unchanged business model)
@@ -501,7 +495,15 @@ const inDays = (n: number) => {
   d.setDate(d.getDate() + n)
   return d
 }
-function DueDatePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function DueDatePicker({
+  value,
+  onChange,
+  compact = false,
+}: {
+  value: string
+  onChange: (v: string) => void
+  compact?: boolean
+}) {
   const [open, setOpen] = React.useState(false)
   const presets = [
     { label: 'أسبوع', iso: toISODate(inDays(7)) },
@@ -518,7 +520,8 @@ function DueDatePicker({ value, onChange }: { value: string; onChange: (v: strin
   const rel = diff <= 0 ? 'النهارده' : diff === 1 ? 'بكرة' : `بعد ${diff} يوم`
   const chip = (on: boolean) =>
     cn(
-      'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-1 py-1.5 text-sm font-semibold transition-colors',
+      'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-1 text-sm font-semibold transition-colors',
+      compact ? 'py-1' : 'py-1.5',
       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40',
       on
         ? 'border-brand-600 bg-brand-600/10 text-brand-800 dark:text-brand-200'
@@ -526,8 +529,8 @@ function DueDatePicker({ value, onChange }: { value: string; onChange: (v: strin
     )
 
   return (
-    <div className="space-y-2">
-      <p className="text-sm font-bold text-foreground/75">
+    <div className={compact ? 'space-y-1.5' : 'space-y-2'}>
+      <p className={cn('font-bold text-foreground/75', compact ? 'text-xs' : 'text-sm')}>
         استحقاق الآجل <span className="font-medium">(اختياري)</span>
       </p>
       <div className="grid grid-cols-5 gap-1.5">
@@ -550,7 +553,7 @@ function DueDatePicker({ value, onChange }: { value: string; onChange: (v: strin
           <PopoverTrigger asChild>
             <button
               type="button"
-              className={cn(chip(!!value && !isPreset), 'h-9 w-full px-3')}
+              className={cn(chip(!!value && !isPreset), 'w-full px-3', compact ? 'h-8' : 'h-9')}
               aria-label="اختيار تاريخ مخصص من التقويم"
             >
               <CalendarDays className="size-4" />
@@ -580,15 +583,15 @@ function DueDatePicker({ value, onChange }: { value: string; onChange: (v: strin
           </PopoverContent>
         </Popover>
       {selected && (
-        <div className="flex items-center justify-between gap-2 rounded-xl bg-muted px-3 py-2 text-sm">
+        <div className={cn('flex items-center justify-between gap-2 rounded-xl bg-muted px-3 text-sm', compact ? 'py-1' : 'py-2')}>
           <span className="flex min-w-0 items-center gap-2">
             <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 leading-snug">
-              <span className="block font-semibold">
+              <span className={cn('font-semibold', compact ? 'inline' : 'block')}>
                 يستحق{' '}
                 {selected.toLocaleDateString('ar-EG-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })}
               </span>
-              <span className="block text-xs font-medium text-muted-foreground">{rel}</span>
+              <span className={cn('text-xs font-medium text-muted-foreground', compact ? 'ms-2 inline' : 'block')}>{rel}</span>
             </span>
           </span>
           <button
@@ -635,7 +638,6 @@ export function POSView() {
   const draftKey = draftKeyFor(user)
   // Read once, on mount — before any state below is created.
   const [restored] = React.useState<PosDraft | null>(() => loadDraft())
-  const [restoredNotice, setRestoredNotice] = React.useState(() => (restored?.cart.length ?? 0) > 0)
 
   const [query, setQuery] = React.useState('')
   const [category, setCategory] = React.useState<string>('all')
@@ -715,6 +717,10 @@ export function POSView() {
      بنقيس المساحة المتاحة فعلاً (أعمدة × صفوف) ونعرض صفحة واحدة بالظبط تملا
      الشاشة. على الشاشات الكبيرة (xl) بس — الموبايل/التابلت بيفضلوا بالتمرير الطبيعي. */
   const isXl = useMediaQuery('(min-width: 1280px)')
+  // لوحة الدفع بتتضغط تلقائياً *لو* محتواها مش داخل في ارتفاعها (بنقيس فعلياً، مش بنخمّن من حجم الشاشة)
+  const [tight, setTight] = React.useState(false)
+  const payBodyRef = React.useRef<HTMLDivElement>(null)
+  const compact = isXl && tight
   const gridBoxRef = React.useRef<HTMLDivElement>(null)
   const gridRef = React.useRef<HTMLUListElement>(null)
   const [perPage, setPerPage] = React.useState(0) // 0 = لسه ماتقاسش
@@ -736,7 +742,10 @@ export function POSView() {
     const box = gridBoxRef.current
     const grid = gridRef.current
     if (!paged) {
-      if (grid) grid.style.gridAutoRows = ''
+      if (grid) {
+        grid.style.gridAutoRows = ''
+        grid.style.removeProperty('--cm')
+      }
       return
     }
     if (!box || !grid) return
@@ -745,26 +754,33 @@ export function POSView() {
       const cs = getComputedStyle(box)
       const availH = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
       const gcs = getComputedStyle(grid)
-      const cols = Math.max(1, gcs.gridTemplateColumns.split(' ').filter(Boolean).length)
       const gap = parseFloat(gcs.rowGap) || 10
-      // 1) نلغي أي ارتفاع صفوف سابق عشان نقيس الارتفاع الطبيعي (من غير تمدد) — مفيش دوران.
-      grid.style.gridAutoRows = ''
-      const kids = Array.from(grid.children) as HTMLElement[]
-      let naturalH = 0
-      if (effMode === 'cards') {
-        const first = kids[0]
-        const thumb = first.querySelector('[data-thumb]') as HTMLElement | null
-        naturalH = thumb
-          ? first.offsetHeight - thumb.offsetHeight + (thumb.offsetWidth * 10) / 16
-          : first.offsetHeight
-      } else {
-        // المدمج: أطول كارت في الصفحة (الأسماء الطويلة بتزوّد الارتفاع)
-        for (const k of kids) naturalH = Math.max(naturalH, k.offsetHeight)
+      // بنجرّب عرض كارت 44 ← 38 ← 32 (وحدة spacing) ونختار أول عرض يدّي صفّين على الأقل:
+      // على الشاشات القصيرة الكروت الكبيرة كانت بتطلّع 4 منتجات بس في الصفحة.
+      const kids = () => Array.from(grid.children) as HTMLElement[]
+      const widths = effMode === 'cards' ? [44, 38, 32] : [0]
+      let cols = 1
+      let rows = 1
+      for (const cm of widths) {
+        if (cm) grid.style.setProperty('--cm', String(cm))
+        grid.style.gridAutoRows = '' // قياس الارتفاع الطبيعي (من غير تمدد) — مفيش دوران
+        cols = Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length)
+        let naturalH = 0
+        if (effMode === 'cards') {
+          const first = kids()[0]
+          const thumb = first.querySelector('[data-thumb]') as HTMLElement | null
+          naturalH = thumb
+            ? first.offsetHeight - thumb.offsetHeight + (thumb.offsetWidth * 10) / 16
+            : first.offsetHeight
+        } else {
+          for (const k of kids()) naturalH = Math.max(naturalH, k.offsetHeight) // أطول كارت (أسماء طويلة)
+        }
+        if (naturalH <= 0 || availH <= 0) return
+        rows = Math.max(1, Math.floor((availH + gap) / (naturalH + gap)))
+        if (rows >= 2) break
       }
-      if (naturalH <= 0 || availH <= 0) return
-      const rows = Math.max(1, Math.floor((availH + gap) / (naturalH + gap)))
       setPerPage((prev) => (prev === cols * rows ? prev : cols * rows))
-      // 2) صفوف بارتفاع ثابت بتملا المساحة بالظبط: مفيش فراغ تحت ومفيش قصّ لآخر صف
+      // صفوف بارتفاع ثابت بتملا المساحة بالظبط: مفيش فراغ تحت ومفيش قصّ لآخر صف
       grid.style.gridAutoRows = `${Math.floor((availH - gap * (rows - 1)) / rows)}px`
     }
     measure()
@@ -1197,7 +1213,6 @@ export function POSView() {
       return
     }
     setCart([])
-    setRestoredNotice(false)
     setConfirmClear(false)
   }
 
@@ -1371,7 +1386,6 @@ export function POSView() {
       setLastSale(sale)
 
       setCart([])
-      setRestoredNotice(false)
       setCustomerName('')
       setSelectedCustomerId(null)
       setPaidFull(true)
@@ -1585,6 +1599,16 @@ export function POSView() {
      Panels (JSX values, not inner components, so inputs keep focus)
      ──────────────────────────────────────────────────────────── */
 
+  // 1) أي تغيير في محتوى اللوحة ← نرجع للعرض العادي ونجرّب تاني  2) لو لسه مش داخل ← نضغط (قبل الرسم، فمفيش وميض)
+  React.useLayoutEffect(() => {
+    setTight(false)
+  }, [paidFull, dueDate, shortBy > 0, resolvedCustomer?.id, remaining > 0, change > 0, paymentMethod, scale, isXl, isFull, cart.length === 0])
+  React.useLayoutEffect(() => {
+    const el = payBodyRef.current
+    if (!el || !isXl) return
+    if (!tight && el.scrollHeight > el.clientHeight + 1) setTight(true)
+  })
+
   const panelCls =
     'flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm'
   const viewMode = effMode
@@ -1594,8 +1618,8 @@ export function POSView() {
     viewMode === 'compact'
       ? 'grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(calc(var(--spacing)*56),1fr))]'
       : fewProducts
-        ? 'grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(calc(var(--spacing)*50),1fr))]'
-        : 'grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(calc(var(--spacing)*44),1fr))]'
+        ? 'grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(calc(var(--spacing)*var(--cm,50)),1fr))]'
+        : 'grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(calc(var(--spacing)*var(--cm,44)),1fr))]'
 
   /* شريط الأدوات: بقى جوه مساحة البيع نفسها (أسفل الكتالوج) بدل هيدر مستقل بياكل ارتفاع الشاشة */
   const dockBtn =
@@ -1930,7 +1954,6 @@ export function POSView() {
         <div className="hidden items-center gap-4 xl:flex">
           {[
             ['/', 'بحث'],
-            ['Enter', 'إضافة بالباركود'],
             ['F9', 'دفع وطباعة'],
           ].map(([k, l]) => (
             <span key={k} className="flex items-center gap-1.5">
@@ -2228,10 +2251,14 @@ export function POSView() {
       <Check className="size-3" strokeWidth={3} />
     </span>
   )
-  const payBtn =
-    'rounded-lg border border-foreground/25 bg-card px-3 py-1.5 text-sm font-semibold tabular-nums transition-colors hover:border-foreground/50 hover:bg-muted disabled:opacity-40'
-  const payInput =
-    'h-11 w-full rounded-xl border border-foreground/25 bg-card shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] placeholder:text-sm placeholder:font-medium placeholder:text-muted-foreground text-center text-lg font-extrabold tabular-nums outline-none transition-colors focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20'
+  const payBtn = cn(
+    'rounded-lg border border-foreground/25 bg-card px-3 text-sm font-semibold tabular-nums transition-colors hover:border-foreground/50 hover:bg-muted disabled:opacity-40',
+    compact ? 'py-1' : 'py-1.5'
+  )
+  const payInput = cn(
+    compact ? 'h-9 text-base' : 'h-11 text-lg',
+    'w-full rounded-xl border border-foreground/25 bg-card shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] placeholder:text-sm placeholder:font-medium placeholder:text-muted-foreground text-center font-extrabold tabular-nums outline-none transition-colors focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20'
+  )
 
   const paymentPanel = (
     <section className={panelCls}>
@@ -2239,32 +2266,35 @@ export function POSView() {
         <PanelHead n={3} tag="Checkout" title="ادفع" aside={statusChip} />
       </header>
 
-      <div className={cn('min-w-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden overscroll-contain p-3.5', slimScroll)}>
+      <div
+        ref={payBodyRef}
+        className={cn('min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain', compact ? 'space-y-2 p-3' : 'space-y-3 p-3.5', slimScroll)}
+      >
         {/* شاشة الكاشير: الإجمالي هو أكبر وأوضح عنصر في الصفحة */}
-        <div className="relative overflow-hidden rounded-2xl bg-stone-950 px-4 py-3 text-stone-50 shadow-md ring-1 ring-black/10 dark:ring-white/10">
+        <div className={cn('relative overflow-hidden rounded-2xl bg-stone-950 text-stone-50 shadow-md ring-1 ring-black/10 dark:ring-white/10', compact ? 'px-3.5 py-2' : 'px-4 py-3')}>
           <div
             aria-hidden
             className="pointer-events-none absolute -top-16 start-1/2 h-32 w-64 -translate-x-1/2 rounded-full bg-emerald-400/15 blur-3xl"
           />
           <div className="relative">
-            <div className="flex items-center justify-between gap-2 text-sm font-semibold text-stone-300">
+            <div className={cn('flex items-center justify-between gap-2 font-semibold text-stone-300', compact ? 'text-xs' : 'text-sm')}>
               <span>الإجمالي المستحق</span>
               <span className="tabular-nums">
                 {cart.length} صنف · {totalPieces} قطعة
               </span>
             </div>
-            <p className="mt-2 flex items-baseline gap-2 leading-none tabular-nums text-emerald-300">
-              <span className="text-4xl font-extrabold tracking-tight">{formatNumber(Math.round(total * 100) / 100)}</span>
+            <p className={cn('flex items-baseline gap-2 leading-none tabular-nums text-emerald-300', compact ? 'mt-1' : 'mt-2')}>
+              <span className={cn('font-extrabold tracking-tight', compact ? 'text-3xl' : 'text-4xl')}>{formatNumber(Math.round(total * 100) / 100)}</span>
               <span className="text-lg font-bold text-emerald-300/70">جنيه</span>
             </p>
             {!paidFull && (
-              <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/10 pt-2.5 text-xs font-semibold tabular-nums">
+              <div className={cn('flex items-center justify-between gap-2 border-t border-white/10 text-xs font-semibold tabular-nums', compact ? 'mt-1.5 pt-1.5' : 'mt-3 pt-2.5')}>
                 <span className="text-stone-300">مدفوع {formatCurrency(effectivePaid)}</span>
                 <span className="text-amber-300">آجل {formatCurrency(remaining)}</span>
               </div>
             )}
             {paidFull && change > 0 && (
-              <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/10 pt-2.5 text-sm font-bold tabular-nums">
+              <div className={cn('flex items-center justify-between gap-2 border-t border-white/10 text-sm font-bold tabular-nums', compact ? 'mt-1.5 pt-1.5' : 'mt-3 pt-2.5')}>
                 <span className="text-stone-300">الباقي للعميل</span>
                 <span className="text-emerald-300">{formatCurrency(change)}</span>
               </div>
@@ -2274,19 +2304,22 @@ export function POSView() {
 
         {/* العميل */}
         <div className="space-y-1.5">
-          <p className="text-sm font-bold text-foreground/75">
-            العميل <span className="font-medium">(اختياري — مطلوب للبيع الآجل)</span>
-          </p>
+          {!compact && (
+            <p className="text-sm font-bold text-foreground/75">
+              العميل <span className="font-medium">(اختياري — مطلوب للبيع الآجل)</span>
+            </p>
+          )}
           {resolvedCustomer ? (
             <div
               className={cn(
-                'flex items-center gap-2.5 rounded-xl border p-2.5',
+                'flex items-center gap-2.5 rounded-xl border',
+                compact ? 'p-1.5' : 'p-2.5',
                 resolvedCustomer.balance > 0
                   ? 'border-warning-subtle bg-warning-subtle/60'
                   : 'border-brand-600/30 bg-brand-600/[0.06]'
               )}
             >
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-foreground text-sm font-bold text-background">
+              <div className={cn('flex shrink-0 items-center justify-center rounded-full bg-foreground text-sm font-bold text-background', compact ? 'size-7' : 'size-9')}>
                 {resolvedCustomer.name.trim().charAt(0)}
               </div>
               <div className="min-w-0 flex-1">
@@ -2327,9 +2360,10 @@ export function POSView() {
                 }}
                 onFocus={() => setCustOpen(true)}
                 onBlur={() => setTimeout(() => setCustOpen(false), 150)}
-                placeholder="ابحث بالاسم أو رقم الهاتف"
+                placeholder={compact ? 'عميل (للآجل) — ابحث بالاسم أو الهاتف' : 'ابحث بالاسم أو رقم الهاتف'}
                 className={cn(
-                  'h-11 rounded-xl border-foreground/25 bg-card pr-9 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]',
+                  compact ? 'h-9' : 'h-11',
+                  'rounded-xl border-foreground/25 bg-card pr-9 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]',
                   creditNeedsCustomer && 'border-destructive focus-visible:ring-destructive/30'
                 )}
               />
@@ -2381,7 +2415,7 @@ export function POSView() {
         {/* وسيلة الدفع: بتحدد الدرج اللي الفلوس دخلت فيه
             (انستاباي وفوري اتشالوا من الكاشير بطلب صاحب المحل) */}
         <div className="space-y-1.5">
-          <p className="text-sm font-bold text-foreground/75">وسيلة الدفع</p>
+          {!compact && <p className="text-sm font-bold text-foreground/75">وسيلة الدفع</p>}
           <div role="radiogroup" aria-label="وسيلة الدفع" className="grid grid-cols-2 gap-2">
             {[
               { v: 'cash', label: 'كاش', icon: Banknote },
@@ -2395,7 +2429,7 @@ export function POSView() {
                   role="radio"
                   aria-checked={active}
                   onClick={() => setPaymentMethod(m.v)}
-                  className={cn(choiceCls(active), 'h-11 flex-row gap-2 text-base')}
+                  className={cn(choiceCls(active), 'flex-row gap-2', compact ? 'h-9 text-sm' : 'h-11 text-base')}
                 >
                   {active && checkMark}
                   <m.icon className="size-5" />
@@ -2408,7 +2442,7 @@ export function POSView() {
 
         {/* نوع الدفع: كامل / جزئي (الباقي آجل) */}
         <div className="space-y-1.5">
-          <p className="text-sm font-bold text-foreground/75">نوع الدفع</p>
+          {!compact && <p className="text-sm font-bold text-foreground/75">نوع الدفع</p>}
           <div role="radiogroup" aria-label="نوع الدفع" className="grid grid-cols-2 gap-2">
             {[
               { full: true, label: 'سداد كامل' },
@@ -2425,7 +2459,7 @@ export function POSView() {
                     setPaidFull(m.full)
                     setPaidAmount(m.full ? 0 : total)
                   }}
-                  className={cn(choiceCls(active), 'h-11 flex-row gap-2 text-base')}
+                  className={cn(choiceCls(active), 'flex-row gap-2', compact ? 'h-9 text-sm' : 'h-11 text-base')}
                 >
                   {active && checkMark}
                   <span className="whitespace-nowrap">{m.label}</span>
@@ -2434,7 +2468,7 @@ export function POSView() {
             })}
           </div>
           {/* الشرح سطر واحد تحت الاختيارين (بدل سطر ثاني داخل كل زر كان بيلزق في الحد) */}
-          <p className="text-xs font-medium leading-snug text-muted-foreground">
+          <p className={cn('text-xs font-medium leading-snug text-muted-foreground', compact && 'hidden')}>
             {paidFull
               ? 'العميل بيدفع كامل المبلغ دلوقتي.'
               : 'العميل بيدفع جزء دلوقتي والباقي بيتسجل آجل عليه.'}
@@ -2443,7 +2477,7 @@ export function POSView() {
 
         {paidFull ? (
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-foreground/75" htmlFor="received">
+            <label className={cn('block font-bold text-foreground/75', compact ? 'text-xs' : 'text-sm')} htmlFor="received">
               المبلغ المستلم من العميل <span className="font-medium">(لحساب الباقي)</span>
             </label>
             <NumField
@@ -2495,7 +2529,7 @@ export function POSView() {
           </div>
         ) : (
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-foreground/75" htmlFor="paid-amount">
+            <label className={cn('block font-bold text-foreground/75', compact ? 'text-xs' : 'text-sm')} htmlFor="paid-amount">
               المبلغ المدفوع دلوقتي
             </label>
             <NumField
@@ -2516,19 +2550,19 @@ export function POSView() {
                 </button>
               ))}
             </div>
-            {remaining > 0 && (
+            {remaining > 0 && !compact && (
               <div className="flex items-center justify-between rounded-xl bg-danger-subtle px-3 py-2.5 text-sm text-danger-subtle-foreground">
                 <span className="font-semibold">المتبقي (آجل)</span>
                 <span className="font-extrabold tabular-nums">{formatCurrency(remaining)}</span>
               </div>
             )}
-            <DueDatePicker value={dueDate} onChange={setDueDate} />
+            <DueDatePicker value={dueDate} onChange={setDueDate} compact={compact} />
           </div>
         )}
       </div>
 
       {/* Footer: السبب اللي مانع الزر ظاهر جنب الزر */}
-      <footer className="space-y-2 border-t border-border bg-card p-3.5">
+      <footer className={cn('space-y-2 border-t border-border bg-card', compact ? 'p-2.5' : 'p-3.5')}>
         {creditNeedsCustomer && (
           <p className="flex items-start gap-1.5 rounded-lg bg-warning-subtle px-3 py-2 text-xs font-medium text-warning-subtle-foreground">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -2539,7 +2573,7 @@ export function POSView() {
         )}
         <Button
           size="lg"
-          className="h-12 w-full rounded-xl bg-brand-700 text-base font-extrabold text-white shadow-md hover:bg-brand-800 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none"
+          className={cn(compact ? 'h-11' : 'h-12', 'w-full rounded-xl bg-brand-700 text-base font-extrabold text-white shadow-md hover:bg-brand-800 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none')}
           onClick={checkout}
           disabled={!canCheckout}
         >
@@ -2570,22 +2604,6 @@ export function POSView() {
       )}
     >
       <h1 className="sr-only">نقطة البيع</h1>
-
-      {restoredNotice && cart.length > 0 && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-info-subtle bg-info-subtle px-3 py-2 text-sm text-info-subtle-foreground">
-          <span>
-            رجّعنا الفاتورة اللي كنت شغال عليها ({cart.length} صنف). راجع الأسعار والكميات قبل الدفع.
-          </span>
-          <button
-            type="button"
-            onClick={() => setRestoredNotice(false)}
-            className="shrink-0 rounded-md p-1 hover:bg-black/5"
-            aria-label="إخفاء التنبيه"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-      )}
 
       <div
         className={cn(
@@ -2654,7 +2672,7 @@ export function POSView() {
       )}
 
       {/* Variant picker */}
-      <Dialog
+      <POSVariantPickerDialog
         open={variantPickerOpen}
         onOpenChange={(o) => {
           setVariantPickerOpen(o)
@@ -2664,42 +2682,10 @@ export function POSView() {
             setVariantPickerUnits([])
           }
         }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>اختار اللون/المقاس — {variantPickerProduct?.name}</DialogTitle>
-          </DialogHeader>
-          {variantPickerVariants.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">
-              لا يوجد ألوان/مقاسات مسجلة لهذا المنتج
-            </p>
-          ) : (
-            <ul className="grid max-h-72 grid-cols-2 gap-2 overflow-y-auto">
-              {variantPickerVariants.map((v) => (
-                <li key={v.id}>
-                  <button
-                    type="button"
-                    disabled={v.quantity <= 0}
-                    onClick={() => handleVariantPick(v)}
-                    className={cn(
-                      'flex w-full flex-col items-start gap-1 rounded-xl border px-3 py-2.5 text-right transition-colors hover:border-primary hover:bg-primary-subtle',
-                      v.quantity <= 0 && 'cursor-not-allowed opacity-50 hover:border-border hover:bg-transparent'
-                    )}
-                  >
-                    <span className="text-sm font-semibold">{variantLabelOf(v)}</span>
-                    <StockBadge quantity={v.quantity} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setVariantPickerOpen(false)}>
-              إلغاء
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        productName={variantPickerProduct?.name}
+        variants={variantPickerVariants}
+        onPick={handleVariantPick}
+      />
 
       <ProductDialog
         open={productDlgOpen}

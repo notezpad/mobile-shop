@@ -49,10 +49,10 @@ export function TrialExpiredBanner() {
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ y: -100, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: -100, opacity: 0 }}
-        transition={{ duration: 0.25, ease: 'easeOut' }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
         className={
           'sticky top-0 z-40 w-full border-b backdrop-blur-sm ' +
           (isExpired

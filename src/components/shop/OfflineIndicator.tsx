@@ -35,8 +35,8 @@ export function OfflineIndicator() {
   if (!sync.online) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
         className="relative z-[60] shrink-0 flex items-center justify-center gap-2 bg-orange-500 px-4 py-2 text-white"
       >
         <WifiOff className="size-4" />
@@ -56,8 +56,8 @@ export function OfflineIndicator() {
   if (sync.syncing) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
         className="relative z-[60] shrink-0 flex items-center justify-center gap-2 bg-blue-500 px-4 py-2 text-white"
       >
         <RefreshCw className="size-4 animate-spin" />
@@ -70,8 +70,8 @@ export function OfflineIndicator() {
   if (sync.pending > 0) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
         className="relative z-[60] shrink-0 flex items-center justify-between gap-2 bg-blue-50 px-4 py-2 text-blue-900 border-b border-blue-200"
       >
         <div className="flex items-center gap-2">
@@ -105,9 +105,9 @@ export function OfflineIndicator() {
   if (syncResult) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -10 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
         className={`relative z-[60] shrink-0 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium ${
           syncResult.failed > 0
             ? 'bg-rose-50 text-rose-700'

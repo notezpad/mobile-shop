@@ -31,14 +31,7 @@ import {
   ArrowUpDown,
   ChevronDown,
 } from 'lucide-react'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Dialog, DialogBody, DialogContent, DialogFooter } from '@/components/ui/dialog'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -57,6 +50,7 @@ import { api } from '@/lib/api'
 import { formatCurrency, formatArabicDate } from '@/lib/format'
 import { useConfirm } from './ConfirmDialogProvider'
 import { CustomerDetailDialog } from './CustomerDetailDialog'
+import { DialogHero as CustomerHero } from './customer-dialog-ui'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { useDataRefresh } from '@/lib/offline/data-events'
@@ -1228,20 +1222,14 @@ function CustomerDialog({ open, onOpenChange, initial, onSaved }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !saving && onOpenChange(o)}>
-      <DialogContent className="max-h-[92vh] gap-0 overflow-y-auto p-0 sm:max-w-md">
-        <DialogHeader className="border-b bg-gradient-to-br from-sky-500/10 to-indigo-500/10 p-5 text-start">
-          <DialogTitle className="flex items-center gap-2 text-lg">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400">
-              {initial ? <Pencil className="size-5" /> : <UserPlus className="size-5" />}
-            </span>
-            {initial ? 'تعديل عميل' : 'عميل جديد'}
-          </DialogTitle>
-          <DialogDescription>
-            {initial ? 'عدّل بيانات العميل — رصيده ومشترياته زي ما هم.' : 'سجّل بيانات العميل علشان تتابع حسابه ومشترياته.'}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent mobileSheet className="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+        <CustomerHero
+          icon={initial ? Pencil : UserPlus}
+          title={initial ? 'تعديل عميل' : 'عميل جديد'}
+          subtitle={initial ? 'عدّل بيانات العميل — رصيده ومشترياته زي ما هم.' : 'سجّل بيانات العميل علشان تتابع حسابه ومشترياته.'}
+        />
 
-        <div className="space-y-5 p-5">
+        <DialogBody className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="c-name">
               الاسم <span className="text-destructive">*</span>
@@ -1251,7 +1239,7 @@ function CustomerDialog({ open, onOpenChange, initial, onSaved }: Props) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !saving && submit()}
-              className="h-11"
+              className="h-11 rounded-xl focus-visible:border-sky-600 focus-visible:ring-sky-500/20"
             />
           </div>
           <div className="space-y-2">
@@ -1260,21 +1248,23 @@ function CustomerDialog({ open, onOpenChange, initial, onSaved }: Props) {
               <Phone className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="c-phone"
+                dir="ltr"
+                inputMode="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !saving && submit()}
                 placeholder="اختياري"
-                className="h-11 pr-9"
+                className="h-11 rounded-xl pr-9 text-right focus-visible:border-sky-600 focus-visible:ring-sky-500/20"
               />
             </div>
           </div>
-        </div>
+        </DialogBody>
 
         <DialogFooter className="flex-row gap-2 border-t bg-muted/30 p-4 sm:justify-between">
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
             إلغاء
           </Button>
-          <Button variant="gradient" size="lg" onClick={submit} disabled={saving} className="min-w-32">
+          <Button size="lg" onClick={submit} disabled={saving} className="min-w-32 rounded-xl border-0 bg-sky-950 font-extrabold text-sky-50 hover:bg-sky-900 dark:bg-sky-700 dark:hover:bg-sky-600">
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
             حفظ
           </Button>
