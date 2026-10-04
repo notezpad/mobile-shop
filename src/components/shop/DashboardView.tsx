@@ -32,6 +32,7 @@ import {
   Bar,
   BarChart as RechartsBarChart,
   CartesianGrid,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -46,6 +47,7 @@ import { formatCurrency, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
 import { useDataRefresh } from '@/lib/offline/data-events'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 interface DashboardData {
   todaySales: number
@@ -93,6 +95,14 @@ interface DashboardData {
     customerName: string | null
     customerPhone: string | null
   }>
+}
+
+/* اختصار الأرقام للمحور وفوق الأعمدة: 2,000,330 → 2M */
+function compactNum(v: number): string {
+  const a = Math.abs(v)
+  if (a >= 1e6) return `${+(v / 1e6).toFixed(1)}M`
+  if (a >= 1e3) return `${+(v / 1e3).toFixed(1)}K`
+  return String(Math.round(v))
 }
 
 /* ───────── تاريخ ووقت بتوقيت المحل — نص هادي من غير كبسولة ───────── */
@@ -234,6 +244,45 @@ function StatCell({
   )
 }
 
+/* صف مؤشر للجوال: الاسم يمين، الرقم + الوحدة شمال في نفس السطر (مفيش لف ولا قص) */
+function MobileStat({
+  label, value, unit, dot, sub, href, loading,
+}: {
+  label: string
+  value: string
+  unit?: string
+  dot: string
+  sub?: React.ReactNode
+  href?: string
+  loading?: boolean
+}) {
+  const body = (
+    <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+      <div className="min-w-0">
+        <p className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
+          <span className={cn('size-2 shrink-0 rounded-full', dot)} />
+          <span className="truncate">{label}</span>
+        </p>
+        {sub && <p className="mt-0.5 ps-4 text-[11px] text-muted-foreground/80">{sub}</p>}
+      </div>
+      {loading ? (
+        <Skeleton className="h-6 w-24 shrink-0" />
+      ) : (
+        <p className="flex shrink-0 items-baseline gap-1 whitespace-nowrap">
+          <span className="text-lg font-extrabold tabular-nums text-foreground">{value}</span>
+          {unit && <span className="text-[11px] font-semibold text-muted-foreground">{unit}</span>}
+          {href && <ArrowUpLeft className="size-3.5 self-center text-muted-foreground/60" />}
+        </p>
+      )}
+    </div>
+  )
+  return href ? (
+    <Link href={href} className="block transition-colors active:bg-muted/50">{body}</Link>
+  ) : (
+    body
+  )
+}
+
 /* عنوان قسم موحّد */
 function PanelTitle({
   icon: Icon,
@@ -261,6 +310,7 @@ export function DashboardView() {
   const [data, setData] = React.useState<DashboardData | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [chartDays, setChartDays] = React.useState<7 | 14 | 30>(7)
+  const isMobile = useIsMobile()
   const user = useShopStore((s) => s.user)
   const enabledModules = useShopStore((s) => s.plan.enabledModules)
   const hasMaintenance = enabledModules.includes('maintenance')
@@ -353,6 +403,12 @@ export function DashboardView() {
   })()
 
   const days = data?.last7DaysSales ?? []
+  // كل التواريخ ظاهرة على 7 أيام (من غير ما الرسم يخفي يوم ويوم) وتخفيف منتظم على 14/30
+  // العدّ بيبدأ من النهاردة ورجوعًا، فآخر يوم دايمًا ظاهر
+  const xStep = days.length <= 7 ? 1 : days.length <= 14 ? (isMobile ? 2 : 1) : isMobile ? 5 : 2
+  const xTicks = days.filter((_, i) => (days.length - 1 - i) % xStep === 0).map((d) => d.date)
+  // أرقام فوق الأعمدة على 7 أيام: بتخلّي الأيام الصغيرة قدام عمود ضخم مقروءة
+  const showBarLabels = days.length <= 7
   const loadingFirst = loading && !data
   const weekProfit = days.reduce((a, d) => a + (d.profit || 0), 0)
   const weekTotal = days.reduce((a, d) => a + (d.total || 0), 0)
@@ -528,29 +584,44 @@ export function DashboardView() {
                 <Skeleton className="h-full w-full" />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <RechartsBarChart data={days} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <RechartsBarChart data={days} margin={{ top: showBarLabels ? 20 : 8, right: 8, left: isMobile ? 8 : 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-                    <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={11} />
+                    <XAxis
+                      dataKey="date"
+                      tickLine={false}
+                      axisLine={false}
+                      fontSize={isMobile ? 10 : 11}
+                      ticks={xTicks}
+                      interval={0}
+                      tickMargin={6}
+                    />
                     <YAxis
+                      hide={isMobile}
                       tickLine={false}
                       axisLine={false}
                       fontSize={11}
                       width={40}
-                      tickFormatter={(v: number) =>
-                        Math.abs(v) >= 1e6 ? `${+(v / 1e6).toFixed(1)}M`
-                        : Math.abs(v) >= 1e3 ? `${+(v / 1e3).toFixed(1)}K`
-                        : String(v)
-                      }
+                      tickCount={4}
+                      tickFormatter={compactNum}
                     />
                     <Tooltip
                       cursor={{ fill: 'color-mix(in srgb, var(--primary) 8%, transparent)' }}
-                      formatter={(v: any, name: any) => [formatCurrency(Number(v)), name]}
-                      contentStyle={{
-                        borderRadius: 12,
-                        border: '1px solid var(--border)',
-                        background: 'var(--popover)',
-                        color: 'var(--popover-foreground)',
-                        fontFamily: 'inherit',
+                      content={({ active, payload }) => {
+                        const row = active ? (payload?.[0]?.payload as { date: string; total: number; profit: number } | undefined) : undefined
+                        if (!row) return null
+                        return (
+                          <div className="rounded-xl border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md">
+                            <p className="mb-1 font-bold tabular-nums">{row.date}</p>
+                            <p className="flex items-center justify-between gap-4">
+                              <span className="text-muted-foreground">المبيعات</span>
+                              <span className="font-bold tabular-nums">{formatCurrency(row.total)}</span>
+                            </p>
+                            <p className="flex items-center justify-between gap-4">
+                              <span className="text-muted-foreground">الربح</span>
+                              <span className="font-bold tabular-nums text-success">{formatCurrency(row.profit)}</span>
+                            </p>
+                          </div>
+                        )
                       }}
                     />
                     <Bar
@@ -559,7 +630,18 @@ export function DashboardView() {
                       fill="var(--primary)"
                       radius={[8, 8, 0, 0]}
                       maxBarSize={44}
-                    />
+                      minPointSize={(v: number) => (v > 0 ? 4 : 0)}
+                    >
+                      {showBarLabels && (
+                        <LabelList
+                          dataKey="total"
+                          position="top"
+                          fontSize={10}
+                          className="fill-muted-foreground font-semibold"
+                          formatter={(v: number) => (v > 0 ? compactNum(v) : '')}
+                        />
+                      )}
+                    </Bar>
                   </RechartsBarChart>
                 </ResponsiveContainer>
               )}
@@ -573,7 +655,40 @@ export function DashboardView() {
         </div>
 
         {/* شريط الأرقام */}
-        <div className="grid grid-cols-2 border-t border-border lg:grid-cols-5">
+        {/* الجوال: قائمة صفوف بعرض كامل */}
+        <div className="divide-y divide-border border-t border-border sm:hidden">
+          {(() => {
+            const n = (v: number | undefined) =>
+              Number(v ?? 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+            const low = data?.lowStockCount ?? 0
+            return (
+              <>
+                <MobileStat label="رصيد الخزنة" value={n(data?.cashBalance)} unit="جنيه" dot="bg-sky-500" loading={loadingFirst} />
+                <MobileStat label="مبيعات الشهر" value={n(data?.monthSales)} unit="جنيه" dot="bg-primary" loading={loadingFirst} />
+                <MobileStat
+                  label="ربح الشهر"
+                  value={n(data?.monthProfit)}
+                  unit="جنيه"
+                  dot="bg-emerald-500"
+                  sub={margin !== null ? `هامش آخر ${chartDays} يوم: ${margin}%` : undefined}
+                  loading={loadingFirst}
+                />
+                <MobileStat label="العملاء" value={String(data?.customersCount ?? 0)} dot="bg-teal-500" href="/customers" loading={loadingFirst} />
+                <MobileStat
+                  label="تنبيهات المخزون"
+                  value={String(low)}
+                  dot={low > 0 ? 'bg-amber-500' : 'bg-emerald-500'}
+                  sub={low > 0 ? 'مراجعة المخزون' : 'كل المنتجات فوق الحد الأدنى'}
+                  href={low > 0 ? '/inventory' : undefined}
+                  loading={loadingFirst}
+                />
+              </>
+            )
+          })()}
+        </div>
+
+        {/* الشاشات الأكبر: شريط الأرقام */}
+        <div className="hidden grid-cols-2 border-t border-border sm:grid lg:grid-cols-5">
           <StatCell
             className="border-b border-e lg:border-b-0"
             label="رصيد الخزنة"
