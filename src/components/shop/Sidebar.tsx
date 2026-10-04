@@ -25,7 +25,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, ShoppingCart, Package, Receipt, Wrench, Users, Truck,
   PackagePlus, Wallet, ReceiptText, Banknote, Warehouse, Building2,
-  BarChart3, Settings as SettingsIcon, UserCog, Power, ChevronLeft, Store, Plus,
+  BarChart3, Settings as SettingsIcon, UserCog, Power, ChevronLeft, Store, Plus, BookOpen,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -72,6 +72,7 @@ const MAIN_GROUP: NavItem[] = [
 ]
 
 const MANAGE_GROUP: NavItem[] = [
+  { path: '/guide', label: 'دليل الاستخدام', icon: BookOpen, module: 'guide' },
   { path: '/finance', label: 'المعاملات المالية', icon: Wallet, module: 'finance' },
   { path: '/expenses', label: 'المصروفات', icon: ReceiptText, module: 'expenses' },
   { path: '/cash', label: 'الخزنة', icon: Banknote, module: 'cash' },

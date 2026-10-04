@@ -2,12 +2,12 @@
 
 import * as React from 'react'
 import {
+  ClipboardList,
   Loader2,
   Plus,
   Trash2,
   RotateCcw,
   Receipt,
-  Truck,
   Wallet,
   TrendingDown,
   TrendingUp,
@@ -57,6 +57,12 @@ import { DateTimeCell } from './DateTimeCell'
 import { SupplierPaymentDialog } from './SupplierPaymentDialog'
 import { PurchaseOrderDialog } from './PurchaseOrderDialog'
 import { PurchaseReturnDialog } from './PurchaseReturnDialog'
+
+// 🎨 هوية صفحة الموردين (stone + orange) على التاب النشط — نفس بصمة باقي دايلوجات الصفحة
+const TAB_TRIGGER_CLS =
+  'flex-1 rounded-lg ' +
+  'data-[state=active]:border-orange-200 data-[state=active]:bg-orange-50 data-[state=active]:text-orange-800 ' +
+  'dark:data-[state=active]:border-orange-500/30 dark:data-[state=active]:bg-orange-500/15 dark:data-[state=active]:text-orange-300'
 
 const METHOD_LABELS: Record<string, string> = {
   cash: 'كاش',
@@ -234,8 +240,6 @@ export function SupplierDetailDialog({
   useDataRefresh(['suppliers'], load, open && !!supplierId)
 
   const balance = detail?.balance ?? 0
-  const balanceTone =
-    balance > 0 ? 'text-destructive' : balance < 0 ? 'text-success-subtle-foreground' : 'text-foreground'
 
   const timeline: TimelineRow[] = React.useMemo(() => {
     if (!detail) return []
@@ -286,45 +290,56 @@ export function SupplierDetailDialog({
         mobileSheet
         className="flex h-[92dvh] flex-col gap-0 overflow-hidden bg-background p-0 sm:h-auto sm:max-h-[90dvh] sm:max-w-5xl"
       >
-        {/* ═════════ الهيدر: هوية الموردين (حجري + برتقالي) + بطاقة الرصيد ═════════ */}
-        <DialogHeader className="relative shrink-0 border-b bg-stone-900 px-4 pb-4 pt-5 text-start text-stone-50 sm:px-6 sm:pt-6">
+        {/* ═════════ الهيدر: هوية الموردين (حجري غامق + برتقالي) — نفس تركيبة supplier-dialog-ui ═════════ */}
+        <DialogHeader className="relative shrink-0 gap-0 border-b border-stone-800 bg-stone-900 px-4 pb-4 pt-4 text-start text-stone-50 sm:px-6 sm:pt-5">
           <DialogTitle className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-stone-700/70 ring-1 ring-orange-600/60">
-                <Truck className="size-5 text-stone-100" />
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-stone-700/70 text-lg font-extrabold text-white ring-1 ring-orange-600/60">
+                {(detail?.name ?? initialName ?? '—').trim().charAt(0) || '?'}
               </span>
               <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="truncate text-lg font-extrabold text-stone-50 sm:text-xl">
                   {detail?.name ?? initialName ?? '—'}
                 </span>
-                <span className="text-xs font-normal text-stone-400">
+                <span className="flex items-center gap-1 text-xs font-normal text-stone-300/80">
                   {detail?.phone ? (
-                    <span dir="ltr">{detail.phone}</span>
+                    <span dir="ltr" className="tabular-nums">{detail.phone}</span>
                   ) : (
                     'لا يوجد رقم هاتف'
                   )}
                 </span>
               </div>
             </div>
-            <div className="rounded-2xl border border-orange-700/40 bg-stone-800/70 px-4 py-2.5 text-start">
-              <p className="text-[11px] font-medium text-stone-400">المستحق حالياً</p>
-              <p className={`text-xl font-extrabold tabular-nums sm:text-2xl ${balance > 0 ? 'text-rose-400' : balance < 0 ? 'text-emerald-400' : 'text-stone-300'}`}>
+            <div className="min-w-[150px] rounded-2xl bg-stone-800/80 px-4 py-2.5 ring-1 ring-orange-600/50">
+              <p className="text-[11px] font-medium text-stone-300/80">المستحق حالياً</p>
+              <p
+                className={`text-xl font-extrabold tabular-nums sm:text-2xl ${
+                  balance > 0
+                    ? 'text-orange-300'
+                    : balance < 0
+                      ? 'text-emerald-300'
+                      : 'text-stone-100'
+                }`}
+              >
                 {formatCurrency(balance)}
               </p>
               {balance > 0 ? (
-                <span className="text-[11px] text-rose-400">لنا آجل عليه</span>
+                <span className="text-[11px] font-semibold text-orange-300/90">لنا آجل عليه</span>
               ) : balance < 0 ? (
-                <span className="text-[11px] text-emerald-400">دفعنا زيادة</span>
+                <span className="text-[11px] font-semibold text-emerald-300/90">دفعنا زيادة</span>
               ) : (
-                <span className="text-[11px] text-stone-400">مسوّى</span>
+                <span className="text-[11px] text-stone-300/70">مسوّى</span>
               )}
             </div>
           </DialogTitle>
           <DialogDescription className="sr-only">
             كشف حساب المورد مع أوامر الشراء والدفعات
           </DialogDescription>
-          {/* خط البرتقالي المائل — بصمة صفحة الموردين */}
-          <span aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-[repeating-linear-gradient(-45deg,rgba(249,115,22,.75)_0_6px,transparent_6px_12px)]" />
+          {/* خط برتقالي مائل — بصمة هوية الموردين (زي باقي دايلوجات الصفحة) */}
+          <span
+            aria-hidden
+            className="absolute inset-x-0 bottom-0 h-1 bg-[repeating-linear-gradient(-45deg,rgba(234,88,12,.85)_0_6px,transparent_6px_12px)]"
+          />
         </DialogHeader>
 
         <div className="relative z-[1] min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background px-4 pb-6 sm:px-6">
@@ -340,15 +355,17 @@ export function SupplierDetailDialog({
             </p>
           ) : (
             <Tabs value={tab} onValueChange={setTab} className="w-full">
-              <TabsList className="sticky top-0 z-10 mb-3 w-full">
-                <TabsTrigger value="account" className="flex-1">
+              <TabsList className="sticky top-0 z-10 mb-3 h-11 w-full rounded-xl border bg-muted/60 p-1 backdrop-blur">
+                <TabsTrigger value="account" className={TAB_TRIGGER_CLS}>
                   <Receipt className="size-4" />
                   كشف حساب
                 </TabsTrigger>
-                <TabsTrigger value="orders" className="flex-1">
+                <TabsTrigger value="orders" className={TAB_TRIGGER_CLS}>
+                  <ClipboardList className="size-4" />
                   أوامر الشراء
                 </TabsTrigger>
-                <TabsTrigger value="payments" className="flex-1">
+                <TabsTrigger value="payments" className={TAB_TRIGGER_CLS}>
+                  <Wallet className="size-4" />
                   الدفعات
                 </TabsTrigger>
               </TabsList>

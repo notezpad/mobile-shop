@@ -21,6 +21,7 @@ export type ViewKey =
   | 'users'
   | 'inventory'
   | 'branches'
+  | 'guide'
 
 export interface ShopBranding {
   phone: string | null

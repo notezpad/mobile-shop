@@ -15,6 +15,7 @@ export const SUPPORT_PHONE = WHATSAPP;
 export const PAGES = [
   { path: "/", changeFrequency: "weekly", priority: 1 },
   { path: "/pricing", changeFrequency: "weekly", priority: 0.9 },
+  { path: "/guide", changeFrequency: "monthly", priority: 0.8 },
   { path: "/about-us", changeFrequency: "monthly", priority: 0.7 },
   { path: "/contact-us", changeFrequency: "monthly", priority: 0.7 },
   { path: "/terms-and-conditions", changeFrequency: "yearly", priority: 0.3 },

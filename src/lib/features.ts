@@ -52,14 +52,15 @@ export type PlanContext = {
  * we always add these two, but everything else (maintenance, finance,
  * expenses, cash, etc.) is gated by the plan's enabledModules.
  *
- * 🛡️ 2026-09-15 (v3): Added runtime vertical-rules enforcement.
- * Even if the DB still has the OLD broken config (e.g. fashion-basic
- * with maintenance in its modules list, or capabilities = [] without
- * 'variants'), `enforceVerticalRules` will silently fix it for the 4
- * canonical plans:
- *   - fashion-basic/pro → strip maintenance, finance, expenses, cash;
- *     ensure 'variants' capability is present (so clothing shops can
- *     always add sizes/colors to products)
+ * 🛡️ 2026-09-15 (v3) · محدّث 2026-10-05 (v7): Added runtime vertical-rules
+ * enforcement. Even if the DB still has the OLD broken config (e.g.
+ * fashion-basic with maintenance in its modules list, or capabilities
+ * = [] without 'variants'), `enforceVerticalRules` will silently fix it
+ * for the 4 canonical plans:
+ *   - fashion plans (basic AND pro) → strip maintenance, finance,
+ *     expenses, cash; ensure 'variants' capability is present (so
+ *     clothing shops — retail chains included — can always add
+ *     sizes/colors to products)
  *   - electronics-basic/pro → keep everything the DB says
  *
  * This means the user gets the correct UX immediately after deploying

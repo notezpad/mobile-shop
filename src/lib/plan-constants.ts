@@ -28,6 +28,7 @@ export const ALL_MODULES = [
   'settings',
   'users',
   'branches',
+  'guide',
 ] as const
 
 export type ModuleKey = (typeof ALL_MODULES)[number]
@@ -66,6 +67,7 @@ export type Capability = (typeof ALL_CAPABILITIES)[number]
 export const CRITICAL_MODULES = [
   'settings',
   'users',
+  'guide',
 ] as const
 
 /** Returns true if a module is critical (must always be allowed). */
@@ -125,30 +127,22 @@ export const ELECTRONICS_ONLY_MODULES = [
 ] as const
 
 /**
- * 🛡️ 2026-09-15 (v6): Capabilities that should ALWAYS be available on
- * FASHION-BASIC plans (retail clothing shops). `variants` (sizes/colors)
- * is essential for retail clothing — without it, the user can't add
- * sizes/colors to products.
+ * 🛡️ 2026-09-15 (v6) · محدّث 2026-10-05 (v7): Capabilities that should ALWAYS
+ * be available on EVERY fashion plan (basic AND pro).
  *
- * NOTE: This does NOT apply to FASHION-PRO (wholesale plans). Wholesale
- * merchants sell by carton/lot via `multi_unit`, not by individual piece
- * variants. If they want to sell a single piece, they add a unit with
- * factor=1 in their product's wholesale units. So 'variants' is REMOVED
- * from fashion-pro at runtime (see FASHION_PRO_CAPABILITIES_TO_STRIP).
+ * `variants` (sizes/colors + المساعد الذكي) is the core of clothing retail —
+ * and since v7 it is ALSO on fashion-pro, because:
+ *   1. A retail clothing CHAIN (قطاعي بكذا فرع) needs multi-branch (pro)
+ *      AND sizes/colors (basic) — the old rule left them stuck between
+ *      the two plans with no valid upgrade path.
+ *   2. Wholesale merchants are NOT harmed by adding it: variants are
+ *      optional per-product — a wholesaler who doesn't create variants
+ *      sees nothing new in the UI. Selling by carton/lot (multi_unit)
+ *      keeps working exactly as before.
+ *   3. The public pricing page already promises pro = "كل ميزات الباقة
+ *      الأساسية" — the old runtime strip contradicted that promise.
  */
 export const FASHION_MANDATORY_CAPABILITIES = ['variants'] as const
-
-/**
- * 🛡️ 2026-09-15 (v6): Capabilities that should be REMOVED from FASHION-PRO
- * plans (wholesale) at runtime, even if the DB has them set.
- *
- * Wholesale merchants don't use variants (sizes/colors per piece) — they
- * sell by carton/lot. The 'variants' UI would just confuse them.
- *
- * If the admin accidentally enabled 'variants' on fashion-pro via the UI,
- * the runtime will silently strip it.
- */
-export const FASHION_PRO_CAPABILITIES_TO_STRIP = ['variants'] as const
 
 /**
  * 🛡️ 2026-09-15 (v3 → v4): Vertical rules enforcement.
@@ -213,36 +207,23 @@ export function enforceVerticalRules(
       moduleSet.delete(m)
     }
 
-    // 🛡️ 2026-09-15 (v6): Per user business-logic request — differentiate
-    // between fashion-basic (retail, NEEDS variants) and fashion-pro
-    // (wholesale, NO variants — uses multi_unit only):
+    // 🛡️ 2026-09-15 (v6) · محدّث 2026-10-05 (v7): 'variants' على كل باقات
+    // الملابس (الأساسية والاحترافية):
     //
-    // - fashion-basic (retail clothing):
-    //     ENSURE 'variants' is in capabilities — retail clothing shops
-    //     sell by piece and need sizes/colors.
+    // - fashion-basic (تجزئة): المقاسات والألوان + المساعد الذكي — أساسية أصلاً.
     //
-    // - fashion-pro (wholesale clothing):
-    //     STRIP 'variants' from capabilities — wholesale merchants sell
-    //     by carton/lot via multi_unit, not by individual piece variants.
-    //     If they want to sell by piece, they add a unit with factor=1.
+    // - fashion-pro (جملة + سلاسل قطاعي): المقاسات والألوان متاحة برضه.
+    //   تاجر الجملة مش هيتأثر — الـ variants اختيارية لكل منتج، وهو أصلاً
+    //   مش هيكتب مقاسات، وبيع الكرتونة/الدستة (multi_unit) شغال زي ما هو.
+    //   لكن محل القطاعي متعدد الفروع (بيحتاج فروع من الاحترافية + مقاسات
+    //   وألوان من الأساسية) كان واقف بين الباقتين — وده اللي اتصلح.
     //
     // - legacy 'trial' / 'free' plans with businessType='fashion':
-    //     We don't know if the user is retail or wholesale, so default
-    //     to ADDING variants (the safer option — retail is more common).
-    //     The user can switch to fashion-pro via /settings → PlanSwitcher.
-    if (planCode === 'fashion-basic') {
-      for (const c of FASHION_MANDATORY_CAPABILITIES) {
-        capSet.add(c)
-      }
-    } else if (planCode === 'fashion-pro') {
-      for (const c of FASHION_PRO_CAPABILITIES_TO_STRIP) {
-        capSet.delete(c)
-      }
-    } else {
-      // Legacy 'trial'/'free' fashion plans — default to retail behavior
-      for (const c of FASHION_MANDATORY_CAPABILITIES) {
-        capSet.add(c)
-      }
+    //   We don't know if the user is retail or wholesale, so default
+    //   to ADDING variants (the safer option — retail is more common).
+    //   The user can switch to fashion-pro via /settings → PlanSwitcher.
+    for (const c of FASHION_MANDATORY_CAPABILITIES) {
+      capSet.add(c)
     }
   }
   // 🛡️ 2026-10-03: التسعير الديناميكي (dynamic_retail_pricing) — باقة احترافية فقط.

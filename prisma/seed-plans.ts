@@ -18,7 +18,11 @@
  *   - Variants capability added to BOTH fashion tiers — clothing always
  *     has sizes/colors, this is the core feature.
  *
- *   - FASHION_PRO keeps collections + multi_unit as the pro upsell.
+ *   - 🛡️ 2026-10-05 (v7): fashion-pro now ALSO includes 'variants'
+ *     (sizes/colors + المساعد الذكي). Retail clothing CHAINS need
+ *     multi-branch (pro) + sizes/colors — the old rule left them stuck.
+ *     Wholesale merchants are unaffected (variants are optional per
+ *     product; multi_unit selling is untouched).
  *
  * Run once after applying the migration:
  *   bun run tsx prisma/seed-plans.ts
@@ -91,7 +95,7 @@ const PLANS = [
   {
     code: 'fashion-pro',
     name: 'احترافية - ملابس وأحذية',
-    description: 'لتجار الجملة — بيع بالكرتونة/الدستة + خصم الكوليكشن. لو حاب تبيع بلقطعة، ضيف القطعة كـ وحدة جملة (factor=1).',
+    description: 'سلاسل المحلات وتجار الجملة — فروع، بيع بالكرتونة/الدستة + خصم الكوليكشن، والمقاسات والألوان متاحة برضه (البيع بالقطعة شغال).',
     priceMonthly: 699,
     priceYearly: 6990,
     maxUsers: 10,
@@ -99,11 +103,10 @@ const PLANS = [
     maxBranches: 5,
     businessType: 'fashion',
     enabledModules: FASHION_PRO,
-    // 🛡️ 2026-09-15 (v6): Per user request — fashion-pro is for WHOLESALE
-    // merchants. They sell by carton/lot (multi_unit), not by individual
-    // piece with sizes/colors. If they want to sell by piece, they add a
-    // unit with factor=1. So NO 'variants' capability here.
-    capabilities: ['collections', 'multi_unit', 'returns_exchange', 'dynamic_retail_pricing'], // 🛡️ 2026-10-03: + التسعير الديناميكي للاحترافية
+    // 🛡️ 2026-10-05 (v7): 'variants' added — pro is a SUPERSET of basic.
+    // Retail clothing chains (قطاعي بكذا فرع) need multi-branch + sizes/colors.
+    // Wholesale merchants simply don't create variants — nothing changes for them.
+    capabilities: ['variants', 'collections', 'multi_unit', 'returns_exchange', 'dynamic_retail_pricing'],
     sortOrder: 40,
   },
 ]

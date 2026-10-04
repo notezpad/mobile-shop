@@ -81,6 +81,57 @@ interface Product {
   dynamicRetailPrice?: number | null
 }
 
+// 🛡️ 2026-10-05: smart product deletion with RESPONSE-LOSS protection.
+//
+// THE BUG: bulk delete (تحديد الكل) sometimes showed a red "فشل حذف: <اسم>"
+// toast even though the product WAS actually deleted. Root cause: the 20s
+// client-side abort in api-offline.ts (or a dev-server cold compile / HMR
+// restart) dropped the RESPONSE while the server still finished the deletion
+// → the client counted the product as "failed" although it was gone from
+// the DB a moment later.
+//
+// THE FIX: treat HTTP 404 ("المنتج غير موجود") as ALREADY-DELETED = success,
+// and retry the whole check→archive dance ONCE on transient failures
+// (timeout / 5xx). A lost response now self-heals on the retry:
+//   - server already deleted it → retry gets 404 → counted as deleted ✓
+//   - server didn't delete it  → retry actually performs the deletion ✓
+type DeleteOutcome = 'deleted' | 'archived' | 'failed'
+
+function isAlreadyDeleted(e: any): boolean {
+  return e?.status === 404 || String(e?.body?.error ?? '').includes('غير موجود')
+}
+
+async function deleteOneProduct(id: number): Promise<DeleteOutcome> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      // check mode: no references → server hard-deletes immediately
+      await api(`/api/products/${id}`, { method: 'DELETE' })
+      return 'deleted'
+    } catch (e: any) {
+      // Session problems never get better by retrying.
+      if (e?.status === 401 || e?.status === 403) return 'failed'
+      // 404 = a previous attempt already deleted it (its response was lost)
+      if (isAlreadyDeleted(e)) return 'deleted'
+      const totalRefs = e?.body?.total_references
+      if (totalRefs > 0) {
+        // has history → accounting-safe archive (unlink FKs, keep snapshots)
+        try {
+          await api(`/api/products/${id}?mode=archive`, { method: 'DELETE' })
+          return 'archived'
+        } catch (e2: any) {
+          if (e2?.status === 401 || e2?.status === 403) return 'failed'
+          if (isAlreadyDeleted(e2)) return 'deleted'
+          if (attempt === 0) continue // one full retry (cold/aborted request)
+          return 'failed'
+        }
+      }
+      if (attempt === 0) continue // one full retry (cold/aborted request)
+      return 'failed'
+    }
+  }
+  return 'failed'
+}
+
 export function ProductsView() {
   const [products, setProducts] = React.useState<Product[]>([])
   const [categories, setCategories] = React.useState<{ id: number; name: string }[]>([])
@@ -262,6 +313,14 @@ export function ProductsView() {
         // Offline — optimistic queue
         setProducts((prev) => prev.filter((p) => p.id !== id))
         toast.success('تم حذف المنتج (offline — سيتم المزامنة لاحقاً)')
+      } else if (isAlreadyDeleted(e)) {
+        // 🛡️ 2026-10-05: 404 = محذوف بالفعل (محاولة سابقة اتحذفت response بتاعها
+        // بسبب timeout / إعادة تشغيل السيرفر) — نجاح مش فشل.
+        setProducts((prev) => prev.filter((p) => p.id !== id))
+        setSelectedIds((prev) => {
+          const next = new Set(prev); next.delete(id); return next
+        })
+        toast.success('المنتج محذوف بالفعل — السجل المالي محفوظ')
       } else {
         // 🛡️ 2026-09-15 (v4): Use toast.custom() to render a custom toast
         // with TWO buttons. sonner's regular `toast()` only supports one
@@ -328,6 +387,20 @@ export function ProductsView() {
                       }
                     } catch (err: any) {
                       toast.dismiss(toastId)
+                      // 🛡️ 2026-10-05: 404 = الحذف المحاسبي نجح فعلاً من محاولة
+                      // سابقة (الـ response ضاع بسبب timeout / recompile) —
+                      // ممنوع نعرض إشعار أحمر لمنتج اتحذف بالفعل.
+                      if (isAlreadyDeleted(err)) {
+                        setProducts((prev) => prev.filter((p) => p.id !== id))
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev); next.delete(id); return next
+                        })
+                        toast.success('تم حذف المنتج نهائياً. السجل المالي محفوظ')
+                        if (typeof navigator === 'undefined' || navigator.onLine) {
+                          loadCats()
+                        }
+                        return
+                      }
                       // 🛡️ 2026-09-15 (v5): Show the FULL error detail so we can
                       // see the actual DB error. The err.body has the structured
                       // response from the DELETE endpoint (error, detail,
@@ -995,25 +1068,13 @@ export function ProductsView() {
             let archived = 0
             const failed: string[] = []
             for (const id of ids) {
-              try {
-                await api(`/api/products/${id}`, { method: 'DELETE' })
-                deleted++
-              } catch (e: any) {
-                const errorBody = e?.body ?? e
-                const totalRefs = errorBody?.total_references
-                if (totalRefs > 0) {
-                  try {
-                    await api(`/api/products/${id}?mode=archive`, { method: 'DELETE' })
-                    archived++
-                  } catch {
-                    const name = products.find((p) => p.id === id)?.name ?? `#${id}`
-                    failed.push(name)
-                  }
-                } else {
-                  const name = products.find((p) => p.id === id)?.name ?? `#${id}`
-                  failed.push(name)
-                }
-              }
+              // 🛡️ 2026-10-05: deleteOneProduct self-heals lost responses
+              // (404 = already deleted → success) so a product that IS gone
+              // from the DB can never be reported as "فشل الحذف" anymore.
+              const outcome = await deleteOneProduct(id)
+              if (outcome === 'deleted') deleted++
+              else if (outcome === 'archived') archived++
+              else failed.push(products.find((p) => p.id === id)?.name ?? `#${id}`)
             }
             setSelectedIds(new Set())
             await loadProducts()

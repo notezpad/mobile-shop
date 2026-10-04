@@ -84,7 +84,7 @@ function parseFeatures(raw: string | null | undefined): string {
 const CAPABILITIES_META: { key: string; label: string; desc: string }[] = [
   { key: 'multi_unit',       label: 'وحدات الجملة (دستة)',    desc: 'بيع بالجملة — نص دستة / دستة / كرتونة. لو حاب تبيع بلقطعة، ضيف وحدة factor=1.' },
   { key: 'collections',      label: 'الكوليكشن',              desc: 'تجميع المنتجات في كوليكشنات وخصم جماعي' },
-  { key: 'variants',         label: 'الأشكال/المقاسات (Variants)', desc: 'إدارة منتجات بأشكال أو مقاسات متعددة (ألوان/مقاسات). مناسب للبيع بالقطعة (تجزئة) — مش للجملة.' },
+  { key: 'variants',         label: 'الأشكال/المقاسات (Variants)', desc: 'إدارة منتجات بأشكال أو مقاسات متعددة (ألوان/مقاسات) + المساعد الذكي — متاحة في كل باقات الملابس.' },
   { key: 'returns_exchange', label: 'المرتجعات والاستبدال',    desc: 'تسجيل مرتجعات واستبدال الفواتير' },
   { key: 'loyalty',          label: 'نقاط الولاء',            desc: 'تجميع واستبدال نقاط ولاء العملاء' },
 ]

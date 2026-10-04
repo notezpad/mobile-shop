@@ -5903,6 +5903,10 @@ html::-webkit-scrollbar-thumb:active {
   border-radius: 8px;
   transition: all 0.18s ease;
   font-family: inherit;
+  /* 🛡️ منع لف النص: الأزرار تتقلص بعرض النص كامل على سطر واحد
+     بدل ما تطلع على سطرين وتكسر ارتفاع الهيدر. */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .notif-panel-markall:hover {

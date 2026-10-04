@@ -47,6 +47,12 @@ import { formatCurrency } from '@/lib/format'
 import { DateTimeCell } from './DateTimeCell'
 import { PaymentDialog } from './PaymentDialog'
 
+// 🎨 هوية صفحة العملاء (sky) على التاب النشط — نفس بصمة باقي دايلوجات الصفحة
+const TAB_TRIGGER_CLS =
+  'rounded-lg ' +
+  'data-[state=active]:border-sky-200 data-[state=active]:bg-sky-50 data-[state=active]:text-sky-800 ' +
+  'dark:data-[state=active]:border-sky-500/30 dark:data-[state=active]:bg-sky-500/15 dark:data-[state=active]:text-sky-300'
+
 const METHOD_LABELS: Record<string, string> = {
   cash: 'كاش',
   vodafone_cash: 'محافظ إلكترونية',
@@ -306,10 +312,16 @@ export function CustomerDetailDialog({
         mobileSheet
         className="flex h-[92dvh] flex-col gap-0 overflow-hidden bg-background p-0 sm:h-auto sm:max-h-[90dvh] sm:max-w-4xl"
       >
-        {/* ═════════ الهيدر: هوية العملاء (سماوي) + بطاقة الرصيد ═════════ */}
+        {/* ═════════ الهيدر: هوية العملاء (سماوي) + بطاقة الرصيد ═════════
+            التدرج سماوي بهوية صفحة العملاء (زي دايلوج "عميل جديد" و"تسجيل دفعة")
+            — اللون المميز للعميل نفسه بيفضل على الأفاتار فقط، عشان الهيدر
+            ميتعارضش مع هوية الصفحة مهما كان لون العميل. */}
         <DialogHeader
-          className="shrink-0 border-b p-4 text-start sm:p-6"
-          style={{ background: `linear-gradient(135deg, ${avatarColor}38, ${avatarColor}0d 70%)` }}
+          className="shrink-0 border-b border-sky-500/20 p-4 text-start sm:p-6"
+          style={{
+            background:
+              'linear-gradient(135deg, rgba(14,165,233,0.16), rgba(14,165,233,0.04) 70%)',
+          }}
         >
           <DialogTitle className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3.5">
@@ -379,15 +391,15 @@ export function CustomerDetailDialog({
           ) : (
             <Tabs value={tab} onValueChange={setTab} className="w-full">
               <TabsList className="sticky top-0 z-10 mb-4 h-11 w-full rounded-xl border bg-muted/60 p-1 backdrop-blur">
-                <TabsTrigger value="account" className="flex-1 rounded-lg">
+                <TabsTrigger value="account" className={TAB_TRIGGER_CLS}>
                   <Receipt className="size-4" />
                   كشف حساب
                 </TabsTrigger>
-                <TabsTrigger value="sales" className="flex-1 rounded-lg">
+                <TabsTrigger value="sales" className={TAB_TRIGGER_CLS}>
                   <ShoppingBag className="size-4" />
                   المبيعات
                 </TabsTrigger>
-                <TabsTrigger value="payments" className="flex-1 rounded-lg">
+                <TabsTrigger value="payments" className={TAB_TRIGGER_CLS}>
                   <Wallet className="size-4" />
                   الدفعات
                 </TabsTrigger>

@@ -357,37 +357,48 @@ export async function DELETE(
       try {
         // 🛡️ Transaction: all FK clears + Product delete must succeed together
         // (or none of them do).
-        await db.$transaction([
+        //
+        // 🛡️ 2026-10-05 ROOT-CAUSE FIX: the ARRAY form of $transaction breaks
+        // with our proxied `db` (src/lib/db.ts wraps every delegate in a Proxy
+        // for socket-error retry) — Prisma rejects the wrapped promises with
+        // "All elements of the array need to be Prisma Client promises" AFTER
+        // the statements already started executing independently → the client
+        // received a 500 "فشل الحذف المحاسبي" while the product WAS actually
+        // deleted (non-atomically!). That was the exact reported bug:
+        //   red "فشل حذف: <اسم>" toast + product gone.
+        // The INTERACTIVE form (callback + tx) is proxy-safe AND truly atomic
+        // — it's the same pattern the PUT handler in this very file uses.
+        await db.$transaction(async (tx) => {
           // 1. SaleItem — set productId = NULL (keep name/price/cost/quantity)
-          db.saleItem.updateMany({
+          await tx.saleItem.updateMany({
             where: { productId: pid },
             data: { productId: null },
-          }),
+          })
           // 2. StockMovement — set productId = NULL (keep type/quantity/refType)
-          db.stockMovement.updateMany({
+          await tx.stockMovement.updateMany({
             where: { productId: pid },
             data: { productId: null },
-          }),
+          })
           // 3. TransferItem — set productId = NULL (keep quantity)
-          db.transferItem.updateMany({
+          await tx.transferItem.updateMany({
             where: { productId: pid },
             data: { productId: null },
-          }),
+          })
           // 4. StocktakeItem — set productId = NULL (keep systemQty/countedQty/diff)
-          db.stocktakeItem.updateMany({
+          await tx.stocktakeItem.updateMany({
             where: { productId: pid },
             data: { productId: null },
-          }),
+          })
           // 5. PurchaseOrderItem — set productId = NULL (keep name/cost/quantity)
-          db.purchaseOrderItem.updateMany({
+          await tx.purchaseOrderItem.updateMany({
             where: { productId: pid },
             data: { productId: null },
-          }),
+          })
           // 6. Finally delete the Product. This cascades:
           //    - ProductUnit (sub-product variants) — fine, no historical value
           //    - ProductVariant (color/size variants) — fine, no historical value
-          db.product.delete({ where: { id: pid } }),
-        ])
+          await tx.product.delete({ where: { id: pid } })
+        })
 
         return NextResponse.json({
           ok: true,
@@ -432,15 +443,18 @@ export async function DELETE(
         )
       }
       try {
-        // Delete all FK rows first, then the Product
-        await db.$transaction([
-          db.saleItem.deleteMany({ where: { productId: pid } }),
-          db.stockMovement.deleteMany({ where: { productId: pid } }),
-          db.transferItem.deleteMany({ where: { productId: pid } }),
-          db.stocktakeItem.deleteMany({ where: { productId: pid } }),
-          db.purchaseOrderItem.deleteMany({ where: { productId: pid } }),
-          db.product.delete({ where: { id: pid } }),
-        ])
+        // Delete all FK rows first, then the Product.
+        // 🛡️ 2026-10-05: same array→interactive $transaction fix as archive
+        // mode above (proxied db breaks the array form → false 500 after the
+        // statements already ran).
+        await db.$transaction(async (tx) => {
+          await tx.saleItem.deleteMany({ where: { productId: pid } })
+          await tx.stockMovement.deleteMany({ where: { productId: pid } })
+          await tx.transferItem.deleteMany({ where: { productId: pid } })
+          await tx.stocktakeItem.deleteMany({ where: { productId: pid } })
+          await tx.purchaseOrderItem.deleteMany({ where: { productId: pid } })
+          await tx.product.delete({ where: { id: pid } })
+        })
         return NextResponse.json({
           ok: true,
           hard_deleted: true,

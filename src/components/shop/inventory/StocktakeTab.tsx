@@ -16,6 +16,7 @@ import {
   PackageOpen,
   Hash,
   Scale,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -604,7 +605,11 @@ function Digit({ label, value, className }: { label: string; value: string; clas
   )
 }
 
-/* ───────────── تفاصيل ورقة الجرد ───────────── */
+/* ───────────── تفاصيل ورقة الجرد ─────────────
+   🎨 إعادة تصميم كاملة بهوية محطة الجرد (تركواز + مرجاني):
+   هيرو تركواز غامق بشريط مرجاني (نفس بصمة هيرو الصفحة) → شريط ملخص
+   bg-stocktake-soft (نفس بصمة العدّادات الجانبية) → بنود على ورق مسطّر
+   (نفس بصمة كروت الأرشيف) → فوتر بهوية الصفحة بدل الزر العام. */
 
 function StocktakeDetailDialog({
   stocktake, open, onOpenChange, onCommit, saving,
@@ -617,82 +622,141 @@ function StocktakeDetailDialog({
 }) {
   const totalD = stocktake.items.reduce((s, i) => s + i.diff, 0)
   const diffItems = stocktake.items.filter((i) => i.diff !== 0).length
+  const isDraft = stocktake.status === 'draft'
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent mobileSheet className="overflow-hidden p-0 sm:max-w-[640px]">
-        <div className="relative border-b border-stocktake/15 bg-stocktake-soft p-5">
-          <div aria-hidden className="pointer-events-none absolute inset-y-0 start-0 w-1 bg-stocktake-warm" />
-          <DialogHeader className="relative">
-            <DialogTitle className="flex items-start justify-between gap-3 text-foreground">
-              <span>
-                <span className="block font-mono text-xs font-bold text-muted-foreground">ورقة جرد #{String(stocktake.id).padStart(4, '0')}</span>
-                <span className="block text-lg font-black">{stocktake.branch?.name ?? 'كل الفروع'}</span>
+      <DialogContent mobileSheet className="gap-0 overflow-hidden p-0 sm:max-w-[680px]">
+        {/* ─── هيرو الورقة: تركواز المحطة + الشريط المرجاني ─── */}
+        <div className="relative bg-stocktake text-stocktake-foreground">
+          <div aria-hidden className="pointer-events-none absolute inset-y-0 start-0 w-1.5 bg-stocktake-warm" />
+          <DialogHeader className="relative gap-0 p-5 pb-4 sm:px-6">
+            <DialogTitle className="flex items-start justify-between gap-3 text-start text-stocktake-foreground">
+              <span className="flex min-w-0 items-center gap-3">
+                <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-stocktake-foreground/12 ring-1 ring-stocktake-foreground/20">
+                  <ClipboardList className="size-6" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-mono text-xs font-bold tracking-wide text-stocktake-foreground/70">
+                    ورقة جرد #{String(stocktake.id).padStart(4, '0')}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xl font-black leading-tight">
+                    {stocktake.branch?.name ?? 'كل الفروع'}
+                  </span>
+                </span>
               </span>
-              <Stamp status={stocktake.status} />
+              <Stamp status={stocktake.status} rot={-6} />
             </DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              {fullDateLabel(stocktake.committedAt ?? stocktake.createdAt)}
-              {stocktake.note && <> · {stocktake.note}</>}
+            <DialogDescription className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-stocktake-foreground/75">
+              <span>{fullDateLabel(stocktake.committedAt ?? stocktake.createdAt)}</span>
+              {stocktake.note && (
+                <span className="rounded-md bg-stocktake-foreground/12 px-2 py-0.5 text-xs font-bold text-stocktake-foreground">
+                  {stocktake.note}
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
-          <div className="relative mt-4 grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-xl border border-stocktake/15 bg-card p-2.5">
-              <p className="text-xs text-muted-foreground">الأصناف</p>
-              <p className="font-mono text-xl font-black tabular-nums">{stocktake.items.length}</p>
-            </div>
-            <div className="rounded-xl border border-amber-500/15 bg-amber-500/[0.06] p-2.5">
-              <p className="text-xs text-muted-foreground">بفرق</p>
-              <p className="font-mono text-xl font-black tabular-nums text-amber-600 dark:text-amber-400">{diffItems}</p>
-            </div>
-            <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/[0.06] p-2.5">
-              <p className="text-xs text-muted-foreground">صافي الفرق</p>
-              <p dir="ltr" className="font-mono text-xl font-black tabular-nums">
-                <span className={totalD === 0 ? 'text-muted-foreground' : totalD > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
-                  <Signed value={totalD} />
-                </span>
-              </p>
-            </div>
+        </div>
+
+        {/* ─── شريط الملخص: نفس بصمة عدّادات المحطة (bg-stocktake-soft) ─── */}
+        <div className="grid grid-cols-3 border-y border-stocktake/15 bg-stocktake-soft text-center">
+          <div className="flex flex-col items-center gap-1 border-e border-stocktake/15 px-3 py-3">
+            <span className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
+              <PackageOpen className="size-3.5 text-stocktake" />
+              الأصناف
+            </span>
+            <p className="font-mono text-xl font-black tabular-nums text-stocktake">{stocktake.items.length}</p>
+          </div>
+          <div className="flex flex-col items-center gap-1 border-e border-stocktake/15 px-3 py-3">
+            <span className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
+              <Scale className="size-3.5 text-stocktake-warm" />
+              بفرق
+            </span>
+            <p className="font-mono text-xl font-black tabular-nums text-amber-600 dark:text-amber-400">{diffItems}</p>
+          </div>
+          <div className="flex flex-col items-center gap-1 px-3 py-3">
+            <span className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
+              <ArrowLeftRight className="size-3.5 text-stocktake" />
+              صافي الفرق
+            </span>
+            <p dir="ltr" className="font-mono text-xl font-black tabular-nums">
+              <span className={totalD === 0 ? 'text-muted-foreground' : totalD > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
+                <Signed value={totalD} />
+              </span>
+            </p>
           </div>
         </div>
 
-        <div className="max-h-[42vh] divide-y divide-dashed overflow-auto px-5">
-          {stocktake.items.map((it, idx) => {
-            const c = diffColor(it.diff)
-            return (
-              <div key={idx} className="flex items-center gap-3 py-2.5">
-                <span className="h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: c }} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold">{it.product?.name}</p>
-                  <p className="text-xs text-muted-foreground tabular-nums">
-                    النظام {num(it.systemQty)} ← العدّ <b className="text-foreground">{num(it.countedQty)}</b>
-                  </p>
+        {/* ─── بنود الورقة: ورق مسطّر زي كروت الأرشيف ─── */}
+        <div
+          className="max-h-[38vh] min-h-[96px] overflow-auto overscroll-contain px-5 py-1 sm:px-6"
+          style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0 43px, rgba(128,128,128,0.07) 43px 44px)' }}
+        >
+          {stocktake.items.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">الورقة دي مفيهاش بنود</p>
+          ) : (
+            stocktake.items.map((it, idx) => {
+              const c = diffColor(it.diff)
+              return (
+                <div key={idx} className="flex items-center gap-3 border-b border-dashed border-border/70 py-2.5 last:border-b-0">
+                  <span className="w-6 shrink-0 font-mono text-xs font-bold text-muted-foreground/70">{String(idx + 1).padStart(2, '0')}</span>
+                  <span aria-hidden className="h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: c }} />
+                  <div className="min-w-0 flex-1">
+                    {/* 🛡️ 2026-10-05: بعد الحذف المحاسبي للمنتج بيفضل الربط null —
+                        نعرض بديل واضح بدل اسم فاضي، والكميات (systemQty/countedQty) محفوظة. */}
+                    <p className="truncate text-sm font-bold text-foreground">
+                      {it.product?.name ?? 'منتج محذوف (الكميات محفوظة)'}
+                    </p>
+                    <p className="text-xs tabular-nums text-muted-foreground">
+                      النظام <span className="font-mono font-bold">{num(it.systemQty)}</span>
+                      <span className="mx-1 text-muted-foreground/60">←</span>
+                      العدّ <span className="font-mono font-black text-foreground">{num(it.countedQty)}</span>
+                    </p>
+                  </div>
+                  {it.diff === 0 ? (
+                    <span title="مطابق" className="flex size-6 shrink-0 items-center justify-center rounded-full bg-stocktake/12 text-stocktake">
+                      <Check className="size-3.5" />
+                    </span>
+                  ) : (
+                    <span
+                      dir="ltr"
+                      className="shrink-0 rounded-lg border px-2.5 py-1 font-mono text-sm font-black tabular-nums"
+                      style={{ backgroundColor: `${c}1a`, color: c, borderColor: `${c}45` }}
+                    >
+                      <Signed value={it.diff} />
+                    </span>
+                  )}
                 </div>
-                {it.diff === 0 ? (
-                  <Check className="size-4" style={{ color: VIOLET }} />
-                ) : (
-                  <span dir="ltr" className="rounded-lg px-2.5 py-0.5 font-mono text-sm font-black tabular-nums" style={{ backgroundColor: `${c}1f`, color: c }}>
-                    <Signed value={it.diff} />
-                  </span>
-                )}
-              </div>
-            )
-          })}
+              )
+            })
+          )}
         </div>
 
-        <DialogFooter className="gap-2 border-t p-4">
-          {stocktake.status === 'draft' && (
+        {/* ─── الفوتر بهوية المحطة ─── */}
+        <DialogFooter className="gap-2 border-t border-stocktake/15 bg-stocktake-soft/60 p-4 sm:px-6">
+          {isDraft && (
             <>
-              <div className="me-auto flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+              <span className="me-auto hidden items-center gap-1.5 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-xs font-bold text-amber-700 ring-1 ring-amber-500/20 dark:text-amber-400 sm:flex">
                 <AlertCircle className="size-3.5" />
                 الاعتماد هيعدّل كميات المخزون
-              </div>
-              <Button onClick={onCommit} disabled={saving} variant="gradient">
+              </span>
+              <Button
+                onClick={onCommit}
+                disabled={saving}
+                className="bg-stocktake text-stocktake-foreground hover:bg-stocktake-strong"
+              >
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
                 اعتماد وتسوية
               </Button>
             </>
           )}
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>إغلاق</Button>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="border-stocktake/25 bg-card text-foreground hover:bg-stocktake/10 hover:text-foreground"
+          >
+            إغلاق
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

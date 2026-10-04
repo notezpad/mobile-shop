@@ -238,6 +238,11 @@ export async function POST(req: NextRequest) {
         )
       }
     }
+    // 🛡️ 2026-10-05 FIX: planCtx was declared AFTER db.product.create but
+    // USED inside its data object (retailMarginPercent) → ReferenceError
+    // "Cannot access 'planCtx' before initialization" → EVERY product
+    // creation returned 500. Moved the lookup above the create call.
+    const planCtx = await getPlanContext(session.tenantId)
     const created = await db.product.create({
       data: {
         tenantId: session.tenantId,
@@ -269,7 +274,6 @@ export async function POST(req: NextRequest) {
     // (حتى الأساسية)، وده كان بيسيب وحدات جملة جاهزة بالسعر الصح في الداتابيز
     // لعملاء ملهومش الحق فيها أصلاً حسب باقتهم.
     // سعر كل وحدة = سعر البيع × factor. بدون تدخل يدوي.
-    const planCtx = await getPlanContext(session.tenantId)
     if (planCtx.capabilities.includes('multi_unit')) {
       try {
         await db.productUnit.createMany({
