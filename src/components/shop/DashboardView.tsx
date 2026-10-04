@@ -217,7 +217,7 @@ function StatCell({
   className?: string
 }) {
   return (
-    <div className={cn('min-w-0 p-4 sm:p-5', className)}>
+    <div className={cn('min-w-0 p-3.5 sm:p-5', className)}>
       <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground sm:text-sm">
         {dot && <span className={cn('size-2 shrink-0 rounded-full', dot)} />}
         <span className="truncate">{label}</span>
@@ -225,7 +225,7 @@ function StatCell({
       {loading ? (
         <Skeleton className="mt-2 h-7 w-28" />
       ) : (
-        <p className="mt-1.5 truncate text-xl font-extrabold tracking-tight tabular-nums text-foreground sm:text-2xl">
+        <p className="mt-1.5 break-words text-[17px] font-extrabold leading-snug tracking-tight tabular-nums text-foreground min-[400px]:text-xl sm:text-2xl">
           {value}
         </p>
       )}
@@ -247,7 +247,7 @@ function PanelTitle({
   action?: React.ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between gap-2">
+    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2.5">
       <h2 className="flex items-center gap-2 text-[15px] font-bold">
         <Icon className={cn('size-4', tone)} />
         {title}
@@ -392,11 +392,11 @@ export function DashboardView() {
   const hasOverdue = (data?.overdueInvoices?.length ?? 0) > 0
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-4 sm:space-y-5">
       {/* ═════════ Hero — مبيعات اليوم + منحنى الأيام الأخيرة ═════════ */}
       <section className="overflow-hidden rounded-3xl border bg-card text-card-foreground shadow-sm">
         <div
-          className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]"
+          className="grid grid-cols-1 gap-6 p-4 sm:p-7 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]"
           style={{ background: 'radial-gradient(560px 220px at 100% 0%, color-mix(in srgb, var(--primary) 12%, transparent), transparent)' }}
         >
           {/* الرقم الأساسي */}
@@ -411,7 +411,7 @@ export function DashboardView() {
                     <span>{todayAr}</span>
                     {insight && (
                       <>
-                        <span className="h-3 w-px bg-border" aria-hidden />
+                        <span className="hidden h-3 w-px bg-border sm:block" aria-hidden />
                         <span
                           className={cn(
                             'inline-flex items-center gap-1 font-semibold',
@@ -450,7 +450,7 @@ export function DashboardView() {
                 <Skeleton className="mt-3 h-14 w-56" />
               ) : (
                 <div className="mt-2 flex flex-wrap items-baseline gap-2">
-                  <span className="text-5xl font-extrabold tracking-tight tabular-nums sm:text-6xl">
+                  <span className="max-w-full break-all text-[2.35rem] font-extrabold leading-tight tracking-tight tabular-nums min-[380px]:text-5xl sm:text-6xl">
                     {Number(data?.todaySales ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}
                   </span>
                   <span className="text-lg font-semibold text-muted-foreground">جنيه</span>
@@ -511,7 +511,7 @@ export function DashboardView() {
                         load(d)
                       }}
                       className={cn(
-                        'rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors',
+                        'whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors',
                         chartDays === d
                           ? 'bg-card text-foreground shadow-sm'
                           : 'text-muted-foreground hover:text-foreground',
@@ -535,7 +535,12 @@ export function DashboardView() {
                       tickLine={false}
                       axisLine={false}
                       fontSize={11}
-                      width={52}
+                      width={40}
+                      tickFormatter={(v: number) =>
+                        Math.abs(v) >= 1e6 ? `${+(v / 1e6).toFixed(1)}M`
+                        : Math.abs(v) >= 1e3 ? `${+(v / 1e3).toFixed(1)}K`
+                        : String(v)
+                      }
                     />
                     <Tooltip
                       cursor={{ fill: 'color-mix(in srgb, var(--primary) 8%, transparent)' }}
@@ -562,7 +567,7 @@ export function DashboardView() {
             <div className="mt-1.5 flex items-center gap-1.5 ps-1 text-[11px] text-muted-foreground">
               <span className="size-2.5 rounded-sm bg-primary" />
               مبيعات
-              <span className="text-muted-foreground/60">— مرّر الماوس على أي يوم لعرض الربح</span>
+              <span className="text-muted-foreground/60">— <span className="hidden sm:inline">مرّر الماوس</span><span className="sm:hidden">المس</span> أي يوم لعرض الربح</span>
             </div>
           </div>
         </div>
@@ -683,9 +688,9 @@ export function DashboardView() {
       )}
 
       {/* ═════════ أكثر المنتجات + المخزون المنخفض + الصيانة ═════════ */}
-      <div className={cn('grid gap-4 md:grid-cols-2', hasMaintenance ? 'xl:grid-cols-3' : 'xl:grid-cols-2')}>
+      <div className={cn('grid grid-cols-1 gap-4 md:grid-cols-2', hasMaintenance ? 'xl:grid-cols-3' : 'xl:grid-cols-2')}>
         {/* أكثر المنتجات مبيعاً */}
-        <Card className="gap-4 rounded-3xl py-5 shadow-sm">
+        <Card className="min-w-0 gap-4 rounded-3xl py-5 shadow-sm">
           <CardHeader className="px-5">
             <PanelTitle icon={Trophy} title="أكثر المنتجات مبيعاً" tone="text-amber-500" />
             <p className="text-xs text-muted-foreground">آخر 30 يوم</p>
@@ -745,7 +750,7 @@ export function DashboardView() {
         </Card>
 
         {/* مخزون منخفض */}
-        <Card className="gap-4 rounded-3xl py-5 shadow-sm">
+        <Card className="min-w-0 gap-4 rounded-3xl py-5 shadow-sm">
           <CardHeader className="px-5">
             <PanelTitle
               icon={AlertCircle}
@@ -795,7 +800,7 @@ export function DashboardView() {
 
         {/* صيانة نشطة */}
         {hasMaintenance && (
-          <Card className="gap-4 rounded-3xl py-5 shadow-sm md:col-span-2 xl:col-span-1">
+          <Card className="min-w-0 gap-4 rounded-3xl py-5 shadow-sm md:col-span-2 xl:col-span-1">
             <CardHeader className="px-5">
               <PanelTitle
                 icon={Wrench}
@@ -846,9 +851,9 @@ export function DashboardView() {
       </div>
 
       {/* ═════════ آخر المبيعات + المركز المالي ═════════ */}
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       {/* ═════════ آخر المبيعات — سجل مجمّع بالأيام ═════════ */}
-      <section className="overflow-hidden rounded-3xl border bg-card shadow-sm xl:flex xl:h-[620px] xl:flex-col">
+      <section className="min-w-0 overflow-hidden rounded-3xl border bg-card shadow-sm xl:flex xl:h-[620px] xl:flex-col">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
           <div>
             <PanelTitle icon={Receipt} title="آخر المبيعات" />
@@ -949,7 +954,7 @@ export function DashboardView() {
         </div>
       </section>
       {/* ═════════ المركز المالي — عمود جانبي ═════════ */}
-      <section className="overflow-hidden rounded-3xl border bg-card shadow-sm">
+      <section className="min-w-0 overflow-hidden rounded-3xl border bg-card shadow-sm">
         <div className="flex items-center gap-2 border-b border-border px-5 py-4">
           <Boxes className="size-4 text-primary" />
           <h2 className="text-[15px] font-bold">المركز المالي</h2>
