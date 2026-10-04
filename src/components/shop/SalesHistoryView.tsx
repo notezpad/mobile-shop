@@ -442,7 +442,7 @@ export function SalesHistoryView() {
       {/* ═════════ الشريط العلوي: عنوان + أرقام المعروض + أعمدة الأيام ═════════ */}
       <section className="animate-in-up overflow-hidden rounded-2xl border bg-card shadow-sm">
         <div className="flex flex-wrap items-stretch">
-          <div className="flex min-w-[230px] items-center gap-3 border-b border-dashed p-4 sm:border-b-0 sm:border-e">
+          <div className="flex w-full items-center gap-3 border-b border-dashed p-4 sm:w-auto sm:min-w-[230px] sm:border-b sm:border-e md:border-b-0">
             <span className="flex size-10 items-center justify-center rounded-lg bg-yellow-300 text-zinc-900 shadow-sm dark:bg-yellow-300/90">
               <ReceiptText className="size-5" />
             </span>
@@ -454,7 +454,7 @@ export function SalesHistoryView() {
             </div>
           </div>
 
-          <dl className="grid flex-1 grid-cols-3 divide-x divide-dashed divide-border rtl:divide-x-reverse">
+          <dl className="grid w-full flex-1 grid-cols-3 divide-x divide-dashed divide-border sm:w-auto rtl:divide-x-reverse">
             <Figure label="صافي المبيعات" value={net} mark />
             <Figure label="المحصّل" value={collected} />
             <Figure label="لسه مستحق" value={outstanding} danger={outstanding > 0} />
@@ -486,7 +486,7 @@ export function SalesHistoryView() {
       <section className="space-y-3.5 rounded-2xl border bg-card p-3.5 shadow-sm" aria-label="فلاتر المبيعات">
         {/* بحث + ترتيب + تجميع + تصدير */}
         <div className="flex flex-wrap items-center gap-2">
-          <label className="relative flex h-10 min-w-[240px] flex-1 items-center rounded-xl border bg-background transition-shadow focus-within:border-yellow-400 focus-within:ring-[3px] focus-within:ring-yellow-300/40">
+          <label className="relative flex h-10 w-full flex-1 items-center rounded-xl border bg-background transition-shadow focus-within:border-yellow-400 focus-within:ring-[3px] focus-within:ring-yellow-300/40 sm:min-w-[240px]">
             <Search className="pointer-events-none absolute start-3.5 size-4 text-foreground/60" aria-hidden />
             <input
               ref={searchRef}
@@ -511,40 +511,42 @@ export function SalesHistoryView() {
             )}
           </label>
 
-          <Picker
-            align="end"
-            title="ترتيب السجل"
-            subtitle="الترتيب جوّه كل مجموعة"
-            icon={ArrowUpDown}
-            options={(Object.keys(SORT_LABELS) as SortKey[]).map((k) => ({ value: k, label: SORT_LABELS[k], hint: SORT_HINTS[k], tone: 'muted' as const }))}
-            selected={sort}
-            onSelect={(v) => v && setSort(v as SortKey)}
-            plain
-            trigger={(open) => (
-              <button
-                type="button"
-                className={cn(
-                  'inline-flex h-10 items-center gap-2 rounded-xl border bg-background px-3.5 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-300/50',
-                  open && 'border-yellow-400 ring-[3px] ring-yellow-300/40'
-                )}
-              >
-                <ArrowUpDown className="size-4 text-foreground/70" />
-                <span className="text-foreground/65">ترتيب:</span>
-                <span className="font-bold">{SORT_LABELS[sort]}</span>
-                <ChevronDown className={cn('size-4 text-foreground/60 transition-transform motion-reduce:transition-none', open && 'rotate-180')} />
-              </button>
-            )}
-          />
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <Picker
+              align="end"
+              title="ترتيب السجل"
+              subtitle="الترتيب جوّه كل مجموعة"
+              icon={ArrowUpDown}
+              options={(Object.keys(SORT_LABELS) as SortKey[]).map((k) => ({ value: k, label: SORT_LABELS[k], hint: SORT_HINTS[k], tone: 'muted' as const }))}
+              selected={sort}
+              onSelect={(v) => v && setSort(v as SortKey)}
+              plain
+              trigger={(open) => (
+                <button
+                  type="button"
+                  className={cn(
+                    'inline-flex h-10 flex-1 items-center gap-2 rounded-xl border bg-background px-3.5 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-300/50 sm:flex-none',
+                    open && 'border-yellow-400 ring-[3px] ring-yellow-300/40'
+                  )}
+                >
+                  <ArrowUpDown className="size-4 text-foreground/70" />
+                  <span className="text-foreground/65">ترتيب:</span>
+                  <span className="font-bold">{SORT_LABELS[sort]}</span>
+                  <ChevronDown className={cn('size-4 text-foreground/60 transition-transform motion-reduce:transition-none', open && 'rotate-180')} />
+                </button>
+              )}
+            />
 
-          <Button variant="outline" className="h-10 rounded-xl" onClick={exportExcel} disabled={filtered.length === 0}>
-            <FileSpreadsheet className="size-4" /> Excel
-          </Button>
+            <Button variant="outline" className="h-10 shrink-0 rounded-xl" onClick={exportExcel} disabled={filtered.length === 0}>
+              <FileSpreadsheet className="size-4" /> Excel
+            </Button>
+          </div>
         </div>
 
         {/* الفترة */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="text-[11px] font-bold text-foreground/65">الفترة</span>
-          <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-muted/60 p-1" role="group" aria-label="الفترة">
+          <div className="flex flex-1 items-center gap-1 overflow-x-auto rounded-full bg-muted/60 p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label="الفترة">
             {([...(['today', '7', 'month', '90', 'all'] as const), 'custom'] as const).map((p) => (
               <button
                 key={p}
@@ -561,19 +563,23 @@ export function SalesHistoryView() {
             ))}
           </div>
           {period === 'custom' && (
-            <div className="flex items-center gap-2 rounded-full border bg-background px-3 py-1 text-xs">
-              <span className="text-foreground/65">من</span>
-              <input
-                type="date" value={from} max={to || undefined} aria-label="من تاريخ"
-                onChange={(e) => changeCustom(e.target.value, to)}
-                className="bg-transparent py-1 text-xs font-bold tabular-nums outline-none"
-              />
-              <span className="text-foreground/65">إلى</span>
-              <input
-                type="date" value={to} min={from || undefined} aria-label="إلى تاريخ"
-                onChange={(e) => changeCustom(from, e.target.value)}
-                className="bg-transparent py-1 text-xs font-bold tabular-nums outline-none"
-              />
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+              <div className="flex flex-1 items-center gap-2 rounded-full border bg-background px-3 py-1 text-xs">
+                <span className="shrink-0 text-foreground/65">من</span>
+                <input
+                  type="date" value={from} max={to || undefined} aria-label="من تاريخ"
+                  onChange={(e) => changeCustom(e.target.value, to)}
+                  className="min-w-0 flex-1 bg-transparent py-1 text-xs font-bold tabular-nums outline-none"
+                />
+              </div>
+              <div className="flex flex-1 items-center gap-2 rounded-full border bg-background px-3 py-1 text-xs">
+                <span className="shrink-0 text-foreground/65">إلى</span>
+                <input
+                  type="date" value={to} min={from || undefined} aria-label="إلى تاريخ"
+                  onChange={(e) => changeCustom(from, e.target.value)}
+                  className="min-w-0 flex-1 bg-transparent py-1 text-xs font-bold tabular-nums outline-none"
+                />
+              </div>
             </div>
           )}
         </div>
@@ -588,7 +594,7 @@ export function SalesHistoryView() {
         </div>
 
         {/* تضييق */}
-        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-t pt-3">
           <span className="flex items-center gap-1 text-[11px] font-bold text-foreground/65">
             <Filter className="size-3.5" />
             تضييق
@@ -655,9 +661,9 @@ export function SalesHistoryView() {
           ) : (
             listDays.map((d) => (
               <section key={d.key} id={`day-${d.key}`} className="scroll-mt-2">
-                <header className="sticky top-0 z-10 -mx-1 mb-2.5 flex items-baseline justify-between bg-background/95 px-1 pb-2 pt-1.5 backdrop-blur">
-                  <h2 className="text-[15px] font-extrabold">{formatArabicDate(new Date(`${d.key}T12:00:00`))}</h2>
-                  <span className="text-xs font-medium text-muted-foreground tabular-nums">
+                <header className="sticky top-0 z-10 -mx-1 mb-2.5 flex items-center justify-between gap-2 bg-background/95 px-1 pb-2 pt-1.5 backdrop-blur">
+                  <h2 className="truncate text-[13px] font-extrabold sm:text-[15px]">{formatArabicDate(new Date(`${d.key}T12:00:00`))}</h2>
+                  <span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
                     {d.list.length} فاتورة <span className="mx-1 opacity-40">|</span>
                     <b className="text-sm font-extrabold text-foreground">{money(d.sum)}</b> جنيه
                   </span>
@@ -680,8 +686,8 @@ export function SalesHistoryView() {
                           aria-pressed={active}
                           style={ret ? { backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 7px, color-mix(in oklab, currentColor 5%, transparent) 7px 8px)' } : undefined}
                           className={cn(
-                            'group relative grid min-h-[84px] w-full overflow-hidden rounded-xl border bg-card text-start transition-all',
-                            'grid-cols-[104px_minmax(0,1fr)_auto] @xl:grid-cols-[112px_minmax(0,1fr)_170px_136px]',
+                            'group relative grid min-h-[72px] w-full overflow-hidden rounded-xl border bg-card text-start transition-all @xl:min-h-[84px]',
+                            'grid-cols-[82px_minmax(0,1fr)_auto] xs:grid-cols-[96px_minmax(0,1fr)_auto] @xl:grid-cols-[112px_minmax(0,1fr)_170px_136px]',
                             'hover:-translate-y-px hover:border-yellow-400/70 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/60',
                             active && 'border-yellow-400 shadow-[0_8px_24px_-12px_rgb(250_204_21/0.7)]',
                             ret && 'text-muted-foreground'
@@ -690,22 +696,22 @@ export function SalesHistoryView() {
                           {/* ① الكعب: الوقت + السيريال الكبير، بثقبين زي التذكرة */}
                           <span
                             className={cn(
-                              'relative flex flex-col items-center justify-center gap-0.5 border-e border-dashed px-2 py-3 transition-colors',
+                              'relative flex flex-col items-center justify-center gap-0.5 border-e border-dashed px-1 py-3 transition-colors @xl:px-2',
                               active ? 'border-zinc-900/30 bg-yellow-300 text-zinc-900' : 'bg-muted/50'
                             )}
                           >
                             <i aria-hidden className="absolute -end-[7px] -top-[7px] size-3.5 rounded-full border bg-background" />
                             <i aria-hidden className="absolute -bottom-[7px] -end-[7px] size-3.5 rounded-full border bg-background" />
                             <span className="text-[11px] font-medium tabular-nums opacity-70">{timeOf(s.createdAt)}</span>
-                            <span dir="ltr" className="text-xl font-extrabold leading-none tracking-tight tabular-nums">{no.serial}</span>
+                            <span dir="ltr" className="text-base font-extrabold leading-none tracking-tight tabular-nums @xl:text-xl">{no.serial}</span>
                             {no.prefix && <span dir="ltr" className="text-[10px] font-medium tracking-wider opacity-60">{no.prefix}</span>}
                           </span>
 
                           {/* ② العميل + اللي اتباع */}
-                          <span className="flex min-w-0 flex-col justify-center gap-0.5 px-4 py-3">
+                          <span className="flex min-w-0 flex-col justify-center gap-0.5 px-2.5 py-3 @xl:px-4">
                             <span
                               className={cn(
-                                'truncate text-[15px] leading-snug',
+                                'truncate text-[13px] leading-snug @xl:text-[15px]',
                                 named ? 'font-bold text-foreground' : 'font-medium text-muted-foreground',
                                 ret && 'line-through decoration-destructive/50'
                               )}
@@ -734,9 +740,9 @@ export function SalesHistoryView() {
                           </span>
 
                           {/* ④ الإجمالي */}
-                          <span className="flex flex-col items-end justify-center px-4 py-3">
-                            <span className={cn('text-xl font-extrabold leading-none tabular-nums', ret && 'line-through decoration-1')}>{money(s.total)}</span>
-                            <span className="mt-1 text-[11px] font-medium text-muted-foreground">جنيه</span>
+                          <span className="flex flex-col items-end justify-center px-2.5 py-3 @xl:px-4">
+                            <span className={cn('text-base font-extrabold leading-none tabular-nums @xl:text-xl', ret && 'line-through decoration-1')}>{money(s.total)}</span>
+                            <span className="mt-1 text-[10px] font-medium text-muted-foreground @xl:text-[11px]">جنيه</span>
                           </span>
                         </button>
 
@@ -760,7 +766,10 @@ export function SalesHistoryView() {
           {/* ترقيم الصفحات */}
           {!loading && totalPages > 1 && (
             <nav className="flex items-center justify-between rounded-xl border bg-card px-3 py-2">
-              <p className="text-xs text-muted-foreground">صفحة {page} من {totalPages} — {total} فاتورة</p>
+              <p className="text-xs text-muted-foreground">
+                <span className="hidden sm:inline">صفحة {page} من {totalPages} — </span>
+                <span>{total} فاتورة</span>
+              </p>
               <div className="flex items-center gap-1">
                 <Button variant="outline" size="icon" className="size-8" disabled={page <= 1} onClick={() => load(from, to, page - 1)} aria-label="السابقة">
                   <ChevronRight className="size-4" />
@@ -775,12 +784,15 @@ export function SalesHistoryView() {
                     onClick={() => load(from, to, p)}
                     className={cn(
                       'size-8 rounded-lg text-xs font-semibold tabular-nums transition',
-                      p === page ? 'bg-yellow-300 text-zinc-900' : 'border hover:bg-muted'
+                      p === page
+                        ? 'bg-yellow-300 text-zinc-900'
+                        : 'hidden border hover:bg-muted sm:block'
                     )}
                   >
                     {p}
                   </button>
                 ))}
+                <span className="px-2 text-xs font-semibold tabular-nums sm:hidden">{page} / {totalPages}</span>
                 <Button variant="outline" size="icon" className="size-8" disabled={page >= totalPages} onClick={() => load(from, to, page + 1)} aria-label="التالية">
                   <ChevronLeft className="size-4" />
                 </Button>
@@ -852,9 +864,9 @@ function StatusChip({ sale: s }: { sale: Sale }) {
 /* ───────── رقم في الشريط العلوي (الماركر الأصفر تحت صافي المبيعات) ───────── */
 function Figure({ label, value, mark, danger }: { label: string; value: number; mark?: boolean; danger?: boolean }) {
   return (
-    <div className="flex flex-col justify-center px-4 py-3">
+    <div className="flex flex-col justify-center px-3 py-2.5 sm:px-4 sm:py-3">
       <dt className="text-[11px] font-medium text-muted-foreground">{label}</dt>
-      <dd className={cn('mt-1 text-xl font-extrabold tabular-nums leading-none sm:text-2xl', danger && 'text-destructive')}>
+      <dd className={cn('mt-1 text-lg font-extrabold tabular-nums leading-none sm:text-xl md:text-2xl', danger && 'text-destructive')}>
         <span className={cn(mark && 'bg-gradient-to-t from-yellow-300/80 from-35% to-transparent to-35% px-0.5')}>
           {money(value)}
         </span>
@@ -982,7 +994,7 @@ function Receipt({
         )}
       </div>
 
-      <div className="mt-3 flex gap-2">
+      <div className="mt-3 flex flex-wrap gap-2">
         <Button className="flex-1 bg-yellow-300 text-zinc-900 hover:bg-yellow-400" onClick={onPrint}>
           <Printer className="size-4" /> طباعة
         </Button>
@@ -992,7 +1004,7 @@ function Receipt({
         {!ret && (
           <Button
             variant="outline"
-            className="text-destructive hover:text-destructive"
+            className="flex-1 text-destructive hover:text-destructive sm:flex-none"
             onClick={onReturn}
             title="مرتجع (جزئي أو كلي)"
           >
@@ -1054,7 +1066,7 @@ function SettlementBar({
               aria-pressed={on}
               disabled={g.n === 0 && !on}
               className={cn(
-                'rounded-xl border bg-background p-2.5 text-start transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-300/50 disabled:cursor-not-allowed disabled:opacity-45',
+                'rounded-xl border bg-background p-2 text-start transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-300/50 disabled:cursor-not-allowed disabled:opacity-45 sm:p-2.5',
                 on ? tone[k].on : 'hover:bg-muted/50'
               )}
             >
@@ -1068,7 +1080,7 @@ function SettlementBar({
                 </span>
                 <span className="rounded-full bg-muted px-1.5 text-[11px] font-extrabold tabular-nums">{g.n}</span>
               </span>
-              <span className="mt-1 block truncate text-lg font-extrabold tabular-nums">{g.n === 0 ? '—' : num(g.amount)}</span>
+              <span className="mt-1 block truncate text-sm font-extrabold tabular-nums sm:text-lg">{g.n === 0 ? '—' : num(g.amount)}</span>
               <span className="flex items-center justify-between gap-2 text-[11px] font-medium text-foreground/60">
                 <span className="truncate">{g.n === 0 ? 'مفيش' : KIND_META[k].sub}</span>
                 {g.n > 0 && pct > 0 && <span className="shrink-0 tabular-nums">{pct}٪</span>}
@@ -1253,7 +1265,7 @@ function Facet({
   return (
     <span
       className={cn(
-        'inline-flex h-8 max-w-[240px] items-center rounded-full border text-xs font-bold transition-colors',
+        'inline-flex h-8 max-w-[180px] items-center rounded-full border text-xs font-bold transition-colors sm:max-w-[240px]',
         active ? 'border-yellow-500 bg-yellow-300/25 text-foreground' : 'bg-background text-foreground/65 hover:bg-muted hover:text-foreground'
       )}
     >
