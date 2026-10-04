@@ -6,7 +6,8 @@ import { Dialog, DialogBody, DialogContent, DialogFooter } from '@/components/ui
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { INK_BTN_OUTLINE } from './settings-ui'
-import { DialogHero, INK_RING, InkInput } from './product-dialog-ui'
+import { INK_RING, InkInput } from './product-dialog-ui'
+import { DialogHero } from './sale-dialog-ui'
 
 export interface PickerVariantLite {
   id: number

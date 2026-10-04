@@ -9,7 +9,8 @@ import { api } from '@/lib/api'
 import { useShopStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { INK_BTN, INK_BTN_OUTLINE } from './settings-ui'
-import { DialogHero, Field, InkInput, LockedNote, QuickChip } from './product-dialog-ui'
+import { Field, InkInput, LockedNote, QuickChip } from './product-dialog-ui'
+import { DialogHero } from './customer-dialog-ui'
 
 interface Props {
   open: boolean

@@ -10,17 +10,17 @@ import {
   ShieldCheck,
   CheckCircle2,
   ArrowRight,
+  X,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogBody, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogBody, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCurrency } from '@/lib/format'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { INK_BTN } from './settings-ui'
-import { DialogHero } from './product-dialog-ui'
 
 interface Plan {
   id: number
@@ -135,11 +135,28 @@ export function UpgradeDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent mobileSheet className="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 max-w-2xl sm:max-w-3xl">
-        <DialogHero
-          icon={Sparkles}
-          title={mode === 'renew' ? 'تجديد الاشتراك' : 'ترقية الاشتراك'}
-          subtitle="اختر الباقة والفترة — الدفع الآمن عبر المحافظ الإلكترونية (Vodafone Cash, Instapay, Fawry)"
-        />
+        {/* هيدر البريميوم: بنفسجي غامق + بريق ذهبي */}
+        <DialogHeader className="relative shrink-0 gap-0 overflow-hidden bg-violet-950 px-4 pb-5 pt-4 text-start text-violet-50 sm:px-6 sm:pt-5">
+          <div className="flex items-center gap-3.5">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-violet-800/70 ring-1 ring-yellow-400/40">
+              <Sparkles className="size-5 text-yellow-300" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-lg font-extrabold leading-tight text-violet-50">
+                {mode === 'renew' ? 'تجديد الاشتراك' : 'ترقية الاشتراك'}
+              </DialogTitle>
+              <DialogDescription className="mt-1 text-xs font-medium leading-relaxed text-violet-300/80">
+                اختر الباقة والفترة — الدفع الآمن عبر المحافظ الإلكترونية (Vodafone Cash, Instapay, Fawry)
+              </DialogDescription>
+            </div>
+            <DialogClose className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-900/70 text-violet-100 transition-colors hover:bg-violet-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">
+              <X className="size-4" />
+              <span className="sr-only">إغلاق</span>
+            </DialogClose>
+          </div>
+          {/* بريق ذهبي متقطع */}
+          <span aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-[repeating-linear-gradient(90deg,rgba(250,204,21,.8)_0_6px,transparent_6px_14px)]" />
+        </DialogHeader>
         <DialogBody>
         {loading ? (
           <div className="space-y-3 py-4">

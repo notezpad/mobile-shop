@@ -7,6 +7,7 @@ import {
   Trash2,
   RotateCcw,
   Receipt,
+  Truck,
   Wallet,
   TrendingDown,
   TrendingUp,
@@ -285,37 +286,45 @@ export function SupplierDetailDialog({
         mobileSheet
         className="flex h-[92dvh] flex-col gap-0 overflow-hidden bg-background p-0 sm:h-auto sm:max-h-[90dvh] sm:max-w-5xl"
       >
-        <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-5 text-start sm:px-6 sm:pt-6 sm:pb-4">
+        {/* ═════════ الهيدر: هوية الموردين (حجري + برتقالي) + بطاقة الرصيد ═════════ */}
+        <DialogHeader className="relative shrink-0 border-b bg-stone-900 px-4 pb-4 pt-5 text-start text-stone-50 sm:px-6 sm:pt-6">
           <DialogTitle className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-col gap-1">
-              <span className="text-lg font-bold sm:text-xl">
-                {detail?.name ?? initialName ?? '—'}
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-stone-700/70 ring-1 ring-orange-600/60">
+                <Truck className="size-5 text-stone-100" />
               </span>
-              <span className="text-xs font-normal text-muted-foreground">
-                {detail?.phone ? (
-                  <span dir="ltr">{detail.phone}</span>
-                ) : (
-                  'لا يوجد رقم هاتف'
-                )}
-              </span>
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="truncate text-lg font-extrabold text-stone-50 sm:text-xl">
+                  {detail?.name ?? initialName ?? '—'}
+                </span>
+                <span className="text-xs font-normal text-stone-400">
+                  {detail?.phone ? (
+                    <span dir="ltr">{detail.phone}</span>
+                  ) : (
+                    'لا يوجد رقم هاتف'
+                  )}
+                </span>
+              </div>
             </div>
-            <div className="text-left">
-              <p className="text-[11px] font-medium text-muted-foreground">المستحق حالياً</p>
-              <p className={`text-xl font-extrabold tabular-nums sm:text-2xl ${balanceTone}`}>
+            <div className="rounded-2xl border border-orange-700/40 bg-stone-800/70 px-4 py-2.5 text-start">
+              <p className="text-[11px] font-medium text-stone-400">المستحق حالياً</p>
+              <p className={`text-xl font-extrabold tabular-nums sm:text-2xl ${balance > 0 ? 'text-rose-400' : balance < 0 ? 'text-emerald-400' : 'text-stone-300'}`}>
                 {formatCurrency(balance)}
               </p>
               {balance > 0 ? (
-                <span className="text-[11px] text-destructive">لنا آجل عليه</span>
+                <span className="text-[11px] text-rose-400">لنا آجل عليه</span>
               ) : balance < 0 ? (
-                <span className="text-[11px] text-success-subtle-foreground">دفعنا زيادة</span>
+                <span className="text-[11px] text-emerald-400">دفعنا زيادة</span>
               ) : (
-                <span className="text-[11px] text-muted-foreground">مسوّى</span>
+                <span className="text-[11px] text-stone-400">مسوّى</span>
               )}
             </div>
           </DialogTitle>
           <DialogDescription className="sr-only">
             كشف حساب المورد مع أوامر الشراء والدفعات
           </DialogDescription>
+          {/* خط البرتقالي المائل — بصمة صفحة الموردين */}
+          <span aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-[repeating-linear-gradient(-45deg,rgba(249,115,22,.75)_0_6px,transparent_6px_12px)]" />
         </DialogHeader>
 
         <div className="relative z-[1] min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background px-4 pb-6 sm:px-6">
