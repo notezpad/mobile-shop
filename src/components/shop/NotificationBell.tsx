@@ -278,6 +278,7 @@ export function NotificationBell() {
         className="notif-bell-btn"
         onClick={() => setOpen((v) => !v)}
         aria-label="الإشعارات"
+        aria-expanded={open}
         title="الإشعارات"
       >
         <Bell className="size-[18px]" />
@@ -355,7 +356,7 @@ export function NotificationBell() {
                     key={n.id}
                     className={cn('notif-item', n.isRead ? 'read' : 'unread')}
                     onClick={() => handleClick(n)}
-                    style={{ borderInlineStartColor: meta.color }}
+                    style={{ '--n-color': meta.color, '--n-bg': meta.bg } as React.CSSProperties}
                   >
                     {/* Icon */}
                     <div
