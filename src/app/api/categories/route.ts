@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { matchEdgeCache, putEdgeCache, purgeCatalogCaches } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,12 +21,19 @@ export async function GET() {
       return NextResponse.json(err?.body, { status: err?.status })
     }
 
+    // ⚡ v9: كاش حافة للتصنيفات — بتتغير نادراً جداً فTTL أطول (60 ثانية)،
+    // وأي إضافة/تعديل/حذف بيمسحها فوراً
+    const hit = await matchEdgeCache('/api/categories', '', session.tenantId, '3')
+    if (hit) return hit
+
     const cats = await db.category.findMany({
       where: { tenantId: session.tenantId },
       orderBy: { name: 'asc' },
       select: { id: true, name: true },
     })
-    return NextResponse.json(cats)
+    const catsRes = NextResponse.json(cats)
+    await putEdgeCache(catsRes.clone(), '/api/categories', '', session.tenantId, 60, '3')
+    return catsRes
   })
 }
 
@@ -53,6 +61,8 @@ export async function POST(req: NextRequest) {
     const created = await db.category.create({
       data: { tenantId: session.tenantId, name },
     })
+    // ⚡ v9: مسح كاش الكتالوج بعد إضافة تصنيف
+    await purgeCatalogCaches(session.tenantId, session.branchId)
     return NextResponse.json(created, { status: 201 })
   })
 }
@@ -85,6 +95,8 @@ export async function PUT(req: NextRequest) {
         data: { category: newName },
       }),
     ])
+    // ⚡ v9: مسح كاش الكتالوج — إعادة التسمية بتغير صفوف المنتجات كمان
+    await purgeCatalogCaches(session.tenantId, session.branchId)
     return NextResponse.json({ ok: true })
   })
 }
@@ -115,6 +127,8 @@ export async function DELETE(req: NextRequest) {
       }),
       db.category.delete({ where: { id } }),
     ])
+    // ⚡ v9: مسح كاش الكتالوج — الحذف بيصفّر تصنيف منتجات كمان
+    await purgeCatalogCaches(session.tenantId, session.branchId)
     return NextResponse.json({ ok: true })
   })
 }

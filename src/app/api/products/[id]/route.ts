@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { getPlanContext } from '@/lib/features'
 import { ensureCategory } from '../route'
+import { purgeCatalogCaches } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -185,6 +186,8 @@ export async function PUT(
         ),
       )
     }
+    // ⚡ v9: مسح كاش الكتالوج بعد تعديل المنتج (سعر/كمية/وحدات...)
+    await purgeCatalogCaches(session.tenantId, session.branchId)
     return NextResponse.json(updated)
   })
 }
@@ -219,6 +222,8 @@ export async function PATCH(
       where: { id: pid },
       data: { active: body.active },
     })
+    // ⚡ v9: مسح كاش الكتالوج بعد تعطيل/تنشيط المنتج
+    await purgeCatalogCaches(session.tenantId, session.branchId)
     return NextResponse.json(updated)
   })
 }
@@ -287,6 +292,8 @@ export async function DELETE(
         // No FK references — just hard delete
         try {
           await db.product.delete({ where: { id: pid } })
+          // ⚡ v9: مسح كاش الكتالوج بعد الحذف الفوري
+          await purgeCatalogCaches(session.tenantId, session.branchId)
           return NextResponse.json({
             ok: true,
             hard_deleted: true,
@@ -400,6 +407,8 @@ export async function DELETE(
           await tx.product.delete({ where: { id: pid } })
         })
 
+        // ⚡ v9: مسح كاش الكتالوج بعد حذف الأرشفة
+        await purgeCatalogCaches(session.tenantId, session.branchId)
         return NextResponse.json({
           ok: true,
           hard_deleted: true,
@@ -455,6 +464,8 @@ export async function DELETE(
           await tx.purchaseOrderItem.deleteMany({ where: { productId: pid } })
           await tx.product.delete({ where: { id: pid } })
         })
+        // ⚡ v9: مسح كاش الكتالوج بعد الحذف الكامل (force)
+        await purgeCatalogCaches(session.tenantId, session.branchId)
         return NextResponse.json({
           ok: true,
           hard_deleted: true,

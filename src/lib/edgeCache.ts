@@ -121,4 +121,29 @@ export async function purgeEdgeCache(
 export const PURGE_KEYS = {
   dashboard: (days: number | string) => ({ pathname: '/api/dashboard', rawQuery: `days=${days}` }),
   customersDefault: { pathname: '/api/customers', rawQuery: '' },
+  /**
+   * ⚡ v9: قائمة المنتجات الافتراضية (كاشير/شاشة المنتجات).
+   * المفتاح بيشمل فرع المستخدم لأن GET بيفلتر بـ session.branchId —
+   * مستخدمين في فروع مختلفة لنفس المحل لازم يشوفوا قوائم مختلفة.
+   * rawQuery هنا مُصطنع (مش من URL) بس هو نفسه اللي بيتخزن بيه.
+   */
+  products: (branchId: number | null | undefined) => ({
+    pathname: '/api/products',
+    rawQuery: `branch=${branchId ?? 0}`,
+  }),
+  categories: { pathname: '/api/categories', rawQuery: '' },
+  suppliers: { pathname: '/api/suppliers', rawQuery: '' },
+}
+
+/**
+ * ⚡ v9: مسح كاش الكتالوج كله (منتجات + تصنيفات + موردين) بعد أي mutation
+ * على أي واحد فيهم. أرخص وأأمن من تتبّع التقاطعات الدقيقة بين الجداول —
+ * والعملية نفسها رخيصة (3 عمليات delete على الحافة).
+ */
+export async function purgeCatalogCaches(
+  tenantId: number | string,
+  branchId: number | null | undefined,
+  v = '3'
+): Promise<void> {
+  await purgeEdgeCache([PURGE_KEYS.products(branchId), PURGE_KEYS.categories, PURGE_KEYS.suppliers], tenantId, v)
 }

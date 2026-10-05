@@ -522,6 +522,8 @@ export async function POST(req: NextRequest) {
       session.tenantId,
       2
     )
+    // ⚡ v9: البيع بيخصم مخزون — امسح كاش قائمة المنتجات كمان (نفس فرع البائع)
+    await purgeEdgeCache([PURGE_KEYS.products(session.branchId)], session.tenantId, '3')
     return NextResponse.json(sale, { status: 201 })
   })
 }

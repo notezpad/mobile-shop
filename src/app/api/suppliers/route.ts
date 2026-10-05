@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { matchEdgeCache, putEdgeCache, purgeCatalogCaches } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +51,15 @@ export async function GET(req: NextRequest) {
     }
 
     const paginated = searchParams.has('page')
+
+    // ⚡ v9: كاش حافة لقائمة الموردين الافتراضية (بدون بحث/صفحات) —
+    // استدعاء شاشة الموردين المتكرر بيرجع من الحافة بلا CPU. TTL 30 ثانية
+    // + أي إضافة/تعديل/حذف بيمسح فوراً.
+    const cacheable = !search && !paginated
+    if (cacheable) {
+      const hit = await matchEdgeCache('/api/suppliers', '', session.tenantId, '3')
+      if (hit) return hit
+    }
     const limit = paginated
       ? Math.min(200, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)))
       : SAFETY_CAP
@@ -115,7 +125,11 @@ export async function GET(req: NextRequest) {
     }))
 
     if (!paginated) {
-      return NextResponse.json(result)
+      const supRes = NextResponse.json(result)
+      if (cacheable) {
+        await putEdgeCache(supRes.clone(), '/api/suppliers', '', session.tenantId, 30, '3')
+      }
+      return supRes
     }
     return NextResponse.json({
       data: result,
@@ -155,6 +169,8 @@ export async function POST(req: NextRequest) {
         phone: body.phone ? String(body.phone).trim() : null,
       },
     })
+    // ⚡ v9: مسح كاش الكتالوج بعد إضافة مورد
+    await purgeCatalogCaches(session.tenantId, session.branchId)
     return NextResponse.json(created, { status: 201 })
   })
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { purgeCatalogCaches } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -167,6 +168,8 @@ async function __PUT(
           : existing.phone,
     },
   })
+  // ⚡ v9: مسح كاش الكتالوج بعد تعديل المورد
+  await purgeCatalogCaches(session.tenantId, session.branchId)
   return NextResponse.json(updated)
 }
 
@@ -241,6 +244,8 @@ async function __DELETE(
     if (result) {
       return NextResponse.json({ error: result.blocked }, { status: 409 })
     }
+    // ⚡ v9: مسح كاش الكتالوج بعد حذف المورد
+    await purgeCatalogCaches(session.tenantId, session.branchId)
     return NextResponse.json({ ok: true })
   } catch {
     return NextResponse.json({ error: 'تعذّر حذف المورد' }, { status: 400 })

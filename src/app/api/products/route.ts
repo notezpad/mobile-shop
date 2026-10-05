@@ -4,6 +4,7 @@ import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { buildDefaultUnitsData } from '@/lib/default-units'
 import { getPlanContext } from '@/lib/features'
 import { computeDynamicRetailPrice } from '@/lib/retail-pricing'
+import { matchEdgeCache, putEdgeCache, purgeCatalogCaches } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -87,6 +88,27 @@ export async function GET(req: NextRequest) {
     // Both are applied BEFORE pagination so page 2 continues the same ordering.
     const sortKey = searchParams.get('sort') || 'newest'
     const lowOnly = searchParams.get('stock') === 'low'
+
+    // ⚡ EDGE CACHE v9: كاش حافة للاستدعاء الافتراضي (كاشير/شاشة المنتجات)
+    // — أتعمر طلبات GET المتكررة من غير ما تشغل الـ Worker أصلاً. الكاشية
+    // فقط لو مفيش بحث/فلترة/ترتيب/صفحات — لأن دي كلها بتغير النتيجة.
+    // المفتاح بيشمل فرع المستخدم (session.branchId) لأن GET بيفلتر بيه.
+    // TTL 20 ثانية بس عشان الكميات تفضل قريبة من الواقع + أي mutation
+    // بيمسح الكاش فوراً.
+    const cacheable =
+      !search &&
+      !category &&
+      !branchIdParam &&
+      status === 'active' &&
+      !searchParams.has('page') &&
+      !searchParams.has('limit') &&
+      !searchParams.has('sort') &&
+      !searchParams.has('stock')
+    const cacheQuery = `branch=${session.branchId ?? 0}`
+    if (cacheable) {
+      const hit = await matchEdgeCache('/api/products', cacheQuery, session.tenantId, '3')
+      if (hit) return hit
+    }
     const orderBy: any = (() => {
       switch (sortKey) {
         case 'name': return [{ name: 'asc' }, { id: 'desc' }]
@@ -190,13 +212,17 @@ export async function GET(req: NextRequest) {
           : null,
     }))
 
-    return NextResponse.json({
+    const listRes = NextResponse.json({
       data: withSales,
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
     })
+    if (cacheable) {
+      await putEdgeCache(listRes.clone(), '/api/products', cacheQuery, session.tenantId, 20, '3')
+    }
+    return listRes
   })
 }
 
@@ -299,6 +325,8 @@ export async function POST(req: NextRequest) {
         },
       })
     }
+    // ⚡ v9: مسح كاش الكتالوج فوراً بعد إضافة منتج (القائمة + كميات الفرع)
+    await purgeCatalogCaches(session.tenantId, session.branchId)
     return NextResponse.json(created, { status: 201 })
   })
 }
