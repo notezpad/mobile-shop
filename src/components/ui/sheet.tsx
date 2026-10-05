@@ -32,11 +32,15 @@ function SheetOverlay({
   className,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
+  // ⚡ forceMount: keep the overlay mounted (for always-mounted sheets) and
+  // hide it with CSS when closed — otherwise it would stay visible forever.
+  const isForceMounted = (props as { forceMount?: true }).forceMount === true
   return (
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
       className={cn(
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+        isForceMounted && "data-[state=closed]:hidden",
         className
       )}
       {...props}
@@ -49,19 +53,31 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  forceMount,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
   /** false = لا تعرض زر الإغلاق الافتراضي (لما الشيت يرسم زر إغلاق خاص به). */
   showCloseButton?: boolean
+  /**
+   * ⚡ PERF (2026-10-05): Radix unmounts the sheet content when closed —
+   * so a heavy child (e.g. the full sidebar tree) is rebuilt from scratch
+   * on EVERY open, which made the mobile sidebar feel like it took ~3s
+   * to slide in. Pass forceMount to keep children mounted permanently and
+   * toggle visibility with CSS (add data-[state=closed]:hidden to className).
+   * Opening then becomes a pure 300ms CSS slide. Props still flow to the
+   * Radix Content element, so open/close handlers keep working unchanged.
+   */
+  forceMount?: true
 }) {
   return (
-    <SheetPortal>
-      <SheetOverlay />
+    <SheetPortal forceMount={forceMount}>
+      <SheetOverlay forceMount={forceMount} />
       <SheetPrimitive.Content
+        forceMount={forceMount}
         data-slot="sheet-content"
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-300",
           side === "right" &&
             "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm",
           side === "left" &&

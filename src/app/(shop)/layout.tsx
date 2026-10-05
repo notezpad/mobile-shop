@@ -333,11 +333,14 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
       </header>
 
       {/* Mobile sidebar */}
+      {/* ⚡ forceMount: السايدبار بيفضل متجمّع دايماً — الفتح بقى أنيميشن CSS
+          نضيف بدل إعادة بناء الشجرة كلها وقت الضغط (كان بياخد ~3 ثواني على الموبايل) */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent
           side="right"
           showCloseButton={false}
-          className="h-dvh w-[82vw] max-w-[300px] gap-0 p-0 sm:max-w-[300px]"
+          forceMount
+          className="h-dvh w-[82vw] max-w-[300px] gap-0 p-0 sm:max-w-[300px] data-[state=closed]:hidden"
         >
           <SheetTitle className="sr-only">القائمة</SheetTitle>
           {/* زر الإغلاق على الشمال عشان ما يغطيش لوجو المحل */}
