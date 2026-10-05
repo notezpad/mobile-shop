@@ -454,10 +454,17 @@ export function SalesHistoryView() {
             </div>
           </div>
 
-          <dl className="grid min-w-0 flex-1 basis-full grid-cols-3 divide-x divide-dashed divide-border rtl:divide-x-reverse sm:basis-auto">
+          {/* 📱 على الجوال: عمودين بس (صافي + محصّل) — «لسه مستحق» بيختفي.
+              من sm وفوق: ٣ أعمدة كاملة زي الأصل. */}
+          <dl className="grid min-w-0 flex-1 basis-full grid-cols-2 divide-x divide-dashed divide-border rtl:divide-x-reverse sm:basis-auto sm:grid-cols-3">
             <Figure label="صافي المبيعات" value={net} mark />
             <Figure label="المحصّل" value={collected} />
-            <Figure label="لسه مستحق" value={outstanding} danger={outstanding > 0} />
+            <Figure
+              label="لسه مستحق"
+              value={outstanding}
+              danger={outstanding > 0}
+              className="hidden sm:flex"
+            />
           </dl>
 
           {days.length > 1 && (
@@ -850,9 +857,18 @@ function StatusChip({ sale: s }: { sale: Sale }) {
 }
 
 /* ───────── رقم في الشريط العلوي (الماركر الأصفر تحت صافي المبيعات) ───────── */
-function Figure({ label, value, mark, danger }: { label: string; value: number; mark?: boolean; danger?: boolean }) {
+/* بيقبل className عشان نقدر نخفيه على الجوال من غير ما نغيّر هيكله */
+function Figure({
+  label, value, mark, danger, className,
+}: {
+  label: string
+  value: number
+  mark?: boolean
+  danger?: boolean
+  className?: string
+}) {
   return (
-    <div className="flex min-w-0 flex-col justify-center px-2.5 py-3 sm:px-4">
+    <div className={cn('flex min-w-0 flex-col justify-center px-2.5 py-3 sm:px-4', className)}>
       <dt className="text-[11px] font-medium text-muted-foreground">{label}</dt>
       <dd className={cn('mt-1 flex flex-wrap items-baseline gap-x-1.5 text-base font-extrabold tabular-nums leading-tight sm:text-2xl', danger && 'text-destructive')}>
         <span className={cn(mark && 'bg-gradient-to-t from-yellow-300/80 from-35% to-transparent to-35% px-0.5')}>
@@ -1043,6 +1059,7 @@ function SettlementBar({
 
   return (
     <div>
+      {/* الشريط البصري بيفضل يعرض الـ ٣ شرائح — النِسب مش بتتأثر */}
       <div className="mb-2 flex h-2 gap-0.5 overflow-hidden rounded-full bg-muted" aria-hidden>
         {kinds.map((k) =>
           segs[k].n > 0 ? (
@@ -1054,7 +1071,10 @@ function SettlementBar({
           ) : null
         )}
       </div>
-      <div className="grid grid-cols-3 gap-2" role="group" aria-label="فلتر حالة التحصيل">
+
+      {/* 📱 على الجوال: عمودين بس (مدفوعة + عليها باقي) — «آجلة بالكامل» بتختفي.
+          من sm وفوق: ٣ أعمدة كاملة زي الأصل. */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" role="group" aria-label="فلتر حالة التحصيل">
         {kinds.map((k) => {
           const g = segs[k]
           const on = status === k
@@ -1068,6 +1088,8 @@ function SettlementBar({
               disabled={g.n === 0 && !on}
               className={cn(
                 'rounded-xl border bg-background p-2 text-start transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-300/50 disabled:cursor-not-allowed disabled:opacity-45 sm:p-2.5',
+                // «آجلة بالكامل» بتختفي على الجوال بس
+                k === 'unpaid' && 'hidden sm:block',
                 on ? tone[k].on : 'hover:bg-muted/50'
               )}
             >
