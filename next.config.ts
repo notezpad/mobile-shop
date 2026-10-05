@@ -11,10 +11,7 @@ const nextConfig: NextConfig = {
   //   ERROR: Could not resolve "pg-cloudflare"
   // Forcing these paths into the output trace makes the real files get copied.
   outputFileTracingIncludes: {
-    "/**": [
-      "./node_modules/pg-cloudflare/dist/**",
-      "./node_modules/pg-cloudflare/package.json",
-    ],
+    "/**": ["./node_modules/pg-cloudflare/dist/**", "./node_modules/pg-cloudflare/package.json"],
   },
 };
 

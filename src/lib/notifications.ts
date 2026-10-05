@@ -28,7 +28,7 @@
  *      flag was removed — serverless isolates reset between requests.
  */
 
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient } from './prisma-wasm'
 
 export interface CreateNotificationInput {
   type?: string

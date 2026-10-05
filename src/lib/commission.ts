@@ -39,7 +39,8 @@
  * For 'cash' / 'card' / unknown methods → no commission, returns commission=0.
  */
 
-import { PrismaClient, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
+import { PrismaClient } from './prisma-wasm'
 
 export type PaymentMethod =
   | 'cash'

@@ -2,7 +2,7 @@
 // Node's net/tls modules for the Cloudflare Workers runtime.
 import 'pg-cloudflare'
 
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient } from './prisma-wasm'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { readDatabaseUrl, readEnv, isProductionRuntime } from './env'
 import { AsyncLocalStorage } from 'node:async_hooks'
