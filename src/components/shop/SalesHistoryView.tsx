@@ -438,23 +438,23 @@ export function SalesHistoryView() {
   const hasRange = !!(from || to)
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {/* ═════════ الشريط العلوي: عنوان + أرقام المعروض + أعمدة الأيام ═════════ */}
       <section className="animate-in-up overflow-hidden rounded-2xl border bg-card shadow-sm">
         <div className="flex flex-wrap items-stretch">
-          <div className="flex w-full items-center gap-3 border-b border-dashed p-4 sm:w-auto sm:min-w-[230px] sm:border-b sm:border-e md:border-b-0">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-yellow-300 text-zinc-900 shadow-sm dark:bg-yellow-300/90">
-              <ReceiptText className="size-5" />
+          <div className="flex w-full items-center gap-3 border-b border-dashed p-3 sm:w-auto sm:min-w-[230px] sm:border-b-0 sm:border-e sm:p-4">
+            <span className="flex size-9 items-center justify-center rounded-lg bg-yellow-300 text-zinc-900 shadow-sm sm:size-10 dark:bg-yellow-300/90">
+              <ReceiptText className="size-4 sm:size-5" />
             </span>
-            <div>
-              <h1 className="text-lg font-extrabold leading-tight">سجل المبيعات</h1>
-              <p className="text-[11px] text-muted-foreground">
+            <div className="min-w-0">
+              <h1 className="text-base font-extrabold leading-tight sm:text-lg">سجل المبيعات</h1>
+              <p className="truncate text-[11px] text-muted-foreground">
                 {loading ? 'جارٍ التحميل…' : `${total} فاتورة${hasRange ? ' في الفترة' : ''}`}
               </p>
             </div>
           </div>
 
-          <dl className="grid w-full flex-1 grid-cols-3 divide-x divide-dashed divide-border sm:w-auto rtl:divide-x-reverse">
+          <dl className="grid w-full flex-1 grid-cols-3 divide-x divide-dashed divide-border rtl:divide-x-reverse sm:w-auto">
             <Figure label="صافي المبيعات" value={net} mark />
             <Figure label="المحصّل" value={collected} />
             <Figure label="لسه مستحق" value={outstanding} danger={outstanding > 0} />
@@ -483,10 +483,10 @@ export function SalesHistoryView() {
       </section>
 
       {/* ═════════ لوحة الفلاتر ═════════ */}
-      <section className="space-y-3.5 rounded-2xl border bg-card p-3.5 shadow-sm" aria-label="فلاتر المبيعات">
+      <section className="space-y-3 rounded-2xl border bg-card p-3 shadow-sm sm:space-y-3.5 sm:p-3.5" aria-label="فلاتر المبيعات">
         {/* بحث + ترتيب + تجميع + تصدير */}
         <div className="flex flex-wrap items-center gap-2">
-          <label className="relative flex h-10 w-full flex-1 items-center rounded-xl border bg-background transition-shadow focus-within:border-yellow-400 focus-within:ring-[3px] focus-within:ring-yellow-300/40 sm:min-w-[240px]">
+          <label className="relative flex h-10 w-full min-w-0 items-center rounded-xl border bg-background transition-shadow focus-within:border-yellow-400 focus-within:ring-[3px] focus-within:ring-yellow-300/40 sm:w-auto sm:min-w-[240px] sm:flex-1">
             <Search className="pointer-events-none absolute start-3.5 size-4 text-foreground/60" aria-hidden />
             <input
               ref={searchRef}
@@ -525,20 +525,21 @@ export function SalesHistoryView() {
                 <button
                   type="button"
                   className={cn(
-                    'inline-flex h-10 flex-1 items-center gap-2 rounded-xl border bg-background px-3.5 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-300/50 sm:flex-none',
+                    'inline-flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border bg-background px-3 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-300/50 sm:flex-none sm:px-3.5',
                     open && 'border-yellow-400 ring-[3px] ring-yellow-300/40'
                   )}
                 >
-                  <ArrowUpDown className="size-4 text-foreground/70" />
-                  <span className="text-foreground/65">ترتيب:</span>
-                  <span className="font-bold">{SORT_LABELS[sort]}</span>
-                  <ChevronDown className={cn('size-4 text-foreground/60 transition-transform motion-reduce:transition-none', open && 'rotate-180')} />
+                  <ArrowUpDown className="size-4 shrink-0 text-foreground/70" />
+                  <span className="hidden text-foreground/65 sm:inline">ترتيب:</span>
+                  <span className="truncate font-bold">{SORT_LABELS[sort]}</span>
+                  <ChevronDown className={cn('size-4 shrink-0 text-foreground/60 transition-transform motion-reduce:transition-none', open && 'rotate-180')} />
                 </button>
               )}
             />
 
             <Button variant="outline" className="h-10 shrink-0 rounded-xl" onClick={exportExcel} disabled={filtered.length === 0}>
-              <FileSpreadsheet className="size-4" /> Excel
+              <FileSpreadsheet className="size-4" />
+              <span className="hidden sm:inline">Excel</span>
             </Button>
           </div>
         </div>
@@ -546,7 +547,12 @@ export function SalesHistoryView() {
         {/* الفترة */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="text-[11px] font-bold text-foreground/65">الفترة</span>
-          <div className="flex flex-1 items-center gap-1 overflow-x-auto rounded-full bg-muted/60 p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label="الفترة">
+          <div
+            className="flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-muted/60 p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            role="group"
+            aria-label="الفترة"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
             {([...(['today', '7', 'month', '90', 'all'] as const), 'custom'] as const).map((p) => (
               <button
                 key={p}
@@ -554,7 +560,7 @@ export function SalesHistoryView() {
                 onClick={() => choosePeriod(p)}
                 aria-pressed={period === p}
                 className={cn(
-                  'h-8 shrink-0 rounded-full px-3.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-300/50',
+                  'h-8 shrink-0 rounded-full px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-300/50 sm:px-3.5',
                   period === p ? 'bg-zinc-900 text-yellow-300 shadow-sm dark:bg-yellow-300 dark:text-zinc-900' : 'text-foreground/65 hover:bg-background hover:text-foreground'
                 )}
               >
@@ -563,23 +569,19 @@ export function SalesHistoryView() {
             ))}
           </div>
           {period === 'custom' && (
-            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-              <div className="flex flex-1 items-center gap-2 rounded-full border bg-background px-3 py-1 text-xs">
-                <span className="shrink-0 text-foreground/65">من</span>
-                <input
-                  type="date" value={from} max={to || undefined} aria-label="من تاريخ"
-                  onChange={(e) => changeCustom(e.target.value, to)}
-                  className="min-w-0 flex-1 bg-transparent py-1 text-xs font-bold tabular-nums outline-none"
-                />
-              </div>
-              <div className="flex flex-1 items-center gap-2 rounded-full border bg-background px-3 py-1 text-xs">
-                <span className="shrink-0 text-foreground/65">إلى</span>
-                <input
-                  type="date" value={to} min={from || undefined} aria-label="إلى تاريخ"
-                  onChange={(e) => changeCustom(from, e.target.value)}
-                  className="min-w-0 flex-1 bg-transparent py-1 text-xs font-bold tabular-nums outline-none"
-                />
-              </div>
+            <div className="flex w-full flex-wrap items-center gap-2 rounded-xl border bg-background px-3 py-1.5 text-xs sm:w-auto sm:rounded-full sm:py-1">
+              <span className="text-foreground/65">من</span>
+              <input
+                type="date" value={from} max={to || undefined} aria-label="من تاريخ"
+                onChange={(e) => changeCustom(e.target.value, to)}
+                className="min-w-0 flex-1 bg-transparent py-1 text-xs font-bold tabular-nums outline-none sm:flex-none"
+              />
+              <span className="text-foreground/65">إلى</span>
+              <input
+                type="date" value={to} min={from || undefined} aria-label="إلى تاريخ"
+                onChange={(e) => changeCustom(from, e.target.value)}
+                className="min-w-0 flex-1 bg-transparent py-1 text-xs font-bold tabular-nums outline-none sm:flex-none"
+              />
             </div>
           )}
         </div>
@@ -587,16 +589,16 @@ export function SalesHistoryView() {
         {/* شريط التسوية — فلتر وعرض في نفس الوقت */}
         <div>
           <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold text-foreground/65">
-            <PackageCheck className="size-3.5" />
-            حالة التحصيل — الشريط يوضّح نصيب كل حالة من القيمة
+            <PackageCheck className="size-3.5 shrink-0" />
+            <span className="truncate">حالة التحصيل — الشريط يوضّح نصيب كل حالة من القيمة</span>
           </p>
           <SettlementBar segs={segs} status={status} onPick={(k) => setStatus(status === k ? null : k)} />
         </div>
 
         {/* تضييق */}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-t pt-3">
+        <div className="flex flex-wrap items-center gap-1.5 border-t pt-3 sm:gap-2">
           <span className="flex items-center gap-1 text-[11px] font-bold text-foreground/65">
-            <Filter className="size-3.5" />
+            <Filter className="size-3.5 shrink-0" />
             تضييق
           </span>
           <Facet
@@ -633,20 +635,20 @@ export function SalesHistoryView() {
       </section>
 
       {pageScoped && (
-        <p className="rounded-xl border border-yellow-400/40 bg-yellow-300/15 px-4 py-2.5 text-xs font-medium text-foreground/80">
+        <p className="rounded-xl border border-yellow-400/40 bg-yellow-300/15 px-3 py-2.5 text-xs font-medium text-foreground/80 sm:px-4">
           البحث والفلاتر والترتيب بيشتغلوا على الـ {num(sales.length)} فاتورة المعروضة (صفحة {page} من {totalPages}). حدّد فترة أضيق عشان تشوف النتايج كاملة بدقة.
         </p>
       )}
 
       {/* ═════════ الدفتر: كعوب الفواتير + الإيصال ═════════ */}
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="@container space-y-5">
+        <div className="@container min-w-0 space-y-4 sm:space-y-5">
           {loading ? (
             <div className="space-y-2">
               {Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-[68px] w-full rounded-xl" />)}
             </div>
           ) : filtered.length === 0 ? (
-            <div className="rounded-2xl border border-dashed bg-card p-10 text-center">
+            <div className="rounded-2xl border border-dashed bg-card p-6 text-center sm:p-10">
               <ReceiptText className="mx-auto size-8 text-muted-foreground" />
               <p className="mt-3 font-semibold">مفيش فواتير في النتيجة دي</p>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -661,11 +663,11 @@ export function SalesHistoryView() {
           ) : (
             listDays.map((d) => (
               <section key={d.key} id={`day-${d.key}`} className="scroll-mt-2">
-                <header className="sticky top-0 z-10 -mx-1 mb-2.5 flex items-center justify-between gap-2 bg-background/95 px-1 pb-2 pt-1.5 backdrop-blur">
-                  <h2 className="truncate text-[13px] font-extrabold sm:text-[15px]">{formatArabicDate(new Date(`${d.key}T12:00:00`))}</h2>
-                  <span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
+                <header className="sticky top-0 z-10 -mx-1 mb-2.5 flex items-baseline justify-between gap-2 bg-background/95 px-1 pb-2 pt-1.5 backdrop-blur">
+                  <h2 className="min-w-0 truncate text-sm font-extrabold sm:text-[15px]">{formatArabicDate(new Date(`${d.key}T12:00:00`))}</h2>
+                  <span className="shrink-0 text-[11px] font-medium text-muted-foreground tabular-nums sm:text-xs">
                     {d.list.length} فاتورة <span className="mx-1 opacity-40">|</span>
-                    <b className="text-sm font-extrabold text-foreground">{money(d.sum)}</b> جنيه
+                    <b className="text-xs font-extrabold text-foreground sm:text-sm">{money(d.sum)}</b> جنيه
                   </span>
                   <span aria-hidden className="absolute inset-x-1 bottom-0 h-0.5 rounded-full bg-border">
                     <span className="block h-full rounded-full bg-yellow-400" style={{ width: `${(d.sum / maxDay) * 100}%` }} />
@@ -686,8 +688,8 @@ export function SalesHistoryView() {
                           aria-pressed={active}
                           style={ret ? { backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 7px, color-mix(in oklab, currentColor 5%, transparent) 7px 8px)' } : undefined}
                           className={cn(
-                            'group relative grid min-h-[72px] w-full overflow-hidden rounded-xl border bg-card text-start transition-all @xl:min-h-[84px]',
-                            'grid-cols-[82px_minmax(0,1fr)_auto] xs:grid-cols-[96px_minmax(0,1fr)_auto] @xl:grid-cols-[112px_minmax(0,1fr)_170px_136px]',
+                            'group relative grid min-h-[76px] w-full overflow-hidden rounded-xl border bg-card text-start transition-all sm:min-h-[84px]',
+                            'grid-cols-[74px_minmax(0,1fr)_auto] sm:grid-cols-[100px_minmax(0,1fr)_auto] @xl:grid-cols-[112px_minmax(0,1fr)_170px_136px]',
                             'hover:-translate-y-px hover:border-yellow-400/70 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/60',
                             active && 'border-yellow-400 shadow-[0_8px_24px_-12px_rgb(250_204_21/0.7)]',
                             ret && 'text-muted-foreground'
@@ -696,33 +698,33 @@ export function SalesHistoryView() {
                           {/* ① الكعب: الوقت + السيريال الكبير، بثقبين زي التذكرة */}
                           <span
                             className={cn(
-                              'relative flex flex-col items-center justify-center gap-0.5 border-e border-dashed px-1 py-3 transition-colors @xl:px-2',
+                              'relative flex flex-col items-center justify-center gap-0.5 border-e border-dashed px-1.5 py-3 transition-colors sm:px-2',
                               active ? 'border-zinc-900/30 bg-yellow-300 text-zinc-900' : 'bg-muted/50'
                             )}
                           >
                             <i aria-hidden className="absolute -end-[7px] -top-[7px] size-3.5 rounded-full border bg-background" />
                             <i aria-hidden className="absolute -bottom-[7px] -end-[7px] size-3.5 rounded-full border bg-background" />
-                            <span className="text-[11px] font-medium tabular-nums opacity-70">{timeOf(s.createdAt)}</span>
-                            <span dir="ltr" className="text-base font-extrabold leading-none tracking-tight tabular-nums @xl:text-xl">{no.serial}</span>
-                            {no.prefix && <span dir="ltr" className="text-[10px] font-medium tracking-wider opacity-60">{no.prefix}</span>}
+                            <span className="text-[10px] font-medium tabular-nums opacity-70 sm:text-[11px]">{timeOf(s.createdAt)}</span>
+                            <span dir="ltr" className="text-base font-extrabold leading-none tracking-tight tabular-nums sm:text-xl">{no.serial}</span>
+                            {no.prefix && <span dir="ltr" className="text-[9px] font-medium tracking-wider opacity-60 sm:text-[10px]">{no.prefix}</span>}
                           </span>
 
                           {/* ② العميل + اللي اتباع */}
-                          <span className="flex min-w-0 flex-col justify-center gap-0.5 px-2.5 py-3 @xl:px-4">
+                          <span className="flex min-w-0 flex-col justify-center gap-0.5 px-3 py-2.5 sm:px-4 sm:py-3">
                             <span
                               className={cn(
-                                'truncate text-[13px] leading-snug @xl:text-[15px]',
+                                'truncate text-sm leading-snug sm:text-[15px]',
                                 named ? 'font-bold text-foreground' : 'font-medium text-muted-foreground',
                                 ret && 'line-through decoration-destructive/50'
                               )}
                             >
                               {s.customer?.name ?? 'عميل نقدي'}
                             </span>
-                            <span className="truncate text-[12.5px] text-foreground/70">{preview(s)}</span>
-                            <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                              <span>{qtyOf(s)} قطعة</span>
-                              {s.userName && (<><span className="size-[3px] rounded-full bg-current opacity-50" /><span>{s.userName}</span></>)}
-                              <span className="ms-auto @xl:hidden"><StatusChip sale={s} /></span>
+                            <span className="truncate text-[11.5px] text-foreground/70 sm:text-[12.5px]">{preview(s)}</span>
+                            <span className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground sm:text-[11px]">
+                              <span className="shrink-0">{qtyOf(s)} قطعة</span>
+                              {s.userName && (<><span className="size-[3px] shrink-0 rounded-full bg-current opacity-50" /><span className="truncate">{s.userName}</span></>)}
+                              <span className="ms-auto shrink-0 @xl:hidden"><StatusChip sale={s} /></span>
                             </span>
                           </span>
 
@@ -740,9 +742,9 @@ export function SalesHistoryView() {
                           </span>
 
                           {/* ④ الإجمالي */}
-                          <span className="flex flex-col items-end justify-center px-2.5 py-3 @xl:px-4">
-                            <span className={cn('text-base font-extrabold leading-none tabular-nums @xl:text-xl', ret && 'line-through decoration-1')}>{money(s.total)}</span>
-                            <span className="mt-1 text-[10px] font-medium text-muted-foreground @xl:text-[11px]">جنيه</span>
+                          <span className="flex flex-col items-end justify-center px-2.5 py-2.5 sm:px-4 sm:py-3">
+                            <span className={cn('text-base font-extrabold leading-none tabular-nums sm:text-xl', ret && 'line-through decoration-1')}>{money(s.total)}</span>
+                            <span className="mt-1 text-[10px] font-medium text-muted-foreground sm:text-[11px]">جنيه</span>
                           </span>
                         </button>
 
@@ -765,34 +767,35 @@ export function SalesHistoryView() {
 
           {/* ترقيم الصفحات */}
           {!loading && totalPages > 1 && (
-            <nav className="flex items-center justify-between rounded-xl border bg-card px-3 py-2">
-              <p className="text-xs text-muted-foreground">
-                <span className="hidden sm:inline">صفحة {page} من {totalPages} — </span>
-                <span>{total} فاتورة</span>
+            <nav className="flex flex-col gap-2 rounded-xl border bg-card px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:py-2">
+              <p className="text-center text-xs text-muted-foreground sm:text-start">
+                صفحة {page} من {totalPages} — {total} فاتورة
               </p>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center justify-center gap-1">
                 <Button variant="outline" size="icon" className="size-8" disabled={page <= 1} onClick={() => load(from, to, page - 1)} aria-label="السابقة">
                   <ChevronRight className="size-4" />
                 </Button>
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  const span = Math.min(5, totalPages)
-                  const start = Math.max(1, Math.min(page - Math.floor(span / 2), totalPages - span + 1))
-                  return start + i
-                }).map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => load(from, to, p)}
-                    className={cn(
-                      'size-8 rounded-lg text-xs font-semibold tabular-nums transition',
-                      p === page
-                        ? 'bg-yellow-300 text-zinc-900'
-                        : 'hidden border hover:bg-muted sm:block'
-                    )}
-                  >
-                    {p}
-                  </button>
-                ))}
-                <span className="px-2 text-xs font-semibold tabular-nums sm:hidden">{page} / {totalPages}</span>
+                <span className="hidden items-center gap-1 sm:flex">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    const span = Math.min(5, totalPages)
+                    const start = Math.max(1, Math.min(page - Math.floor(span / 2), totalPages - span + 1))
+                    return start + i
+                  }).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => load(from, to, p)}
+                      className={cn(
+                        'size-8 rounded-lg text-xs font-semibold tabular-nums transition',
+                        p === page ? 'bg-yellow-300 text-zinc-900' : 'border hover:bg-muted'
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </span>
+                <span className="rounded-lg bg-yellow-300 px-3 py-1 text-xs font-extrabold tabular-nums text-zinc-900 sm:hidden">
+                  {page} / {totalPages}
+                </span>
                 <Button variant="outline" size="icon" className="size-8" disabled={page >= totalPages} onClick={() => load(from, to, page + 1)} aria-label="التالية">
                   <ChevronLeft className="size-4" />
                 </Button>
@@ -864,13 +867,13 @@ function StatusChip({ sale: s }: { sale: Sale }) {
 /* ───────── رقم في الشريط العلوي (الماركر الأصفر تحت صافي المبيعات) ───────── */
 function Figure({ label, value, mark, danger }: { label: string; value: number; mark?: boolean; danger?: boolean }) {
   return (
-    <div className="flex flex-col justify-center px-3 py-2.5 sm:px-4 sm:py-3">
-      <dt className="text-[11px] font-medium text-muted-foreground">{label}</dt>
-      <dd className={cn('mt-1 text-lg font-extrabold tabular-nums leading-none sm:text-xl md:text-2xl', danger && 'text-destructive')}>
+    <div className="flex min-w-0 flex-col justify-center px-2 py-3 sm:px-4">
+      <dt className="truncate text-[10px] font-medium text-muted-foreground sm:text-[11px]">{label}</dt>
+      <dd className={cn('mt-1 text-base font-extrabold leading-none tabular-nums sm:text-xl md:text-2xl', danger && 'text-destructive')}>
         <span className={cn(mark && 'bg-gradient-to-t from-yellow-300/80 from-35% to-transparent to-35% px-0.5')}>
           {money(value)}
         </span>
-        <span className="ms-1 text-xs font-semibold text-muted-foreground">جنيه</span>
+        <span className="ms-1 text-[10px] font-semibold text-muted-foreground sm:text-xs">جنيه</span>
       </dd>
     </div>
   )
@@ -898,7 +901,7 @@ function Receipt({
   return (
     <div className="animate-in-up">
       <div
-        className="relative bg-yellow-50 px-5 pb-8 pt-5 text-zinc-900 shadow-md dark:bg-zinc-900 dark:text-zinc-100"
+        className="relative bg-yellow-50 px-4 pb-8 pt-5 text-zinc-900 shadow-md sm:px-5 dark:bg-zinc-900 dark:text-zinc-100"
         style={{
           WebkitMask: 'conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) 50%/14px 100%',
           mask: 'conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) 50%/14px 100%',
@@ -911,19 +914,19 @@ function Receipt({
             <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">فاتورة</span>
             <span dir="ltr" className="text-2xl font-black leading-none tabular-nums">{splitNo(s).serial}</span>
           </div>
-          <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400 tabular-nums">
+          <p className="mt-1 text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">
             {splitNo(s).prefix && <span dir="ltr" className="inline-block">{splitNo(s).prefix}</span>}{splitNo(s).prefix && ' · '}{formatArabicDate(d)} · {timeOf(s.createdAt)}
           </p>
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2 border-y border-dashed border-zinc-300 py-2 text-xs dark:border-zinc-700">
-          <div>
+          <div className="min-w-0">
             <span className="text-zinc-500 dark:text-zinc-400">العميل</span>
-            <p className="font-semibold">{s.customer?.name ?? 'عميل نقدي'}</p>
+            <p className="truncate font-semibold">{s.customer?.name ?? 'عميل نقدي'}</p>
           </div>
-          <div>
+          <div className="min-w-0">
             <span className="text-zinc-500 dark:text-zinc-400">البائع</span>
-            <p className="font-semibold">{s.userName ?? '—'}</p>
+            <p className="truncate font-semibold">{s.userName ?? '—'}</p>
           </div>
         </div>
 
@@ -954,31 +957,31 @@ function Receipt({
               <li key={it.id} className="flex items-baseline gap-2 text-sm">
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{it.name}</span>
-                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400 tabular-nums">
+                  <span className="text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">
                     {l.qty}{l.unit ? ` ${l.unit}` : ''} × {formatCurrency(l.price)}
                   </span>
                 </span>
-                <span className="font-semibold tabular-nums">{formatCurrency(l.price * l.qty)}</span>
+                <span className="shrink-0 font-semibold tabular-nums">{formatCurrency(l.price * l.qty)}</span>
               </li>
             )
           })}
         </ul>
 
         <dl className="mt-3 space-y-1 border-t border-dashed border-zinc-300 pt-3 text-sm dark:border-zinc-700">
-          <div className="flex justify-between text-base font-extrabold">
+          <div className="flex justify-between gap-2 text-base font-extrabold">
             <dt>الإجمالي</dt>
             <dd className="tabular-nums"><span className="bg-gradient-to-t from-yellow-300/80 from-35% to-transparent to-35%">{formatCurrency(s.total)}</span></dd>
           </div>
-          <div className="flex justify-between text-zinc-600 dark:text-zinc-300">
+          <div className="flex justify-between gap-2 text-zinc-600 dark:text-zinc-300">
             <dt>المدفوع</dt><dd className="tabular-nums">{formatCurrency(s.paid)}</dd>
           </div>
           {!ret && due !== 0 && (
-            <div className="flex justify-between font-semibold text-destructive">
+            <div className="flex justify-between gap-2 font-semibold text-destructive">
               <dt>الباقي</dt><dd className="tabular-nums">{formatCurrency(due)}</dd>
             </div>
           )}
           {(s.refunded ?? 0) > 0 && (
-            <div className="flex justify-between text-zinc-600 dark:text-zinc-300">
+            <div className="flex justify-between gap-2 text-zinc-600 dark:text-zinc-300">
               <dt>اتردّ للعميل</dt><dd className="tabular-nums">{formatCurrency(s.refunded!)}</dd>
             </div>
           )}
@@ -994,21 +997,23 @@ function Receipt({
         )}
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-3 flex gap-2">
         <Button className="flex-1 bg-yellow-300 text-zinc-900 hover:bg-yellow-400" onClick={onPrint}>
-          <Printer className="size-4" /> طباعة
+          <Printer className="size-4" />
+          <span className="hidden xs:inline">طباعة</span>
         </Button>
-        <Button variant="outline" onClick={onPdf} aria-label="حفظ PDF" title="حفظ PDF">
+        <Button variant="outline" size="icon" onClick={onPdf} aria-label="حفظ PDF" title="حفظ PDF">
           <FileDown className="size-4" />
         </Button>
         {!ret && (
           <Button
             variant="outline"
-            className="flex-1 text-destructive hover:text-destructive sm:flex-none"
+            className="text-destructive hover:text-destructive"
             onClick={onReturn}
             title="مرتجع (جزئي أو كلي)"
           >
-            <RotateCcw className="size-4" /> مرتجع
+            <RotateCcw className="size-4" />
+            <span className="hidden xs:inline">مرتجع</span>
           </Button>
         )}
       </div>
@@ -1053,7 +1058,7 @@ function SettlementBar({
           ) : null
         )}
       </div>
-      <div className="grid grid-cols-3 gap-2" role="group" aria-label="فلتر حالة التحصيل">
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-2" role="group" aria-label="فلتر حالة التحصيل">
         {kinds.map((k) => {
           const g = segs[k]
           const on = status === k
@@ -1066,22 +1071,22 @@ function SettlementBar({
               aria-pressed={on}
               disabled={g.n === 0 && !on}
               className={cn(
-                'rounded-xl border bg-background p-2 text-start transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-300/50 disabled:cursor-not-allowed disabled:opacity-45 sm:p-2.5',
+                'min-w-0 rounded-xl border bg-background p-2 text-start transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-300/50 disabled:cursor-not-allowed disabled:opacity-45 sm:p-2.5',
                 on ? tone[k].on : 'hover:bg-muted/50'
               )}
             >
-              <span className="flex items-center justify-between gap-2">
-                <span className={cn('flex min-w-0 items-center gap-1.5 text-xs font-bold', on && tone[k].text)}>
-                  <span aria-hidden className={cn('size-2.5 shrink-0 rounded-full', tone[k].dot)} />
+              <span className="flex items-center justify-between gap-1.5">
+                <span className={cn('flex min-w-0 items-center gap-1.5 text-[11px] font-bold sm:text-xs', on && tone[k].text)}>
+                  <span aria-hidden className={cn('size-2 shrink-0 rounded-full sm:size-2.5', tone[k].dot)} />
                   <span className="truncate">
                     <span className="sm:hidden">{KIND_META[k].short}</span>
                     <span className="hidden sm:inline">{KIND_META[k].label}</span>
                   </span>
                 </span>
-                <span className="rounded-full bg-muted px-1.5 text-[11px] font-extrabold tabular-nums">{g.n}</span>
+                <span className="shrink-0 rounded-full bg-muted px-1.5 text-[10px] font-extrabold tabular-nums sm:text-[11px]">{g.n}</span>
               </span>
               <span className="mt-1 block truncate text-sm font-extrabold tabular-nums sm:text-lg">{g.n === 0 ? '—' : num(g.amount)}</span>
-              <span className="flex items-center justify-between gap-2 text-[11px] font-medium text-foreground/60">
+              <span className="flex items-center justify-between gap-1 text-[10px] font-medium text-foreground/60 sm:text-[11px]">
                 <span className="truncate">{g.n === 0 ? 'مفيش' : KIND_META[k].sub}</span>
                 {g.n > 0 && pct > 0 && <span className="shrink-0 tabular-nums">{pct}٪</span>}
               </span>
@@ -1162,7 +1167,10 @@ function Picker({
           </div>
         )}
 
-        <div role="listbox" className="max-h-72 space-y-0.5 overflow-y-auto p-1.5">
+        <div
+          role="listbox"
+          className="max-h-[min(72vh,22rem)] space-y-0.5 overflow-y-auto overscroll-contain p-1.5 landscape:max-h-[50vh]"
+        >
           {hasAll && !needle && (
             <PickRow on={selected === null} onClick={() => pick(null)} lead={<Layers className="size-4" />} label={allLabel!} count={allCount} />
           )}
@@ -1265,7 +1273,7 @@ function Facet({
   return (
     <span
       className={cn(
-        'inline-flex h-8 max-w-[180px] items-center rounded-full border text-xs font-bold transition-colors sm:max-w-[240px]',
+        'inline-flex h-8 max-w-[calc(100vw-3rem)] items-center rounded-full border text-xs font-bold transition-colors sm:max-w-[240px]',
         active ? 'border-yellow-500 bg-yellow-300/25 text-foreground' : 'bg-background text-foreground/65 hover:bg-muted hover:text-foreground'
       )}
     >
@@ -1325,8 +1333,8 @@ function TogglePill({
           : 'bg-background text-foreground/65 hover:bg-muted hover:text-foreground'
       )}
     >
-      <Icon className="size-3.5" />
-      {children}
+      <Icon className="size-3.5 shrink-0" />
+      <span className="truncate">{children}</span>
     </button>
   )
 }
