@@ -80,12 +80,11 @@ const V = '#7c3aed'
 const F = '#d946ef'
 const GRAD = `linear-gradient(to left, ${V}, ${F})`
 const MIX = [V, F, '#06b6d4', '#f59e0b']
-// LRM قبل الرقم: علامة السالب تفضل على شمال الرقم في الـ RTL (بدل "670-")
 const LRM = '\u200E'
 const num = (n: number | null | undefined) => LRM + formatNumber(n)
 const formatCurrency = (n: number | null | undefined) => LRM + fmtCur(n)
 const WD = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
-const WD_ORDER = [6, 0, 1, 2, 3, 4, 5] // السبت → الجمعة
+const WD_ORDER = [6, 0, 1, 2, 3, 4, 5]
 const dow = (iso: string) => {
   const [y, m, d] = iso.split('-').map(Number)
   return new Date(y, m - 1, d).getDay()
@@ -130,7 +129,6 @@ export function ReportsView() {
     load()
   }, [load])
 
-  // live refresh — التقرير بيجمع مبيعات ومصروفات وخزنة ومنتجات
   useDataRefresh(['sales', 'expenses', 'cash', 'products'], load)
 
   const exportPdf = () => {
@@ -144,7 +142,6 @@ export function ReportsView() {
     openPrintWindow(html, () => toast.error('الرجاء السماح بالنوافذ المنبثقة'))
   }
 
-  // scroll-spy لفهرس الفصول
   React.useEffect(() => {
     if (!report) return
     const ids = ['ch-rhythm', 'ch-leaders', 'ch-stock', ...(hasFinance ? ['ch-finance'] : [])]
@@ -178,7 +175,6 @@ export function ReportsView() {
     }
   }, [report])
 
-  // كل فصل بياخد «لمحة» حيّة من بياناته تظهر في خريطة التقرير
   const rr = report
   const bestDay =
     ins && rr && rr.salesTrend.length >= 7
@@ -219,10 +215,8 @@ export function ReportsView() {
         <div className={cn('space-y-4 transition-opacity duration-base sm:space-y-6', loading && 'opacity-70')}>
           <Hero r={r} ins={ins} hasFinance={hasFinance} shop={shopName} range={rangeText(from, to)} branch={branchLabel} />
 
-          {/* ═════════ المسرح: المنحنى + شريط الإشارات ═════════ */}
           <Stage r={r} ins={ins} />
 
-          {/* ═════════ فهرس الفصول + المحتوى ═════════ */}
           <div className="grid gap-4 sm:gap-6 lg:grid-cols-[176px_minmax(0,1fr)]">
             <ChapterMap chapters={chapters} active={active} />
 
@@ -511,73 +505,107 @@ function FilterBar({
   loading: boolean; disabled: boolean; onExport: () => void
 }) {
   const days = daysIn(from, to)
+  const [open, setOpen] = React.useState(false)
+
   const apply = (k: PresetKey) => {
     const [f, t] = rangeFor(k)
     setFrom(f); setTo(t); setPreset(k)
   }
+
   return (
     <div className="sticky top-0 z-20 overflow-hidden rounded-2xl border bg-background/80 shadow-sm backdrop-blur-xl">
       <style>{`@keyframes rpt-slide{0%{transform:translateX(-120%)}100%{transform:translateX(420%)}}`}</style>
-      <div className="flex flex-col gap-2 p-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2.5 sm:gap-y-2">
-        <Popover>
-          <PopoverTrigger asChild>
-            <button type="button" className="flex h-10 w-full min-w-0 items-center gap-2 rounded-xl border bg-card px-3 text-xs font-bold shadow-xs transition-colors hover:bg-muted/60 sm:w-auto">
-              <CalendarDays className="size-4 shrink-0 text-violet-600 dark:text-violet-400" />
-              <span className="min-w-0 truncate tabular-nums">{rangeText(from, to)}</span>
-              {days && <span className="shrink-0 rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-700 dark:text-violet-300">{days} يوم</span>}
-              <ChevronDown className="ms-auto size-3.5 shrink-0 opacity-60 sm:ms-0" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-[min(310px,calc(100vw-2rem))] rounded-2xl p-3">
-            <div className="grid grid-cols-2 gap-1.5">
-              {PRESETS.map((p) => (
-                <button
-                  key={p.k}
-                  type="button"
-                  onClick={() => apply(p.k)}
-                  className={cn('rounded-xl border px-3 py-2 text-xs font-semibold transition-colors', preset === p.k ? 'border-transparent text-white' : 'hover:bg-muted/60')}
-                  style={preset === p.k ? { background: GRAD } : undefined}
-                >
-                  {p.l}
-                </button>
-              ))}
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3">
-              <label className="space-y-1 text-[11px] font-medium text-muted-foreground">من
-                <Input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPreset(null) }} className="h-9 rounded-xl text-xs" />
-              </label>
-              <label className="space-y-1 text-[11px] font-medium text-muted-foreground">إلى
-                <Input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPreset(null) }} className="h-9 rounded-xl text-xs" />
-              </label>
-            </div>
-          </PopoverContent>
-        </Popover>
 
-        <Seg<PresetKey>
-          label="الفترة السريعة"
-          value={QUICK.includes(preset as PresetKey) ? preset : null}
-          onChange={apply}
-          options={QUICK.map((k) => ({ v: k, l: PRESETS.find((p) => p.k === k)!.l }))}
-        />
-
-        {branches.length > 1 && (
-          <Seg<string>
-            label="الفرع"
-            value={branchId}
-            onChange={setBranchId}
-            options={[{ v: 'all', l: 'كل الفروع' }, ...branches.map((b) => ({ v: String(b.id), l: b.name }))]}
-          />
-        )}
-
-        <span className="hidden items-center gap-1.5 rounded-full bg-muted/70 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground sm:flex sm:ms-auto" aria-live="polite">
-          <span className={cn('size-2 rounded-full', loading ? 'animate-pulse bg-amber-500' : 'bg-emerald-500')} />
-          {loading ? 'بيحدّث…' : 'مباشر'}
+      {/* ── هيدر الطي: يظهر على الجوال فقط ── */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls="rpt-filter-body"
+        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-start sm:hidden"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <CalendarDays className="size-4 shrink-0 text-violet-600 dark:text-violet-400" />
+          <span className="min-w-0 truncate text-xs font-bold tabular-nums">{rangeText(from, to)}</span>
+          {days && <span className="shrink-0 rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-700 dark:text-violet-300">{days} يوم</span>}
         </span>
+        <span className="flex shrink-0 items-center gap-2">
+          <span className={cn('size-2 rounded-full', loading ? 'animate-pulse bg-amber-500' : 'bg-emerald-500')} />
+          <ChevronDown className={cn('size-4 opacity-60 transition-transform duration-base', open && 'rotate-180')} />
+        </span>
+      </button>
 
-        <Button onClick={onExport} disabled={disabled} className="h-10 w-full rounded-xl border-0 text-white shadow-md shadow-violet-600/25 sm:w-auto" style={{ background: GRAD }}>
-          <FileText className="size-4 shrink-0" />
-          <span className="truncate">تصدير PDF</span>
-        </Button>
+      {/* ── جسم الفلتر: قابل للطي على الجوال، دائمًا ظاهر على sm+ ── */}
+      <div
+        id="rpt-filter-body"
+        className={cn(
+          'grid transition-[grid-template-rows,opacity] duration-base ease-out sm:grid-rows-[1fr] sm:opacity-100',
+          open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
+        )}
+      >
+        <div className="overflow-hidden">
+          <div className="flex flex-col gap-2 p-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2.5 sm:gap-y-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button type="button" className="flex h-10 w-full min-w-0 items-center gap-2 rounded-xl border bg-card px-3 text-xs font-bold shadow-xs transition-colors hover:bg-muted/60 sm:w-auto">
+                  <CalendarDays className="size-4 shrink-0 text-violet-600 dark:text-violet-400" />
+                  <span className="min-w-0 truncate tabular-nums">{rangeText(from, to)}</span>
+                  {days && <span className="shrink-0 rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-700 dark:text-violet-300">{days} يوم</span>}
+                  <ChevronDown className="ms-auto size-3.5 shrink-0 opacity-60 sm:ms-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-[min(310px,calc(100vw-2rem))] rounded-2xl p-3">
+                <div className="grid grid-cols-2 gap-1.5">
+                  {PRESETS.map((p) => (
+                    <button
+                      key={p.k}
+                      type="button"
+                      onClick={() => apply(p.k)}
+                      className={cn('rounded-xl border px-3 py-2 text-xs font-semibold transition-colors', preset === p.k ? 'border-transparent text-white' : 'hover:bg-muted/60')}
+                      style={preset === p.k ? { background: GRAD } : undefined}
+                    >
+                      {p.l}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3">
+                  <label className="space-y-1 text-[11px] font-medium text-muted-foreground">من
+                    <Input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPreset(null) }} className="h-9 rounded-xl text-xs" />
+                  </label>
+                  <label className="space-y-1 text-[11px] font-medium text-muted-foreground">إلى
+                    <Input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPreset(null) }} className="h-9 rounded-xl text-xs" />
+                  </label>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <Seg<PresetKey>
+              label="الفترة السريعة"
+              value={QUICK.includes(preset as PresetKey) ? preset : null}
+              onChange={apply}
+              options={QUICK.map((k) => ({ v: k, l: PRESETS.find((p) => p.k === k)!.l }))}
+            />
+
+            {branches.length > 1 && (
+              <Seg<string>
+                label="الفرع"
+                value={branchId}
+                onChange={setBranchId}
+                options={[{ v: 'all', l: 'كل الفروع' }, ...branches.map((b) => ({ v: String(b.id), l: b.name }))]}
+              />
+            )}
+
+            <span className="hidden items-center gap-1.5 rounded-full bg-muted/70 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground sm:flex sm:ms-auto" aria-live="polite">
+              <span className={cn('size-2 rounded-full', loading ? 'animate-pulse bg-amber-500' : 'bg-emerald-500')} />
+              {loading ? 'بيحدّث…' : 'مباشر'}
+            </span>
+
+            <Button onClick={onExport} disabled={disabled} className="h-10 w-full rounded-xl border-0 text-white shadow-md shadow-violet-600/25 sm:w-auto" style={{ background: GRAD }}>
+              <FileText className="size-4 shrink-0" />
+              <span className="truncate">تصدير PDF</span>
+            </Button>
+          </div>
+        </div>
       </div>
 
       {loading && (
@@ -1209,7 +1237,6 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
         )}
       </div>
 
-      {/* 📱 على الجوال: كارت لكل إشارة — بعرض كامل عشان الأرقام ما تتقطعش */}
       <div className="mt-4 grid grid-cols-1 gap-px border-t bg-border sm:grid-cols-2 lg:grid-cols-4">
         <Signal label="إجمالي المبيعات" value={num(Math.round(r.totalSales))} unit="جنيه" delta={r.changes.totalSales}>
           <div className="w-16 sm:w-20"><Spark v={t.map((x) => x.total)} /></div>

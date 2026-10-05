@@ -81,21 +81,39 @@ interface BranchReport {
    الأساسية بس (العنوان، الهاتف، المبيعات، الربح). */
 const num = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 
-// أرقام كبيرة جوه خانات ضيقة: من مليون وفوق بتتختصر (١.٢ م) والرقم الكامل في الـ tooltip
+/**
+ * رقم مضغوط للعرض في الخانات الضيقة:
+ *   < 1,000,000       → 999,999            (رقم كامل بفواصل)
+ *   1M → 999.5M       → 5.47 مليون
+ *   999.5M → 999.5B   → 1.23 مليار
+ *   1B+               → 1.23 مليار
+ *
+ * الرقم الكامل دايمًا موجود في الـ tooltip عن طريق prop الـ `full`.
+ */
 const fmtBig = (n: number) => {
   const a = Math.abs(n)
+  const s = n < 0 ? '−' : ''
+
+  const compose = (div: number, word: string) => {
+    const v = a / div
+    const d = v >= 100 ? 0 : v >= 10 ? 1 : 2   // 123 / 12.3 / 1.23
+    return `${s}${v.toFixed(d).replace(/\.?0+$/, '')} ${word}`
+  }
+
   if (a < 1_000_000) return num(n)
-  const v = n / 1_000_000
-  return `${v.toFixed(a >= 10_000_000 ? 1 : 2).replace(/\.?0+$/, '')} م`
+  if (a < 1_000_000_000) {
+    // لو هوصل 1000 مليون، اطلع للمليار على طول
+    if (a >= 999_500_000) return compose(1_000_000_000, 'مليار')
+    return compose(1_000_000, 'مليون')
+  }
+  return compose(1_000_000_000, 'مليار')
 }
 
 const toLatinDigits = (v: string) =>
   v.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
 
-// الزر الأساسي: ليموني فاتح بنص غامق في الوضعين
 const PRIMARY_BTN = 'border-0 bg-lime-400 text-stone-900 shadow-sm hover:bg-lime-300 focus-visible:ring-lime-500/40'
 
-// ألوان مساهمة الفروع (درجات الليموني) + رمادي لـ «غير مسند لفرع»
 const LIME_RAMP = ['#4d7c0f', '#65a30d', '#84cc16', '#a3e635']
 const UNASSIGNED_COLOR = '#a8a29e'
 
@@ -111,14 +129,6 @@ export function BranchesView() {
   const [form, setForm] = React.useState({ name: '', address: '', phone: '', active: true })
   const [saving, setSaving] = React.useState(false)
 
-  /**
-   * Load BOTH the branches list AND the per-branch reports (sales/profit).
-   * Used on initial mount to fully populate the page.
-   *
-   * 🚀 2026-09-13: After the /api/reports/branches SQL-aggregate fix, this
-   * endpoint is now ~150-300ms instead of 3-6s. So we can safely fetch both
-   * in parallel on initial load.
-   */
   const load = React.useCallback(async () => {
     setLoading(true)
     try {
@@ -135,20 +145,8 @@ export function BranchesView() {
   }, [])
   React.useEffect(() => { load() }, [load])
 
-  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
   useDataRefresh(['branches', 'sales'], load)
 
-  /**
-   * Lightweight reload — fetches ONLY the branches list (single fast query).
-   * Used after save/delete when we know the reports haven't materially
-   * changed (the new branch has zero sales). Refreshes the list instantly
-   * without waiting for the (now fast but still unnecessary) reports fetch.
-   *
-   * We also patch the local `reports` array to keep the UI consistent:
-   *   - Added a branch? Append a zero-stats entry.
-   *   - Deleted a branch? Remove its entry from reports.
-   *   - Edited? Just update the name in the existing entry.
-   */
   const reloadBranchesOnly = React.useCallback(async (opts?: {
     added?: { id: number; name: string; isMain: boolean }
     deletedId?: number
@@ -159,8 +157,6 @@ export function BranchesView() {
       setBranches(bs)
 
       if (opts?.added) {
-        // New branch starts with zero sales — patch the reports array so the
-        // table shows it without needing to refetch /api/reports/branches.
         const placeholder: BranchReport = {
           branchId: opts.added.id,
           name: opts.added.name,
@@ -182,7 +178,6 @@ export function BranchesView() {
         )
       }
     } catch (e: any) {
-      // If the lightweight reload fails, fall back to a full load.
       load()
     }
   }, [load])
@@ -206,8 +201,6 @@ export function BranchesView() {
         await api(`/api/branches/${editing.id}`, { method: 'PATCH', body: form })
         toast.success('تم تحديث الفرع')
         setOpen(false)
-        // 🚀 Only refetch branches list (fast) + patch the reports array
-        // in-place. The new branch's stats haven't changed.
         void reloadBranchesOnly({ renamed: { id: editing.id, name: form.name.trim() } })
       } else {
         const created = await api<Branch>('/api/branches', { method: 'POST', body: form })
@@ -248,7 +241,6 @@ export function BranchesView() {
 
   const reportMap = new Map(reports.map(r => [r.branchId, r]))
 
-  // Aggregate stats
   const totals = React.useMemo(() => {
     return reports.reduce((acc, r) => ({
       sales: acc.sales + r.totalSales,
@@ -300,14 +292,13 @@ export function BranchesView() {
     openPrintWindow(html, () => toast.error('الرجاء السماح بالنوافذ المنبثقة'))
   }
 
-  /* ───────── فتح/غلق سريع للفرع — نفس PATCH بتاع التعديل (active بس) ───────── */
   const toggleActive = async (b: Branch) => {
     if (b.isMain) {
       toast.error('الفرع الرئيسي لازم يفضل مفتوح — عيّن فرعاً آخر كرئيسي أولاً')
       return
     }
     const next = !b.active
-    setBranches((prev) => prev.map((x) => (x.id === b.id ? { ...x, active: next } : x))) // ⚡ optimistic
+    setBranches((prev) => prev.map((x) => (x.id === b.id ? { ...x, active: next } : x)))
     try {
       await api(`/api/branches/${b.id}`, { method: 'PATCH', body: { active: next } })
       toast.success(next ? `تم تفعيل ${b.name}` : `تم إيقاف ${b.name}`)
@@ -317,7 +308,6 @@ export function BranchesView() {
     }
   }
 
-  /* ───────── عرض فقط (مشتق من نفس البيانات) ───────── */
   const summary = React.useMemo(() => {
     let k = 0
     const segs = [...reports]
@@ -325,7 +315,6 @@ export function BranchesView() {
       .sort((x, y) => y.totalSales - x.totalSales)
       .map((r) => ({
         id: r.branchId,
-        // صف «بدون فرع» (branchId = 0) مش فرع: فواتير اتسجّلت من غير تحديد فرع
         name: r.branchId === 0 ? 'غير مسند لفرع' : r.name,
         unassigned: r.branchId === 0,
         sales: r.totalSales,
@@ -336,9 +325,9 @@ export function BranchesView() {
     const unassignedProducts = reports.find((r) => r.branchId === 0)?.productCount ?? 0
     return {
       segs,
-      orphan, // فواتير اتسجّلت من غير فرع (المستخدم اللي باع مش مربوط بفرع)
+      orphan,
       onlyOrphan: segs.length === 1 && segs[0].unassigned,
-      branchProducts: totals.products - unassignedProducts, // أصناف الفروع الفعلية بس
+      branchProducts: totals.products - unassignedProducts,
       unassignedProducts,
       margin: totals.sales > 0 ? (totals.profit / totals.sales) * 100 : 0,
       avg: totals.count > 0 ? totals.sales / totals.count : 0,
@@ -346,8 +335,7 @@ export function BranchesView() {
   }, [reports, totals])
 
   const [search, setSearch] = React.useState('')
-  const showSearch = branches.length > 6 // الفروع قليلة عادةً — البحث بيظهر بس لما تكتر
-  // ترتيب العرض: الرئيسي أولاً (محطة التبادل) ثم بتاريخ الافتتاح — عرض فقط
+  const showSearch = branches.length > 6
   const ordered = React.useMemo(
     () =>
       [...branches].sort(
@@ -361,7 +349,6 @@ export function BranchesView() {
     return ordered.filter((b) => `${b.name} ${b.address ?? ''} ${b.phone ?? ''}`.toLowerCase().includes(q))
   }, [ordered, search])
 
-  // أول ما الصفحة تفتح: الخط «يترسم» من فوق لتحت (بيتجاهل لو المستخدم مفعّل تقليل الحركة)
   const [drawn, setDrawn] = React.useState(false)
   React.useEffect(() => {
     const id = requestAnimationFrame(() => setDrawn(true))
@@ -370,11 +357,10 @@ export function BranchesView() {
 
   let stationNo = 0
 
-  // تنبيه «مبيعات من غير فرع» — جوه الملخص (فرعين+) أو لوحده لما يبقى فرع واحد
   const orphanNotice = (mt: string) =>
     summary.orphan && (
-      <div className={cn('flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-xs leading-relaxed', mt)}>
-        <Link2 className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+      <div className={cn('flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[11px] leading-relaxed sm:items-center sm:px-3.5 sm:text-xs', mt)}>
+        <Link2 className="mt-0.5 size-4 shrink-0 text-amber-600 sm:mt-0 dark:text-amber-400" />
         <p className="min-w-0" title={`${num(summary.orphan.count)} فاتورة بقيمة ${num(summary.orphan.sales)} جنيه`}>
           {summary.onlyOrphan ? 'كل مبيعاتك' : 'جزء من مبيعاتك'} اتسجّل من غير فرع.{' '}
           <Link href="/users" className="font-bold text-amber-700 underline underline-offset-2 hover:no-underline dark:text-amber-400">
@@ -386,17 +372,17 @@ export function BranchesView() {
     )
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
+    <div className="mx-auto w-full max-w-6xl px-3 sm:px-4">
       <ol className="relative">
         {/* ═════════ أول المحطة: العنوان + ملخص الأداء ═════════ */}
         <Row line drawn={drawn} index={0}>
-          <span className="flex size-12 items-center justify-center rounded-full bg-lime-400 text-stone-900 shadow-md ring-4 ring-lime-400/25">
-            <Store className="size-6" />
+          <span className="flex size-10 items-center justify-center rounded-full bg-lime-400 text-stone-900 shadow-md ring-4 ring-lime-400/25 sm:size-12">
+            <Store className="size-5 sm:size-6" />
           </span>
-          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 pb-1 pt-0.5">
-            <div>
-              <h1 className="text-2xl font-extrabold leading-tight">الفروع</h1>
-              <p className="mt-0.5 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3 pb-1 pt-0.5 sm:gap-x-6">
+            <div className="min-w-0">
+              <h1 className="text-xl font-extrabold leading-tight sm:text-2xl">الفروع</h1>
+              <p className="mt-0.5 text-[11px] text-muted-foreground sm:text-xs">
                 {loading && branches.length === 0
                   ? ' '
                   : branches.length === 0
@@ -405,27 +391,25 @@ export function BranchesView() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button onClick={openNew} className={PRIMARY_BTN}>
+              <Button onClick={openNew} className={PRIMARY_BTN} size="sm">
                 <Plus className="size-4" />
                 فرع جديد
               </Button>
-              <Button variant="outline" size="icon" onClick={exportPdf} disabled={loading} title="تصدير PDF" aria-label="تصدير PDF">
+              <Button variant="outline" size="icon" onClick={exportPdf} disabled={loading} title="تصدير PDF" aria-label="تصدير PDF" className="size-9">
                 <FileText className="size-4" />
               </Button>
             </div>
           </div>
 
-          {/* ملخص أداء كل الفروع — صف واحد مضغوط */}
           {loading && reports.length === 0 ? (
             <Skeleton className="mt-3 h-[104px] w-full rounded-2xl" />
           ) : branches.length === 1 ? (
-            // فرع واحد: كارت المحطة بيعرض نفس الأرقام — الملخص هيبقى تكرار، فبنكتفي بالتنبيه لو فيه مبيعات من غير فرع
             orphanNotice('mt-3')
           ) : (
             branches.length > 1 && (
-              <div className="relative mt-3 overflow-hidden rounded-2xl border bg-card p-4 pt-5 shadow-sm">
+              <div className="relative mt-3 overflow-hidden rounded-2xl border bg-card p-3 pt-5 shadow-sm sm:p-4 sm:pt-5">
                 <span aria-hidden className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-lime-400 via-lime-500 to-lime-600" />
-                <div className="grid grid-cols-2 gap-y-4 sm:grid-cols-4 sm:divide-x sm:divide-x-reverse">
+                <div className="grid grid-cols-2 gap-x-1 gap-y-4 sm:grid-cols-4 sm:gap-x-0 sm:divide-x sm:divide-x-reverse">
                   <Stat icon={Wallet} label="إجمالي المبيعات" value={fmtBig(totals.sales)} full={num(totals.sales)} unit="جنيه" big />
                   <Stat icon={TrendingUp} label="الأرباح" value={fmtBig(totals.profit)} full={num(totals.profit)} sub={totals.sales > 0 ? `هامش ${summary.margin.toFixed(summary.margin >= 10 ? 0 : 1)}%` : undefined} lime />
                   <Stat icon={Receipt} label="الفواتير" value={num(totals.count)} sub={totals.count > 0 ? `متوسط ${num(Math.round(summary.avg))} جنيه` : undefined} />
@@ -450,9 +434,9 @@ export function BranchesView() {
                         />
                       ))}
                     </div>
-                    <ul className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1.5">
+                    <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 sm:gap-x-5">
                       {summary.segs.map((g) => (
-                        <li key={g.id} className="flex items-center gap-1.5 text-xs">
+                        <li key={g.id} className="flex items-center gap-1.5 text-[11px] sm:text-xs">
                           <span className="size-2.5 rounded-full" style={{ backgroundColor: g.color }} />
                           <span className="font-medium">{g.name}</span>
                           <span className="tabular-nums text-muted-foreground">{Math.round((g.sales / (totals.sales || 1)) * 100)}%</span>
@@ -522,13 +506,13 @@ export function BranchesView() {
             <button
               type="button"
               onClick={openNew}
-              className="group flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-dashed border-border px-4 py-3.5 text-start transition-colors hover:border-lime-500/70 hover:bg-lime-500/5 focus-visible:ring-[3px] focus-visible:ring-lime-500/40 focus-visible:outline-none"
+              className="group flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-dashed border-border px-3.5 py-3 text-start transition-colors hover:border-lime-500/70 hover:bg-lime-500/5 focus-visible:ring-[3px] focus-visible:ring-lime-500/40 focus-visible:outline-none sm:px-4 sm:py-3.5"
             >
-              <span>
+              <span className="min-w-0">
                 <span className="block text-sm font-bold">{branches.length === 0 ? 'افتح أول فرع' : 'محطة جديدة'}</span>
-                <span className="block text-xs text-muted-foreground">اسم وعنوان ورقم وابدأ تبيع</span>
+                <span className="block truncate text-xs text-muted-foreground">اسم وعنوان ورقم وابدأ تبيع</span>
               </span>
-              <span className="flex size-8 items-center justify-center rounded-full bg-lime-400 text-stone-900 transition-transform group-hover:rotate-90">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-lime-400 text-stone-900 transition-transform group-hover:rotate-90">
                 <Plus className="size-4" />
               </span>
             </button>
@@ -536,22 +520,22 @@ export function BranchesView() {
         )}
       </ol>
 
-      {/* ═════════ نافذة الفرع — نفس هيكل نوافذ المصروفات والخزنة: هيدر متدرج + فوتر رمادي خفيف ═════════ */}
+      {/* ═════════ نافذة الفرع ═════════ */}
       <Dialog open={open} onOpenChange={(o) => !saving && setOpen(o)}>
         <DialogContent className="max-h-[92vh] gap-0 overflow-y-auto p-0 sm:max-w-md">
-          <DialogHeader className="border-b bg-gradient-to-br from-lime-400/20 to-lime-500/5 p-5 text-start">
-            <DialogTitle className="flex items-center gap-2 text-lg">
+          <DialogHeader className="border-b bg-gradient-to-br from-lime-400/20 to-lime-500/5 p-4 text-start sm:p-5">
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
               <span className="flex size-9 items-center justify-center rounded-full bg-lime-400 text-stone-900 shadow-sm">
                 {editing ? <Pencil className="size-[18px]" /> : <Store className="size-[18px]" />}
               </span>
               {editing ? 'تعديل فرع' : 'فرع جديد'}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs sm:text-sm">
               {editing ? 'عدّل بيانات الفرع — مبيعاته وأرباحه زي ما هي.' : 'اسم وعنوان ورقم، وهتبقى محطة جديدة على الخط.'}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5 p-5">
+          <div className="space-y-4 p-4 sm:space-y-5 sm:p-5">
             <div className="space-y-2">
               <Label htmlFor="b-name">
                 اسم الفرع <span className="text-destructive">*</span>
@@ -607,11 +591,11 @@ export function BranchesView() {
             </div>
           </div>
 
-          <DialogFooter className="flex-row gap-2 border-t bg-muted/30 p-4 sm:justify-between">
+          <DialogFooter className="flex-row gap-2 border-t bg-muted/30 p-3 sm:justify-between sm:p-4">
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={saving}>
               إلغاء
             </Button>
-            <Button size="lg" onClick={save} disabled={saving} className={cn('min-w-36', PRIMARY_BTN)}>
+            <Button size="lg" onClick={save} disabled={saving} className={cn('min-w-32 sm:min-w-36', PRIMARY_BTN)}>
               {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
               {editing ? 'حفظ' : 'إنشاء الفرع'}
             </Button>
@@ -624,10 +608,6 @@ export function BranchesView() {
 
 /* ───────────────────────── مكوّنات صغيرة ───────────────────────── */
 
-/**
- * صف على الخط: عمود المحطة (children[0]) + المحتوى (باقي الأبناء).
- * الخط الواصل بين المحطات بيترسم بحركة خفيفة، ومتقطّع لو المحطة اللي بعده مقفولة.
- */
 function Row({
   children,
   line,
@@ -643,30 +623,29 @@ function Row({
 }) {
   const kids = React.Children.toArray(children)
   return (
-    <li className="relative flex gap-3 pb-5 last:pb-0 sm:gap-4">
+    <li className="relative flex gap-2.5 pb-5 last:pb-0 sm:gap-4">
       {line && (
         <span
           aria-hidden
           className={cn(
-            'absolute start-[22px] top-6 origin-top transition-transform duration-500 ease-out motion-reduce:transition-none',
+            'absolute start-[19px] top-6 origin-top transition-transform duration-500 ease-out motion-reduce:transition-none sm:start-[22px]',
             dashed ? 'w-0 border-s-4 border-dashed border-stone-300 dark:border-stone-600' : 'w-1 rounded-full bg-lime-500 dark:bg-lime-400',
           )}
           style={{ bottom: -24, transform: drawn ? 'scaleY(1)' : 'scaleY(0)', transitionDelay: `${Math.min(index, 8) * 110}ms` }}
         />
       )}
-      <div className="relative z-10 flex h-12 w-12 shrink-0 items-center justify-center">{kids[0]}</div>
+      <div className="relative z-10 flex h-12 w-10 shrink-0 items-center justify-center sm:w-12">{kids[0]}</div>
       <div className="min-w-0 flex-1">{kids.slice(1)}</div>
     </li>
   )
 }
 
-/** دايرة المحطة: تبادل (رئيسي) · رقم · مقفولة */
 function StationNode({ main, active, no, title }: { main: boolean; active: boolean; no: number; title: string }) {
   if (main) {
     return (
       <span
         title={`الفرع الرئيسي — ${title}`}
-        className="flex size-11 items-center justify-center rounded-full border-[5px] border-lime-400 bg-stone-900 text-lime-400 ring-4 ring-lime-400/25"
+        className="flex size-10 items-center justify-center rounded-full border-[5px] border-lime-400 bg-stone-900 text-lime-400 ring-4 ring-lime-400/25 sm:size-11"
       >
         <Crown className="size-4" />
       </span>
@@ -676,7 +655,7 @@ function StationNode({ main, active, no, title }: { main: boolean; active: boole
     <span
       title={title}
       className={cn(
-        'flex size-9 items-center justify-center rounded-full border-[3px] text-xs font-extrabold tabular-nums',
+        'flex size-8 items-center justify-center rounded-full border-[3px] text-[11px] font-extrabold tabular-nums sm:size-9 sm:text-xs',
         active ? 'border-lime-400 bg-stone-900 text-lime-400' : 'border-dashed border-stone-400 bg-background text-muted-foreground dark:border-stone-500',
       )}
     >
@@ -685,28 +664,19 @@ function StationNode({ main, active, no, title }: { main: boolean; active: boole
   )
 }
 
-/** الهاتف: شارة موبايل + الرقم بولد LTR بأرقام إنجليزية */
 function PhoneTag({ phone }: { phone: string }) {
   return (
     <span dir="ltr" className="inline-flex max-w-full items-center gap-1.5">
       <span aria-hidden className="flex size-6 shrink-0 items-center justify-center rounded-md bg-lime-500/15 text-lime-700 dark:text-lime-400">
         <Smartphone className="size-3.5" strokeWidth={2.25} />
       </span>
-      <span className="truncate text-[13px] font-bold tracking-wide tabular-nums text-foreground/90">{toLatinDigits(phone.trim())}</span>
+      <span className="truncate text-[12px] font-bold tracking-wide tabular-nums text-foreground/90 sm:text-[13px]">{toLatinDigits(phone.trim())}</span>
     </span>
   )
 }
 
-/** خانة إحصائية (متوسّطة): تسمية صغيرة + رقم + سطر توضيحي اختياري */
 function Stat({
-  label,
-  value,
-  unit,
-  sub,
-  big,
-  lime,
-  full,
-  icon: Icon,
+  label, value, unit, sub, big, lime, full, icon: Icon,
 }: {
   icon?: React.ComponentType<{ className?: string }>
   label: string
@@ -719,33 +689,78 @@ function Stat({
 }) {
   const zero = value === '0'
   return (
-    <div className="min-w-0 px-2 text-center sm:px-3">
+    <div className="min-w-0 px-1 text-center sm:px-3">
       {Icon && (
-        <span className="mx-auto mb-1.5 flex size-8 items-center justify-center rounded-xl bg-lime-500/15 text-lime-700 dark:text-lime-400">
-          <Icon className="size-4" />
+        <span className="mx-auto mb-1.5 flex size-7 items-center justify-center rounded-xl bg-lime-500/15 text-lime-700 sm:size-8 dark:text-lime-400">
+          <Icon className="size-3.5 sm:size-4" />
         </span>
       )}
-      <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+      <p className="truncate text-[10px] font-medium text-muted-foreground sm:text-[11px]">{label}</p>
       <p
         title={full && full !== value ? `${full} جنيه` : undefined}
         className={cn(
           'mt-0.5 truncate leading-tight font-extrabold tabular-nums',
-          big ? 'text-2xl' : 'text-xl',
+          big ? 'text-xl sm:text-2xl' : 'text-lg sm:text-xl',
           zero ? 'text-muted-foreground/60' : lime ? 'text-lime-700 dark:text-lime-400' : 'text-foreground',
         )}
       >
         {value}
-        {unit && <span className="ms-1 text-[11px] font-medium text-muted-foreground">{unit}</span>}
+        {unit && <span className="ms-1 text-[10px] font-medium text-muted-foreground sm:text-[11px]">{unit}</span>}
       </p>
-      {sub && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{sub}</p>}
+      {sub && <p className="mt-0.5 truncate text-[10px] text-muted-foreground sm:text-[11px]">{sub}</p>}
     </div>
   )
 }
 
-/** نسبة مئوية مقروءة: ١٢٪ — وتحت ١٠٪ بكسر واحد، وأقل من ١٪ بتبان «<١٪» بدل ٠٪ */
+/** خانة إحصائية للجوال — بسيطة بدون أيقونة */
+function MobileStat({ label, value, unit, sub, lime }: { label: string; value: string; unit?: string; sub?: React.ReactNode; lime?: boolean }) {
+  const zero = value === '0'
+  return (
+    <div className="min-w-0">
+      <p className="truncate text-[10px] font-medium text-muted-foreground">{label}</p>
+      <p className={cn(
+        'mt-0.5 truncate text-lg leading-tight font-extrabold tabular-nums',
+        zero ? 'text-muted-foreground/60' : lime ? 'text-lime-700 dark:text-lime-400' : 'text-foreground',
+      )}>
+        {value}
+        {unit && <span className="ms-1 text-[10px] font-medium text-muted-foreground">{unit}</span>}
+      </p>
+      {sub && <div className="mt-0.5 truncate text-[10px] text-muted-foreground">{sub}</div>}
+    </div>
+  )
+}
+
+/** صف اتصال للجوال — كامل العرض، التفاف طبيعي للكلام */
+function MobileContactRow({
+  icon: Icon, label, value, ltr, action,
+}: {
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
+  label: string
+  value: string
+  ltr?: boolean
+  action?: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center gap-2.5 rounded-xl border bg-background/70 px-2.5 py-2">
+      <span aria-hidden className="flex size-7 shrink-0 items-center justify-center rounded-md bg-lime-500/15 text-lime-700 dark:text-lime-400">
+        <Icon className="size-3.5" strokeWidth={2.25} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-medium text-muted-foreground">{label}</p>
+        <p
+          dir={ltr ? 'ltr' : undefined}
+          className={cn('text-[12px] font-semibold leading-snug break-words', ltr && 'text-left tracking-wide tabular-nums')}
+        >
+          {value}
+        </p>
+      </div>
+      {action}
+    </div>
+  )
+}
+
 const pctText = (v: number) => (v > 0 && v < 1 ? '<1%' : `${v.toFixed(v >= 10 ? 0 : 1).replace(/\.0$/, '')}%`)
 
-/** نقطة «شغّال» بنبض خفيف (بتتجاهل تقليل الحركة) */
 function LiveDot() {
   return (
     <span className="relative flex size-2 shrink-0">
@@ -755,24 +770,11 @@ function LiveDot() {
   )
 }
 
-/** خانة رقم صغيرة جوه لوحة المحطة */
-function Mini({
-  label,
-  value,
-  sub,
-  lime,
-  full,
-}: {
-  label: string
-  value: string
-  sub?: React.ReactNode
-  lime?: boolean
-  full?: string
-}) {
+function Mini({ label, value, sub, lime, full }: { label: string; value: string; sub?: React.ReactNode; lime?: boolean; full?: string }) {
   const zero = value === '0'
   return (
     <div className="min-w-0 px-2 text-center">
-      <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+      <p className="truncate text-[11px] font-medium text-muted-foreground">{label}</p>
       <p
         title={full && full !== value ? `${full} جنيه` : undefined}
         className={cn(
@@ -787,7 +789,6 @@ function Mini({
   )
 }
 
-/** شريحة اتصال: أيقونة في مربع ليموني + محتوى — نفس الارتفاع والشكل للعنوان والهاتف */
 function ContactChip({ icon: Icon, children }: { icon: React.ComponentType<{ className?: string; strokeWidth?: number }>; children: React.ReactNode }) {
   return (
     <span className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-xl border bg-background/70 py-1 ps-1.5 pe-2.5 text-[13px]">
@@ -799,18 +800,10 @@ function ContactChip({ icon: Icon, children }: { icon: React.ComponentType<{ cla
   )
 }
 
-/**
- * المحطة — «لوحة محطة»:
- * شريط رصيف منقّط (زي بلاط الرصيف الأصفر في المترو) على حافة الكارت، الاسم والحالة والاتصال في جنب،
- * ولوحة الأرقام في النص (المبيعات هي البطل + نسبتها من المحل، وحواليها الأرباح والفواتير والأصناف).
- */
+/* ─────────────────────── البطاقة (تخطيطان) ─────────────────────── */
+
 function Station({
-  b,
-  r,
-  totalSales,
-  onEdit,
-  onDelete,
-  onToggle,
+  b, r, totalSales, onEdit, onDelete, onToggle,
 }: {
   b: Branch
   r: BranchReport | undefined
@@ -829,6 +822,62 @@ function Station({
   const hasSales = sales > 0 || count > 0
   const edge = b.active ? '#84cc16' : '#a8a29e'
   const opened = new Date(b.createdAt).toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' })
+  const mapsHref = b.address?.trim()
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.address)}`
+    : undefined
+
+  const badges = (
+    <>
+      {b.isMain && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-lime-400/25 px-2 py-0.5 text-[10px] font-bold text-lime-800 sm:px-2.5 sm:text-[11px] dark:text-lime-300">
+          <Crown className="size-3" />
+          الفرع الرئيسي
+        </span>
+      )}
+      {b.active ? (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-lime-500/10 px-2 py-0.5 text-[10px] font-bold text-lime-700 sm:px-2.5 sm:text-[11px] dark:text-lime-400">
+          <LiveDot />
+          شغّال
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1 rounded-full bg-stone-500/15 px-2 py-0.5 text-[10px] font-bold text-stone-600 sm:px-2.5 sm:text-[11px] dark:text-stone-300">
+          <Power className="size-3" />
+          موقوف
+        </span>
+      )}
+    </>
+  )
+
+  const actions = (
+    <>
+      <Button variant="outline" size="icon" className="size-8 rounded-lg lg:size-9 lg:rounded-xl" onClick={onEdit} title="تعديل" aria-label="تعديل الفرع">
+        <Pencil className="size-3.5 lg:size-4" />
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="size-8 rounded-lg lg:size-9 lg:rounded-xl" aria-label="خيارات الفرع">
+            <MoreVertical className="size-3.5 lg:size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {!b.isMain && (
+            <DropdownMenuItem onClick={onToggle}>
+              <Power className="size-4" />
+              {b.active ? 'إيقاف الفرع' : 'تفعيل الفرع'}
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem
+            onClick={onDelete}
+            disabled={b.isMain}
+            className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+          >
+            <Trash2 className="size-4" />
+            {b.isMain ? 'الرئيسي لا يُحذف' : 'حذف الفرع'}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  )
 
   return (
     <article
@@ -837,49 +886,31 @@ function Station({
         !b.active && 'bg-muted/40',
       )}
     >
-      {/* رصيف المحطة: شريط منقّط على الحافة */}
       <span
         aria-hidden
-        className="absolute inset-y-0 start-0 w-3 rounded-s-[15px]"
+        className="absolute inset-y-0 start-0 w-2.5 rounded-s-[15px] sm:w-3"
         style={{
           backgroundColor: edge,
           backgroundImage: 'radial-gradient(rgba(0,0,0,0.22) 1.3px, transparent 1.6px)',
           backgroundSize: '7px 7px',
         }}
       />
-      {/* وصلة بين دايرة المحطة والرصيف */}
-      <span aria-hidden className="absolute -start-[21px] top-[22px] h-1 w-[22px] rounded-full" style={{ backgroundColor: edge }} />
+      <span aria-hidden className="absolute -start-[17px] top-[22px] h-1 w-[17px] rounded-full sm:-start-[21px] sm:w-[21px]" style={{ backgroundColor: edge }} />
 
-      <div className="grid gap-4 p-4 ps-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.55fr)_auto] lg:items-center lg:gap-6">
-        {/* ── الهوية والحالة والاتصال ── */}
-        <div className="min-w-0 space-y-3 pe-24 lg:pe-0">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
+      {/* ══════════════ 🖥️ ديسكتوب — التخطيط الأفقي (lg+) ══════════════ */}
+      <div className="hidden lg:grid gap-6 p-4 ps-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.55fr)_auto] lg:items-center">
+        {/* عمود 1: الهوية والاتصال */}
+        <div className="min-w-0 space-y-3">
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
             <h2 className="text-xl font-extrabold leading-snug break-words [overflow-wrap:anywhere]">{b.name}</h2>
-            {b.isMain && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-lime-400/25 px-2.5 py-0.5 text-[11px] font-bold text-lime-800 dark:text-lime-300">
-                <Crown className="size-3" />
-                الفرع الرئيسي
-              </span>
-            )}
-            {b.active ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-lime-500/10 px-2.5 py-0.5 text-[11px] font-bold text-lime-700 dark:text-lime-400">
-                <LiveDot />
-                شغّال
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 rounded-full bg-stone-500/15 px-2.5 py-0.5 text-[11px] font-bold text-stone-600 dark:text-stone-300">
-                <Power className="size-3" />
-                موقوف
-              </span>
-            )}
+            {badges}
           </div>
-
           <div className="flex flex-wrap items-center gap-2">
             {b.address?.trim() ? (
               <ContactChip icon={MapPin}>
-                <span className="min-w-0 break-words [overflow-wrap:anywhere]">{b.address}</span>
+                <span className="min-w-0 break-words">{b.address}</span>
                 <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.address)}`}
+                  href={mapsHref}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex shrink-0 items-center gap-1 rounded-md bg-lime-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-lime-700 hover:bg-lime-500/20 focus-visible:ring-[3px] focus-visible:ring-lime-500/40 focus-visible:outline-none dark:text-lime-400"
@@ -899,18 +930,17 @@ function Station({
               <AddChip icon={Smartphone} label="أضف رقم الهاتف" onClick={onEdit} />
             )}
           </div>
-
           <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <CalendarDays className="size-3" />
             افتُتح {opened}
           </p>
         </div>
 
-        {/* ── لوحة الأرقام ── */}
+        {/* عمود 2: لوحة الأرقام */}
         <div className="rounded-xl border border-lime-500/20 bg-lime-500/[0.06] p-3.5 dark:bg-lime-400/[0.07]">
           {hasSales ? (
-            <div className="grid gap-x-4 gap-y-3.5 sm:grid-cols-[1.15fr_2fr] sm:items-center">
-              <div className="min-w-0 sm:border-e sm:border-lime-500/20 sm:pe-4">
+            <div className="grid gap-x-4 gap-y-3.5 grid-cols-[1.15fr_2fr] items-center">
+              <div className="min-w-0 border-e border-lime-500/20 pe-4">
                 <p className="text-[11px] font-medium text-muted-foreground">المبيعات</p>
                 <p title={`${num(sales)} جنيه`} className="mt-0.5 truncate text-3xl leading-tight font-extrabold tabular-nums">
                   {fmtBig(sales)}
@@ -960,41 +990,113 @@ function Station({
           )}
         </div>
 
-        {/* ── الإجراءات ── */}
-        <div className="absolute top-3 end-3 flex items-center gap-1 lg:static lg:flex-col lg:self-center">
-          <Button variant="outline" size="icon" className="size-9 rounded-xl" onClick={onEdit} title="تعديل" aria-label="تعديل الفرع">
-            <Pencil className="size-4" />
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-9 rounded-xl" aria-label="خيارات الفرع">
-                <MoreVertical className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {!b.isMain && (
-                <DropdownMenuItem onClick={onToggle}>
-                  <Power className="size-4" />
-                  {b.active ? 'إيقاف الفرع' : 'تفعيل الفرع'}
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem
-                onClick={onDelete}
-                disabled={b.isMain}
-                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-              >
-                <Trash2 className="size-4" />
-                {b.isMain ? 'الرئيسي لا يُحذف' : 'حذف الفرع'}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        {/* عمود 3: الإجراءات */}
+        <div className="flex flex-col items-center gap-1">
+          {actions}
         </div>
+      </div>
+
+      {/* ══════════════ 📱 موبايل/تابلت — تخطيط عمودي ══════════════ */}
+      <div className="lg:hidden p-3.5 ps-5 sm:p-4 sm:ps-6">
+        {/* رأس: اسم + شارات + إجراءات */}
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <h2 className="text-base font-extrabold leading-snug break-words sm:text-lg">{b.name}</h2>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {badges}
+            </div>
+          </div>
+          <div className="-me-1 -mt-1 flex shrink-0 items-center gap-0.5">
+            {actions}
+          </div>
+        </div>
+
+        {/* اتصال: صفوف كاملة العرض */}
+        {(b.address?.trim() || b.phone?.trim()) && (
+          <div className="mt-3 space-y-2">
+            {b.address?.trim() && (
+              <MobileContactRow
+                icon={MapPin}
+                label="العنوان"
+                value={b.address}
+                action={
+                  <a
+                    href={mapsHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-md bg-lime-500/10 px-2 py-1 text-[10px] font-semibold text-lime-700 hover:bg-lime-500/20 focus-visible:ring-[3px] focus-visible:ring-lime-500/40 focus-visible:outline-none dark:text-lime-400"
+                  >
+                    <Navigation className="size-3" />
+                    خريطة
+                  </a>
+                }
+              />
+            )}
+            {!b.address?.trim() && (
+              <AddChip icon={MapPin} label="أضف العنوان" onClick={onEdit} />
+            )}
+            {b.phone?.trim() && (
+              <MobileContactRow
+                icon={Smartphone}
+                label="الهاتف"
+                value={toLatinDigits(b.phone.trim())}
+                ltr
+              />
+            )}
+            {!b.phone?.trim() && (
+              <AddChip icon={Smartphone} label="أضف رقم الهاتف" onClick={onEdit} />
+            )}
+          </div>
+        )}
+
+        {/* إحصائيات: 2×2 على الموبايل */}
+        <div className="mt-3 overflow-hidden rounded-xl border border-lime-500/20 bg-lime-500/[0.06] dark:bg-lime-400/[0.07]">
+          {hasSales ? (
+            <div className="grid grid-cols-2">
+              <div className="border-b border-e border-lime-500/20 p-3">
+                <MobileStat label="إجمالي المبيعات" value={fmtBig(sales)} unit="جنيه" />
+              </div>
+              <div className="border-b border-lime-500/20 p-3">
+                <MobileStat
+                  lime
+                  label="الأرباح"
+                  value={fmtBig(profit)}
+                  sub={sales > 0 ? `هامش ${margin.toFixed(margin >= 10 ? 0 : 1)}%` : undefined}
+                />
+              </div>
+              <div className="border-e border-lime-500/20 p-3">
+                <MobileStat
+                  label="الفواتير"
+                  value={num(count)}
+                  sub={count > 0 ? `متوسط ${num(Math.round(avg))} جنيه` : undefined}
+                />
+              </div>
+              <div className="p-3">
+                <MobileStat label="الأصناف" value={num(products)} />
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2.5 p-3">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-lime-500/15 text-lime-700 dark:text-lime-400">
+                <Hourglass className="size-4" />
+              </span>
+              <p className="min-w-0 text-[11px] leading-snug text-muted-foreground">
+                لسه مفيش مبيعات — الأرقام هتظهر هنا أول ما يبيع
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* تاريخ الافتتاح */}
+        <p className="mt-2.5 flex items-center gap-1.5 text-[10px] text-muted-foreground sm:text-[11px]">
+          <CalendarDays className="size-3" />
+          افتُتح {opened}
+        </p>
       </div>
     </article>
   )
 }
 
-/** بيانات ناقصة؟ بدل ما تختفي: زرار «أضف» بيفتح التعديل */
 function AddChip({
   icon: Icon,
   label,
@@ -1008,7 +1110,7 @@ function AddChip({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-border px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-lime-500/70 hover:bg-lime-500/10 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-lime-500/40 focus-visible:outline-none"
+      className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border px-2.5 py-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-lime-500/70 hover:bg-lime-500/10 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-lime-500/40 focus-visible:outline-none sm:w-auto sm:py-1.5 sm:text-xs"
     >
       <Plus className="size-3" />
       <Icon className="size-3.5" />
