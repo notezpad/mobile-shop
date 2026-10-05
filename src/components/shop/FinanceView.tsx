@@ -85,22 +85,24 @@ interface Rates {
 const METHODS: {
   key: MethodKey
   label: string
+  short: string
   icon: React.ElementType
   color: string
   rate: keyof Rates
 }[] = [
-  { key: 'vodafone_cash', label: 'محافظ إلكترونية', icon: Smartphone, color: '#f97316', rate: 'commissionVodafoneCash' },
-  { key: 'instapay', label: 'انستاباي', icon: Zap, color: '#6366f1', rate: 'commissionInstapay' },
-  { key: 'fawry', label: 'فوري', icon: Receipt, color: '#eab308', rate: 'commissionFawry' },
+  { key: 'vodafone_cash', label: 'محافظ إلكترونية', short: 'محافظ', icon: Smartphone, color: '#f97316', rate: 'commissionVodafoneCash' },
+  { key: 'instapay', label: 'انستاباي', short: 'انستاباي', icon: Zap, color: '#6366f1', rate: 'commissionInstapay' },
+  { key: 'fawry', label: 'فوري', short: 'فوري', icon: Receipt, color: '#eab308', rate: 'commissionFawry' },
 ]
 const M = Object.fromEntries(METHODS.map((m) => [m.key, m])) as Record<string, (typeof METHODS)[number]>
 const methodLabel = (k: string) => M[k]?.label ?? k
+const methodShort = (k: string) => M[k]?.short ?? k
 
-const PRESETS: { k: Preset; l: string }[] = [
-  { k: 'today', l: 'اليوم' },
-  { k: 'week', l: 'آخر 7 أيام' },
-  { k: 'month', l: 'الشهر ده' },
-  { k: 'all', l: 'كل الفترة' },
+const PRESETS: { k: Preset; l: string; short: string }[] = [
+  { k: 'today', l: 'اليوم', short: 'اليوم' },
+  { k: 'week', l: 'آخر 7 أيام', short: '٧ أيام' },
+  { k: 'month', l: 'الشهر ده', short: 'الشهر' },
+  { k: 'all', l: 'كل الفترة', short: 'الكل' },
 ]
 
 const ACCENT = 'linear-gradient(135deg, #0d9488, #06b6d4)' // teal → cyan
@@ -376,7 +378,7 @@ export function FinanceView() {
   const firstLoad = loading && !loadedOnce
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {/* ═════════ الهيرو — التذكرة ═════════ */}
       <section className="relative overflow-hidden rounded-3xl border bg-card text-card-foreground shadow-sm">
         <div
@@ -391,10 +393,10 @@ export function FinanceView() {
 
         <div className="relative grid lg:grid-cols-[minmax(0,1fr)_212px]">
           {/* الجنب الأساسي */}
-          <div className="space-y-4 p-5 sm:p-6">
+          <div className="space-y-4 p-4 sm:p-6">
             <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-              {/* الهوية + الرقم المحوري */}
-              <div className="min-w-[250px]">
+              {/* الهوية + الرقم المحوري — بعرض كامل على الجوال */}
+              <div className="w-full min-w-0 sm:w-auto sm:min-w-[250px]">
                 <div className="flex items-center gap-3">
                   <span
                     className="flex size-10 items-center justify-center rounded-xl text-white shadow-md shadow-teal-600/25"
@@ -402,26 +404,28 @@ export function FinanceView() {
                   >
                     <Wallet className="size-5" />
                   </span>
-                  <div>
-                    <h1 className="text-lg font-extrabold leading-tight">المعاملات المالية</h1>
-                    <p className="text-[11px] text-muted-foreground">إيداع وسحب المحافظ الإلكترونية والعمولات</p>
+                  <div className="min-w-0">
+                    <h1 className="truncate text-lg font-extrabold leading-tight">المعاملات المالية</h1>
+                    <p className="truncate text-[11px] text-muted-foreground">إيداع وسحب المحافظ الإلكترونية والعمولات</p>
                   </div>
                 </div>
 
                 <p className="mt-4 text-xs font-medium text-muted-foreground">عمولة الفترة — ربح المحل من التحويلات</p>
-                <div className="mt-1 flex items-baseline gap-2.5">
+                {/* 📱 رقم مقاوم للملايين — text-4xl على الجوال + truncate */}
+                <div className="mt-1 flex min-w-0 items-baseline gap-2.5">
                   {firstLoad ? (
                     <Skeleton className="h-12 w-44 rounded-xl" />
                   ) : (
                     <span
                       dir="ltr"
-                      className="bg-clip-text text-5xl font-black leading-none tracking-tight tabular-nums text-transparent"
+                      title={fmt(stats.total.comm)}
+                      className="min-w-0 truncate bg-clip-text text-4xl font-black leading-none tracking-tight tabular-nums text-transparent sm:text-5xl"
                       style={{ backgroundImage: ACCENT }}
                     >
                       {fmt(stats.total.comm)}
                     </span>
                   )}
-                  <span className="text-base font-semibold text-muted-foreground">جنيه</span>
+                  <span className="shrink-0 text-sm font-semibold text-muted-foreground sm:text-base">جنيه</span>
                 </div>
                 <p className="mt-1.5 text-xs text-muted-foreground">
                   من <b className="text-foreground">{countTxn(stats.total.n)}</b> · {rangeText}
@@ -429,15 +433,16 @@ export function FinanceView() {
                 </p>
               </div>
 
-              {/* ملخص التدفق */}
-              <div className="grid min-w-[280px] flex-1 grid-cols-3 gap-2 lg:max-w-[500px]">
-                <Tile label="إيداعات" value={fmt(stats.total.dep)} tone={stats.total.dep > 0 ? 'in' : 'flat'} />
-                <Tile label="سحوبات" value={fmt(stats.total.wd)} tone={stats.total.wd > 0 ? 'out' : 'flat'} />
+              {/* ملخص التدفق — 📱 w-full على الجوال، 3 أعمدة بتقسيم متساوي */}
+              <div className="grid w-full min-w-0 flex-1 grid-cols-3 gap-1.5 sm:gap-2 lg:max-w-[500px]">
+                <Tile label="إيداعات" value={fmt(stats.total.dep)} tone={stats.total.dep > 0 ? 'in' : 'flat'} rawValue={stats.total.dep} />
+                <Tile label="سحوبات" value={fmt(stats.total.wd)} tone={stats.total.wd > 0 ? 'out' : 'flat'} rawValue={stats.total.wd} />
                 <Tile
                   label="أثر الخزنة"
                   value={sgn(stats.net)}
                   tone={stats.net > 0 ? 'in' : stats.net < 0 ? 'out' : 'flat'}
                   hint="إيداع − سحب + عمولة"
+                  rawValue={stats.net}
                 />
               </div>
             </div>
@@ -480,7 +485,7 @@ export function FinanceView() {
           </div>
 
           {/* الجنب المقصوص (stub) */}
-          <div className="relative flex flex-col justify-center gap-2.5 border-t border-dashed p-5 sm:p-6 lg:border-s lg:border-t-0">
+          <div className="relative flex flex-col justify-center gap-2.5 border-t border-dashed p-4 sm:p-6 lg:border-s lg:border-t-0">
             <span aria-hidden className="absolute left-0 top-0 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border bg-background lg:left-auto lg:right-0 lg:translate-x-1/2" />
             <span aria-hidden className="absolute right-0 top-0 size-5 -translate-y-1/2 translate-x-1/2 rounded-full border bg-background lg:bottom-0 lg:top-auto lg:translate-y-1/2" />
             <Button
@@ -512,19 +517,22 @@ export function FinanceView() {
       {/* ═════════ الفلاتر ═════════ */}
       <div className="sticky top-0 z-20 overflow-hidden rounded-2xl border bg-background/80 shadow-sm backdrop-blur-xl">
         <style>{`@keyframes fin-slide{0%{transform:translateX(-120%)}100%{transform:translateX(420%)}}`}</style>
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 p-2">
+        <div className="flex flex-col gap-2 p-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2.5 sm:gap-y-2">
+          {/* الفترة — 📱 صف كامل مع باقي الفلاتر */}
           <Popover>
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="flex h-10 items-center gap-2 rounded-xl border bg-card px-3 text-xs font-bold shadow-xs transition-colors hover:bg-muted/60"
+                className="flex h-10 w-full items-center justify-between gap-2 rounded-xl border bg-card px-3 text-xs font-bold shadow-xs transition-colors hover:bg-muted/60 sm:w-auto sm:justify-start"
               >
-                <CalendarDays className="size-4 text-teal-600 dark:text-teal-400" />
-                <span dir="ltr" className="tabular-nums">{rangeText}</span>
-                <ChevronDown className="size-3.5 opacity-60" />
+                <span className="flex min-w-0 items-center gap-2">
+                  <CalendarDays className="size-4 shrink-0 text-teal-600 dark:text-teal-400" />
+                  <span dir="ltr" className="truncate tabular-nums">{rangeText}</span>
+                </span>
+                <ChevronDown className="size-3.5 shrink-0 opacity-60" />
               </button>
             </PopoverTrigger>
-            <PopoverContent align="start" className="w-[300px] rounded-2xl p-3">
+            <PopoverContent align="start" className="w-[min(300px,calc(100vw-2rem))] rounded-2xl p-3">
               <div className="grid grid-cols-2 gap-1.5">
                 {PRESETS.map((p) => (
                   <button
@@ -558,7 +566,7 @@ export function FinanceView() {
             label="الفترة السريعة"
             value={preset}
             onChange={(v) => apply(v as Preset)}
-            options={PRESETS.map((p) => ({ v: p.k, l: p.l }))}
+            options={PRESETS.map((p) => ({ v: p.k, l: p.short }))}
           />
 
           <Seg
@@ -566,13 +574,14 @@ export function FinanceView() {
             value={method}
             onChange={setMethod}
             options={[
-              { v: 'all', l: 'كل الوسائل' },
+              { v: 'all', l: 'الكل' },
               ...METHODS.map((m) => ({
                 v: m.key,
                 l: (
-                  <span className="inline-flex items-center gap-1.5">
-                    <i className="size-2 rounded-full" style={{ backgroundColor: m.color }} />
-                    {m.label}
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                    <i className="size-2 shrink-0 rounded-full" style={{ backgroundColor: m.color }} />
+                    <span className="sm:hidden">{m.short}</span>
+                    <span className="hidden sm:inline">{m.label}</span>
                   </span>
                 ),
               })),
@@ -596,16 +605,18 @@ export function FinanceView() {
               aria-pressed={!showCancelled}
               onClick={() => setShowCancelled((v) => !v)}
               className={cn(
-                'flex h-10 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-colors',
+                'flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-colors sm:w-auto sm:justify-start',
                 showCancelled ? 'bg-card text-muted-foreground hover:text-foreground' : 'border-teal-500/40 bg-teal-500/10 text-teal-700 dark:text-teal-300'
               )}
             >
-              {showCancelled ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              {showCancelled ? 'إخفاء' : 'إظهار'} الملغية ({fmt(stats.cancelled)})
+              {showCancelled ? <EyeOff className="size-4 shrink-0" /> : <Eye className="size-4 shrink-0" />}
+              <span className="truncate">
+                {showCancelled ? 'إخفاء' : 'إظهار'} الملغية ({fmt(stats.cancelled)})
+              </span>
             </button>
           )}
 
-          <div className="relative min-w-[170px] flex-1">
+          <div className="relative min-w-0 flex-1 sm:min-w-[170px]">
             <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={q}
@@ -731,26 +742,30 @@ export function FinanceView() {
 /* ───────────────────────── مكوّنات الهيرو والفلاتر ───────────────────────── */
 
 const GRID =
-  'grid-cols-[auto_minmax(0,1fr)_auto_32px] lg:grid-cols-[auto_minmax(0,1.3fr)_minmax(80px,1fr)_130px_100px_130px_32px] gap-x-4'
+  'grid-cols-[auto_minmax(0,1fr)_auto_32px] gap-x-2 sm:gap-x-4 lg:grid-cols-[auto_minmax(0,1.3fr)_minmax(80px,1fr)_130px_100px_130px_32px]'
 
+/** كارت صغير — مقاوم للملايين عبر truncate + title */
 function Tile({
   label,
   value,
   tone,
   hint,
+  rawValue,
 }: {
   label: string
   value: string
   tone: 'in' | 'out' | 'flat'
   hint?: string
+  rawValue?: number
 }) {
   return (
-    <div className="rounded-2xl border bg-background/60 px-3 py-2.5" title={hint}>
-      <p className="text-[11px] text-muted-foreground">{label}</p>
+    <div className="min-w-0 rounded-2xl border bg-background/60 px-2 py-2.5 sm:px-3" title={hint}>
+      <p className="truncate text-[10px] text-muted-foreground sm:text-[11px]">{label}</p>
       <p
         dir="ltr"
+        title={rawValue !== undefined ? value : undefined}
         className={cn(
-          'mt-0.5 text-right text-lg font-extrabold tabular-nums',
+          'mt-0.5 min-w-0 truncate text-right text-sm font-extrabold tabular-nums sm:text-lg',
           tone === 'in' && 'text-emerald-600 dark:text-emerald-400',
           tone === 'out' && 'text-rose-600 dark:text-rose-400'
         )}
@@ -765,7 +780,7 @@ function Pill({ tone, children }: { tone: 'in' | 'out' | 'acc'; children: React.
   return (
     <span
       className={cn(
-        'rounded-full px-2.5 py-1',
+        'whitespace-nowrap rounded-full px-2.5 py-1',
         tone === 'in' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
         tone === 'out' && 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
         tone === 'acc' && 'bg-teal-500/10 text-teal-700 dark:text-teal-300'
@@ -823,13 +838,23 @@ function Lane({
             <Icon className="size-4" />
           </span>
           <div className="min-w-0">
-            <p className="truncate text-xs font-bold leading-tight">{m.label}</p>
-            <p className="text-[10px] leading-tight text-muted-foreground">{countTxn(b.n)}</p>
+            <p className="truncate text-xs font-bold leading-tight">
+              <span className="sm:hidden">{m.short}</span>
+              <span className="hidden sm:inline">{m.label}</span>
+            </p>
+            <p className="truncate text-[10px] leading-tight text-muted-foreground">{countTxn(b.n)}</p>
           </div>
         </div>
-        <div className="shrink-0 text-end">
+        <div className="min-w-0 shrink-0 text-end">
           <p className="text-[10px] leading-tight text-muted-foreground">عمولة</p>
-          <p dir="ltr" className={cn('text-left text-sm font-extrabold leading-tight tabular-nums', b.comm > 0 ? 'text-teal-700 dark:text-teal-300' : 'text-muted-foreground/60')}>
+          <p
+            dir="ltr"
+            title={b.comm > 0 ? fmt(b.comm) : undefined}
+            className={cn(
+              'max-w-[80px] truncate text-left text-sm font-extrabold leading-tight tabular-nums',
+              b.comm > 0 ? 'text-teal-700 dark:text-teal-300' : 'text-muted-foreground/60'
+            )}
+          >
             {b.comm > 0 ? sgn(b.comm) : '0'}
           </p>
         </div>
@@ -851,16 +876,26 @@ function Lane({
             />
           )}
         </div>
-        <div className="mt-1 flex justify-between text-[10px] font-semibold tabular-nums">
-          <span className={b.wd ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground/60'}>{b.wd ? sgn(-b.wd) : '0'}</span>
-          <span className={b.dep ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/60'}>{b.dep ? sgn(b.dep) : '0'}</span>
+        <div className="mt-1 flex justify-between gap-1 text-[10px] font-semibold tabular-nums">
+          <span
+            title={b.wd ? fmt(b.wd) : undefined}
+            className={cn('min-w-0 truncate', b.wd ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground/60')}
+          >
+            {b.wd ? sgn(-b.wd) : '0'}
+          </span>
+          <span
+            title={b.dep ? fmt(b.dep) : undefined}
+            className={cn('min-w-0 truncate text-end', b.dep ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/60')}
+          >
+            {b.dep ? sgn(b.dep) : '0'}
+          </span>
         </div>
       </div>
     </div>
   )
 }
 
-/** مفتاح اختيار موحّد */
+/** مفتاح اختيار موحّد — 📱 صف كامل مع سكرول أفقي، 🖥️ حجم المحتوى */
 function Seg({
   value,
   onChange,
@@ -876,7 +911,7 @@ function Seg({
     <div
       role="radiogroup"
       aria-label={label}
-      className="inline-flex max-w-full gap-0.5 overflow-x-auto rounded-xl bg-muted/70 p-1 ring-1 ring-inset ring-border/60"
+      className="flex w-full max-w-full gap-0.5 overflow-x-auto rounded-xl bg-muted/70 p-1 ring-1 ring-inset ring-border/60 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:inline-flex sm:w-auto"
     >
       {options.map((o) => {
         const on = value === o.v
@@ -888,7 +923,7 @@ function Seg({
             aria-checked={on}
             onClick={() => onChange(o.v)}
             className={cn(
-              'shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all',
+              'shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all sm:px-3',
               on
                 ? 'bg-card text-teal-700 shadow-sm ring-1 ring-teal-500/25 dark:text-teal-300'
                 : 'text-muted-foreground hover:text-foreground'
@@ -908,11 +943,12 @@ function MethodTag({ k }: { k: string }) {
   const Icon = m.icon
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-xs font-bold"
+      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-0.5 text-xs font-bold"
       style={{ backgroundColor: `${m.color}1a`, color: m.color }}
     >
-      <Icon className="size-3.5" />
-      {m.label}
+      <Icon className="size-3.5 shrink-0" />
+      <span className="sm:hidden">{methodShort(k)}</span>
+      <span className="hidden sm:inline">{m.label}</span>
     </span>
   )
 }
@@ -945,7 +981,7 @@ function TxnRow({
   return (
     <li
       className={cn(
-        'group grid items-center gap-y-1 px-3.5 py-3 transition-colors duration-700 hover:bg-muted/40 animate-in-up motion-reduce:animate-none',
+        'group grid items-center gap-y-1 px-3 py-2.5 transition-colors duration-700 hover:bg-muted/40 animate-in-up motion-reduce:animate-none sm:px-3.5 sm:py-3',
         GRID,
         cancelled && 'bg-muted/20',
         flash && 'bg-teal-500/15 hover:bg-teal-500/15'
@@ -954,7 +990,7 @@ function TxnRow({
     >
       <span
         className={cn(
-          'flex size-10 items-center justify-center rounded-xl',
+          'flex size-9 items-center justify-center rounded-xl sm:size-10',
           cancelled
             ? 'bg-muted text-muted-foreground'
             : dep
@@ -963,15 +999,15 @@ function TxnRow({
         )}
         title={dep ? 'داخل للخزنة' : 'خارج من الخزنة'}
       >
-        <Icon className="size-5" />
+        <Icon className="size-4 sm:size-5" />
       </span>
 
       <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-x-2">
           <MethodTag k={t.method} />
-          <span className="text-xs font-semibold">{dep ? 'إيداع للعميل' : 'سحب للعميل'}</span>
+          <span className="hidden text-xs font-semibold sm:inline">{dep ? 'إيداع للعميل' : 'سحب للعميل'}</span>
           {cancelled && (
-            <span className="rounded-md border border-rose-500/40 px-1.5 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400">
+            <span className="whitespace-nowrap rounded-md border border-rose-500/40 px-1.5 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400">
               ملغية
             </span>
           )}
@@ -993,18 +1029,19 @@ function TxnRow({
         </div>
       </div>
 
-      <div className="text-end">
+      <div className="min-w-0 text-end">
         <p
           dir="ltr"
+          title={fmt(Math.abs(money))}
           className={cn(
-            'text-left text-base font-extrabold tabular-nums',
+            'min-w-0 truncate text-left text-sm font-extrabold tabular-nums sm:text-base',
             cancelled ? 'text-muted-foreground line-through' : dep ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
           )}
         >
           {sgn(money)}
         </p>
         {t.commission > 0 && (
-          <p className={cn('text-[10px] text-muted-foreground lg:hidden', cancelled && 'line-through')}>
+          <p className={cn('truncate text-[10px] text-muted-foreground lg:hidden', cancelled && 'line-through')}>
             عمولة <bdi dir="ltr">{sgn(t.commission)}</bdi>
           </p>
         )}
@@ -1114,8 +1151,8 @@ function TxnDialog({
   }
 
   const KINDS = [
-    { v: 'deposit' as const, icon: ArrowDownLeft, t: 'إيداع للعميل', on: 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500' },
-    { v: 'withdraw' as const, icon: ArrowUpRight, t: 'سحب للعميل', on: 'border-rose-500 bg-rose-500/10 text-rose-700 dark:text-rose-300 ring-1 ring-rose-500' },
+    { v: 'deposit' as const, icon: ArrowDownLeft, t: 'إيداع للعميل', short: 'إيداع', on: 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500' },
+    { v: 'withdraw' as const, icon: ArrowUpRight, t: 'سحب للعميل', short: 'سحب', on: 'border-rose-500 bg-rose-500/10 text-rose-700 dark:text-rose-300 ring-1 ring-rose-500' },
   ]
 
   return (
@@ -1129,9 +1166,9 @@ function TxnDialog({
           setTimeout(() => amountRef.current?.focus(), 0)
         }}
       >
-        <DialogHeader className="border-b px-5 py-3.5 text-start">
+        <DialogHeader className="border-b px-4 py-3.5 text-start sm:px-5">
           <DialogTitle className="flex items-center gap-2.5 text-base">
-            <span className="flex size-8 items-center justify-center rounded-lg text-white" style={{ background: ACCENT }}>
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg text-white" style={{ background: ACCENT }}>
               <Wallet className="size-4" />
             </span>
             معاملة جديدة
@@ -1157,8 +1194,9 @@ function TxnDialog({
                       sel ? k.on : 'text-muted-foreground hover:bg-muted/50'
                     )}
                   >
-                    <k.icon className="size-4" />
-                    {k.t}
+                    <k.icon className="size-4 shrink-0" />
+                    <span className="hidden xs:inline sm:inline">{k.t}</span>
+                    <span className="xs:hidden sm:hidden">{k.short}</span>
                   </button>
                 )
               })}
@@ -1181,10 +1219,10 @@ function TxnDialog({
                   role="radio"
                   aria-checked={sel}
                   onClick={() => setMethod(m.key)}
-                  className={cn('flex min-w-0 flex-col gap-1.5 rounded-xl border p-2.5 text-start transition-colors', !sel && 'hover:bg-muted/50')}
+                  className={cn('flex min-w-0 flex-col gap-1.5 rounded-xl border p-2 text-start transition-colors sm:p-2.5', !sel && 'hover:bg-muted/50')}
                   style={sel ? { borderColor: m.color, backgroundColor: `${m.color}12`, boxShadow: `0 0 0 1px ${m.color}` } : undefined}
                 >
-                  <span className="flex items-center justify-between gap-2">
+                  <span className="flex items-center justify-between gap-1.5">
                     <span
                       className="flex size-7 shrink-0 items-center justify-center rounded-lg"
                       style={{ backgroundColor: `${m.color}1f`, color: m.color }}
@@ -1195,7 +1233,10 @@ function TxnDialog({
                       {r == null ? '…' : r > 0 ? `${fmtRate(r)}٪` : '0٪'}
                     </span>
                   </span>
-                  <span className="text-xs font-bold leading-tight">{m.label}</span>
+                  <span className="truncate text-xs font-bold leading-tight">
+                    <span className="sm:hidden">{m.short}</span>
+                    <span className="hidden sm:inline">{m.label}</span>
+                  </span>
                 </button>
               )
             })}
@@ -1215,7 +1256,7 @@ function TxnDialog({
                 autoComplete="off"
                 placeholder="المبلغ"
                 dir="ltr"
-                className="h-14 rounded-xl bg-background px-12 text-center text-3xl font-black tabular-nums placeholder:text-base placeholder:font-semibold"
+                className="h-14 rounded-xl bg-background px-12 text-center text-2xl font-black tabular-nums placeholder:text-base placeholder:font-semibold sm:text-3xl"
               />
               <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">جنيه</span>
               {amountText && (
@@ -1229,7 +1270,7 @@ function TxnDialog({
                 </button>
               )}
             </div>
-            <div className="mt-2 flex gap-1.5 overflow-x-auto">
+            <div className="mt-2 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               {QUICK_ADD.map((v) => (
                 <button
                   key={v}
@@ -1265,12 +1306,13 @@ function TxnDialog({
 
           {/* الإيصال: أثر الخزنة + العمولة في صف واحد */}
           <div className="relative grid grid-cols-[minmax(0,1fr)_auto] items-stretch rounded-2xl border border-dashed bg-muted/30" aria-live="polite">
-            <div className="p-3.5">
+            <div className="min-w-0 p-3.5">
               <p className="text-[11px] font-medium text-muted-foreground">أثر الخزنة</p>
               <p
                 dir="ltr"
+                title={amt > 0 ? fmt(Math.abs(net)) : undefined}
                 className={cn(
-                  'mt-0.5 text-right text-2xl font-black leading-tight tabular-nums',
+                  'mt-0.5 min-w-0 truncate text-right text-xl font-black leading-tight tabular-nums sm:text-2xl',
                   amt <= 0 ? 'text-muted-foreground' : net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
                 )}
               >
@@ -1281,32 +1323,36 @@ function TxnDialog({
                 العمولة النهائية بتتحسب على السيرفر
               </p>
             </div>
-            <div className="relative flex min-w-[116px] flex-col justify-center border-s border-dashed p-3.5">
+            <div className="relative flex min-w-[110px] flex-col justify-center border-s border-dashed p-3.5 sm:min-w-[116px]">
               <span aria-hidden className="absolute -top-2 start-0 size-4 -translate-x-1/2 rounded-full border bg-card rtl:translate-x-1/2" />
               <span aria-hidden className="absolute -bottom-2 start-0 size-4 -translate-x-1/2 rounded-full border bg-card rtl:translate-x-1/2" />
               <p className="text-[11px] font-medium text-muted-foreground">
                 العمولة{rate != null && rate > 0 && <span className="ms-1 text-[10px]">({fmtRate(rate)}٪)</span>}
               </p>
-              <p dir="ltr" className="mt-0.5 text-right text-lg font-extrabold tabular-nums text-teal-700 dark:text-teal-300">
+              <p
+                dir="ltr"
+                title={commission != null && commission > 0 ? fmt(commission) : undefined}
+                className="mt-0.5 min-w-0 truncate text-right text-base font-extrabold tabular-nums text-teal-700 sm:text-lg dark:text-teal-300"
+              >
                 {commission == null ? '—' : commission > 0 ? sgn(commission) : '0'}
               </p>
             </div>
           </div>
         </div>
 
-        <DialogFooter className="flex-row items-center gap-2 border-t bg-muted/30 px-4 py-3 sm:justify-between sm:px-5">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving} className="shrink-0">
+        <DialogFooter className="flex-col gap-2 border-t bg-muted/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving} className="w-full sm:w-auto">
             إلغاء
           </Button>
-          <div className="flex min-w-0 flex-1 justify-end gap-2">
-            <Button variant="outline" onClick={() => submit(true)} disabled={saving || !(amt > 0)} className="min-w-0 max-sm:flex-1">
+          <div className="flex w-full gap-2 sm:w-auto">
+            <Button variant="outline" onClick={() => submit(true)} disabled={saving || !(amt > 0)} className="min-w-0 flex-1 sm:flex-none">
               <Plus className="size-4 shrink-0" />
               <span className="truncate">حفظ وإضافة تانية</span>
             </Button>
             <Button
               onClick={() => submit(false)}
               disabled={saving || !(amt > 0)}
-              className="min-w-0 border-0 font-bold text-white hover:opacity-95 max-sm:flex-1"
+              className="min-w-0 flex-1 border-0 font-bold text-white hover:opacity-95 sm:flex-none"
               style={{ background: ACCENT }}
             >
               {saving && <Loader2 className="size-4 animate-spin" />}

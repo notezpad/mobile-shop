@@ -290,7 +290,7 @@ export function CustomersView() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {/* ═════════ Hero — "دفتر الديون": لوحة مضغوطة بصف واحد ═════════ */}
       <section
         className="animate-in-up relative overflow-hidden rounded-3xl border bg-card text-card-foreground shadow-sm"
@@ -310,8 +310,10 @@ export function CustomersView() {
           }}
         />
 
-        <div className="relative flex flex-wrap items-center gap-x-8 gap-y-5 p-5 sm:p-6">
-          <div className="min-w-[230px]">
+        {/* 📱 موبايل: العنوان + الرقم + صحة التحصيل + الأزرار (كل واحد بعرض كامل)
+            من sm+ وفوق: صف أفقي واحد زي الأصل */}
+        <div className="relative flex flex-wrap items-center gap-x-6 gap-y-4 p-4 sm:gap-x-8 sm:gap-y-5 sm:p-6">
+          <div className="w-full min-w-0 sm:w-auto sm:min-w-[230px]">
             <div className="flex items-center gap-2.5">
               <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-indigo-500 text-white shadow-md shadow-sky-500/25">
                 <Users className="size-[18px]" />
@@ -321,16 +323,16 @@ export function CustomersView() {
                 <p className="text-[11px] text-muted-foreground">سجل العملاء وأرصدتهم والدفعات</p>
               </div>
             </div>
-            <p className="mt-4 text-[11px] font-medium text-muted-foreground">إجمالي المستحق عند العملاء</p>
+            <p className="mt-3 text-[11px] font-medium text-muted-foreground sm:mt-4">إجمالي المستحق عند العملاء</p>
             <div className="flex items-baseline gap-2">
-              <span className="bg-gradient-to-l from-sky-600 to-indigo-600 bg-clip-text text-5xl font-extrabold tracking-tight tabular-nums text-transparent dark:from-sky-300 dark:to-indigo-300">
+              <span className="bg-gradient-to-l from-sky-600 to-indigo-600 bg-clip-text text-4xl font-extrabold tracking-tight tabular-nums text-transparent sm:text-5xl dark:from-sky-300 dark:to-indigo-300">
                 {noData ? '—' : num(totalDebt)}
               </span>
-              <span className="text-base font-semibold text-muted-foreground">جنيه</span>
+              <span className="text-sm font-semibold text-muted-foreground sm:text-base">جنيه</span>
             </div>
           </div>
 
-          <div className="min-w-[300px] flex-1">
+          <div className="w-full min-w-0 sm:min-w-[300px] sm:flex-1">
             <HealthPanel
               hidden={noData}
               collected={Math.max(view.purchases - totalDebt, 0)}
@@ -340,12 +342,13 @@ export function CustomersView() {
             />
           </div>
 
-          <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-col lg:items-stretch">
-            <Button variant="gradient" size="lg" onClick={openAdd}>
+          {/* 📱 موبايل: زرارين جنب بعض بنفس العرض — من sm+ وفوق: صف أفقي عادي */}
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:w-auto lg:flex-col lg:items-stretch">
+            <Button variant="gradient" size="lg" onClick={openAdd} className="w-full sm:w-auto lg:w-auto">
               <Plus className="size-4" />
               عميل جديد
             </Button>
-            <Button variant="outline" onClick={exportExcel} disabled={customers.length === 0}>
+            <Button variant="outline" onClick={exportExcel} disabled={customers.length === 0} className="w-full sm:w-auto lg:w-auto">
               <FileSpreadsheet className="size-4" />
               تصدير Excel
             </Button>
@@ -355,23 +358,23 @@ export function CustomersView() {
 
       {/* ═════════ مركز الإحصائيات ═════════ */}
       {base.length > 0 && (
-        <section className="animate-in-up stagger-1 space-y-4">
+        <section className="animate-in-up stagger-1 space-y-3 sm:space-y-4">
           <button
             type="button"
             onClick={() => setStatsOpen((o) => !o)}
             aria-expanded={statsOpen}
-            className="group flex w-full items-center gap-2.5 rounded-2xl border bg-card px-3.5 py-2.5 text-start shadow-sm transition-colors hover:bg-muted/40"
+            className="group flex w-full items-center gap-2.5 rounded-2xl border bg-card px-3 py-2.5 text-start shadow-sm transition-colors hover:bg-muted/40 sm:px-3.5"
           >
             <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400">
               <BarChart3 className="size-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <h2 className="text-base font-extrabold leading-tight">إحصائيات العملاء</h2>
+              <h2 className="text-sm font-extrabold leading-tight sm:text-base">إحصائيات العملاء</h2>
               <p className="text-[11px] text-muted-foreground">صورة سريعة عن ديونك ومبيعاتك وعملائك</p>
             </div>
-            {/* ملخص مختصر يظهر وقت الطي */}
+            {/* ملخص مختصر يظهر وقت الطي — مخفي على الموبايل الضيق */}
             {!statsOpen && (
-              <div className="hidden items-center gap-2 text-[11px] sm:flex">
+              <div className="hidden items-center gap-2 text-[11px] md:flex">
                 <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 font-semibold text-emerald-600 dark:text-emerald-400">
                   تحصيل {view.purchases > 0 ? `${Math.round(view.collectionPct)}%` : '—'}
                 </span>
@@ -383,75 +386,76 @@ export function CustomersView() {
                 </span>
               </div>
             )}
-            <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+            <span className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-muted-foreground">
               {statsOpen ? 'إخفاء' : 'عرض'}
               <ChevronDown className={cn('size-4 transition-transform duration-base', statsOpen && 'rotate-180')} />
             </span>
           </button>
 
           {statsOpen && (
-            <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <KpiTile
-              color="#6366f1" icon={ShoppingBag} label="إجمالي المشتريات"
-              value={num(view.purchases)} unit="جنيه"
-              sub={`${num(view.salesCount)} فاتورة من ${num(base.length)} ${base.length > 2 && base.length < 11 ? 'عملاء' : 'عميل'}`}
-            />
-            <KpiTile
-              color="#10b981" icon={Percent} label="نسبة التحصيل"
-              value={view.purchases > 0 ? `${view.collectionPct.toFixed(view.collectionPct >= 10 ? 0 : 1)}%` : '—'}
-              sub={view.purchases > 0 ? `اتحصّل ${num(Math.max(view.purchases - totalDebt, 0))} جنيه` : 'لسه مفيش مشتريات'}
-              progress={view.purchases > 0 ? view.collectionPct : undefined}
-            />
-            <KpiTile
-              color="#14b8a6" icon={Receipt} label="متوسط قيمة الفاتورة"
-              value={num(Math.round(view.avgInvoice))} unit="جنيه"
-              sub={`على ${num(view.salesCount)} فاتورة`}
-            />
-            <KpiTile
-              color="#8b5cf6" icon={UserCheck} label="متوسط مشتريات العميل"
-              value={num(Math.round(view.avgCustomer))} unit="جنيه"
-              sub="لكل عميل في السجل"
-            />
-            <KpiTile
-              color="#f43f5e" icon={Clock} label="ديون متأخرة +٣٠ يوم"
-              value={num(view.lateDebt)} unit="جنيه"
-              sub={view.lateCount > 0 ? `على ${num(view.lateCount)} ${view.lateCount > 2 && view.lateCount < 11 ? 'عملاء' : 'عميل'} من غير تعامل` : 'مفيش ديون متأخرة'}
-              progress={totalDebt > 0 ? (view.lateDebt / totalDebt) * 100 : undefined}
-              progressLabel={totalDebt > 0 ? `${Math.round((view.lateDebt / totalDebt) * 100)}% من الديون` : undefined}
-            />
-            <KpiTile
-              color="#f59e0b" icon={UserX} label="عملاء خاملون +٣٠ يوم"
-              value={num(view.idleCount)} unit="عميل"
-              sub={base.length > 0 ? `${Math.round((view.idleCount / base.length) * 100)}% من العملاء من غير تعامل` : ''}
-              progress={base.length > 0 ? (view.idleCount / base.length) * 100 : undefined}
-            />
-            <KpiTile
-              color="#0ea5e9" icon={Wallet} label="أرصدة دائنة للعملاء"
-              value={num(view.creditSum)} unit="جنيه"
-              sub={view.creditCount > 0 ? `${num(view.creditCount)} عميل ليهم فلوس عندك` : 'مفيش أرصدة دائنة'}
-            />
-            <KpiTile
-              color="#ec4899" icon={AlertCircle} label="عملاء عليهم آجل"
-              value={num(view.debtorsCount)} unit="عميل"
-              sub={base.length > 0 ? `${Math.round((view.debtorsCount / base.length) * 100)}% من العملاء` : ''}
-              progress={base.length > 0 ? (view.debtorsCount / base.length) * 100 : undefined}
-            />
-          </div>
+            <div className="space-y-3 sm:space-y-4">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
+                <KpiTile
+                  color="#6366f1" icon={ShoppingBag} label="إجمالي المشتريات"
+                  value={num(view.purchases)} unit="جنيه"
+                  sub={`${num(view.salesCount)} فاتورة من ${num(base.length)} ${base.length > 2 && base.length < 11 ? 'عملاء' : 'عميل'}`}
+                />
+                <KpiTile
+                  color="#10b981" icon={Percent} label="نسبة التحصيل"
+                  value={view.purchases > 0 ? `${view.collectionPct.toFixed(view.collectionPct >= 10 ? 0 : 1)}%` : '—'}
+                  sub={view.purchases > 0 ? `اتحصّل ${num(Math.max(view.purchases - totalDebt, 0))} جنيه` : 'لسه مفيش مشتريات'}
+                  progress={view.purchases > 0 ? view.collectionPct : undefined}
+                />
+                <KpiTile
+                  color="#14b8a6" icon={Receipt} label="متوسط قيمة الفاتورة"
+                  value={num(Math.round(view.avgInvoice))} unit="جنيه"
+                  sub={`على ${num(view.salesCount)} فاتورة`}
+                />
+                <KpiTile
+                  color="#8b5cf6" icon={UserCheck} label="متوسط مشتريات العميل"
+                  value={num(Math.round(view.avgCustomer))} unit="جنيه"
+                  sub="لكل عميل في السجل"
+                />
+                <KpiTile
+                  color="#f43f5e" icon={Clock} label="ديون متأخرة +٣٠ يوم"
+                  value={num(view.lateDebt)} unit="جنيه"
+                  sub={view.lateCount > 0 ? `على ${num(view.lateCount)} ${view.lateCount > 2 && view.lateCount < 11 ? 'عملاء' : 'عميل'} من غير تعامل` : 'مفيش ديون متأخرة'}
+                  progress={totalDebt > 0 ? (view.lateDebt / totalDebt) * 100 : undefined}
+                  progressLabel={totalDebt > 0 ? `${Math.round((view.lateDebt / totalDebt) * 100)}% من الديون` : undefined}
+                />
+                <KpiTile
+                  color="#f59e0b" icon={UserX} label="عملاء خاملون +٣٠ يوم"
+                  value={num(view.idleCount)} unit="عميل"
+                  sub={base.length > 0 ? `${Math.round((view.idleCount / base.length) * 100)}% من العملاء من غير تعامل` : ''}
+                  progress={base.length > 0 ? (view.idleCount / base.length) * 100 : undefined}
+                />
+                <KpiTile
+                  color="#0ea5e9" icon={Wallet} label="أرصدة دائنة للعملاء"
+                  value={num(view.creditSum)} unit="جنيه"
+                  sub={view.creditCount > 0 ? `${num(view.creditCount)} عميل ليهم فلوس عندك` : 'مفيش أرصدة دائنة'}
+                />
+                <KpiTile
+                  color="#ec4899" icon={AlertCircle} label="عملاء عليهم آجل"
+                  value={num(view.debtorsCount)} unit="عميل"
+                  sub={base.length > 0 ? `${Math.round((view.debtorsCount / base.length) * 100)}% من العملاء` : ''}
+                  progress={base.length > 0 ? (view.debtorsCount / base.length) * 100 : undefined}
+                />
+              </div>
 
-          <div className="grid gap-3 lg:grid-cols-2">
-            <TopBuyers rows={view.buyers.slice(0, 5)} total={view.purchases} onOpen={(c) => setDetailCustomer(c)} />
-            <DebtAging buckets={view.buckets} total={totalDebt} />
-          </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                <TopBuyers rows={view.buyers.slice(0, 5)} total={view.purchases} onOpen={(c) => setDetailCustomer(c)} />
+                <DebtAging buckets={view.buckets} total={totalDebt} />
+              </div>
             </div>
           )}
         </section>
       )}
 
       {/* ═════════ الفلاتر ═════════ */}
-      <div className="animate-in-up stagger-2 space-y-3 rounded-2xl border bg-card p-4 shadow-sm">
+      <div className="animate-in-up stagger-2 space-y-3 rounded-2xl border bg-card p-3 shadow-sm sm:p-4">
+        {/* البحث + العدّاد */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[220px] flex-1">
+          <div className="relative min-w-0 flex-1 sm:min-w-[220px]">
             <Search className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
@@ -470,51 +474,58 @@ export function CustomersView() {
               </button>
             )}
           </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full border bg-background px-3 py-2 text-xs font-semibold text-muted-foreground">
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-background px-3 py-2 text-xs font-semibold text-muted-foreground">
             <Users className="size-3.5" />
             <span className="tabular-nums text-foreground">{num(shown.length)}</span>
             من {num(customers.length)}
           </span>
         </div>
 
-        {/* حالة الحساب */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="me-1 text-[11px] font-semibold text-muted-foreground">الحالة</span>
-          <FilterPill active={status === 'all'} onClick={() => setStatus('all')} count={counts.all}>
-            الكل
-          </FilterPill>
-          <FilterPill active={status === 'debt'} onClick={() => setStatus(status === 'debt' ? 'all' : 'debt')} count={counts.debt} color="#f43f5e">
-            عليهم آجل
-          </FilterPill>
-          <FilterPill active={status === 'clear'} onClick={() => setStatus(status === 'clear' ? 'all' : 'clear')} count={counts.clear} color="#10b981">
-            مسوّى
-          </FilterPill>
-          <FilterPill active={status === 'credit'} onClick={() => setStatus(status === 'credit' ? 'all' : 'credit')} count={counts.credit} color="#0ea5e9">
-            رصيد دائن
-          </FilterPill>
-          <FilterPill active={status === 'idle'} onClick={() => setStatus(status === 'idle' ? 'all' : 'idle')} count={counts.idle} color="#f59e0b">
-            خاملون +٣٠ يوم
-          </FilterPill>
+        {/* حالة الحساب — 📱 موبايل: العنوان فوق والأقراص تلف بشكل مرتب.
+            من sm+ وفوق: العنوان جنب الأقراص زي الأصل. */}
+        <div className="space-y-1.5 sm:flex sm:items-center sm:gap-1.5 sm:space-y-0">
+          <span className="block text-[11px] font-semibold text-muted-foreground sm:me-1 sm:shrink-0 sm:self-auto">
+            الحالة
+          </span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <FilterPill active={status === 'all'} onClick={() => setStatus('all')} count={counts.all}>
+              الكل
+            </FilterPill>
+            <FilterPill active={status === 'debt'} onClick={() => setStatus(status === 'debt' ? 'all' : 'debt')} count={counts.debt} color="#f43f5e">
+              عليهم آجل
+            </FilterPill>
+            <FilterPill active={status === 'clear'} onClick={() => setStatus(status === 'clear' ? 'all' : 'clear')} count={counts.clear} color="#10b981">
+              مسوّى
+            </FilterPill>
+            <FilterPill active={status === 'credit'} onClick={() => setStatus(status === 'credit' ? 'all' : 'credit')} count={counts.credit} color="#0ea5e9">
+              رصيد دائن
+            </FilterPill>
+            <FilterPill active={status === 'idle'} onClick={() => setStatus(status === 'idle' ? 'all' : 'idle')} count={counts.idle} color="#f59e0b">
+              خاملون +٣٠ يوم
+            </FilterPill>
+          </div>
         </div>
 
-        {/* الترتيب */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="me-1 inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
+        {/* الترتيب — نفس المنطق */}
+        <div className="space-y-1.5 sm:flex sm:items-center sm:gap-1.5 sm:space-y-0">
+          <span className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground sm:me-1 sm:shrink-0 sm:self-auto">
             <ArrowUpDown className="size-3" />
             ترتيب
           </span>
-          {(
-            [
-              ['debt', 'الأعلى مديونية'],
-              ['purchases', 'الأكثر مشتريات'],
-              ['recent', 'الأحدث تعاملاً'],
-              ['name', 'الاسم (أ – ي)'],
-            ] as [SortKey, string][]
-          ).map(([k, l]) => (
-            <FilterPill key={k} active={sort === k} onClick={() => setSort(sort === k ? 'default' : k)} color="#6366f1">
-              {l}
-            </FilterPill>
-          ))}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(
+              [
+                ['debt', 'الأعلى مديونية'],
+                ['purchases', 'الأكثر مشتريات'],
+                ['recent', 'الأحدث تعاملاً'],
+                ['name', 'الاسم (أ – ي)'],
+              ] as [SortKey, string][]
+            ).map(([k, l]) => (
+              <FilterPill key={k} active={sort === k} onClick={() => setSort(sort === k ? 'default' : k)} color="#6366f1">
+                {l}
+              </FilterPill>
+            ))}
+          </div>
         </div>
 
         {hasFilters && (
@@ -540,7 +551,7 @@ export function CustomersView() {
 
       {/* ═════════ كروت العملاء ═════════ */}
       {loading && customers.length === 0 ? (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-5">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4 sm:grid-cols-[repeat(auto-fill,minmax(290px,1fr))] sm:gap-5">
           {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-[340px] w-full rounded-3xl" />
           ))}
@@ -576,7 +587,7 @@ export function CustomersView() {
       ) : (
         <div
           className={cn(
-            'grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-5',
+            'grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4 sm:grid-cols-[repeat(auto-fill,minmax(290px,1fr))] sm:gap-5',
             loading && 'opacity-60 transition-opacity',
           )}
         >
@@ -677,7 +688,7 @@ function FilterPill({
       type="button"
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+        'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors sm:px-3 sm:py-1.5 sm:text-xs',
         active
           ? color
             ? 'border-transparent text-white shadow-sm'
@@ -724,30 +735,30 @@ function KpiTile({
 }) {
   return (
     <div
-      className="relative overflow-hidden rounded-2xl border border-t-2 bg-card p-4 transition-shadow hover:shadow-md"
+      className="relative overflow-hidden rounded-2xl border border-t-2 bg-card p-3 transition-shadow hover:shadow-md sm:p-4"
       style={{ borderTopColor: color, backgroundImage: `linear-gradient(135deg, ${color}14, transparent 60%)` }}
     >
       <Icon
         strokeWidth={1.25}
-        className="pointer-events-none absolute -bottom-4 -start-3 size-24 opacity-[0.07]"
+        className="pointer-events-none absolute -bottom-4 -start-3 size-20 opacity-[0.07] sm:size-24"
       />
       <div className="relative">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-medium text-muted-foreground">{label}</p>
+          <p className="text-[11px] font-medium text-muted-foreground sm:text-xs">{label}</p>
           <span
-            className="flex size-8 shrink-0 items-center justify-center rounded-xl"
+            className="flex size-7 shrink-0 items-center justify-center rounded-xl sm:size-8"
             style={{ backgroundColor: `${color}1f`, color }}
           >
-            <Icon className="size-4" />
+            <Icon className="size-3.5 sm:size-4" />
           </span>
         </div>
-        <p className="mt-2 truncate text-2xl font-extrabold tabular-nums">
+        <p className="mt-1.5 truncate text-xl font-extrabold tabular-nums sm:mt-2 sm:text-2xl">
           {value}
-          {unit && <span className="ms-1 text-[11px] font-medium text-muted-foreground">{unit}</span>}
+          {unit && <span className="ms-1 text-[10px] font-medium text-muted-foreground sm:text-[11px]">{unit}</span>}
         </p>
-        {sub && <p className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">{sub}</p>}
+        {sub && <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground sm:mt-1 sm:text-[11px]">{sub}</p>}
         {progress !== undefined && (
-          <div className="mt-2.5 flex items-center gap-2">
+          <div className="mt-2 flex items-center gap-2 sm:mt-2.5">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ backgroundColor: `${color}22` }}>
               <div
                 className="h-full rounded-full transition-[width] duration-slow ease-out"
@@ -777,13 +788,13 @@ function TopBuyers({
   const medals = ['#f59e0b', '#94a3b8', '#c2410c']
   const max = rows[0]?.totalPurchases ?? 0
   return (
-    <div className="rounded-2xl border bg-card p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="rounded-2xl border bg-card p-3.5 sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 text-sm font-bold">
-          <Crown className="size-4 text-amber-500" />
+          <Crown className="size-4 shrink-0 text-amber-500" />
           أفضل العملاء بالمشتريات
         </h3>
-        <span className="text-[11px] text-muted-foreground">اضغط لفتح كشف الحساب</span>
+        <span className="hidden text-[11px] text-muted-foreground sm:inline">اضغط لفتح كشف الحساب</span>
       </div>
       {rows.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">لسه مفيش مشتريات مسجّلة</p>
@@ -797,10 +808,10 @@ function TopBuyers({
                 <button
                   type="button"
                   onClick={() => onOpen(r)}
-                  className="flex w-full items-center gap-3 rounded-xl p-2 text-start transition-colors hover:bg-muted/60"
+                  className="flex w-full items-center gap-2.5 rounded-xl p-2 text-start transition-colors hover:bg-muted/60 sm:gap-3"
                 >
                   <span
-                    className="flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-extrabold text-white"
+                    className="flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-extrabold text-white sm:size-8"
                     style={{ backgroundColor: color }}
                   >
                     {i + 1}
@@ -841,13 +852,13 @@ function DebtAging({
   total: number
 }) {
   return (
-    <div className="rounded-2xl border bg-card p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="rounded-2xl border bg-card p-3.5 sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 text-sm font-bold">
-          <CalendarDays className="size-4 text-rose-500" />
+          <CalendarDays className="size-4 shrink-0 text-rose-500" />
           أعمار الديون
         </h3>
-        <span className="text-[11px] text-muted-foreground">من آخر تعامل مع العميل</span>
+        <span className="hidden text-[11px] text-muted-foreground sm:inline">من آخر تعامل مع العميل</span>
       </div>
       {total <= 0 ? (
         <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
@@ -871,14 +882,14 @@ function DebtAging({
           </div>
           <ul className="mt-3 space-y-2">
             {buckets.map((b) => (
-              <li key={b.label} className={cn('flex items-center gap-2.5 text-sm transition-opacity', b.sum <= 0 && 'opacity-35')}>
+              <li key={b.label} className={cn('flex items-center gap-2 text-sm transition-opacity sm:gap-2.5', b.sum <= 0 && 'opacity-35')}>
                 <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
-                <span className="flex-1 font-medium">{b.label}</span>
-                <span className="text-[11px] tabular-nums text-muted-foreground">
+                <span className="flex-1 truncate font-medium">{b.label}</span>
+                <span className="hidden text-[11px] tabular-nums text-muted-foreground sm:inline">
                   {b.n} {b.n > 2 && b.n < 11 ? 'عملاء' : 'عميل'}
                 </span>
-                <span className="w-24 text-end font-bold tabular-nums">{formatCurrency(b.sum)}</span>
-                <span className="w-9 text-end text-[11px] tabular-nums text-muted-foreground">
+                <span className="text-xs font-bold tabular-nums sm:w-24 sm:text-end sm:text-sm">{formatCurrency(b.sum)}</span>
+                <span className="w-9 shrink-0 text-end text-[11px] tabular-nums text-muted-foreground">
                   {Math.round((b.sum / total) * 100)}%
                 </span>
               </li>
@@ -908,9 +919,9 @@ function HealthPanel({
   const denom = collected + recent + late
   if (denom <= 0) {
     return (
-      <div className="flex items-center gap-3 rounded-2xl border border-dashed bg-card/60 p-4 text-sm text-muted-foreground">
-        <CheckCircle2 className="size-5 text-emerald-500" />
-        لسه مفيش مشتريات مسجّلة — أول فاتورة هتظهر هنا صحة التحصيل
+      <div className="flex items-center gap-3 rounded-2xl border border-dashed bg-card/60 p-3 text-sm text-muted-foreground sm:p-4">
+        <CheckCircle2 className="size-5 shrink-0 text-emerald-500" />
+        <span className="text-[12px] sm:text-sm">لسه مفيش مشتريات مسجّلة — أول فاتورة هتظهر هنا صحة التحصيل</span>
       </div>
     )
   }
@@ -918,80 +929,91 @@ function HealthPanel({
   const R = 38
   const C = 2 * Math.PI * R
   const segs = [
-    { label: 'محصّل', value: collected, color: '#10b981' },
-    { label: 'مستحق حديث', value: recent, color: '#f59e0b' },
-    { label: 'متأخر +٣٠ يوم', value: late, color: '#f43f5e' },
+    { label: 'محصّل', short: 'محصّل', value: collected, color: '#10b981' },
+    { label: 'مستحق حديث', short: 'مستحق', value: recent, color: '#f59e0b' },
+    { label: 'متأخر +٣٠ يوم', short: 'متأخر', value: late, color: '#f43f5e' },
   ]
-  return (
-    <div className="flex items-center gap-4 rounded-2xl border bg-card/70 p-4">
-      {/* العدّاد */}
-      <div className="relative size-[104px] shrink-0">
-        <svg viewBox="0 0 100 100" className="size-full -rotate-90">
-          <circle cx="50" cy="50" r={R} fill="none" strokeWidth="11" className="stroke-muted" />
-          <circle
-            cx="50"
-            cy="50"
-            r={R}
-            fill="none"
-            strokeWidth="11"
-            strokeLinecap="round"
-            stroke="#10b981"
-            strokeDasharray={C}
-            strokeDashoffset={C - (C * Math.max(pct, 1)) / 100}
-            className="transition-[stroke-dashoffset] duration-slow ease-out"
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-2xl font-extrabold leading-none tabular-nums">
-            {pct.toFixed(pct >= 10 ? 0 : 1)}
-            <span className="text-xs font-bold">%</span>
-          </span>
-          <span className="mt-1 text-[10px] text-muted-foreground">تحصيل</span>
-        </div>
-      </div>
 
-      {/* الشريط + الشرح */}
-      <div className="min-w-0 flex-1">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold text-foreground/80">صحة التحصيل</p>
-          {topDebtor && (
-            <span className="truncate text-[11px] text-muted-foreground">
+  return (
+    <div className="rounded-2xl border bg-card/70 p-3.5 sm:p-4">
+      {/* ═══ الصف الأول: الدائرة + العنوان + أكبر مدين (كله في صف واحد) ═══ */}
+      <div className="flex items-center gap-3 sm:gap-4">
+        {/* العدّاد الدائري */}
+        <div className="relative size-[78px] shrink-0 sm:size-[104px]">
+          <svg viewBox="0 0 100 100" className="size-full -rotate-90">
+            <circle cx="50" cy="50" r={R} fill="none" strokeWidth="11" className="stroke-muted" />
+            <circle
+              cx="50"
+              cy="50"
+              r={R}
+              fill="none"
+              strokeWidth="11"
+              strokeLinecap="round"
+              stroke="#10b981"
+              strokeDasharray={C}
+              strokeDashoffset={C - (C * Math.max(pct, 1)) / 100}
+              className="transition-[stroke-dashoffset] duration-slow ease-out"
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-base font-extrabold leading-none tabular-nums sm:text-2xl">
+              {pct.toFixed(pct >= 10 ? 0 : 1)}
+              <span className="text-[9px] font-bold sm:text-xs">%</span>
+            </span>
+            <span className="mt-0.5 text-[9px] text-muted-foreground sm:mt-1 sm:text-[10px]">تحصيل</span>
+          </div>
+        </div>
+
+        {/* العنوان + أكبر مدين */}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-foreground/85 sm:text-base">صحة التحصيل</p>
+          {topDebtor ? (
+            <p className="mt-1 truncate text-[11px] text-muted-foreground sm:text-xs">
               أكبر مدين:{' '}
               <b className="font-bold text-foreground/80">{topDebtor.name}</b>{' '}
               <span className="tabular-nums text-rose-600 dark:text-rose-400">{num(topDebtor.balance)}</span>
-            </span>
+            </p>
+          ) : (
+            <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">مفيش مدينين حالياً</p>
           )}
         </div>
-        <div className="flex h-3.5 gap-0.5 overflow-hidden rounded-full">
-          {segs.map(
-            (g) =>
-              g.value > 0 && (
-                <div
-                  key={g.label}
-                  title={`${g.label}: ${formatCurrency(g.value)}`}
-                  className="h-full min-w-[6px] transition-all duration-slow ease-out first:rounded-s-full last:rounded-e-full"
-                  style={{ width: `${(g.value / denom) * 100}%`, backgroundColor: g.color }}
-                />
-              ),
-          )}
-        </div>
-        <ul className="mt-3 grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-3">
-          {segs.map((g) => (
-            <li key={g.label} className={cn('min-w-0 text-[11px]', g.value <= 0 && 'opacity-40')}>
-              <span className="flex items-center gap-1.5 text-muted-foreground">
-                <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: g.color }} />
-                <span className="truncate">{g.label}</span>
-              </span>
-              <span className="mt-0.5 block text-sm font-extrabold tabular-nums text-foreground">
-                {num(g.value)}
-                <span className="ms-1 text-[10px] font-medium text-muted-foreground">
-                  {Math.round((g.value / denom) * 100)}%
-                </span>
-              </span>
-            </li>
-          ))}
-        </ul>
       </div>
+
+      {/* ═══ الشريط — بعرض كامل تحتهم ═══ */}
+      <div className="mt-3 flex h-3 gap-0.5 overflow-hidden rounded-full sm:mt-4">
+        {segs.map(
+          (g) =>
+            g.value > 0 && (
+              <div
+                key={g.label}
+                title={`${g.label}: ${formatCurrency(g.value)}`}
+                className="h-full min-w-[6px] transition-all duration-slow ease-out first:rounded-s-full last:rounded-e-full"
+                style={{ width: `${(g.value / denom) * 100}%`, backgroundColor: g.color }}
+              />
+            ),
+        )}
+      </div>
+
+      {/* ═══ المفتاح — 3 أعمدة دايماً حتى على الموبايل ═══ */}
+      <ul className="mt-3 grid grid-cols-3 gap-x-2 sm:gap-x-4">
+        {segs.map((g) => (
+          <li key={g.label} className={cn('min-w-0', g.value <= 0 && 'opacity-40')}>
+            <span className="flex items-center gap-1 text-[10px] text-muted-foreground sm:text-[11px]">
+              <span className="size-1.5 shrink-0 rounded-full sm:size-2" style={{ backgroundColor: g.color }} />
+              <span className="truncate">
+                <span className="sm:hidden">{g.short}</span>
+                <span className="hidden sm:inline">{g.label}</span>
+              </span>
+            </span>
+            <span className="mt-0.5 block text-sm font-extrabold leading-tight tabular-nums text-foreground sm:text-base">
+              {num(g.value)}
+            </span>
+            <span className="text-[9px] tabular-nums text-muted-foreground sm:text-[10px]">
+              {Math.round((g.value / denom) * 100)}%
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -1043,7 +1065,7 @@ function CustomerCard({
         type="button"
         onClick={onOpen}
         aria-label={`كشف حساب ${c.name}`}
-        className="relative block overflow-hidden p-5 text-start text-white outline-none"
+        className="relative block overflow-hidden p-4 text-start text-white outline-none sm:p-5"
         style={{ background: `linear-gradient(135deg, ${color} 0%, ${shade(color, 0.38)} 100%)` }}
       >
         {/* زخارف */}
@@ -1068,11 +1090,11 @@ function CustomerCard({
         </div>
 
         {/* الرصيد */}
-        <div className="relative mt-6">
+        <div className="relative mt-4 sm:mt-6">
           <p className="text-[11px] font-medium text-white/75">
             {hasDebt ? 'المستحق عليه' : hasCredit ? 'رصيده الدائن' : 'الرصيد'}
           </p>
-          <p className="mt-0.5 text-4xl font-extrabold leading-none tracking-tight tabular-nums drop-shadow-sm">
+          <p className="mt-0.5 text-3xl font-extrabold leading-none tracking-tight tabular-nums drop-shadow-sm sm:text-4xl">
             {num(Math.abs(c.balance))}
             <span className="ms-1.5 text-sm font-semibold text-white/75">جنيه</span>
           </p>
@@ -1092,31 +1114,31 @@ function CustomerCard({
         </div>
 
         {/* الاسم + الهاتف */}
-        <div className="relative mt-6 flex items-end justify-between gap-3">
+        <div className="relative mt-4 flex items-end justify-between gap-3 sm:mt-6">
           <div className="min-w-0">
-            <p className="truncate text-lg font-extrabold leading-tight">{c.name}</p>
-            <p dir="ltr" className="mt-1 truncate text-start font-mono text-xs tracking-[0.14em] text-white/80">
+            <p className="truncate text-base font-extrabold leading-tight sm:text-lg">{c.name}</p>
+            <p dir="ltr" className="mt-1 truncate text-start font-mono text-[11px] tracking-[0.14em] text-white/80 sm:text-xs">
               {c.phone ?? '— — —'}
             </p>
           </div>
           {isTop ? (
             <span
               title="أفضل عميل — الأعلى مشتريات"
-              className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-br from-amber-200 to-amber-400 px-3 text-[11px] font-extrabold text-amber-900 shadow-md"
+              className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-gradient-to-br from-amber-200 to-amber-400 px-2.5 text-[10px] font-extrabold text-amber-900 shadow-md sm:h-10 sm:gap-1.5 sm:px-3 sm:text-[11px]"
             >
-              <Crown className="size-4" />
+              <Crown className="size-3.5 sm:size-4" />
               أفضل عميل
             </span>
           ) : (
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 ring-1 ring-white/30 backdrop-blur">
-              <ReceiptText className="size-[18px]" />
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/20 ring-1 ring-white/30 backdrop-blur sm:size-10">
+              <ReceiptText className="size-4 sm:size-[18px]" />
             </span>
           )}
         </div>
       </button>
 
       {/* ═══ ظهر البطاقة ═══ */}
-      <div className="flex flex-1 flex-col gap-3 p-4">
+      <div className="flex flex-1 flex-col gap-3 p-3.5 sm:p-4">
         <div className="grid grid-cols-3 divide-x divide-x-reverse text-center">
           <div className="px-1">
             <p className="text-[10px] text-muted-foreground">الفواتير</p>
@@ -1140,7 +1162,7 @@ function CustomerCard({
           <Button
             variant="ghost"
             size="icon"
-            className="size-9 rounded-xl border text-muted-foreground"
+            className="size-9 shrink-0 rounded-xl border text-muted-foreground"
             onClick={onEdit}
             title="تعديل"
             aria-label="تعديل"
@@ -1152,7 +1174,7 @@ function CustomerCard({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-9 rounded-xl border text-muted-foreground"
+                className="size-9 shrink-0 rounded-xl border text-muted-foreground"
                 aria-label="خيارات"
               >
                 <MoreVertical className="size-4" />

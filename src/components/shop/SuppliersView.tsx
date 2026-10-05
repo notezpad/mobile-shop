@@ -355,7 +355,7 @@ export function SuppliersView() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {/* ═════════ Hero — «بوليصة الاستلام»: إجمالي اللي عليك + أولويات السداد ═════════ */}
       <section className="animate-in-up motion-reduce:animate-none relative overflow-hidden rounded-3xl border border-orange-200 bg-gradient-to-br from-orange-50 via-amber-50/70 to-white text-stone-900 shadow-sm dark:border-stone-800 dark:from-stone-900 dark:via-stone-900 dark:to-stone-950 dark:text-stone-50">
         {/* شريط تحذير الشحن — فاتح نهاراً وداكن ليلاً */}
@@ -386,8 +386,8 @@ export function SuppliersView() {
           }}
         />
 
-        <div className="relative flex flex-wrap items-stretch gap-x-8 gap-y-5 p-5 sm:p-6">
-          <div className="min-w-[230px]">
+        <div className="relative flex flex-wrap items-stretch gap-x-6 gap-y-4 p-4 sm:gap-x-8 sm:gap-y-5 sm:p-6">
+          <div className="w-full min-w-0 sm:w-auto sm:min-w-[230px]">
             <div className="flex items-center gap-2.5">
               <span
                 className="flex size-9 items-center justify-center rounded-xl text-white shadow-md"
@@ -400,12 +400,12 @@ export function SuppliersView() {
                 <p className="text-[11px] text-stone-500 dark:text-stone-400">سجل الموردين وأرصدتهم والدفعات الآجلة</p>
               </div>
             </div>
-            <p className="mt-4 text-[11px] font-medium text-stone-500 dark:text-stone-400">إجمالي المستحق للموردين</p>
+            <p className="mt-3 text-[11px] font-medium text-stone-500 sm:mt-4 dark:text-stone-400">إجمالي المستحق للموردين</p>
             <div className="flex items-baseline gap-2">
-              <span className="text-5xl font-extrabold tracking-tight tabular-nums text-orange-600 dark:text-orange-400">
+              <span className="text-4xl font-extrabold tracking-tight tabular-nums text-orange-600 sm:text-5xl dark:text-orange-400">
                 {noData ? '—' : num(totalOwed)}
               </span>
-              <span className="text-base font-semibold text-stone-500 dark:text-stone-400">جنيه</span>
+              <span className="text-sm font-semibold text-stone-500 sm:text-base dark:text-stone-400">جنيه</span>
             </div>
             {!noData && base.length > 0 && (
               <p className="mt-1.5 text-[11px] text-stone-500 dark:text-stone-400">
@@ -416,7 +416,7 @@ export function SuppliersView() {
             )}
           </div>
 
-          <div className="min-w-[280px] flex-1">
+          <div className="w-full min-w-0 sm:min-w-[280px] sm:flex-1">
             <PaymentHealth
               hidden={noData}
               paid={Math.max(view.purchases - totalOwed, 0)}
@@ -427,11 +427,11 @@ export function SuppliersView() {
             />
           </div>
 
-          <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-col lg:items-stretch lg:justify-center">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:w-auto lg:flex-col lg:items-stretch lg:justify-center">
             <Button
               size="lg"
               onClick={openAdd}
-              className="border-0 bg-orange-600 text-white shadow-md shadow-orange-600/30 hover:bg-orange-500 dark:shadow-orange-900/40"
+              className="w-full border-0 bg-orange-600 text-white shadow-md shadow-orange-600/30 hover:bg-orange-500 sm:w-auto lg:w-auto dark:shadow-orange-900/40"
             >
               <Plus className="size-4" />
               مورد جديد
@@ -440,7 +440,7 @@ export function SuppliersView() {
               variant="outline"
               onClick={exportExcel}
               disabled={suppliers.length === 0}
-              className="border-orange-300 bg-white/70 text-stone-800 hover:border-orange-400 hover:bg-orange-100 hover:text-stone-900 dark:border-stone-700 dark:bg-transparent dark:text-stone-100 dark:hover:border-stone-500 dark:hover:bg-stone-800 dark:hover:text-white"
+              className="w-full border-orange-300 bg-white/70 text-stone-800 hover:border-orange-400 hover:bg-orange-100 hover:text-stone-900 sm:w-auto lg:w-auto dark:border-stone-700 dark:bg-transparent dark:text-stone-100 dark:hover:border-stone-500 dark:hover:bg-stone-800 dark:hover:text-white"
             >
               <FileSpreadsheet className="size-4" />
               تصدير Excel
@@ -451,22 +451,22 @@ export function SuppliersView() {
 
       {/* ═════════ مركز الإحصائيات ═════════ */}
       {base.length > 0 && (
-        <section className="animate-in-up motion-reduce:animate-none stagger-1 space-y-4">
+        <section className="animate-in-up motion-reduce:animate-none stagger-1 space-y-3 sm:space-y-4">
           <button
             type="button"
             onClick={() => setStatsOpen((o) => !o)}
             aria-expanded={statsOpen}
-            className="group flex w-full items-center gap-2.5 rounded-2xl border bg-card px-3.5 py-2.5 text-start shadow-sm transition-colors hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-orange-500/40 focus-visible:outline-none"
+            className="group flex w-full items-center gap-2.5 rounded-2xl border bg-card px-3 py-2.5 text-start shadow-sm transition-colors hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-orange-500/40 focus-visible:outline-none sm:px-3.5"
           >
             <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-orange-500/15 text-orange-600 dark:text-orange-400">
               <BarChart3 className="size-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <h2 className="text-base font-extrabold leading-tight">إحصائيات الموردين</h2>
+              <h2 className="text-sm font-extrabold leading-tight sm:text-base">إحصائيات الموردين</h2>
               <p className="text-[11px] text-muted-foreground">صورة سريعة عن مشترياتك وسدادك وأرصدة الموردين</p>
             </div>
             {!statsOpen && (
-              <div className="hidden items-center gap-2 text-[11px] sm:flex">
+              <div className="hidden items-center gap-2 text-[11px] md:flex">
                 <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 font-semibold text-emerald-600 dark:text-emerald-400">
                   سداد {view.purchases > 0 ? `${Math.round(view.paidPct)}%` : '—'}
                 </span>
@@ -478,15 +478,15 @@ export function SuppliersView() {
                 </span>
               </div>
             )}
-            <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+            <span className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-muted-foreground">
               {statsOpen ? 'إخفاء' : 'عرض'}
               <ChevronDown className={cn('size-4 transition-transform duration-base', statsOpen && 'rotate-180')} />
             </span>
           </button>
 
           {statsOpen && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="space-y-3 sm:space-y-4">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
                 <KpiTile
                   color="#ea580c" icon={ShoppingBag} label="إجمالي المشتريات"
                   value={num(view.purchases)} unit="جنيه"
@@ -544,9 +544,9 @@ export function SuppliersView() {
       )}
 
       {/* ═════════ الفلاتر — مصمَّمة لمنطق الموردين: إيه اللي عليّا أسدده؟ وإمتى؟ وبكام؟ ═════════ */}
-      <div className="animate-in-up motion-reduce:animate-none stagger-2 space-y-3 rounded-2xl border bg-card p-4 shadow-sm">
+      <div className="animate-in-up motion-reduce:animate-none stagger-2 space-y-3 rounded-2xl border bg-card p-3 shadow-sm sm:p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[220px] flex-1">
+          <div className="relative min-w-0 flex-1 sm:min-w-[220px]">
             <Search className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
@@ -569,11 +569,11 @@ export function SuppliersView() {
           {/* الترتيب — قائمة منسدلة بدل الأقراص */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-10 rounded-xl">
+              <Button variant="outline" className="h-10 shrink-0 rounded-xl">
                 <ArrowUpDown className="size-4" />
-                <span className="text-muted-foreground">ترتيب:</span>
-                <span className="font-semibold">{SORT_LABELS[sort]}</span>
-                <ChevronDown className="size-4 text-muted-foreground" />
+                <span className="hidden text-muted-foreground sm:inline">ترتيب:</span>
+                <span className="max-w-[8rem] truncate font-semibold sm:max-w-none">{SORT_LABELS[sort]}</span>
+                <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-52">
@@ -611,7 +611,9 @@ export function SuppliersView() {
           </div>
         </div>
 
-        {/* تبويبات الحساب — كل تبويب بيقولك كام مورد وكام جنيه */}
+        {/* تبويبات الحساب — كل تبويب بيقولك كام مورد وكام جنيه
+            📱 «كل الموردين» بعرض كامل → 4 الباقيين 2×2 مرتّب
+            🖥️ sm+: 3 أعمدة → lg: 5 أعمدة */}
         <div role="tablist" aria-label="حالة الحساب" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           {(
             [
@@ -632,56 +634,84 @@ export function SuppliersView() {
                 aria-selected={on}
                 onClick={() => setStatus(on && k !== 'all' ? 'all' : k)}
                 className={cn(
-                  'relative overflow-hidden rounded-xl border p-3 text-start transition-all focus-visible:ring-[3px] focus-visible:ring-orange-500/40 focus-visible:outline-none',
+                  'relative overflow-hidden rounded-xl border p-2.5 text-start transition-all focus-visible:ring-[3px] focus-visible:ring-orange-500/40 focus-visible:outline-none sm:p-3',
+                  // 📱 «كل الموردين» بعرض كامل على الموبايل → 4 الباقيين في 2×2 مرتّب
+                  k === 'all' && 'col-span-2 sm:col-span-1',
                   on ? 'shadow-sm' : 'bg-background hover:bg-muted/50',
                   t.n === 0 && !on && 'opacity-55',
                 )}
                 style={on ? { borderColor: color, backgroundColor: `${color}12` } : undefined}
               >
                 <span aria-hidden className="absolute inset-x-0 bottom-0 h-[3px] transition-opacity" style={{ backgroundColor: color, opacity: on ? 1 : 0 }} />
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-1.5 text-xs font-bold" style={{ color: on ? color : undefined }}>
-                    <Icon className="size-3.5" />
-                    {label}
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="flex items-center gap-1.5 text-[11px] font-bold sm:text-xs" style={{ color: on ? color : undefined }}>
+                    <Icon className="size-3.5 shrink-0" />
+                    <span className="truncate">{label}</span>
                   </span>
                   <span
-                    className="min-w-6 rounded-full px-1.5 text-center text-[11px] font-extrabold tabular-nums"
+                    className="min-w-6 shrink-0 rounded-full px-1.5 text-center text-[10px] font-extrabold tabular-nums sm:text-[11px]"
                     style={{ backgroundColor: `${color}1f`, color }}
                   >
                     {t.n}
                   </span>
                 </div>
-                <p className="mt-1.5 truncate text-base font-extrabold tabular-nums" style={{ color: t.sum ? color : undefined }}>
+                <p className="mt-1 truncate text-sm font-extrabold tabular-nums sm:mt-1.5 sm:text-base" style={{ color: t.sum ? color : undefined }}>
                   {t.sum !== null ? num(t.sum) : t.n === 0 ? '—' : num(t.n)}
-                  <span className="ms-1 text-[11px] font-medium text-muted-foreground">{t.sum !== null ? 'جنيه' : 'مورد'}</span>
+                  <span className="ms-1 text-[10px] font-medium text-muted-foreground sm:text-[11px]">{t.sum !== null ? 'جنيه' : 'مورد'}</span>
                 </p>
-                {hint && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{hint}</p>}
+                {hint && <p className="mt-0.5 truncate text-[10px] text-muted-foreground sm:text-[11px]">{hint}</p>}
               </button>
             )
           })}
         </div>
 
-        {/* آخر توريد + ميزانية السداد */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="me-1 text-[11px] font-semibold text-muted-foreground">آخر توريد</span>
-            <FilterPill active={activity === 'active'} onClick={() => setActivity(activity === 'active' ? 'any' : 'active')} count={actCounts.active} color="#059669">
-              بنشتغل معاه (٣٠ يوم)
-            </FilterPill>
-            <FilterPill active={activity === 'stalled'} onClick={() => setActivity(activity === 'stalled' ? 'any' : 'stalled')} count={actCounts.stalled} color="#78716c">
-              وقفنا التوريد
-            </FilterPill>
-            <FilterPill active={activity === 'never'} onClick={() => setActivity(activity === 'never' ? 'any' : 'never')} count={actCounts.never} color="#7c3aed">
-              لسه ماشتريناش منه
-            </FilterPill>
-            <FilterPill active={activity === 'nophone'} onClick={() => setActivity(activity === 'nophone' ? 'any' : 'nophone')} count={actCounts.nophone} color="#0369a1">
-              من غير رقم
-            </FilterPill>
+        {/* آخر توريد + ميزانية السداد
+            📱 موبايل: عنوان فوق + أقراص flex-wrap + فاصل رفيع بين الصفين + فاصل بوليصة + الميزانية
+            🖥️ sm+: صف أفقي زي الأصل (الفصلات بتختفي) */}
+        <div className="space-y-3 sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2 sm:space-y-0">
+          <div className="space-y-1.5 sm:flex sm:items-center sm:gap-1.5 sm:space-y-0">
+            <span className="block text-[11px] font-semibold text-muted-foreground sm:me-1 sm:shrink-0">آخر توريد</span>
+            {/* flex-wrap — كل قرص بحجم نصه، وفاصل رفيع بين الصفين على الموبايل */}
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0 sm:gap-1.5">
+              <FilterPill active={activity === 'active'} onClick={() => setActivity(activity === 'active' ? 'any' : 'active')} count={actCounts.active} color="#059669">
+                <span className="sm:hidden">بنشتغل معاه</span>
+                <span className="hidden sm:inline">بنشتغل معاه (٣٠ يوم)</span>
+              </FilterPill>
+              <FilterPill active={activity === 'stalled'} onClick={() => setActivity(activity === 'stalled' ? 'any' : 'stalled')} count={actCounts.stalled} color="#78716c">
+                وقفنا التوريد
+              </FilterPill>
+
+              {/* ═══ فاصل رفيع بين الصفين — يظهر على الموبايل بس.
+                  w-full بيجبره ياخد صف كامل، واللي بعده بينزل تحته ═══ */}
+              <span
+                aria-hidden
+                className="my-1.5 h-px w-full bg-gradient-to-l from-transparent via-orange-300/70 to-transparent sm:hidden dark:via-stone-600/70"
+              />
+
+              <FilterPill active={activity === 'never'} onClick={() => setActivity(activity === 'never' ? 'any' : 'never')} count={actCounts.never} color="#7c3aed">
+                <span className="sm:hidden">لسه ماشتريناش</span>
+                <span className="hidden sm:inline">لسه ماشتريناش منه</span>
+              </FilterPill>
+              <FilterPill active={activity === 'nophone'} onClick={() => setActivity(activity === 'nophone' ? 'any' : 'nophone')} count={actCounts.nophone} color="#0369a1">
+                من غير رقم
+              </FilterPill>
+            </div>
           </div>
 
-          <label className="ms-auto flex items-center gap-2 rounded-xl border bg-background px-3 py-1.5 text-xs focus-within:ring-[3px] focus-within:ring-orange-500/40">
-            <Calculator className="size-4 text-orange-600 dark:text-orange-400" />
-            <span className="font-semibold text-muted-foreground">معايا</span>
+          {/* ═══ فاصل بوليصة — خط بتدرج شفاف + chip «ميزانية السداد» في المنتصف.
+              بيظهر على الموبايل بس، ومن sm+ وفوق بيختفي ═══ */}
+          <div aria-hidden className="flex items-center gap-2 sm:hidden">
+            <span className="h-px flex-1 bg-gradient-to-l from-transparent via-orange-300/70 to-transparent dark:via-stone-600/70" />
+            <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-dashed border-orange-300/70 bg-orange-500/[0.07] px-2.5 py-1 text-[10px] font-bold text-orange-700 dark:border-stone-600/70 dark:bg-orange-400/10 dark:text-orange-300">
+              <Calculator className="size-3" />
+              ميزانية السداد
+            </span>
+            <span className="h-px flex-1 bg-gradient-to-l from-transparent via-orange-300/70 to-transparent dark:via-stone-600/70" />
+          </div>
+
+          <label className="flex w-full items-center gap-2 rounded-xl border bg-background px-3 py-2 text-xs focus-within:ring-[3px] focus-within:ring-orange-500/40 sm:ms-auto sm:w-auto sm:py-1.5">
+            <Calculator className="size-4 shrink-0 text-orange-600 dark:text-orange-400" />
+            <span className="shrink-0 font-semibold text-muted-foreground">معايا</span>
             <input
               type="number"
               inputMode="decimal"
@@ -690,12 +720,12 @@ export function SuppliersView() {
               onChange={(e) => setBudget(e.target.value)}
               placeholder="ميزانية السداد"
               dir="ltr"
-              className="w-28 bg-transparent text-center text-sm font-bold tabular-nums outline-none placeholder:text-xs placeholder:font-normal"
+              className="min-w-0 flex-1 bg-transparent text-center text-sm font-bold tabular-nums outline-none placeholder:text-xs placeholder:font-normal sm:w-28 sm:flex-none"
               aria-label="ميزانية السداد بالجنيه"
             />
-            <span className="font-semibold text-muted-foreground">جنيه</span>
+            <span className="shrink-0 font-semibold text-muted-foreground">جنيه</span>
             {budget && (
-              <button type="button" onClick={() => setBudget('')} className="text-muted-foreground hover:text-foreground" aria-label="مسح الميزانية">
+              <button type="button" onClick={() => setBudget('')} className="shrink-0 text-muted-foreground hover:text-foreground" aria-label="مسح الميزانية">
                 <X className="size-3.5" />
               </button>
             )}
@@ -759,7 +789,7 @@ export function SuppliersView() {
 
       {/* ═════════ القايمة ═════════ */}
       {loading && suppliers.length === 0 ? (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-5">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4 sm:grid-cols-[repeat(auto-fill,minmax(290px,1fr))] sm:gap-5">
           {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-[330px] w-full rounded-3xl" />
           ))}
@@ -797,7 +827,7 @@ export function SuppliersView() {
           {/* بطاقات — الافتراضي، وهي الوحيدة على الموبايل */}
           <div
             className={cn(
-              'grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-5',
+              'grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4 sm:grid-cols-[repeat(auto-fill,minmax(290px,1fr))] sm:gap-5',
               mode === 'list' && 'lg:hidden',
               loading && 'opacity-60 transition-opacity',
             )}
@@ -1004,7 +1034,7 @@ function PhoneTag({
   )
 }
 
-/** قرص فلتر بعدّاد */
+/** قرص فلتر بعدّاد — كل قرص بحجم نصه (w-auto shrink-0) عشان مايتقطعش */
 function FilterPill({
   active,
   onClick,
@@ -1024,7 +1054,7 @@ function FilterPill({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:ring-[3px] focus-visible:ring-orange-500/40 focus-visible:outline-none',
+        'inline-flex w-auto shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold transition-colors focus-visible:ring-[3px] focus-visible:ring-orange-500/40 focus-visible:outline-none sm:px-3 sm:text-xs',
         active
           ? color
             ? 'border-transparent text-white shadow-sm'
@@ -1033,12 +1063,13 @@ function FilterPill({
       )}
       style={active && color ? { backgroundColor: color } : undefined}
     >
-      {color && !active && <i className="size-2 rounded-full" style={{ backgroundColor: color }} />}
-      {children}
+      {color && !active && <i className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />}
+      {/* whitespace-nowrap بدل truncate — النص يظهر كامل، مايتقطعش */}
+      <span className="whitespace-nowrap">{children}</span>
       {count !== undefined && (
         <span
           className={cn(
-            'min-w-5 rounded-full px-1.5 text-center text-[11px] font-bold tabular-nums',
+            'min-w-5 shrink-0 rounded-full px-1.5 text-center text-[10px] font-bold tabular-nums sm:text-[11px]',
             active ? 'bg-white/25' : 'bg-muted text-foreground/70',
           )}
         >
@@ -1049,7 +1080,8 @@ function FilterPill({
   )
 }
 
-/** بطاقة مؤشر — حد جانبي ملوّن (بدل الحد العلوي في العملاء) + شريط تقدّم اختياري */
+/** بطاقة مؤشر — حد جانبي ملوّن + شريط تقدّم اختياري
+    📱 على الموبايل: العنوان والنص الفرعي بيستحملوا سطرين (line-clamp-2) عشان مايتقطعوش */
 function KpiTile({
   color,
   icon: Icon,
@@ -1071,32 +1103,44 @@ function KpiTile({
 }) {
   return (
     <div
-      className="relative overflow-hidden rounded-2xl border border-s-4 bg-card p-4 transition-shadow hover:shadow-md"
+      className="relative flex min-w-0 flex-col overflow-hidden rounded-2xl border border-s-4 bg-card p-3 transition-shadow hover:shadow-md sm:p-4"
       style={{ borderInlineStartColor: color }}
     >
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      {/* العنوان + الأيقونة — الأيقونة تفضل فوق لو العنوان بقى سطرين */}
+      <div className="flex items-start justify-between gap-2">
+        <p className="line-clamp-2 min-w-0 text-[11px] font-medium leading-tight text-muted-foreground sm:line-clamp-1 sm:text-xs">
+          {label}
+        </p>
         <span
-          className="flex size-8 shrink-0 items-center justify-center rounded-lg"
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg sm:size-8"
           style={{ backgroundColor: `${color}1f`, color }}
         >
-          <Icon className="size-4" />
+          <Icon className="size-3.5 sm:size-4" />
         </span>
       </div>
-      <p className="mt-2 truncate text-2xl font-extrabold tabular-nums">
+
+      {/* 📱 رقم مقاوم للملايين — على الموبايل حجم أصغر يمنع القطع */}
+      <p className="mt-1.5 min-w-0 truncate text-lg font-extrabold tabular-nums sm:mt-2 sm:text-2xl" title={value}>
         {value}
-        {unit && <span className="ms-1 text-[11px] font-medium text-muted-foreground">{unit}</span>}
+        {unit && <span className="ms-1 text-[10px] font-medium text-muted-foreground sm:text-[11px]">{unit}</span>}
       </p>
-      {sub && <p className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">{sub}</p>}
+
+      {/* النص الفرعي — يستحمل سطرين على الموبايل */}
+      {sub && (
+        <p className="mt-0.5 line-clamp-2 min-w-0 text-[10px] leading-tight text-muted-foreground sm:mt-1 sm:line-clamp-1 sm:text-[11px]">
+          {sub}
+        </p>
+      )}
+
       {progress !== undefined && (
-        <div className="mt-2.5 flex items-center gap-2">
+        <div className="mt-2 flex items-center gap-2 sm:mt-2.5">
           <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ backgroundColor: `${color}22` }}>
             <div
               className="h-full rounded-full transition-[width] duration-slow ease-out"
               style={{ width: `${Math.min(100, Math.max(progress, 2))}%`, backgroundColor: color }}
             />
           </div>
-          <span className="text-[11px] font-bold tabular-nums" style={{ color }}>
+          <span className="shrink-0 text-[10px] font-bold tabular-nums sm:text-[11px]" style={{ color }}>
             {progressLabel ?? `${Math.round(progress)}%`}
           </span>
         </div>
@@ -1252,13 +1296,13 @@ function TopSources({
   const stamps = [ACCENT, '#b45309', '#78716c']
   const max = rows[0]?.totalPurchases ?? 0
   return (
-    <div className="rounded-2xl border border-s-4 bg-card p-4" style={{ borderInlineStartColor: ACCENT }}>
-      <div className="mb-3 flex items-center justify-between">
+    <div className="rounded-2xl border border-s-4 bg-card p-3.5 sm:p-4" style={{ borderInlineStartColor: ACCENT }}>
+      <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 text-sm font-bold">
-          <Boxes className="size-4 text-orange-500" />
+          <Boxes className="size-4 shrink-0 text-orange-500" />
           أكتر الموردين توريداً
         </h3>
-        <span className="text-[11px] text-muted-foreground">اضغط لفتح كشف الحساب</span>
+        <span className="hidden text-[11px] text-muted-foreground sm:inline">اضغط لفتح كشف الحساب</span>
       </div>
       {rows.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">لسه مفيش مشتريات مسجّلة</p>
@@ -1272,10 +1316,10 @@ function TopSources({
                 <button
                   type="button"
                   onClick={() => onOpen(r)}
-                  className="flex w-full items-center gap-3 rounded-xl p-2 text-start transition-colors hover:bg-orange-500/[0.06] focus-visible:ring-[3px] focus-visible:ring-orange-500/40 focus-visible:outline-none"
+                  className="flex w-full items-center gap-2.5 rounded-xl p-2 text-start transition-colors hover:bg-orange-500/[0.06] focus-visible:ring-[3px] focus-visible:ring-orange-500/40 focus-visible:outline-none sm:gap-3"
                 >
                   <span
-                    className="flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-extrabold text-white ring-2 ring-offset-2 ring-offset-card"
+                    className="flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-extrabold text-white ring-2 ring-offset-2 ring-offset-card sm:size-8"
                     style={{ backgroundColor: color, ['--tw-ring-color' as string]: `${color}55` }}
                   >
                     {i + 1}
@@ -1292,7 +1336,7 @@ function TopSources({
                           style={{ width: `${max > 0 ? Math.max((v / max) * 100, 4) : 0}%`, backgroundColor: color }}
                         />
                       </div>
-                      <span className="w-9 text-end text-[11px] tabular-nums text-muted-foreground">
+                      <span className="w-9 shrink-0 text-end text-[11px] tabular-nums text-muted-foreground">
                         {total > 0 ? `${Math.round((v / total) * 100)}%` : ''}
                       </span>
                     </div>
@@ -1316,13 +1360,13 @@ function PayableAging({
   total: number
 }) {
   return (
-    <div className="rounded-2xl border bg-card p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="rounded-2xl border bg-card p-3.5 sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 text-sm font-bold">
-          <CalendarDays className="size-4 text-orange-500" />
+          <CalendarDays className="size-4 shrink-0 text-orange-500" />
           أعمار المستحقات
         </h3>
-        <span className="text-[11px] text-muted-foreground">من آخر شراء من المورد</span>
+        <span className="hidden text-[11px] text-muted-foreground sm:inline">من آخر شراء من المورد</span>
       </div>
       {total <= 0 ? (
         <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
@@ -1346,14 +1390,14 @@ function PayableAging({
           </div>
           <ul className="mt-3 space-y-2">
             {buckets.map((b) => (
-              <li key={b.label} className={cn('flex items-center gap-2.5 text-sm transition-opacity', b.sum <= 0 && 'opacity-35')}>
+              <li key={b.label} className={cn('flex items-center gap-2 text-sm transition-opacity sm:gap-2.5', b.sum <= 0 && 'opacity-35')}>
                 <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: b.color }} />
-                <span className="flex-1 font-medium">{b.label}</span>
-                <span className="text-[11px] tabular-nums text-muted-foreground">
+                <span className="flex-1 truncate font-medium">{b.label}</span>
+                <span className="hidden text-[11px] tabular-nums text-muted-foreground sm:inline">
                   {b.n} {b.n > 2 && b.n < 11 ? 'موردين' : 'مورد'}
                 </span>
-                <span className="w-24 text-end font-bold tabular-nums">{formatCurrency(b.sum)}</span>
-                <span className="w-9 text-end text-[11px] tabular-nums text-muted-foreground">
+                <span className="text-xs font-bold tabular-nums sm:w-24 sm:text-end sm:text-sm">{formatCurrency(b.sum)}</span>
+                <span className="w-9 shrink-0 text-end text-[11px] tabular-nums text-muted-foreground">
                   {Math.round((b.sum / total) * 100)}%
                 </span>
               </li>
@@ -1409,26 +1453,26 @@ function SupplierSlip({
           className="h-2"
           style={{ backgroundImage: `repeating-linear-gradient(-45deg, ${t.color} 0 8px, transparent 8px 16px)` }}
         />
-        <div className="relative p-5 pb-6" style={{ backgroundImage: `linear-gradient(180deg, ${t.color}14, transparent)` }}>
+        <div className="relative p-4 pb-5 sm:p-5 sm:pb-6" style={{ backgroundImage: `linear-gradient(180deg, ${t.color}14, transparent)` }}>
           <div className="flex items-start gap-3">
             <span
-              className="flex size-12 shrink-0 items-center justify-center rounded-2xl text-xl font-extrabold text-white shadow-md"
+              className="flex size-11 shrink-0 items-center justify-center rounded-2xl text-lg font-extrabold text-white shadow-md sm:size-12 sm:text-xl"
               style={{ backgroundColor: color }}
             >
               {c.name?.charAt(0) ?? '?'}
             </span>
             <div className="min-w-0 flex-1 pt-0.5">
-              <p className="text-lg font-extrabold leading-snug break-words [overflow-wrap:anywhere]">{c.name}</p>
+              <p className="text-base font-extrabold leading-snug break-words [overflow-wrap:anywhere] sm:text-lg">{c.name}</p>
               <PhoneTag phone={c.phone} className="mt-1.5" />
             </div>
           </div>
 
-          <div className="mt-5 flex items-end justify-between gap-3">
+          <div className="mt-4 flex items-end justify-between gap-2 sm:mt-5 sm:gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-medium text-muted-foreground">
                 {hasDebt ? 'المستحق له عليك' : tone === 'credit' ? 'ليك عنده' : 'الرصيد'}
               </p>
-              <p className="mt-0.5 text-4xl leading-none font-extrabold tracking-tight tabular-nums" style={{ color: t.color }}>
+              <p className="mt-0.5 truncate text-3xl leading-none font-extrabold tracking-tight tabular-nums sm:text-4xl" style={{ color: t.color }}>
                 {num(Math.abs(c.balance))}
                 <span className="ms-1.5 text-sm font-semibold text-muted-foreground">جنيه</span>
               </p>
@@ -1466,18 +1510,18 @@ function SupplierSlip({
       </div>
 
       {/* ═══ كعب البوليصة ═══ */}
-      <div className="flex flex-1 flex-col gap-3 p-4">
+      <div className="flex flex-1 flex-col gap-3 p-3.5 sm:p-4">
         <div className="grid grid-cols-3 divide-x divide-x-reverse text-center">
           <div className="px-1">
-            <p className="text-[11px] text-muted-foreground">الأوامر</p>
+            <p className="text-[10px] text-muted-foreground sm:text-[11px]">الأوامر</p>
             <p className="mt-0.5 text-sm font-extrabold tabular-nums">{num(orders)}</p>
           </div>
           <div className="px-1">
-            <p className="text-[11px] text-muted-foreground">المشتريات</p>
-            <p className="mt-0.5 text-sm font-extrabold tabular-nums">{num(purchases)}</p>
+            <p className="text-[10px] text-muted-foreground sm:text-[11px]">المشتريات</p>
+            <p className="mt-0.5 truncate text-sm font-extrabold tabular-nums" title={num(purchases)}>{num(purchases)}</p>
           </div>
           <div className="px-1">
-            <p className="text-[11px] text-muted-foreground">آخر تعامل</p>
+            <p className="text-[10px] text-muted-foreground sm:text-[11px]">آخر تعامل</p>
             <p className="mt-0.5 text-sm font-extrabold">{lastDeal}</p>
           </div>
         </div>
@@ -1486,22 +1530,22 @@ function SupplierSlip({
           {hasDebt ? (
             <Button
               onClick={onPay}
-              className="flex-1 rounded-xl border-0 bg-orange-600 font-semibold text-white hover:bg-orange-500"
+              className="h-9 min-w-0 flex-1 rounded-xl border-0 bg-orange-600 px-3 text-[13px] font-semibold text-white hover:bg-orange-500 sm:h-10"
             >
               <HandCoins className="size-4" />
-              سدّد دفعة
+              <span className="truncate">سدّد دفعة</span>
             </Button>
           ) : (
-            <Button variant="outline" className="flex-1 rounded-xl font-semibold" onClick={onOpen}>
+            <Button variant="outline" className="h-9 min-w-0 flex-1 rounded-xl text-[13px] font-semibold sm:h-10" onClick={onOpen}>
               <Eye className="size-4" />
-              كشف الحساب
+              <span className="truncate">كشف الحساب</span>
             </Button>
           )}
           {hasDebt && (
             <Button
               variant="ghost"
               size="icon"
-              className="size-9 rounded-xl border text-muted-foreground"
+              className="size-9 shrink-0 rounded-xl border text-muted-foreground"
               onClick={onOpen}
               title="كشف الحساب"
               aria-label="كشف الحساب"
@@ -1512,7 +1556,7 @@ function SupplierSlip({
           <Button
             variant="ghost"
             size="icon"
-            className="size-9 rounded-xl border text-muted-foreground"
+            className="size-9 shrink-0 rounded-xl border text-muted-foreground"
             onClick={onEdit}
             title="تعديل"
             aria-label="تعديل"
@@ -1524,7 +1568,7 @@ function SupplierSlip({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-9 rounded-xl border text-muted-foreground"
+                className="size-9 shrink-0 rounded-xl border text-muted-foreground"
                 aria-label="خيارات"
               >
                 <MoreVertical className="size-4" />

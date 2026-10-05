@@ -7,6 +7,7 @@ import {
   CalendarDays,
   Check,
   ChevronLeft,
+  ChevronDown,
   ChevronRight,
   Loader2,
   Maximize2,
@@ -32,6 +33,13 @@ import { Input } from '@/components/ui/input'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { arEG } from 'react-day-picker/locale'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
@@ -41,7 +49,6 @@ import { useShopStore } from '@/lib/store'
 import { printSale } from '@/lib/print-client'
 import { printThermalReceipt, getStoredPrinterSettings } from '@/lib/thermal-printer'
 import { ProductDialog } from './ProductDialog'
-import { POSVariantPickerDialog } from './POSVariantPickerDialog'
 
 /* ────────────────────────────────────────────────────────────────
    Types (unchanged business model)
@@ -608,6 +615,47 @@ function DueDatePicker({
   )
 }
 
+/* ── زر الرجوع في الموبايل ────────────────────────────────────────────────
+   كل شاشة منبثقة (السلة، الدفع، حوار المنتج…) بتاخد «طبقة» في history: زر الرجوع
+   بيقفل الطبقة العلوية بدل ما يخرج من نقطة البيع للوحة التحكم. لما الطبقة تتقفل
+   من الواجهة (زر ×، إتمام بيع…) بنشيل مدخلها من history عشان ما يتراكمش. */
+const backStack: { onBack: () => void; popped: boolean }[] = []
+let backIgnore = 0
+let backListening = false
+function ensureBackListener() {
+  if (backListening || typeof window === 'undefined') return
+  backListening = true
+  window.addEventListener('popstate', () => {
+    if (backIgnore > 0) {
+      backIgnore--
+      return
+    }
+    const top = backStack.pop()
+    if (!top) return
+    top.popped = true
+    top.onBack()
+  })
+}
+function useBackLayer(active: boolean, onBack: () => void) {
+  const cb = React.useRef(onBack)
+  cb.current = onBack
+  React.useEffect(() => {
+    if (!active) return
+    ensureBackListener()
+    const layer = { onBack: () => cb.current(), popped: false }
+    backStack.push(layer)
+    window.history.pushState({ ...(window.history.state ?? {}), posLayer: true }, '')
+    return () => {
+      const i = backStack.indexOf(layer)
+      if (i >= 0) backStack.splice(i, 1)
+      if (!layer.popped) {
+        backIgnore++
+        window.history.back()
+      }
+    }
+  }, [active])
+}
+
 /** شريط تمرير نحيف وهادي (بدل الافتراضي الغليظ) — للقوائم اللي لازم تفضل بتتمرّر (السلة، لوحة الدفع) */
 const slimScroll =
   '[scrollbar-width:thin] [scrollbar-color:oklch(0.57_0.18_162/0.35)_transparent] hover:[scrollbar-color:oklch(0.57_0.18_162/0.6)_transparent]'
@@ -674,11 +722,30 @@ export function POSView() {
   const [customersVersion, setCustomersVersion] = React.useState(0)
   const [addingProduct, setAddingProduct] = React.useState(false)
   const [cartSheetOpen, setCartSheetOpen] = React.useState(false)
+  const [mobileStep, setMobileStep] = React.useState<'cart' | 'pay'>('cart')
+  const [expandedKey, setExpandedKey] = React.useState<string | null>(null)
+  const openCartSheet = () => {
+    setMobileStep('cart')
+    setCartSheetOpen(true)
+  }
+  const closeCartSheet = () => {
+    setCartSheetOpen(false)
+    setMobileStep('cart')
+  }
+  // زر الرجوع: من الدفع ← للسلة، ومن السلة ← للمنتجات (مش للوحة التحكم)
+  useBackLayer(cartSheetOpen, closeCartSheet)
+  useBackLayer(cartSheetOpen && mobileStep === 'pay', () => setMobileStep('cart'))
 
   const [variantPickerOpen, setVariantPickerOpen] = React.useState(false)
   const [variantPickerProduct, setVariantPickerProduct] = React.useState<ProductLite | null>(null)
   const [variantPickerVariants, setVariantPickerVariants] = React.useState<PosVariant[]>([])
   const [variantPickerUnits, setVariantPickerUnits] = React.useState<PosUnit[]>([])
+  useBackLayer(variantPickerOpen, () => {
+    setVariantPickerOpen(false)
+    setVariantPickerProduct(null)
+    setVariantPickerVariants([])
+    setVariantPickerUnits([])
+  })
 
   const searchRef = React.useRef<HTMLInputElement>(null)
   // Caches that keep repeated scans instant (all cleared after a sale).
@@ -725,13 +792,28 @@ export function POSView() {
   const gridRef = React.useRef<HTMLUListElement>(null)
   const [perPage, setPerPage] = React.useState(0) // 0 = لسه ماتقاسش
   const [page, setPage] = React.useState(0)
+  const isSm = useMediaQuery('(min-width: 640px)')
+  const simplePageSize = isSm ? 24 : 12 // الموبايل/التابلت: صفحات ثابتة (مفيش قياس للمساحة)
   const paged = isXl && !searchError && products.length > 0
-  const pageSize = perPage || 24
-  const pageCount = paged ? Math.max(1, Math.ceil(products.length / pageSize)) : 1
+  const simplePaged = !isXl && !searchError && products.length > simplePageSize
+  const pageSize = paged ? perPage || 24 : simplePageSize
+  const anyPaged = paged || simplePaged
+  const pageCount = anyPaged ? Math.max(1, Math.ceil(products.length / pageSize)) : 1
   const safePage = Math.min(page, pageCount - 1)
-  const visibleProducts = paged
+  const visibleProducts = anyPaged
     ? products.slice(safePage * pageSize, safePage * pageSize + pageSize)
     : products
+  const panelTopRef = React.useRef<HTMLElement>(null)
+  const pageMounted = React.useRef(false)
+  // تغيير الصفحة على الموبايل ← نرجع لأول المنتجات (مش نسيب المستخدم في آخر الصفحة)
+  React.useEffect(() => {
+    if (!pageMounted.current) {
+      pageMounted.current = true
+      return
+    }
+    if (simplePaged) panelTopRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safePage])
   const hasImages = products.some((x) => x.imagePath)
   const effMode: 'cards' | 'compact' =
     viewPref === 'auto' ? (hasImages ? 'cards' : 'compact') : viewPref
@@ -829,6 +911,7 @@ export function POSView() {
   const closeQuickAdd = useShopStore((s) => s.closeQuickAddProduct)
   const [productDlgOpen, setProductDlgOpen] = React.useState(false)
   const [productInitial, setProductInitial] = React.useState<Record<string, any> | null>(null)
+  useBackLayer(productDlgOpen, () => setProductDlgOpen(false))
 
   React.useEffect(() => {
     if (quickAdd.open) {
@@ -1393,14 +1476,14 @@ export function POSView() {
       setReceived('')
       setPaymentMethod('cash')
       setDueDate('')
-      setCartSheetOpen(false)
+      closeCartSheet()
       setCustomersVersion((v) => v + 1)
       // Refresh stock numbers in the grid and get ready for the next scan.
       detailsCache.current.clear()
       barcodeCache.current.clear()
       gridCache.current.clear()
       setRefreshTick((t) => t + 1)
-      searchRef.current?.focus()
+      focusSearch()
     } catch (e: any) {
       toast.error(e?.message || 'فشل إتمام البيع')
     } finally {
@@ -1695,7 +1778,7 @@ export function POSView() {
   )
 
   const productsPanel = (
-    <section className={panelCls}>
+    <section ref={panelTopRef} className={cn(panelCls, 'scroll-mt-2 max-lg:overflow-visible')}>
       <div className="space-y-3 border-b border-border p-3.5">
         <PanelHead
           n={1}
@@ -1703,6 +1786,20 @@ export function POSView() {
           title="اختر المنتجات"
           aside={
             <div className="flex items-center gap-2.5">
+              {!isDesktop && (
+                <button
+                  type="button"
+                  onClick={() => setSoundOn((v) => !v)}
+                  aria-pressed={soundOn}
+                  aria-label={soundOn ? 'إيقاف صوت السكان' : 'تشغيل صوت السكان'}
+                  className={cn(
+                    'flex size-9 touch-manipulation items-center justify-center rounded-lg border border-border active:bg-muted',
+                    soundOn ? 'text-foreground' : 'text-muted-foreground'
+                  )}
+                >
+                  {soundOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+                </button>
+              )}
               <span className="text-xs font-medium tabular-nums text-muted-foreground">
                 {productsLoading ? 'جاري التحميل…' : `${products.length} منتج`}
               </span>
@@ -1750,7 +1847,7 @@ export function POSView() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="ابحث أو امسح الباركود…"
               className="h-12 rounded-xl border-foreground/25 bg-card pr-10 pl-24 text-base shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] focus-visible:border-brand-600 focus-visible:ring-brand-600/20"
-              autoFocus
+              autoFocus={isDesktop}
               inputMode="search"
             />
             <div className="absolute left-2.5 top-1/2 flex -translate-y-1/2 items-center gap-1.5">
@@ -1830,8 +1927,10 @@ export function POSView() {
           setPage((p) => Math.max(0, Math.min(pageCount - 1, p + (dx < 0 ? 1 : -1))))
         }}
         className={cn(
-          'min-h-0 flex-1 overscroll-contain p-3 lg:max-h-[75dvh] xl:max-h-none',
-          paged ? 'overflow-hidden' : cn('overflow-y-auto', slimScroll)
+          'min-h-0 flex-1 p-3 lg:max-h-[75dvh] xl:max-h-none',
+          // الموبايل (<lg): مفيش overflow ولا overscroll-contain خالص — الصفحة هي الوحيدة اللي بتتمرّر،
+          // فالسحب من أي نقطة (حتى المنتصف) بيمرّر الصفحة. التمرير الداخلي للتابلت الكبير بس.
+          paged ? 'overflow-hidden overscroll-contain' : cn('lg:overflow-y-auto lg:overscroll-contain', slimScroll)
         )}
       >
         {searchError ? (
@@ -1950,7 +2049,43 @@ export function POSView() {
         )}
       </div>
 
-      <footer className="flex items-center justify-between gap-3 border-t border-dashed border-foreground/20 bg-muted/40 px-3 py-1.5 text-sm text-muted-foreground">
+      {simplePaged && pageCount > 1 && (
+        <nav aria-label="صفحات المنتجات" className="flex items-center gap-2 border-t border-border bg-muted/40 px-3 py-2.5">
+          <button
+            type="button"
+            onClick={() => setPage(Math.max(0, safePage - 1))}
+            disabled={safePage === 0}
+            className="flex h-11 flex-1 touch-manipulation items-center justify-center gap-1.5 rounded-xl border-2 border-foreground/20 bg-card text-sm font-bold transition-colors active:bg-muted disabled:opacity-35"
+          >
+            <ChevronRight className="size-5" />
+            السابقة
+          </button>
+          {/* اختيار الصفحة مباشرة (قايمة النظام على الموبايل) — مهم لما المنتجات تبقى مئات */}
+          <select
+            value={safePage}
+            onChange={(e) => setPage(parseInt(e.target.value, 10))}
+            aria-label="اختيار الصفحة"
+            className="h-11 w-[5.5rem] shrink-0 cursor-pointer appearance-none rounded-xl border-2 border-foreground/20 bg-card text-center text-sm font-extrabold tabular-nums"
+          >
+            {Array.from({ length: pageCount }, (_, i) => (
+              <option key={i} value={i}>
+                {i + 1} من {pageCount}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setPage(Math.min(pageCount - 1, safePage + 1))}
+            disabled={safePage >= pageCount - 1}
+            className="flex h-11 flex-1 touch-manipulation items-center justify-center gap-1.5 rounded-xl border-2 border-foreground/20 bg-card text-sm font-bold transition-colors active:bg-muted disabled:opacity-35"
+          >
+            التالية
+            <ChevronLeft className="size-5" />
+          </button>
+        </nav>
+      )}
+
+      <footer className="flex items-center justify-between gap-3 border-t border-dashed border-foreground/20 bg-muted/40 px-3 py-1.5 text-sm text-muted-foreground max-lg:hidden">
         <div className="hidden items-center gap-4 xl:flex">
           {[
             ['/', 'بحث'],
@@ -1996,7 +2131,7 @@ export function POSView() {
     </section>
   )
 
-  const cartLines =
+  const renderCartLines = (inSheet: boolean) =>
     cart.length === 0 ? (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-14 text-center">
         <div className="flex size-16 items-center justify-center rounded-2xl border-2 border-dashed border-foreground/25 text-muted-foreground">
@@ -2009,6 +2144,147 @@ export function POSView() {
           </p>
         </div>
       </div>
+    ) : inSheet ? (
+      /* موبايل: صف واحد مضغوط (الكمية · الاسم والسعر · الإجمالي). الضغط على الاسم بيفتح التفاصيل
+         (اللون/المقاس، الوحدة، تعديل السعر، حذف). زر «−» بيتحوّل لسلة مهملات لما الكمية 1. */
+      <ul className="divide-y divide-border">
+        {cart.map((it) => {
+          const cap = lineCap(it, cart)
+          const atMax = it.quantity >= cap
+          const step = it.unitFactor || 1
+          const needsVariant = it.availableVariants.length > 0 && it.variantId == null
+          const open = expandedKey === it.cartKey || needsVariant
+          const atMin = it.quantity <= step
+          return (
+            <li
+              key={it.cartKey}
+              id={`cart-line-${it.cartKey}`}
+              className={cn('px-3 py-2.5 transition-colors duration-700', lastAddedKey === it.cartKey && 'bg-brand-600/10')}
+            >
+              <div className="flex items-center gap-2">
+                <div
+                  dir="ltr"
+                  className="flex shrink-0 items-center overflow-hidden rounded-xl border border-foreground/25 bg-card"
+                >
+                  <button
+                    type="button"
+                    onClick={() => (atMin ? removeItem(it.cartKey) : updateQty(it.cartKey, it.quantity - step))}
+                    className={cn(
+                      'flex size-10 touch-manipulation items-center justify-center transition-colors active:bg-muted',
+                      atMin ? 'text-destructive' : 'text-muted-foreground'
+                    )}
+                    aria-label={atMin ? `حذف ${it.product.name}` : 'تقليل الكمية'}
+                  >
+                    {atMin ? <Trash2 className="size-4" /> : <Minus className="size-4" />}
+                  </button>
+                  <NumField
+                    integer
+                    value={it.quantity}
+                    onChange={(n) => n !== '' && updateQty(it.cartKey, Math.round(n))}
+                    ariaLabel="الكمية"
+                    className="h-10 w-10 bg-transparent text-center text-base font-extrabold tabular-nums outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => updateQty(it.cartKey, it.quantity + step)}
+                    disabled={atMax}
+                    className="flex size-10 touch-manipulation items-center justify-center text-brand-700 transition-colors active:bg-brand-600/10 disabled:text-muted-foreground disabled:opacity-40 dark:text-brand-300"
+                    aria-label="زيادة الكمية"
+                  >
+                    <Plus className="size-4" />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setExpandedKey(open && !needsVariant ? null : it.cartKey)}
+                  aria-expanded={open}
+                  className="min-w-0 flex-1 touch-manipulation rounded-lg px-1 py-0.5 text-right"
+                >
+                  <span className="flex items-center gap-1">
+                    <span className="truncate text-sm font-bold">{it.product.name}</span>
+                    <ChevronDown className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
+                  </span>
+                  <span
+                    className={cn(
+                      'block truncate text-xs tabular-nums',
+                      atMax ? 'font-semibold text-warning-subtle-foreground' : 'text-muted-foreground'
+                    )}
+                  >
+                    {it.variantLabel ? `${it.variantLabel} · ` : ''}
+                    {formatCurrency(it.price)}
+                    {it.unitLabel ? ` / ${it.unitLabel}` : ''}
+                    {atMax ? ' · آخر كمية' : ''}
+                  </span>
+                </button>
+                <span className="shrink-0 text-base font-extrabold tabular-nums">
+                  {formatCurrency(it.price * it.quantity)}
+                </span>
+              </div>
+
+              {open && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {it.availableVariants.length > 0 && (
+                    <select
+                      value={it.variantId ?? ''}
+                      onChange={(e) => {
+                        const vid = e.target.value ? parseInt(e.target.value, 10) : null
+                        updateVariant(it.cartKey, vid ? it.availableVariants.find((v) => v.id === vid) ?? null : null)
+                      }}
+                      className={cn(selectCls, 'h-10 min-w-full rounded-xl text-base')}
+                      aria-label="اللون / المقاس"
+                    >
+                      <option value="" disabled>
+                        اختار اللون/المقاس
+                      </option>
+                      {it.availableVariants.map((v) => (
+                        <option key={v.id} value={v.id} disabled={v.quantity <= 0}>
+                          {variantLabelOf(v)} {v.quantity <= 0 ? '(نفد)' : `(متاح ${v.quantity})`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {it.availableUnits.length > 0 && (
+                    <select
+                      value={it.unitId ?? ''}
+                      onChange={(e) => {
+                        const uid = e.target.value ? parseInt(e.target.value, 10) : null
+                        updateUnit(it.cartKey, uid ? it.availableUnits.find((u) => u.id === uid) ?? null : null)
+                      }}
+                      className={cn(selectCls, 'h-10 min-w-0 flex-1 rounded-xl text-base')}
+                      aria-label="الوحدة"
+                    >
+                      <option value="">قطعة</option>
+                      {it.availableUnits.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                          {u.price != null ? ` (${formatCurrency(u.price)})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <label className="flex h-10 min-w-0 flex-1 items-center gap-1.5 rounded-xl border border-foreground/25 bg-card px-3 text-xs font-medium text-muted-foreground focus-within:border-brand-600 focus-within:ring-2 focus-within:ring-brand-600/20">
+                    <span>السعر</span>
+                    <NumField
+                      value={it.price}
+                      onChange={(n) => updatePrice(it.cartKey, n === '' ? 0 : n)}
+                      ariaLabel="سعر القطعة"
+                      className="w-full min-w-0 bg-transparent text-center text-base font-bold tabular-nums text-foreground outline-none"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => removeItem(it.cartKey)}
+                    className="flex h-10 shrink-0 touch-manipulation items-center gap-1.5 rounded-xl border border-destructive/40 px-3 text-sm font-semibold text-destructive active:bg-danger-subtle"
+                  >
+                    <Trash2 className="size-4" />
+                    حذف
+                  </button>
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ul>
     ) : (
       <ul className="divide-y divide-border">
         {cart.map((it) => {
@@ -2158,8 +2434,8 @@ export function POSView() {
       </ul>
     )
 
-  const cartPanel = (
-    <section className={panelCls}>
+  const renderCartPanel = (inSheet: boolean) => (
+    <section className={cn(panelCls, inSheet && 'min-h-0 flex-1 rounded-none border-0 shadow-none')}>
       <header className="border-b border-border px-3.5 py-3">
         <PanelHead
           n={2}
@@ -2218,8 +2494,14 @@ export function POSView() {
         </div>
       )}
 
-      <div className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain lg:max-h-[46dvh] xl:max-h-none', slimScroll)}>
-        {cartLines}
+      <div
+        className={cn(
+          'flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain',
+          !inSheet && 'lg:max-h-[46dvh] xl:max-h-none',
+          slimScroll
+        )}
+      >
+        {renderCartLines(inSheet)}
       </div>
 
       {cart.length > 0 && (
@@ -2232,7 +2514,24 @@ export function POSView() {
             <span className="font-bold">إجمالي السلة</span>
             <span className="text-2xl font-extrabold tabular-nums">{formatCurrency(total)}</span>
           </div>
+          {inSheet && (
+            <Button
+              size="lg"
+              className="mt-2 h-12 w-full rounded-xl bg-brand-700 text-base font-extrabold text-white shadow-md hover:bg-brand-800"
+              onClick={() => setMobileStep('pay')}
+            >
+              التالي: الدفع
+              <ChevronLeft className="size-5" />
+            </Button>
+          )}
         </footer>
+      )}
+      {inSheet && cart.length === 0 && (
+        <div className="border-t border-border p-3">
+          <Button variant="outline" size="lg" className="h-12 w-full rounded-xl text-base font-bold" onClick={closeCartSheet}>
+            رجوع للمنتجات
+          </Button>
+        </div>
       )}
     </section>
   )
@@ -2260,8 +2559,8 @@ export function POSView() {
     'w-full rounded-xl border border-foreground/25 bg-card shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] placeholder:text-sm placeholder:font-medium placeholder:text-muted-foreground text-center font-extrabold tabular-nums outline-none transition-colors focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20'
   )
 
-  const paymentPanel = (
-    <section className={panelCls}>
+  const renderPaymentPanel = (inSheet: boolean) => (
+    <section className={cn(panelCls, inSheet && 'min-h-0 flex-1 rounded-none border-0 shadow-none')}>
       <header className="border-b border-border px-3.5 py-3">
         <PanelHead n={3} tag="Checkout" title="ادفع" aside={statusChip} />
       </header>
@@ -2621,8 +2920,8 @@ export function POSView() {
 
         {isDesktop && (
           <>
-            <div className="flex min-h-0 flex-col [&>section]:flex-1">{cartPanel}</div>
-            <div className="flex min-h-0 flex-col [&>section]:flex-1">{paymentPanel}</div>
+            <div className="flex min-h-0 flex-col [&>section]:flex-1">{renderCartPanel(false)}</div>
+            <div className="flex min-h-0 flex-col [&>section]:flex-1">{renderPaymentPanel(false)}</div>
           </>
         )}
       </div>
@@ -2630,11 +2929,11 @@ export function POSView() {
       {/* Mobile / tablet: sticky checkout bar + bottom sheet with cart & payment */}
       {!isDesktop && (
         <>
-          <div className="fixed inset-x-3 bottom-3 z-40">
+          <div className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40">
             <button
               type="button"
-              onClick={() => setCartSheetOpen(true)}
-              className="flex w-full items-center justify-between gap-3 rounded-2xl bg-stone-950 px-4 py-3.5 text-white shadow-xl ring-1 ring-white/10 active:scale-[0.99]"
+              onClick={openCartSheet}
+              className="flex w-full touch-manipulation items-center justify-between gap-3 rounded-2xl bg-stone-950 px-4 py-3.5 text-white shadow-xl ring-1 ring-white/10 active:scale-[0.99]"
             >
               <span className="flex items-center gap-2.5">
                 <span className="relative">
@@ -2656,15 +2955,51 @@ export function POSView() {
             </button>
           </div>
 
-          <Sheet open={cartSheetOpen} onOpenChange={setCartSheetOpen}>
+          {/* شيت بخطوتين (السلة ← الدفع): الهيدر والفوتر ثابتين، والقايمة بس هي اللي بتتمرّر جواه */}
+          <Sheet open={cartSheetOpen} onOpenChange={(o) => (o ? openCartSheet() : closeCartSheet())}>
             <SheetContent
               side="bottom"
-              className="max-h-[92dvh] gap-0 overflow-y-auto overscroll-contain rounded-t-3xl bg-background p-0 sm:mx-auto sm:max-w-lg"
+              showCloseButton={false}
+              className="h-[92dvh] max-h-[92dvh] gap-0 overflow-hidden rounded-t-3xl bg-background p-0 sm:mx-auto sm:max-w-lg"
             >
               <SheetTitle className="sr-only">السلة والدفع</SheetTitle>
-              <div className="space-y-3 p-3">
-                {cartPanel}
-                {paymentPanel}
+              <div className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-2">
+                <button
+                  type="button"
+                  onClick={mobileStep === 'pay' ? () => setMobileStep('cart') : closeCartSheet}
+                  className="flex h-10 touch-manipulation items-center gap-1 rounded-xl px-3 text-sm font-bold active:bg-muted"
+                >
+                  <ChevronRight className="size-5" />
+                  {mobileStep === 'pay' ? 'السلة' : 'المنتجات'}
+                </button>
+                <div role="tablist" aria-label="خطوات الفاتورة" className="mx-auto flex items-center gap-1 rounded-full bg-muted p-1">
+                  {(
+                    [
+                      { k: 'cart', n: 2, label: 'السلة' },
+                      { k: 'pay', n: 3, label: 'الدفع' },
+                    ] as const
+                  ).map((st) => (
+                    <button
+                      key={st.k}
+                      type="button"
+                      role="tab"
+                      aria-selected={mobileStep === st.k}
+                      disabled={st.k === 'pay' && cart.length === 0}
+                      onClick={() => setMobileStep(st.k)}
+                      className={cn(
+                        'flex h-8 touch-manipulation items-center gap-1.5 rounded-full px-3.5 text-sm font-bold transition-colors disabled:opacity-40',
+                        mobileStep === st.k ? 'bg-foreground text-background shadow-sm' : 'text-muted-foreground'
+                      )}
+                    >
+                      <span className="tabular-nums">{st.n}</span>
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="w-[92px]" aria-hidden />
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col">
+                {mobileStep === 'cart' ? renderCartPanel(true) : renderPaymentPanel(true)}
               </div>
             </SheetContent>
           </Sheet>
@@ -2672,7 +3007,7 @@ export function POSView() {
       )}
 
       {/* Variant picker */}
-      <POSVariantPickerDialog
+      <Dialog
         open={variantPickerOpen}
         onOpenChange={(o) => {
           setVariantPickerOpen(o)
@@ -2682,10 +3017,42 @@ export function POSView() {
             setVariantPickerUnits([])
           }
         }}
-        productName={variantPickerProduct?.name}
-        variants={variantPickerVariants}
-        onPick={handleVariantPick}
-      />
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>اختار اللون/المقاس — {variantPickerProduct?.name}</DialogTitle>
+          </DialogHeader>
+          {variantPickerVariants.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              لا يوجد ألوان/مقاسات مسجلة لهذا المنتج
+            </p>
+          ) : (
+            <ul className="grid max-h-72 grid-cols-2 gap-2 overflow-y-auto">
+              {variantPickerVariants.map((v) => (
+                <li key={v.id}>
+                  <button
+                    type="button"
+                    disabled={v.quantity <= 0}
+                    onClick={() => handleVariantPick(v)}
+                    className={cn(
+                      'flex w-full flex-col items-start gap-1 rounded-xl border px-3 py-2.5 text-right transition-colors hover:border-primary hover:bg-primary-subtle',
+                      v.quantity <= 0 && 'cursor-not-allowed opacity-50 hover:border-border hover:bg-transparent'
+                    )}
+                  >
+                    <span className="text-sm font-semibold">{variantLabelOf(v)}</span>
+                    <StockBadge quantity={v.quantity} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setVariantPickerOpen(false)}>
+              إلغاء
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ProductDialog
         open={productDlgOpen}

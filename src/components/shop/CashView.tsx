@@ -384,41 +384,42 @@ export function CashView() {
   return (
     <div className="space-y-4">
       {/* ═══════════════ الهيرو ═══════════════ */}
-      <section className="relative overflow-hidden rounded-3xl border bg-gradient-to-br from-emerald-50 via-white to-amber-50 p-5 dark:from-emerald-950/40 dark:via-card dark:to-amber-950/25 sm:p-7">
+      <section className="relative overflow-hidden rounded-3xl border bg-gradient-to-br from-emerald-50 via-white to-amber-50 p-4 dark:from-emerald-950/40 dark:via-card dark:to-amber-950/25 sm:p-7">
         {/* علامة مائية: الخزنة */}
         <Vault className="pointer-events-none absolute -bottom-8 -start-6 size-56 text-emerald-600/[0.05] dark:text-emerald-400/[0.06]" strokeWidth={1} />
 
-        <div className="relative grid items-center gap-6 lg:grid-cols-[1fr_minmax(0,1.1fr)_auto]">
+        <div className="relative grid items-center gap-5 lg:grid-cols-[1fr_minmax(0,1.1fr)_auto] lg:gap-6">
           {/* الرصيد */}
-          <div>
-            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <span className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-                <Vault className="size-4" />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground sm:text-sm">
+              <span className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 sm:size-8 dark:text-emerald-400">
+                <Vault className="size-3.5 sm:size-4" />
               </span>
               الخزنة
             </div>
             {loading ? (
               <Skeleton className="mt-3 h-14 w-56" />
             ) : (
-              <div className="mt-2 flex items-baseline gap-2">
+              <div className="mt-2 flex min-w-0 flex-wrap items-baseline gap-2">
                 {negative && (
-                  <span className="text-5xl font-extrabold text-rose-600 dark:text-rose-400 sm:text-6xl">−</span>
+                  <span className="text-4xl font-extrabold text-rose-600 dark:text-rose-400 sm:text-5xl md:text-6xl">−</span>
                 )}
                 <span
                   dir="ltr"
                   style={{ unicodeBidi: 'isolate' }}
+                  title={num(balance)}
                   className={cn(
-                    'text-5xl font-extrabold tabular-nums tracking-tight sm:text-6xl',
+                    'min-w-0 break-all text-4xl font-extrabold tabular-nums tracking-tight sm:text-5xl md:text-6xl',
                     negative && 'text-rose-600 dark:text-rose-400'
                   )}
                 >
                   {num(balance)}
                 </span>
-                <span className="text-lg font-semibold text-muted-foreground">جنيه</span>
+                <span className="shrink-0 text-base font-semibold text-muted-foreground sm:text-lg">جنيه</span>
               </div>
             )}
             <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CalendarDays className="size-3.5" />
+              <CalendarDays className="size-3.5 shrink-0" />
               {negative && !loading ? (
                 <span className="font-medium text-rose-600 dark:text-rose-400">الرصيد بالسالب — راجع حركات الصادر</span>
               ) : (
@@ -428,7 +429,7 @@ export function CashView() {
           </div>
 
           {/* رسم آخر 7 أيام */}
-          <div>
+          <div className="min-w-0">
             <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
               <span>آخر ٧ أيام</span>
               <span className="flex items-center gap-3">
@@ -436,7 +437,7 @@ export function CashView() {
                 <span className="flex items-center gap-1"><i className="size-2 rounded-full bg-rose-500" />صادر</span>
               </span>
             </div>
-            <div className="flex h-24 items-end gap-2">
+            <div className="flex h-24 items-end gap-1.5 sm:gap-2">
               {stats.week.map((d) => (
                 <div
                   key={d.key}
@@ -445,11 +446,11 @@ export function CashView() {
                 >
                   <div className="flex h-full w-full items-end justify-center gap-[3px]">
                     <div
-                      className={cn('w-2.5 rounded-t bg-emerald-500 transition-[height] duration-slow', d.inn === 0 && 'bg-emerald-500/20')}
+                      className={cn('w-2 rounded-t bg-emerald-500 transition-[height] duration-slow sm:w-2.5', d.inn === 0 && 'bg-emerald-500/20')}
                       style={{ height: `${loading ? 4 : Math.max(4, (d.inn / weekMax) * 100)}%` }}
                     />
                     <div
-                      className={cn('w-2.5 rounded-t bg-rose-500 transition-[height] duration-slow', d.out === 0 && 'bg-rose-500/20')}
+                      className={cn('w-2 rounded-t bg-rose-500 transition-[height] duration-slow sm:w-2.5', d.out === 0 && 'bg-rose-500/20')}
                       style={{ height: `${loading ? 4 : Math.max(4, (d.out / weekMax) * 100)}%` }}
                     />
                   </div>
@@ -461,15 +462,15 @@ export function CashView() {
             </div>
           </div>
 
-          {/* الأزرار */}
-          <div className="flex flex-wrap gap-2 lg:flex-col">
-            <Button onClick={() => setDialogOpen(true)}>
-              <Plus className="size-4" />
-              حركة يدوية
+          {/* الأزرار — 📱 شبكة 2 أعمدة على الجوال */}
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap lg:flex-col">
+            <Button onClick={() => setDialogOpen(true)} className="w-full sm:w-auto">
+              <Plus className="size-4 shrink-0" />
+              <span className="truncate">حركة يدوية</span>
             </Button>
-            <Button variant="outline" onClick={exportPdf} disabled={loading} className="bg-background/70">
-              <FileText className="size-4" />
-              تصدير PDF
+            <Button variant="outline" onClick={exportPdf} disabled={loading} className="w-full bg-background/70 sm:w-auto">
+              <FileText className="size-4 shrink-0" />
+              <span className="truncate">تصدير PDF</span>
             </Button>
           </div>
         </div>
@@ -512,15 +513,15 @@ export function CashView() {
         {/* ----- العمود الرئيسي: فلاتر + دفتر ----- */}
         <div className="min-w-0 space-y-4">
           {/* الفلاتر */}
-          <div className="space-y-3 rounded-2xl border bg-card p-4">
+          <div className="space-y-3 rounded-2xl border bg-card p-3.5 sm:p-4">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-[200px] flex-1">
-                <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <div className="relative w-full min-w-0 sm:min-w-[200px] sm:flex-1">
+                <Search className="pointer-events-none absolute start-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground sm:size-4" />
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="ابحث في البيان أو الملاحظات أو الموظف..."
-                  className="h-10 rounded-xl ps-9"
+                  className="h-9 rounded-xl ps-9 text-xs placeholder:text-xs sm:h-10 sm:text-sm sm:placeholder:text-sm"
                 />
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -539,11 +540,15 @@ export function CashView() {
                 <Pill active={dir === 'out'} onClick={() => setDir('out')} tone="rose">صادر</Pill>
               </div>
               <span className="mx-1 hidden h-5 w-px bg-border sm:block" />
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                من
-                <Input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPeriod('all') }} className="h-9 w-40 rounded-lg" />
-                إلى
-                <Input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPeriod('all') }} className="h-9 w-40 rounded-lg" />
+              <div className="flex w-full flex-wrap items-center gap-2 text-xs text-muted-foreground sm:w-auto sm:text-sm">
+                <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
+                  <span className="shrink-0 text-xs">من</span>
+                  <Input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPeriod('all') }} className="h-9 min-w-0 flex-1 rounded-lg text-xs sm:w-40 sm:flex-none sm:text-sm" />
+                </div>
+                <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
+                  <span className="shrink-0 text-xs">إلى</span>
+                  <Input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPeriod('all') }} className="h-9 min-w-0 flex-1 rounded-lg text-xs sm:w-40 sm:flex-none sm:text-sm" />
+                </div>
               </div>
             </div>
 
@@ -609,24 +614,24 @@ export function CashView() {
                     {/* رأس اليوم */}
                     <div
                       className={cn(
-                        'flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3',
+                        'flex flex-wrap items-center justify-between gap-2 border-b px-3.5 py-3 sm:gap-3 sm:px-4',
                         isToday
                           ? 'bg-gradient-to-l from-emerald-500/10 via-transparent to-amber-500/5'
                           : 'bg-muted/40'
                       )}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
                         <span
                           className={cn(
-                            'flex size-10 items-center justify-center rounded-xl',
+                            'flex size-9 shrink-0 items-center justify-center rounded-xl sm:size-10',
                             isToday ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-muted text-muted-foreground'
                           )}
                         >
-                          <CalendarDays className="size-5" />
+                          <CalendarDays className="size-4 sm:size-5" />
                         </span>
-                        <div>
-                          <p className="text-base font-extrabold leading-tight">{dayTitle(g.key)}</p>
-                          <p className="text-xs text-muted-foreground">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-extrabold leading-tight sm:text-base">{dayTitle(g.key)}</p>
+                          <p className="truncate text-xs text-muted-foreground">
                             {g.items.length} حركة
                             {(isToday || dayTitle(g.key) === 'أمس') && (
                               <> • {formatArabicDate(new Date(g.key + 'T00:00:00'))}</>
@@ -635,22 +640,22 @@ export function CashView() {
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-emerald-700 dark:text-emerald-400">
-                          <ArrowDownLeft className="size-3.5" />
+                      <div className="flex w-full flex-wrap items-center gap-1.5 text-[11px] font-bold sm:w-auto sm:gap-2 sm:text-xs">
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2 py-1 text-emerald-700 sm:px-2.5 sm:py-1.5 dark:text-emerald-400">
+                          <ArrowDownLeft className="size-3 shrink-0 sm:size-3.5" />
                           وارد <Amt value={g.inn} />
                         </span>
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-rose-700 dark:text-rose-400">
-                          <ArrowUpRight className="size-3.5" />
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-rose-500/10 px-2 py-1 text-rose-700 sm:px-2.5 sm:py-1.5 dark:text-rose-400">
+                          <ArrowUpRight className="size-3 shrink-0 sm:size-3.5" />
                           صادر <Amt value={g.out} />
                         </span>
                         <span
                           className={cn(
-                            'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5',
+                            'inline-flex items-center gap-1 rounded-lg border px-2 py-1 sm:px-2.5 sm:py-1.5',
                             g.net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
                           )}
                         >
-                          <Scale className="size-3.5" />
+                          <Scale className="size-3 shrink-0 sm:size-3.5" />
                           الصافي <Amt value={g.net} sign />
                         </span>
                       </div>
@@ -665,7 +670,7 @@ export function CashView() {
                         return (
                           <div
                             key={e.id}
-                            className="group relative grid grid-cols-2 items-center gap-x-3 gap-y-3 px-4 py-4 transition-colors hover:bg-muted/40 lg:grid-cols-[minmax(0,1fr)_150px_180px_160px]"
+                            className="group relative grid grid-cols-2 items-center gap-x-3 gap-y-3 px-3.5 py-3.5 transition-colors hover:bg-muted/40 sm:px-4 sm:py-4 lg:grid-cols-[minmax(0,1fr)_150px_180px_160px]"
                           >
                             <span
                               className={cn(
@@ -675,42 +680,42 @@ export function CashView() {
                             />
 
                             {/* البيان */}
-                            <div className="col-span-2 flex min-w-0 items-start gap-3.5 lg:col-span-1">
+                            <div className="col-span-2 flex min-w-0 items-start gap-3 sm:gap-3.5 lg:col-span-1">
                               <div className="relative shrink-0">
-                                <span className={cn('flex size-12 items-center justify-center rounded-2xl', TONES[sm.tone].tile)}>
-                                  <SI className="size-6" />
+                                <span className={cn('flex size-10 items-center justify-center rounded-2xl sm:size-12', TONES[sm.tone].tile)}>
+                                  <SI className="size-5 sm:size-6" />
                                 </span>
                                 <span
                                   className={cn(
-                                    'absolute -bottom-1 -end-1 flex size-5 items-center justify-center rounded-full text-white ring-2 ring-card',
+                                    'absolute -bottom-1 -end-1 flex size-4 items-center justify-center rounded-full text-white ring-2 ring-card sm:size-5',
                                     isIn ? 'bg-emerald-500' : 'bg-rose-500'
                                   )}
                                 >
-                                  {isIn ? <ArrowDownLeft className="size-3" /> : <ArrowUpRight className="size-3" />}
+                                  {isIn ? <ArrowDownLeft className="size-2.5 sm:size-3" /> : <ArrowUpRight className="size-2.5 sm:size-3" />}
                                 </span>
                               </div>
                               <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="text-base font-extrabold leading-tight">{sm.label}</p>
-                                  <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-                                    <Clock className="size-3" />
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                  <p className="text-sm font-extrabold leading-tight sm:text-base">{sm.label}</p>
+                                  <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:text-[11px]">
+                                    <Clock className="size-3 shrink-0" />
                                     <span dir="ltr" style={{ unicodeBidi: 'isolate' }}>{timeLabel(e.createdAt)}</span>
                                   </span>
                                   {e.method && e.method !== 'cash' && (
-                                    <span className="rounded-md border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                                    <span className="rounded-md border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:text-[11px]">
                                       {mtdMeta(e.method).label}
                                     </span>
                                   )}
                                 </div>
                                 {e.note ? (
-                                  <p className="mt-1.5 flex items-start gap-1.5 text-sm text-muted-foreground">
+                                  <p className="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground sm:text-sm">
                                     <StickyNote className="mt-0.5 size-3.5 shrink-0 opacity-60" />
                                     <span className="line-clamp-2">{e.note}</span>
                                   </p>
                                 ) : null}
                                 {/* الموظف — للموبايل والتابلت فقط */}
                                 {e.userName && (
-                                  <p className="mt-1 text-xs text-muted-foreground lg:hidden">بواسطة: {e.userName}</p>
+                                  <p className="mt-1 truncate text-xs text-muted-foreground lg:hidden">بواسطة: {e.userName}</p>
                                 )}
                               </div>
                             </div>
@@ -730,10 +735,10 @@ export function CashView() {
                             </div>
 
                             {/* المبلغ */}
-                            <div className="lg:text-center">
+                            <div className="min-w-0 lg:text-center">
                               <span
                                 className={cn(
-                                  'inline-flex items-center rounded-xl px-3.5 py-2 text-lg font-black',
+                                  'inline-flex max-w-full items-center rounded-xl px-2.5 py-1.5 text-sm font-black sm:px-3.5 sm:py-2 sm:text-base lg:text-lg',
                                   isIn
                                     ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
                                     : 'bg-rose-500/10 text-rose-700 dark:text-rose-400'
@@ -744,7 +749,7 @@ export function CashView() {
                             </div>
 
                             {/* الرصيد بعد الحركة */}
-                            <div className="text-end">
+                            <div className="min-w-0 text-end">
                               <p className="text-[10px] font-medium text-muted-foreground lg:hidden">الرصيد بعد الحركة</p>
                               <Amt
                                 value={after}
@@ -771,20 +776,20 @@ export function CashView() {
         {/* ----- العمود الجانبي: دونات + طرق الدفع ----- */}
         <aside className="space-y-4 lg:sticky lg:top-4">
           {/* توزيع الحركات */}
-          <div className="rounded-2xl border bg-card p-4">
+          <div className="rounded-2xl border bg-card p-3.5 sm:p-4">
             <div className="flex items-start justify-between gap-2">
-              <div>
-                <h3 className="font-bold">توزيع الحركات</h3>
-                <p className="text-xs text-muted-foreground">اضغط على أي مصدر لتصفية القائمة</p>
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold sm:text-base">توزيع الحركات</h3>
+                <p className="truncate text-xs text-muted-foreground">اضغط على أي مصدر لتصفية القائمة</p>
               </div>
-              <div className="inline-flex rounded-lg border bg-muted/40 p-0.5 text-xs">
+              <div className="inline-flex shrink-0 rounded-lg border bg-muted/40 p-0.5 text-xs">
                 {(['in', 'out'] as const).map((t) => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => setDonutTab(t)}
                     className={cn(
-                      'rounded-md px-2.5 py-1 font-semibold transition-colors',
+                      'rounded-md px-2 py-1 font-semibold transition-colors sm:px-2.5',
                       donutTab === t
                         ? t === 'in' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
                         : 'text-muted-foreground'
@@ -822,12 +827,12 @@ export function CashView() {
                       active && 'bg-muted ring-1 ring-border'
                     )}
                   >
-                    <span className={cn('flex size-7 items-center justify-center rounded-lg', TONES[m.tone].tile)}>
+                    <span className={cn('flex size-7 shrink-0 items-center justify-center rounded-lg', TONES[m.tone].tile)}>
                       <m.icon className="size-3.5" />
                     </span>
-                    <span className="flex-1 font-medium">{m.label}</span>
-                    <span className="text-xs tabular-nums text-muted-foreground">{Math.round((v / donutTotal) * 100)}%</span>
-                    <span className="w-24 text-end text-xs font-bold tabular-nums">{formatCurrency(v)}</span>
+                    <span className="min-w-0 flex-1 truncate font-medium">{m.label}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{Math.round((v / donutTotal) * 100)}%</span>
+                    <span className="w-24 shrink-0 text-end text-xs font-bold tabular-nums" title={formatCurrency(v)}>{formatCurrency(v)}</span>
                   </button>
                 )
               })}
@@ -835,9 +840,9 @@ export function CashView() {
           </div>
 
           {/* الرصيد حسب طريقة الدفع */}
-          <div className="rounded-2xl border bg-card p-4">
-            <h3 className="font-bold">الرصيد حسب طريقة الدفع</h3>
-            <p className="text-xs text-muted-foreground">النقدي الفعلي منفصل عن المحافظ والبنك</p>
+          <div className="rounded-2xl border bg-card p-3.5 sm:p-4">
+            <h3 className="text-sm font-bold sm:text-base">الرصيد حسب طريقة الدفع</h3>
+            <p className="truncate text-xs text-muted-foreground">النقدي الفعلي منفصل عن المحافظ والبنك</p>
             <div className="mt-3 space-y-1">
               {Object.entries(stats.byMethod).length === 0 && !loading && (
                 <p className="py-2 text-center text-xs text-muted-foreground">لا توجد حركات</p>
@@ -857,11 +862,11 @@ export function CashView() {
                         active && 'bg-muted ring-1 ring-border'
                       )}
                     >
-                      <span className={cn('flex size-8 items-center justify-center rounded-lg', TONES[mm.tone].tile)}>
+                      <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-lg', TONES[mm.tone].tile)}>
                         <mm.icon className="size-4" />
                       </span>
-                      <span className="flex-1 font-medium">{mm.label}</span>
-                      <Amt value={v} className={cn('text-sm font-bold', v < 0 && 'text-rose-600 dark:text-rose-400')} />
+                      <span className="min-w-0 flex-1 truncate font-medium">{mm.label}</span>
+                      <Amt value={v} className={cn('shrink-0 text-sm font-bold', v < 0 && 'text-rose-600 dark:text-rose-400')} />
                     </button>
                   )
                 })}
@@ -892,7 +897,7 @@ function Pill({
       type="button"
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+        'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors sm:px-3 sm:py-1.5 sm:text-xs',
         active
           ? tone === 'rose'
             ? 'border-rose-600 bg-rose-600 text-white'
@@ -900,8 +905,8 @@ function Pill({
           : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
       )}
     >
-      {dot && <i className={cn('size-2 rounded-full', dot)} />}
-      {children}
+      {dot && <i className={cn('size-2 shrink-0 rounded-full', dot)} />}
+      <span className="whitespace-nowrap">{children}</span>
     </button>
   )
 }
@@ -920,27 +925,27 @@ function KpiCard({
 }) {
   const t = KPI[tone]
   return (
-    <div className={cn('relative overflow-hidden rounded-2xl border border-t-2 bg-gradient-to-br p-4', t.card)}>
-      <Icon className={cn('pointer-events-none absolute -bottom-4 -start-3 size-24 opacity-[0.07]', t.wm)} strokeWidth={1.25} />
+    <div className={cn('relative min-w-0 overflow-hidden rounded-2xl border border-t-2 bg-gradient-to-br p-3 sm:p-4', t.card)}>
+      <Icon className={cn('pointer-events-none absolute -bottom-4 -start-3 size-20 opacity-[0.07] sm:size-24', t.wm)} strokeWidth={1.25} />
       <div className="relative">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-medium text-muted-foreground">{label}</p>
-          <span className={cn('flex size-9 items-center justify-center rounded-xl', t.tile)}>
-            <Icon className="size-4" />
+          <p className="truncate text-[11px] font-medium text-muted-foreground sm:text-sm">{label}</p>
+          <span className={cn('flex size-7 shrink-0 items-center justify-center rounded-xl sm:size-9', t.tile)}>
+            <Icon className="size-3.5 sm:size-4" />
           </span>
         </div>
         {loading ? (
           <Skeleton className="mt-3 h-7 w-28" />
         ) : (
-          <p className="mt-2 truncate text-2xl font-extrabold">{value}</p>
+          <p className="mt-2 min-w-0 break-all text-xl font-extrabold sm:text-2xl">{value}</p>
         )}
-        <p className="mt-1 text-xs text-muted-foreground">{sub}</p>
+        <p className="mt-1 truncate text-[11px] text-muted-foreground sm:text-xs">{sub}</p>
         {progress !== undefined && (
           <div className="mt-3 flex items-center gap-2">
             <div className={cn('h-1.5 flex-1 overflow-hidden rounded-full', t.track)}>
               <div className={cn('h-full rounded-full transition-[width] duration-slow', t.bar)} style={{ width: `${Math.min(100, progress)}%` }} />
             </div>
-            <span className={cn('text-[11px] font-bold tabular-nums', t.text)}>{progressLabel ?? `${Math.round(progress)}%`}</span>
+            <span className={cn('shrink-0 text-[11px] font-bold tabular-nums', t.text)}>{progressLabel ?? `${Math.round(progress)}%`}</span>
           </div>
         )}
       </div>
@@ -962,7 +967,7 @@ function Donut({
   const C = 2 * Math.PI * R
   let acc = 0
   return (
-    <div className="relative mx-auto mt-4 size-48">
+    <div className="relative mx-auto mt-4 size-40 sm:size-48">
       <svg viewBox="0 0 200 200" className="size-full -rotate-90">
         <circle cx="100" cy="100" r={R} fill="none" strokeWidth="24" className="stroke-muted" />
         {!loading &&
@@ -991,7 +996,7 @@ function Donut({
           })}
       </svg>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <span dir="ltr" className="text-2xl font-extrabold tabular-nums">{loading ? '—' : num(total)}</span>
+        <span dir="ltr" className="max-w-full truncate px-2 text-xl font-extrabold tabular-nums sm:text-2xl">{loading ? '—' : num(total)}</span>
         <span className="text-xs text-muted-foreground">{label}</span>
       </div>
     </div>
@@ -1023,12 +1028,8 @@ function ManualDialog({ open, onOpenChange, onSaved, balance }: ManualProps) {
     }
   }, [open])
 
-  // 🛡️ FIX: `parseFloat` dropped a sign written after the number ("100-") and
-  // ignored the Unicode minus "−", so a withdrawal was saved as a deposit and
-  // vice-versa. `parseSignedAmount` keeps the sign the user actually meant.
   const parsed = parseSignedAmount(amount)
 
-  // لو المستخدم كتب علامة سالب صراحة ("-50" / "50-") نضبط الاتجاه على "سحب".
   const onAmountChange = (v: string) => {
     setAmount(v)
     const p = parseSignedAmount(v)
@@ -1045,7 +1046,6 @@ function ManualDialog({ open, onOpenChange, onSaved, balance }: ManualProps) {
       toast.error('المبلغ غير صالح')
       return
     }
-    // 🛡️ 2026-09-30: السبب إجباري — الحركة من غير سبب بترفض من السيرفر كمان
     if (note.trim().length < 3) {
       toast.error('اكتب سبب الحركة (إجباري)')
       return
@@ -1070,19 +1070,19 @@ function ManualDialog({ open, onOpenChange, onSaved, balance }: ManualProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-[520px]">
         {/* الهيدر */}
-        <DialogHeader className="border-b bg-gradient-to-l from-emerald-50 via-white to-amber-50 px-5 py-4 text-start dark:from-emerald-950/40 dark:via-card dark:to-amber-950/25">
+        <DialogHeader className="border-b bg-gradient-to-l from-emerald-50 via-white to-amber-50 px-4 py-3.5 text-start sm:px-5 sm:py-4 dark:from-emerald-950/40 dark:via-card dark:to-amber-950/25">
           <div className="flex items-center gap-3">
-            <span className="flex size-11 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-              <Vault className="size-5" />
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 sm:size-11 dark:text-emerald-400">
+              <Vault className="size-4 sm:size-5" />
             </span>
-            <div>
-              <DialogTitle>حركة يدوية على الخزنة</DialogTitle>
+            <div className="min-w-0">
+              <DialogTitle className="text-base sm:text-lg">حركة يدوية على الخزنة</DialogTitle>
               <p className="mt-0.5 text-xs text-muted-foreground">هتتسجل مباشرة في رصيد الخزنة وتظهر في الدفتر</p>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="max-h-[70vh] space-y-5 overflow-y-auto px-5 py-5">
+        <div className="max-h-[70vh] space-y-5 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
           {/* الاتجاه */}
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -1093,7 +1093,7 @@ function ManualDialog({ open, onOpenChange, onSaved, balance }: ManualProps) {
                 isIn ? 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground hover:bg-muted'
               )}
             >
-              <ArrowDownLeft className="size-4" />
+              <ArrowDownLeft className="size-4 shrink-0" />
               إيداع (دخول)
             </button>
             <button
@@ -1104,7 +1104,7 @@ function ManualDialog({ open, onOpenChange, onSaved, balance }: ManualProps) {
                 !isIn ? 'border-rose-500 bg-rose-500/10 text-rose-700 dark:text-rose-300' : 'text-muted-foreground hover:bg-muted'
               )}
             >
-              <ArrowUpRight className="size-4" />
+              <ArrowUpRight className="size-4 shrink-0" />
               سحب (خروج)
             </button>
           </div>
@@ -1174,7 +1174,7 @@ function ManualDialog({ open, onOpenChange, onSaved, balance }: ManualProps) {
           </div>
         </div>
 
-        <DialogFooter className="border-t bg-muted/30 px-5 py-3">
+        <DialogFooter className="border-t bg-muted/30 px-4 py-3 sm:px-5">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             إلغاء
           </Button>

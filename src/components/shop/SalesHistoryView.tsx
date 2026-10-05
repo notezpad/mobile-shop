@@ -701,64 +701,138 @@ export function SalesHistoryView() {
                           aria-pressed={active}
                           style={ret ? { backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 7px, color-mix(in oklab, currentColor 5%, transparent) 7px 8px)' } : undefined}
                           className={cn(
-                            'group relative grid min-h-[84px] w-full overflow-hidden rounded-xl border bg-card text-start transition-all',
-                            'grid-cols-[104px_minmax(0,1fr)_auto] @xl:grid-cols-[112px_minmax(0,1fr)_170px_136px]',
+                            'group relative w-full overflow-hidden rounded-xl border bg-card text-start transition-all',
+                            // 📱 موبايل: بطاقة عمودية كاملة العرض
+                            'grid min-h-[84px] grid-cols-1',
+                            // 🖥️ sm+: نرجع لتصميم الأعمدة الأصلي
+                            'sm:min-h-[84px] sm:grid-cols-[104px_minmax(0,1fr)_auto]',
+                            // 🖥️ @xl: نضيف عمود حالة الدفع
+                            '@xl:grid-cols-[112px_minmax(0,1fr)_170px_136px]',
                             'hover:-translate-y-px hover:border-yellow-400/70 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/60',
                             active && 'border-yellow-400 shadow-[0_8px_24px_-12px_rgb(250_204_21/0.7)]',
                             ret && 'text-muted-foreground'
                           )}
                         >
-                          {/* ① الكعب: الوقت + السيريال الكبير، بثقبين زي التذكرة */}
-                          <span
-                            className={cn(
-                              'relative flex flex-col items-center justify-center gap-0.5 border-e border-dashed px-2 py-3 transition-colors',
-                              active ? 'border-zinc-900/30 bg-yellow-300 text-zinc-900' : 'bg-muted/50'
-                            )}
-                          >
-                            <i aria-hidden className="absolute -end-[7px] -top-[7px] size-3.5 rounded-full border bg-background" />
-                            <i aria-hidden className="absolute -bottom-[7px] -end-[7px] size-3.5 rounded-full border bg-background" />
-                            <span className="text-[11px] font-medium tabular-nums opacity-70">{timeOf(s.createdAt)}</span>
-                            <span dir="ltr" className="text-xl font-extrabold leading-none tracking-tight tabular-nums">{no.serial}</span>
-                            {no.prefix && <span dir="ltr" className="text-[10px] font-medium tracking-wider opacity-60">{no.prefix}</span>}
-                          </span>
+                          {/* ═══════════ 📱 موبايل فقط: بطاقة إيصال عمودية ═══════════ */}
+                          <div className="flex flex-col sm:hidden">
+                            {/* شريط علوي: السيريال + الوقت | حالة الدفع */}
+                            <div className={cn(
+                              'flex items-center justify-between gap-2 border-b border-dashed px-3 py-1.5 transition-colors',
+                              active ? 'border-zinc-900/30 bg-yellow-300 text-zinc-900' : 'bg-muted/40'
+                            )}>
+                              <div className="flex min-w-0 items-baseline gap-1.5">
+                                <span dir="ltr" className="text-sm font-extrabold leading-none tracking-tight tabular-nums">
+                                  {no.serial}
+                                </span>
+                                <span className="text-[10px] opacity-40">·</span>
+                                <span className="text-[10.5px] tabular-nums opacity-75">{timeOf(s.createdAt)}</span>
+                                {no.prefix && (
+                                  <>
+                                    <span className="text-[10px] opacity-40">·</span>
+                                    <span dir="ltr" className="truncate text-[10px] opacity-60">{no.prefix}</span>
+                                  </>
+                                )}
+                              </div>
+                              <StatusChip sale={s} />
+                            </div>
 
-                          {/* ② العميل + اللي اتباع */}
-                          <span className="flex min-w-0 flex-col justify-center gap-0.5 px-3 py-3 sm:px-4">
+                            {/* جسم الكارت */}
+                            <div className="flex flex-col gap-1.5 px-3 py-2.5">
+                              {/* العميل + الإجمالي */}
+                              <div className="flex items-baseline justify-between gap-2">
+                                <span className={cn(
+                                  'truncate text-[14px] leading-snug',
+                                  named ? 'font-bold text-foreground' : 'font-medium text-muted-foreground',
+                                  ret && 'line-through decoration-destructive/50'
+                                )}>
+                                  {s.customer?.name ?? 'عميل نقدي'}
+                                </span>
+                                <span className={cn('shrink-0 text-lg font-extrabold leading-none tabular-nums', ret && 'line-through decoration-1')}>
+                                  {money(s.total)}
+                                  <span className="ms-1 text-[10px] font-medium text-muted-foreground">جنيه</span>
+                                </span>
+                              </div>
+
+                              {/* معاينة الأصناف */}
+                              <div className="truncate text-[11.5px] text-foreground/70">{preview(s)}</div>
+
+                              {/* سطر سفلي: الكمية + البائع + طريقة الدفع */}
+                              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10.5px] text-muted-foreground">
+                                <span className="shrink-0 tabular-nums">{qtyOf(s)} قطعة</span>
+
+                                {s.userName && (
+                                  <span className="flex min-w-0 items-center gap-1">
+                                    <span aria-hidden className="size-[3px] shrink-0 rounded-full bg-current opacity-50" />
+                                    <User className="size-3 shrink-0 text-foreground/50" aria-hidden />
+                                    <span className="truncate font-semibold text-foreground/75">{s.userName}</span>
+                                  </span>
+                                )}
+
+                                {s.paymentMethod && methodLabel(s.paymentMethod) && (
+                                  <span className="flex min-w-0 items-center gap-1">
+                                    <span aria-hidden className="size-[3px] shrink-0 rounded-full bg-current opacity-50" />
+                                    <Wallet className="size-3 shrink-0 text-foreground/50" aria-hidden />
+                                    <span className="truncate">{methodLabel(s.paymentMethod)}</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* ═══════════ 🖥️ sm+ فقط: تصميم الأعمدة الأصلي ═══════════ */}
+                          <div className="hidden sm:contents">
+                            {/* ① الكعب: الوقت + السيريال الكبير، بثقبين زي التذكرة */}
                             <span
                               className={cn(
-                                'truncate text-[15px] leading-snug',
-                                named ? 'font-bold text-foreground' : 'font-medium text-muted-foreground',
-                                ret && 'line-through decoration-destructive/50'
+                                'relative flex flex-col items-center justify-center gap-0.5 border-e border-dashed px-2 py-3 transition-colors',
+                                active ? 'border-zinc-900/30 bg-yellow-300 text-zinc-900' : 'bg-muted/50'
                               )}
                             >
-                              {s.customer?.name ?? 'عميل نقدي'}
+                              <i aria-hidden className="absolute -end-[7px] -top-[7px] size-3.5 rounded-full border bg-background" />
+                              <i aria-hidden className="absolute -bottom-[7px] -end-[7px] size-3.5 rounded-full border bg-background" />
+                              <span className="text-[11px] font-medium tabular-nums opacity-70">{timeOf(s.createdAt)}</span>
+                              <span dir="ltr" className="text-xl font-extrabold leading-none tracking-tight tabular-nums">{no.serial}</span>
+                              {no.prefix && <span dir="ltr" className="text-[10px] font-medium tracking-wider opacity-60">{no.prefix}</span>}
                             </span>
-                            <span className="truncate text-[12.5px] text-foreground/70">{preview(s)}</span>
-                            <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                              <span>{qtyOf(s)} قطعة</span>
-                              {s.userName && (<><span className="size-[3px] rounded-full bg-current opacity-50" /><span>{s.userName}</span></>)}
-                              <span className="ms-auto @xl:hidden"><StatusChip sale={s} /></span>
+
+                            {/* ② العميل + اللي اتباع */}
+                            <span className="flex min-w-0 flex-col justify-center gap-0.5 px-3 py-3 sm:px-4">
+                              <span
+                                className={cn(
+                                  'truncate text-[15px] leading-snug',
+                                  named ? 'font-bold text-foreground' : 'font-medium text-muted-foreground',
+                                  ret && 'line-through decoration-destructive/50'
+                                )}
+                              >
+                                {s.customer?.name ?? 'عميل نقدي'}
+                              </span>
+                              <span className="truncate text-[12.5px] text-foreground/70">{preview(s)}</span>
+                              <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                <span>{qtyOf(s)} قطعة</span>
+                                {s.userName && (<><span className="size-[3px] rounded-full bg-current opacity-50" /><span>{s.userName}</span></>)}
+                                <span className="ms-auto @xl:hidden"><StatusChip sale={s} /></span>
+                              </span>
                             </span>
-                          </span>
 
-                          {/* ③ الدفع: الطبيعي هادي، والاستثناء (باقي/مرتجع) هو اللي يلفت النظر */}
-                          <span className="hidden flex-col justify-center gap-1.5 px-2 py-3 @xl:flex">
-                            <StatusChip sale={s} />
-                            {!ret && s.total > s.paid && s.total > 0 && (
-                              <>
-                                <span className="h-1 w-full overflow-hidden rounded-full bg-destructive/15">
-                                  <span className="block h-full rounded-full bg-yellow-400" style={{ width: `${Math.min(100, Math.round((s.paid / s.total) * 100))}%` }} />
-                                </span>
-                                <span className="text-[10.5px] tabular-nums text-muted-foreground">اتدفع {Math.min(100, Math.round((s.paid / s.total) * 100))}%</span>
-                              </>
-                            )}
-                          </span>
+                            {/* ③ الدفع: الطبيعي هادي، والاستثناء (باقي/مرتجع) هو اللي يلفت النظر */}
+                            <span className="hidden flex-col justify-center gap-1.5 px-2 py-3 @xl:flex">
+                              <StatusChip sale={s} />
+                              {!ret && s.total > s.paid && s.total > 0 && (
+                                <>
+                                  <span className="h-1 w-full overflow-hidden rounded-full bg-destructive/15">
+                                    <span className="block h-full rounded-full bg-yellow-400" style={{ width: `${Math.min(100, Math.round((s.paid / s.total) * 100))}%` }} />
+                                  </span>
+                                  <span className="text-[10.5px] tabular-nums text-muted-foreground">اتدفع {Math.min(100, Math.round((s.paid / s.total) * 100))}%</span>
+                                </>
+                              )}
+                            </span>
 
-                          {/* ④ الإجمالي */}
-                          <span className="flex flex-col items-end justify-center px-3 py-3 sm:px-4">
-                            <span className={cn('text-xl font-extrabold leading-none tabular-nums', ret && 'line-through decoration-1')}>{money(s.total)}</span>
-                            <span className="mt-1 text-[11px] font-medium text-muted-foreground">جنيه</span>
-                          </span>
+                            {/* ④ الإجمالي */}
+                            <span className="flex flex-col items-end justify-center px-3 py-3 sm:px-4">
+                              <span className={cn('text-xl font-extrabold leading-none tabular-nums', ret && 'line-through decoration-1')}>{money(s.total)}</span>
+                              <span className="mt-1 text-[11px] font-medium text-muted-foreground">جنيه</span>
+                            </span>
+                          </div>
                         </button>
 
                         {/* موبايل/تابلت: الإيصال يفتح تحت الكعب */}

@@ -4,7 +4,7 @@
  * أدوات مشتركة لصفحات المخزون.
  * كل صفحة لها هوية بصرية مستقلة (انظر ACCENT)، وهنا فقط الأدوات العامة:
  * تنسيق، تجميع بالأيام، عدّاد كمية، مفتاح تبديل، حالة فارغة، كروت التنقّل
- * بين الصفحات، وحركات CSS.
+ * بين الصفحات، كارت KPI، وحركات CSS.
  */
 
 import * as React from 'react'
@@ -23,10 +23,10 @@ import { cn } from '@/lib/utils'
 /* ───────────── ألوان هوية كل جزء ───────────── */
 
 export const ACCENT = {
-  stock: '#10b981', // مستودع — أخضر
-  movements: '#0ea5e9', // دفتر حركة — سماوي
-  transfers: '#f59e0b', // لوجستيات — كهرماني
-  stocktake: '#0f766e', // جرد — تركواز
+  stock: '#10b981',
+  movements: '#0ea5e9',
+  transfers: '#f59e0b',
+  stocktake: '#0f766e',
   up: '#10b981',
   down: '#f43f5e',
 } as const
@@ -75,9 +75,8 @@ export const INVENTORY_PAGES: {
 ]
 
 /**
- * كروت التنقّل بين صفحات المخزون — نفس شكل كروت التبويبات القديمة اللي
- * بانت للمستخدم، لكن كل كارت بقى Link لصفحة مستقلة، والكارت النشط
- * بياخد حدود وخلفية بلون هوية صفحته.
+ * كروت التنقّل بين صفحات المخزون — كل كارت Link لصفحة مستقلة،
+ * والكارت النشط بياخد حدود وخلفية بلون هوية صفحته.
  */
 export function InventoryCrossNav({
   active,
@@ -208,7 +207,7 @@ export function groupByDay<T>(items: T[], getIso: (item: T) => string) {
   return Array.from(map.entries()).map(([key, list]) => ({ key, items: list }))
 }
 
-/* ───────────── حركات CSS (مرة واحدة في الصفحة) ───────────── */
+/* ───────────── حركات CSS ───────────── */
 
 export function InventoryStyles() {
   return (
@@ -345,7 +344,7 @@ export function QtyStepper({
   )
 }
 
-/* ───────────── رقم بإشارة (آمن ضد لخبطة اتجاه النص) ───────────── */
+/* ───────────── رقم بإشارة ───────────── */
 
 export function Signed({ value, className }: { value: number; className?: string }) {
   const sign = value > 0 ? '+' : value < 0 ? '-' : ''
@@ -385,6 +384,70 @@ export function EmptyState({
         {hint && <p className="mt-1 text-sm text-muted-foreground">{hint}</p>}
       </div>
       {action}
+    </div>
+  )
+}
+
+/* ───────────── كارت إحصائي (KPI Tile) ─────────────
+   📱 على الجوال: كارت بعرض كامل (بيتحدد من الأب `grid-cols-1`)
+   🖥️ من sm+ وفوق: 2×2، ومن lg: 4×1
+   العنوان والنص الفرعي يستحملوا لحد سطرين (line-clamp-2) عشان مايتقطعوش. */
+
+export function StatTile({
+  icon: Icon,
+  label,
+  value,
+  unit,
+  foot,
+  accent,
+}: {
+  icon: LucideIcon
+  label: string
+  value: string
+  unit?: string
+  foot?: React.ReactNode
+  accent: string
+}) {
+  return (
+    <div className="relative min-w-0 overflow-hidden rounded-2xl border bg-card p-3.5 sm:p-4">
+      {/* شريط جانبي ملوّن بهوية الإحصائية */}
+      <span
+        aria-hidden
+        className="absolute inset-y-3 start-0 w-1 rounded-e-full"
+        style={{ backgroundColor: accent }}
+      />
+
+      {/* 📱 الصف العلوي: العنوان (لحد سطرين) + الأيقونة */}
+      <div className="flex items-start justify-between gap-2">
+        <p className="line-clamp-2 min-w-0 flex-1 text-[11px] font-semibold leading-tight text-muted-foreground sm:text-xs">
+          {label}
+        </p>
+        <span
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg sm:size-8"
+          style={{ backgroundColor: `${accent}1f`, color: accent }}
+        >
+          <Icon className="size-3.5 sm:size-4" />
+        </span>
+      </div>
+
+      {/* الرقم — truncate يحمي أرقام الملايين */}
+      <p className="mt-2 flex min-w-0 items-baseline gap-1">
+        <span className="min-w-0 truncate text-xl font-extrabold leading-none tabular-nums sm:text-2xl">
+          {value}
+        </span>
+        {unit && (
+          <span className="shrink-0 text-[11px] font-medium text-muted-foreground sm:text-xs">
+            {unit}
+          </span>
+        )}
+      </p>
+
+      {/* 📱 النص الفرعي — سطرين على الجوال، سطر على الكبير */}
+      {foot && (
+        <p className="mt-1.5 line-clamp-2 min-w-0 text-[11px] leading-snug text-muted-foreground sm:line-clamp-1">
+          {foot}
+        </p>
+      )}
     </div>
   )
 }

@@ -416,19 +416,20 @@ export function MaintenanceView() {
         />
 
         <div className="flex flex-wrap items-stretch">
-          <div className="flex min-w-[260px] flex-1 items-center gap-3.5 p-4 sm:p-5">
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
-              <Wrench className="size-6" />
+          {/* 📱 موبايل: العميل + الزر تحت (كل واحد بعرض كامل) — من sm+ وفوق: صف واحد */}
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-3 p-4 sm:w-auto sm:min-w-[260px] sm:flex-1 sm:flex-nowrap sm:gap-3.5 sm:p-5">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15 sm:size-12">
+              <Wrench className="size-5 sm:size-6" />
             </span>
             <div className="min-w-0 flex-1">
-              <h1 className="text-xl font-extrabold leading-tight">الصيانة</h1>
-              <p className="mt-0.5 text-xs font-medium text-slate-300">
+              <h1 className="text-lg font-extrabold leading-tight sm:text-xl">الصيانة</h1>
+              <p className="mt-0.5 text-[11px] font-medium text-slate-300 sm:text-xs">
                 {loading ? 'جارٍ التحميل…' : `${num(stats.active)} جهاز في الورشة دلوقتي`}
               </p>
             </div>
             <Button
               onClick={openNew}
-              className="h-11 shrink-0 rounded-xl bg-white px-4 font-bold text-slate-950 hover:bg-slate-100"
+              className="h-10 w-full shrink-0 rounded-xl bg-white px-4 text-sm font-bold text-slate-950 hover:bg-slate-100 sm:h-11 sm:w-auto"
             >
               <Plus className="size-4" />
               استلام جهاز
@@ -470,10 +471,17 @@ export function MaintenanceView() {
           </div>
         </div>
 
-        {/* المراحل — فلتر وعدّاد */}
-        <div className="flex gap-1 overflow-x-auto border-t border-white/10 p-1.5" role="tablist" aria-label="مراحل الصيانة">
-          {tabs.map((t) => {
+        {/* المراحل — فلتر وعدّاد
+            📱 موبايل: «في الورشة» بعرض كامل (الفيلتر الأشمل)، والمراحل الـ4 في شبكة 2×2
+            🖥️ sm+ وفوق: كل التبويبات في صف واحد زي الأصل */}
+        <div
+          className="grid grid-cols-2 gap-1 border-t border-white/10 p-1.5 sm:flex sm:gap-1"
+          role="tablist"
+          aria-label="مراحل الصيانة"
+        >
+          {tabs.map((t, i) => {
             const on = !q && tab === t.key
+            const isOverview = i === 0 // «في الورشة»
             return (
               <button
                 key={t.key}
@@ -482,28 +490,35 @@ export function MaintenanceView() {
                 aria-selected={on}
                 onClick={() => chooseTab(t.key)}
                 className={cn(
-                  'relative flex min-w-[112px] flex-1 items-center justify-center gap-2.5 rounded-xl px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50',
+                  'relative flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 sm:flex-1 sm:gap-2.5 sm:rounded-xl sm:px-3 sm:py-2.5',
+                  // «في الورشة» بعرض كامل على الموبايل
+                  isOverview && 'col-span-2 sm:col-span-1',
                   on ? 'bg-white/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white'
                 )}
               >
                 <span
                   aria-hidden
                   className={cn(
-                    'size-3 shrink-0 rounded-full ring-2 ring-white/10',
+                    'size-2 shrink-0 rounded-full ring-2 ring-white/10 sm:size-3',
                     t.led,
                     t.count > 0 ? t.glow : 'opacity-30'
                   )}
                 />
-                <span className="truncate text-[13px] font-bold">{t.label}</span>
+                <span className="truncate text-[12px] font-bold sm:text-[13px]">{t.label}</span>
                 <span
                   className={cn(
-                    'min-w-[1.75rem] rounded-full px-2 py-0.5 text-center text-sm font-extrabold leading-none tabular-nums',
+                    'min-w-[1.5rem] rounded-full px-1.5 py-0.5 text-center text-[11px] font-extrabold leading-none tabular-nums sm:min-w-[1.75rem] sm:px-2 sm:text-sm',
                     t.count > 0 ? (on ? 'bg-white text-slate-950' : 'bg-white/15 text-white') : 'bg-white/5 text-slate-500'
                   )}
                 >
                   {t.count}
                 </span>
-                {on && <span aria-hidden className={cn('absolute inset-x-4 bottom-0 h-[3px] rounded-full', t.led)} />}
+                {on && (
+                  <span
+                    aria-hidden
+                    className={cn('absolute inset-x-2 bottom-0 h-[3px] rounded-full sm:inset-x-4', t.led)}
+                  />
+                )}
               </button>
             )
           })}
@@ -511,14 +526,15 @@ export function MaintenanceView() {
       </section>
 
       {/* ═════════ شريط البحث والترتيب ═════════ */}
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card p-2.5">
-        <label className="relative flex h-10 min-w-[240px] flex-1 items-center rounded-xl border bg-background transition-shadow focus-within:border-slate-500 focus-within:ring-[3px] focus-within:ring-slate-500/25">
+      {/* 📱 موبايل: 2×2 — من sm+ وفوق: صف أفقي زي الأصل */}
+      <div className="grid grid-cols-2 gap-2 rounded-2xl border bg-card p-2.5 sm:flex sm:flex-wrap sm:items-center">
+        <label className="relative col-span-2 flex h-10 w-full min-w-0 items-center rounded-xl border bg-background transition-shadow focus-within:border-slate-500 focus-within:ring-[3px] focus-within:ring-slate-500/25 sm:col-span-1 sm:min-w-[240px] sm:flex-1">
           <Search className="pointer-events-none absolute start-3.5 size-4 text-foreground/60" aria-hidden />
           <input
             ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="ابحث باسم العميل أو رقمه أو الجهاز أو العطل أو رقم الأمر…"
+            placeholder="ابحث باسم العميل أو الجهاز أو العطل…"
             aria-label="بحث في أوامر الصيانة"
             className="h-full w-full bg-transparent pe-10 text-sm outline-none placeholder:text-muted-foreground/80"
             style={{ paddingInlineStart: '2.75rem' }}
@@ -537,7 +553,12 @@ export function MaintenanceView() {
           )}
         </label>
 
-        <div className="flex h-10 items-center gap-0.5 rounded-xl border bg-background p-1" role="group" aria-label="ترتيب الأوامر">
+        {/* ترتيب — بعرض كامل على الموبايل، الأزرار جواه بتتوزّع */}
+        <div
+          className="col-span-2 flex h-10 items-center gap-0.5 rounded-xl border bg-background p-1 sm:col-span-1 sm:w-auto"
+          role="group"
+          aria-label="ترتيب الأوامر"
+        >
           {SORTS.map((s) => (
             <button
               key={s.k}
@@ -545,7 +566,7 @@ export function MaintenanceView() {
               onClick={() => setSort(s.k)}
               aria-pressed={sort === s.k}
               className={cn(
-                'h-8 rounded-lg px-3 text-xs font-bold transition-colors',
+                'h-8 flex-1 rounded-lg px-2.5 text-xs font-bold transition-colors sm:flex-initial sm:px-3',
                 ring,
                 sort === s.k
                   ? 'bg-slate-950 text-white shadow-sm dark:bg-slate-100 dark:text-slate-950'
@@ -557,12 +578,13 @@ export function MaintenanceView() {
           ))}
         </div>
 
+        {/* متأخرة — نصف عرض على الموبايل */}
         <button
           type="button"
           onClick={() => setOnlyLate((v) => !v)}
           aria-pressed={onlyLate}
           className={cn(
-            'inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-colors',
+            'col-span-1 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-colors sm:w-auto sm:justify-start',
             ring,
             onlyLate
               ? 'border-amber-500 bg-amber-500/15 text-amber-800 dark:text-amber-300'
@@ -570,10 +592,16 @@ export function MaintenanceView() {
           )}
         >
           <Clock className="size-3.5" />
-          متأخرة +{STALE_DAYS} أيام
+          متأخرة +{STALE_DAYS}
         </button>
 
-        <Button variant="outline" className="h-10 rounded-xl" onClick={exportPdf} disabled={loading || orders.length === 0}>
+        {/* PDF — نصف عرض على الموبايل */}
+        <Button
+          variant="outline"
+          className="col-span-1 h-10 w-full rounded-xl sm:w-auto"
+          onClick={exportPdf}
+          disabled={loading || orders.length === 0}
+        >
           <FileText className="size-4" />
           PDF
         </Button>
@@ -653,22 +681,22 @@ function Kpi({
 }) {
   const body = (
     <>
-      <p className="text-[11px] font-bold text-slate-300">{label}</p>
+      <p className="truncate text-[10px] font-bold text-slate-300 sm:text-[11px]">{label}</p>
       <p
         className={cn(
-          'mt-1 text-xl font-extrabold leading-none tabular-nums sm:text-2xl',
+          'mt-1 text-base font-extrabold leading-none tabular-nums sm:text-xl md:text-2xl',
           tone === 'ready' && 'text-emerald-300',
           tone === 'late' && 'text-amber-300',
           dim && 'text-slate-400'
         )}
       >
         {value}
-        <span className="ms-1 text-xs font-semibold text-slate-400">{unit}</span>
+        <span className="ms-1 text-[10px] font-semibold text-slate-400 sm:text-xs">{unit}</span>
       </p>
       {sub && <p className="mt-1.5 hidden truncate text-[11px] font-medium text-slate-400 sm:block">{sub}</p>}
     </>
   )
-  const cls = 'flex min-w-0 flex-col justify-center px-3 py-3.5 text-start sm:px-5'
+  const cls = 'flex min-w-0 flex-col justify-center px-2.5 py-3 text-start sm:px-5 sm:py-3.5'
   return onClick ? (
     <button
       type="button"
@@ -712,64 +740,99 @@ function Ticket({
   const VerbIcon = STAGES[idx].verbIcon
   const verbLabel = STAGES[idx].verb
 
+  // 📱 أزرار الإجراءات أصغر على الموبايل — 5 أزرار × 32px = 160px مش 200px
+  // في الكروت المُسلَّمة، بنستخدم أبيض/سلات صريح عشان يبانوا فوق الخلفية الرمادية
   const iconBtn = cn(
-    'flex size-9 shrink-0 items-center justify-center rounded-xl border bg-background text-foreground/70 transition-colors hover:bg-muted hover:text-foreground',
-    ring
+    'flex size-8 shrink-0 items-center justify-center rounded-lg border transition-colors sm:size-9 sm:rounded-xl',
+    ring,
+    delivered
+      ? 'border-slate-300/80 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100'
+      : 'border-border bg-background text-foreground/70 hover:bg-muted hover:text-foreground'
   )
 
   return (
     <article
       className={cn(
-        'group relative overflow-hidden rounded-2xl border bg-card transition-shadow hover:shadow-md motion-reduce:transition-none',
-        ready && 'border-emerald-500/40 bg-emerald-500/[0.035]',
-        delivered && 'bg-muted/30'
+        'group relative overflow-hidden rounded-2xl border transition-shadow hover:shadow-md motion-reduce:transition-none',
+        // 📦 «مُسلَّم»: لون صلب (مش شفاف) عشان ميتلخبطش مع لون الصفحة،
+        // وبوردر أوضح عشان يبان مختلف عن باقي الكروت
+        delivered
+          ? 'border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-900'
+          : 'border-border bg-card',
+        ready && 'border-emerald-500/40 bg-emerald-500/[0.035] dark:bg-emerald-500/[0.06]'
       )}
     >
+      {/* ختم «اتسلّم» شفاف في الخلفية للكروت المسلّمة — بيدّي إحساس «خلص وانتهى» */}
+      {delivered && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -end-4 -top-4 flex size-24 rotate-12 items-center justify-center text-slate-700/[0.09] dark:text-slate-100/[0.07]"
+        >
+          <PackageCheck className="size-full" strokeWidth={1.25} />
+        </span>
+      )}
+
       {/* شريط الليدات: وصل لفين */}
       <div className="flex gap-1 px-4 pt-3" aria-hidden>
         {STAGES.map((s, i) => (
-          <span key={s.key} className={cn('h-1 flex-1 rounded-full', i <= idx ? s.led : 'bg-border')} />
+          <span key={s.key} className={cn('h-1 flex-1 rounded-full', i <= idx ? s.led : 'bg-border', delivered && i <= idx && 'opacity-70')} />
         ))}
       </div>
 
-      <div className="p-4 pt-3">
+      <div className="relative p-3.5 pt-3 sm:p-4 sm:pt-3">
         {/* الجهاز + العميل */}
-        <div className="flex items-start gap-3">
-          <span className="relative flex size-12 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-slate-50 dark:bg-slate-800">
-            <Icon className="size-6" />
+        <div className="flex items-start gap-2.5 sm:gap-3">
+          <span
+            className={cn(
+              'relative flex size-10 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-slate-50 sm:size-12 dark:bg-slate-800',
+              delivered && 'opacity-55'
+            )}
+          >
+            <Icon className="size-5 sm:size-6" />
             <span aria-hidden className={cn('absolute -end-1 -top-1 size-3 rounded-full ring-2 ring-card', stage.led)} />
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-[15px] font-extrabold leading-snug" title={o.device}>{o.device}</h3>
-            <p className="truncate text-[13px] font-semibold leading-snug text-foreground/85">{o.customerName}</p>
-            <p className="text-xs font-medium tabular-nums text-foreground/60">
+            <h3 className={cn('truncate text-sm font-extrabold leading-snug sm:text-[15px]', delivered && 'text-foreground/80')} title={o.device}>
+              {o.device}
+            </h3>
+            <p className={cn('truncate text-[12px] font-semibold leading-snug text-foreground/85 sm:text-[13px]', delivered && 'text-foreground/70')}>
+              {o.customerName}
+            </p>
+            <p className={cn('text-[11px] font-medium tabular-nums text-foreground/60 sm:text-xs', delivered && 'text-foreground/50')}>
               {o.phone ? <bdi dir="ltr">{o.phone}</bdi> : 'بدون رقم تليفون'}
             </p>
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-1.5">
-            <span dir="ltr" className="font-mono text-[11px] font-bold tracking-wider text-foreground/55">{orderNo(o.id)}</span>
-            <span className={cn('rounded-full px-2.5 py-0.5 text-[11px] font-bold', stage.chip)}>{stage.key}</span>
+          <div className="flex shrink-0 flex-col items-end gap-1 sm:gap-1.5">
+            <span dir="ltr" className={cn('font-mono text-[10px] font-bold tracking-wider text-foreground/55 sm:text-[11px]', delivered && 'text-foreground/40')}>
+              {orderNo(o.id)}
+            </span>
+            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold sm:px-2.5 sm:text-[11px]', stage.chip, delivered && 'opacity-75')}>
+              {stage.key}
+            </span>
           </div>
         </div>
 
         {/* العطل */}
         <div
-          className="mt-3 flex min-h-[2.75rem] items-start gap-2 rounded-xl border border-dashed bg-muted/40 px-3 py-2"
+          className={cn(
+            'mt-3 flex min-h-[2.5rem] items-start gap-2 rounded-xl border border-dashed bg-muted/40 px-2.5 py-2 sm:min-h-[2.75rem] sm:px-3',
+            delivered && 'border-border/60 bg-white/60 dark:bg-slate-800/40'
+          )}
           title={o.issue || undefined}
         >
           <Wrench className="mt-0.5 size-3.5 shrink-0 text-foreground/45" aria-hidden />
-          <p className={cn('line-clamp-2 text-[12.5px] leading-relaxed', o.issue ? 'text-foreground/80' : 'italic text-foreground/50')}>
+          <p className={cn('line-clamp-2 text-[12px] leading-relaxed sm:text-[12.5px]', o.issue ? 'text-foreground/80' : 'italic text-foreground/50', delivered && 'text-foreground/65')}>
             {o.issue || 'من غير وصف للعطل'}
           </p>
         </div>
 
         {/* العمر + التكلفة */}
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <div className="min-w-0 text-xs font-medium text-foreground/65">
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <div className={cn('min-w-0 text-[11px] font-medium text-foreground/65 sm:text-xs', delivered && 'text-foreground/55')}>
             {delivered ? (
               <span className="inline-flex items-center gap-1.5">
                 <Check className="size-3.5 text-slate-500" aria-hidden />
-                <span title={o.deliveredAt ? formatArabicDateTime(o.deliveredAt) : undefined}>
+                <span className="truncate" title={o.deliveredAt ? formatArabicDateTime(o.deliveredAt) : undefined}>
                   اتسلّم {o.deliveredAt ? shortDate(o.deliveredAt) : ''} · بعد {inShop === 0 ? 'أقل من يوم' : inShop === 1 ? 'يوم' : `${inShop} يوم`}
                 </span>
               </span>
@@ -781,91 +844,100 @@ function Ticket({
                 )}
                 title={formatArabicDateTime(o.receivedAt)}
               >
-                <Clock className="size-3.5" aria-hidden />
-                {ready ? 'مستنية العميل' : 'في الورشة'} {daysText(age)}
+                <Clock className="size-3.5 shrink-0" aria-hidden />
+                <span className="truncate">{ready ? 'مستنية العميل' : 'في الورشة'} {daysText(age)}</span>
               </span>
             )}
           </div>
           {o.cost > 0 ? (
-            <p className="shrink-0 text-lg font-extrabold leading-none tabular-nums">
+            <p className={cn('shrink-0 text-base font-extrabold leading-none tabular-nums sm:text-lg', delivered && 'text-foreground/75')}>
               {money(o.cost)}
-              <span className="ms-1 text-[11px] font-semibold text-foreground/55">جنيه</span>
+              <span className={cn('ms-1 text-[10px] font-semibold text-foreground/55 sm:text-[11px]', delivered && 'text-foreground/45')}>جنيه</span>
             </p>
           ) : (
             <button
               type="button"
               onClick={onEdit}
-              className={cn('shrink-0 rounded-full border border-dashed border-amber-500/70 px-2.5 py-1 text-[11px] font-bold text-amber-800 transition-colors hover:bg-amber-500/10 dark:text-amber-300', ring)}
+              className={cn('shrink-0 rounded-full border border-dashed border-amber-500/70 px-2 py-1 text-[10px] font-bold text-amber-800 transition-colors hover:bg-amber-500/10 sm:px-2.5 sm:text-[11px] dark:text-amber-300', ring)}
             >
               لسه متسعّرش
             </button>
           )}
         </div>
 
-        {/* الإجراءات */}
-        <div className="mt-3.5 flex items-center gap-1.5 border-t pt-3.5">
-          {next && VerbIcon ? (
-            <Button
-              onClick={() => onGo(next.key)}
-              disabled={busy}
-              className={cn(
-                'h-9 min-w-0 flex-1 rounded-xl px-3 font-bold',
-                ready
-                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                  : 'bg-slate-950 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white'
-              )}
-            >
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <VerbIcon className="size-4" />}
-              <span className="truncate">{verbLabel}</span>
-            </Button>
-          ) : (
-            <span className="flex h-9 flex-1 items-center gap-1.5 text-xs font-bold text-foreground/55">
-              <PackageCheck className="size-4" aria-hidden />
-              الأمر مقفول
-            </span>
-          )}
+        {/* ════════ الإجراءات ════════
+            📱 موبايل: صفّين — (زر التقدّم + الرجوع) فوق، والأيقونات الثانوية تحت
+            🖥️ sm+: صف واحد زي الأصل */}
+        <div className="mt-3 space-y-2 border-t pt-3 sm:mt-3.5 sm:flex sm:items-center sm:gap-1.5 sm:space-y-0 sm:pt-3.5">
+          {/* ─── صف 1: زر التقدّم + زر الرجوع ─── */}
+          <div className="flex items-center gap-1.5 sm:min-w-0 sm:flex-1 sm:basis-[200px]">
+            {next && VerbIcon ? (
+              <Button
+                onClick={() => onGo(next.key)}
+                disabled={busy}
+                className={cn(
+                  'h-9 min-w-0 flex-1 rounded-lg px-3 text-[13px] font-bold sm:rounded-xl',
+                  ready
+                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                    : 'bg-slate-950 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white'
+                )}
+              >
+                {busy ? <Loader2 className="size-4 animate-spin" /> : <VerbIcon className="size-4" />}
+                <span className="truncate">{verbLabel}</span>
+              </Button>
+            ) : (
+              <span className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-400/50 text-xs font-bold text-slate-500 sm:justify-start sm:border-0 sm:px-0 dark:border-slate-600/60 dark:text-slate-400">
+                <PackageCheck className="size-4 shrink-0" aria-hidden />
+                الأمر مقفول
+              </span>
+            )}
 
-          {prev && (
+            {prev && (
+              <button
+                type="button"
+                onClick={() => onGo(prev.key)}
+                disabled={busy}
+                className={cn(iconBtn, 'shrink-0 disabled:opacity-50')}
+                title={delivered ? 'إعادة فتح الأمر' : `رجوع إلى "${prev.key}"`}
+                aria-label={delivered ? 'إعادة فتح الأمر' : `رجوع إلى ${prev.key}`}
+              >
+                <Undo2 className="size-3.5 sm:size-4" />
+              </button>
+            )}
+          </div>
+
+          {/* ─── صف 2: الأيقونات الثانوية — على الطرف على الموبايل ─── */}
+          <div className="flex items-center gap-1 sm:ms-auto sm:shrink-0">
+            {o.phone && (
+              <a href={`tel:${o.phone}`} className={iconBtn} title="اتصال بالعميل" aria-label={`اتصال بـ ${o.customerName}`}>
+                <Phone className="size-3.5 sm:size-4" />
+              </a>
+            )}
+            {wa && (
+              <a
+                href={`https://wa.me/${wa}?text=${encodeURIComponent(waText)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(iconBtn, 'hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-300')}
+                title="رسالة واتساب"
+                aria-label={`واتساب ${o.customerName}`}
+              >
+                <MessageCircle className="size-3.5 sm:size-4" />
+              </a>
+            )}
+            <button type="button" onClick={onEdit} className={iconBtn} title="تعديل" aria-label="تعديل الأمر">
+              <Pencil className="size-3.5 sm:size-4" />
+            </button>
             <button
               type="button"
-              onClick={() => onGo(prev.key)}
-              disabled={busy}
-              className={cn(iconBtn, 'disabled:opacity-50')}
-              title={delivered ? 'إعادة فتح الأمر' : `رجوع إلى "${prev.key}"`}
-              aria-label={delivered ? 'إعادة فتح الأمر' : `رجوع إلى ${prev.key}`}
+              onClick={onDelete}
+              className={cn(iconBtn, 'hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-300')}
+              title="حذف"
+              aria-label="حذف الأمر"
             >
-              <Undo2 className="size-4" />
+              <Trash2 className="size-3.5 sm:size-4" />
             </button>
-          )}
-          {o.phone && (
-            <a href={`tel:${o.phone}`} className={iconBtn} title="اتصال بالعميل" aria-label={`اتصال بـ ${o.customerName}`}>
-              <Phone className="size-4" />
-            </a>
-          )}
-          {wa && (
-            <a
-              href={`https://wa.me/${wa}?text=${encodeURIComponent(waText)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(iconBtn, 'hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-300')}
-              title="رسالة واتساب"
-              aria-label={`واتساب ${o.customerName}`}
-            >
-              <MessageCircle className="size-4" />
-            </a>
-          )}
-          <button type="button" onClick={onEdit} className={iconBtn} title="تعديل" aria-label="تعديل الأمر">
-            <Pencil className="size-4" />
-          </button>
-          <button
-            type="button"
-            onClick={onDelete}
-            className={cn(iconBtn, 'hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-300')}
-            title="حذف"
-            aria-label="حذف الأمر"
-          >
-            <Trash2 className="size-4" />
-          </button>
+          </div>
         </div>
       </div>
     </article>
@@ -892,7 +964,7 @@ function Empty({
     'مُسلَّم': 'لسه مفيش أجهزة اتسلّمت',
   }
   return (
-    <div className="rounded-2xl border border-dashed bg-card p-10 text-center">
+    <div className="rounded-2xl border border-dashed bg-card p-8 text-center sm:p-10">
       <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-slate-950 text-slate-50 dark:bg-slate-800">
         <Wrench className="size-7" />
       </span>
@@ -1028,20 +1100,20 @@ function OrderDialog({ open, onOpenChange, initial, orders, onSaved }: OrderDial
             backgroundSize: '18px 18px',
           }}
         >
-          <div className="flex items-center gap-3.5">
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
+          <div className="flex items-center gap-3 sm:gap-3.5">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15 sm:size-11">
               <Wrench className="size-5" />
             </span>
             <div className="min-w-0 flex-1">
-              <DialogTitle className="flex flex-wrap items-center gap-2 text-lg font-extrabold leading-tight text-slate-50">
+              <DialogTitle className="flex flex-wrap items-center gap-2 text-base font-extrabold leading-tight text-slate-50 sm:text-lg">
                 {initial ? 'تعديل أمر صيانة' : 'استلام جهاز'}
                 {initial && (
-                  <span dir="ltr" className="rounded-lg bg-white/10 px-2 py-0.5 font-mono text-xs font-bold tracking-wider text-slate-200 ring-1 ring-white/15">
+                  <span dir="ltr" className="rounded-lg bg-white/10 px-2 py-0.5 font-mono text-[11px] font-bold tracking-wider text-slate-200 ring-1 ring-white/15 sm:text-xs">
                     {orderNo(initial.id)}
                   </span>
                 )}
               </DialogTitle>
-              <DialogDescription className="mt-1 text-xs font-medium leading-relaxed text-slate-300">
+              <DialogDescription className="mt-1 text-[11px] font-medium leading-relaxed text-slate-300 sm:text-xs">
                 {initial
                   ? 'عدّل البيانات — المرحلة بتتغيّر من التذكرة نفسها.'
                   : 'سجّل الجهاز وهيظهر في «مستلم» لحد ما تبدأ الشغل.'}
@@ -1098,8 +1170,8 @@ function OrderDialog({ open, onOpenChange, initial, orders, onSaved }: OrderDial
                   ring
                 )}
               >
-                <Check className="size-3.5 text-emerald-600" />
-                عميل سابق: {known.name} ({known.n} {known.n === 1 ? 'أمر' : 'أوامر'}) — استخدم الاسم
+                <Check className="size-3.5 shrink-0 text-emerald-600" />
+                <span className="truncate">عميل سابق: {known.name} ({known.n} {known.n === 1 ? 'أمر' : 'أوامر'}) — استخدم الاسم</span>
               </button>
             )}
           </section>
@@ -1144,7 +1216,7 @@ function OrderDialog({ open, onOpenChange, initial, orders, onSaved }: OrderDial
                     onClick={() => toggleFault(f)}
                     aria-pressed={on}
                     className={cn(
-                      'h-8 rounded-full border px-3 text-xs font-bold transition-colors',
+                      'h-8 rounded-full border px-2.5 text-[11px] font-bold transition-colors sm:px-3 sm:text-xs',
                       ring,
                       on
                         ? 'border-slate-950 bg-slate-950 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950'
@@ -1210,23 +1282,31 @@ function OrderDialog({ open, onOpenChange, initial, orders, onSaved }: OrderDial
           </section>
         </div>
 
+        {/* 📱 موبايل: التكلفة فوق، الأزرار جنب بعض تحت — من sm+ وفوق: صف أفقي واحد */}
         <div className="shrink-0 border-t bg-card px-4 py-3 sm:px-6 sm:py-4">
-          <div className="flex items-center gap-3">
-            <div className="min-w-0 flex-1">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="min-w-0 sm:flex-1">
               <p className="text-[11px] font-semibold text-foreground/60">التكلفة المتوقعة</p>
               <p className="truncate text-lg font-extrabold tabular-nums">{formatCurrency(costNum)}</p>
             </div>
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving} className="h-11 rounded-xl px-5">
-              إلغاء
-            </Button>
-            <Button
-              onClick={submit}
-              disabled={saving}
-              className="h-11 rounded-xl bg-slate-950 px-6 font-bold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
-            >
-              {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-              {initial ? 'حفظ التعديل' : 'تسجيل الاستلام'}
-            </Button>
+            <div className="flex gap-2 sm:gap-3">
+              <Button
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={saving}
+                className="h-11 flex-1 rounded-xl px-4 sm:flex-none sm:px-5"
+              >
+                إلغاء
+              </Button>
+              <Button
+                onClick={submit}
+                disabled={saving}
+                className="h-11 flex-1 rounded-xl bg-slate-950 px-4 font-bold text-white hover:bg-slate-800 sm:flex-none sm:px-6 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
+              >
+                {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                <span className="truncate">{initial ? 'حفظ التعديل' : 'تسجيل الاستلام'}</span>
+              </Button>
+            </div>
           </div>
         </div>
       </DialogContent>

@@ -3,15 +3,6 @@
 /**
  * المشتريات — "دفتر الاستلام".
  * الهوية: بترول/سماوي غامق + كربون، والكهرماني للمتبقي للموردين فقط (مفيش بنفسجي).
- *
- * أفكار الصفحة:
- *  1) شريط الحساب: إجمالي ← مرتجع ← صافي ← مدفوع ← المتبقي (كل رقم مرة واحدة بس).
- *  2) فلتر "شريط التسوية": الأوامر مقسومة مسدّدة / عليها باقي / آجلة، عرض كل جزء بيمثّل حجمه.
- *  3) كل أمر شراء "إيصال استلام" فيه مقياس تسوية (مدفوع | مرتجع | متبقي) وتفاصيل كاملة.
- *  4) تجميع حسب اليوم أو المورد أو من غير تجميع.
- *
- * المحاسبة (متوافقة مع purchase-return.ts): الإجمالي بيفضل زي ما هو،
- *   صافي الأمر = الإجمالي − قيمة المرتجع،  المتبقي = الصافي − (المدفوع − المسترد).
  */
 
 import * as React from 'react'
@@ -95,7 +86,6 @@ const LATE_DAYS = 30
 const NO_SUPPLIER = '__none'
 const FETCH_CAP = 500
 
-// نفس تسميات باقي المشروع (PaymentDialog / الخزنة)
 const METHOD_LABELS: Record<string, string> = {
   cash: 'كاش',
   vodafone_cash: 'محافظ إلكترونية',
@@ -130,8 +120,8 @@ const PERIOD_LABELS: Record<Exclude<Period, 'custom'>, string> = {
 }
 
 const KIND_META: Record<Kind, { label: string; short: string; sub: string }> = {
-  settled: { label: 'مسدّدة', short: 'مسدّدة', sub: 'قيمتها بعد المرتجع' },
-  partial: { label: 'عليها باقي', short: 'عليها باقي', sub: 'متبقي عليها' },
+  settled: { label: 'مسدّدة', short: 'مسدّدة', sub: 'صافيها بعد المرتجع' },
+  partial: { label: 'عليها باقي', short: 'باقي', sub: 'متبقي عليها' },
   unpaid: { label: 'آجلة بالكامل', short: 'آجلة', sub: 'متبقي عليها' },
 }
 
@@ -202,12 +192,10 @@ export function PurchaseOrdersView() {
   const [orders, setOrders] = React.useState<PurchaseOrder[]>([])
   const [loading, setLoading] = React.useState(true)
 
-  // الفترة (بتتحمّل من السيرفر)
   const [period, setPeriod] = React.useState<Period>('all')
   const [from, setFrom] = React.useState('')
   const [to, setTo] = React.useState('')
 
-  // فلاتر على القائمة المحمّلة
   const [query, setQuery] = React.useState('')
   const [status, setStatus] = React.useState<Kind | null>(null)
   const [supplier, setSupplier] = React.useState<string | null>(null)
@@ -216,7 +204,6 @@ export function PurchaseOrdersView() {
   const [onlyReturned, setOnlyReturned] = React.useState(false)
   const [onlyLate, setOnlyLate] = React.useState(false)
 
-  // العرض
   const [sort, setSort] = React.useState<SortKey>('recent')
   const [groupBy, setGroupBy] = React.useState<GroupBy>('day')
   const [openId, setOpenId] = React.useState<number | null>(null)
@@ -249,7 +236,6 @@ export function PurchaseOrdersView() {
 
   useDataRefresh(['purchase-orders'], () => load(from, to))
 
-  // اختصار "/" للبحث
   React.useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
@@ -294,8 +280,6 @@ export function PurchaseOrdersView() {
     load(f, t)
   }
 
-  /* ───── البيانات المشتقة ───── */
-
   const calcs = React.useMemo(() => {
     const m = new Map<number, Calc>()
     orders.forEach((o) => m.set(o.id, calcOrder(o)))
@@ -303,7 +287,6 @@ export function PurchaseOrdersView() {
   }, [orders])
   const C = (o: PurchaseOrder) => calcs.get(o.id)!
 
-  // خيارات القوائم المنسدلة — كل خيار معاه عدد الأوامر + معلومة تفيد في القرار
   const supplierOpts = React.useMemo<PickOption[]>(() => {
     const m = new Map<string, { n: number; due: number }>()
     orders.forEach((o) => {
@@ -351,7 +334,6 @@ export function PurchaseOrdersView() {
       .map(([k, e]) => ({ value: k, label: k, count: e.n, hint: `صافي ${formatCurrency(e.net)}`, tone: 'muted' as const }))
   }, [orders, calcs])
 
-  // كل الفلاتر ما عدا حالة التسوية (علشان أرقام الشريط تفضل ثابتة)
   const base = React.useMemo(() => {
     const q = query.trim().toLowerCase()
     return orders.filter((o) => {
@@ -526,40 +508,39 @@ export function PurchaseOrdersView() {
   /* ───────────────────────── الواجهة ───────────────────────── */
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {/* العنوان */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">المشتريات</h1>
-          <p className="text-sm text-muted-foreground">دفتر استلام البضاعة من الموردين — إيه دخل، ودفعت كام، ولسه عليك كام</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-extrabold tracking-tight sm:text-2xl">المشتريات</h1>
+          <p className="text-xs text-muted-foreground sm:text-sm">دفتر استلام البضاعة من الموردين — إيه دخل، ودفعت كام، ولسه عليك كام</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={exportExcel} disabled={filtered.length === 0}>
-            <FileSpreadsheet className="size-4" />
-            تصدير Excel
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <Button variant="outline" onClick={exportExcel} disabled={filtered.length === 0} className="w-full sm:w-auto">
+            <FileSpreadsheet className="size-4 shrink-0" />
+            <span className="truncate">تصدير Excel</span>
           </Button>
-          <Button onClick={() => setNewOpen(true)} className="bg-cyan-700 text-white hover:bg-cyan-600 focus-visible:ring-cyan-600/40">
-            <Plus className="size-4" />
-            أمر شراء جديد
+          <Button onClick={() => setNewOpen(true)} className="w-full bg-cyan-700 text-white hover:bg-cyan-600 focus-visible:ring-cyan-600/40 sm:w-auto">
+            <Plus className="size-4 shrink-0" />
+            <span className="truncate">أمر شراء جديد</span>
           </Button>
         </div>
       </div>
 
       {/* ═════════ شريط الحساب ═════════ */}
       <section className="overflow-hidden rounded-3xl bg-cyan-950 text-cyan-50 shadow-lg ring-1 ring-cyan-900">
-        <div className="grid items-center gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-          {/* المتبقي — الرقم اللي يهمّك */}
+        <div className="grid items-center gap-5 p-4 sm:gap-6 sm:p-7 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
           <div className="min-w-0">
-            <p className="flex items-center gap-2 text-sm text-cyan-200/80">
-              <Wallet className="size-4 text-amber-300" aria-hidden />
+            <p className="flex items-center gap-2 text-xs text-cyan-200/80 sm:text-sm">
+              <Wallet className="size-4 shrink-0 text-amber-300" aria-hidden />
               متبقي للموردين {periodText}
             </p>
-            <p className="mt-2 text-5xl font-extrabold leading-none tracking-tight text-amber-300 tabular-nums sm:text-6xl">
+            <p className="mt-2 truncate text-3xl font-extrabold leading-none tracking-tight text-amber-300 tabular-nums sm:text-5xl lg:text-6xl">
               {loading ? '…' : num(sums.due)}
-              <span className="ms-2 text-base font-semibold text-cyan-200/70">جنيه</span>
+              <span className="ms-2 text-sm font-semibold text-cyan-200/70 sm:text-base">جنيه</span>
             </p>
 
-            <div className="mt-6">
+            <div className="mt-5 sm:mt-6">
               <div
                 className="flex h-3 overflow-hidden rounded-full bg-cyan-900"
                 role="img"
@@ -579,16 +560,17 @@ export function PurchaseOrdersView() {
               {sums.lateDue > 0 && (
                 <button
                   onClick={() => setOnlyLate(true)}
-                  className="mt-3 inline-flex items-center gap-2 rounded-full bg-rose-500/15 px-3 py-1.5 text-xs font-semibold text-rose-200 ring-1 ring-rose-400/30 transition-colors hover:bg-rose-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+                  className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full bg-rose-500/15 px-3 py-1.5 text-xs font-semibold text-rose-200 ring-1 ring-rose-400/30 transition-colors hover:bg-rose-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
                 >
-                  <Clock className="size-3.5" />
-                  منها <span className="tabular-nums">{formatCurrency(sums.lateDue)}</span> عدّى عليها +{LATE_DAYS} يوم — اعرضها
+                  <Clock className="size-3.5 shrink-0" />
+                  <span className="truncate">
+                    منها <span className="tabular-nums">{formatCurrency(sums.lateDue)}</span> عدّى عليها +{LATE_DAYS} يوم — اعرضها
+                  </span>
                 </button>
               )}
             </div>
           </div>
 
-          {/* إيصال الحساب */}
           <div className="min-w-0 rounded-2xl border border-dashed border-cyan-700/70 bg-cyan-900/40 p-4 sm:p-5">
             <p className="mb-3 text-xs font-semibold tracking-wide text-cyan-200/70">كشف الحساب · {num(filtered.length)} أمر</p>
             <ul className="space-y-2.5 text-sm">
@@ -605,10 +587,10 @@ export function PurchaseOrdersView() {
       </section>
 
       {/* ═════════ لوحة الفلاتر ═════════ */}
-      <section className="space-y-4 rounded-3xl border bg-card p-4 shadow-sm sm:p-5" aria-label="فلاتر المشتريات">
+      <section className="space-y-4 rounded-3xl border bg-card p-3.5 shadow-sm sm:p-5" aria-label="فلاتر المشتريات">
         {/* بحث + ترتيب + تجميع */}
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="relative flex h-11 min-w-[240px] flex-1 items-center rounded-2xl border bg-background transition-shadow focus-within:border-cyan-600 focus-within:ring-[3px] focus-within:ring-cyan-600/25">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <label className="relative flex h-11 w-full min-w-0 items-center rounded-2xl border bg-background transition-shadow focus-within:border-cyan-600 focus-within:ring-[3px] focus-within:ring-cyan-600/25 sm:min-w-[240px] sm:flex-1">
             <Search className="pointer-events-none absolute right-3.5 size-4 text-muted-foreground" aria-hidden />
             <input
               ref={searchRef}
@@ -645,20 +627,20 @@ export function PurchaseOrdersView() {
               <button
                 type="button"
                 className={cn(
-                  'inline-flex h-11 items-center gap-2 rounded-2xl border bg-background px-3.5 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40',
+                  'inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border bg-background px-3.5 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 sm:w-auto sm:justify-start',
                   open && 'border-cyan-600 ring-[3px] ring-cyan-600/25'
                 )}
               >
-                <ArrowUpDown className="size-4 text-cyan-700 dark:text-cyan-300" />
+                <ArrowUpDown className="size-4 shrink-0 text-cyan-700 dark:text-cyan-300" />
                 <span className="text-muted-foreground">ترتيب:</span>
-                <span className="font-semibold">{SORT_LABELS[sort]}</span>
-                <ChevronDown className={cn('size-4 text-muted-foreground transition-transform motion-reduce:transition-none', open && 'rotate-180')} />
+                <span className="truncate font-semibold">{SORT_LABELS[sort]}</span>
+                <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none', open && 'rotate-180')} />
               </button>
             )}
           />
 
-          <div className="flex h-11 items-center gap-0.5 rounded-2xl border bg-background p-1" role="group" aria-label="تجميع السجل">
-            <Layers className="ms-1.5 size-4 text-muted-foreground" aria-hidden />
+          <div className="flex h-11 w-full items-center gap-0.5 rounded-2xl border bg-background p-1 sm:w-auto" role="group" aria-label="تجميع السجل">
+            <Layers className="ms-1.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
             <span className="me-1 hidden text-xs text-muted-foreground lg:inline">تجميع</span>
             {(Object.keys(GROUP_LABELS) as GroupBy[]).map((k) => (
               <button
@@ -667,7 +649,7 @@ export function PurchaseOrdersView() {
                 onClick={() => setGroupBy(k)}
                 aria-pressed={groupBy === k}
                 className={cn(
-                  'h-8 rounded-xl px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40',
+                  'h-8 flex-1 rounded-xl px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 sm:flex-initial sm:px-3',
                   groupBy === k ? 'bg-cyan-700 text-white shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 )}
               >
@@ -678,9 +660,13 @@ export function PurchaseOrdersView() {
         </div>
 
         {/* الفترة */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span className="text-[11px] font-semibold text-muted-foreground">الفترة</span>
-          <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-muted/60 p-1" role="group" aria-label="الفترة">
+        <div className="space-y-1.5 sm:space-y-0 sm:flex sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
+          <span className="block text-[11px] font-semibold text-muted-foreground sm:me-1 sm:inline sm:shrink-0">الفترة</span>
+          <div
+            className="grid w-full grid-cols-3 gap-1 rounded-2xl bg-muted/60 p-1 sm:flex sm:w-auto sm:flex-nowrap sm:overflow-x-auto sm:rounded-full [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            role="group"
+            aria-label="الفترة"
+          >
             {(['today', '7', 'month', '90', 'all'] as const).map((p) => (
               <button
                 key={p}
@@ -688,7 +674,7 @@ export function PurchaseOrdersView() {
                 onClick={() => choosePeriod(p)}
                 aria-pressed={period === p}
                 className={cn(
-                  'h-8 shrink-0 rounded-full px-3.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40',
+                  'h-8 shrink-0 rounded-full px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 sm:px-3.5',
                   period === p ? 'bg-cyan-950 text-cyan-50 shadow-sm dark:bg-cyan-600' : 'text-muted-foreground hover:bg-background hover:text-foreground'
                 )}
               >
@@ -700,7 +686,7 @@ export function PurchaseOrdersView() {
               onClick={() => choosePeriod('custom')}
               aria-pressed={period === 'custom'}
               className={cn(
-                'h-8 shrink-0 rounded-full px-3.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40',
+                'col-span-3 h-8 shrink-0 rounded-full px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 sm:col-span-1 sm:px-3.5',
                 period === 'custom' ? 'bg-cyan-950 text-cyan-50 shadow-sm dark:bg-cyan-600' : 'text-muted-foreground hover:bg-background hover:text-foreground'
               )}
             >
@@ -709,7 +695,7 @@ export function PurchaseOrdersView() {
           </div>
 
           {period === 'custom' && (
-            <div className="flex items-center gap-2 rounded-full border bg-background px-3 py-1 text-xs">
+            <div className="flex w-full flex-wrap items-center gap-2 rounded-2xl border bg-background px-3 py-1.5 text-xs sm:w-auto sm:rounded-full sm:py-1">
               <span className="text-muted-foreground">من</span>
               <input
                 type="date"
@@ -717,7 +703,7 @@ export function PurchaseOrdersView() {
                 max={to || undefined}
                 onChange={(e) => changeCustom(e.target.value, to)}
                 aria-label="من تاريخ"
-                className="bg-transparent py-1 text-xs font-semibold tabular-nums outline-none"
+                className="min-w-0 flex-1 bg-transparent py-1 text-xs font-semibold tabular-nums outline-none sm:flex-none"
               />
               <span className="text-muted-foreground">إلى</span>
               <input
@@ -726,7 +712,7 @@ export function PurchaseOrdersView() {
                 min={from || undefined}
                 onChange={(e) => changeCustom(from, e.target.value)}
                 aria-label="إلى تاريخ"
-                className="bg-transparent py-1 text-xs font-semibold tabular-nums outline-none"
+                className="min-w-0 flex-1 bg-transparent py-1 text-xs font-semibold tabular-nums outline-none sm:flex-none"
               />
             </div>
           )}
@@ -735,74 +721,77 @@ export function PurchaseOrdersView() {
         {/* شريط التسوية — فلتر وعرض في نفس الوقت */}
         <div>
           <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
-            <PackageCheck className="size-3.5" />
+            <PackageCheck className="size-3.5 shrink-0" />
             حالة التسوية — الشريط يوضّح نصيب كل حالة من القيمة
           </p>
           <SettlementBar segs={segs} status={status} onPick={(k) => setStatus(status === k ? null : k)} />
         </div>
 
-        {/* فلاتر سريعة */}
-        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-          <span className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
-            <Filter className="size-3.5" />
-            تضييق
-          </span>
+        {/* فلاتر سريعة — 2×2 على الموبايل */}
+        <div className="space-y-2 border-t pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
+              <Filter className="size-3.5 shrink-0" />
+              تضييق
+            </span>
+            {activeFilters > 0 && (
+              <button
+                type="button"
+                onClick={clearAll}
+                className="inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <X className="size-3.5" />
+                مسح الفلاتر ({activeFilters})
+              </button>
+            )}
+          </div>
 
-          <Facet
-            icon={Truck}
-            label="المورد"
-            title="اختر المورد"
-            subtitle="مرتّبين بالأكتر متبقياً عليك"
-            options={supplierOpts}
-            selected={supplier}
-            onPick={setSupplier}
-            allLabel="كل الموردين"
-            allCount={orders.length}
-            searchable={supplierOpts.length > 5}
-            searchPlaceholder="ابحث باسم المورد…"
-          />
-          <Facet
-            icon={Wallet}
-            label="طريقة الدفع"
-            title="طريقة الدفع"
-            subtitle="الأوامر اللي اتدفع فيها حاجة"
-            options={methodOpts}
-            selected={method}
-            onPick={setMethod}
-            allLabel="كل الطرق"
-            allCount={methodOpts.reduce((s, o) => s + (o.count ?? 0), 0)}
-          />
-          {userOpts.length > 1 && (
+          <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
             <Facet
-              icon={User}
-              label="بواسطة"
-              title="مين سجّل الأمر"
-              subtitle="حسب الموظف"
-              options={userOpts}
-              selected={by}
-              onPick={setBy}
-              allLabel="كل الموظفين"
-              allCount={userOpts.reduce((s, o) => s + (o.count ?? 0), 0)}
+              icon={Truck}
+              label="المورد"
+              title="اختر المورد"
+              subtitle="مرتّبين بالأكتر متبقياً عليك"
+              options={supplierOpts}
+              selected={supplier}
+              onPick={setSupplier}
+              allLabel="كل الموردين"
+              allCount={orders.length}
+              searchable={supplierOpts.length > 5}
+              searchPlaceholder="ابحث باسم المورد…"
             />
-          )}
+            <Facet
+              icon={Wallet}
+              label="طريقة الدفع"
+              title="طريقة الدفع"
+              subtitle="الأوامر اللي اتدفع فيها حاجة"
+              options={methodOpts}
+              selected={method}
+              onPick={setMethod}
+              allLabel="كل الطرق"
+              allCount={methodOpts.reduce((s, o) => s + (o.count ?? 0), 0)}
+            />
+            {userOpts.length > 1 && (
+              <Facet
+                icon={User}
+                label="بواسطة"
+                title="مين سجّل الأمر"
+                subtitle="حسب الموظف"
+                options={userOpts}
+                selected={by}
+                onPick={setBy}
+                allLabel="كل الموظفين"
+                allCount={userOpts.reduce((s, o) => s + (o.count ?? 0), 0)}
+              />
+            )}
 
-          <TogglePill active={onlyReturned} onClick={() => setOnlyReturned((v) => !v)} icon={RotateCcw}>
-            فيها مرتجع
-          </TogglePill>
-          <TogglePill active={onlyLate} onClick={() => setOnlyLate((v) => !v)} icon={Clock} tone="late">
-            متأخرة +{LATE_DAYS} يوم
-          </TogglePill>
-
-          {activeFilters > 0 && (
-            <button
-              type="button"
-              onClick={clearAll}
-              className="ms-auto inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <X className="size-3.5" />
-              مسح الفلاتر ({activeFilters})
-            </button>
-          )}
+            <TogglePill active={onlyReturned} onClick={() => setOnlyReturned((v) => !v)} icon={RotateCcw}>
+              فيها مرتجع
+            </TogglePill>
+            <TogglePill active={onlyLate} onClick={() => setOnlyLate((v) => !v)} icon={Clock} tone="late">
+              متأخرة +{LATE_DAYS} يوم
+            </TogglePill>
+          </div>
         </div>
       </section>
 
@@ -842,28 +831,28 @@ export function PurchaseOrdersView() {
           )}
         </div>
       ) : (
-        <div className="space-y-7">
+        <div className="space-y-6 sm:space-y-7">
           {groups.map((g) => {
             const gNet = g.list.reduce((s, o) => s + C(o).net, 0)
             const gDue = g.list.reduce((s, o) => s + C(o).due, 0)
             return (
               <section key={g.key} aria-label={g.title || 'كل الأوامر'}>
                 {groupBy !== 'none' && (
-                  <header className="mb-3 flex items-center gap-3">
+                  <header className="mb-3 flex items-center gap-2 sm:gap-3">
                     {groupBy === 'supplier' && (
-                      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-cyan-700/10 text-sm font-extrabold text-cyan-800 dark:text-cyan-200">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-cyan-700/10 text-sm font-extrabold text-cyan-800 sm:size-9 dark:text-cyan-200">
                         {g.key === NO_SUPPLIER ? <Truck className="size-4" aria-hidden /> : g.title.trim().charAt(0)}
                       </span>
                     )}
-                    <div className="min-w-0 max-w-[60%] shrink-0">
+                    <div className="min-w-0 flex-1">
                       <h2 className="truncate text-sm font-extrabold">{g.title}</h2>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="truncate text-xs text-muted-foreground">
                         {g.list.length} أمر · صافي <span className="tabular-nums">{formatCurrency(gNet)}</span>
                       </p>
                     </div>
-                    <span aria-hidden className="h-px min-w-6 flex-1 bg-border" />
+                    <span aria-hidden className="hidden h-px min-w-6 flex-1 bg-border sm:block" />
                     {gDue > 0 && (
-                      <span className="shrink-0 rounded-full bg-amber-500/15 px-3 py-1 text-xs font-bold tabular-nums text-amber-800 dark:text-amber-300">
+                      <span className="shrink-0 rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-bold tabular-nums text-amber-800 sm:px-3 sm:text-xs dark:text-amber-300">
                         متبقي {formatCurrency(gDue)}
                       </span>
                     )}
@@ -910,9 +899,9 @@ export function PurchaseOrdersView() {
 function Leader({ label, value, strong, dim }: { label: string; value: string; strong?: boolean; dim?: boolean }) {
   return (
     <li className={cn('flex items-baseline gap-2', strong && 'border-t border-cyan-700/70 pt-2.5 text-base font-extrabold text-cyan-50', dim && 'text-cyan-200/50')}>
-      <span className={cn(!strong && 'text-cyan-100/85')}>{label}</span>
-      <span aria-hidden className="mb-1 flex-1 border-b border-dotted border-cyan-600/60" />
-      <b className="tabular-nums">{value}</b>
+      <span className={cn('shrink-0', !strong && 'text-cyan-100/85')}>{label}</span>
+      <span aria-hidden className="mb-1 min-w-4 flex-1 border-b border-dotted border-cyan-600/60" />
+      <b className="shrink-0 tabular-nums">{value}</b>
     </li>
   )
 }
@@ -944,7 +933,7 @@ function SettlementBar({
 
   return (
     <div>
-      {/* شريط النِّسب: حجم كل جزء = حجم قيمته */}
+      {/* الشريط الرفيع — بيفضل يعرض الـ3 شرائح دايماً (حتى على الجوال) */}
       <div className="mb-2 flex h-2 gap-0.5 overflow-hidden rounded-full bg-muted" aria-hidden>
         {kinds.map((k) =>
           segs[k].n > 0 ? (
@@ -957,7 +946,9 @@ function SettlementBar({
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-2" role="group" aria-label="فلتر حالة التسوية">
+      {/* الكروت — 📱 على الجوال: كرتين بس (مسدّدة + عليها باقي) في 2×2
+                     🖥️ من sm+: الـ3 كروت كاملة في 3×1 زي الأصل */}
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 sm:gap-2" role="group" aria-label="فلتر حالة التسوية">
         {kinds.map((k) => {
           const s = segs[k]
           const on = status === k
@@ -970,22 +961,25 @@ function SettlementBar({
               aria-pressed={on}
               disabled={s.n === 0 && !on}
               className={cn(
-                'rounded-2xl border bg-background p-3 text-start transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 disabled:cursor-not-allowed disabled:opacity-45',
+                'min-w-0 rounded-2xl border bg-background p-2 text-start transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 disabled:cursor-not-allowed disabled:opacity-45 sm:p-3',
+                // 📱 «آجلة بالكامل» بتختفي على الجوال بس — الشريط الرفيع فوق بيفضل يعرضها بلونها
+                k === 'unpaid' && 'hidden sm:block',
                 on ? tone[k].on : 'hover:bg-muted/50'
               )}
             >
-              <span className="flex items-center justify-between gap-2">
-                <span className={cn('flex min-w-0 items-center gap-1.5 text-xs font-bold', on && tone[k].text)}>
-                  <span aria-hidden className={cn('size-2.5 shrink-0 rounded-full', tone[k].dot)} />
+              <span className="flex items-center justify-between gap-1 sm:gap-2">
+                <span className={cn('flex min-w-0 items-center gap-1 text-[10px] font-bold sm:gap-1.5 sm:text-xs', on && tone[k].text)}>
+                  <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full sm:size-2.5', tone[k].dot)} />
                   <span className="truncate">
                     <span className="sm:hidden">{KIND_META[k].short}</span>
                     <span className="hidden sm:inline">{KIND_META[k].label}</span>
                   </span>
                 </span>
-                <span className="rounded-full bg-muted px-1.5 text-[11px] font-extrabold tabular-nums">{s.n}</span>
+                <span className="shrink-0 rounded-full bg-muted px-1 text-[10px] font-extrabold tabular-nums sm:px-1.5 sm:text-[11px]">{s.n}</span>
               </span>
-              <span className="mt-1.5 block truncate text-lg font-extrabold tabular-nums sm:text-xl">{s.n === 0 ? '—' : num(s.amount)}</span>
-              <span className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+              {/* 📱 الرقم أكبر على الجوال لأن الكروت بقت 2×2 */}
+              <span className="mt-1 block truncate text-base font-extrabold tabular-nums sm:mt-1.5 sm:text-lg md:text-xl">{s.n === 0 ? '—' : num(s.amount)}</span>
+              <span className="flex items-center justify-between gap-1 text-[10px] text-muted-foreground sm:text-[11px]">
                 <span className="truncate">{s.n === 0 ? 'مفيش' : KIND_META[k].sub}</span>
                 {s.n > 0 && pct > 0 && <span className="shrink-0 tabular-nums">{pct}٪</span>}
               </span>
@@ -1006,7 +1000,6 @@ interface PickOption {
   noSupplier?: boolean
 }
 
-/** قائمة اختيار بتصميم الصفحة: رأس بترولي + بحث + صفوف فيها معلومة + تنقّل بالأسهم */
 function Picker({
   trigger,
   title,
@@ -1104,7 +1097,6 @@ function PickerBody({
       if (e.key === 'ArrowDown') { e.preventDefault(); move(1) }
       else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1) }
     }}>
-      {/* الرأس */}
       <div className="flex items-center gap-3 bg-cyan-950 px-4 py-3 text-cyan-50">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-cyan-800/70">
           <Icon className="size-4 text-cyan-200" />
@@ -1115,7 +1107,6 @@ function PickerBody({
         </div>
       </div>
 
-      {/* البحث */}
       {searchable && (
         <div className="border-b bg-muted/30 p-2.5">
           <label className="relative flex h-9 items-center rounded-xl border bg-background focus-within:border-cyan-600 focus-within:ring-[3px] focus-within:ring-cyan-600/25">
@@ -1133,8 +1124,7 @@ function PickerBody({
         </div>
       )}
 
-      {/* الصفوف */}
-      <div ref={listRef} role="listbox" className="max-h-72 space-y-0.5 overflow-y-auto p-1.5">
+      <div ref={listRef} role="listbox" className="max-h-[min(72vh,22rem)] space-y-0.5 overflow-y-auto overscroll-contain p-1.5 landscape:max-h-[50vh]">
         {hasAll && !needle && (
           <Row2 on={selected === null} onClick={() => onSelect(null)} lead={<Layers className="size-4" />} label={allLabel!} count={allCount} />
         )}
@@ -1278,7 +1268,7 @@ function Facet({
   return (
     <span
       className={cn(
-        'inline-flex h-8 max-w-[240px] items-center rounded-full border text-xs font-semibold transition-colors',
+        'flex h-8 w-full min-w-0 items-center rounded-full border text-xs font-semibold transition-colors sm:w-auto sm:max-w-[240px]',
         active ? 'border-cyan-600 bg-cyan-600/10 text-cyan-900 dark:text-cyan-100' : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
       )}
     >
@@ -1298,14 +1288,14 @@ function Facet({
             type="button"
             disabled={options.length === 0}
             className={cn(
-              'inline-flex h-full min-w-0 items-center gap-1.5 rounded-full ps-3 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 disabled:opacity-45',
+              'flex h-full min-w-0 flex-1 items-center gap-1.5 overflow-hidden rounded-full ps-3 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 disabled:opacity-45',
               active ? 'pe-1.5' : 'pe-3',
               open && 'text-foreground'
             )}
           >
             <Icon className="size-3.5 shrink-0" />
             <span className="truncate">{current ? `${label}: ${current.label}` : label}</span>
-            <ChevronDown className={cn('size-3.5 shrink-0 opacity-60 transition-transform motion-reduce:transition-none', open && 'rotate-180')} />
+            <ChevronDown className={cn('ms-auto size-3.5 shrink-0 opacity-60 transition-transform motion-reduce:transition-none', open && 'rotate-180')} />
           </button>
         )}
       />
@@ -1314,7 +1304,7 @@ function Facet({
           type="button"
           onClick={() => onPick(null)}
           aria-label={`مسح فلتر ${label}`}
-          className="me-1 ms-0.5 flex size-5 shrink-0 items-center justify-center rounded-full hover:bg-cyan-600/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600/50"
+          className="me-1 flex size-5 shrink-0 items-center justify-center rounded-full hover:bg-cyan-600/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600/50"
         >
           <X className="size-3" />
         </button>
@@ -1342,7 +1332,7 @@ function TogglePill({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40',
+        'flex h-8 w-full min-w-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 sm:w-auto',
         active
           ? tone === 'late'
             ? 'border-rose-500 bg-rose-500/10 text-rose-700 dark:text-rose-300'
@@ -1350,15 +1340,16 @@ function TogglePill({
           : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
       )}
     >
-      <Icon className="size-3.5" />
-      {children}
+      <Icon className="size-3.5 shrink-0" />
+      <span className="truncate">{children}</span>
     </button>
   )
 }
 
 const MANY_ITEMS = 8
 
-/** جدول أصناف الأمر — بيتعامل مع الفواتير الطويلة (جملة 30–50 صنف): بحث، "المرتجع فقط"، تمرير داخلي، وعنوان وإجمالي ثابتين */
+const ITEM_COLS = 'grid grid-cols-[minmax(0,1fr)_auto] gap-3 sm:grid-cols-[minmax(0,1fr)_4rem_5.5rem_6.5rem]'
+
 function ItemsTable({ o, c }: { o: PurchaseOrder; c: Calc }) {
   const [q, setQ] = React.useState('')
   const [onlyRet, setOnlyRet] = React.useState(false)
@@ -1384,7 +1375,7 @@ function ItemsTable({ o, c }: { o: PurchaseOrder; c: Calc }) {
       <div className="overflow-hidden rounded-2xl border bg-card">
         {many && (
           <div className="flex flex-wrap items-center gap-2 border-b bg-card p-2.5">
-            <label className="relative flex h-9 min-w-[10rem] flex-1 items-center rounded-xl border bg-background focus-within:border-cyan-600 focus-within:ring-[3px] focus-within:ring-cyan-600/25">
+            <label className="relative flex h-9 min-w-0 flex-1 items-center rounded-xl border bg-background focus-within:border-cyan-600 focus-within:ring-[3px] focus-within:ring-cyan-600/25 sm:min-w-[10rem]">
               <Search className="pointer-events-none absolute right-3 size-3.5 text-muted-foreground" aria-hidden />
               <input
                 value={q}
@@ -1411,7 +1402,7 @@ function ItemsTable({ o, c }: { o: PurchaseOrder; c: Calc }) {
                 aria-pressed={onlyRet}
                 onClick={() => setOnlyRet((v) => !v)}
                 className={cn(
-                  'inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40',
+                  'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40',
                   onlyRet ? 'border-cyan-600 bg-cyan-600/10 text-cyan-900 dark:text-cyan-100' : 'bg-background text-foreground/75 hover:bg-muted'
                 )}
               >
@@ -1425,8 +1416,8 @@ function ItemsTable({ o, c }: { o: PurchaseOrder; c: Calc }) {
         <div className={cn(many && 'max-h-[18rem] overflow-y-auto overscroll-contain')}>
           <div className={cn(ITEM_COLS, 'sticky top-0 z-10 border-b bg-muted px-4 py-2.5 text-[11px] font-bold text-foreground/70')}>
             <span>الصنف</span>
-            <span className="text-center">الكمية</span>
-            <span className="text-end">التكلفة</span>
+            <span className="hidden text-center sm:block">الكمية</span>
+            <span className="hidden text-end sm:block">التكلفة</span>
             <span className="text-end">القيمة</span>
           </div>
           <ul className="divide-y">
@@ -1437,22 +1428,25 @@ function ItemsTable({ o, c }: { o: PurchaseOrder; c: Calc }) {
                 <li key={it.id} className={cn(ITEM_COLS, 'items-center px-4 py-3')}>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold">{it.name}</p>
+                    <p className="mt-0.5 text-xs font-medium tabular-nums text-foreground/65 sm:hidden">
+                      {formatNumber(it.quantity)} × {formatNumber(it.cost)}
+                    </p>
                     {rq > 0 && (
                       <div className="mt-1.5 flex items-center gap-2">
-                        <span className="flex h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-slate-400" aria-hidden>
+                        <span className="flex h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-slate-400 sm:w-20" aria-hidden>
                           <span className="h-full bg-cyan-600" style={{ width: `${keptPct}%` }} />
                         </span>
-                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-200">
                           رجع {formatNumber(rq)} من {formatNumber(it.quantity)}
                         </span>
                       </div>
                     )}
                   </div>
-                  <div className="text-center tabular-nums">
+                  <div className="hidden text-center tabular-nums sm:block">
                     <p className="text-sm font-bold">{formatNumber(it.quantity)}</p>
                     {rq > 0 && <p className="text-xs font-bold text-slate-600 dark:text-slate-300">−{formatNumber(rq)}</p>}
                   </div>
-                  <p className="text-end text-sm font-medium tabular-nums text-foreground/70">{formatCurrency(it.cost)}</p>
+                  <p className="hidden text-end text-sm font-medium tabular-nums text-foreground/70 sm:block">{formatCurrency(it.cost)}</p>
                   <div className="text-end tabular-nums">
                     <p className="text-sm font-extrabold">{formatCurrency(it.quantity * it.cost)}</p>
                     {rq > 0 && <p className="text-xs font-bold text-slate-600 dark:text-slate-300">−{formatCurrency(rq * it.cost)}</p>}
@@ -1469,16 +1463,16 @@ function ItemsTable({ o, c }: { o: PurchaseOrder; c: Calc }) {
         {c.returnedQty > 0 ? (
           <div className={cn(ITEM_COLS, 'items-center border-t bg-cyan-600/[0.07] px-4 py-3 text-sm font-extrabold tabular-nums')}>
             <span className="text-cyan-900 dark:text-cyan-100">الصافي بعد المرتجع</span>
-            <span className="text-center">{formatNumber(c.qty - c.returnedQty)}</span>
-            <span />
+            <span className="hidden text-center sm:block">{formatNumber(c.qty - c.returnedQty)}</span>
+            <span className="hidden sm:block" />
             <span className="text-end">{formatCurrency(c.net)}</span>
           </div>
         ) : (
           many && (
             <div className={cn(ITEM_COLS, 'items-center border-t bg-cyan-600/[0.07] px-4 py-3 text-sm font-extrabold tabular-nums')}>
               <span className="text-cyan-900 dark:text-cyan-100">إجمالي {o.items.length} صنف</span>
-              <span className="text-center">{formatNumber(c.qty)}</span>
-              <span />
+              <span className="hidden text-center sm:block">{formatNumber(c.qty)}</span>
+              <span className="hidden sm:block" />
               <span className="text-end">{formatCurrency(o.total)}</span>
             </div>
           )
@@ -1488,7 +1482,6 @@ function ItemsTable({ o, c }: { o: PurchaseOrder; c: Calc }) {
   )
 }
 
-/** إيصال استلام لأمر شراء واحد */
 function Slip({
   o,
   c,
@@ -1529,22 +1522,21 @@ function Slip({
           onClick={onToggle}
           aria-expanded={open}
           aria-controls={id}
-          className="grid min-w-0 flex-1 items-center gap-x-8 gap-y-4 p-4 ps-6 text-start focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-cyan-600/40 md:grid-cols-[minmax(0,1fr)_9rem_minmax(0,1.25fr)] md:p-5 md:ps-7"
+          className="grid min-w-0 flex-1 items-center gap-x-8 gap-y-3 p-3.5 ps-5 text-start focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-cyan-600/40 sm:gap-y-4 sm:p-4 sm:ps-6 md:grid-cols-[minmax(0,1fr)_9rem_minmax(0,1.25fr)] md:p-5 md:ps-7"
         >
-          {/* الهوية */}
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-lg bg-cyan-950 px-2 py-0.5 text-xs font-extrabold tracking-wide text-cyan-50 tabular-nums dark:bg-cyan-700">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <span className="rounded-lg bg-cyan-950 px-2 py-0.5 text-[11px] font-extrabold tracking-wide text-cyan-50 tabular-nums sm:text-xs dark:bg-cyan-700">
                 {o.orderNo ?? `#${o.id}`}
               </span>
-              {c.fully && <span className="rounded-md bg-slate-500/15 px-1.5 py-0.5 text-[11px] font-bold text-slate-600 dark:text-slate-300">مرتجعة بالكامل</span>}
+              {c.fully && <span className="rounded-md bg-slate-500/15 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 sm:text-[11px] dark:text-slate-300">مرتجعة بالكامل</span>}
               {!c.fully && c.returnedQty > 0 && (
-                <span className="rounded-md bg-slate-500/15 px-1.5 py-0.5 text-[11px] font-bold text-slate-600 dark:text-slate-300">مرتجعة جزئياً</span>
+                <span className="rounded-md bg-slate-500/15 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 sm:text-[11px] dark:text-slate-300">مرتجعة جزئياً</span>
               )}
-              {c.late && <span className="rounded-md bg-rose-500/15 px-1.5 py-0.5 text-[11px] font-bold text-rose-700 dark:text-rose-300">متأخرة {c.age} يوم</span>}
+              {c.late && <span className="rounded-md bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-bold text-rose-700 sm:text-[11px] dark:text-rose-300">متأخرة {c.age} يوم</span>}
             </div>
             {showSupplier && (
-              <p className="mt-2.5 flex items-center gap-2 text-sm font-bold">
+              <p className="mt-2 flex items-center gap-2 text-sm font-bold sm:mt-2.5">
                 {o.supplier ? (
                   <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-cyan-700/10 text-xs font-extrabold text-cyan-800 dark:text-cyan-200">
                     {o.supplier.name.trim().charAt(0)}
@@ -1557,28 +1549,26 @@ function Slip({
                 <span className="truncate">{o.supplier?.name ?? <span className="font-medium text-muted-foreground">شراء بدون مورد</span>}</span>
               </p>
             )}
-            <p className={cn('flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] font-medium text-foreground/70', showSupplier ? 'mt-1.5' : 'mt-2.5')}>
+            <p className={cn('flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-medium text-foreground/70 sm:text-[13px]', showSupplier ? 'mt-1.5' : 'mt-2')}>
               <span className="tabular-nums">
                 {showDate ? `${new Date(o.createdAt).toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'short' })} · ` : ''}
                 {timeLabel(o.createdAt)}
               </span>
-              <span aria-hidden>·</span>
+              <span aria-hidden className="hidden sm:inline">·</span>
               <span>{o.items.length} صنف</span>
-              <span aria-hidden>·</span>
+              <span aria-hidden className="hidden sm:inline">·</span>
               <span className="tabular-nums">{formatNumber(c.qty)} قطعة</span>
             </p>
           </div>
 
-          {/* قيمة الفاتورة — عمود ثابت علشان الأرقام تتحاذى */}
           <div className="flex items-baseline justify-between gap-3 md:block">
-            <p className="text-xs font-semibold text-foreground/70">قيمة الفاتورة</p>
-            <p className={cn('text-xl font-extrabold leading-tight tabular-nums md:mt-0.5 md:text-2xl', c.fully && 'text-muted-foreground line-through')}>
+            <p className="text-[11px] font-semibold text-foreground/70 sm:text-xs">قيمة الفاتورة</p>
+            <p className={cn('text-lg font-extrabold leading-tight tabular-nums sm:text-xl md:mt-0.5 md:text-2xl', c.fully && 'text-muted-foreground line-through')}>
               {num(o.total)}
               <span className="ms-1 text-xs font-semibold text-muted-foreground">جنيه</span>
             </p>
           </div>
 
-          {/* مقياس التسوية */}
           <div className="min-w-0">
             <div
               className="flex h-2.5 overflow-hidden rounded-full bg-muted"
@@ -1590,7 +1580,7 @@ function Slip({
               <div className="bg-[repeating-linear-gradient(-45deg,#f59e0b_0_4px,#fde68a_4px_8px)]" style={{ width: `${pDue}%` }} />
             </div>
 
-            <dl className="mt-3 flex flex-wrap gap-2">
+            <dl className="mt-3 flex flex-wrap gap-1.5 sm:gap-2">
               {c.paidNet > 0 && <Legend kind="paid" label="مدفوع" value={formatCurrency(c.paidNet)} sub={paidSub || undefined} />}
               {c.returnedValue > 0 && (
                 <Legend kind="ret" label="مرتجع" value={formatCurrency(c.returnedValue)} sub={`${formatNumber(c.returnedQty)} قطعة`} />
@@ -1602,13 +1592,13 @@ function Slip({
           </div>
         </button>
 
-        <div className="flex w-14 shrink-0 flex-col items-center justify-between gap-2 border-s py-3">
+        <div className="flex w-12 shrink-0 flex-col items-center justify-between gap-2 border-s py-3 sm:w-14">
           <button
             type="button"
             onClick={onToggle}
             tabIndex={-1}
             aria-hidden
-            className={cn('flex size-8 items-center justify-center rounded-full bg-muted/70 text-muted-foreground transition-colors hover:bg-muted', open && 'bg-cyan-600/15 text-cyan-800 dark:text-cyan-200')}
+            className={cn('flex size-7 items-center justify-center rounded-full bg-muted/70 text-muted-foreground transition-colors hover:bg-muted sm:size-8', open && 'bg-cyan-600/15 text-cyan-800 dark:text-cyan-200')}
           >
             <ChevronDown className={cn('size-4 transition-transform motion-reduce:transition-none', open && 'rotate-180')} />
           </button>
@@ -1624,14 +1614,13 @@ function Slip({
               <RotateCcw className="size-4" />
             </Button>
           ) : (
-            <span className="size-8" aria-hidden />
+            <span className="size-7 sm:size-8" aria-hidden />
           )}
         </div>
       </div>
 
       {open && (
-        <div id={id} className="grid gap-5 border-t bg-cyan-600/[0.035] p-4 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] md:p-5">
-          {/* الأصناف + المرتجع */}
+        <div id={id} className="grid gap-4 border-t bg-cyan-600/[0.035] p-4 sm:gap-5 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] md:p-5">
           <div className="min-w-0 space-y-4">
             <ItemsTable o={o} c={c} />
 
@@ -1639,15 +1628,15 @@ function Slip({
               <div>
                 <p className="mb-2 text-xs font-bold text-foreground/70">إزاي اتسوّى المرتجع</p>
                 <div className="overflow-hidden rounded-2xl border bg-card">
-                  <div className="flex items-center justify-between gap-3 bg-slate-500/[0.07] px-4 py-3">
-                    <div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-500/[0.07] px-4 py-3">
+                    <div className="min-w-0">
                       <p className="text-[11px] font-semibold text-foreground/60">قيمة المرتجع</p>
-                      <p className="text-xl font-extrabold tabular-nums">
+                      <p className="text-lg font-extrabold tabular-nums sm:text-xl">
                         {num(c.returnedValue)}
                         <span className="ms-1 text-xs font-semibold text-foreground/60">جنيه</span>
                       </p>
                     </div>
-                    <p className="text-xs font-semibold text-foreground/65">
+                    <p className="shrink-0 text-xs font-semibold text-foreground/65">
                       {formatNumber(c.returnedQty)} قطعة من {o.items.filter((i) => (i.returnedQty ?? 0) > 0).length} صنف
                     </p>
                   </div>
@@ -1667,7 +1656,7 @@ function Slip({
                           <p className="text-sm font-bold">رجعلك المورد فلوس</p>
                           <p className="text-xs font-medium text-foreground/65">اتسجّلت في الخزنة</p>
                         </div>
-                        <b className="text-base font-extrabold tabular-nums text-cyan-800 dark:text-cyan-200">{formatCurrency(refundBack)}</b>
+                        <b className="shrink-0 text-base font-extrabold tabular-nums text-cyan-800 dark:text-cyan-200">{formatCurrency(refundBack)}</b>
                       </li>
                     )}
                     {creditBack > 0 && (
@@ -1677,11 +1666,12 @@ function Slip({
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-bold">اتخصمت من اللي عليك للمورد</p>
-                          <p className="text-xs font-medium tabular-nums text-foreground/65">
+                          {/* 📱 شلنا truncate — النص بيلف على سطرين طبيعي بدل ما يتقطع */}
+                          <p className="text-xs font-medium leading-snug tabular-nums text-foreground/65">
                             {c.credit <= 0 ? `المتبقي عليك نزل من ${num(c.due + creditBack)} إلى ${num(c.due)}` : 'قلّل المتبقي عليك للمورد'}
                           </p>
                         </div>
-                        <b className="text-base font-extrabold tabular-nums text-amber-800 dark:text-amber-200">{formatCurrency(creditBack)}</b>
+                        <b className="shrink-0 text-base font-extrabold tabular-nums text-amber-800 dark:text-amber-200">{formatCurrency(creditBack)}</b>
                       </li>
                     )}
                   </ul>
@@ -1690,27 +1680,25 @@ function Slip({
             )}
           </div>
 
-          {/* بيانات الأمر */}
           <div className="min-w-0 space-y-3 md:sticky md:top-3 md:self-start">
             <p className="text-xs font-bold text-foreground/70">بيان الأمر</p>
             <div className="overflow-hidden rounded-2xl border bg-card">
-              {/* المورد */}
               <div className="p-3.5">
                 <div className="flex items-center gap-3">
                   {o.supplier ? (
-                    <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-cyan-950 text-lg font-extrabold text-cyan-50 dark:bg-cyan-700">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-cyan-950 text-base font-extrabold text-cyan-50 sm:size-11 sm:text-lg dark:bg-cyan-700">
                       {o.supplier.name.trim().charAt(0)}
                     </span>
                   ) : (
-                    <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-dashed text-muted-foreground">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-dashed text-muted-foreground sm:size-11">
                       <Truck className="size-5" aria-hidden />
                     </span>
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="text-[11px] font-semibold text-foreground/60">المورد</p>
-                    <p className="truncate text-base font-extrabold leading-tight">{o.supplier?.name ?? 'شراء بدون مورد'}</p>
+                    <p className="truncate text-sm font-extrabold leading-tight sm:text-base">{o.supplier?.name ?? 'شراء بدون مورد'}</p>
                     {o.supplier?.phone && (
-                      <bdi dir="ltr" className="mt-0.5 inline-block text-sm font-semibold tabular-nums tracking-wide text-foreground/75">
+                      <bdi dir="ltr" className="mt-0.5 inline-block text-xs font-semibold tabular-nums tracking-wide text-foreground/75 sm:text-sm">
                         {o.supplier.phone}
                       </bdi>
                     )}
@@ -1738,7 +1726,7 @@ function Slip({
                       }}
                       aria-label="نسخ رقم المورد"
                       title="نسخ الرقم"
-                      className="flex size-10 items-center justify-center rounded-xl border bg-background text-foreground/70 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40"
+                      className="flex size-10 shrink-0 items-center justify-center rounded-xl border bg-background text-foreground/70 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40"
                     >
                       <Copy className="size-4" aria-hidden />
                     </button>
@@ -1746,7 +1734,6 @@ function Slip({
                 )}
               </div>
 
-              {/* معلومات الأمر */}
               <div className="grid grid-cols-2 gap-px border-t bg-border">
                 <Fact label="التاريخ" value={when.d} sub={when.t} />
                 <Fact
@@ -1773,8 +1760,6 @@ function Slip({
   )
 }
 
-const ITEM_COLS = 'grid grid-cols-[minmax(0,1fr)_4rem_5.5rem_6.5rem] gap-3'
-
 const LEGEND_STYLE = {
   paid: { dot: 'bg-cyan-600', chip: 'bg-cyan-600/10 ring-cyan-600/20', value: 'text-cyan-900 dark:text-cyan-100' },
   ret: { dot: 'bg-slate-500', chip: 'bg-slate-500/10 ring-slate-500/20', value: 'text-slate-800 dark:text-slate-100' },
@@ -1796,12 +1781,12 @@ function Legend({
 }) {
   const st = LEGEND_STYLE[kind]
   return (
-    <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl px-3 py-1.5 ring-1 ring-inset', st.chip)}>
+    <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl px-2.5 py-1 ring-1 ring-inset sm:px-3 sm:py-1.5', st.chip)}>
       <span aria-hidden className={cn('size-2.5 shrink-0 rounded-full', st.dot)} />
-      <dt className="text-[13px] font-semibold text-foreground/80">{label}</dt>
+      <dt className="text-[12px] font-semibold text-foreground/80 sm:text-[13px]">{label}</dt>
       <dd className="flex items-baseline gap-1.5">
-        <span className={cn('text-[15px] font-extrabold tabular-nums', st.value)}>{value}</span>
-        {sub && <span className="text-xs font-medium text-foreground/65">· {sub}</span>}
+        <span className={cn('text-sm font-extrabold tabular-nums sm:text-[15px]', st.value)}>{value}</span>
+        {sub && <span className="truncate text-[11px] font-medium text-foreground/65 sm:text-xs">· {sub}</span>}
       </dd>
     </div>
   )
@@ -1809,10 +1794,10 @@ function Legend({
 
 function Fact({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'late' }) {
   return (
-    <div className="min-w-0 bg-card px-3.5 py-3">
-      <p className="text-[11px] font-semibold text-foreground/60">{label}</p>
-      <p className={cn('mt-0.5 truncate text-sm font-extrabold tabular-nums', tone === 'late' && 'text-rose-600 dark:text-rose-300')}>{value}</p>
-      {sub && <p className="mt-0.5 truncate text-xs font-medium tabular-nums text-foreground/65">{sub}</p>}
+    <div className="min-w-0 bg-card px-3 py-2.5 sm:px-3.5 sm:py-3">
+      <p className="text-[10px] font-semibold text-foreground/60 sm:text-[11px]">{label}</p>
+      <p className={cn('mt-0.5 truncate text-xs font-extrabold tabular-nums sm:text-sm', tone === 'late' && 'text-rose-600 dark:text-rose-300')}>{value}</p>
+      {sub && <p className="mt-0.5 truncate text-[11px] font-medium tabular-nums text-foreground/65 sm:text-xs">{sub}</p>}
     </div>
   )
 }

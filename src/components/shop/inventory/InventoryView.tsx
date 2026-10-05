@@ -251,31 +251,33 @@ export function InventoryView() {
     'dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-primary dark:data-[state=active]:text-primary-foreground'
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {/* ═════════ Hero ═════════ */}
       <section className="animate-in-up relative overflow-hidden rounded-3xl border bg-card">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-sky-500/10" />
         <div className="pointer-events-none absolute -top-24 -left-24 size-72 rounded-full bg-emerald-500/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-28 -right-16 size-72 rounded-full bg-sky-500/10 blur-3xl" />
 
-        <div className="relative space-y-6 p-5 sm:p-7">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <span className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                  <Warehouse className="size-4" />
+        <div className="relative space-y-5 p-4 sm:space-y-6 sm:p-7">
+          <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
+            {/* 📱 min-w-0 flex-1 — على الجوال الجزء ده بياخد صف كامل، والأزرار بتنزل تحته */}
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground sm:text-sm">
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 sm:size-8 dark:text-emerald-400">
+                  <Warehouse className="size-3.5 sm:size-4" />
                 </span>
                 قيمة المخزون بسعر التكلفة
               </div>
               <div className="flex flex-wrap items-baseline gap-2">
-                <span className="text-4xl font-extrabold tracking-tight tabular-nums text-foreground sm:text-5xl">
+                {/* 📱 أرقام مقاومة للملايين — أصغر + truncate على الجوال */}
+                <span className="min-w-0 truncate text-3xl font-extrabold tracking-tight tabular-nums text-foreground sm:text-4xl md:text-5xl">
                   {noData ? '—' : num(Math.round(stats.totalValueCost))}
                 </span>
-                <span className="text-lg font-semibold text-muted-foreground">جنيه</span>
+                <span className="text-base font-semibold text-muted-foreground sm:text-lg">جنيه</span>
               </div>
-              <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground sm:text-xs">
                 <span className="flex items-center gap-1.5">
-                  <TrendingUp className="size-3.5" />
+                  <TrendingUp className="size-3.5 shrink-0" />
                   قيمة البيع المتوقعة{' '}
                   <span className="font-semibold tabular-nums text-foreground">
                     {noData ? '—' : num(Math.round(stats.totalValuePrice))}
@@ -290,7 +292,7 @@ export function InventoryView() {
               </p>
             </div>
 
-            {/* صحة المخزون */}
+            {/* صحة المخزون — من md: بس */}
             <div className="hidden min-w-[260px] max-w-sm flex-1 md:block">
               <p className="mb-2 text-[11px] font-semibold text-muted-foreground">صحة المخزون</p>
               <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
@@ -327,22 +329,22 @@ export function InventoryView() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
               {isEmployee && userBranchId && (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary">
                   <MapPin className="size-3.5" />
                   {branches.find((b) => b.id === userBranchId)?.name ?? '—'}
                 </span>
               )}
-              <Button variant="outline" onClick={exportExcel} className="bg-background/60 backdrop-blur">
+              <Button variant="outline" onClick={exportExcel} className="w-full bg-background/60 backdrop-blur sm:w-auto">
                 <FileSpreadsheet className="size-4" />
                 تصدير Excel
               </Button>
             </div>
           </div>
 
-          {/* إحصائيات سريعة */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {/* إحصائيات سريعة — 📱 موبايل: كل كارت بعرض كامل، من sm+: 2×2، من lg: 4×1 */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatTile
               icon={Package}
               label="إجمالي الأصناف"

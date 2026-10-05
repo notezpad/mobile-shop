@@ -658,31 +658,70 @@ export function ProductsView() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={() => setCatDialogOpen(true)}>
+        {/* 📱 موبايل: الأزرار الثانوية 2×2 + "منتج جديد" بارز بعرض كامل.
+            من sm+ وفوق: كل الأزرار صف أفقي زي الأصل. */}
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap sm:items-center">
+          <Button
+            variant="outline"
+            className="h-10 flex-1 basis-[calc(50%-4px)] sm:h-10 sm:flex-initial sm:basis-auto"
+            onClick={() => setCatDialogOpen(true)}
+          >
             <FolderOpen className="size-4" />
             التصنيفات
           </Button>
-          <Button variant="outline" onClick={exportExcel} disabled={products.length === 0}>
+          <Button
+            variant="outline"
+            className="h-10 flex-1 basis-[calc(50%-4px)] sm:h-10 sm:flex-initial sm:basis-auto"
+            onClick={exportExcel}
+            disabled={products.length === 0}
+          >
             <FileSpreadsheet className="size-4" />
             تصدير Excel
           </Button>
           {capabilities.includes('collections') && (
-            <Button variant="outline" onClick={() => setCollectionDlg(true)}>
+            <Button
+              variant="outline"
+              className="h-10 flex-1 basis-[calc(50%-4px)] sm:h-10 sm:flex-initial sm:basis-auto"
+              onClick={() => setCollectionDlg(true)}
+            >
               <Percent className="size-4" />
               خصم كوليكشن
             </Button>
           )}
-          <Button onClick={openAdd}>
-            <Plus className="size-4" />
-            منتج جديد
+
+          {/* ➕ منتج جديد — الزر الأساسي: بارز، مميّز، يملئ الفراغ على الموبايل */}
+          <Button
+            onClick={openAdd}
+            className={cn(
+              'group/add relative h-12 gap-2 overflow-hidden rounded-xl',
+              // 📱 موبايل: صف كامل بعرض كامل + تصميم بارز
+              'basis-full shadow-lg shadow-primary/25',
+              // 🖥️ sm+: يرجع لحجمه الطبيعي زي باقي الأزرار
+              'sm:h-10 sm:basis-auto sm:gap-1.5 sm:rounded-lg sm:shadow-sm sm:hover:bg-primary/90'
+            )}
+          >
+            {/* لمعة خفيفة تمرّ على الزر */
+            }
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-primary-foreground/15 to-transparent transition-transform duration-700 group-hover/add:translate-x-full"
+            />
+            <span className="relative flex size-7 items-center justify-center rounded-lg bg-primary-foreground/20 sm:size-5">
+              <Plus className="size-4 sm:size-3.5" strokeWidth={3} />
+            </span>
+            <span className="relative text-base font-extrabold sm:text-sm sm:font-bold">
+              منتج جديد
+            </span>
           </Button>
         </div>
       </header>
 
       {/* ═══ شريط التحكم ═══ */}
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-foreground/15 bg-card p-2 shadow-xs">
-        <div ref={searchWrapRef} className="relative min-w-[220px] flex-1">
+      {/* 📱 موبايل: شبكة 2×2 — من sm+ وفوق: صف أفقي زي الأصل.
+          ترتيب العرض: بحث → (تصنيف + ترتيب) → حالة → (منخفض + تحديد الكل) */}
+      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-foreground/15 bg-card p-2 shadow-xs sm:flex sm:flex-wrap sm:items-center">
+        {/* ① البحث — عرض كامل على الموبايل */}
+        <div ref={searchWrapRef} className="relative col-span-2 min-w-0 sm:min-w-[220px] sm:flex-1">
           <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
@@ -706,8 +745,9 @@ export function ProductsView() {
           )}
         </div>
 
+        {/* ② التصنيف — نصف عرض على الموبايل */}
         <Select value={category} onValueChange={setCategory}>
-          <SelectTrigger className="h-10 w-[170px] rounded-xl border-0 bg-muted/60 shadow-none">
+          <SelectTrigger className="h-10 w-full min-w-0 rounded-xl border-0 bg-muted/60 shadow-none sm:w-[170px]">
             <SelectValue placeholder="كل التصنيفات" />
           </SelectTrigger>
           <SelectContent>
@@ -720,47 +760,9 @@ export function ProductsView() {
           </SelectContent>
         </Select>
 
-        {/* الحالة — مفتاح مقسّم */}
-        <div role="group" aria-label="الحالة" className="flex rounded-xl bg-muted/60 p-1">
-          {(
-            [
-              ['all', 'الكل'],
-              ['active', 'مفعّل'],
-              ['inactive', 'معطّل'],
-            ] as const
-          ).map(([v, label]) => (
-            <button
-              key={v}
-              type="button"
-              aria-pressed={status === v}
-              onClick={() => setStatus(v)}
-              className={cn(
-                'h-8 rounded-lg px-3 text-xs font-bold transition-colors',
-                status === v
-                  ? 'bg-foreground text-background shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <button
-          type="button"
-          aria-pressed={lowOnly}
-          onClick={() => setLowOnly((v) => !v)}
-          className={cn(
-            'inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors',
-            lowOnly ? 'bg-foreground text-background shadow-sm' : 'bg-muted/60 text-muted-foreground hover:text-foreground'
-          )}
-        >
-          <AlertTriangle className="size-3.5" />
-          منخفض فقط
-        </button>
-
+        {/* ③ الترتيب — نصف عرض على الموبايل */}
         <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger className="h-10 w-[160px] rounded-xl border-0 bg-muted/60 shadow-none" aria-label="ترتيب">
+          <SelectTrigger className="h-10 w-full min-w-0 rounded-xl border-0 bg-muted/60 shadow-none sm:w-[160px]" aria-label="ترتيب">
             <ArrowUpDown className="size-3.5 text-muted-foreground" />
             <SelectValue placeholder="الترتيب" />
           </SelectTrigger>
@@ -775,11 +777,53 @@ export function ProductsView() {
           </SelectContent>
         </Select>
 
-        {/* تحديد الكل + طريقة العرض */}
-        <label className="flex h-10 cursor-pointer items-center gap-2 rounded-xl px-2 text-xs font-bold text-muted-foreground hover:bg-muted/60">
+        {/* ④ الحالة — عرض كامل على الموبايل (3 أزرار موزّعة) */}
+        <div role="group" aria-label="الحالة" className="col-span-2 flex rounded-xl bg-muted/60 p-1 sm:w-auto">
+          {(
+            [
+              ['all', 'الكل'],
+              ['active', 'مفعّل'],
+              ['inactive', 'معطّل'],
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={status === v}
+              onClick={() => setStatus(v)}
+              className={cn(
+                'h-8 flex-1 rounded-lg px-3 text-xs font-bold transition-colors sm:flex-initial',
+                status === v
+                  ? 'bg-foreground text-background shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* ⑤ منخفض فقط — نصف عرض على الموبايل */}
+        <button
+          type="button"
+          aria-pressed={lowOnly}
+          onClick={() => setLowOnly((v) => !v)}
+          className={cn(
+            'inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-colors sm:w-auto sm:justify-start',
+            lowOnly ? 'bg-foreground text-background shadow-sm' : 'bg-muted/60 text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <AlertTriangle className="size-3.5" />
+          منخفض فقط
+        </button>
+
+        {/* ⑥ تحديد الكل — نصف عرض على الموبايل */}
+        <label className="flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-2 text-xs font-bold text-muted-foreground hover:bg-muted/60 sm:w-auto sm:justify-start">
           <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} disabled={products.length === 0} />
-          <span className="hidden md:inline">تحديد الكل</span>
+          <span>تحديد الكل</span>
         </label>
+
+        {/* ⑦ طريقة العرض — زي ما هي (xl فأكثر بس) */}
         <div role="group" aria-label="طريقة العرض" className="hidden rounded-xl bg-muted/60 p-1 xl:flex">
           <button
             type="button"

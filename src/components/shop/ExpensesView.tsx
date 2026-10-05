@@ -69,7 +69,6 @@ import { ExpenseHero, ROSE_BTN } from './expense-dialog-ui'
 
 /* ───────────────────────── الأنواع والثوابت ───────────────────────── */
 
-// ⚠️ لازم تفضل مطابقة لقايمة الأنواع في /api/expenses (السيرفر بيرفض أي نوع برّاها)
 const CATEGORIES = [
   'إيجار',
   'كهرباء ومياه',
@@ -97,10 +96,22 @@ const CATEGORY_META: Record<string, { icon: LucideIcon; color: string }> = {
 const metaOf = (cat: string) =>
   CATEGORY_META[cat] ?? { icon: Receipt, color: '#64748b' }
 
-// نوع الهالك بيتسجل آلياً من حركة المخزون فقط — مش بيتظهر في نموذج الإضافة/التعديل
 const FORM_CATEGORIES = CATEGORIES.filter((c) => c !== 'هالك وتالف')
 
 const QUICK_AMOUNTS = [50, 100, 200, 500, 1000]
+
+// ترتيب شرائح الفلتر — بنوزّع الطويلة على الصفوف عشان الصف الأخير ميبقاش فيه شريحة لوحدها
+const FILTER_CHIP_ORDER: readonly string[] = [
+  'إيجار',
+  'ضيافة',
+  'أخرى',
+  'مرتبات',
+  'نقل ومواصلات',
+  'إنترنت واتصالات',
+  'صيانة المحل',
+  'هالك وتالف',
+  'كهرباء ومياه',
+]
 
 interface ExpenseRow {
   id: number
@@ -141,7 +152,6 @@ interface RecurringItem {
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
-/** "YYYY-MM-DD" بتوقيت المحل (مش بتوقيت الجهاز) — نفس منطق السيرفر في tenantTime.ts */
 function tzDateStr(d: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -153,13 +163,11 @@ function tzDateStr(d: Date, timeZone: string): string {
   return `${get('year')}-${get('month')}-${get('day')}`
 }
 
-/** إضافة/طرح أيام على تاريخ نصي YYYY-MM-DD من غير أي تأثر بتوقيت الجهاز */
 function addDays(dateStr: string, n: number): string {
   const [y, m, d] = dateStr.split('-').map(Number)
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10)
 }
 
-/** YYYY-MM-DD (نص) ← Date محلي للعرض في منتقي التاريخ */
 function parseDateStr(str: string): Date {
   const [y, m, d] = str.split('-').map(Number)
   return new Date(y, m - 1, d)
@@ -188,7 +196,6 @@ const timeLabel = (iso: string, tz: string) =>
 const num = (n: number) =>
   n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 
-/** أيقونة التصنيف داخل مربع ملوّن (اللون بيتحدد من ألوان التصنيف الثابتة) */
 function CategoryIcon({
   category,
   size = 'md',
@@ -216,17 +223,14 @@ export function ExpensesView() {
   const [loading, setLoading] = React.useState(true)
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
-  // توقيت المحل (مش توقيت الجهاز) — نفس اللي بيستخدمه السيرفر في الفلاتر
   const tz = useShopStore((s) => s.branding.timezone) || 'Africa/Cairo'
 
-  // نموذج الإضافة
   const [addOpen, setAddOpen] = React.useState(false)
   const [category, setCategory] = React.useState<string>(CATEGORIES[0])
   const [amount, setAmount] = React.useState('')
   const [note, setNote] = React.useState('')
   const [saving, setSaving] = React.useState(false)
 
-  // الفلاتر
   const [from, setFrom] = React.useState('')
   const [to, setTo] = React.useState('')
   const [filterCategory, setFilterCategory] = React.useState('all')
@@ -235,16 +239,13 @@ export function ExpensesView() {
   const [deleteId, setDeleteId] = React.useState<number | null>(null)
   const [deleting, setDeleting] = React.useState(false)
 
-  // تعديل مصروف (نفس نافذة الإضافة)
   const [editing, setEditing] = React.useState<ExpenseRow | null>(null)
 
-  // الميزانية الشهرية
   const [budgets, setBudgets] = React.useState<BudgetRow[]>([])
   const [budgetOpen, setBudgetOpen] = React.useState(false)
   const [budgetDraft, setBudgetDraft] = React.useState<Record<string, string>>({})
   const [budgetSaving, setBudgetSaving] = React.useState(false)
 
-  // المصروفات المتكررة
   const [recurring, setRecurring] = React.useState<RecurringItem[]>([])
   const [recOpen, setRecOpen] = React.useState(false)
   const [recCategory, setRecCategory] = React.useState<string>(FORM_CATEGORIES[0])
@@ -275,8 +276,6 @@ export function ExpensesView() {
     load()
   }, [load])
 
-  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
-  // الميزانيات والقوالب المتكررة: فشل تحميلها ما يعطّلش الصفحة (مثلاً قبل تنفيذ الـ migration)
   const loadBudgets = React.useCallback(async () => {
     try {
       const r = await api<{ budgets: BudgetRow[] }>('/api/expenses/budgets')
@@ -328,7 +327,6 @@ export function ExpensesView() {
     setAddOpen(true)
   }
 
-  /** تطبيق التعديل محلياً على القايمة والإجماليات (بدون انتظار السيرفر) */
   const applyLocalEdit = (id: number, cat: string, amt: number, nt: string | null) => {
     setData((prev) => {
       if (!prev) return prev
@@ -385,7 +383,6 @@ export function ExpensesView() {
       return
     }
     setSaving(true)
-    // ⚡ Optimistic: add to local list immediately
     const tempId = Date.now()
     const newExpense: ExpenseRow = {
       id: tempId,
@@ -425,7 +422,6 @@ export function ExpensesView() {
         resetForm()
         setAddOpen(false)
       } else {
-        // Revert on real error
         setData((prev) =>
           prev
             ? {
@@ -445,8 +441,6 @@ export function ExpensesView() {
       setSaving(false)
     }
   }
-
-  /* ───── الميزانية الشهرية ───── */
 
   const openBudgets = () => {
     const draft: Record<string, string> = {}
@@ -471,8 +465,6 @@ export function ExpensesView() {
       setBudgetSaving(false)
     }
   }
-
-  /* ───── المصروفات المتكررة ───── */
 
   const openRecurring = () => {
     setRecCategory(FORM_CATEGORIES[0])
@@ -539,7 +531,6 @@ export function ExpensesView() {
   const confirmDelete = async () => {
     if (!deleteId) return
     setDeleting(true)
-    // ⚡ Optimistic: remove from list immediately
     const deleted = data?.expenses?.find((e) => e.id === deleteId)
     setData((prev) =>
       prev
@@ -570,7 +561,6 @@ export function ExpensesView() {
         toast.success('تم حذف المصروف (offline — سيتم المزامنة لاحقاً)')
         setDeleteId(null)
       } else {
-        // Revert: أعد تحميل القايمة من السيرفر
         if (deleted) load()
         toast.error(e?.message || 'فشل الحذف')
         setDeleteId(null)
@@ -579,8 +569,6 @@ export function ExpensesView() {
       setDeleting(false)
     }
   }
-
-  /* ───── بيانات مشتقة ───── */
 
   const expenses = data?.expenses ?? []
   const total = data?.total ?? 0
@@ -686,7 +674,6 @@ export function ExpensesView() {
     })
   }
 
-  /* ───── إحصائيات الهيرو ───── */
   const todayKey = tzDateStr(new Date(), tz)
   const stats = (() => {
     const perDay = new Map<string, number>()
@@ -736,53 +723,54 @@ export function ExpensesView() {
     color: metaOf(cat).color,
   }))
 
-  /* ───────────────────────── الواجهة ───────────────────────── */
-
   return (
-    <div className="space-y-5">
-      {/* ═════════ Hero — يتبع الثيم (فاتح/داكن) بلون واحد: وردي = خروج فلوس ═════════ */}
+    <div className="space-y-4 sm:space-y-5">
+      {/* ═════════ Hero ═════════ */}
       <section className="animate-in-up overflow-hidden rounded-3xl border bg-card text-card-foreground shadow-sm">
-        {/* اللمعة الوردية محصورة في الجزء العلوي وبتخفت قبل الشريط السفلي — من غير فرق لون */}
         <div
-          className="flex flex-wrap items-stretch justify-between gap-6 p-5 sm:p-7"
+          className="flex flex-col gap-4 p-4 sm:flex-row sm:flex-wrap sm:items-stretch sm:justify-between sm:gap-6 sm:p-7"
           style={{ background: 'radial-gradient(560px 200px at 100% 0%, rgba(244,63,94,0.10), transparent)' }}
         >
-          <div className="self-start">
-            <p className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <span className="size-2 rounded-full bg-rose-400" />
+          <div className="w-full min-w-0 self-start sm:w-auto">
+            <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground sm:text-sm">
+              <span className="size-2 shrink-0 rounded-full bg-rose-400" />
               إجمالي المصروفات
             </p>
-            <div className="mt-2 flex flex-wrap items-baseline gap-2">
-              <span className="text-5xl font-extrabold tracking-tight tabular-nums text-foreground sm:text-6xl">
+            <div className="mt-2 flex min-w-0 flex-wrap items-baseline gap-2">
+              <span
+                dir="ltr"
+                title={noData ? undefined : num(total)}
+                className="min-w-0 break-all text-right text-3xl font-extrabold tracking-tight tabular-nums text-foreground sm:text-5xl md:text-6xl"
+              >
                 {noData ? '—' : num(total)}
               </span>
-              <span className="text-lg font-semibold text-muted-foreground">جنيه</span>
+              <span className="shrink-0 text-sm font-semibold text-muted-foreground sm:text-base">جنيه</span>
             </div>
             <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CalendarDays className="size-3.5" />
-              {periodText}
+              <CalendarDays className="size-3.5 shrink-0" />
+              <span className="truncate">{periodText}</span>
             </p>
           </div>
 
           <WeekBars days={stats.week} />
 
-          <div className="flex flex-wrap items-center gap-2 self-start">
+          <div className="grid w-full grid-cols-2 gap-2 self-start sm:flex sm:w-auto sm:flex-wrap sm:items-center">
             <Button
               variant="outline"
               onClick={exportExcel}
               disabled={!data || data.expenses.length === 0}
+              className="w-full sm:w-auto"
             >
-              <FileSpreadsheet className="size-4" />
-              تصدير Excel
+              <FileSpreadsheet className="size-4 shrink-0" />
+              <span className="truncate">تصدير Excel</span>
             </Button>
-            <Button variant="gradient" size="lg" onClick={openAdd}>
-              <Plus className="size-4" />
-              مصروف جديد
+            <Button variant="gradient" size="lg" onClick={openAdd} className="w-full sm:w-auto">
+              <Plus className="size-4 shrink-0" />
+              <span className="truncate">مصروف جديد</span>
             </Button>
           </div>
         </div>
 
-        {/* شريط الأرقام — خطوط رفيعة بدل كروت ملوّنة */}
         <div className="grid grid-cols-2 border-t border-border lg:grid-cols-4">
           <HeroStat
             className="border-b border-e lg:border-b-0"
@@ -820,7 +808,7 @@ export function ExpensesView() {
             value={noData ? '—' : num(Math.round(average * 100) / 100)}
             unit="جنيه"
             foot={
-              <span>
+              <span className="line-clamp-2">
                 أكبر عملية: <span className="font-semibold tabular-nums text-foreground/80">{num(stats.maxExpense)}</span>
               </span>
             }
@@ -833,8 +821,10 @@ export function ExpensesView() {
               topCategory ? (
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between tabular-nums">
-                    <span className="font-semibold text-foreground/80">{formatCurrency(topCategory[1])}</span>
-                    <span>{topShare.toFixed(topShare >= 10 ? 0 : 1)}%</span>
+                    <span className="truncate font-semibold text-foreground/80" title={formatCurrency(topCategory[1])}>
+                      {formatCurrency(topCategory[1])}
+                    </span>
+                    <span className="shrink-0">{topShare.toFixed(topShare >= 10 ? 0 : 1)}%</span>
                   </div>
                   <div className="h-1 overflow-hidden rounded-full bg-muted">
                     <div
@@ -849,10 +839,9 @@ export function ExpensesView() {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-3">
         {/* ═════════ القايمة (يمين) ═════════ */}
         <div className="space-y-4 lg:col-span-2">
-          {/* تنبيه تجاوز الميزانية */}
           {overBudgets.length > 0 && (
             <div className="animate-in-up flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive-subtle p-3.5 text-destructive-subtle-foreground">
               <AlertTriangle className="mt-0.5 size-5 shrink-0" />
@@ -860,14 +849,13 @@ export function ExpensesView() {
                 <p className="text-sm font-bold">
                   تجاوزت الحد الشهري في {overBudgets.length} {overBudgets.length > 2 ? 'بنود' : 'بند'}
                 </p>
-                <p className="mt-0.5 text-xs opacity-90">
+                <p className="mt-0.5 line-clamp-2 text-xs opacity-90">
                   {overBudgets.map((b) => `${b.category} (+${num(b.spent - b.monthlyLimit)} جنيه)`).join(' • ')}
                 </p>
               </div>
             </div>
           )}
 
-          {/* مصروفات متكررة مستحقة */}
           {dueItems.length > 0 && (
             <div className="animate-in-up overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent">
               <div className="flex items-center gap-2 border-b border-amber-500/20 px-4 py-2.5">
@@ -878,13 +866,15 @@ export function ExpensesView() {
               </div>
               <div className="divide-y divide-amber-500/15">
                 {dueItems.map((r) => (
-                  <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <div key={r.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5 sm:px-4">
                     <CategoryIcon category={r.category} size="sm" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold leading-tight">{r.category}</p>
+                      <p className="truncate text-sm font-semibold leading-tight">{r.category}</p>
                       {r.note && <p className="truncate text-xs text-muted-foreground">{r.note}</p>}
                     </div>
-                    <span className="text-sm font-bold tabular-nums">{num(r.amount)} جنيه</span>
+                    <span className="shrink-0 text-sm font-bold tabular-nums" title={num(r.amount)}>
+                      {num(r.amount)} جنيه
+                    </span>
                     <Button size="sm" onClick={() => postRecurring(r.id)} disabled={postingId === r.id}>
                       {postingId === r.id ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
                       سجّل الآن
@@ -897,52 +887,52 @@ export function ExpensesView() {
 
           {/* الفلاتر */}
           <Card className="animate-in-up stagger-1 gap-4 py-4">
-            <CardContent className="space-y-3 px-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative min-w-[180px] flex-1">
-                  <Search className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="ابحث في الملاحظات أو النوع أو الموظف…"
-                    className="pr-9"
-                  />
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {(
-                    [
-                      ['all', 'الكل'],
-                      ['today', 'اليوم'],
-                      ['week', '٧ أيام'],
-                      ['month', 'هذا الشهر'],
-                    ] as [Period, string][]
-                  ).map(([p, label]) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => applyPeriod(p)}
-                      className={cn(
-                        'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
-                        activePeriod === p
-                          ? 'border-primary bg-primary text-primary-foreground shadow-sm'
-                          : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+            <CardContent className="space-y-3 px-3.5 sm:px-4">
+              {/* 📱 بحث مصغّر على الموبايل */}
+              <div className="relative w-full sm:min-w-[210px]">
+                <Search className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground sm:size-4" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="ابحث فى المصروفات او النوع او الموظف"
+                  className="h-9 pr-8 text-xs placeholder:text-xs sm:h-10 sm:pr-9 sm:text-sm sm:placeholder:text-sm"
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  [
+                    ['all', 'الكل'],
+                    ['today', 'اليوم'],
+                    ['week', '٧ أيام'],
+                    ['month', 'هذا الشهر'],
+                  ] as [Period, string][]
+                ).map(([p, label]) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => applyPeriod(p)}
+                    className={cn(
+                      'shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                      activePeriod === p
+                        ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                        : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center gap-2">
-                  <Label htmlFor="exp-from" className="text-xs text-muted-foreground">
+                  <Label htmlFor="exp-from" className="shrink-0 text-xs text-muted-foreground">
                     من
                   </Label>
                   <DatePickerField id="exp-from" value={from} onChange={setFrom} placeholder="من بداية السجل" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <Label htmlFor="exp-to" className="text-xs text-muted-foreground">
+                  <Label htmlFor="exp-to" className="shrink-0 text-xs text-muted-foreground">
                     إلى
                   </Label>
                   <DatePickerField id="exp-to" value={to} onChange={setTo} placeholder="حتى اليوم" />
@@ -955,14 +945,13 @@ export function ExpensesView() {
                 )}
               </div>
 
-              {/* شرائح الأنواع */}
               <div className="flex flex-wrap gap-1.5">
                 <CategoryChip
                   active={filterCategory === 'all'}
                   onClick={() => setFilterCategory('all')}
                   label="كل الأنواع"
                 />
-                {CATEGORIES.map((c) => (
+                {FILTER_CHIP_ORDER.map((c) => (
                   <CategoryChip
                     key={c}
                     active={filterCategory === c}
@@ -1013,26 +1002,29 @@ export function ExpensesView() {
               </CardContent>
             </Card>
           ) : (
-            <div className={cn('space-y-5', loading && 'opacity-60 transition-opacity')}>
+            <div className={cn('space-y-4 sm:space-y-5', loading && 'opacity-60 transition-opacity')}>
               {groups.map((g) => {
                 const label = dayLabel(g.key, tz)
                 const relative = label === 'اليوم' || label === 'أمس'
                 return (
                   <Card key={g.key} className="animate-in-up gap-0 overflow-hidden py-0">
-                    {/* رأس اليوم: العنوان + إجمالي + شريط تركيبة اليوم بألوان الأنواع */}
-                    <div className="space-y-3.5 border-b bg-muted/30 px-4 py-4">
-                      <div className="flex items-end justify-between gap-3">
-                        <div>
-                          <h3 className="text-lg font-extrabold leading-tight text-foreground">{label}</h3>
-                          <p className="mt-0.5 text-xs text-muted-foreground">
+                    <div className="space-y-3.5 border-b bg-muted/30 px-3.5 py-3.5 sm:px-4 sm:py-4">
+                      <div className="flex items-end justify-between gap-2">
+                        <div className="min-w-0">
+                          <h3 className="truncate text-base font-extrabold leading-tight text-foreground sm:text-lg">{label}</h3>
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
                             {relative ? `${formatArabicDate(parseDateStr(g.key))} · ` : ''}
                             {g.items.length} {g.items.length > 2 && g.items.length < 11 ? 'عمليات' : 'عملية'}
                           </p>
                         </div>
-                        <div className="text-end">
+                        <div className="min-w-0 shrink-0 text-end">
                           <p className="text-[11px] text-muted-foreground">إجمالي اليوم</p>
-                          <p className="text-2xl font-extrabold leading-tight tabular-nums text-foreground">
-                            <span className="me-0.5 text-rose-500">−</span>
+                          <p
+                            dir="ltr"
+                            title={num(g.sum)}
+                            className="max-w-[55vw] break-all text-right text-lg font-extrabold leading-tight tabular-nums text-foreground sm:text-2xl"
+                          >
+                            <span className="text-rose-500">−</span>
                             {num(g.sum)}
                             <span className="ms-1 text-xs font-medium text-muted-foreground">جنيه</span>
                           </p>
@@ -1057,122 +1049,230 @@ export function ExpensesView() {
                         <div className="flex flex-wrap gap-x-4 gap-y-1">
                           {g.cats.map(([cat, v]) => (
                             <span key={cat} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                              <span className="size-2 rounded-full" style={{ backgroundColor: metaOf(cat).color }} />
-                              {cat}
-                              <span className="font-semibold tabular-nums text-foreground">{num(v)}</span>
+                              <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: metaOf(cat).color }} />
+                              <span className="truncate">{cat}</span>
+                              <span className="shrink-0 font-semibold tabular-nums text-foreground">{num(v)}</span>
                             </span>
                           ))}
                         </div>
                       </div>
                     </div>
 
-                    <div className="divide-y">
+                    <ul className="divide-y">
                       {g.items.map((e) => {
                         const locked = e.locked ?? e.source === 'damage'
                         const { icon: Icon, color } = metaOf(e.category)
                         const dayShare = g.sum > 0 ? (e.amount / g.sum) * 100 : 0
                         const isBiggest = g.items.length >= 3 && e.amount === g.biggest
                         return (
-                          <div
-                            key={e.id}
-                            className="group flex items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/40"
-                          >
-                            {/* أيقونة النوع داخل حلقة = حصة العملية من إجمالي اليوم */}
-                            <ShareRing pct={dayShare} color={color}>
-                              <Icon className="size-[18px]" />
-                            </ShareRing>
+                          <li key={e.id} className="group">
+                            {/* 📱 موبايل: كارت عمودي */}
+                            <div className="flex flex-col gap-2.5 px-3.5 py-3 transition-colors hover:bg-muted/40 sm:hidden">
+                              <div className="flex items-start gap-3">
+                                <ShareRing pct={dayShare} color={color}>
+                                  <Icon className="size-[18px]" />
+                                </ShareRing>
 
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                <p className="text-[15px] font-bold leading-tight">{e.category}</p>
-                                {isBiggest && (
-                                  <span className="rounded-md bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600 dark:text-rose-400">
-                                    الأكبر
-                                  </span>
-                                )}
-                                {locked && (
-                                  <Badge variant="warning" size="sm">
-                                    <Lock />
-                                    تلقائي
-                                  </Badge>
-                                )}
-                              </div>
+                                <div className="min-w-0 flex-1 pt-0.5">
+                                  <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                                    <p className="truncate text-[15px] font-bold leading-tight">{e.category}</p>
+                                    {isBiggest && (
+                                      <span className="shrink-0 rounded-md bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600 dark:text-rose-400">
+                                        الأكبر
+                                      </span>
+                                    )}
+                                    {locked && (
+                                      <Badge variant="warning" size="sm">
+                                        <Lock />
+                                        تلقائي
+                                      </Badge>
+                                    )}
+                                  </div>
 
-                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                                  <Clock className="size-3" />
-                                  <span dir="ltr" className="tabular-nums">
-                                    {timeLabel(e.createdAt, tz)}
-                                  </span>
-                                </span>
-                                {e.userName && (
-                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                                    <span className="flex size-4 items-center justify-center rounded-full bg-background text-[9px] font-bold text-foreground">
-                                      {e.userName.trim().charAt(0)}
+                                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                                    <span className="inline-flex items-center gap-1">
+                                      <Clock className="size-3 shrink-0" />
+                                      <span dir="ltr" className="tabular-nums">
+                                        {timeLabel(e.createdAt, tz)}
+                                      </span>
                                     </span>
-                                    {e.userName}
+                                    {e.userName && (
+                                      <>
+                                        <span aria-hidden>·</span>
+                                        <span className="inline-flex min-w-0 items-center gap-1">
+                                          <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] font-bold">
+                                            {e.userName.trim().charAt(0)}
+                                          </span>
+                                          <span className="truncate">{e.userName}</span>
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {locked ? (
+                                  <span
+                                    title="مصروف هالك مرتبط بحركة مخزون — لا يُعدَّل ولا يُحذف من هنا"
+                                    className="flex size-8 shrink-0 items-center justify-center text-muted-foreground/60"
+                                  >
+                                    <Lock className="size-4" />
                                   </span>
+                                ) : (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="size-8 shrink-0 text-muted-foreground"
+                                        aria-label="خيارات"
+                                      >
+                                        <MoreVertical className="size-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start">
+                                      <DropdownMenuItem onClick={() => openEdit(e)}>
+                                        <Pencil className="size-4" />
+                                        تعديل
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => setDeleteId(e.id)}
+                                        className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                                      >
+                                        <Trash2 className="size-4" />
+                                        حذف
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 )}
                               </div>
 
                               {e.note && (
                                 <p
-                                  className="mt-2 line-clamp-2 border-s-2 ps-2.5 text-sm text-muted-foreground"
+                                  className="line-clamp-2 border-s-2 ps-2.5 text-xs text-muted-foreground"
                                   style={{ borderColor: `${color}66` }}
                                 >
                                   {e.note}
                                 </p>
                               )}
+
+                              <div className="flex items-end justify-between gap-2 border-t border-border/40 pt-2.5">
+                                <span className="text-[11px] tabular-nums text-muted-foreground">
+                                  {dayShare.toFixed(dayShare >= 10 ? 0 : 1)}% من إجمالي اليوم
+                                </span>
+                                <span
+                                  dir="ltr"
+                                  title={num(e.amount)}
+                                  className="min-w-0 break-all text-right text-lg font-extrabold tabular-nums text-foreground"
+                                >
+                                  <span className="text-rose-500">−</span>
+                                  {num(e.amount)}
+                                  <span className="ms-1 text-[10px] font-medium text-muted-foreground">جنيه</span>
+                                </span>
+                              </div>
                             </div>
 
-                            <div className="w-28 shrink-0 text-end">
-                              <p className="text-xl font-extrabold leading-tight tabular-nums text-foreground">
-                                <span className="me-0.5 text-rose-500">−</span>
-                                {num(e.amount)}
-                              </p>
-                              <p className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">
-                                جنيه · {dayShare.toFixed(dayShare >= 10 ? 0 : 1)}% من اليوم
-                              </p>
-                            </div>
+                            {/* 🖥️ من sm+ وفوق: التصميم الأفقي الأصلي */}
+                            <div className="hidden items-start gap-4 px-4 py-4 transition-colors hover:bg-muted/40 sm:flex">
+                              <ShareRing pct={dayShare} color={color}>
+                                <Icon className="size-[18px]" />
+                              </ShareRing>
 
-                            {locked ? (
-                              <span
-                                title="مصروف هالك مرتبط بحركة مخزون — لا يُعدَّل ولا يُحذف من هنا"
-                                className="flex size-8 shrink-0 items-center justify-center text-muted-foreground/60"
-                              >
-                                <Lock className="size-4" />
-                              </span>
-                            ) : (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="size-8 shrink-0 text-muted-foreground"
-                                    aria-label="خيارات"
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                  <p className="truncate text-[15px] font-bold leading-tight">{e.category}</p>
+                                  {isBiggest && (
+                                    <span className="shrink-0 rounded-md bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600 dark:text-rose-400">
+                                      الأكبر
+                                    </span>
+                                  )}
+                                  {locked && (
+                                    <Badge variant="warning" size="sm">
+                                      <Lock />
+                                      تلقائي
+                                    </Badge>
+                                  )}
+                                </div>
+
+                                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                                    <Clock className="size-3 shrink-0" />
+                                    <span dir="ltr" className="tabular-nums">
+                                      {timeLabel(e.createdAt, tz)}
+                                    </span>
+                                  </span>
+                                  {e.userName && (
+                                    <span className="inline-flex max-w-[10rem] items-center gap-1.5 truncate rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                                      <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-background text-[9px] font-bold text-foreground">
+                                        {e.userName.trim().charAt(0)}
+                                      </span>
+                                      <span className="truncate">{e.userName}</span>
+                                    </span>
+                                  )}
+                                </div>
+
+                                {e.note && (
+                                  <p
+                                    className="mt-2 line-clamp-2 border-s-2 ps-2.5 text-sm text-muted-foreground"
+                                    style={{ borderColor: `${color}66` }}
                                   >
-                                    <MoreVertical className="size-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start">
-                                  <DropdownMenuItem onClick={() => openEdit(e)}>
-                                    <Pencil className="size-4" />
-                                    تعديل
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => setDeleteId(e.id)}
-                                    className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                                  >
-                                    <Trash2 className="size-4" />
-                                    حذف
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                          </div>
+                                    {e.note}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="w-32 shrink-0 text-end">
+                                <p
+                                  dir="ltr"
+                                  title={num(e.amount)}
+                                  className="break-all text-right text-lg font-extrabold leading-tight tabular-nums text-foreground sm:text-xl"
+                                >
+                                  <span className="text-rose-500">−</span>
+                                  {num(e.amount)}
+                                </p>
+                                <p className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">
+                                  جنيه · {dayShare.toFixed(dayShare >= 10 ? 0 : 1)}% من اليوم
+                                </p>
+                              </div>
+
+                              {locked ? (
+                                <span
+                                  title="مصروف هالك مرتبط بحركة مخزون — لا يُعدَّل ولا يُحذف من هنا"
+                                  className="flex size-8 shrink-0 items-center justify-center text-muted-foreground/60"
+                                >
+                                  <Lock className="size-4" />
+                                </span>
+                              ) : (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="size-8 shrink-0 text-muted-foreground"
+                                      aria-label="خيارات"
+                                    >
+                                      <MoreVertical className="size-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="start">
+                                    <DropdownMenuItem onClick={() => openEdit(e)}>
+                                      <Pencil className="size-4" />
+                                      تعديل
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => setDeleteId(e.id)}
+                                      className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                                    >
+                                      <Trash2 className="size-4" />
+                                      حذف
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
+                            </div>
+                          </li>
                         )
                       })}
-                    </div>
+                    </ul>
                   </Card>
                 )
               })}
@@ -1187,9 +1287,9 @@ export function ExpensesView() {
         </div>
 
         {/* ═════════ التوزيع (يسار) ═════════ */}
-        <aside className="space-y-5">
+        <aside className="space-y-4 sm:space-y-5">
           <Card className="animate-in-up stagger-2 gap-5 py-5">
-            <CardContent className="space-y-5 px-5">
+            <CardContent className="space-y-5 px-4 sm:px-5">
               <div>
                 <h2 className="text-base font-bold">توزيع المصروفات</h2>
                 <p className="text-xs text-muted-foreground">اضغط على أي نوع لتصفية القايمة</p>
@@ -1232,8 +1332,8 @@ export function ExpensesView() {
                           >
                             <div className="flex items-center gap-2.5">
                               <CategoryIcon category={cat} size="sm" />
-                              <span className="flex-1 truncate text-sm font-medium">{cat}</span>
-                              <span className="text-sm font-bold tabular-nums">{num(value)}</span>
+                              <span className="min-w-0 flex-1 truncate text-sm font-medium">{cat}</span>
+                              <span className="shrink-0 text-sm font-bold tabular-nums" title={num(value)}>{num(value)}</span>
                             </div>
                             <div className="mt-2 flex items-center gap-2">
                               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
@@ -1242,7 +1342,7 @@ export function ExpensesView() {
                                   style={{ width: `${Math.max(pct, 2)}%`, backgroundColor: color }}
                                 />
                               </div>
-                              <span className="w-10 text-end text-[11px] tabular-nums text-muted-foreground">
+                              <span className="w-10 shrink-0 text-end text-[11px] tabular-nums text-muted-foreground">
                                 {pct.toFixed(pct >= 10 ? 0 : 1)}%
                               </span>
                             </div>
@@ -1256,15 +1356,14 @@ export function ExpensesView() {
             </CardContent>
           </Card>
 
-          {/* الميزانية الشهرية */}
           <Card className="animate-in-up stagger-3 gap-4 py-5">
-            <CardContent className="space-y-4 px-5">
-              <div className="flex items-start justify-between gap-2">
-                <div>
+            <CardContent className="space-y-4 px-4 sm:px-5">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
                   <h2 className="text-base font-bold">الميزانية الشهرية</h2>
                   <p className="text-xs text-muted-foreground">الصرف هذا الشهر مقابل الحد المحدد</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={openBudgets}>
+                <Button variant="outline" size="sm" onClick={openBudgets} className="shrink-0">
                   <SlidersHorizontal className="size-3.5" />
                   ضبط الحدود
                 </Button>
@@ -1288,9 +1387,9 @@ export function ExpensesView() {
                       <li key={b.category} className="space-y-1.5">
                         <div className="flex items-center gap-2.5">
                           <CategoryIcon category={b.category} size="sm" />
-                          <span className="flex-1 truncate text-sm font-medium">{b.category}</span>
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium">{b.category}</span>
                           {over && (
-                            <Badge variant="destructive" size="sm">
+                            <Badge variant="destructive" size="sm" className="shrink-0">
                               تجاوز
                             </Badge>
                           )}
@@ -1301,11 +1400,11 @@ export function ExpensesView() {
                             style={{ width: `${Math.min(Math.max(b.pct, 2), 100)}%`, backgroundColor: barColor }}
                           />
                         </div>
-                        <div className="flex items-center justify-between text-[11px] tabular-nums text-muted-foreground">
-                          <span>
-                            <span className="font-semibold text-foreground">{num(b.spent)}</span> من {num(b.monthlyLimit)} جنيه
+                        <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] tabular-nums text-muted-foreground">
+                          <span className="truncate">
+                            <span className="font-semibold text-foreground" title={num(b.spent)}>{num(b.spent)}</span> من {num(b.monthlyLimit)} جنيه
                           </span>
-                          <span className={cn(over && 'font-semibold text-destructive')}>{Math.round(b.pct)}%</span>
+                          <span className={cn('shrink-0', over && 'font-semibold text-destructive')}>{Math.round(b.pct)}%</span>
                         </div>
                       </li>
                     )
@@ -1315,15 +1414,14 @@ export function ExpensesView() {
             </CardContent>
           </Card>
 
-          {/* المصروفات المتكررة */}
           <Card className="animate-in-up stagger-4 gap-4 py-5">
-            <CardContent className="space-y-4 px-5">
-              <div className="flex items-start justify-between gap-2">
-                <div>
+            <CardContent className="space-y-4 px-4 sm:px-5">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
                   <h2 className="text-base font-bold">مصروفات متكررة</h2>
                   <p className="text-xs text-muted-foreground">إيجار ومرتبات وغيرها — تسجّلها بضغطة</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={openRecurring}>
+                <Button variant="outline" size="sm" onClick={openRecurring} className="shrink-0">
                   <Plus className="size-3.5" />
                   إضافة
                 </Button>
@@ -1349,10 +1447,10 @@ export function ExpensesView() {
                             {num(r.amount)} جنيه
                           </span>
                         </p>
-                        <p className="text-[11px] text-muted-foreground">
+                        <p className="truncate text-[11px] text-muted-foreground">
                           {r.postedThisMonth ? (
                             <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                              <Check className="size-3" />
+                              <Check className="size-3 shrink-0" />
                               اتسجّل هذا الشهر
                             </span>
                           ) : r.due ? (
@@ -1363,14 +1461,14 @@ export function ExpensesView() {
                         </p>
                       </div>
                       {r.due && (
-                        <Button size="sm" onClick={() => postRecurring(r.id)} disabled={postingId === r.id}>
+                        <Button size="sm" onClick={() => postRecurring(r.id)} disabled={postingId === r.id} className="shrink-0">
                           {postingId === r.id ? <Loader2 className="size-3.5 animate-spin" /> : 'سجّل'}
                         </Button>
                       )}
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="size-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        className="size-7 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => setDeleteRecId(r.id)}
                         title="حذف القالب"
                       >
@@ -1385,7 +1483,6 @@ export function ExpensesView() {
         </aside>
       </div>
 
-      {/* زر عائم للموبايل */}
       <Button
         variant="gradient"
         size="icon-lg"
@@ -1396,7 +1493,6 @@ export function ExpensesView() {
         <Plus className="size-6" />
       </Button>
 
-      {/* ═════════ نافذة إضافة مصروف ═════════ */}
       <Dialog
         open={addOpen}
         onOpenChange={(o) => {
@@ -1413,7 +1509,6 @@ export function ExpensesView() {
           />
 
           <DialogBody className="space-y-5">
-            {/* المبلغ */}
             <div className="space-y-2">
               <Label htmlFor="exp-amount">المبلغ</Label>
               <div className="relative">
@@ -1449,13 +1544,11 @@ export function ExpensesView() {
               </div>
             </div>
 
-            {/* النوع */}
             <div className="space-y-2">
               <Label>النوع</Label>
               <CategoryPicker value={category} onChange={setCategory} />
             </div>
 
-            {/* ملاحظة */}
             <div className="space-y-2">
               <Label htmlFor="exp-note">ملاحظات</Label>
               <Input
@@ -1487,7 +1580,6 @@ export function ExpensesView() {
         </DialogContent>
       </Dialog>
 
-      {/* ═════════ نافذة الحدود الشهرية ═════════ */}
       <Dialog open={budgetOpen} onOpenChange={(o) => !budgetSaving && setBudgetOpen(o)}>
         <DialogContent mobileSheet className="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
           <ExpenseHero icon={SlidersHorizontal} title="الحدود الشهرية" subtitle="اترك الخانة فاضية لو مش عايز حد للنوع ده." />
@@ -1495,8 +1587,8 @@ export function ExpensesView() {
             {CATEGORIES.map((c) => (
               <div key={c} className="flex items-center gap-3">
                 <CategoryIcon category={c} size="sm" />
-                <span className="flex-1 text-sm font-medium">{c}</span>
-                <div className="relative w-36">
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{c}</span>
+                <div className="relative w-36 shrink-0">
                   <Input
                     type="number"
                     inputMode="decimal"
@@ -1526,7 +1618,6 @@ export function ExpensesView() {
         </DialogContent>
       </Dialog>
 
-      {/* ═════════ نافذة مصروف متكرر ═════════ */}
       <Dialog open={recOpen} onOpenChange={(o) => !recSaving && setRecOpen(o)}>
         <DialogContent mobileSheet className="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
           <ExpenseHero
@@ -1591,7 +1682,6 @@ export function ExpensesView() {
         </DialogContent>
       </Dialog>
 
-      {/* ═════════ تأكيد حذف قالب متكرر ═════════ */}
       <AlertDialog open={deleteRecId !== null} onOpenChange={(o) => !o && setDeleteRecId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1612,7 +1702,6 @@ export function ExpensesView() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ═════════ تأكيد الحذف ═════════ */}
       <AlertDialog open={deleteId !== null} onOpenChange={(o) => !o && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1640,7 +1729,6 @@ export function ExpensesView() {
 
 /* ───────────────────────── مكوّنات صغيرة ───────────────────────── */
 
-/** حلقة تقدّم حوالين أيقونة النوع — بتوضّح حصة العملية من إجمالي اليوم */
 function ShareRing({
   pct,
   color,
@@ -1654,7 +1742,7 @@ function ShareRing({
   const c = 2 * Math.PI * r
   const dash = (Math.max(Math.min(pct, 100), 3) / 100) * c
   return (
-    <div className="relative flex size-14 shrink-0 items-center justify-center">
+    <div className="relative flex size-12 shrink-0 items-center justify-center sm:size-14">
       <svg
         viewBox="0 0 52 52"
         className="absolute inset-0 size-full text-muted"
@@ -1675,7 +1763,7 @@ function ShareRing({
         />
       </svg>
       <span
-        className="relative flex size-9 items-center justify-center rounded-full"
+        className="relative flex size-8 items-center justify-center rounded-full sm:size-9"
         style={{ backgroundColor: `${color}1c`, color }}
       >
         {children}
@@ -1684,7 +1772,6 @@ function ShareRing({
   )
 }
 
-/** خانة رقم داخل شريط الهيرو */
 function HeroStat({
   label,
   value,
@@ -1701,25 +1788,30 @@ function HeroStat({
   className?: string
 }) {
   return (
-    <div className={cn('border-border px-5 py-4', className)}>
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <div className="mt-1.5 flex items-center gap-2">
+    <div className={cn('min-w-0 border-border px-3.5 py-3.5 sm:px-5 sm:py-4', className)}>
+      <p className="truncate text-[11px] font-medium text-muted-foreground sm:text-xs">{label}</p>
+      <div className="mt-1.5 flex min-w-0 items-center gap-2">
         {dot && <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: dot }} />}
-        <span className="truncate text-2xl font-bold tracking-tight tabular-nums text-foreground">{value}</span>
-        {unit && <span className="text-xs font-medium text-muted-foreground">{unit}</span>}
+        <span
+          dir={unit ? 'ltr' : undefined}
+          title={value}
+          className="min-w-0 break-all text-right text-lg font-bold tracking-tight tabular-nums text-foreground sm:text-2xl"
+        >
+          {value}
+        </span>
+        {unit && <span className="shrink-0 text-[11px] font-medium text-muted-foreground sm:text-xs">{unit}</span>}
       </div>
       {foot && <div className="mt-2 text-[11px] text-muted-foreground">{foot}</div>}
     </div>
   )
 }
 
-/** رسم أعمدة صغير لمصروفات آخر ٧ أيام */
 function WeekBars({
   days,
 }: {
   days: { key: string; label: string; sum: number; isToday: boolean }[]
 }) {
-  const BAR_AREA = 72 // px
+  const BAR_AREA = 72
   const max = Math.max(...days.map((d) => d.sum), 1)
   return (
     <div className="hidden min-w-[260px] max-w-md flex-1 self-end md:block">
@@ -1768,7 +1860,6 @@ function WeekBars({
   )
 }
 
-/** منتقي تاريخ عربي (بديل حقل التاريخ الافتراضي للمتصفح mm/dd/yyyy) — القيمة نص YYYY-MM-DD */
 function DatePickerField({
   id,
   value,
@@ -1831,10 +1922,9 @@ function DatePickerField({
   )
 }
 
-/** شبكة اختيار النوع (بدون الهالك — بيتسجل آلياً من المخزون) */
 function CategoryPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
       {FORM_CATEGORIES.map((c) => {
         const active = value === c
         const { color } = metaOf(c)
@@ -1844,7 +1934,7 @@ function CategoryPicker({ value, onChange }: { value: string; onChange: (c: stri
             type="button"
             onClick={() => onChange(c)}
             className={cn(
-              'flex flex-col items-center gap-1.5 rounded-xl border p-2.5 text-center text-xs font-medium transition-all',
+              'flex flex-col items-center gap-1.5 rounded-xl border p-2 text-center text-xs font-medium transition-all sm:p-2.5',
               active ? 'shadow-sm' : 'bg-background text-muted-foreground hover:bg-muted/60',
             )}
             style={active ? { borderColor: color, backgroundColor: `${color}14`, color } : undefined}
@@ -1874,16 +1964,16 @@ function CategoryChip({
       type="button"
       onClick={onClick}
       className={cn(
-        'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+        'flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-xs',
         active
           ? 'border-primary bg-primary text-primary-foreground shadow-sm'
           : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
       )}
     >
       {color && (
-        <span className="size-2 rounded-full" style={{ backgroundColor: color }} />
+        <span className="size-1.5 shrink-0 rounded-full sm:size-2" style={{ backgroundColor: color }} />
       )}
-      {label}
+      <span className="whitespace-nowrap">{label}</span>
     </button>
   )
 }

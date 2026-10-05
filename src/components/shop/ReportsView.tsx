@@ -201,7 +201,7 @@ export function ReportsView() {
   const r = report
 
   return (
-    <div id="rpt-top" className="space-y-6">
+    <div id="rpt-top" className="space-y-4 sm:space-y-6">
       <FilterBar
         from={from} to={to} setFrom={setFrom} setTo={setTo}
         preset={activePreset} setPreset={setActivePreset}
@@ -210,23 +210,23 @@ export function ReportsView() {
       />
 
       {!r ? (
-        <div className="space-y-5">
+        <div className="space-y-4 sm:space-y-5">
           <Skeleton className="h-[380px] w-full rounded-3xl" />
           <Skeleton className="h-[420px] w-full rounded-3xl" />
           <Skeleton className="h-64 w-full rounded-3xl" />
         </div>
       ) : (
-        <div className={cn('space-y-6 transition-opacity duration-base', loading && 'opacity-70')}>
+        <div className={cn('space-y-4 transition-opacity duration-base sm:space-y-6', loading && 'opacity-70')}>
           <Hero r={r} ins={ins} hasFinance={hasFinance} shop={shopName} range={rangeText(from, to)} branch={branchLabel} />
 
           {/* ═════════ المسرح: المنحنى + شريط الإشارات ═════════ */}
           <Stage r={r} ins={ins} />
 
           {/* ═════════ فهرس الفصول + المحتوى ═════════ */}
-          <div className="grid gap-6 lg:grid-cols-[176px_minmax(0,1fr)]">
+          <div className="grid gap-4 sm:gap-6 lg:grid-cols-[176px_minmax(0,1fr)]">
             <ChapterMap chapters={chapters} active={active} />
 
-            <div className="min-w-0 space-y-12">
+            <div className="min-w-0 space-y-8 sm:space-y-12">
               {/* ───── ٠١ الإيقاع ───── */}
               <Chapter id="ch-rhythm" n="01" title="إيقاع البيع" hint="امتى بتبيع، وبإيه بيدفعوا، وإيه اللي بيتباع">
                 <div className="grid gap-4 lg:grid-cols-2">
@@ -284,8 +284,8 @@ export function ReportsView() {
                           const mg = pct(p.profit, p.total)
                           const maxP = Math.max(1, ...r.topProducts.map((x) => x.total))
                           return (
-                            <li key={i} className="flex items-center gap-3">
-                              <span className="w-7 shrink-0 text-center text-2xl font-black leading-none tabular-nums text-muted-foreground/30">{i + 1}</span>
+                            <li key={i} className="flex items-center gap-2 sm:gap-3">
+                              <span className="w-6 shrink-0 text-center text-xl font-black leading-none tabular-nums text-muted-foreground/30 sm:w-7 sm:text-2xl">{i + 1}</span>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-baseline justify-between gap-2 text-xs">
                                   <span className="truncate font-semibold">{p.name}</span>
@@ -310,23 +310,23 @@ export function ReportsView() {
                   <Panel title="أفضل العملاء" hint="نسبة من إجمالي المبيعات" className="flex flex-col lg:col-span-2">
                     {r.topCustomers.length > 0 ? (
                       <>
-<ul className="space-y-3.5">
-                        {r.topCustomers.map((c, i) => (
-                          <li key={i} className="flex items-center gap-3">
-                            <span className="flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-extrabold text-white" style={{ background: GRAD }}>
-                              {c.name.trim().charAt(0) || '؟'}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-xs font-semibold">{c.name}</p>
-                              <p className="text-[11px] text-muted-foreground">{num(c.salesCount)} فاتورة</p>
-                            </div>
-                            <div className="shrink-0 text-end">
-                              <p className="text-xs font-bold tabular-nums">{formatCurrency(c.total)}</p>
-                              <p className="text-[10px] tabular-nums text-muted-foreground">{pct(c.total, r.totalSales).toFixed(0)}٪</p>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
+                        <ul className="space-y-3.5">
+                          {r.topCustomers.map((c, i) => (
+                            <li key={i} className="flex items-center gap-2.5 sm:gap-3">
+                              <span className="flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-extrabold text-white sm:size-9 sm:text-sm" style={{ background: GRAD }}>
+                                {c.name.trim().charAt(0) || '؟'}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-semibold">{c.name}</p>
+                                <p className="text-[11px] text-muted-foreground">{num(c.salesCount)} فاتورة</p>
+                              </div>
+                              <div className="shrink-0 text-end">
+                                <p className="text-xs font-bold tabular-nums">{formatCurrency(c.total)}</p>
+                                <p className="text-[10px] tabular-nums text-muted-foreground">{pct(c.total, r.totalSales).toFixed(0)}٪</p>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
                         {(() => {
                           const share = Math.min(100, pct(r.topCustomers.reduce((t, c) => t + c.total, 0), r.totalSales))
                           return (
@@ -361,8 +361,8 @@ export function ReportsView() {
                           <div className="h-full flex-1 rounded-e-full" style={{ background: F }} />
                         </div>
                         <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                          <div><p className="flex items-center gap-1.5 text-muted-foreground"><i className="size-2 rounded-full" style={{ background: V }} />بالتكلفة</p><p className="mt-0.5 text-base font-extrabold tabular-nums">{formatCurrency(r.stockValueCost)}</p></div>
-                          <div><p className="flex items-center gap-1.5 text-muted-foreground"><i className="size-2 rounded-full" style={{ background: F }} />ربح متوقع</p><p className="mt-0.5 text-base font-extrabold tabular-nums">{formatCurrency(r.stockValuePrice - r.stockValueCost)}</p></div>
+                          <div><p className="flex items-center gap-1.5 text-muted-foreground"><i className="size-2 rounded-full" style={{ background: V }} />بالتكلفة</p><p className="mt-0.5 min-w-0 break-all text-base font-extrabold tabular-nums">{formatCurrency(r.stockValueCost)}</p></div>
+                          <div><p className="flex items-center gap-1.5 text-muted-foreground"><i className="size-2 rounded-full" style={{ background: F }} />ربح متوقع</p><p className="mt-0.5 min-w-0 break-all text-base font-extrabold tabular-nums">{formatCurrency(r.stockValuePrice - r.stockValueCost)}</p></div>
                         </div>
                         <p className="mt-3 border-t pt-3 text-[11px] text-muted-foreground">
                           بسعر البيع: <b className="text-foreground">{formatCurrency(r.stockValuePrice)}</b> · مشتريات الفترة: <b className="text-foreground">{formatCurrency(r.totalPurchases)}</b> ({num(r.purchasesCount)} أمر)
@@ -417,9 +417,9 @@ export function ReportsView() {
                         <Row label="رصيد الخزنة" value={r.cashBalance} />
                         <Row label="+ مستحقات على العملاء" value={r.customersReceivable} tone="pos" />
                         <Row label="− مستحقات للموردين" value={-r.suppliersPayable} tone="neg" />
-                        <div className="flex items-center justify-between border-t pt-3">
-                          <span className="font-extrabold">= صافي المركز</span>
-                          <span className="bg-clip-text text-xl font-extrabold tabular-nums text-transparent" style={{ backgroundImage: GRAD }}>
+                        <div className="flex items-center justify-between gap-2 border-t pt-3">
+                          <span className="shrink-0 font-extrabold">= صافي المركز</span>
+                          <span className="min-w-0 break-all bg-clip-text text-lg font-extrabold tabular-nums text-transparent sm:text-xl" style={{ backgroundImage: GRAD }}>
                             {formatCurrency(r.cashBalance + r.customersReceivable - r.suppliersPayable)}
                           </span>
                         </div>
@@ -455,7 +455,7 @@ export function ReportsView() {
   )
 }
 
-/* ═════════════════════ الفلتر والهيرو (النسخة الجديدة) ═════════════════════ */
+/* ═════════════════════ الفلتر والهيرو ═════════════════════ */
 
 type PresetKey = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'year' | 'all'
 const PRESETS: { k: PresetKey; l: string }[] = [
@@ -518,17 +518,17 @@ function FilterBar({
   return (
     <div className="sticky top-0 z-20 overflow-hidden rounded-2xl border bg-background/80 shadow-sm backdrop-blur-xl">
       <style>{`@keyframes rpt-slide{0%{transform:translateX(-120%)}100%{transform:translateX(420%)}}`}</style>
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 p-2">
+      <div className="flex flex-col gap-2 p-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2.5 sm:gap-y-2">
         <Popover>
           <PopoverTrigger asChild>
-            <button type="button" className="flex h-10 items-center gap-2 rounded-xl border bg-card px-3 text-xs font-bold shadow-xs transition-colors hover:bg-muted/60">
-              <CalendarDays className="size-4 text-violet-600 dark:text-violet-400" />
-              <span className="tabular-nums">{rangeText(from, to)}</span>
-              {days && <span className="rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-700 dark:text-violet-300">{days} يوم</span>}
-              <ChevronDown className="size-3.5 opacity-60" />
+            <button type="button" className="flex h-10 w-full min-w-0 items-center gap-2 rounded-xl border bg-card px-3 text-xs font-bold shadow-xs transition-colors hover:bg-muted/60 sm:w-auto">
+              <CalendarDays className="size-4 shrink-0 text-violet-600 dark:text-violet-400" />
+              <span className="min-w-0 truncate tabular-nums">{rangeText(from, to)}</span>
+              {days && <span className="shrink-0 rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-700 dark:text-violet-300">{days} يوم</span>}
+              <ChevronDown className="ms-auto size-3.5 shrink-0 opacity-60 sm:ms-0" />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-[310px] rounded-2xl p-3">
+          <PopoverContent align="start" className="w-[min(310px,calc(100vw-2rem))] rounded-2xl p-3">
             <div className="grid grid-cols-2 gap-1.5">
               {PRESETS.map((p) => (
                 <button
@@ -569,14 +569,14 @@ function FilterBar({
           />
         )}
 
-        <span className="ms-auto hidden items-center gap-1.5 rounded-full bg-muted/70 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground md:flex" aria-live="polite">
+        <span className="hidden items-center gap-1.5 rounded-full bg-muted/70 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground sm:flex sm:ms-auto" aria-live="polite">
           <span className={cn('size-2 rounded-full', loading ? 'animate-pulse bg-amber-500' : 'bg-emerald-500')} />
           {loading ? 'بيحدّث…' : 'مباشر'}
         </span>
 
-        <Button onClick={onExport} disabled={disabled} className="h-10 rounded-xl border-0 text-white shadow-md shadow-violet-600/25 max-md:ms-auto" style={{ background: GRAD }}>
-          <FileText className="size-4" />
-          تصدير PDF
+        <Button onClick={onExport} disabled={disabled} className="h-10 w-full rounded-xl border-0 text-white shadow-md shadow-violet-600/25 sm:w-auto" style={{ background: GRAD }}>
+          <FileText className="size-4 shrink-0" />
+          <span className="truncate">تصدير PDF</span>
         </Button>
       </div>
 
@@ -586,7 +586,8 @@ function FilterBar({
         </span>
       )}
     </div>
-  )}
+  )
+}
 
 function Hero({
   r, ins, hasFinance, shop, range, branch,
@@ -599,7 +600,6 @@ function Hero({
   const ch = r.changes.totalSales
   const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
-  // tx = لون النص (أغمق في الفاتح عشان التباين) · c = لون الشكل (نقطة/مقياس/توهّج)
   const verdict =
     r.salesCount === 0 ? { t: 'مفيش بيانات', d: 'مفيش مبيعات في الفترة دي', c: '#94a3b8', tx: 'text-slate-500 dark:text-slate-400' }
     : r.netProfit < 0 ? { t: 'خسارة', d: 'المصروفات أكبر من الربح', c: '#f43f5e', tx: 'text-rose-600 dark:text-rose-400' }
@@ -661,45 +661,45 @@ function Hero({
         <div className="absolute inset-0 opacity-50" style={{ backgroundImage: 'radial-gradient(rgba(124,58,237,0.18) 1px, transparent 1.2px)', backgroundSize: '18px 18px', maskImage: 'linear-gradient(to left, black, transparent 55%)', WebkitMaskImage: 'linear-gradient(to left, black, transparent 55%)' }} />
       </div>
 
-      <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="relative grid gap-4 p-4 sm:gap-6 sm:p-7 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <span className="relative flex size-12 shrink-0 items-center justify-center">
+            <span className="relative flex size-10 shrink-0 items-center justify-center sm:size-12">
               <span className="absolute inset-0 animate-[ping_1.6s_cubic-bezier(0,0,0.2,1)_3] rounded-full bg-violet-500/30 motion-reduce:hidden" />
-              <span className="relative flex size-12 items-center justify-center rounded-full shadow-lg shadow-violet-500/30" style={{ background: 'conic-gradient(from 180deg, #7c3aed, #d946ef, #06b6d4, #7c3aed)' }}>
+              <span className="relative flex size-10 items-center justify-center rounded-full shadow-lg shadow-violet-500/30 sm:size-12" style={{ background: 'conic-gradient(from 180deg, #7c3aed, #d946ef, #06b6d4, #7c3aed)' }}>
                 <span className="absolute inset-[3px] rounded-full bg-card/80 backdrop-blur" />
-                <Sparkles className="relative size-5 text-violet-600 dark:text-violet-300" />
+                <Sparkles className="relative size-4 text-violet-600 sm:size-5 dark:text-violet-300" />
               </span>
             </span>
             <div className="min-w-0">
-              <h1 className="truncate text-lg font-extrabold leading-tight">محلل {shop || 'المحل'}</h1>
+              <h1 className="truncate text-base font-extrabold leading-tight sm:text-lg">محلل {shop || 'المحل'}</h1>
               <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                <CalendarDays className="size-3" />
-                جهّزت لك ملخص <b className="tabular-nums text-foreground/80">{range}</b> · {branch}
+                <CalendarDays className="size-3 shrink-0" />
+                <span className="truncate">جهّزت لك ملخص <b className="tabular-nums text-foreground/80">{range}</b> · {branch}</span>
               </p>
             </div>
           </div>
 
-          <div key={`${r.totalSales}-${r.salesCount}-${range}-${branch}`} className="mt-5 space-y-2.5">
+          <div key={`${r.totalSales}-${r.salesCount}-${range}-${branch}`} className="mt-4 space-y-2.5 sm:mt-5">
             {bubbles.map((b, i) => (
               <p
                 key={i}
                 style={{ animationDelay: `${80 + i * 140}ms` }}
-                className="animate-in-up motion-reduce:animate-none w-fit max-w-3xl rounded-2xl rounded-ss-md border bg-background/70 px-4 py-2.5 text-base font-semibold leading-[2.1] backdrop-blur-sm sm:text-lg sm:leading-[2.1]"
+                className="animate-in-up motion-reduce:animate-none w-fit max-w-3xl rounded-2xl rounded-ss-md border bg-background/70 px-3.5 py-2 text-sm font-semibold leading-[1.9] backdrop-blur-sm sm:px-4 sm:py-2.5 sm:text-base sm:leading-[2.1] lg:text-lg"
               >
                 {b}
               </p>
             ))}
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-2 sm:mt-5">
             {asks.map((a, i) => (
               <button
                 key={a.id}
                 type="button"
                 onClick={() => jump(a.id)}
                 style={{ animationDelay: `${80 + (bubbles.length + i) * 90}ms` }}
-                className="animate-in-up motion-reduce:animate-none rounded-full border border-violet-500/30 bg-violet-500/5 px-3.5 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-500/15 dark:text-violet-300"
+                className="animate-in-up motion-reduce:animate-none rounded-full border border-violet-500/30 bg-violet-500/5 px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-500/15 dark:text-violet-300"
               >
                 <span className="inline-flex items-center gap-1.5">
                   {a.l}
@@ -718,12 +718,6 @@ function Hero({
 
 /* ═════════════════════ مكوّنات الهوية ═════════════════════ */
 
-/**
- * VerdictCard — «ميزان الفترة»
- * بدل الحلقة (اللي بتفضل فاضية لو الهامش بالسالب): مقياس ثنائي الاتجاه من -50٪ لـ +50٪
- * بيبيّن مكان الهامش بين (خسارة / ربح ضعيف / ربح صحي)، وتحته معادلة الفترة
- * (الربح قبل المصروفات − المصروفات = الصافي) عشان الحكم يتفهم من غير ما تفتح أي فصل.
- */
 function VerdictCard({
   r, netMargin, verdict,
 }: {
@@ -732,39 +726,37 @@ function VerdictCard({
   verdict: { t: string; d: string; c: string; tx: string }
 }) {
   const has = r.salesCount > 0
-  const earned = Math.max(0, r.netProfit + r.totalExpenses) // الربح قبل خصم المصروفات
+  const earned = Math.max(0, r.netProfit + r.totalExpenses)
   const spent = Math.max(0, r.totalExpenses)
   const max = Math.max(earned, spent, 1)
   const clamped = Math.max(-50, Math.min(50, netMargin))
-  const pos = clamped + 50 // 0..100 من الشمال (المقياس رقمي فبيفضل LTR)
+  const pos = clamped + 50
   const m = Math.round(Math.abs(netMargin))
   const netNeg = r.netProfit < 0
 
   return (
-    <aside className="relative flex flex-col justify-between gap-5 overflow-hidden rounded-2xl border bg-background/60 p-4 backdrop-blur-sm sm:p-5">
+    <aside className="relative flex flex-col justify-between gap-4 overflow-hidden rounded-2xl border bg-background/60 p-3.5 backdrop-blur-sm sm:gap-5 sm:p-5">
       <span
         aria-hidden
         className="pointer-events-none absolute -top-12 -end-12 size-36 rounded-full opacity-25 blur-2xl"
         style={{ backgroundColor: verdict.c }}
       />
 
-      {/* الحكم */}
       <div className="relative">
         <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
           <span className="size-2 rounded-full" style={{ backgroundColor: verdict.c }} />
           حالة الفترة
         </p>
-        <p className={cn('mt-1.5 text-3xl font-black leading-none', verdict.tx)}>
+        <p className={cn('mt-1.5 text-2xl font-black leading-none sm:text-3xl', verdict.tx)}>
           {verdict.t}
         </p>
         <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{verdict.d}</p>
       </div>
 
-      {/* مقياس الهامش */}
       <div className="relative">
         <div className="flex items-baseline justify-between gap-2">
           <span className="text-[11px] font-medium text-muted-foreground">هامش الصافي</span>
-          <span dir="ltr" className={cn('text-2xl font-extrabold leading-none tabular-nums', has && verdict.tx)}>
+          <span dir="ltr" className={cn('text-xl font-extrabold leading-none tabular-nums sm:text-2xl', has && verdict.tx)}>
             {has ? `${netMargin < 0 ? '−' : ''}${m}٪` : '—'}
           </span>
         </div>
@@ -791,14 +783,13 @@ function VerdictCard({
         </div>
       </div>
 
-      {/* معادلة الفترة */}
       {has && (
         <div className="relative space-y-2.5 border-t border-dashed pt-4">
           <FlowBar label="الربح قبل المصروفات" value={earned} max={max} fill={GRAD} />
           <FlowBar label="المصروفات" value={spent} max={max} fill="#f43f5e" />
-          <div className="flex items-center justify-between border-t pt-2.5">
-            <span className="text-xs font-bold">الصافي</span>
-            <span dir="ltr" className={cn('text-sm font-extrabold tabular-nums', netNeg ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
+          <div className="flex items-center justify-between gap-2 border-t pt-2.5">
+            <span className="shrink-0 text-xs font-bold">الصافي</span>
+            <span dir="ltr" className={cn('min-w-0 break-all text-sm font-extrabold tabular-nums', netNeg ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
               {netNeg ? '−' : ''}{num(Math.round(Math.abs(r.netProfit)))} جنيه
             </span>
           </div>
@@ -828,14 +819,6 @@ function FlowBar({ label, value, max, fill }: { label: string; value: number; ma
 type ChapterItem = { id: string; n: string; label: string; note: string; tone: 'ok' | 'warn' | 'bad' | 'info' }
 const TONE_DOT = { ok: 'bg-emerald-500', warn: 'bg-amber-500', bad: 'bg-rose-500', info: 'bg-violet-500' } as const
 
-/**
- * ChapterMap — «خريطة التقرير»
- * بدل قايمة روابط: خريطة مصغّرة للصفحة.
- *  - ارتفاع كل شريط = ارتفاع الفصل الحقيقي في الصفحة (نسبة وتناسب)
- *  - التعبئة بتنزل مع السكرول جوه كل فصل، والرقم فوق = نسبة اللي قريته من التقرير كله
- *  - الفصل الحالي بيتفتح ويعرض لمحة حيّة من بياناته (أقوى يوم / الأول مبيعاً / أصناف ناقصة / الصافي)
- * على الموبايل بتتحوّل لأزرار أفقية بشريط تقدّم تحتها.
- */
 function ChapterMap({ chapters, active }: { chapters: ChapterItem[]; active: string }) {
   const [m, setM] = React.useState<{ p: number[]; h: number[]; all: number }>({ p: [], h: [], all: 0 })
   const key = chapters.map((c) => c.id).join()
@@ -857,7 +840,6 @@ function ChapterMap({ chapters, active }: { chapters: ChapterItem[]; active: str
     const on = () => { if (!raf) raf = requestAnimationFrame(calc) }
     calc()
     const t = window.setTimeout(calc, 500)
-    // capture: السكرول ممكن يكون جوه حاوية مش الـ window
     document.addEventListener('scroll', on, true)
     window.addEventListener('resize', on)
     return () => {
@@ -874,8 +856,7 @@ function ChapterMap({ chapters, active }: { chapters: ChapterItem[]; active: str
 
   return (
     <div className="lg:sticky lg:top-24 lg:self-start">
-      {/* موبايل: أزرار أفقية بشريط تقدّم */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1 lg:hidden" role="group" aria-label="فصول التقرير">
+      <div className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden lg:hidden" role="group" aria-label="فصول التقرير">
         {chapters.map((c, i) => {
           const on = active === c.id
           return (
@@ -885,11 +866,11 @@ function ChapterMap({ chapters, active }: { chapters: ChapterItem[]; active: str
               onClick={() => jump(c.id)}
               aria-current={on ? 'true' : undefined}
               className={cn(
-                'relative shrink-0 overflow-hidden rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors',
+                'relative shrink-0 overflow-hidden rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
                 on ? 'border-violet-500/40 bg-violet-500/10 text-foreground' : 'text-muted-foreground',
               )}
             >
-              <span className="relative flex items-center gap-1.5">
+              <span className="relative flex items-center gap-1.5 whitespace-nowrap">
                 <span dir="ltr" className={cn('font-black tabular-nums', on ? 'text-violet-600 dark:text-violet-400' : 'text-muted-foreground/50')}>{c.n}</span>
                 {c.label}
               </span>
@@ -901,7 +882,6 @@ function ChapterMap({ chapters, active }: { chapters: ChapterItem[]; active: str
         })}
       </div>
 
-      {/* ديسكتوب: الخريطة */}
       <nav className="hidden lg:block" aria-label="خريطة التقرير">
         <div className="mb-3 flex items-baseline justify-between px-2">
           <span className="text-[11px] font-extrabold">خريطة التقرير</span>
@@ -964,7 +944,6 @@ const HL_TONES = {
   warn: 'from-amber-500/30 to-amber-500/10',
 } as const
 
-/** تظليل الرقم بلون معناه: أخضر = كويس · أحمر = مشكلة · أصفر = انتبه · بنفسجي = معلومة */
 function Hl({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: keyof typeof HL_TONES }) {
   return <span className={cn('box-decoration-clone rounded-lg bg-gradient-to-l px-1.5 py-0.5 font-extrabold text-foreground', HL_TONES[tone])}>{children}</span>
 }
@@ -972,13 +951,13 @@ function Hl({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 
 function Chapter({ id, n, title, hint, children }: { id: string; n: string; title: string; hint: string; children: React.ReactNode }) {
   return (
     <section id={id} className="animate-in-up scroll-mt-24 space-y-4">
-      <div className="flex items-end gap-3">
-        <span dir="ltr" className="bg-clip-text text-5xl font-black leading-none tabular-nums text-transparent" style={{ backgroundImage: `linear-gradient(to bottom, ${V}, ${F})` }}>{n}</span>
-        <div className="pb-0.5">
-          <h2 className="text-lg font-extrabold leading-tight">{title}</h2>
-          <p className="text-[11px] text-muted-foreground">{hint}</p>
+      <div className="flex items-end gap-2 sm:gap-3">
+        <span dir="ltr" className="bg-clip-text text-3xl font-black leading-none tabular-nums text-transparent sm:text-5xl" style={{ backgroundImage: `linear-gradient(to bottom, ${V}, ${F})` }}>{n}</span>
+        <div className="min-w-0 flex-1 pb-0.5">
+          <h2 className="truncate text-base font-extrabold leading-tight sm:text-lg">{title}</h2>
+          <p className="truncate text-[11px] text-muted-foreground">{hint}</p>
         </div>
-        <span className="mb-2 h-px flex-1 bg-border" />
+        <span className="mb-2 hidden h-px flex-1 bg-border sm:block" />
       </div>
       {children}
     </section>
@@ -987,7 +966,7 @@ function Chapter({ id, n, title, hint, children }: { id: string; n: string; titl
 
 function Panel({ title, hint, className, children }: { title: string; hint?: string; className?: string; children: React.ReactNode }) {
   return (
-    <div className={cn('rounded-3xl border bg-card p-5 shadow-sm', className)}>
+    <div className={cn('rounded-3xl border bg-card p-4 shadow-sm sm:p-5', className)}>
       <div className="mb-4">
         <h3 className="text-sm font-extrabold">{title}</h3>
         {hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>}
@@ -1006,7 +985,6 @@ const Empty = ({ t, ok }: { t: string; ok?: boolean }) => (
   </div>
 )
 
-/** مفتاح اختيار موحّد: بيتستخدم في الفلتر والمنحنى عشان الشكل يبقى واحد */
 function Seg<T extends string>({
   value, onChange, options, label, className,
 }: {
@@ -1017,7 +995,7 @@ function Seg<T extends string>({
   className?: string
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className={cn('inline-flex max-w-full gap-0.5 overflow-x-auto rounded-xl bg-muted/70 p-1 ring-1 ring-inset ring-border/60', className)}>
+    <div role="radiogroup" aria-label={label} className={cn('flex w-full max-w-full flex-wrap gap-0.5 rounded-xl bg-muted/70 p-1 ring-1 ring-inset ring-border/60 sm:inline-flex sm:w-auto sm:flex-nowrap sm:overflow-x-auto', className)}>
       {options.map((o) => {
         const on = value === o.v
         return (
@@ -1044,9 +1022,9 @@ function Seg<T extends string>({
 
 function Row({ label, value, tone }: { label: string; value: number; tone?: 'pos' | 'neg' }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={cn('font-bold tabular-nums', tone === 'pos' && 'text-emerald-600 dark:text-emerald-400', tone === 'neg' && 'text-rose-600 dark:text-rose-400')}>{formatCurrency(value)}</span>
+    <div className="flex items-center justify-between gap-2">
+      <span className="min-w-0 truncate text-muted-foreground">{label}</span>
+      <span className={cn('shrink-0 font-bold tabular-nums', tone === 'pos' && 'text-emerald-600 dark:text-emerald-400', tone === 'neg' && 'text-rose-600 dark:text-rose-400')}>{formatCurrency(value)}</span>
     </div>
   )
 }
@@ -1094,9 +1072,9 @@ function PayMix({ items }: { items: { method: string; amount: number }[] }) {
       </div>
       <ul className="mt-4 space-y-2">
         {merged.map((m, i) => (
-          <li key={m.label} className="flex items-center justify-between text-xs">
-            <span className="flex items-center gap-1.5 font-medium"><i className="size-2.5 rounded-full" style={{ background: MIX[i % MIX.length] }} />{m.label}</span>
-            <span className="tabular-nums text-muted-foreground"><b className="text-foreground">{formatCurrency(m.value)}</b> · {pct(m.value, total).toFixed(0)}٪</span>
+          <li key={m.label} className="flex items-center justify-between gap-2 text-xs">
+            <span className="flex min-w-0 items-center gap-1.5 font-medium"><i className="size-2.5 shrink-0 rounded-full" style={{ background: MIX[i % MIX.length] }} /><span className="truncate">{m.label}</span></span>
+            <span className="shrink-0 tabular-nums text-muted-foreground"><b className="text-foreground">{formatCurrency(m.value)}</b> · {pct(m.value, total).toFixed(0)}٪</span>
           </li>
         ))}
       </ul>
@@ -1142,15 +1120,26 @@ function Delta({ v }: { v: number | null }) {
 
 function Signal({ label, value, unit, delta, children }: { label: string; value: string; unit?: string; delta?: number | null; children?: React.ReactNode }) {
   return (
-    <div className="bg-card p-4 sm:p-5">
+    <div className="min-w-0 bg-card p-3.5 sm:p-4 md:p-5">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
-          <p className="mt-1 flex items-baseline gap-1 truncate">
-            <span dir="ltr" className="text-2xl font-extrabold tabular-nums tracking-tight">{value}</span>
-            {unit && <span className="text-xs font-semibold text-muted-foreground">{unit}</span>}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[11px] font-medium text-muted-foreground">{label}</p>
+          <p className="mt-1 flex min-w-0 items-baseline gap-1">
+            <span
+              dir="ltr"
+              style={{ unicodeBidi: 'isolate' }}
+              className="min-w-0 truncate text-xl font-extrabold tabular-nums tracking-tight sm:text-2xl"
+            >
+              {value}
+            </span>
+            {unit && <span className="shrink-0 text-xs font-semibold text-muted-foreground">{unit}</span>}
           </p>
-          {delta != null && <div className="mt-1.5 flex items-center gap-1.5"><Delta v={delta} /><span className="text-[10px] text-muted-foreground">عن السابقة</span></div>}
+          {delta != null && (
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <Delta v={delta} />
+              <span className="text-[10px] text-muted-foreground">عن السابقة</span>
+            </div>
+          )}
         </div>
         {children && <div className="shrink-0">{children}</div>}
       </div>
@@ -1179,10 +1168,10 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
   const t = r.salesTrend
   return (
     <section className="animate-in-up stagger-1 overflow-hidden rounded-3xl border bg-card shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3 p-5 pb-0">
-        <div>
-          <h2 className="text-base font-extrabold">منحنى المبيعات والربح</h2>
-          <p className="text-[11px] text-muted-foreground">يوم بيوم — مرّر على الرسم لتفاصيل اليوم</p>
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4 pb-0 sm:p-5">
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-extrabold sm:text-base">منحنى المبيعات والربح</h2>
+          <p className="truncate text-[11px] text-muted-foreground">يوم بيوم — مرّر على الرسم لتفاصيل اليوم</p>
         </div>
         <Seg<'both' | 'total' | 'profit'>
           label="نوع المنحنى"
@@ -1192,7 +1181,7 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
         />
       </div>
 
-      <div dir="ltr" className="h-72 px-2 pt-4">
+      <div dir="ltr" className="h-60 px-1 pt-3 sm:h-72 sm:px-2 sm:pt-4">
         {t.length > 1 ? (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={t} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
@@ -1211,7 +1200,7 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
         ) : t.length === 1 ? (
           <div dir="rtl" className="flex h-full flex-col items-center justify-center gap-1 text-center">
             <p className="text-xs text-muted-foreground">يوم واحد في الفترة · {shortDate(t[0].date)}</p>
-            <p className="text-5xl font-extrabold tabular-nums tracking-tight">{formatCurrency(t[0].total)}</p>
+            <p className="min-w-0 break-all text-3xl font-extrabold tabular-nums tracking-tight sm:text-5xl">{formatCurrency(t[0].total)}</p>
             <p className="text-sm font-semibold text-fuchsia-600 dark:text-fuchsia-400">ربح {formatCurrency(t[0].profit)}</p>
             <p className="mt-2 text-[11px] text-muted-foreground">وسّع المدى (أسبوع / شهر) علشان يظهر المنحنى</p>
           </div>
@@ -1220,13 +1209,14 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
         )}
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-px border-t bg-border lg:grid-cols-4">
+      {/* 📱 على الجوال: كارت لكل إشارة — بعرض كامل عشان الأرقام ما تتقطعش */}
+      <div className="mt-4 grid grid-cols-1 gap-px border-t bg-border sm:grid-cols-2 lg:grid-cols-4">
         <Signal label="إجمالي المبيعات" value={num(Math.round(r.totalSales))} unit="جنيه" delta={r.changes.totalSales}>
-          <div className="w-20"><Spark v={t.map((x) => x.total)} /></div>
+          <div className="w-16 sm:w-20"><Spark v={t.map((x) => x.total)} /></div>
         </Signal>
         <Signal label="صافي الربح" value={num(Math.round(r.netProfit))} unit="جنيه" delta={r.changes.netProfit}>
           <div className="relative">
-            <Ring className="size-14" p={Math.abs(ins?.netMargin ?? 0)} color={(ins?.netMargin ?? 0) >= 0 ? V : '#f43f5e'} />
+            <Ring className="size-12 sm:size-14" p={Math.abs(ins?.netMargin ?? 0)} color={(ins?.netMargin ?? 0) >= 0 ? V : '#f43f5e'} />
             <span dir="ltr" className="absolute inset-0 flex items-center justify-center text-[10px] font-extrabold tabular-nums">{(ins?.netMargin ?? 0) < 0 ? '−' : ''}{Math.abs(Math.round(ins?.netMargin ?? 0))}٪</span>
           </div>
         </Signal>
@@ -1256,15 +1246,15 @@ function Waterfall({ steps }: { steps: { label: string; v: number; total?: boole
   const at = (v: number) => ((v - lo) / rng) * 100
   return (
     <div>
-      <div className="relative mt-6 h-52">
+      <div className="relative mt-4 h-44 sm:mt-6 sm:h-52">
         <div className="absolute inset-x-0 border-t border-dashed border-border" style={{ bottom: `${at(0)}%` }} />
-        <div className="absolute inset-0 flex gap-3">
+        <div className="absolute inset-0 flex gap-1.5 sm:gap-3">
           {bars.map((b, i) => {
             const color = b.total ? (b.end >= 0 ? GRAD : '#f43f5e') : b.v >= 0 ? '#10b981' : '#f43f5e'
             return (
               <div key={i} className="relative h-full flex-1">
                 <div
-                  className="absolute inset-x-2 rounded-lg transition-all duration-slow ease-out sm:inset-x-6"
+                  className="absolute inset-x-1 rounded-lg transition-all duration-slow ease-out sm:inset-x-3 md:inset-x-6"
                   style={{ bottom: `${at(Math.min(b.start, b.end))}%`, height: `${Math.max(1.5, (Math.abs(b.end - b.start) / rng) * 100)}%`, background: color }}
                 />
                 <span className="absolute inset-x-0 pb-1 text-center text-[11px] font-extrabold tabular-nums" style={{ bottom: `${at(Math.max(b.start, b.end))}%` }}>
@@ -1275,9 +1265,9 @@ function Waterfall({ steps }: { steps: { label: string; v: number; total?: boole
           })}
         </div>
       </div>
-      <div className="mt-2 flex gap-3 border-t pt-2">
+      <div className="mt-2 flex gap-1.5 border-t pt-2 sm:gap-3">
         {bars.map((b, i) => (
-          <span key={i} className={cn('flex-1 text-center text-[11px]', b.total ? 'font-extrabold' : 'text-muted-foreground')}>{b.label}</span>
+          <span key={i} className={cn('min-w-0 flex-1 truncate text-center text-[10px] sm:text-[11px]', b.total ? 'font-extrabold' : 'text-muted-foreground')}>{b.label}</span>
         ))}
       </div>
     </div>
