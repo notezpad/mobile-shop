@@ -107,18 +107,36 @@ async function __PUT(req: NextRequest) {
     data.retailEnabled = Boolean(body.retailEnabled)
 
   // 🛡️ 2026-10-03: التسعير الديناميكي (cost + هامش %) — باقة احترافية فقط.
-  // نتحقق من الـ capability قبل ما نسمح بأي تغيير على هذين الحقلين.
-  // لو الباقة أساسية ونفّذ أحد PATCH مباشرة على الـ API → 403.
+  // 🛡️ 2026-10-05 (v8): الفحص بقى على التغيير الفعلي مش مجرّد وجود الحقل في
+  // الجسم. صفحة الإعدادات كانت بتبعت الـ object كله (يعني dynamicRetailPricingEnabled
+  // موجود دايماً حتى لو المستخدم مانسّهوش) → أي حفظ من باقة غير احترافية كان
+  // بيرجع 403 «التسعير الديناميكي...» ومفيش حاجة بتتحفظ خالص. دلوقتي:
+  // الحقل الموجود بنفس القيمة الحالية = مفيش تغيير = بيتمرّ عادي، وأي تغيير
+  // حقيقي لسه محتاج الباقة الاحترافية (والـ client كمان بقى يبعت diff بس).
   if (
     body.dynamicRetailPricingEnabled !== undefined ||
     body.defaultRetailMarginPercent !== undefined
   ) {
-    const planCtxTenant = await getPlanContext(session.tenantId)
-    if (!planCtxTenant.capabilities.includes('dynamic_retail_pricing')) {
-      return NextResponse.json(
-        { error: 'التسعير الديناميكي متاح للباقة الاحترافية فقط — يرجى ترقية الاشتراك' },
-        { status: 403 }
-      )
+    const current = await db.tenant.findUnique({
+      where: { id: session.tenantId },
+      select: { dynamicRetailPricingEnabled: true, defaultRetailMarginPercent: true },
+    })
+    const pricingChanged =
+      body.dynamicRetailPricingEnabled !== undefined &&
+      Boolean(body.dynamicRetailPricingEnabled) !==
+        Boolean(current?.dynamicRetailPricingEnabled)
+    const marginChanged =
+      body.defaultRetailMarginPercent !== undefined &&
+      Number(body.defaultRetailMarginPercent) !==
+        Number(current?.defaultRetailMarginPercent ?? 0)
+    if (pricingChanged || marginChanged) {
+      const planCtxTenant = await getPlanContext(session.tenantId)
+      if (!planCtxTenant.capabilities.includes('dynamic_retail_pricing')) {
+        return NextResponse.json(
+          { error: 'التسعير الديناميكي متاح للباقة الاحترافية فقط — يرجى ترقية الاشتراك' },
+          { status: 403 }
+        )
+      }
     }
     if (body.dynamicRetailPricingEnabled !== undefined)
       data.dynamicRetailPricingEnabled = Boolean(body.dynamicRetailPricingEnabled)

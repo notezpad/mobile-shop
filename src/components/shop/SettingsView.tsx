@@ -262,9 +262,21 @@ export function SettingsView() {
 
   const save = async () => {
     if (!data || saving) return
+    // 🛡️ 2026-10-05 (v8): بنبعت بس الحقول اللي اتغيّرت فعلاً (diff على الـ baseline
+    // `saved`) مش الـ object كله. قبل كده كنا بنبعت dynamicRetailPricingEnabled +
+    // defaultRetailMarginPercent في كل حفظ حتى لو المستخدم مانسهمش — فحرس الباقة
+    // في الـ API كان شايف الحقل موجود → 403 «التسعير الديناميكي متاح للباقة
+    // الاحترافية فقط» على أي باقة غير احترافية، ومفيش حاجة بتتحفظ خالص (لا شكل
+    // بطاقة المنتج ولا اسم المحل ولا العمولات). دلوقتي الحفظ بيوصّل بس اللي
+    // المستخدم لمس، وحرس الباقة بيفضل شغال لأي تغيير حقيقي في التسعير.
+    const body: Record<string, unknown> = {}
+    for (const t of TRACKED) {
+      if (saved && data[t.key] !== saved[t.key]) body[t.key] = data[t.key]
+    }
+    if (Object.keys(body).length === 0) return
     setSaving(true)
     try {
-      const out: TenantData = await api('/api/tenant', { method: 'PUT', body: data })
+      const out: TenantData = await api('/api/tenant', { method: 'PUT', body })
       setData(out)
       setSaved(out)
       setShopName(out.shopName)
@@ -328,6 +340,9 @@ export function SettingsView() {
   const prefix = (data?.invoicePrefix || 'INV').trim() || 'INV'
   const margin = data?.defaultRetailMarginPercent ?? 20
   const retailOn = data?.dynamicRetailPricingEnabled ?? false
+  // 🛡️ 2026-10-05 (v8): الباقات من غير dynamic_retail_pricing نشوف لها القسم ده
+  // مقفول (toggle + margin disabled) بدل ما يفعّلوه وبعدين يتصدم بـ 403 عند الحفظ.
+  const pricingLocked = !capabilities.includes('dynamic_retail_pricing')
   const commissions: { key: 'commissionVodafoneCash' | 'commissionInstapay' | 'commissionFawry'; label: string }[] = [
     { key: 'commissionVodafoneCash', label: 'المحافظ الإلكترونية' },
     { key: 'commissionInstapay', label: 'انستاباي' },
@@ -623,14 +638,14 @@ export function SettingsView() {
           >
             <SettingRow
               title="تفعيل التسعير التلقائي للقطعة"
-              desc="السعر بيتحدّث فوراً في نقطة البيع لحظة اختيار وحدة «قطعة»"
+              desc={pricingLocked ? 'ميزة الباقة الاحترافية — الترقية بتفتح القسم ده' : 'السعر بيتحدّث فوراً في نقطة البيع لحظة اختيار وحدة «قطعة»'}
               on={retailOn}
             >
-              <Toggle label="تفعيل التسعير التلقائي للقطعة" checked={retailOn} onChange={(v) => update('dynamicRetailPricingEnabled', v)} disabled={saving} />
+              <Toggle label="تفعيل التسعير التلقائي للقطعة" checked={retailOn} onChange={(v) => update('dynamicRetailPricingEnabled', v)} disabled={saving || pricingLocked} />
             </SettingRow>
 
-            <Field label="نسبة هامش الربح الافتراضية" hint="تُطبَّق على أي منتج ملوش نسبة مخصصة. وتقدر تخصص نسبة لمنتج معين من بياناته.">
-              <NumInput value={margin} onChange={(n) => update('defaultRetailMarginPercent', n)} suffix="%" />
+            <Field label="نسبة هامش الربح الافتراضية" hint={pricingLocked ? 'بيتفتح مع الباقة الاحترافية' : 'تُطبَّق على أي منتج ملوش نسبة مخصصة. وتقدر تخصص نسبة لمنتج معين من بياناته.'}>
+              <NumInput value={margin} onChange={(n) => update('defaultRetailMarginPercent', n)} suffix="%" disabled={saving || pricingLocked} />
             </Field>
 
             {/* معادلة حيّة */}
