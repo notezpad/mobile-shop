@@ -733,7 +733,16 @@ html::-webkit-scrollbar-thumb:active {
   * {
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
-    transition: scrollbar-color 0.3s ease;
+    /* ⚡ PERF FIX (2026-10-06): transition: scrollbar-color اتشالت — كانت
+       كارثة أداء خفية: لما دايلوج/شيت يفتح، RemoveScroll بيقفل scroll الـ
+       body، وكروم بيعتبر ده تغيير scrollbar-color قابل للتحريك على كل عنصر
+       بيرث القيمة (اتقاس: 10,156 animation event لفتح دايلوج واحد!). كل
+       أنيميشن بيفرض إعادة حساب أنماط للصفحة كلها (UpdateLayoutTree 200-370ms
+       × 4+) = بطء فتح/غلق الدايلوجات 3-4 ثواني على الجوال. القياس بعد الحذف
+       (محاكاة 6x CPU): الفتح 1880→656ms والإغلاق 1829→895ms.
+       الـ hover-reveal لسه شغال (اللون بيتغير لحظياً بدل 0.3s fade).
+       ⚠️ ملاحظة مهمة: ده الملف الحقيقي المستورد في src/app/layout.tsx —
+       src/components/shop/globals.css ملف ميت مش مستورد في أي حتة. */
   }
 
   *:hover,
@@ -744,6 +753,34 @@ html::-webkit-scrollbar-thumb:active {
   .dark *:hover,
   .dark *:focus-within {
     scrollbar-color: oklch(0.74 0.16 162 / 0.35) transparent;
+  }
+}
+
+/* ⚡ PERF FIX v8 (2026-10-06): دايلوجات لحظية على الجوال.
+   المستخدم قارن بتطبيق تاني مودالاته بتفتح فوراً — التحليل أظهر إنه بيستخدم
+   مودال عادي بدون Radix (بدون FocusScope/RemoveScroll/أنيميشن نهائياً).
+   احنا مش هنستبدل Radix (مستخدم في عشرات الشاشات)، بس هنوصل لنفس الإحساس:
+   على الجوال (< 640px) نشيل أنيميشن فتح/غلق الـ overlays والـ contents.
+   الفايدة مزدوجة: (1) الفتح بيظهر فوراً بدون fade/zoom/slide، (2) الغلق —
+   Radix Presence بيفضل العنصر mounted لحد animationend قبل فك الـ portal
+   وتحرر scroll-lock؛ من غير أنيميشن الفك بيحصل لحظياً.
+   ملاحظات: animation: none مش بتلمس الترانزيشنز التانية (hover ألوان إلخ)،
+   والـ spinners/badges بره العناصر دي فشغالة عادي، والديسكتوب (>= 640px)
+   فضل بأنيميشنه الكامل. شملنا select/popover/dropdown content لأنها
+   بتنفتح جوه الدايلوجات (اختيار عميل/منتج) وكانت نفس مشكلة الأنيميشن.
+   !important ضرورية لأن أنيميشن tw-animate بتتحط عبر data-state variants
+   (specificity أعلى من utility عادية). */
+@media (max-width: 639.98px) {
+  [data-slot="dialog-overlay"],
+  [data-slot="dialog-content"],
+  [data-slot="alert-dialog-overlay"],
+  [data-slot="alert-dialog-content"],
+  [data-slot="sheet-overlay"],
+  [data-slot="sheet-content"],
+  [data-slot="select-content"],
+  [data-slot="popover-content"],
+  [data-slot="dropdown-menu-content"] {
+    animation: none !important;
   }
 }
 
