@@ -1,5 +1,5 @@
-import XLSX from 'xlsx-js-style'
 import { BRAND } from '@/lib/print'
+import type * as XLSXNamespace from 'xlsx-js-style'
 
 /**
  * Shared Excel export engine.
@@ -9,7 +9,24 @@ import { BRAND } from '@/lib/print'
  * system already used by the PDF/print templates (`src/lib/print.ts`):
  * same green identity, same shop header block, same clean table look —
  * just inside a spreadsheet instead of a printed page.
+ *
+ * ⚡ PERF FIX (2026-10-05 — slow mobile navigation):
+ * xlsx-js-style weighs ~870KB minified. It USED to be statically imported
+ * here, so EVERY view that imports this module (Products, Customers,
+ * Suppliers, Sales, Purchases, Expenses, Inventory tabs…) pulled the whole
+ * 870KB chunk into its own route chunk. On a phone with a weak connection
+ * that meant downloading + parsing ~870KB just to OPEN the page — before
+ * any data fetch could even start. Now the library is loaded lazily the
+ * first time an actual export runs, so navigating to any page downloads
+ * only that page's real code and the 870KB is paid ONLY when the user
+ * actually clicks "تصدير Excel" (once — then it's cached).
  */
+
+let xlsxPromise: Promise<typeof XLSXNamespace> | null = null
+function loadXLSX(): Promise<typeof XLSXNamespace> {
+  if (!xlsxPromise) xlsxPromise = import('xlsx-js-style')
+  return xlsxPromise
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -107,11 +124,11 @@ function sanitizeSheetName(name: string, used: Set<string>): string {
   return final
 }
 
-function buildSheet(sheet: ExcelSheet, shop: ExcelWorkbookOptions['shop'], documentTitle: string, periodLabel?: string): XLSX.WorkSheet {
+function buildSheet(XLSX: typeof XLSXNamespace, sheet: ExcelSheet, shop: ExcelWorkbookOptions['shop'], documentTitle: string, periodLabel?: string): XLSXNamespace.WorkSheet {
   const cols = sheet.columns
   const colCount = Math.max(cols.length, 1)
   const aoa: any[][] = []
-  const merges: XLSX.Range[] = []
+  const merges: XLSXNamespace.Range[] = []
   const rowStyles: Record<number, Record<number, any>> = {}
   let r = 0
 
@@ -297,13 +314,16 @@ function buildSheet(sheet: ExcelSheet, shop: ExcelWorkbookOptions['shop'], docum
 // Public API
 // ---------------------------------------------------------------------------
 
-export function exportStyledExcel(opts: ExcelWorkbookOptions) {
+export async function exportStyledExcel(opts: ExcelWorkbookOptions) {
+  // ⚡ Lazy: download/parse the ~870KB xlsx engine only when an export
+  // actually runs (see the PERF FIX note at the top of this file).
+  const XLSX = await loadXLSX()
   const wb = XLSX.utils.book_new()
   ;(wb as any).Workbook = { Views: [{ RTL: true }] }
 
   const used = new Set<string>()
   for (const sheet of opts.sheets) {
-    const ws = buildSheet(sheet, opts.shop, opts.documentTitle, opts.periodLabel)
+    const ws = buildSheet(XLSX, sheet, opts.shop, opts.documentTitle, opts.periodLabel)
     const name = sanitizeSheetName(sheet.name, used)
     XLSX.utils.book_append_sheet(wb, ws, name)
   }
@@ -322,7 +342,7 @@ export function exportSimpleExcel(params: {
   rows: Record<string, any>[]
   totals?: Record<string, any>
 }) {
-  exportStyledExcel({
+  return exportStyledExcel({
     fileName: params.fileName,
     shop: params.shop,
     documentTitle: params.documentTitle,
