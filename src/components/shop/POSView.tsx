@@ -33,13 +33,6 @@ import { Input } from '@/components/ui/input'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { arEG } from 'react-day-picker/locale'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
@@ -49,6 +42,7 @@ import { useShopStore } from '@/lib/store'
 import { printSale } from '@/lib/print-client'
 import { printThermalReceipt, getStoredPrinterSettings } from '@/lib/thermal-printer'
 import { ProductDialog } from './ProductDialog'
+import { POSVariantPickerDialog } from './POSVariantPickerDialog'
 
 /* ────────────────────────────────────────────────────────────────
    Types (unchanged business model)
@@ -3007,7 +3001,7 @@ export function POSView() {
       )}
 
       {/* Variant picker */}
-      <Dialog
+      <POSVariantPickerDialog
         open={variantPickerOpen}
         onOpenChange={(o) => {
           setVariantPickerOpen(o)
@@ -3017,42 +3011,10 @@ export function POSView() {
             setVariantPickerUnits([])
           }
         }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>اختار اللون/المقاس — {variantPickerProduct?.name}</DialogTitle>
-          </DialogHeader>
-          {variantPickerVariants.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">
-              لا يوجد ألوان/مقاسات مسجلة لهذا المنتج
-            </p>
-          ) : (
-            <ul className="grid max-h-72 grid-cols-2 gap-2 overflow-y-auto">
-              {variantPickerVariants.map((v) => (
-                <li key={v.id}>
-                  <button
-                    type="button"
-                    disabled={v.quantity <= 0}
-                    onClick={() => handleVariantPick(v)}
-                    className={cn(
-                      'flex w-full flex-col items-start gap-1 rounded-xl border px-3 py-2.5 text-right transition-colors hover:border-primary hover:bg-primary-subtle',
-                      v.quantity <= 0 && 'cursor-not-allowed opacity-50 hover:border-border hover:bg-transparent'
-                    )}
-                  >
-                    <span className="text-sm font-semibold">{variantLabelOf(v)}</span>
-                    <StockBadge quantity={v.quantity} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setVariantPickerOpen(false)}>
-              إلغاء
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        productName={variantPickerProduct?.name}
+        variants={variantPickerVariants}
+        onPick={handleVariantPick}
+      />
 
       <ProductDialog
         open={productDlgOpen}
