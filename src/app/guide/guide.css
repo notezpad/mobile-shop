@@ -1,11 +1,57 @@
 /* guide.css — أنماط صفحة دليل الاستخدام (/guide)
    بتوسع نظام landing-dark الموجود (co-*, ab-*, lg-grad-text) وتضيف طبقة gd-* */
 
+/* ─────────────────────────────────────────────────────────────
+   SEO / الأداء / الوصولية (مطبقة في هذا الملف):
+   - content-visibility: auto على الأقسام تحت الطية  →  رسم أسرع
+   - contain-intrinsic-size                         →  منع CLS
+   - prefers-reduced-motion                         →  احترام إعدادات المستخدم
+   - prefers-contrast: more                         →  دعم وضع التباين العالي
+   - :focus-visible على كل عناصر التفاعل            →  Accessibility
+   - scroll-margin-top على الأقسام                  →  روابط المراسي
+   - scroll-snap-type على شريط التنقل               →  تمرير أنعم للموبايل
+   - text-wrap: balance/pretty                      →  عناوين وفقرات أنيقة
+   - طباعة                                          →  نسخة نظيفة لو المستخدم طبع
+
+   ملاحظات يجب تطبيقها في الـ HTML (خارج نطاق CSS):
+   - <h1> واحدة في الهيرو، ثم <h2> لكل قسم و<h3> لكل بطاقة
+   - Schema.org FAQPage على قسم الأسئلة الشائعة (Rich Results في Google)
+   - الصور: loading="lazy" decoding="async" alt واضح + width/height لمنع CLS
+   - روابط المراسي: <a href="#section-id"> مع نص وصفي (مش "اضغط هنا")
+   ───────────────────────────────────────────────────────────── */
+
+/* ═══════════ قاعدة عامة / وصولية ═══════════ */
+
+/* تركيز واضح بالكيبورد على كل عنصر تفاعلي */
+.gd-btn-primary:focus-visible,
+.gd-btn-ghost:focus-visible,
+.gd-anchor:focus-visible,
+.gd-plan:focus-visible,
+.gd-faq summary:focus-visible {
+  outline: 2px solid #6ee7b7;
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+
+/* منع الوميض الأزرق عند اللمس على iOS */
+.gd-btn-primary,
+.gd-btn-ghost,
+.gd-anchor,
+.gd-faq summary,
+.gd-plan {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* عند استخدام روابط مراسي، خلي المحتوى ما يختفيش تحت الشريط اللاصق */
+[id] {
+  scroll-margin-top: 90px;
+}
+
 /* ═══════════ Hero ═══════════ */
 .gd-hero {
   position: relative;
   border-radius: 24px;
-  padding: clamp(28px, 5vw, 56px);
+  padding: clamp(24px, 5vw, 56px);
   background:
     radial-gradient(1200px 400px at 85% -10%, rgba(16, 185, 129, 0.16), transparent 60%),
     radial-gradient(800px 300px at 10% 110%, rgba(52, 211, 153, 0.1), transparent 60%),
@@ -27,17 +73,19 @@
 }
 .gd-hero-title {
   margin-top: 18px;
-  font-size: clamp(26px, 4.2vw, 44px);
+  font-size: clamp(24px, 4.2vw, 44px);
   font-weight: 800;
   line-height: 1.35;
   color: #f4f6f8;
+  text-wrap: balance; /* عناوين أنيقة بدون كلمة معلقة */
 }
 .gd-hero-sub {
   margin-top: 14px;
   max-width: 640px;
-  font-size: clamp(14px, 1.6vw, 16.5px);
+  font-size: clamp(13.5px, 1.6vw, 16.5px);
   line-height: 2;
   color: rgba(226, 232, 240, 0.78);
+  text-wrap: pretty;
 }
 .gd-hero-cta {
   margin-top: 26px;
@@ -48,6 +96,7 @@
 .gd-btn-primary {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   padding: 12px 22px;
   border-radius: 12px;
@@ -57,6 +106,7 @@
   background: linear-gradient(135deg, #34d399, #059669);
   box-shadow: 0 8px 24px -8px rgba(16, 185, 129, 0.55);
   transition: transform 0.18s ease, box-shadow 0.18s ease;
+  min-height: 44px; /* هدف لمس مريح */
 }
 .gd-btn-primary:hover {
   transform: translateY(-2px);
@@ -65,6 +115,7 @@
 .gd-btn-ghost {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   padding: 12px 22px;
   border-radius: 12px;
@@ -74,12 +125,13 @@
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.14);
   transition: background 0.18s ease;
+  min-height: 44px;
 }
 .gd-btn-ghost:hover {
   background: rgba(255, 255, 255, 0.11);
 }
 
-/* شريط روابط الأقسام */
+/* ═══════════ شريط روابط الأقسام ═══════════ */
 .gd-anchorbar {
   position: sticky;
   top: 12px;
@@ -92,20 +144,29 @@
   border-radius: 14px;
   background: rgba(13, 17, 28, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.09);
+  -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
   scrollbar-width: none;
+  -ms-overflow-style: none;
+  overscroll-behavior-x: contain; /* ما يحرّكش الصفحة وأنت تسحب الشريط */
+  scroll-snap-type: x proximity;  /* تمرير أنعم للموبايل */
+  -webkit-overflow-scrolling: touch;
 }
 .gd-anchorbar::-webkit-scrollbar {
   display: none;
 }
 .gd-anchor {
   flex-shrink: 0;
-  padding: 7px 14px;
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 14px; /* كان 7px — هدف لمس أوضح */
   border-radius: 9px;
   font-size: 13px;
   font-weight: 600;
   color: rgba(226, 232, 240, 0.75);
   transition: color 0.15s, background 0.15s;
+  scroll-snap-align: center;
+  white-space: nowrap;
 }
 .gd-anchor:hover {
   color: #fff;
@@ -118,6 +179,9 @@
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 16px;
   margin-top: 24px;
+  /* تحسين أداء: تخطي رسم الأقسام البعيدة */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
 }
 .gd-erp-card {
   position: relative;
@@ -149,11 +213,13 @@
   font-weight: 700;
   color: #f1f5f9;
   margin-bottom: 8px;
+  text-wrap: balance;
 }
 .gd-erp-card p {
   font-size: 13.8px;
   line-height: 1.95;
   color: rgba(203, 213, 225, 0.78);
+  text-wrap: pretty;
 }
 .gd-erp-list {
   margin-top: 10px;
@@ -178,6 +244,8 @@
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 16px;
   margin-top: 26px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 480px;
 }
 .gd-plan {
   position: relative;
@@ -229,6 +297,7 @@
   font-size: 16.5px;
   font-weight: 800;
   color: #f8fafc;
+  text-wrap: balance;
 }
 .gd-plan-forwho {
   margin-top: 5px;
@@ -244,9 +313,10 @@
   display: flex;
   align-items: baseline;
   gap: 6px;
+  flex-wrap: wrap;
 }
 .gd-plan-price b {
-  font-size: 34px;
+  font-size: clamp(28px, 5vw, 34px);
   font-weight: 800;
   color: #fff;
   letter-spacing: -0.5px;
@@ -284,13 +354,21 @@
   color: #fbbf24;
 }
 
-/* جدول المقارنة */
+/* ═══════════ جدول المقارنة ═══════════ */
 .gd-table-wrap {
   margin-top: 26px;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   overflow-x: auto;
   background: rgba(255, 255, 255, 0.025);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  /* تلميح بصري للمستخدم إن فيه محتوى أكتر على الجنب */
+  background-image:
+    linear-gradient(to left, rgba(0, 0, 0, 0.35), transparent 32px);
+  background-repeat: no-repeat;
+  background-position: right center;
+  background-size: 32px 100%;
 }
 .gd-table {
   width: 100%;
@@ -339,6 +417,8 @@
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.09);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
 }
 .gd-gem-badge {
   display: inline-flex;
@@ -357,6 +437,7 @@
   font-size: clamp(18px, 2.4vw, 23px);
   font-weight: 800;
   color: #f8fafc;
+  text-wrap: balance;
 }
 .gd-gem p {
   margin-top: 12px;
@@ -364,6 +445,7 @@
   line-height: 2.05;
   color: rgba(203, 213, 225, 0.82);
   max-width: 820px;
+  text-wrap: pretty;
 }
 .gd-gem-shots {
   margin-top: 22px;
@@ -408,11 +490,18 @@
   font-size: 10.5px;
   color: rgba(148, 163, 184, 0.75);
   direction: ltr;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .gd-shot img {
   display: block;
   width: 100%;
   height: auto;
+  /* يمنع الـ CLS أثناء تحميل الصور */
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.03);
 }
 .gd-shot-cap {
   padding: 11px 16px;
@@ -428,6 +517,8 @@
   margin-top: 28px;
   display: grid;
   gap: 20px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 700px;
 }
 .gd-step {
   position: relative;
@@ -450,12 +541,14 @@
   color: #052e22;
   background: linear-gradient(135deg, #6ee7b7, #10b981);
   box-shadow: 0 8px 20px -8px rgba(16, 185, 129, 0.6);
+  align-self: start;
 }
 .gd-step-title {
   font-size: clamp(16px, 2vw, 20px);
   font-weight: 800;
   color: #f8fafc;
   padding-top: 10px;
+  text-wrap: balance;
 }
 .gd-step p {
   margin-top: 10px;
@@ -463,6 +556,7 @@
   line-height: 2.05;
   color: rgba(203, 213, 225, 0.82);
   max-width: 860px;
+  text-wrap: pretty;
 }
 .gd-step-shots {
   margin-top: 18px;
@@ -499,6 +593,8 @@
   margin-top: 26px;
   display: grid;
   gap: 12px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 400px;
 }
 .gd-faq details {
   border-radius: 14px;
@@ -521,6 +617,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-height: 48px; /* هدف لمس مريح */
+  text-wrap: balance;
 }
 .gd-faq summary::-webkit-details-marker {
   display: none;
@@ -538,6 +636,7 @@
   font-size: 13.8px;
   line-height: 2.05;
   color: rgba(203, 213, 225, 0.82);
+  text-wrap: pretty;
 }
 
 /* ═══════════ CTA النهائي ═══════════ */
@@ -555,11 +654,13 @@
   font-size: clamp(20px, 3vw, 30px);
   font-weight: 800;
   color: #f8fafc;
+  text-wrap: balance;
 }
 .gd-cta p {
   margin-top: 10px;
   font-size: 14.5px;
   color: rgba(203, 213, 225, 0.8);
+  text-wrap: pretty;
 }
 .gd-cta-buttons {
   margin-top: 22px;
@@ -574,25 +675,253 @@
   color: rgba(148, 163, 184, 0.7) !important;
 }
 
-/* ═══════════ استجابة الموبايل ═══════════ */
-@media (max-width: 640px) {
-  .gd-step {
-    grid-template-columns: 40px 1fr;
-    gap: 12px;
+/* ═══════════════════════════════════════════════════════════
+   استجابة: تابلت (≤ 900px)
+   - تقليل الحشو
+   - شكل تخطيط أهدى
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .gd-hero {
+    border-radius: 20px;
   }
-  .gd-step-num {
-    width: 40px;
-    height: 40px;
-    font-size: 15px;
+  .gd-gem,
+  .gd-step,
+  .gd-cta {
+    border-radius: 18px;
+  }
+  .gd-plan {
+    padding: 22px 18px 18px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   استجابة: موبايل (≤ 640px)
+   - هيرو مضغوط
+   - شريط تنقل بلمس أريح
+   - جدول بعمود أول لاصق
+   - بطاقات بعمود واحد
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  /* ── الهيرو ── */
+  .gd-hero {
+    padding: 22px 18px;
+    border-radius: 18px;
+  }
+  .gd-hero-title {
+    margin-top: 14px;
+    line-height: 1.45;
+  }
+  .gd-hero-sub {
+    line-height: 1.9;
+  }
+
+  /* ── شريط التنقل: لاصق من فوق، بلمس أوضح ── */
+  .gd-anchorbar {
+    top: 6px;
+    margin-top: 14px;
+    padding: 7px;
     border-radius: 12px;
   }
+  .gd-anchor {
+    padding: 10px 14px;
+    font-size: 12.5px;
+  }
+
+  /* ── أزرار الهيرو بعرض كامل ── */
   .gd-hero-cta .gd-btn-primary,
   .gd-hero-cta .gd-btn-ghost {
     width: 100%;
-    justify-content: center;
   }
+
+  /* ── البطاقات: عمود واحد ── */
+  .gd-erp-grid,
+  .gd-plans-grid,
   .gd-gem-shots,
   .gd-fashion-shots {
     grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  /* ── الخطوات: عمودين أصغر ── */
+  .gd-step {
+    grid-template-columns: 42px 1fr;
+    gap: 12px;
+    padding: 16px;
+  }
+  .gd-step-num {
+    width: 42px;
+    height: 42px;
+    font-size: 16px;
+    border-radius: 12px;
+  }
+  .gd-step-title {
+    padding-top: 8px;
+  }
+
+  /* ── الجدول: العمود الأول يفضل ظاهر أثناء السحب ── */
+  .gd-table-wrap {
+    border-radius: 14px;
+  }
+  .gd-table td:first-child,
+  .gd-table th:first-child {
+    position: sticky;
+    inset-inline-start: 0;
+    background: rgba(13, 17, 28, 0.96);
+    z-index: 2;
+    box-shadow: 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+  .gd-table th:first-child {
+    z-index: 3;
+  }
+
+  /* ── الكنوز: حشو أقل ── */
+  .gd-gem {
+    padding: 18px 16px;
+    border-radius: 16px;
+  }
+
+  /* ── CTA: حشو أقل + أزرار بعرض كامل ── */
+  .gd-cta {
+    margin-top: 32px;
+    padding: 24px 18px;
+    border-radius: 18px;
+  }
+  .gd-cta-buttons .gd-btn-primary,
+  .gd-cta-buttons .gd-btn-ghost {
+    width: 100%;
+  }
+
+  /* ── FAQ: حشو أقل + لمس أريح ── */
+  .gd-faq summary {
+    padding: 14px 16px;
+    font-size: 14px;
+  }
+  .gd-faq .gd-faq-a {
+    padding: 0 16px 16px;
+  }
+
+  /* ── الباقات: badge أقرب للحافة ── */
+  .gd-plan-badge {
+    inset-inline-start: 14px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   استجابة: موبايل صغير جدًا (≤ 400px)
+   - تقليل أكثر للخطوط والحشو
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 400px) {
+  .gd-hero {
+    padding: 18px 14px;
+  }
+  .gd-hero-title {
+    font-size: 22px;
+  }
+  .gd-plan {
+    padding: 20px 16px 16px;
+  }
+  .gd-plan-price b {
+    font-size: 26px;
+  }
+  .gd-step {
+    grid-template-columns: 36px 1fr;
+    gap: 10px;
+    padding: 14px;
+  }
+  .gd-step-num {
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
+    border-radius: 10px;
+  }
+  .gd-anchor {
+    padding: 9px 12px;
+    font-size: 12px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   وصولية: احترام إعدادات المستخدم لتقليل الحركة
+   (مهم للأشخاص ذوي الحساسية للحركة، ويحسن تجربة الاستخدام)
+   ═══════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  .gd-btn-primary,
+  .gd-btn-ghost,
+  .gd-anchor,
+  .gd-plan,
+  .gd-faq details,
+  .gd-faq summary .chev,
+  .gd-shot {
+    transition-duration: 0.01ms !important;
+  }
+  .gd-btn-primary:hover,
+  .gd-plan:hover {
+    transform: none;
+  }
+  .gd-anchorbar {
+    scroll-behavior: auto;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   وصولية: وضع التباين العالي (Windows High Contrast, etc.)
+   ═══════════════════════════════════════════════════════════ */
+@media (prefers-contrast: more) {
+  .gd-hero,
+  .gd-erp-card,
+  .gd-plan,
+  .gd-gem,
+  .gd-step,
+  .gd-faq details,
+  .gd-cta,
+  .gd-anchorbar {
+    border-color: rgba(255, 255, 255, 0.28);
+  }
+  .gd-erp-card p,
+  .gd-plan-features span,
+  .gd-step p,
+  .gd-faq .gd-faq-a {
+    color: rgba(226, 232, 240, 0.95);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   طباعة: نسخة نظيفة لو المستخدم طبع الدليل
+   ═══════════════════════════════════════════════════════════ */
+@media print {
+  .gd-anchorbar,
+  .gd-hero-cta,
+  .gd-cta-buttons {
+    display: none !important;
+  }
+  .gd-hero,
+  .gd-erp-card,
+  .gd-plan,
+  .gd-gem,
+  .gd-step,
+  .gd-faq details,
+  .gd-cta {
+    background: #fff !important;
+    color: #000 !important;
+    border-color: #ccc !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+  .gd-hero-title,
+  .gd-erp-card h3,
+  .gd-plan-name,
+  .gd-gem-title,
+  .gd-step-title,
+  .gd-cta h2 {
+    color: #000 !important;
+  }
+  .gd-step p,
+  .gd-faq .gd-faq-a,
+  .gd-erp-card p {
+    color: #222 !important;
+  }
+  .gd-shot {
+    border-color: #ccc !important;
+    box-shadow: none !important;
   }
 }

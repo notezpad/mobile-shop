@@ -108,6 +108,7 @@ function NavButton({
 
   const linkEl = (
     <Link
+      prefetch={false}
       href={item.path}
       onClick={onNavigate}
       aria-current={active ? 'page' : undefined}
@@ -193,6 +194,7 @@ function InventoryGroup({
   if (collapsed) {
     const linkEl = (
       <Link
+        prefetch={false}
         href="/inventory"
         onClick={onNavigate}
         aria-label="المخزون"
@@ -248,6 +250,7 @@ function InventoryGroup({
         )}
 
         <Link
+          prefetch={false}
           href="/inventory"
           onClick={onNavigate}
           aria-current={parentActive ? 'page' : undefined}
@@ -303,6 +306,7 @@ function InventoryGroup({
             return (
               <Link
                 key={child.path}
+                prefetch={false}
                 href={child.path}
                 onClick={onNavigate}
                 aria-current={active ? 'page' : undefined}

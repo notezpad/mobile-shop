@@ -299,7 +299,8 @@ async function runGet<T>(
       throw err
     }
     // Success → cache + return
-    await idb.setCached(url, data)
+    // لا ننتظر كتابة IndexedDB (بطيئة على الموبايل) — الكاش للأوفلاين فقط
+    void idb.setCached(url, data).catch(() => {})
     return data as T
   } catch (err: any) {
     // 4xx client errors (401 session expired, 403 forbidden, 404 not found)

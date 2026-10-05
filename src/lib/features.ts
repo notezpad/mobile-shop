@@ -68,7 +68,19 @@ export type PlanContext = {
  * is still recommended (it cleans up the DB rows for hygiene) but it's
  * no longer strictly required for the runtime to behave correctly.
  */
+const PLAN_CTX_TTL_MS = 60_000
+const planCtxCache = new Map<string, { at: number; value: PlanContext }>()
+
 export async function getPlanContext(tenantId: string): Promise<PlanContext> {
+  const hit = planCtxCache.get(tenantId)
+  if (hit && Date.now() - hit.at < PLAN_CTX_TTL_MS) return hit.value
+  const value = await loadPlanContext(tenantId)
+  if (planCtxCache.size > 500) planCtxCache.clear()
+  planCtxCache.set(tenantId, { at: Date.now(), value })
+  return value
+}
+
+async function loadPlanContext(tenantId: string): Promise<PlanContext> {
   const sub = await db.subscription.findFirst({
     where: { tenantId, status: 'active' },
     orderBy: { endDate: 'desc' },
