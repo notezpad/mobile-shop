@@ -31,6 +31,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
 import type { ViewKey } from '@/lib/store'
+import { preloadView, shouldSkipPreload } from '@/lib/view-preload'
 import {
   Tooltip,
   TooltipContent,
@@ -106,10 +107,19 @@ function NavButton({
 }) {
   const Icon = item.icon
 
+  // ⚡ PERF FIX: التنزيل يبدأ من لحظة اللمس/الهوفر بدل الانتظار بعد الكليك.
+  // (راجع src/lib/view-preload.ts للشرح الكامل للسلسلة المتسلسلة)
+  const warmup = React.useCallback(() => {
+    if (!shouldSkipPreload()) preloadView(item.path)
+  }, [item.path])
+
   const linkEl = (
     <Link
-      prefetch={false}
+      prefetch
       href={item.path}
+      onMouseEnter={warmup}
+      onPointerDown={warmup}
+      onFocus={warmup}
       onClick={onNavigate}
       aria-current={active ? 'page' : undefined}
       className={cn(
@@ -190,12 +200,20 @@ function InventoryGroup({
     wasInInventory.current = inInventory
   }, [inInventory])
 
+  // ⚡ PERF FIX: warm-up موحّد لكل روابط المخزون (راجع src/lib/view-preload.ts)
+  const warmInventory = React.useCallback(() => {
+    if (!shouldSkipPreload()) preloadView('/inventory')
+  }, [])
+
   /* ── Collapsed mode: single icon link + tooltip ── */
   if (collapsed) {
     const linkEl = (
       <Link
-        prefetch={false}
+        prefetch
         href="/inventory"
+        onMouseEnter={warmInventory}
+        onPointerDown={warmInventory}
+        onFocus={warmInventory}
         onClick={onNavigate}
         aria-label="المخزون"
         className={cn(
@@ -250,8 +268,11 @@ function InventoryGroup({
         )}
 
         <Link
-          prefetch={false}
+          prefetch
           href="/inventory"
+          onMouseEnter={warmInventory}
+          onPointerDown={warmInventory}
+          onFocus={warmInventory}
           onClick={onNavigate}
           aria-current={parentActive ? 'page' : undefined}
           className="flex min-w-0 flex-1 items-center gap-3 px-3 py-1.5"
@@ -306,8 +327,11 @@ function InventoryGroup({
             return (
               <Link
                 key={child.path}
-                prefetch={false}
+                prefetch
                 href={child.path}
+                onMouseEnter={() => shouldSkipPreload() || preloadView(child.path)}
+                onPointerDown={() => shouldSkipPreload() || preloadView(child.path)}
+                onFocus={() => shouldSkipPreload() || preloadView(child.path)}
                 onClick={onNavigate}
                 aria-current={active ? 'page' : undefined}
                 style={

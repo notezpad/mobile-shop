@@ -2,7 +2,6 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { motion, AnimatePresence } from 'framer-motion'
 import {
   AlertTriangle,
   Clock,
@@ -27,6 +26,11 @@ import { useShopStore } from '@/lib/store'
  *     on the next session.
  *
  * Sibling of `OfflineIndicator` in (shop)/layout.tsx.
+ *
+ * ⚡ PERF FIX (2026-10-05): كان بيسحب framer-motion كامل (~35KB gzip)
+ * في chunk الـ shell اللي بيتحمّل مع كل صفحة — عشان fade واحد بسيط.
+ * اتعوّض بأنيميشن CSS بسيطة (animate-in fade-in) بدون أي فرق بصري،
+ * وده بيشيل framer-motion من الـ shell خالص.
  */
 export function TrialExpiredBanner() {
   const subscription = useShopStore((s) => s.subscription)
@@ -47,19 +51,14 @@ export function TrialExpiredBanner() {
   const daysLeft = subscription.daysLeft ?? 0
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}
-        className={
-          'sticky top-0 z-40 w-full border-b backdrop-blur-sm ' +
-          (isExpired
-            ? 'bg-gradient-to-l from-red-600/95 via-red-700/95 to-red-800/95 border-red-900/50'
-            : 'bg-gradient-to-l from-amber-500/95 via-amber-600/95 to-amber-700/95 border-amber-900/50')
-        }
-      >
+    <div
+      className={
+        'sticky top-0 z-40 w-full border-b backdrop-blur-sm animate-in fade-in duration-200 ' +
+        (isExpired
+          ? 'bg-gradient-to-l from-red-600/95 via-red-700/95 to-red-800/95 border-red-900/50'
+          : 'bg-gradient-to-l from-amber-500/95 via-amber-600/95 to-amber-700/95 border-amber-900/50')
+      }
+    >
         <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-3 py-2 sm:px-6">
           {/* Icon */}
           <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/15">
@@ -127,7 +126,6 @@ export function TrialExpiredBanner() {
             </button>
           )}
         </div>
-      </motion.div>
-    </AnimatePresence>
+    </div>
   )
 }

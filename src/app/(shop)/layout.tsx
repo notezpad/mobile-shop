@@ -18,9 +18,10 @@ import { OfflineIndicator } from '@/components/shop/OfflineIndicator'
 import { TrialExpiredBanner } from '@/components/shop/TrialExpiredBanner'
 import { RoleBadge } from '@/components/shop/RoleBadge'
 import { useOfflineReady } from '@/lib/offline/use-offline'
+import { scheduleIdleWarmup } from '@/lib/view-preload'
 import { useShopStore } from '@/lib/store'
 import { api } from '@/lib/api'
-import { getMe } from '@/lib/auth-client'
+import { getMe, type AuthUser } from '@/lib/auth-client'
 
 const VIEW_PATHS: Record<string, string> = {
   '/dashboard': 'dashboard',
@@ -151,71 +152,116 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   // ⚡ Initialize offline sync engine (flush outbox when network returns)
   useOfflineReady()
 
+  // ⚡ PERF: بعد الفتح بشوية، حمّل chunks أشهر صفحات (الداشبورد/نقطة
+  // البيع/المنتجات) في وقت الخمول — أول ضغطة تبقى فورية. بيتجاهل
+  // شبكات 2G/3G و Save-Data تلقائياً.
+  React.useEffect(() => {
+    if (bootState !== 'authed') return
+    const cancel = scheduleIdleWarmup()
+    return () => cancel?.()
+  }, [bootState])
+
   React.useEffect(() => {
     let alive = true
     ;(async () => {
-      // 🛡️ ROOT FIX (استهلاك موارد): التلات ريكويستات كانوا بيتنططوا
-      // بالتوازي لأي حد يفتح الصفحة — يعني زائر/بوت مش مسجّل دخول كان
-      // بيكلّف 3 ريكويستات + 3 اتصالات قاعدة بيانات. دلوقتي بنتأكد من
-      // السيشن الأول، وبعدها بس بنسحب بيانات المحل والاشتراك.
+      // ⚡ PERF FIX (2026-10-05 — بطء فتح أي صفحة على الجوال):
+      //
+      // القديم: getMe() ← في انتظار → وبعدها /api/tenant + /api/subscription
+      // بالتوازي ← في انتظار → وبعدها bootState='authed' والصفحة تظهر.
+      // يعني shell كامل واقف ورا سبينر لحد ما تخلص **2 مرات متتالية** من
+      // الـ round-trips على شبكة موبايل + سيرفر بيقعد يفتح اتصال Postgres
+      // جديد لكل ريكويست. ده كان بيضيف 1-3 ثواني على كل فتح للتطبيق.
+      //
+      // الجديد:
+      //   1) bootState بيتقفل بمجرد ما getMe يرجع (أسرع FCP ممكن) —
+      //      بيانات المحل/الاشتراك دي للعرض فقط (اسم المحل، اللوجو،
+      //      البانر، الساعة) فمش لازم تحجب الشاشة.
+      //   2) tenant + subscription بييجوا في الخلفية بالتوازي بعد me.
+      //   3) fast-boot: للزيارات المتكررة في نفس التاب (أو PWA)، بنرجّع
+      //      اليوزر من sessionStorage فوراً ونفتح الشل على طول، وبعدين
+      //      نعيد التحقق من السيشن في الخلفية — لو السيشن خلصت فعلاً،
+      //      آلية الـ 401 الموجودة (SessionGuard + notifySessionExpired)
+      //      هتفرّغ اليوزر وترجّعه للوجين زي ما هي.
+      let cachedUser: AuthUser | null = null
+      try {
+        const raw = sessionStorage.getItem('boot-user-v1')
+        const parsed = raw ? JSON.parse(raw) : null
+        // صلاحية قصيرة جداً (10 دقايق) — كفاية للتنقل السريع بين فتح
+        // وتقفيل التاب، وقصيرة كفاية إن أي تغيير حساب حقيقي يتشاف فوراً
+        // من إعادة التحقق في الخلفية.
+        if (parsed?.user?.userId && Date.now() - parsed.at < 10 * 60 * 1000) {
+          cachedUser = parsed.user as AuthUser
+        }
+      } catch { /* ignore */ }
+
+      if (cachedUser) {
+        setUser(cachedUser)
+        setBootState('authed')
+      }
+
+      // الخطوة 1: السيشن (no-store دايمًا — مصدر الحقيقة للأمان)
       const meResult = await Promise.allSettled([getMe()]).then((r) => r[0])
       if (!alive) return
 
       const me = meResult.status === 'fulfilled' ? meResult.value : null
       if (!me) {
+        // مفيش سيشن حقيقية → نمسح أي fast-boot مخبّأ ونطلع للوجين
+        try { sessionStorage.removeItem('boot-user-v1') } catch { /* ignore */ }
+        setUser(null)
         setBootState('guest')
         return
       }
+      try { sessionStorage.setItem('boot-user-v1', JSON.stringify({ user: me, at: Date.now() })) } catch { /* ignore */ }
       setUser(me)
 
-      const [tenantResult, subResult] = await Promise.allSettled([
-        api<{ shopName?: string; phone?: string | null; address?: string | null; logoPath?: string | null; invoicePrefix?: string; timezone?: string }>('/api/tenant'),
-        api<any>('/api/subscription'),
-      ])
-      if (!alive) return
+      // الخطوة 2 (خلفية): بيانات المحل + الاشتراك — بالتوازي وبغير حاجب
+      ;(async () => {
+        const [tenantResult, subResult] = await Promise.allSettled([
+          api<{ shopName?: string; phone?: string | null; address?: string | null; logoPath?: string | null; invoicePrefix?: string; timezone?: string }>('/api/tenant'),
+          api<any>('/api/subscription'),
+        ])
+        if (!alive) return
 
+        if (tenantResult.status === 'fulfilled') {
+          const t = tenantResult.value
+          if (t?.shopName) setShopName(t.shopName)
+          setBranding({
+            phone: t?.phone ?? null,
+            address: t?.address ?? null,
+            logoPath: t?.logoPath ?? null,
+            invoicePrefix: t?.invoicePrefix || 'INV',
+            // 🛡️ 2026-09-27: تولبار الساعة/التاريخ فوق بيتبع دلوقتي المنطقة
+            // الزمنية بتاعة المحل (مش جهاز المستخدم) — راجع LiveClock تحت.
+            timezone: t?.timezone || 'Africa/Cairo',
+          })
+        }
+
+        if (subResult.status === 'fulfilled') {
+          const d = subResult.value
+          setSubscription({
+            expired: Boolean(d?.expired),
+            expiringSoon: Boolean(d?.expiringSoon),
+            daysLeft: typeof d?.daysLeft === 'number' ? d.daysLeft : null,
+            endDate: d?.endDate ?? null,
+            planCode: d?.planCode ?? null,
+            planName: d?.planName ?? null,
+            period: d?.period ?? null,
+          })
+          if (Array.isArray(d?.enabledModules)) {
+            setPlan({
+              businessType: d.businessType === 'fashion' ? 'fashion' : 'electronics',
+              enabledModules: d.enabledModules,
+              capabilities: Array.isArray(d.capabilities) ? d.capabilities : [],
+            })
+          }
+        }
+      })()
+
+      // الخطوة 3: SUPER_ADMIN يتحوّل للوحة الأدمن (نفس السلوك القديم)
       if (me.role === 'SUPER_ADMIN' && !(me as any).impersonating) {
         setBootState('admin')
         router.replace('/')
         return
-      }
-
-      if (tenantResult.status === 'fulfilled') {
-        const t = tenantResult.value
-        if (t?.shopName) setShopName(t.shopName)
-        setBranding({
-          phone: t?.phone ?? null,
-          address: t?.address ?? null,
-          logoPath: t?.logoPath ?? null,
-          invoicePrefix: t?.invoicePrefix || 'INV',
-          // 🛡️ 2026-09-27: تولبار الساعة/التاريخ فوق بيتبع دلوقتي المنطقة
-          // الزمنية بتاعة المحل (مش جهاز المستخدم) — راجع LiveClock تحت.
-          timezone: t?.timezone || 'Africa/Cairo',
-        })
-      }
-
-      if (subResult.status === 'fulfilled') {
-        const d = subResult.value
-        // 🛡️ 2026-09-13: NO LONGER redirect on expired. Instead, store the
-        // subscription state in the shop store and let the user continue
-        // using the system. A `TrialExpiredBanner` will be shown at the top
-        // of every page encouraging them to subscribe via /pricing.
-        setSubscription({
-          expired: Boolean(d?.expired),
-          expiringSoon: Boolean(d?.expiringSoon),
-          daysLeft: typeof d?.daysLeft === 'number' ? d.daysLeft : null,
-          endDate: d?.endDate ?? null,
-          planCode: d?.planCode ?? null,
-          planName: d?.planName ?? null,
-          period: d?.period ?? null,
-        })
-        if (Array.isArray(d?.enabledModules)) {
-          setPlan({
-            businessType: d.businessType === 'fashion' ? 'fashion' : 'electronics',
-            enabledModules: d.enabledModules,
-            capabilities: Array.isArray(d.capabilities) ? d.capabilities : [],
-          })
-        }
       }
 
       setBootState('authed')

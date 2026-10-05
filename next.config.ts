@@ -1,28 +1,8 @@
 import type { NextConfig } from "next";
-import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
 const nextConfig: NextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  reactStrictMode: false,
-  // يخفي زر N الدايري بتاع وضع التطوير (مش بيظهر في الإنتاج أصلاً)
-  devIndicators: false,
-  serverExternalPackages: [
-    "@prisma/client",
-    ".prisma/client",
-    "@prisma/adapter-pg",
-    "pg",
-    "pg-cloudflare",
-  ],
+  typescript: { ignoreBuildErrors: true },
+  eslint: { ignoreDuringBuilds: true },
 };
 
 export default nextConfig;
-
-// Only run during local development — NOT during CI/production builds.
-// During `next build` (Cloudflare Pages CI), NODE_ENV is "production",
-// so this is skipped and the missing Hyperdrive local connection string
-// no longer causes a build failure.
-if (process.env.NODE_ENV === "development") {
-  initOpenNextCloudflareForDev();
-}

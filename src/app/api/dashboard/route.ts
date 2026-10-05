@@ -168,7 +168,12 @@ export async function GET(req: Request) {
 
     // 🛡️ 2026-09-30 (M10): فواتير آجلة متأخرة — استحقاقها عدّى ومفيش سداد
     // كامل. بتظهر في الداشبورد عشان التحصيل يحصل قبل ما الدين يتقادم.
-    const tzNow = await getTenantTimezone(session.tenantId)
+    //
+    // ⚡ PERF FIX (2026-10-05): كان بيستدعي getTenantTimezone() تاني هنا —
+    // يعني استعلام Tenant إضافي كامل على كل تحميل داشبورد، وهو متاح أصلاً
+    // في `tz` اللي اتحسب فوق في نفس الطلب. اتصال الـ Postgres هنا بيتفتح
+    // من جديد لكل ريكويست، فكل استعلام زيادة بيحسس المستخدم فعلياً.
+    const tzNow = tz
     const todayStr2 = dateStrInTz(new Date(), tzNow)
     const overdueCutoff = new Date(`${todayStr2}T00:00:00.000Z`)
     const overdueRows = await db.sale.findMany({

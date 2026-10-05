@@ -926,3 +926,18 @@
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.8); }
 }
+
+/* === ⚡ PERF 2026-10-05: ThemeToggle icon swap (replaces framer-motion) === */
+.theme-icon-swap {
+  animation: theme-icon-in 0.22s ease-out;
+}
+@keyframes theme-icon-in {
+  from {
+    transform: rotate(-60deg) scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: rotate(0deg) scale(1);
+    opacity: 1;
+  }
+}

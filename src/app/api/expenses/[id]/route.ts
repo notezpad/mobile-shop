@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
-import { requireModule, featureErrorResponse } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,105 +75,6 @@ async function __DELETE(
   return NextResponse.json({ ok: true })
 }
 
-const CATEGORIES = new Set([
-  'إيجار',
-  'كهرباء ومياه',
-  'مرتبات',
-  'نقل ومواصلات',
-  'صيانة المحل',
-  'إنترنت واتصالات',
-  'ضيافة',
-  'هالك وتالف',
-  'أخرى',
-])
-
-async function __PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let session
-  try {
-    session = await requireAdmin()
-  } catch (e) {
-    const err = authErrorResponse(e)
-    return NextResponse.json(err?.body, { status: err?.status })
-  }
-  try { await requireModule(session, 'expenses') } catch (e) {
-    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
-  }
-
-  const { id } = await params
-  const eid = parseInt(id, 10)
-  if (isNaN(eid)) {
-    return NextResponse.json({ error: 'معرف غير صالح' }, { status: 400 })
-  }
-
-  const body = await req.json().catch(() => null)
-  if (!body || typeof body !== 'object') {
-    return NextResponse.json({ error: 'بيانات غير صالحة' }, { status: 400 })
-  }
-
-  const expense = await db.expense.findUnique({ where: { id: eid } })
-  if (!expense || expense.tenantId !== session.tenantId) {
-    return NextResponse.json({ error: 'المصروف غير موجود' }, { status: 404 })
-  }
-
-  // مصروف الهالك مولّد من حركة مخزون ومفيش له قيد خزنة — تعديله من هنا هيبوّظ الربط.
-  if ((expense as any).source === 'damage') {
-    return NextResponse.json(
-      { error: 'مصروف الهالك مرتبط بحركة مخزون ولا يمكن تعديله من هنا' },
-      { status: 409 },
-    )
-  }
-
-  const category = String(body.category ?? expense.category).trim()
-  if (!CATEGORIES.has(category)) {
-    return NextResponse.json(
-      { error: 'النوع غير صالح — اختار من قايمة الأنواع المعروضة' },
-      { status: 400 },
-    )
-  }
-  const amount = body.amount === undefined ? expense.amount : Number(body.amount)
-  if (isNaN(amount) || amount <= 0) {
-    return NextResponse.json(
-      { error: 'المبلغ يجب أن يكون أكبر من صفر' },
-      { status: 400 },
-    )
-  }
-  const note =
-    body.note === undefined
-      ? expense.note
-      : body.note
-        ? String(body.note).trim() || null
-        : null
-
-  const updated = await db.$transaction(async (tx) => {
-    const row = await tx.expense.update({
-      where: { id: eid },
-      data: { category, amount, note },
-    })
-    // نعدّل قيد الخزنة الأصلي في مكانه (بنفس طريقة الدفع) بدل ما نضيف قيد فرق —
-    // عشان حذف المصروف بعد كده يفضل يشتغل صح ومايتحسبش "اتلغى بالفعل".
-    const entry = await tx.cashEntry.findFirst({
-      where: { tenantId: session.tenantId, source: 'expense', refId: eid, amount: { lt: 0 } },
-      orderBy: { id: 'desc' },
-      select: { id: true },
-    })
-    if (entry) {
-      await tx.cashEntry.update({
-        where: { id: entry.id },
-        data: {
-          amount: -amount,
-          note: `المصروف ${category}${note ? ' - ' + note : ''}`,
-        },
-      })
-    }
-    return row
-  })
-
-  return NextResponse.json(updated)
-}
-
 class ExpenseAlreadyReversed extends Error {}
 
 export async function DELETE(...args: Parameters<typeof __DELETE>) {
@@ -191,8 +91,4 @@ export async function DELETE(...args: Parameters<typeof __DELETE>) {
       throw e
     }
   })
-}
-
-export async function PATCH(...args: Parameters<typeof __PATCH>) {
-  return withDb(() => __PATCH(...args))
 }
