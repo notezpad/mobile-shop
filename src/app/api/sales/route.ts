@@ -5,6 +5,7 @@ import type { Session } from '@/lib/auth'
 import { requireCapability, featureErrorResponse } from '@/lib/features'
 import { deductStock } from '@/lib/deduct-stock'
 import { getTenantTimezone, localDateStrToUtcBounds, dateStrInTz } from '@/lib/tenantTime'
+import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 import type { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -509,6 +510,18 @@ export async function POST(req: NextRequest) {
       }, { maxWait: 10000, timeout: 20000 }) // default 5s was too short over a remote DB → sale hung/failed
     }
 
+    // ⚡ EDGE CACHE purge (2026-10-06): البيع الجديد لازم يظهر فوراً في الداشبورد
+    // وديون العملاء — بنمسح مفاتيح الكاش بلا انتظار الـ TTL
+    await purgeEdgeCache(
+      [
+        PURGE_KEYS.customersDefault,
+        PURGE_KEYS.dashboard(7),
+        PURGE_KEYS.dashboard(14),
+        PURGE_KEYS.dashboard(30),
+      ],
+      session.tenantId,
+      2
+    )
     return NextResponse.json(sale, { status: 201 })
   })
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { createPrincipalCashEntry } from '@/lib/commission'
+import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -238,6 +239,12 @@ async function __POST(req: NextRequest) {
     }
   })
 
+  // ⚡ EDGE CACHE purge (2026-10-06): السداد بيغير رصيد العميل والخزنة فوراً
+  await purgeEdgeCache(
+    [PURGE_KEYS.customersDefault, PURGE_KEYS.dashboard(7), PURGE_KEYS.dashboard(14), PURGE_KEYS.dashboard(30)],
+    session.tenantId,
+    2
+  )
   return NextResponse.json(created, { status: 201 })
 }
 

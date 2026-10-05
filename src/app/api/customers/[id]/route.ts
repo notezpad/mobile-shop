@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
+import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
+
+/** ⚡ EDGE CACHE purge بعد أي تعديل/حذف عميل */
+async function purgeCustomerCaches(tenantId: number | string) {
+  await purgeEdgeCache(
+    [PURGE_KEYS.customersDefault, PURGE_KEYS.dashboard(7), PURGE_KEYS.dashboard(14), PURGE_KEYS.dashboard(30)],
+    tenantId,
+    2
+  )
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -172,6 +182,7 @@ async function __PUT(
       creditLimit,
     },
   })
+  await purgeCustomerCaches(session.tenantId)
   return NextResponse.json(updated)
 }
 
@@ -248,6 +259,7 @@ async function __DELETE(
 
       await tx.customer.delete({ where: { id: cid } })
     })
+    await purgeCustomerCaches(session.tenantId)
     return NextResponse.json({ ok: true })
   } catch (e) {
     if (e instanceof CustomerDeleteError) {

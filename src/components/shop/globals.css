@@ -621,7 +621,16 @@
   * {
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
-    transition: scrollbar-color 0.3s ease;
+    /* ⚡ PERF FIX (2026-10-06): transition: scrollbar-color اتشالت — كانت
+       كارثة أداء خفية: لما دايلوج/شيت يفتح، RemoveScroll بيقفل scroll الـ
+       body، وكروم بيعتبر ده تغيير scrollbar-color قابل للتحريك على كل عنصر
+       بيرث القيمة (اتقاس: 10,156 animation event لفتح دايلوج واحد!). كل
+       أنيميشن بيفرض إعادة حساب أنماط للصفحة كلها (UpdateLayoutTree 200-370ms
+       × 4+) = بطء فتح/غلق الدايلوجات 3-4 ثواني على الجوال. القياس بعد الحذف:
+       الفتح 1880→656ms والإغلاق 1829→895ms (على 6x CPU throttle).
+       الـ hover-reveal لسه شغال (اللون بيتغير لحظياً بدل 0.3s fade) —
+       وقواعد :hover/:focus-within تحت لسه زي ما هي، والأنيميشن الوحيدة
+       اللي اتشالت هي دي. */
   }
 
   *:hover,

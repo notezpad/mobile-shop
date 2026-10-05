@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,6 +42,18 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const search = searchParams.get('search')?.trim() || ''
+
+    // ⚡ EDGE CACHE (2026-10-06) — إصلاح Error 1102: القائمة الافتراضية (بدون
+    // بحث/صفحات) بتجيب حتى 3000 عميل + groupBy على كل المبيعات — ده الطلب
+    // اللي بيقع في كل تصفح سريع (شفناه في wrangler tail بـ Exceeded CPU Limit).
+    // كاش حافة 20 ثانية بمفتاح per-tenant — والجديد فوري لأن أي إضافة
+    // عميل/فاتورة/سداد بتعمل purge للمفتاح فوراً.
+    const cacheable = !search && !searchParams.has('page') && searchParams.keys().next().done === true
+    if (cacheable) {
+      const cached = await matchEdgeCache('/api/customers', '', session.tenantId, 2)
+      if (cached) return cached
+    }
+
     const where: any = { tenantId: session.tenantId }
     if (search) {
       where.OR = [
@@ -90,7 +103,12 @@ export async function GET(req: NextRequest) {
     }))
 
     if (!paginated) {
-      return NextResponse.json(result)
+      const res = NextResponse.json(result)
+      if (cacheable) {
+        // ⚡ خزّن نسخة على الحافة (clone — الرد الأصلي يكمل للمتصفح)
+        await putEdgeCache(res.clone(), '/api/customers', '', session.tenantId, 20, 2)
+      }
+      return res
     }
     return NextResponse.json({
       data: result,
@@ -123,6 +141,12 @@ export async function POST(req: NextRequest) {
         phone: body.phone ? String(body.phone).trim() : null,
       },
     })
+    // ⚡ تفريغ الكاش فوراً — العميل الجديد يظهر في كل القوائم لحظياً
+    await purgeEdgeCache(
+      [PURGE_KEYS.customersDefault, PURGE_KEYS.dashboard(7), PURGE_KEYS.dashboard(14), PURGE_KEYS.dashboard(30)],
+      session.tenantId,
+      2
+    )
     return NextResponse.json(created, { status: 201 })
   })
 }

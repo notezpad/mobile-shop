@@ -54,6 +54,8 @@ function SheetContent({
   side = "right",
   showCloseButton = true,
   forceMount,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
@@ -61,12 +63,7 @@ function SheetContent({
   showCloseButton?: boolean
   /**
    * ⚡ PERF (2026-10-05): Radix unmounts the sheet content when closed —
-   * so a heavy child (e.g. the full sidebar tree) is rebuilt from scratch
-   * on EVERY open, which made the mobile sidebar feel like it took ~3s
-   * to slide in. Pass forceMount to keep children mounted permanently and
-   * toggle visibility with CSS (add data-[state=closed]:hidden to className).
-   * Opening then becomes a pure 300ms CSS slide. Props still flow to the
-   * Radix Content element, so open/close handlers keep working unchanged.
+   * (انظر تعليق forceMount أعلاه — ولا تستخدمه على الجوال، انظر Task 9)
    */
   forceMount?: true
 }) {
@@ -76,6 +73,14 @@ function SheetContent({
       <SheetPrimitive.Content
         forceMount={forceMount}
         data-slot="sheet-content"
+        /*
+         * ⚡ PERF FIX (2026-10-06): نفس إصلاح dialog.tsx — منع دوامة focus
+         * recursion (35 مستوى) بين react-dom وRadix FocusGuards اللي بتفرض
+         * layout متزامن مع كل نداء focus(). الشيتات بتنزل 3-4 ثواني على الجوال
+         * بسببها. الـ Escape/overlay close مش متأثرين.
+         */
+        onOpenAutoFocus={onOpenAutoFocus ?? ((e) => e.preventDefault())}
+        onCloseAutoFocus={onCloseAutoFocus ?? ((e) => e.preventDefault())}
         className={cn(
           "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-300",
           side === "right" &&

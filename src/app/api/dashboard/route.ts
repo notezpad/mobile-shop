@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { checkLowStockAndNotify, checkExpiringSubscriptions } from '@/lib/notifications'
 import { getTenantTimezone, startOfDayInTz, startOfMonthInTz, dateStrInTz } from '@/lib/tenantTime'
+import { matchEdgeCache, putEdgeCache } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,15 @@ export async function GET(req: Request) {
   const url = new URL(req.url)
   const rawDays = parseInt(url.searchParams.get('days') ?? '7', 10)
   const chartDays = [7, 14, 30].includes(rawDays) ? rawDays : 7
+
+  // ⚡ EDGE CACHE (2026-10-06) — إصلاح Error 1102: الداشبورد أثقل endpoint
+  // (15+ استعلام + Prisma init لكل طلب) وبيتسحب مع كل زيارة وتحديث تلقائي.
+  // نسخة مخزنة على حافة Cloudflare لحد 45 ثانية = ≈ صفر CPU للطلبات المتكررة.
+  // مفتاح per-tenant — بيانات كل محل منفصلة. والجديد دايماً متاح لأن أي
+  // بيع/سداد بيعمل purge للمفتاح (انظر api/sales و api/payments).
+  const dashQuery = `days=${chartDays}`
+  const cachedDashboard = await matchEdgeCache('/api/dashboard', dashQuery, session.tenantId, 2)
+  if (cachedDashboard) return cachedDashboard
 
   return withDb(async () => {
     const tenantFilter = { tenantId: session.tenantId }
@@ -233,6 +243,8 @@ export async function GET(req: Request) {
         path: '/',
       })
     }
+    // ⚡ خزّن نسخة على الحافة (clone — الرد الأصلي يكمل للمتصفح)
+    await putEdgeCache(res.clone(), '/api/dashboard', dashQuery, session.tenantId, 45, 2)
     return res
   })
 }

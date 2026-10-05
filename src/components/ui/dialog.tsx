@@ -57,6 +57,8 @@ function DialogContent({
    */
   showCloseButton = false,
   mobileSheet = false,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
@@ -74,6 +76,20 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        /*
+         * ⚡ PERF FIX (2026-10-06): بطء فتح/غلق الدايلوجات ~3-4 ثواني على الجوال.
+         * السبب (اتأكدنا منه بـ CPU profiling على محاكاة موبايل 6x):
+         * Radix بيعمل auto-focus عند الفتح → focus event → FocusScope/FocusGuards
+         * بيردوا بـ focus() تاني → دوامة recursion 35 مستوى بين react-dom و
+         * Radix، وكل نداء native focus() بيفرض style+layout متزامن على الصفحة
+         * كلها. النتيجة: ~500ms JS + ثانية layout/paint على موبايل متوسط.
+         * preventDefault هنا بيمنع أول focus فالدوامة مش بتبدأ أصلاً.
+         * ملاحظة a11y: المعتاد على الموبايل إن المستخدم يدوس على الحقل بنفسه،
+         * والـ role=dialog + aria-modal لسه موجودين لقارئات الشاشة.
+         * أي دايلوج عايز focus مخصوص يقدر يمرر onOpenAutoFocus وهيتحترم.
+         */
+        onOpenAutoFocus={onOpenAutoFocus ?? ((e) => e.preventDefault())}
+        onCloseAutoFocus={onCloseAutoFocus ?? ((e) => e.preventDefault())}
         className={cn(
           "bg-card data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-[100] grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
           // 🛡️ الإصلاح العام: أي دايلوج أطول من الشاشة يسكرول جواه بدل ما يطلع برا.
