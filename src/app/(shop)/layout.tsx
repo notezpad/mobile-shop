@@ -4,12 +4,6 @@ import * as React from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2, Menu, CalendarDays, Home, X } from 'lucide-react'
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetTitle,
-} from '@/components/ui/sheet'
 import { Sidebar } from '@/components/shop/Sidebar'
 import { ThemeToggle } from '@/components/shop/ThemeToggle'
 import { NotificationBell } from '@/components/shop/NotificationBell'
@@ -133,6 +127,20 @@ function LiveClock({ timeZone }: { timeZone: string }) {
       </div>
     </div>
   )
+}
+
+/** 🛡️ 2026-10-06: إغلاق السايدبار بزر Escape — بديل مباشر لسلوك Radix الشيتي
+    القديم من غير أي Radix. مركّب مستقل عشان الـ effect يعتمد على enabled بس. */
+function EscapeCloser({ onEscape, enabled }: { onEscape: () => void; enabled: boolean }) {
+  React.useEffect(() => {
+    if (!enabled) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onEscape()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onEscape, enabled])
+  return null
 }
 
 export default function ShopLayout({ children }: { children: React.ReactNode }) {
@@ -333,25 +341,54 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
       </header>
 
       {/* Mobile sidebar */}
-      {/* ⚡ forceMount: السايدبار بيفضل متجمّع دايماً — الفتح بقى أنيميشن CSS
-          نضيف بدل إعادة بناء الشجرة كلها وقت الضغط (كان بياخد ~3 ثواني على الموبايل) */}
-      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent
-          side="right"
-          showCloseButton={false}
-          forceMount
-          className="h-dvh w-[82vw] max-w-[300px] gap-0 p-0 sm:max-w-[300px] data-[state=closed]:hidden"
+      {/* 🛡️ 2026-10-06 — إصلاح تجمّد الجوال بالكامل: درَجер بسيط بدون Radix Dialog
+          خالص. التاريخ: باتش v5 حط forceMount على SheetContent عشان يسرّع
+          الفتح، بس ده خلّى Radix Overlay (اللي جوّه RemoveScroll) متركّب
+          على طول → listeners غير passiva على document بتعمل preventDefault
+          لكل touchmove = سكرول الجوال ميت + أي لمسة بتنزل 1px الـ click
+          بتاعها بيتلغى. وحتى بعد modal={false}، اختبارات المتصفح أثبتت إن
+          وجود الشيت الـ forceMounted بيفسد dispatch بتاع React للضغطات
+          الحقيقية (isTrusted) على الهيدر كله (المصدر: react-dialog 1.1.23
+          + Presence/DismissableLayer مع forceMount).
+          الحل النهائي: درَجر عادي — div ثابت بيتحرك بـ translate-x CSS.
+          * شجرة السايدبار متجمّعة دايمًا جوّاه → الفتح فوري (300ms أنيميشن
+            CSS نضيف من غير إعادة بناء — نفس هدف forceMount بالظبط).
+          * مقفول = translate-x-full (بره الشاشة) + inert (مش بياخد focus
+            ولا يترى لقارئات الشاشة) — مفيش أي طبقة فوق الصفحة.
+          * مفيش قفل سكرول خالص: الشل fixed inset-0 + overflow-hidden،
+            والمس على الـ Overlay (غير قابل للسكرول) مش بيسكرول حاجة وراه. */}
+      {/* الظل الخلفي */}
+      <div
+        aria-hidden="true"
+        onClick={() => setMobileOpen(false)}
+        className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 ${
+          mobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+      />
+      {/* الدرج نفسه */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="قائمة التنقل"
+        inert={!mobileOpen}
+        className={`fixed inset-y-0 right-0 z-50 flex h-dvh w-[82vw] max-w-[300px] flex-col bg-background shadow-lg transition-transform duration-300 ease-in-out ${
+          mobileOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {/* زر الإغلاق على الشمال عشان ما يغطيش لوجو المحل */}
+        <button
+          type="button"
+          onClick={() => setMobileOpen(false)}
+          className="absolute left-3 top-4 z-10 flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted active:scale-90"
         >
-          <SheetTitle className="sr-only">القائمة</SheetTitle>
-          {/* زر الإغلاق على الشمال عشان ما يغطيش لوجو المحل */}
-          <SheetClose className="absolute left-3 top-4 z-10 flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted active:scale-90">
-            <X className="size-4" />
-            <span className="sr-only">إغلاق</span>
-          </SheetClose>
-          {/* w-full: السايدبار يملا الشيت بالكامل (كان 252px فيسيب شريط فاضي) */}
-          <Sidebar className="w-full border-l-0" onNavigate={() => setMobileOpen(false)} />
-        </SheetContent>
-      </Sheet>
+          <X className="size-4" />
+          <span className="sr-only">إغلاق</span>
+        </button>
+        {/* w-full: السايدبار يملا الدرج بالكامل */}
+        <Sidebar className="w-full border-l-0" onNavigate={() => setMobileOpen(false)} />
+      </div>
+      {/* إغلاق بزرار Escape (سلوك الشيت القديم) */}
+      <EscapeCloser onEscape={() => setMobileOpen(false)} enabled={mobileOpen} />
 
       {/*
         Sidebar + Main content in a flex-row.
