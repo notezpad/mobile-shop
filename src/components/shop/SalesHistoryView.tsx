@@ -552,7 +552,7 @@ export function SalesHistoryView() {
               disabled={filtered.length === 0}
             >
               <FileSpreadsheet className="size-4" />
-              <span className="hidden sm:inline">Excel</span>
+              <span>Excel</span>
             </Button>
           </div>
         </div>
@@ -603,42 +603,47 @@ export function SalesHistoryView() {
           <SettlementBar segs={segs} status={status} onPick={(k) => setStatus(status === k ? null : k)} />
         </div>
 
-        {/* تضييق */}
-        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-          <span className="flex items-center gap-1 text-[11px] font-bold text-foreground/65">
-            <Filter className="size-3.5" />
-            تضييق
-          </span>
-          <Facet
-            icon={Users} label="العميل" title="اختر العميل" subtitle="مرتّبين بالأكتر باقياً عليه"
-            options={customerOpts} selected={customer} onPick={setCustomer}
-            allLabel="كل العملاء" allCount={sales.length}
-            searchable={customerOpts.length > 5} searchPlaceholder="ابحث باسم العميل…"
-          />
-          <Facet
-            icon={Wallet} label="طريقة الدفع" title="طريقة الدفع" subtitle="الفواتير اللي اتدفع فيها حاجة"
-            options={methodOpts} selected={method} onPick={setMethod}
-            allLabel="كل الطرق" allCount={methodOpts.reduce((n, o) => n + (o.count ?? 0), 0)}
-          />
-          {userOpts.length > 1 && (
+        {/* تضييق — على الجوال 2×2، ومن sm: صف أفقي زي الأصل */}
+        <div className="border-t pt-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <span className="flex items-center gap-1 text-[11px] font-bold text-foreground/65">
+              <Filter className="size-3.5" />
+              تضييق
+            </span>
+            {activeFilters > 0 && (
+              <button
+                type="button"
+                onClick={clearAll}
+                className="inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold text-foreground/65 transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <X className="size-3.5" />
+                مسح الفلاتر ({activeFilters})
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
             <Facet
-              icon={User} label="الكاشير" title="مين سجّل الفاتورة" subtitle="حسب الموظف"
-              options={userOpts} selected={by} onPick={setBy}
-              allLabel="كل الموظفين" allCount={userOpts.reduce((n, o) => n + (o.count ?? 0), 0)}
+              icon={Users} label="العميل" title="اختر العميل" subtitle="مرتّبين بالأكتر باقياً عليه"
+              options={customerOpts} selected={customer} onPick={setCustomer}
+              allLabel="كل العملاء" allCount={sales.length}
+              searchable={customerOpts.length > 5} searchPlaceholder="ابحث باسم العميل…"
             />
-          )}
-          <TogglePill active={onlyReturned} onClick={() => setOnlyReturned((v) => !v)} icon={RotateCcw}>فيها مرتجع</TogglePill>
-          <TogglePill active={onlyLate} onClick={() => setOnlyLate((v) => !v)} icon={Clock} tone="late">متأخرة +{LATE_DAYS} يوم</TogglePill>
-          {activeFilters > 0 && (
-            <button
-              type="button"
-              onClick={clearAll}
-              className="ms-auto inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-bold text-foreground/65 transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <X className="size-3.5" />
-              مسح الفلاتر ({activeFilters})
-            </button>
-          )}
+            <Facet
+              icon={Wallet} label="طريقة الدفع" title="طريقة الدفع" subtitle="الفواتير اللي اتدفع فيها حاجة"
+              options={methodOpts} selected={method} onPick={setMethod}
+              allLabel="كل الطرق" allCount={methodOpts.reduce((n, o) => n + (o.count ?? 0), 0)}
+            />
+            {userOpts.length > 1 && (
+              <Facet
+                icon={User} label="الكاشير" title="مين سجّل الفاتورة" subtitle="حسب الموظف"
+                options={userOpts} selected={by} onPick={setBy}
+                allLabel="كل الموظفين" allCount={userOpts.reduce((n, o) => n + (o.count ?? 0), 0)}
+              />
+            )}
+            <TogglePill active={onlyReturned} onClick={() => setOnlyReturned((v) => !v)} icon={RotateCcw}>فيها مرتجع</TogglePill>
+            <TogglePill active={onlyLate} onClick={() => setOnlyLate((v) => !v)} icon={Clock} tone="late">متأخرة +{LATE_DAYS} يوم</TogglePill>
+          </div>
         </div>
       </section>
 
@@ -1297,7 +1302,9 @@ function Facet({
   return (
     <span
       className={cn(
-        'inline-flex h-8 max-w-[240px] items-center rounded-full border text-xs font-bold transition-colors',
+        // 📱 على الجوال: عرض كامل للخلية عشان يترصفوا 2×2 متناسقين
+        // من sm وفوق: يرجع لحجم المحتوى زي الأصل
+        'flex h-8 w-full min-w-0 items-center rounded-full border text-xs font-bold transition-colors sm:w-auto sm:max-w-[240px]',
         active ? 'border-yellow-500 bg-yellow-300/25 text-foreground' : 'bg-background text-foreground/65 hover:bg-muted hover:text-foreground'
       )}
     >
@@ -1309,14 +1316,15 @@ function Facet({
             type="button"
             disabled={options.length === 0}
             className={cn(
-              'inline-flex h-full min-w-0 items-center gap-1.5 rounded-full ps-3 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-300/50 disabled:opacity-45',
+              // flex-1 عشان الليبل يتمدد و truncate يشتغل صح داخل خلية الجريد
+              'flex h-full min-w-0 flex-1 items-center gap-1.5 overflow-hidden rounded-full ps-3 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-300/50 disabled:opacity-45',
               active ? 'pe-1.5' : 'pe-3',
               open && 'text-foreground'
             )}
           >
             <Icon className="size-3.5 shrink-0" />
             <span className="truncate">{current ? `${label}: ${current.label}` : label}</span>
-            <ChevronDown className={cn('size-3.5 shrink-0 opacity-60 transition-transform motion-reduce:transition-none', open && 'rotate-180')} />
+            <ChevronDown className={cn('ms-auto size-3.5 shrink-0 opacity-60 transition-transform motion-reduce:transition-none', open && 'rotate-180')} />
           </button>
         )}
       />
@@ -1325,7 +1333,7 @@ function Facet({
           type="button"
           onClick={() => onPick(null)}
           aria-label={`مسح فلتر ${label}`}
-          className="me-1 ms-0.5 flex size-5 shrink-0 items-center justify-center rounded-full hover:bg-yellow-400/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500/50"
+          className="me-1 flex size-5 shrink-0 items-center justify-center rounded-full hover:bg-yellow-400/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500/50"
         >
           <X className="size-3" />
         </button>
@@ -1349,7 +1357,9 @@ function TogglePill({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-300/50',
+        // 📱 على الجوال: عرض كامل للخلية عشان الترصيف 2×2
+        // من sm وفوق: يرجع لحجم المحتوى
+        'flex h-8 w-full min-w-0 items-center gap-1.5 rounded-full border px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-yellow-300/50 sm:w-auto',
         active
           ? tone === 'late'
             ? 'border-destructive bg-destructive/10 text-destructive'
@@ -1357,8 +1367,8 @@ function TogglePill({
           : 'bg-background text-foreground/65 hover:bg-muted hover:text-foreground'
       )}
     >
-      <Icon className="size-3.5" />
-      {children}
+      <Icon className="size-3.5 shrink-0" />
+      <span className="truncate">{children}</span>
     </button>
   )
 }
