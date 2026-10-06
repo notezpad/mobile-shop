@@ -13,7 +13,7 @@ import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { TransfersTab } from './TransfersTab'
 import { useInventoryData } from './useInventoryData'
-import { InventoryCrossNav, InventoryStyles, TRANSFER_STATUS_LABELS, num } from './shared'
+import { InventoryCrossNav, InventoryStyles, LoadErrorBanner, TRANSFER_STATUS_LABELS, num } from './shared'
 
 /** خط تحذير لوجستي (نفس ستايل بوليصة الشحن) */
 const HAZARD =
@@ -26,7 +26,7 @@ export function TransfersPage() {
   const isEmployee = user?.role === 'EMPLOYEE'
   const userBranchId = user?.branchId ?? null
 
-  const { branches, products, transfers, movements, stats, loading, reload } = useInventoryData()
+  const { branches, products, transfers, movements, stats, loading, reload, loadErrors } = useInventoryData()
 
   const exportExcel = () => {
     if (transfers.length === 0) return
@@ -121,6 +121,15 @@ export function TransfersPage() {
           },
         }}
       />
+
+      {/* 🛡️ v17: فشل تحميل التحويلات بيظهر صريحًا برمز السبب */}
+      {loadErrors.transfers && (
+        <LoadErrorBanner
+          label="تعذّر تحميل التحويلات"
+          message={loadErrors.transfers}
+          onRetry={reload}
+        />
+      )}
 
       {/* ═════════ غرفة العمليات + الأرشيف ═════════ */}
       <TransfersTab

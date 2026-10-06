@@ -13,7 +13,7 @@ import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { MovementsTab } from './MovementsTab'
 import { useInventoryData } from './useInventoryData'
-import { InventoryCrossNav, InventoryStyles, MOVEMENT_TYPE_LABELS, SectionBoundary, num } from './shared'
+import { InventoryCrossNav, InventoryStyles, LoadErrorBanner, MOVEMENT_TYPE_LABELS, SectionBoundary, num } from './shared'
 
 export function MovementsPage() {
   const shopName = useShopStore((s) => s.shopName)
@@ -22,7 +22,7 @@ export function MovementsPage() {
   const isEmployee = user?.role === 'EMPLOYEE'
   const userBranchId = user?.branchId ?? null
 
-  const { branches, movements, stats, loading, reload } = useInventoryData()
+  const { branches, movements, stats, loading, reload, loadErrors } = useInventoryData()
 
   const exportExcel = () => {
     if (movements.length === 0) return
@@ -116,6 +116,15 @@ export function MovementsPage() {
           },
         }}
       />
+
+      {/* 🛡️ v17: فشل تحميل الحركات بيظهر صريحًا برمز السبب — مش عدّاد 0 صامت */}
+      {loadErrors.movements && (
+        <LoadErrorBanner
+          label="تعذّر تحميل الحركات"
+          message={loadErrors.movements}
+          onRetry={reload}
+        />
+      )}
 
       {/* ═════════ الميزان + الفلاتر + الدفتر ═════════ */}
       {/* 🛡️ v14: لو حصل أي كراش في الدفتر، الصفحة نفسها بتفضل شغالة

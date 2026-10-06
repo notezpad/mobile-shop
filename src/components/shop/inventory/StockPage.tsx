@@ -22,7 +22,7 @@ import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { StockTab } from './StockTab'
 import { useInventoryData } from './useInventoryData'
-import { InventoryCrossNav, InventoryStyles, SectionBoundary, num } from './shared'
+import { InventoryCrossNav, InventoryStyles, LoadErrorBanner, SectionBoundary, num } from './shared'
 
 export function StockPage() {
   const user = useShopStore((s) => s.user)
@@ -31,7 +31,7 @@ export function StockPage() {
   const isEmployee = user?.role === 'EMPLOYEE'
   const userBranchId = user?.branchId ?? null
 
-  const { branches, products, transfers, stocktakes, loading, noData, stats, reload } = useInventoryData()
+  const { branches, products, transfers, stocktakes, loading, noData, stats, reload, loadErrors } = useInventoryData()
 
   const exportExcel = () => {
     if (products.length === 0) return
@@ -245,6 +245,15 @@ export function StockPage() {
           },
         }}
       />
+
+      {/* 🛡️ v17: فشل تحميل الأصناف بيظهر صريحًا برمز السبب — مش قايمة فاضية صامتة */}
+      {loadErrors.products && (
+        <LoadErrorBanner
+          label="تعذّر تحميل المخزون"
+          message={loadErrors.products}
+          onRetry={reload}
+        />
+      )}
 
       {/* ═════════ قائمة الأصناف ═════════ */}
       {loading ? (

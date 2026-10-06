@@ -12,7 +12,7 @@ import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { StocktakeTab } from './StocktakeTab'
 import { useInventoryData } from './useInventoryData'
-import { InventoryCrossNav, InventoryStyles, STOCKTAKE_STATUS_LABELS, num } from './shared'
+import { InventoryCrossNav, InventoryStyles, LoadErrorBanner, STOCKTAKE_STATUS_LABELS, num } from './shared'
 
 export function StocktakePage() {
   const shopName = useShopStore((s) => s.shopName)
@@ -20,7 +20,7 @@ export function StocktakePage() {
   const user = useShopStore((s) => s.user)
   const userBranchId = user?.branchId ?? null
 
-  const { branches, products, stocktakes, movements, stats, reload } = useInventoryData()
+  const { branches, products, stocktakes, movements, stats, reload, loadErrors } = useInventoryData()
 
   const exportExcel = () => {
     if (stocktakes.length === 0) return
@@ -123,6 +123,15 @@ export function StocktakePage() {
           },
         }}
       />
+
+      {/* 🛡️ v17: فشل تحميل الجرد بيظهر صريحًا برمز السبب */}
+      {loadErrors.stocktake && (
+        <LoadErrorBanner
+          label="تعذّر تحميل الجرد"
+          message={loadErrors.stocktake}
+          onRetry={reload}
+        />
+      )}
 
       {/* ═════════ وحدة المسح + الكروت + الأرشيف ═════════ */}
       <StocktakeTab

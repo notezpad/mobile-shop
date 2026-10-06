@@ -32,6 +32,7 @@ import {
   ACCENT,
   Signed,
   EmptyState,
+  LoadErrorBanner,
   Segmented,
   dayLabel,
   fullDateLabel,
@@ -98,7 +99,19 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
 
   // Reload movements when filters change
   const [liveMovements, setLiveMovements] = React.useState<Movement[]>(movements)
-  React.useEffect(() => { setLiveMovements(movements) }, [movements])
+
+  /* 🛡️ v17: سبب فشل جلب الحركات الحية (null = تمام). قبل كده أي فشل كان
+     بيتبلع بصمت والدفتر يفضل فاضي — والمستخدم يظن بياناته اتمسحت.
+     دلوقتي الفشل بيظهر برسالة واضحة + زر إعادة محاولة، والفرق بين
+     «الدفتر فاضي فعلاً» و«فشل التحميل» بقى واضح دايمًا. */
+  const [liveError, setLiveError] = React.useState<string | null>(null)
+  const [retryNonce, setRetryNonce] = React.useState(0)
+
+  React.useEffect(() => {
+    setLiveMovements(movements)
+    // 🛡️ v17: بيانات سليمة وصلت من المصدر المشترك = الفشل القديم اتحل — نلغي بانر الخطأ
+    if (Array.isArray(movements) && movements.length > 0) setLiveError(null)
+  }, [movements])
 
   React.useEffect(() => {
     const params = new URLSearchParams()
@@ -112,14 +125,31 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
     const t = setTimeout(async () => {
       try {
         const res = await fetch(url, { cache: 'no-store' })
-        if (!res.ok) return
-        const data = await res.json()
-        // 🛡️ v16: لازم مصفوفة — أي رد غلط (object خطأ/null) بنعتبره قائمة فاضية
-        if (alive) setLiveMovements(Array.isArray(data) ? (data as Movement[]) : [])
-      } catch {}
+        if (!alive) return
+        if (!res.ok) {
+          // بنسيب البيانات القديمة اللي على الشاشة (لو فيه) ونعرض السبب بدل الصمت
+          setLiveError(`الخادم ردّ برمز ${res.status}`)
+          return
+        }
+        let data: unknown
+        try {
+          data = await res.json()
+        } catch {
+          setLiveError('رد غير مقروء من الخادم (جسم فاضي أو غير JSON)')
+          return
+        }
+        if (!Array.isArray(data)) {
+          setLiveError('رد غير متوقع من الخادم (المفروض مصفوفة)')
+          return
+        }
+        setLiveMovements(data as Movement[])
+        setLiveError(null)
+      } catch {
+        if (alive) setLiveError('تعذر الاتصال بالخادم — تأكد من اتصال الإنترنت وحاول تاني')
+      }
     }, 250)
     return () => { alive = false; clearTimeout(t) }
-  }, [branchFilter, typeFilter, from, to, search])
+  }, [branchFilter, typeFilter, from, to, search, retryNonce])
 
   const filtered = liveMovements
 
@@ -364,14 +394,26 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
       </section>
 
       {/* ═════════ الدفتر: خط زمني ═════════ */}
-      {groups.length === 0 ? (
-        <EmptyState
-          icon={ArrowUpDown}
-          accent={ACCENT.movements}
-          title={hasFilters ? 'مفيش حركات مطابقة' : 'الدفتر لسه فاضي'}
-          hint={hasFilters ? 'جرّب تغيّر الفلاتر أو الفترة' : 'أي بيع أو توريد أو تحويل هيتسجل هنا لحظة حدوثه'}
-          action={hasFilters ? <Button variant="outline" onClick={clearFilters}>مسح الفلاتر</Button> : undefined}
+      {/* 🛡️ v17: لو التحميل فشل بنعرض سبب الفشل — ومفيش «الدفتر لسه فاضي»
+          الكاذبة (اللي بتخفي مشكلة شبكة/سيرفر خلفها). لو فيه بيانات قديمة
+          معروضة بتفضل ظاهرة والبانر فوقها. */}
+      {liveError && (
+        <LoadErrorBanner
+          label="تعذّر تحديث الحركات"
+          message={liveError}
+          onRetry={() => setRetryNonce((n) => n + 1)}
         />
+      )}
+      {groups.length === 0 ? (
+        liveError ? null : (
+          <EmptyState
+            icon={ArrowUpDown}
+            accent={ACCENT.movements}
+            title={hasFilters ? 'مفيش حركات مطابقة' : 'الدفتر لسه فاضي'}
+            hint={hasFilters ? 'جرّب تغيّر الفلاتر أو الفترة' : 'أي بيع أو توريد أو تحويل هيتسجل هنا لحظة حدوثه'}
+            action={hasFilters ? <Button variant="outline" onClick={clearFilters}>مسح الفلاتر</Button> : undefined}
+          />
+        )
       ) : (
         <div className="space-y-7">
           {groups.map((g) => {

@@ -31,6 +31,14 @@ export interface InventoryStats {
   pendingTotal: number
 }
 
+export interface InventoryLoadErrors {
+  branches: string | null
+  products: string | null
+  movements: string | null
+  transfers: string | null
+  stocktake: string | null
+}
+
 export interface InventoryData {
   branches: Branch[]
   products: InventoryProduct[]
@@ -41,31 +49,36 @@ export interface InventoryData {
   noData: boolean
   stats: InventoryStats
   reload: () => void
+  /* 🛡️ v17: سبب فشل تحميل كل مصدر (null = تمام). قبل كده أي فشل شبكة/سيرفر
+     كان بيتحول بهدوء لقايمة فاضية فالمستخدم يشوف "الدفتر فاضي" وهو في
+     الحقيقة التحميل فشل — من غير أي رسالة توضّح السبب. */
+  loadErrors: InventoryLoadErrors
 }
 
-async function apiSafe<T>(url: string, fallback: T): Promise<T> {
-  try {
-    const res = await fetch(url, { cache: 'no-store' })
-    if (!res.ok) return fallback
-    const data = await res.json()
-    return data as T
-  } catch {
-    return fallback
-  }
-}
+type LoadResult<T> = { data: T; error: string | null }
 
-/* 🛡️ 2026-10-07 (v16): للـ endpoints اللي المفروض ترجّع مصفوفة — لو السيرفر
-   ردّ 200 بجسم غلط (object خطأ، null، HTML…) بنرجّع [] بدل ما المصفوفة تبقى
-   object و .length يبقى undefined ويكسّر الصفحة عند التنسيق (سبب شاشة
-   الحركات السوداء). */
-async function apiSafeArray<T>(url: string, fallback: T[]): Promise<T[]> {
+const NETWORK_ERR = 'تعذر الاتصال بالخادم — تأكد من اتصال الإنترنت وحاول تاني'
+
+/* 🛡️ v17: جلب آمن بيفضّح سبب الفشل بدل ما يبلعه:
+   - !res.ok → «الخادم ردّ برمز X» (402 اشتراك / 403 باقة / 500 سيرفر…)
+   - جسم غير مقروء أو غير متوقع → «رد غير متوقع من الخادم»
+   - فشل شبكة → رسالة إنترنت واضحة */
+async function fetchSafe<T>(url: string, opts: { wantArray: boolean; fallback: T }): Promise<LoadResult<T>> {
   try {
     const res = await fetch(url, { cache: 'no-store' })
-    if (!res.ok) return fallback
-    const data = await res.json()
-    return Array.isArray(data) ? (data as T[]) : fallback
+    if (!res.ok) return { data: opts.fallback, error: `الخادم ردّ برمز ${res.status}` }
+    let parsed: unknown
+    try {
+      parsed = await res.json()
+    } catch {
+      return { data: opts.fallback, error: 'رد غير مقروء من الخادم (جسم فاضي أو غير JSON)' }
+    }
+    if (opts.wantArray && !Array.isArray(parsed)) {
+      return { data: opts.fallback, error: 'رد غير متوقع من الخادم (المفروض مصفوفة)' }
+    }
+    return { data: parsed as T, error: null }
   } catch {
-    return fallback
+    return { data: opts.fallback, error: NETWORK_ERR }
   }
 }
 
@@ -76,25 +89,40 @@ export function useInventoryData(): InventoryData {
   const [transfers, setTransfers] = React.useState<Transfer[]>([])
   const [stocktakes, setStocktakes] = React.useState<Stocktake[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [loadErrors, setLoadErrors] = React.useState<InventoryLoadErrors>({
+    branches: null,
+    products: null,
+    movements: null,
+    transfers: null,
+    stocktake: null,
+  })
 
   const load = React.useCallback(async () => {
     setLoading(true)
     try {
       const [bs, ps, mv, tf, st] = await Promise.all([
-        apiSafeArray<Branch>('/api/branches', []),
-        apiSafe<{ data: InventoryProduct[] } | InventoryProduct[]>('/api/products?limit=1000&status=all', []),
-        apiSafeArray<Movement>('/api/inventory/movements', []),
-        apiSafeArray<Transfer>('/api/inventory/transfers', []),
-        apiSafeArray<Stocktake>('/api/inventory/stocktake', []),
+        fetchSafe<Branch[]>('/api/branches', { wantArray: true, fallback: [] }),
+        fetchSafe<{ data: InventoryProduct[] } | InventoryProduct[]>('/api/products?limit=1000&status=all', { wantArray: false, fallback: [] }),
+        fetchSafe<Movement[]>('/api/inventory/movements', { wantArray: true, fallback: [] }),
+        fetchSafe<Transfer[]>('/api/inventory/transfers', { wantArray: true, fallback: [] }),
+        fetchSafe<Stocktake[]>('/api/inventory/stocktake', { wantArray: true, fallback: [] }),
       ])
-      const productsArr = Array.isArray(ps) ? ps : (ps as { data?: InventoryProduct[] })?.data ?? []
-      setBranches(bs)
-      setProducts(productsArr)
-      setMovements(mv)
+      // 🛡️ v16: المنتجات ممكن ترجع مصفوفة مباشرة أو { data: [...] } — الاتنين مقبولين
+      const psArr = Array.isArray(ps.data) ? ps.data : ((ps.data as { data?: InventoryProduct[] })?.data ?? [])
+      setBranches(bs.data)
+      setProducts(psArr)
+      setMovements(mv.data)
       // 🛡️ v16: ضمان شكل العناصر الداخلية — items لازم تكون مصفوفة عشان
       // التحويلات والجرد مايكسروش في .reduce/.length لو رد السيرفر ناقص
-      setTransfers(tf.map((t) => ({ ...t, items: Array.isArray(t?.items) ? t.items : [] })))
-      setStocktakes(st.map((s) => ({ ...s, items: Array.isArray(s?.items) ? s.items : [] })))
+      setTransfers(tf.data.map((t) => ({ ...t, items: Array.isArray(t?.items) ? t.items : [] })))
+      setStocktakes(st.data.map((s) => ({ ...s, items: Array.isArray(s?.items) ? s.items : [] })))
+      setLoadErrors({
+        branches: bs.error,
+        products: ps.error,
+        movements: mv.error,
+        transfers: tf.error,
+        stocktake: st.error,
+      })
     } finally {
       setLoading(false)
     }
@@ -140,5 +168,6 @@ export function useInventoryData(): InventoryData {
     noData: loading && products.length === 0,
     stats,
     reload: load,
+    loadErrors,
   }
 }

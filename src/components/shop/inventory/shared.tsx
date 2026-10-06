@@ -442,6 +442,49 @@ export function EmptyState({
   )
 }
 
+/* ───────────── بانر فشل التحميل (🛡️ v17) ─────────────
+   قبل v17 أي فشل في جلب البيانات كان يتحول بهدوء لقائمة فاضية — فالمستخدم
+   يظن بياناته «اتمسحت» والمشكلة في الحقيقة شبكة/سيرفر/صلاحية. البانر ده
+   بيعرض سبب الفشل الحقيقي (رمز HTTP / شبكة / رد غير متوقع) + زر إعادة
+   محاولة، عشان الفرق بين «فاضي فعلاً» و«فشل التحميل» يبقى واضح دايمًا. */
+
+export function LoadErrorBanner({
+  message,
+  onRetry,
+  label = 'تعذّر تحميل البيانات',
+}: {
+  message: string
+  onRetry?: () => void
+  label?: string
+}) {
+  return (
+    <div
+      role="alert"
+      className="animate-in-up flex flex-wrap items-center gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/[0.06] px-4 py-3"
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400">
+        <AlertTriangle className="size-4" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold text-rose-700 dark:text-rose-300">{label}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-rose-600/90 dark:text-rose-400/90 [overflow-wrap:anywhere]">
+          {message}
+        </p>
+      </div>
+      {onRetry && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRetry}
+          className="h-8 shrink-0 border-rose-500/40 text-rose-700 hover:bg-rose-500/10 dark:text-rose-300"
+        >
+          إعادة المحاولة
+        </Button>
+      )}
+    </div>
+  )
+}
+
 /* ───────────── كارت إحصائي (KPI Tile) ─────────────
    📱 على الجوال: كارت بعرض كامل (بيتحدد من الأب `grid-cols-1`)
    🖥️ من sm+ وفوق: 2×2، ومن lg: 4×1

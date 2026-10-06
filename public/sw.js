@@ -16,7 +16,11 @@
  *  ✅ Periodic sync (optional, for background data refresh)
  */
 
-const CACHE_VERSION = 'shop-erp-v6'
+// 🛡️ 2026-10-07 (v17): رفعنا رقم الكاش من v4 لـ v5 — عند التنشيط بيمسح كل
+// كاش النسخة القديمة، وفيه كان ممكن تكون اتخزنت ردود API غلط/فاضية (بسبب
+// الباج القديم اللي كان بيخزّن أي رد حتى لو 500) فبتتقدم للمستخدم لاحقاً
+// كأن البيانات "اتمسحت". المسح التلقائي ده بينضف أي سموم قديمة.
+const CACHE_VERSION = 'shop-erp-v5'
 const OFFLINE_URL = '/offline.html'
 
 // ─── Precache list ──────────────────────────────────────────
@@ -42,55 +46,12 @@ const PRECACHE_URLS = [
   '/icon-512.png',
 ]
 
-// 🛡️ v12 (2026-10-06) — «صفحات الطوارئ»: أغلفة HTML ثابتة 100%
-// (كل البيانات بتتجيب client-side من الـ APIs — مفيش أي بيانات مستخدم/محل
-// جوا ملف الصفحة نفسه — اتأكدنا من ده في فحص الكاش v11).
-// ⚠️ مختلفة عن PRECACHE_URLS القديمة اللي شالت Bug 2026-09-27: دي مش بتتقدم
-// في المسار العادي خالص — بتتقدم كـ «ملاذ أخير» فقط لما:
-//   1) الطلب يكون navigate-mode كامل (طلبات RSC بتعدّي فوق الـ SW من الأول
-//      بالـ early-return اللي فوق — فمستحيل تسمّم انتقالات الصفحات)،
-//   2) والشبكة تكون وقعت (5xx / Error 1102) بلا أي نسخة مخزنة للطلب نفسه.
-// النتيجة: حتى وقت انهيار كامل للـ Worker، المستخدم بيشوف التطبيق بدل
-// صفحة Error 1102 البيضا — وده اللي حصل مع صفحة دليل المستخدم
-// اللي كانت بتقع مع صفحات الإدارة لأن مفيش نسخة سليمة منها في الكاش.
-const FALLBACK_PAGES = [
-  '/pos',
-  '/dashboard',
-  '/products',
-  '/inventory',
-  '/customers',
-  '/users',
-  '/reports',
-  '/branches',
-  '/expenses',
-  '/guide',
-  '/login',
-]
-
-/** ملاذ أخير للتنقل: نسخة الطوارئ المخزنة عند التثبيت (لو الطلب نفسه مالوش نسخة) */
-async function lastResortPage(request) {
-  try {
-    const path = new URL(request.url).pathname
-    if (!FALLBACK_PAGES.includes(path)) return null
-    return (await caches.match(path, { ignoreSearch: true })) || null
-  } catch {
-    return null
-  }
-}
-
 // ─── Install: precache app shell ─────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_VERSION).then((cache) => {
       // Cache what we can — ignore individual failures
-      const base = cache.addAll(PRECACHE_URLS).catch(() => {})
-      // 🛡️ v12: صفحات الطوارئ — واحدة واحدة (add بيفشل صامت لو الصفحة
-      // مش متاحة وقت التثبيت، ومابكسرش التثبيت). كلها HITs من
-      // الـ Static Assets فتكلفة التحميل ≈ صفر.
-      FALLBACK_PAGES.forEach((u) => {
-        cache.add(u).catch(() => {})
-      })
-      return base
+      return cache.addAll(PRECACHE_URLS).catch(() => {})
     })
   )
   self.skipWaiting()
@@ -148,41 +109,28 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/')) {
     // 🛡️ /api/auth/* بيحدد مين مسجّل دخول — ممنوع يتخزن نهائياً
     if (url.pathname.startsWith('/api/auth/')) return
-    // 🛡️ v10 (2026-10-06) — ROOT FIX لعرض «الأصفار» و«الموقع وقع وفضل واقع»:
-    // الكود القديم كان بيخزّن *أي* رد في الكاش — حتى صفحة خطأ Cloudflare
-    // (Error 1102 / 503 HTML) كانت تتخزن تحت رابط الـ API نفسه أو تحت رابط
-    // الصفحة! فبعد أي انهيار مؤقت للـ Worker، الويب بيفضل يرجّع صفحة الخطأ
-    // المخزنة، والواجهة بتطلع أصفار لحد ما المستخدم يمسح الكاش بنفسه.
-    // دلوقتي: نخزّن الردود السليمة (ok) فقط، وعند 5xx نقدّم آخر نسخة سليمة
-    // (لو أحدث من 60 ثانية) بدل الأصفار/صفحة الخطأ — بيانات قديمة بثواني
-    // أحسن بكتير من شاشة فاضية عند مستخدم نقطة بيع.
+    // 🛡️ 2026-10-07 (v17): ناخد نسخة في الكاش للعمل أوفلاين **لو الرد سليم
+    // فقط**. الباج القديم كان بيخزّن أي رد (حتى 500/403/رد فاضي) — فلو
+    // حصل خطأ مرة واحدة بيفضل متراكم ويترجع لاحقاً بدل البيانات الحقيقية.
     event.respondWith(
-      (async () => {
-        try {
-          const response = await fetch(request)
+      fetch(request)
+        .then((response) => {
           if (response && response.ok) {
             const clone = response.clone()
             caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
-            return response
-          }
-          // 5xx → آخر نسخة سليمة لو طازة (≤ 60s)، وإلا مرّر رد الخطأ كما هو
-          if (response && response.status >= 500) {
-            const cached = await caches.match(request)
-            if (cached) {
-              const at = Date.parse(cached.headers.get('date') || '')
-              if (!Number.isFinite(at) || Date.now() - at < 60_000) return cached
-            }
           }
           return response
-        } catch {
-          // Offline → try cache, then 503
-          const cached = await caches.match(request)
-          return cached || new Response(
-            JSON.stringify({ error: 'أنت غير متصل بالإنترنت' }),
-            { status: 503, headers: { 'Content-Type': 'application/json' } }
-          )
-        }
-      })()
+        })
+        .catch(() => {
+          // Offline → try cache (رد سليم فقط)، ثم 503
+          return caches.match(request).then((cached) => {
+            if (cached && cached.ok) return cached
+            return new Response(
+              JSON.stringify({ error: 'أنت غير متصل بالإنترنت' }),
+              { status: 503, headers: { 'Content-Type': 'application/json' } }
+            )
+          })
+        })
     )
     return
   }
@@ -195,42 +143,20 @@ self.addEventListener('fetch', (event) => {
           // Use navigation preload if available
           const preload = await event.preloadResponse
           if (preload) {
-            // 🛡️ v10: نخزّن الرد السليم فقط — صفحة Error 1102/503 ممنوع تتخزن
-            // (كانت بتتخزن قبل كده فالموقع بيفضل «واقع» من الكاش بعد ما يتعافى)
-            if (preload.ok) {
-              const clone = preload.clone()
-              caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
-              return preload
-            }
-            // 🛡️ v11 — ROOT FIX لمظهر «الموقع وقع»:
-            // صفحة 5xx من Cloudflare (زي Error 1102 — Worker exceeded resource
-            // limits) ممنوع نوصلها للمستخدم وهناك نسخة سليمة مخزنة. نقدّم آخر
-            // نسخة HTML سليمة فورًا — التطبيق بيكمل شغال من الكاش والشل،
-            // والبيانات بتتحدّث من الـ APIs لوحدها في الخلفية.
-            // 🛡️ v12: لو مفيش نسخة للطلب نفسه (أول زيارة للصفحة دي) → نسخة
-            // الطوارئ المخزنة عند التثبيت (FALLBACK_PAGES).
-            const fallback = (await caches.match(request)) || (await lastResortPage(request))
-            if (fallback) return fallback
+            // Cache the preloaded response
+            const clone = preload.clone()
+            caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
             return preload
           }
 
           // Normal fetch
           const response = await fetch(request)
-          if (response.ok) {
-            const clone = response.clone()
-            caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
-            return response
-          }
-          // 🛡️ v11: نفس الحماية للـ fetch العادي (بدون preload)
-          // 🛡️ v12: + نسخة الطوارئ لو مفيش نسخة للطلب نفسه
-          if (response.status >= 500) {
-            const fallback = (await caches.match(request)) || (await lastResortPage(request))
-            if (fallback) return fallback
-          }
+          const clone = response.clone()
+          caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
           return response
         } catch {
-          // Offline → cache → emergency page → offline page
-          const cached = (await caches.match(request)) || (await lastResortPage(request))
+          // Offline → cache → offline page
+          const cached = await caches.match(request)
           return cached || caches.match(OFFLINE_URL)
         }
       })()

@@ -350,7 +350,16 @@ export function authErrorResponse(e: unknown) {
   if (msg === 'TENANT_NOT_FOUND') {
     return { status: 404, body: { error: 'المحل غير موجود' } }
   }
-  return null
+  // 🛡️ 2026-10-07 (v17): كانت بترجع null هنا — وكل الـ routes كانت تعمل
+  // `NextResponse.json(err?.body, { status: err?.status })` فيتحول الرد
+  // لـ 200 بجسم فاضي! العميل بيحاول يقرأ JSON فاضي فيفشل بهدوء، وصفحات
+  // زي دفتر الحركات بتظهر فاضية تماماً كأن البيانات "اتمسحت" — من غير
+  // أي رسالة خطأ توصل للمستخدم. دلوقتي أي خطأ تحقق غير معروف = 500
+  // حقيقي بجسم JSON واضح، فالواجهة بتقدر تعرض سبب الفشل وزر إعادة محاولة.
+  return {
+    status: 500,
+    body: { error: 'حدث خطأ غير متوقع أثناء التحقق من الجلسة — حاول مرة أخرى' },
+  }
 }
 
 /** Verify a record belongs to the current tenant; returns the record if found or null. */
