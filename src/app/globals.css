@@ -6251,6 +6251,16 @@ html::-webkit-scrollbar-thumb:active {
   .notif-panel::before { display: none; }
 }
 
+/* ─── Mobile-only short labels ─── */
+.notif-lbl-short { display: none; }
+@media (max-width: 639.98px) {
+  .notif-lbl-full { display: none; }
+  .notif-lbl-short { display: inline; }
+  .notif-panel-head { padding: 14px 12px 12px; gap: 6px; }
+  .notif-panel-head-title { font-size: 0.92rem; gap: 8px; }
+  .notif-panel-markall { padding: 5px 9px; font-size: 0.68rem; }
+}
+
 /* ─── Dark mode ─── */
 .dark .notif-panel {
   background:
