@@ -5854,14 +5854,13 @@ html::-webkit-scrollbar-thumb:active {
   max-width: calc(100vw - 24px);
   max-height: 560px;
   background:
-    radial-gradient(120% 70px at 50% 0%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 70%),
+    radial-gradient(120% 60px at 50% 0%, color-mix(in srgb, var(--primary) 5%, transparent), transparent 70%),
     var(--popover);
   border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border));
   border-radius: 24px;
   box-shadow:
-    0 30px 70px -12px rgba(15, 23, 42, 0.28),
-    0 10px 24px -8px rgba(15, 23, 42, 0.14),
-    0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+    0 20px 48px -14px rgba(15, 23, 42, 0.2),
+    0 6px 16px -8px rgba(15, 23, 42, 0.1);
   z-index: 100;
   display: flex;
   flex-direction: column;
@@ -5898,7 +5897,7 @@ html::-webkit-scrollbar-thumb:active {
   gap: 10px;
   padding: 16px 16px 14px;
   border-bottom: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border));
-  background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 8%, transparent), transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 5%, transparent), transparent);
 }
 
 .notif-panel-head-title {
@@ -5918,7 +5917,7 @@ html::-webkit-scrollbar-thumb:active {
   border-radius: 12px;
   color: #fff;
   background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 85%, #fff), var(--primary));
-  box-shadow: 0 6px 14px color-mix(in srgb, var(--primary) 35%, transparent);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--primary) 25%, transparent);
 }
 
 .notif-panel-count {
@@ -6047,11 +6046,9 @@ html::-webkit-scrollbar-thumb:active {
 [dir='rtl'] .notif-item::before { border-radius: 4px 0 0 4px; }
 
 .notif-item.unread {
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--n-color) 9%, transparent), transparent 65%),
-    var(--card);
-  border-color: color-mix(in srgb, var(--n-color) 26%, var(--border));
-  box-shadow: 0 4px 14px -6px color-mix(in srgb, var(--n-color) 40%, transparent);
+  background: color-mix(in srgb, var(--primary) 4%, var(--card));
+  border-color: color-mix(in srgb, var(--primary) 18%, var(--border));
+  box-shadow: 0 2px 8px -4px rgba(15, 23, 42, 0.12);
 }
 .notif-item.unread::before { opacity: 1; }
 
@@ -6065,8 +6062,8 @@ html::-webkit-scrollbar-thumb:active {
 
 .notif-item:hover {
   transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--n-color) 45%, var(--border));
-  box-shadow: 0 12px 24px -10px color-mix(in srgb, var(--n-color) 45%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+  box-shadow: 0 10px 20px -10px rgba(15, 23, 42, 0.2);
 }
 .notif-item:hover::before { opacity: 1; }
 .notif-item:active { transform: translateY(0) scale(0.99); }
@@ -6251,10 +6248,20 @@ html::-webkit-scrollbar-thumb:active {
   .notif-panel::before { display: none; }
 }
 
+/* ─── Mobile-only short labels ─── */
+.notif-lbl-short { display: none; }
+@media (max-width: 639.98px) {
+  .notif-lbl-full { display: none; }
+  .notif-lbl-short { display: inline; }
+  .notif-panel-head { padding: 14px 12px 12px; gap: 6px; }
+  .notif-panel-head-title { font-size: 0.92rem; gap: 8px; }
+  .notif-panel-markall { padding: 5px 9px; font-size: 0.68rem; }
+}
+
 /* ─── Dark mode ─── */
 .dark .notif-panel {
   background:
-    radial-gradient(120% 80px at 50% 0%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 70%),
+    radial-gradient(120% 70px at 50% 0%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 70%),
     var(--popover);
   box-shadow:
     0 30px 70px -10px rgba(0, 0, 0, 0.7),
@@ -6264,9 +6271,7 @@ html::-webkit-scrollbar-thumb:active {
 
 .dark .notif-item { background: color-mix(in srgb, var(--card) 80%, var(--popover)); }
 .dark .notif-item.unread {
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--n-color) 13%, transparent), transparent 65%),
-    var(--card-muted, var(--card));
+  background: color-mix(in srgb, var(--primary) 7%, var(--card-muted, var(--card)));
 }
 .dark .notif-item-icon { color: var(--n-color); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08); }
 .dark .notif-item-type { color: var(--n-color) !important; }
@@ -6277,6 +6282,51 @@ html::-webkit-scrollbar-thumb:active {
   .notif-panel, .notif-badge, .notif-item-dot::after, .notif-bell-btn:hover svg { animation: none; }
   .notif-item, .notif-item-icon { transition: none; }
 }
+
+/* =========================================================================
+   Mobile drawer — edge handle (replaces the traditional X close button)
+   Sits on the drawer's free (left) edge. Tap it or swipe the drawer right.
+   ========================================================================= */
+.sb-edge-tab {
+  position: absolute;
+  top: 50%;
+  right: 100%;                     /* drawer is right-anchored: tab sits just outside its left edge */
+  margin-right: -1px;
+  width: 24px;
+  height: 76px;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 16px 0 0 16px;
+  border: 1px solid var(--border);
+  border-right: none;
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  color: var(--muted-foreground);
+  box-shadow: -6px 0 16px -8px rgba(15, 23, 42, 0.25);
+  cursor: pointer;
+  z-index: 10;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.2s ease, background 0.2s ease, width 0.2s ease, opacity 0.25s ease;
+}
+/* drawer closed → the tab would otherwise peek in at the screen edge */
+.sb-edge-tab[data-open='false'] { opacity: 0; pointer-events: none; }
+.sb-edge-grip {
+  width: 4px;
+  height: 22px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+  transition: background 0.2s ease;
+}
+.sb-edge-tab:active {
+  width: 28px;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, var(--card));
+}
+.sb-edge-tab:active .sb-edge-grip { background: var(--primary); }
+.sb-edge-tab:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 /* =========================================================================
    RoleBadge — WorkerOS-style role pill
