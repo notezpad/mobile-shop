@@ -131,6 +131,14 @@ export const PURGE_KEYS = {
     pathname: '/api/products',
     rawQuery: `branch=${branchId ?? 0}`,
   }),
+  /**
+   * ⚡ v10: نسخة قائمة المخزون (شاشة المخزون تطلب status=all&limit=1000&meta=slim)
+   * — مفتاح منفصل عن كاشير الـ POS، بنفس منطق الفرع.
+   */
+  productsInventory: (branchId: number | null | undefined) => ({
+    pathname: '/api/products',
+    rawQuery: `branch=${branchId ?? 0}&inv=1&page=1`,
+  }),
   categories: { pathname: '/api/categories', rawQuery: '' },
   suppliers: { pathname: '/api/suppliers', rawQuery: '' },
 }
@@ -145,5 +153,14 @@ export async function purgeCatalogCaches(
   branchId: number | null | undefined,
   v = '3'
 ): Promise<void> {
-  await purgeEdgeCache([PURGE_KEYS.products(branchId), PURGE_KEYS.categories, PURGE_KEYS.suppliers], tenantId, v)
+  await purgeEdgeCache(
+    [
+      PURGE_KEYS.products(branchId),
+      PURGE_KEYS.productsInventory(branchId),
+      PURGE_KEYS.categories,
+      PURGE_KEYS.suppliers,
+    ],
+    tenantId,
+    v
+  )
 }

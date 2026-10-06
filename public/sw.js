@@ -16,7 +16,7 @@
  *  ✅ Periodic sync (optional, for background data refresh)
  */
 
-const CACHE_VERSION = 'shop-erp-v4'
+const CACHE_VERSION = 'shop-erp-v5'
 const OFFLINE_URL = '/offline.html'
 
 // ─── Precache list ──────────────────────────────────────────
@@ -105,23 +105,41 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/')) {
     // 🛡️ /api/auth/* بيحدد مين مسجّل دخول — ممنوع يتخزن نهائياً
     if (url.pathname.startsWith('/api/auth/')) return
+    // 🛡️ v10 (2026-10-06) — ROOT FIX لعرض «الأصفار» و«الموقع وقع وفضل واقع»:
+    // الكود القديم كان بيخزّن *أي* رد في الكاش — حتى صفحة خطأ Cloudflare
+    // (Error 1102 / 503 HTML) كانت تتخزن تحت رابط الـ API نفسه أو تحت رابط
+    // الصفحة! فبعد أي انهيار مؤقت للـ Worker، الويب بيفضل يرجّع صفحة الخطأ
+    // المخزنة، والواجهة بتطلع أصفار لحد ما المستخدم يمسح الكاش بنفسه.
+    // دلوقتي: نخزّن الردود السليمة (ok) فقط، وعند 5xx نقدّم آخر نسخة سليمة
+    // (لو أحدث من 60 ثانية) بدل الأصفار/صفحة الخطأ — بيانات قديمة بثواني
+    // أحسن بكتير من شاشة فاضية عند مستخدم نقطة بيع.
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          // Cache a copy for offline
-          const clone = response.clone()
-          caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+      (async () => {
+        try {
+          const response = await fetch(request)
+          if (response && response.ok) {
+            const clone = response.clone()
+            caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+            return response
+          }
+          // 5xx → آخر نسخة سليمة لو طازة (≤ 60s)، وإلا مرّر رد الخطأ كما هو
+          if (response && response.status >= 500) {
+            const cached = await caches.match(request)
+            if (cached) {
+              const at = Date.parse(cached.headers.get('date') || '')
+              if (!Number.isFinite(at) || Date.now() - at < 60_000) return cached
+            }
+          }
           return response
-        })
-        .catch(() => {
+        } catch {
           // Offline → try cache, then 503
-          return caches.match(request).then((cached) => {
-            return cached || new Response(
-              JSON.stringify({ error: 'أنت غير متصل بالإنترنت' }),
-              { status: 503, headers: { 'Content-Type': 'application/json' } }
-            )
-          })
-        })
+          const cached = await caches.match(request)
+          return cached || new Response(
+            JSON.stringify({ error: 'أنت غير متصل بالإنترنت' }),
+            { status: 503, headers: { 'Content-Type': 'application/json' } }
+          )
+        }
+      })()
     )
     return
   }
@@ -134,16 +152,21 @@ self.addEventListener('fetch', (event) => {
           // Use navigation preload if available
           const preload = await event.preloadResponse
           if (preload) {
-            // Cache the preloaded response
-            const clone = preload.clone()
-            caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+            // 🛡️ v10: نخزّن الرد السليم فقط — صفحة Error 1102/503 ممنوع تتخزن
+            // (كانت بتتخزن قبل كده فالموقع بيفضل «واقع» من الكاش بعد ما يتعافى)
+            if (preload.ok) {
+              const clone = preload.clone()
+              caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+            }
             return preload
           }
 
           // Normal fetch
           const response = await fetch(request)
-          const clone = response.clone()
-          caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+          if (response.ok) {
+            const clone = response.clone()
+            caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+          }
           return response
         } catch {
           // Offline → cache → offline page

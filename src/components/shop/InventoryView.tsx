@@ -19,7 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { StockTab } from './inventory/StockTab'
-import { MovementsTab } from './inventory/MovementsTab'
+import { MovementsTab, type MovementMeta } from './inventory/MovementsTab'
 import { TransfersTab } from './inventory/TransfersTab'
 import { StocktakeTab } from './inventory/StocktakeTab'
 import { useDataRefresh } from '@/lib/offline/data-events'
@@ -95,6 +95,8 @@ export function InventoryView() {
   const [branches, setBranches] = React.useState<Branch[]>([])
   const [products, setProducts] = React.useState<InventoryProduct[]>([])
   const [movements, setMovements] = React.useState<Movement[]>([])
+  // ⚡ v10: إجماليات/منحنى الحركات محسوبة في SQL من السيرفر (الرد دلوقتي 50 صف/صفحة)
+  const [movementMeta, setMovementMeta] = React.useState<MovementMeta | null>(null)
   const [transfers, setTransfers] = React.useState<Transfer[]>([])
   const [stocktakes, setStocktakes] = React.useState<Stocktake[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -105,13 +107,28 @@ export function InventoryView() {
     try {
       const [bs, ps, mv, tf, st] = await Promise.all([
         apiSafe<Branch[]>('/api/branches', []),
-        apiSafe<{ data: InventoryProduct[] } | InventoryProduct[]>('/api/products?limit=1000&status=all', []),
-        apiSafe<Movement[]>('/api/inventory/movements', []),
+        // ⚡ v10: meta=slim — شاشة المخزون مش محتاجة soldQuantity/التسعير الديناميكي
+        // (بيرجّع استعلام groupBy كامل على عناصر الفواتير) — والاستدعاء دلوقتي
+        // متخزّن على الحافة 20 ثانية بدل ما كان بيتنفذ كامل في كل زيارة.
+        apiSafe<{ data: InventoryProduct[] } | InventoryProduct[]>('/api/products?limit=1000&status=all&meta=slim', []),
+        // ⚡ v10: 50 حركة/صفحة من السيرفر + إجماليات SQL — بدل 1000 صف كاملين
+        apiSafe<{ data: Movement[]; total?: number; inTotal?: number; outTotal?: number; series?: MovementMeta['series'] } | Movement[]>('/api/inventory/movements?limit=50', []),
         apiSafe<Transfer[]>('/api/inventory/transfers', []),
         apiSafe<Stocktake[]>('/api/inventory/stocktake', []),
       ])
       const productsArr = Array.isArray(ps) ? ps : (ps as any)?.data ?? []
-      setBranches(bs); setProducts(productsArr); setMovements(mv); setTransfers(tf); setStocktakes(st)
+      setBranches(bs); setProducts(productsArr); setTransfers(tf); setStocktakes(st)
+      if (Array.isArray(mv)) {
+        setMovements(mv); setMovementMeta(null)
+      } else {
+        setMovements((mv as any)?.data ?? [])
+        setMovementMeta({
+          total: (mv as any)?.total ?? (mv as any)?.data?.length ?? 0,
+          inTotal: (mv as any)?.inTotal ?? 0,
+          outTotal: (mv as any)?.outTotal ?? 0,
+          series: (mv as any)?.series ?? [],
+        })
+      }
     } finally {
       setLoading(false)
     }
@@ -142,7 +159,7 @@ export function InventoryView() {
   const STOCKTAKE_STATUS_LABELS: Record<string, string> = { draft: 'مسودة', committed: 'معتمد' }
   const branchName = (id: number | null) => (id ? branches.find((b) => b.id === id)?.name ?? '-' : 'كل الفروع')
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
     const shop = { name: shopName, phone: shopBranding.phone || undefined, address: shopBranding.address || undefined }
     if (tab === 'stock') {
       if (products.length === 0) return
@@ -170,7 +187,14 @@ export function InventoryView() {
         totals: { name: 'الإجمالي', quantity: products.reduce((s, p) => s + p.quantity, 0), stockValue: products.reduce((s, p) => s + p.quantity * p.cost, 0) },
       })
     } else if (tab === 'movements') {
+      // ⚡ v10: التصدير بيجيب القائمة الكاملة (حتى 1000) في طلب مستقل وقت
+      // الضغط — مش اللي محمّل في الصفحة (50 صف) ولا طلب ثقيل مع كل فتح.
       if (movements.length === 0) return
+      let rows = movements
+      if ((movementMeta?.total ?? 0) > movements.length) {
+        const all = await apiSafe<{ data: Movement[] } | Movement[]>('/api/inventory/movements?limit=1000', [])
+        rows = Array.isArray(all) ? all : (all as any)?.data ?? movements
+      }
       exportSimpleExcel({
         fileName: excelFileName('حركات-المخزون'),
         shop,
@@ -185,7 +209,7 @@ export function InventoryView() {
           { header: 'ملاحظة', key: 'note', format: 'text' },
           { header: 'بواسطة', key: 'user', format: 'text' },
         ],
-        rows: movements.map((m) => ({
+        rows: rows.map((m) => ({
           date: new Date(m.createdAt).toLocaleString('ar-EG'),
           product: m.product.name, type: TYPE_LABELS[m.type] ?? m.type, quantity: m.quantity,
           branch: m.branch?.name || '-', note: m.note || '-', user: m.userName || '-',
@@ -270,7 +294,7 @@ export function InventoryView() {
 
   const tabs = [
     { value: 'stock', label: 'المخزون', icon: Warehouse, color: ACCENT.stock, sub: `${num(stats.totalItems)} صنف`, alert: false },
-    { value: 'movements', label: 'الحركات', icon: ArrowUpDown, color: ACCENT.movements, sub: `${num(movements.length)} حركة`, alert: false },
+    { value: 'movements', label: 'الحركات', icon: ArrowUpDown, color: ACCENT.movements, sub: `${num(movementMeta?.total ?? movements.length)} حركة`, alert: false },
     {
       value: 'transfers', label: 'التحويلات', icon: Truck, color: ACCENT.transfers,
       sub: stats.pendingTransfers > 0 ? `${num(stats.pendingTransfers)} معلّق` : `${num(transfers.length)} تحويل`,
@@ -463,6 +487,7 @@ export function InventoryView() {
             <TabsContent value="movements" forceMount className="space-y-0">
               <MovementsTab
                 movements={movements}
+                meta={movementMeta}
                 branches={branches}
                 isEmployee={isEmployee}
                 userBranchId={userBranchId}

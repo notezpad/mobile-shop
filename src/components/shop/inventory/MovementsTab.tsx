@@ -43,10 +43,19 @@ import {
 
 interface Props {
   movements: Movement[]
+  /** ⚡ v10: إجماليات + منحنى 14 يوم محسوبة في SQL من السيرفر (اختياري — fallback محلي لو غياب) */
+  meta?: MovementMeta | null
   branches: Branch[]
   isEmployee: boolean
   userBranchId: number | null
   onChanged: () => void
+}
+
+export interface MovementMeta {
+  total: number
+  inTotal: number
+  outTotal: number
+  series: { date: string; inn: number; out: number }[]
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -89,16 +98,24 @@ function periodRange(p: Period): { from: string; to: string } {
   return { from: toISODate(new Date(now.getFullYear(), now.getMonth(), 1)), to }
 }
 
-export function MovementsTab({ movements, branches, isEmployee, userBranchId: _userBranchId, onChanged: _onChanged }: Props) {
+export function MovementsTab({ movements, meta, branches, isEmployee, userBranchId: _userBranchId, onChanged: _onChanged }: Props) {
   const [search, setSearch] = React.useState('')
   const [branchFilter, setBranchFilter] = React.useState<string>('all')
   const [typeFilter, setTypeFilter] = React.useState<string>('all')
   const [from, setFrom] = React.useState('')
   const [to, setTo] = React.useState('')
 
-  // Reload movements when filters change
+  // ⚡ v10 (2026-10-06): الـ API بيرجّع 50 حركة/صفحة من السيرفر + الإجماليات
+  // والمنحنى محسوبة جوه PostgreSQL — بدل 1000 صف كاملين في كل تحميل/فلتر
+  // (كان ده بيحرق CPU الـ Worker ⇒ Error 1102). التنقل بين الصفحات بقى
+  // طلب سيرفر خفيف، والفلاتر بتترسل للسيرفر (كانت كده أصلاً).
   const [liveMovements, setLiveMovements] = React.useState<Movement[]>(movements)
+  const [liveMeta, setLiveMeta] = React.useState<MovementMeta | null>(meta ?? null)
   React.useEffect(() => { setLiveMovements(movements) }, [movements])
+  React.useEffect(() => { setLiveMeta(meta ?? null) }, [meta])
+
+  const [serverPage, setServerPage] = React.useState(1)
+  React.useEffect(() => { setServerPage(1) }, [branchFilter, typeFilter, from, to, search])
 
   React.useEffect(() => {
     const params = new URLSearchParams()
@@ -107,47 +124,85 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
     if (from) params.set('from', from)
     if (to) params.set('to', to)
     if (search.trim()) params.set('q', search.trim())
-    const url = `/api/inventory/movements${params.toString() ? '?' + params.toString() : ''}`
+    params.set('page', String(serverPage))
+    params.set('limit', '50')
+    const url = `/api/inventory/movements?${params.toString()}`
     let alive = true
     const t = setTimeout(async () => {
       try {
         const res = await fetch(url, { cache: 'no-store' })
         if (!res.ok) return
-        const data = await res.json()
-        if (alive) setLiveMovements(data as Movement[])
+        const json = await res.json()
+        if (!alive) return
+        if (Array.isArray(json)) {
+          // fallback احتياطي لو الرد مصفوفة قديمة الشكل
+          setLiveMovements(json as Movement[])
+          setLiveMeta(null)
+        } else {
+          setLiveMovements((json.data ?? []) as Movement[])
+          setLiveMeta({
+            total: json.total ?? json.data?.length ?? 0,
+            inTotal: json.inTotal ?? 0,
+            outTotal: json.outTotal ?? 0,
+            series: json.series ?? [],
+          })
+        }
       } catch {}
     }, 250)
     return () => { alive = false; clearTimeout(t) }
-  }, [branchFilter, typeFilter, from, to, search])
+  }, [branchFilter, typeFilter, from, to, search, serverPage])
 
   const filtered = liveMovements
 
-  // ⚡ v9 (2026-10-06): تقسيم الدفتر — الـ API بيرجع حتى 1000 حركة وكانت
-  // كلها بتترسم في الـ DOM مرة واحدة (دفتر زمني)، فأي دايلوج فوق الصفحة
-  // بيدفع recalc ضخم. 50 حركة/صفحة — والإجماليات والرسم البياني بيتحسبوا
-  // من القائمة كاملة (مش الصفحة الحالية) فمفيش رقم بيتغير.
+  // ⚡ v10: التقسيم من السيرفر (الرد الحالي = صفحة واحدة بالظبط). fallback:
+  // تقسيم محلي لو مفيش meta (بيانات قديمة).
   const PAGE_SIZE = 50
-  const [page, setPage] = React.useState(1)
-  React.useEffect(() => { setPage(1) }, [branchFilter, typeFilter, from, to, search, liveMovements])
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const safePage = Math.min(page, totalPages)
+  const usingServerPages = liveMeta !== null
+  const page = usingServerPages ? serverPage : serverPage
+  const [legacyPage, setLegacyPage] = React.useState(1)
+  React.useEffect(() => { setLegacyPage(1) }, [branchFilter, typeFilter, from, to, search, liveMovements])
+  const localTotalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const totalPages = usingServerPages
+    ? Math.max(1, Math.ceil((liveMeta?.total ?? 0) / PAGE_SIZE))
+    : localTotalPages
+  const activePage = usingServerPages ? page : Math.min(legacyPage, totalPages)
+  const setPage = usingServerPages ? setServerPage : setLegacyPage
   const paged = React.useMemo(
-    () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
-    [filtered, safePage]
+    () => (usingServerPages
+      ? filtered
+      : filtered.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE)),
+    [filtered, usingServerPages, activePage]
   )
 
+  // ⚡ v10: ميزان الحركة من SQL (فيه meta) — fallback حساب محلي على الصفحة الحالية
   const summary = React.useMemo(() => {
+    if (liveMeta) {
+      return { inTotal: liveMeta.inTotal, outTotal: liveMeta.outTotal, net: liveMeta.inTotal - liveMeta.outTotal }
+    }
     let inTotal = 0, outTotal = 0
     for (const m of filtered) {
       if (m.quantity > 0) inTotal += m.quantity
       else outTotal += Math.abs(m.quantity)
     }
     return { inTotal, outTotal, net: inTotal - outTotal }
-  }, [filtered])
+  }, [liveMeta, filtered])
 
-  // آخر ١٤ يوم: وارد لأعلى، صادر لأسفل
+  // آخر ١٤ يوم: وارد لأعلى، صادر لأسفل — التواريخ من السيرفر بتوقيت المحل
   const series = React.useMemo(() => {
     const days: { key: string; label: string; inn: number; out: number; today: boolean }[] = []
+    if (liveMeta && liveMeta.series.length > 0) {
+      liveMeta.series.forEach((s, i) => {
+        days.push({
+          key: s.date,
+          label: String(Number(s.date.slice(8, 10)) || s.date.slice(8, 10)),
+          inn: s.inn,
+          out: s.out,
+          today: i === liveMeta.series.length - 1,
+        })
+      })
+      const max = Math.max(1, ...days.map((d) => Math.max(d.inn, d.out)))
+      return { days, max }
+    }
     const now = new Date()
     for (let i = 13; i >= 0; i--) {
       const d = new Date(now)
@@ -165,7 +220,7 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
     }
     const max = Math.max(1, ...days.map((d) => Math.max(d.inn, d.out)))
     return { days, max }
-  }, [filtered])
+  }, [liveMeta, filtered])
 
   const groups = React.useMemo(() => groupByDay(paged, (m) => m.createdAt), [paged])
 
@@ -203,7 +258,7 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
                 <ArrowUpDown className="size-4" />
               </span>
               ميزان الحركة
-              <span className="text-xs font-normal text-muted-foreground">· {num(filtered.length)} حركة</span>
+              <span className="text-xs font-normal text-muted-foreground">· {num(liveMeta?.total ?? filtered.length)} حركة</span>
             </div>
 
             <div className="flex items-baseline gap-2" dir="ltr">
@@ -439,16 +494,16 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
         </div>
       )}
 
-      {/* ⚡ v9: تنقّل الدفتر — 50 حركة/صفحة (الإجماليات فوق على القائمة كاملة) */}
-      {filtered.length > PAGE_SIZE && (
+      {/* ⚡ v10: تنقّل الدفتر — 50 حركة/صفحة من السيرفر (الإجماليات فوق من SQL) */}
+      {totalPages > 1 && (
         <div className="flex items-center justify-between gap-2 rounded-xl border bg-card px-3 py-2">
           <span className="text-[11px] tabular-nums text-muted-foreground">
-            {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} من {filtered.length} حركة
+            {(activePage - 1) * PAGE_SIZE + 1}–{Math.min(activePage * PAGE_SIZE, liveMeta?.total ?? filtered.length)} من {num(liveMeta?.total ?? filtered.length)} حركة
           </span>
           <div className="flex items-center gap-1">
-            <Button variant="outline" size="sm" className="h-8" disabled={safePage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>السابق</Button>
-            <span className="px-1 text-xs tabular-nums text-muted-foreground">{safePage} / {totalPages}</span>
-            <Button variant="outline" size="sm" className="h-8" disabled={safePage >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>التالي</Button>
+            <Button variant="outline" size="sm" className="h-8" disabled={activePage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>السابق</Button>
+            <span className="px-1 text-xs tabular-nums text-muted-foreground">{activePage} / {totalPages}</span>
+            <Button variant="outline" size="sm" className="h-8" disabled={activePage >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>التالي</Button>
           </div>
         </div>
       )}

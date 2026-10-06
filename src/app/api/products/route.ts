@@ -88,6 +88,23 @@ export async function GET(req: NextRequest) {
     // Both are applied BEFORE pagination so page 2 continues the same ordering.
     const sortKey = searchParams.get('sort') || 'newest'
     const lowOnly = searchParams.get('stock') === 'low'
+    // meta=slim — شاشة المخزون: بدون soldQuantity / تسعير ديناميكي
+    const metaSlim = searchParams.get('meta') === 'slim'
+
+    // كاش استدعاء المخزون (status=all + limit=1000 + slim) — نفس قواعد الأمان:
+    // بدون بحث/فلترة/ترتيب، والمفتاح لكل فرع + رقم الصفحة
+    const invCacheable =
+      metaSlim &&
+      !search &&
+      !category &&
+      status === 'all' &&
+      sortKey === 'newest' &&
+      !lowOnly
+    const invQuery = `branch=${session.branchId ?? 0}&inv=1&page=${page}`
+    if (invCacheable) {
+      const invHit = await matchEdgeCache('/api/products', invQuery, session.tenantId, '3')
+      if (invHit) return invHit
+    }
 
     // ⚡ EDGE CACHE v9: كاش حافة للاستدعاء الافتراضي (كاشير/شاشة المنتجات)
     // — أتعمر طلبات GET المتكررة من غير ما تشغل الـ Worker أصلاً. الكاشية
@@ -109,6 +126,17 @@ export async function GET(req: NextRequest) {
       const hit = await matchEdgeCache('/api/products', cacheQuery, session.tenantId, '3')
       if (hit) return hit
     }
+
+    // ⚡ v10 (2026-10-06) — إصلاح Error 1102: شاشة المخزون كانت بتطلب
+    // /api/products?limit=1000&status=all في *كل* فتح — استدعاء غير مخزّن
+    // بيرجّع 1000 منتج كاملين + groupBy على عناصر الفواتير (soldQuantity)
+    // + حساب تسعير ديناميكي لكل منتج — أثقل استدعاء في التطبيق، وكان بيتكرر
+    // مع كل زيارة ⇒ تراكم CPU/ذاكرة ⇒ 1102.
+    // الحل:
+    //  1) meta=slim → شاشة المخزون مش محتاجة soldQuantity/التسعير الديناميكي
+    //     فبنحذف الاستعلامين دول خالص.
+    //  2) كاش حافة 20 ثانية لنفس الاستدعاء (مفتاح لكل فرع) — زيارات المخزون
+    //     المتتالية بترجع ≈ بصفر CPU، وأي mutation على منتجات/مبيعات بيمسحه.
     const orderBy: any = (() => {
       switch (sortKey) {
         case 'name': return [{ name: 'asc' }, { id: 'desc' }]
@@ -123,13 +151,17 @@ export async function GET(req: NextRequest) {
     // 🛡️ 2026-10-03: نجيب plan context وبيانات التسعير بالتوازي.
     // الـ dynamicRetailPrice بيتحسب فقط لو الباقة فيها capability = dynamic_retail_pricing
     // (باقة احترافية). لو الباقة أساسية نرجّع null وبالتالي الـ POS هيستخدم p.price العادي.
-    const [planCtxForGet, retailPricingTenant] = await Promise.all([
-      getPlanContext(session.tenantId),
-      db.tenant.findUnique({
-        where: { id: session.tenantId },
-        select: { dynamicRetailPricingEnabled: true, defaultRetailMarginPercent: true },
-      }),
-    ])
+    // ⚡ v10: في وضع slim (شاشة المخزون) الاستدعاءين دول مش محتاجين — توفير
+    // استعلامين كاملين من كل تحميل مخزون.
+    const [planCtxForGet, retailPricingTenant] = metaSlim
+      ? [null as never, null as never]
+      : await Promise.all([
+          getPlanContext(session.tenantId),
+          db.tenant.findUnique({
+            where: { id: session.tenantId },
+            select: { dynamicRetailPricingEnabled: true, defaultRetailMarginPercent: true },
+          }),
+        ])
 
     let products: any[]
     let total: number
@@ -187,8 +219,9 @@ export async function GET(req: NextRequest) {
     // إجمالي عدد الوحدات المباعة لكل منتج (من عناصر الفواتير)
     // 🚀 Skip this expensive groupBy when there are no products returned
     // (e.g. filtered out, or tenant has no products yet) — saves a query.
+    // ⚡ v10: ومفيش داعي له خالص في وضع slim (شاشة المخزون مش بتعرضه)
     let soldMap = new Map<number, number>()
-    if (products.length > 0) {
+    if (products.length > 0 && !metaSlim) {
       const salesAgg = await db.saleItem.groupBy({
         by: ['productId'],
         where: { productId: { in: products.map((p) => p.id) } },
@@ -206,8 +239,10 @@ export async function GET(req: NextRequest) {
       // الشرط مزدوج: الباقة لازم فيها capability = dynamic_retail_pricing
       // + التينانت لازم فعّل الميزة من الإعدادات.
       // لو أي شرط مش متحقق → null → الـ POS يستخدم p.price العادي.
-      dynamicRetailPrice:
-        planCtxForGet.capabilities.includes('dynamic_retail_pricing') && retailPricingTenant
+      // ⚡ v10: في وضع slim نرجّع null مباشرة (شاشة المخزون مش بتستخدمه)
+      dynamicRetailPrice: metaSlim
+        ? null
+        : planCtxForGet.capabilities.includes('dynamic_retail_pricing') && retailPricingTenant
           ? computeDynamicRetailPrice(p, retailPricingTenant)
           : null,
     }))
@@ -219,7 +254,9 @@ export async function GET(req: NextRequest) {
       limit,
       totalPages: Math.ceil(total / limit),
     })
-    if (cacheable) {
+    if (invCacheable) {
+      await putEdgeCache(listRes.clone(), '/api/products', invQuery, session.tenantId, 20, '3')
+    } else if (cacheable) {
       await putEdgeCache(listRes.clone(), '/api/products', cacheQuery, session.tenantId, 20, '3')
     }
     return listRes

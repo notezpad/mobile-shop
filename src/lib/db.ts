@@ -2,7 +2,7 @@
 // Node's net/tls modules for the Cloudflare Workers runtime.
 import 'pg-cloudflare'
 
-import { PrismaClient } from './prisma-wasm'
+import { PrismaClient, type PrismaClientType } from './prisma-wasm'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { readDatabaseUrl, readEnv, isProductionRuntime } from './env'
 import { AsyncLocalStorage } from 'node:async_hooks'
@@ -35,21 +35,29 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
  *     + the route handler share ONE connection instead of two, and no
  *     socket is ever reused across requests.
  *  c. Cross-request / dead-socket errors still self-heal with one retry.
+ *
+ * ⚡ v10 (2026-10-06) ملاحظة مهمة: جربنا عميل PrismaClient مشترك لكل
+ * isolate (عشان نقلل churn بتاع محرك الاستعلام من كل طلب) — لكن بيئتشغيل
+ * workerd بيربط I/O (السوكات + تايمرات pg Pool) بسياق الطلب اللي اتعمل فيه،
+ * فأي Pool عاش من طلب سابق بيبوظ للطلبات اللي بعده (الاستعلام بيفضل
+ * معلّق لحد timeout). عشان كده التصميم لكل طلب بيفضل هو الآمن والمثبت —
+ * وتقليل الـ 1102 بيتحقق من طبقة v10 فوقه: كاش حافة أوسع (movements +
+ * منتجات المخزون)، ردود أصغر (50 صف + slim)، واستعلامات أقل (tz cache).
  */
 
-type RequestStore = { client: PrismaClient | null }
+type RequestStore = { client: PrismaClientType | null }
 
 const requestStorage = new AsyncLocalStorage<RequestStore>()
 
 // Node.js (dev) only: a single long-lived client is fine there.
-let devClient: PrismaClient | null = null
+let devClient: PrismaClientType | null = null
 
 // Per-request clients for code paths not wrapped in withDb(), keyed on the
 // request's own ExecutionContext so they are never shared between requests.
-const ctxClients = new WeakMap<object, PrismaClient>()
+const ctxClients = new WeakMap<object, PrismaClientType>()
 
 // Absolute last resort (no request context at all, e.g. build-time calls).
-let fallbackClient: PrismaClient | null = null
+let fallbackClient: PrismaClientType | null = null
 
 /**
  * Prefer the Hyperdrive connection string (pooled at the edge) and fall back
@@ -89,7 +97,7 @@ function getCurrentRequestKey(): object | null {
   return null
 }
 
-function createPrismaClient(): PrismaClient {
+function createPrismaClient(): PrismaClientType {
   const connectionString = resolveConnectionString()
   if (!connectionString) {
     throw new Error(
@@ -123,7 +131,7 @@ function isCrossRequestOrSocketError(err: unknown): boolean {
   )
 }
 
-async function disconnectQuietly(client: PrismaClient | null) {
+async function disconnectQuietly(client: PrismaClientType | null) {
   if (!client) return
   try {
     await client.$disconnect()
@@ -155,7 +163,7 @@ export async function withDb<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-function getClient(): PrismaClient {
+function getClient(): PrismaClientType {
   if (!isProductionRuntime()) {
     if (!devClient) devClient = createPrismaClient()
     return devClient
@@ -207,7 +215,7 @@ function wrapDelegate(delegate: any, prop: PropertyKey): any {
       const value = Reflect.get(target, method, target)
       if (typeof value !== 'function') return value
       return (...args: unknown[]) => {
-        const invoke = (client: PrismaClient) => {
+        const invoke = (client: PrismaClientType) => {
           const d = Reflect.get(client as object, prop, client) as any
           return d[method](...args)
         }
@@ -245,7 +253,7 @@ function wrapDelegate(delegate: any, prop: PropertyKey): any {
   })
 }
 
-export const db = new Proxy({} as PrismaClient, {
+export const db = new Proxy({} as PrismaClientType, {
   get(_target, prop) {
     const client = getClient()
     const value = Reflect.get(client as object, prop, client)

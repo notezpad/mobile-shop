@@ -20,7 +20,7 @@ export function StocktakePage() {
   const user = useShopStore((s) => s.user)
   const userBranchId = user?.branchId ?? null
 
-  const { branches, products, stocktakes, movements, stats, reload } = useInventoryData()
+  const { branches, products, stocktakes, movements, movementMeta, stats, reload } = useInventoryData()
 
   const exportExcel = () => {
     if (stocktakes.length === 0) return
@@ -112,7 +112,7 @@ export function StocktakePage() {
         active="stocktake"
         counts={{
           stock: { text: `${num(stats.totalItems)} صنف` },
-          movements: { text: `${num(movements.length)} حركة` },
+          movements: { text: `${num(movementMeta?.total ?? movements.length)} حركة` },
           transfers: {
             text: stats.pendingTransfers > 0 ? `${num(stats.pendingTransfers)} معلّق` : undefined,
             alert: stats.pendingTransfers > 0,

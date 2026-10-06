@@ -39,14 +39,25 @@ export const DEFAULT_TENANT_TIMEZONE = 'Africa/Cairo'
 
 // ─────────────────────────────────────────────
 // جلب توقيت المحل (مع fallback آمن لو مش موجود)
+// ⚡ v10 (2026-10-06): كاش per-isolate لمدة 5 دقايق — المنطقة الزمنية نادراً
+// ما بتتغير، والداشبورد/التقارير/المخزون كانت بتدفع استعلام Tenant كامل في
+// *كل* طلب. جزء من إصلاح Error 1102 (تقليل الاستعلامات الثابتة لكل طلب).
 // ─────────────────────────────────────────────
+const TZ_CACHE_TTL_MS = 5 * 60_000
+const tzCache = new Map<string, { at: number; tz: string }>()
+
 export async function getTenantTimezone(tenantId: string): Promise<string> {
+  const hit = tzCache.get(tenantId)
+  if (hit && Date.now() - hit.at < TZ_CACHE_TTL_MS) return hit.tz
   try {
     const tenant = await db.tenant.findUnique({
       where: { id: tenantId },
       select: { timezone: true },
     })
-    return tenant?.timezone || DEFAULT_TENANT_TIMEZONE
+    const tz = tenant?.timezone || DEFAULT_TENANT_TIMEZONE
+    if (tzCache.size > 500) tzCache.clear()
+    tzCache.set(tenantId, { at: Date.now(), tz })
+    return tz
   } catch {
     // لو حصل أي خطأ (مثلاً tenantId بتاع الأدمن نفسه)، منسيبش الـ API يقع
     // بسبب حساب التوقيت — نرجع الافتراضي.

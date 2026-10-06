@@ -26,7 +26,7 @@ export function TransfersPage() {
   const isEmployee = user?.role === 'EMPLOYEE'
   const userBranchId = user?.branchId ?? null
 
-  const { branches, products, transfers, movements, stats, loading, reload } = useInventoryData()
+  const { branches, products, transfers, movements, movementMeta, stats, loading, reload } = useInventoryData()
 
   const exportExcel = () => {
     if (transfers.length === 0) return
@@ -110,7 +110,7 @@ export function TransfersPage() {
         active="transfers"
         counts={{
           stock: { text: `${num(stats.totalItems)} صنف` },
-          movements: { text: `${num(movements.length)} حركة` },
+          movements: { text: `${num(movementMeta?.total ?? movements.length)} حركة` },
           transfers: {
             text: loading ? '…' : `${num(transfers.length)} تحويل`,
             alert: stats.pendingTransfers > 0,

@@ -523,7 +523,12 @@ export async function POST(req: NextRequest) {
       2
     )
     // ⚡ v9: البيع بيخصم مخزون — امسح كاش قائمة المنتجات كمان (نفس فرع البائع)
-    await purgeEdgeCache([PURGE_KEYS.products(session.branchId)], session.tenantId, '3')
+    // ⚡ v10: وكمان نسخة قائمة المخزون (شاشة المخزون) عشان الكميات تفضل حية
+    await purgeEdgeCache(
+      [PURGE_KEYS.products(session.branchId), PURGE_KEYS.productsInventory(session.branchId)],
+      session.tenantId,
+      '3'
+    )
     return NextResponse.json(sale, { status: 201 })
   })
 }
