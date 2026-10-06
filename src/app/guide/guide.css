@@ -925,3 +925,552 @@
     box-shadow: none !important;
   }
 }
+/* ═══════════════════════════════════════════════════════════════
+   v12 (2026-10-07) — طبقة الدليل التفاعلي
+   فلسفة: الصورة الأول، الكلام اختياري. مشغّل جولة + بداية سريعة + أكورديون.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* وصولية للعناصر الجديدة */
+.gd-chip:focus-visible,
+.gd-qs-card:focus-visible,
+.gd-nav-btn:focus-visible,
+.gd-gemacc summary:focus-visible,
+.gd-details summary:focus-visible {
+  outline: 2px solid #6ee7b7;
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+.gd-chip,
+.gd-qs-card,
+.gd-nav-btn,
+.gd-gemacc summary,
+.gd-details summary {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ─── شرائح إحصائيات الهيرو ─── */
+.gd-hero-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+.gd-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.gd-stat svg {
+  color: #6ee7b7;
+}
+
+/* ─── البداية السريعة (4 خطوات) ─── */
+.gd-qs-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-top: 26px;
+}
+.gd-qs-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: right;
+  padding: 20px 18px 16px;
+  border-radius: 18px;
+  background: linear-gradient(170deg, rgba(30, 41, 59, 0.55), rgba(15, 23, 42, 0.75));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.22s ease, border-color 0.22s ease, background 0.22s ease;
+}
+.gd-qs-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(16, 185, 129, 0.45);
+  background: linear-gradient(170deg, rgba(16, 185, 129, 0.1), rgba(15, 23, 42, 0.8));
+}
+.gd-qs-num {
+  position: absolute;
+  top: 14px;
+  inset-inline-end: 14px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #052e22;
+  background: linear-gradient(135deg, #34d399, #10b981);
+}
+.gd-qs-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.gd-qs-card h3 {
+  font-size: 15.5px;
+  font-weight: 800;
+  color: #f4f6f8;
+}
+.gd-qs-card p {
+  font-size: 12.8px;
+  line-height: 1.75;
+  color: rgba(203, 213, 225, 0.78);
+}
+.gd-qs-link {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6ee7b7;
+}
+.gd-qs-card:hover .gd-qs-link {
+  text-decoration: underline;
+}
+
+/* ─── مشغّل الجولة التفاعلية ─── */
+.gd-player {
+  margin-top: 26px;
+}
+.gd-chipbar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 2px 12px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(16, 185, 129, 0.4) transparent;
+}
+.gd-chipbar::-webkit-scrollbar {
+  height: 6px;
+}
+.gd-chipbar::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.35);
+  border-radius: 99px;
+}
+.gd-chip {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 13px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: rgba(203, 213, 225, 0.85);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+  white-space: nowrap;
+}
+.gd-chip:hover {
+  color: #f4f6f8;
+  border-color: rgba(16, 185, 129, 0.4);
+}
+.gd-chip-num {
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 3px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(148, 163, 184, 0.95);
+  background: rgba(255, 255, 255, 0.08);
+}
+.gd-chip.is-done .gd-chip-num {
+  color: #052e22;
+  background: #34d399;
+}
+.gd-chip.is-active {
+  color: #04241a;
+  background: linear-gradient(135deg, #6ee7b7, #10b981);
+  border-color: transparent;
+}
+.gd-chip.is-active .gd-chip-num {
+  color: #04241a;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.gd-panel {
+  border-radius: 22px;
+  padding: clamp(18px, 3vw, 30px);
+  background:
+    radial-gradient(700px 260px at 90% -10%, rgba(16, 185, 129, 0.1), transparent 60%),
+    linear-gradient(165deg, rgba(17, 24, 39, 0.94), rgba(10, 14, 26, 0.97));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+.gd-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.gd-panel-num {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  font-size: 19px;
+  font-weight: 800;
+  color: #052e22;
+  background: linear-gradient(135deg, #6ee7b7, #10b981);
+  box-shadow: 0 6px 22px rgba(16, 185, 129, 0.35);
+}
+.gd-panel-titles {
+  min-width: 0;
+}
+.gd-panel-title {
+  font-size: clamp(16px, 2.4vw, 20px);
+  font-weight: 800;
+  color: #f4f6f8;
+  text-wrap: balance;
+}
+.gd-panel-line {
+  margin-top: 3px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: #6ee7b7;
+  font-weight: 600;
+}
+.gd-panel-count {
+  margin-inline-start: auto;
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(148, 163, 184, 0.9);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 6px 11px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.gd-panel-count i {
+  font-style: normal;
+  opacity: 0.5;
+}
+
+.gd-progress {
+  height: 5px;
+  margin-top: 16px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+.gd-progress i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #34d399, #6ee7b7);
+  transition: width 0.35s ease;
+}
+
+.gd-panel-shots {
+  margin-top: 18px;
+  display: grid;
+  gap: 14px;
+}
+.gd-panel-shots.is-two {
+  grid-template-columns: repeat(2, 1fr);
+  align-items: start;
+}
+
+/* الشرح الكامل المطوي */
+.gd-details {
+  margin-top: 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.gd-details summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 13px 16px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: rgba(226, 232, 240, 0.92);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.gd-details summary::-webkit-details-marker {
+  display: none;
+}
+.gd-details summary svg:first-child {
+  color: #6ee7b7;
+}
+.gd-details summary .chev {
+  margin-inline-start: auto;
+  color: rgba(148, 163, 184, 0.8);
+  transition: transform 0.25s ease;
+}
+.gd-details[open] summary .chev {
+  transform: rotate(180deg);
+}
+.gd-details-body {
+  padding: 2px 18px 16px;
+  display: grid;
+  gap: 10px;
+}
+.gd-details-body p {
+  font-size: 13.5px;
+  line-height: 2;
+  color: rgba(203, 213, 225, 0.85);
+}
+
+/* أزرار التنقل */
+.gd-panel-nav {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.gd-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 18px;
+  border-radius: 13px;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: rgba(226, 232, 240, 0.92);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+.gd-nav-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+.gd-nav-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.gd-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.gd-nav-btn.is-primary {
+  color: #04241a;
+  background: linear-gradient(135deg, #6ee7b7, #10b981);
+  border-color: transparent;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.3);
+}
+.gd-nav-btn.is-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #8ff0cd, #34d399);
+}
+.gd-panel-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+.gd-panel-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.14);
+  transition: background 0.2s ease, width 0.2s ease;
+}
+.gd-panel-dots i.done {
+  background: rgba(52, 211, 153, 0.55);
+}
+.gd-panel-dots i.on {
+  width: 22px;
+  background: linear-gradient(90deg, #34d399, #6ee7b7);
+}
+
+/* ─── أكورديون الميزات الذكية ─── */
+.gd-gemacc-list {
+  margin-top: 26px;
+  display: grid;
+  gap: 14px;
+}
+.gd-gemacc {
+  border-radius: 20px;
+  background: linear-gradient(170deg, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.78));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+.gd-gemacc summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  padding: 18px 20px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.gd-gemacc summary::-webkit-details-marker {
+  display: none;
+}
+.gd-gemacc-head {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.gd-gem-line {
+  font-size: 13px;
+  line-height: 1.75;
+  color: rgba(203, 213, 225, 0.8);
+  font-weight: 600;
+}
+.gd-gemacc summary .chev {
+  flex: 0 0 auto;
+  color: rgba(148, 163, 184, 0.8);
+  transition: transform 0.25s ease;
+}
+.gd-gemacc[open] summary .chev {
+  transform: rotate(180deg);
+}
+.gd-gemacc-body {
+  padding: 0 20px 6px;
+  display: grid;
+  gap: 10px;
+}
+.gd-gemacc-body p {
+  font-size: 13.5px;
+  line-height: 2;
+  color: rgba(203, 213, 225, 0.85);
+}
+.gd-gemacc .gd-gem-shots {
+  padding: 12px 20px 20px;
+}
+
+/* ─── نقاط قسم الملابس ─── */
+.gd-points {
+  margin-top: 20px;
+  display: grid;
+  gap: 10px;
+  max-width: 860px;
+}
+.gd-point {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 16px;
+  border-radius: 14px;
+  font-size: 13.8px;
+  line-height: 1.9;
+  color: rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.gd-point svg {
+  flex: 0 0 auto;
+  margin-top: 5px;
+  color: #6ee7b7;
+}
+
+/* ─── شريط الباقات المختصر ─── */
+.gd-miniplan {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: clamp(20px, 3.5vw, 34px);
+  border-radius: 22px;
+  background:
+    radial-gradient(600px 240px at 12% 120%, rgba(16, 185, 129, 0.16), transparent 60%),
+    linear-gradient(160deg, rgba(17, 24, 39, 0.94), rgba(10, 14, 26, 0.97));
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.gd-miniplan-text {
+  flex: 1;
+  min-width: 0;
+}
+.gd-miniplan-text h2 {
+  font-size: clamp(17px, 2.6vw, 22px);
+  font-weight: 800;
+  color: #f4f6f8;
+}
+.gd-miniplan-text p {
+  margin-top: 8px;
+  font-size: 13.5px;
+  line-height: 1.95;
+  color: rgba(203, 213, 225, 0.8);
+}
+.gd-miniplan .gd-btn-primary {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* ─── استجابة الشاشات ─── */
+@media (max-width: 1024px) {
+  .gd-qs-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .gd-panel-shots.is-two {
+    grid-template-columns: 1fr;
+  }
+  .gd-panel-nav {
+    flex-wrap: wrap;
+  }
+  .gd-panel-dots {
+    order: 3;
+    flex-basis: 100%;
+  }
+  .gd-nav-btn {
+    flex: 1;
+  }
+  .gd-miniplan {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+  .gd-miniplan .gd-btn-primary {
+    justify-content: center;
+  }
+}
+@media (max-width: 560px) {
+  .gd-qs-grid {
+    grid-template-columns: 1fr;
+  }
+  .gd-panel-count {
+    display: none;
+  }
+}
+
+/* حركة أهدأ لمن يفضل كده */
+@media (prefers-reduced-motion: reduce) {
+  .gd-qs-card,
+  .gd-nav-btn,
+  .gd-chip,
+  .gd-progress i,
+  .gd-panel-dots i {
+    transition: none;
+  }
+}

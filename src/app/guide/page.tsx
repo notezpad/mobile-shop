@@ -2,8 +2,17 @@
 
 /**
  * صفحة دليل الاستخدام (/guide) — عامة بدون تسجيل دخول
- * شرح المنهج كامل: إيه هو ERP ← الباقات الأربعة ← الميزات الذكية ← جولة صفحة-بصفحة بالصور ← أسئلة شائعة
- * التصميم: نفس نظام landing-dark بتاع صفحات الماركتينج (كلاسات co- و ab-) + طبقة gd- من guide.css
+ *
+ * ═══ v12 (2026-10-07) — إعادة تصميم كاملة: من «كتاب طويل» إلى «تجربة تفاعلية» ═══
+ * المشكلة: 15 خطوة × فقرات طويلة + جدول باقات تسويقي في سكرول واحد = قارئ بيتعب من أول دخول.
+ * الحل (Progressive Disclosure):
+ *   1) «ابدأ في 5 دقائق» — 4 بطاقات بتوديك جوه الجولة عند الخطوة المعنية.
+ *   2) مشغّل جولة تفاعلي — شاشة واحدة قدامك + شريط تقدم + أسهم كيبورد + الشرح الطويل مطوي.
+ *   3) الميزات الذكية — أكورديون: الصور ظاهرة والشرح ورا زر.
+ *   4) الباقات اتنقلت لصفحة الأسعار — الدليل بقى عن الاستخدام بس.
+ *   صفر فقدان محتوى: كل النصوص الأصلية لسه موجودة ورا «الشرح الكامل».
+ *
+ * التصميم: نفس نظام landing-dark (كلاسات co- و ab-) + طبقة gd- من guide.css
  */
 
 import * as React from 'react'
@@ -12,8 +21,8 @@ import { motion } from 'framer-motion'
 import {
   Store,
   ArrowLeft,
+  ArrowRight,
   Sparkles,
-  Smartphone,
   Shirt,
   CheckCircle2,
   CircleDollarSign,
@@ -28,9 +37,15 @@ import {
   Package,
   Calculator,
   Search,
+  LogIn,
+  PackagePlus,
+  ScanBarcode,
+  BarChart3,
+  MousePointerClick,
+  CirclePlay,
 } from 'lucide-react'
 import { LandingFooter } from '@/components/landing/LandingFooter'
-import { PLANS, COMPARE_ROWS, GEMS, TOUR_STEPS, FASHION_STORY, FAQ } from './guide-data'
+import { GEMS, TOUR_STEPS, FASHION_STORY, FAQ } from './guide-data'
 import './guide.css'
 
 const fadeUp = {
@@ -41,12 +56,39 @@ const fadeUp = {
 }
 
 const SECTIONS = [
-  { href: '#erp', label: 'يعني إيه ERP؟' },
-  { href: '#plans', label: 'الباقات الأربعة' },
-  { href: '#gems', label: 'الميزات الذكية' },
-  { href: '#tour', label: 'الجولة بالصور' },
+  { href: '#start', label: 'ابدأ في 5 دقائق' },
+  { href: '#tour', label: 'الجولة التفاعلية' },
+  { href: '#gems', label: 'ميزات ذكية' },
   { href: '#fashion', label: 'ملابس وأحذية' },
   { href: '#faq', label: 'أسئلة شائعة' },
+]
+
+/** مسار البداية السريعة — كل بطاقة بتقفز للخطوة المعنية في الجولة */
+const QUICK_START = [
+  {
+    icon: LogIn,
+    title: 'سجّل دخول',
+    line: 'بميل وباسورد محلك — وعلّم «تذكّرني» على جهازك الخاص.',
+    step: 0,
+  },
+  {
+    icon: PackagePlus,
+    title: 'أضف أول منتج',
+    line: 'الاسم وسعر البيع و«حفظ» — عشر ثواني وخلص التسجيل.',
+    step: 4,
+  },
+  {
+    icon: ScanBarcode,
+    title: 'افتح الكاشير وبيع',
+    line: 'باركود أو بحث، اختار الصنف وادفع — وخلاص اتباع.',
+    step: 2,
+  },
+  {
+    icon: BarChart3,
+    title: 'تابع أرقامك',
+    line: 'لوحة المعلومات والتقارير بيقولوك بايع كام وربحك كام.',
+    step: 1,
+  },
 ]
 
 function Shot({ src, cap, alt }: { src: string; cap?: string; alt: string }) {
@@ -59,21 +101,180 @@ function Shot({ src, cap, alt }: { src: string; cap?: string; alt: string }) {
         <span>Nezam POS — نظام المحل</span>
       </div>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={alt} loading="lazy" />
+      <img src={src} alt={alt} loading="lazy" decoding="async" />
       {cap ? <figcaption className="gd-shot-cap">{cap}</figcaption> : null}
     </figure>
   )
 }
 
-function PlanIconBubble({ icon }: { icon: 'phone' | 'shirt' }) {
+/** عنوان قصير للـ chips والأزرار — بنقطع النص عند الشرطة الطويلة */
+function shortTitle(title: string): string {
+  return title.split('—')[0].trim()
+}
+
+function TourPlayer({
+  current,
+  setCurrent,
+}: {
+  current: number
+  setCurrent: React.Dispatch<React.SetStateAction<number>>
+}) {
+  const total = TOUR_STEPS.length
+  const s = TOUR_STEPS[current]
+  const isFirst = current === 0
+  const isLast = current === total - 1
+  const panelRef = React.useRef<HTMLDivElement | null>(null)
+
+  // لو رأس اللوحة طلع بره الشاشة بعد تغيير الخطوة، رجّعه قدام المستخدم
+  React.useEffect(() => {
+    const el = panelRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    if (r.top < 60 || r.top > window.innerHeight * 0.65) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [current])
+
   return (
-    <div className="gd-plan-icon">
-      {icon === 'phone' ? <Smartphone className="size-5" /> : <Shirt className="size-5" />}
+    <div className="gd-player">
+      {/* شريط صفحات النظام */}
+      <div className="gd-chipbar" role="tablist" aria-label="صفحات النظام">
+        {TOUR_STEPS.map((t, i) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={i === current}
+            className={`gd-chip${i === current ? ' is-active' : ''}${i < current ? ' is-done' : ''}`}
+            onClick={() => setCurrent(i)}
+          >
+            <span className="gd-chip-num">{i + 1}</span>
+            {shortTitle(t.title)}
+          </button>
+        ))}
+      </div>
+
+      {/* لوحة الخطوة الحالية */}
+      <motion.div
+        ref={panelRef}
+        key={s.id}
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        className="gd-panel"
+        style={{ scrollMarginTop: 84 }}
+      >
+        <div className="gd-panel-head">
+          <span className="gd-panel-num">{current + 1}</span>
+          <div className="gd-panel-titles">
+            <h3 className="gd-panel-title">{s.title}</h3>
+            <p className="gd-panel-line">{s.line}</p>
+          </div>
+          <span className="gd-panel-count">
+            {current + 1}
+            <i>/</i>
+            {total}
+          </span>
+        </div>
+
+        <div className="gd-progress" aria-hidden="true">
+          <i style={{ width: `${Math.round(((current + 1) / total) * 100)}%` }} />
+        </div>
+
+        {(s.img || s.img2) && (
+          <div className={`gd-panel-shots${s.img2 ? ' is-two' : ''}`}>
+            {s.img ? <Shot src={s.img} cap={s.cap} alt={s.cap ?? s.title} /> : null}
+            {s.img2 ? <Shot src={s.img2} cap={s.cap2} alt={s.cap2 ?? s.title} /> : null}
+          </div>
+        )}
+
+        {s.tip ? (
+          <div className="gd-tip">
+            <Lightbulb className="size-4" />
+            <span>
+              <b>خد بالك:</b> {s.tip}
+            </span>
+          </div>
+        ) : null}
+
+        {s.desc.length > 0 && (
+          <details className="gd-details">
+            <summary>
+              <BookOpen className="size-4" />
+              الشرح الكامل للشاشة دي
+              <ChevronDown className="chev size-4" />
+            </summary>
+            <div className="gd-details-body">
+              {s.desc.map((d, i) => (
+                <p key={i}>{d}</p>
+              ))}
+            </div>
+          </details>
+        )}
+
+        <div className="gd-panel-nav">
+          <button
+            type="button"
+            className="gd-nav-btn"
+            onClick={() => setCurrent((v) => Math.max(0, v - 1))}
+            disabled={isFirst}
+          >
+            <ArrowRight className="size-4" />
+            السابق
+          </button>
+
+          <div className="gd-panel-dots" aria-hidden="true">
+            {TOUR_STEPS.map((t, i) => (
+              <i
+                key={t.id}
+                className={i === current ? 'on' : i < current ? 'done' : ''}
+              />
+            ))}
+          </div>
+
+          {isLast ? (
+            <Link href="/signup" className="gd-nav-btn is-primary">
+              <Sparkles className="size-4" />
+              خلصت الجولة — سجّل محلك مجاناً
+            </Link>
+          ) : (
+            <button
+              type="button"
+              className="gd-nav-btn is-primary"
+              onClick={() => setCurrent((v) => Math.min(total - 1, v + 1))}
+            >
+              التالي: {shortTitle(TOUR_STEPS[current + 1].title)}
+              <ArrowLeft className="size-4" />
+            </button>
+          )}
+        </div>
+      </motion.div>
     </div>
   )
 }
 
 export default function GuidePage() {
+  const [step, setStep] = React.useState(0)
+
+  // أسهم الكيبورد: شمال = التالي، يمين = السابق (اتجاه القراءة RTL)
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (e.key === 'ArrowLeft') setStep((v) => Math.min(v + 1, TOUR_STEPS.length - 1))
+      else if (e.key === 'ArrowRight') setStep((v) => Math.max(v - 1, 0))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const jumpToStep = (i: number) => {
+    setStep(i)
+    requestAnimationFrame(() => {
+      document.getElementById('tour')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
   return (
     <div className="co-page landing-dark" dir="rtl">
       <div className="co-bg-glow" aria-hidden="true" />
@@ -102,57 +303,203 @@ export default function GuidePage() {
       </header>
 
       <main className="co-container" style={{ paddingBottom: 64 }}>
-        {/* ═══════════ Hero ═══════════ */}
+        {/* ═══════════ Hero — مختصر ═══════════ */}
         <section className="gd-hero" style={{ marginTop: 24 }}>
           <span className="gd-hero-kicker">
             <Sparkles className="size-3.5" />
-            دليل الاستخدام الكامل — مُحدَّث 2026
+            دليل الاستخدام — مُحدَّث 2026
           </span>
           <h1 className="gd-hero-title">
-            اعرف نظام المحل من <span className="lg-grad-text">أول شاشة لآخر إعداد</span>
-            <br />
-            — خطوة بخطوة وبالصور
+            تعلّم نظام المحل في <span className="lg-grad-text">5 دقائق</span>
+            <br />— بالصور وخطوة بخطوة
           </h1>
           <p className="gd-hero-sub">
-            الدليل ده كتبناه لصاحب المحل اللي مش خبير تقنية: هنشرح يعني إيه نظام ERP بكلام بسيط،
-            نديك تختار الباقة اللي على قياس محلك من 4 باقات (موبايل وكمبيوتر / ملابس وأحذية — أساسية واحترافية)،
-            وبعدين نمشي معاك جولة حقيقية بالصور من لوحة المعلومات لحد آخر صفحة إعدادات.
+            مش هتقرا كتاب هنا. اضغط «التالي» وامشي في الجولة: كل شاشة قدامك بصورتها الحقيقية
+            وسطر واحد بيقول بتعمل إيه — والتفاصيل كلها موجودة لما تحبها.
           </p>
           <div className="gd-hero-cta">
-            <Link href="/signup" className="gd-btn-primary">
-              <Sparkles className="size-4" />
-              ابدأ تجربة 14 يوم مجاناً
-            </Link>
-            <a href="#plans" className="gd-btn-ghost">
-              <CircleDollarSign className="size-4" />
-              شوف الباقات الأول
+            <a href="#tour" className="gd-btn-primary">
+              <CirclePlay className="size-4" />
+              ابدأ الجولة دلوقتي
             </a>
+            <Link href="/signup" className="gd-btn-ghost">
+              <CircleDollarSign className="size-4" />
+              عندي محل — جرّب 14 يوم مجاناً
+            </Link>
+          </div>
+          <div className="gd-hero-stats">
+            <span className="gd-stat">
+              <BookOpen className="size-3.5" />
+              {TOUR_STEPS.length} شاشة مشروحة
+            </span>
+            <span className="gd-stat">
+              <Shirt className="size-3.5" />
+              صوت ومحتوى للملابس والإلكترونيات
+            </span>
+            <span className="gd-stat">
+              <Zap className="size-3.5" />
+              4 خطوات لصوت أول فاتورة
+            </span>
           </div>
         </section>
 
         {/* شريط الأقسام */}
         <nav className="gd-anchorbar" aria-label="أقسام الدليل">
-          {SECTIONS.map((s) => (
-            <a key={s.href} href={s.href} className="gd-anchor">
-              {s.label}
+          {SECTIONS.map((sec) => (
+            <a key={sec.href} href={sec.href} className="gd-anchor">
+              {sec.label}
             </a>
           ))}
         </nav>
 
-        {/* ═══════════ يعني إيه ERP؟ ═══════════ */}
+        {/* ═══════════ ابدأ في 5 دقائق ═══════════ */}
+        <section id="start" className="ab-section" style={{ scrollMarginTop: 90 }}>
+          <motion.div {...fadeUp} className="ab-section-header">
+            <span className="lp-eyebrow ab-section-eyebrow">
+              <Zap className="size-3" />
+              للمستعجلين
+            </span>
+            <h2 className="ab-section-title">
+              ابدأ في <span className="lg-grad-text">5 دقائق</span> — 4 خطوات بس
+            </h2>
+            <p className="ab-section-desc">
+              دي كل اللي محتاجه عشان تشتغل من أول يوم: من صفحة الدخول لحد أول فاتورة
+              وقراية أرقامك. دوس على أي خطوة وتنقلك لمكانها في الجولة.
+            </p>
+          </motion.div>
+
+          <div className="gd-qs-grid">
+            {QUICK_START.map((q, i) => (
+              <motion.button
+                key={q.title}
+                type="button"
+                {...fadeUp}
+                transition={{ duration: 0.5, delay: i * 0.06 }}
+                className="gd-qs-card"
+                onClick={() => jumpToStep(q.step)}
+              >
+                <span className="gd-qs-num">{i + 1}</span>
+                <span className="gd-qs-icon">
+                  <q.icon className="size-5" />
+                </span>
+                <h3>{q.title}</h3>
+                <p>{q.line}</p>
+                <span className="gd-qs-link">
+                  شوفها في الجولة
+                  <MousePointerClick className="size-3.5" />
+                </span>
+              </motion.button>
+            ))}
+          </div>
+        </section>
+
+        {/* ═══════════ الجولة التفاعلية ═══════════ */}
+        <section id="tour" className="ab-section" style={{ scrollMarginTop: 90 }}>
+          <motion.div {...fadeUp} className="ab-section-header">
+            <span className="lp-eyebrow ab-section-eyebrow">
+              <BookOpen className="size-3" />
+              جولة بالصور — صفحة صفحة
+            </span>
+            <h2 className="ab-section-title">
+              الجولة التفاعلية: <span className="lg-grad-text">{TOUR_STEPS.length} شاشة</span> بتشرح نفسها
+            </h2>
+            <p className="ab-section-desc">
+              كل الصور من نظام شغال فعلاً بمحل تجريبي فيه 46 منتج وفواتير حقيقية. اضغط
+              «التالي» أو استخدم أسهم الكيبورد ← → — والشرح الطويل موجود مطوي لمن يحب يقرأ.
+            </p>
+          </motion.div>
+
+          <TourPlayer current={step} setCurrent={setStep} />
+        </section>
+
+        {/* ═══════════ الميزات الذكية — أكورديون ═══════════ */}
+        <section id="gems" className="ab-section" style={{ scrollMarginTop: 90 }}>
+          <motion.div {...fadeUp} className="ab-section-header">
+            <span className="lp-eyebrow ab-section-eyebrow">
+              <Wand2 className="size-3" />
+              كنوز بتوفرلك ساعات كل أسبوع
+            </span>
+            <h2 className="ab-section-title">
+              3 ميزات ذكية <span className="lg-grad-text">هتفرق معاك من أول يوم</span>
+            </h2>
+            <p className="ab-section-desc">
+              الصور قدامك على طول — ولو حبيت تفهم بالتفصيل، افتح «التفاصيل» تحت كل ميزة.
+              وكل ميزة مكتوب فوقها متاحة في أنهي باقة.
+            </p>
+          </motion.div>
+
+          <div className="gd-gemacc-list">
+            {GEMS.map((g) => (
+              <motion.details key={g.id} {...fadeUp} className="gd-gemacc">
+                <summary>
+                  <span className="gd-gem-badge">
+                    <Crown className="size-3.5" />
+                    {g.badge}
+                  </span>
+                  <span className="gd-gemacc-head">
+                    <h3 className="gd-gem-title">{g.title}</h3>
+                    <span className="gd-gem-line">{g.line}</span>
+                  </span>
+                  <ChevronDown className="chev size-5" />
+                </summary>
+                <div className="gd-gemacc-body">
+                  {g.desc.map((d, i) => (
+                    <p key={i}>{d}</p>
+                  ))}
+                </div>
+                <div className="gd-gem-shots">
+                  {g.shots.map((sh) => (
+                    <Shot key={sh.src} src={sh.src} cap={sh.cap} alt={sh.cap} />
+                  ))}
+                </div>
+              </motion.details>
+            ))}
+          </div>
+        </section>
+
+        {/* ═══════════ ملابس وأحذية ═══════════ */}
+        <section id="fashion" className="ab-section" style={{ scrollMarginTop: 90 }}>
+          <motion.div {...fadeUp} className="ab-section-header">
+            <span className="lp-eyebrow ab-section-eyebrow">
+              <Shirt className="size-3" />
+              محلك ملابس أو أحذية؟
+            </span>
+            <h2 className="ab-section-title">
+              النظام بيتكلم <span className="lg-grad-text">لغة مقاسات وألوان</span>
+            </h2>
+          </motion.div>
+
+          <div className="gd-points">
+            {FASHION_STORY.points.map((pt, i) => (
+              <motion.span
+                key={i}
+                {...fadeUp}
+                transition={{ duration: 0.5, delay: i * 0.06 }}
+                className="gd-point"
+              >
+                <CheckCircle2 className="size-4" />
+                {pt}
+              </motion.span>
+            ))}
+          </div>
+
+          <div className="gd-fashion-shots">
+            {FASHION_STORY.shots.map((sh) => (
+              <Shot key={sh.src} src={sh.src} cap={sh.cap} alt={sh.cap} />
+            ))}
+          </div>
+        </section>
+
+        {/* ═══════════ يعني إيه ERP؟ — مختصر بصري ═══════════ */}
         <section id="erp" className="ab-section" style={{ scrollMarginTop: 90 }}>
           <motion.div {...fadeUp} className="ab-section-header">
             <span className="lp-eyebrow ab-section-eyebrow">
               <Info className="size-3" />
-              للمبتدئين تماماً
+              لو عايز تفهم الفكرة من جوه
             </span>
             <h2 className="ab-section-title">
-              يعني إيه <span className="lg-grad-text">نظام ERP</span>؟ وبيعمل إيه لمحلك؟
+              يعني إيه <span className="lg-grad-text">نظام ERP</span>؟ ببساطة
             </h2>
-            <p className="ab-section-desc">
-              خد نفسك — مش هنتكلم بمصطلحات. تخيل إن محلك عنده 4 دفاتر: دفتر مبيعات، شيت مخزون،
-              دفتر خزنة، ودفتر عملاء. النظام بيدمج الأربعة في شاشة واحدة بتتكلم مع نفسها.
-            </p>
           </motion.div>
 
           <div className="gd-erp-grid">
@@ -161,10 +508,9 @@ export default function GuidePage() {
                 <Lightbulb className="size-5" />
               </div>
               <h3>قبل النظام: الدفاتر</h3>
-              <p>كل عملية بتتسجل في مكان، والحساب بيتعمل في مكان تاني، والنتيجة:</p>
               <div className="gd-erp-list">
                 <span>
-                  <Search className="dot size-3.5" /> تفضل ساعات بتعدّ مخزون يدوي
+                  <Search className="dot size-3.5" /> ساعات في عدّ المخزون يدوي
                 </span>
                 <span>
                   <Search className="dot size-3.5" /> ديون العملاء بتتلخبط وتضيع
@@ -184,19 +530,15 @@ export default function GuidePage() {
                 <Zap className="size-5" />
               </div>
               <h3>مع نظام المحل: حركة واحدة</h3>
-              <p>بتبيع قطعة واحدة من الكاشير؟ النظام فوراً بيعمل كل ده من غير ما تحس:</p>
               <div className="gd-erp-list">
                 <span>
-                  <CheckCircle2 className="dot size-4" /> نقص الكمية من المخزون
+                  <CheckCircle2 className="dot size-4" /> بتبيع قطعة من الكاشير
                 </span>
                 <span>
-                  <CheckCircle2 className="dot size-4" /> زوّد رصيد الخزنة
+                  <CheckCircle2 className="dot size-4" /> المخزون والخزنة والعميل بيتحدثوا لوحدهم
                 </span>
                 <span>
-                  <CheckCircle2 className="dot size-4" /> حدّث حساب العميل وسجل الفاتورة
-                </span>
-                <span>
-                  <CheckCircle2 className="dot size-4" /> حدّث كل التقارير والأرباح
+                  <CheckCircle2 className="dot size-4" /> والتقارير بتتحدث في نفس اللحظة
                 </span>
               </div>
             </motion.div>
@@ -210,10 +552,9 @@ export default function GuidePage() {
                 <Calculator className="size-5" />
               </div>
               <h3>النتيجة بعد شهر</h3>
-              <p>بتفتح لوحة المعلومات الصبح وتشوف في 10 ثواني:</p>
               <div className="gd-erp-list">
                 <span>
-                  <CircleDollarSign className="dot size-4" /> بايع كام النهاردة وربحك كام
+                  <CircleDollarSign className="dot size-4" /> بايع كام وربحك كام في 10 ثواني
                 </span>
                 <span>
                   <Package className="dot size-4" /> إيه اللي قرب يخلص من المخزون
@@ -226,201 +567,21 @@ export default function GuidePage() {
           </div>
         </section>
 
-        {/* ═══════════ الباقات الأربعة ═══════════ */}
+        {/* ═══════════ الباقات — شريط يودي لصفحة الأسعار ═══════════ */}
         <section id="plans" className="ab-section" style={{ scrollMarginTop: 90 }}>
-          <motion.div {...fadeUp} className="ab-section-header">
-            <span className="lp-eyebrow ab-section-eyebrow">
-              <Crown className="size-3" />
-              اختار اللي على قياس محلك
-            </span>
-            <h2 className="ab-section-title">
-              4 باقات — <span className="lg-grad-text">مجالين × مستويين</span>
-            </h2>
-            <p className="ab-section-desc">
-              النظام متخصص في مجالين: محلات الموبايل والكمبيوتر، ومحلات الملابس والأحذية.
-              وكل مجال له مستويان: «أساسية» تبدأ بيها براحتك، و«احترافية» لما تكبر وتحتاج
-              فروع أكتر ومستخدمين أكتر وميزات الجملة. كل الباقات بيها تجربة مجانية 14 يوم.
-            </p>
+          <motion.div {...fadeUp} className="gd-miniplan">
+            <div className="gd-miniplan-text">
+              <h2>محتار في الباقة المناسبة لمحلك؟</h2>
+              <p>
+                4 باقات لمجالين — موبايل وكمبيوتر وملابس وأحذية — وكلها بتجربة 14 يوم مجاناً
+                بدون بطاقة ائتمان. المقارنة الكاملة بالأسعار والميزات مستنيةك في صفحة الأسعار.
+              </p>
+            </div>
+            <Link href="/pricing" className="gd-btn-primary">
+              <CircleDollarSign className="size-4" />
+              شوف الباقات والأسعار
+            </Link>
           </motion.div>
-
-          <div className="gd-plans-grid">
-            {PLANS.map((p, i) => (
-              <motion.div
-                key={p.code}
-                {...fadeUp}
-                transition={{ duration: 0.5, delay: i * 0.06 }}
-                className={`gd-plan${p.pro ? ' is-pro' : ''}`}
-              >
-                {p.pro ? <span className="gd-plan-badge">الأكثر مرونة</span> : null}
-                <PlanIconBubble icon={p.icon} />
-                <h3 className="gd-plan-name">{p.name}</h3>
-                <p className="gd-plan-forwho">{p.forWho}</p>
-                <div className="gd-plan-price">
-                  <b>{p.priceMonthly}</b>
-                  <span>جنيه / شهرياً</span>
-                  <span className="yearly">أو {p.priceYearly.toLocaleString('ar-EG')} سنوياً</span>
-                </div>
-                <div className="gd-plan-features">
-                  {p.features.map((f) => (
-                    <span key={f}>
-                      <CheckCircle2 className="check size-4" />
-                      {f}
-                    </span>
-                  ))}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* جدول المقارنة */}
-          <motion.div {...fadeUp} className="gd-table-wrap">
-            <table className="gd-table">
-              <thead>
-                <tr>
-                  <th>المقارنة</th>
-                  <th>أساسية — موبايل وكمبيوتر</th>
-                  <th>احترافية — موبايل وكمبيوتر</th>
-                  <th>أساسية — ملابس وأحذية</th>
-                  <th>احترافية — ملابس وأحذية</th>
-                </tr>
-              </thead>
-              <tbody>
-                {COMPARE_ROWS.map((r) => (
-                  <tr key={r.label} className={r.highlight ? 'is-highlight' : ''}>
-                    <td>{r.label}</td>
-                    {r.values.map((v, j) => (
-                      <td key={j}>
-                        {v === '✓' ? (
-                          <CheckCircle2 className="yes size-4 inline" />
-                        ) : v === '—' ? (
-                          <span className="no">—</span>
-                        ) : (
-                          v
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </motion.div>
-        </section>
-
-        {/* ═══════════ الميزات الذكية ═══════════ */}
-        <section id="gems" className="ab-section" style={{ scrollMarginTop: 90 }}>
-          <motion.div {...fadeUp} className="ab-section-header">
-            <span className="lp-eyebrow ab-section-eyebrow">
-              <Wand2 className="size-3" />
-              الكنوز اللي ناس كتير مش واخدة بالها بيها
-            </span>
-            <h2 className="ab-section-title">
-              3 ميزات ذكية <span className="lg-grad-text">هتوفرلك ساعات كل أسبوع</span>
-            </h2>
-            <p className="ab-section-desc">
-              دي الميزات اللي بتفرق النظام عن أي دفتر — جربها مرة وهتبقى مش عارف تشتغل من غيرها.
-              كل ميزة مكتوب فوقها هي متاحة في أنهي باقة.
-            </p>
-          </motion.div>
-
-          {GEMS.map((g) => (
-            <motion.div key={g.id} {...fadeUp} className="gd-gem">
-              <span className="gd-gem-badge">
-                <Crown className="size-3.5" />
-                {g.badge}
-              </span>
-              <h3 className="gd-gem-title">{g.title}</h3>
-              {g.desc.map((d, i) => (
-                <p key={i}>{d}</p>
-              ))}
-              <div className="gd-gem-shots">
-                {g.shots.map((s) => (
-                  <Shot key={s.src} src={s.src} cap={s.cap} alt={s.cap} />
-                ))}
-              </div>
-            </motion.div>
-          ))}
-        </section>
-
-        {/* ═══════════ الجولة العملية ═══════════ */}
-        <section id="tour" className="ab-section" style={{ scrollMarginTop: 90 }}>
-          <motion.div {...fadeUp} className="ab-section-header">
-            <span className="lp-eyebrow ab-section-eyebrow">
-              <BookOpen className="size-3" />
-              جولة حقيقية بالصور — من أول صفحة لآخر صفحة
-            </span>
-            <h2 className="ab-section-title">
-              الجولة الكاملة: <span className="lg-grad-text">من لوحة المعلومات للإعدادات</span>
-            </h2>
-            <p className="ab-section-desc">
-              كل الصور دي من نظام شغال فعلاً بمحل تجريبي فيه 46 منتج (موبايلات، لابتوبات، ملابس،
-              أحذية) وعملاء وموردين وفواتير حقيقية. امشِ معاك الصفحة صفحة — ولو مستعجل،
-              الصور لوحدها كفاية تفهم الشكل.
-            </p>
-          </motion.div>
-
-          <div className="gd-steps">
-            {TOUR_STEPS.map((step, i) => (
-              <motion.div key={step.id} {...fadeUp} className="gd-step">
-                <div className="gd-step-num">{i + 1}</div>
-                <div>
-                  <h3 className="gd-step-title">{step.title}</h3>
-                  {step.desc.map((d, j) => (
-                    <p key={j}>{d}</p>
-                  ))}
-                  {(step.img || step.img2) && (
-                    <div className="gd-step-shots">
-                      {step.img ? <Shot src={step.img} cap={step.cap} alt={step.cap ?? step.title} /> : null}
-                      {step.img2 ? <Shot src={step.img2} cap={step.cap2} alt={step.cap2 ?? step.title} /> : null}
-                    </div>
-                  )}
-                  {step.tip ? (
-                    <div className="gd-tip">
-                      <Lightbulb className="size-4" />
-                      <span>
-                        <b>خد بالك:</b> {step.tip}
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </section>
-
-        {/* ═══════════ ملابس وأحذية ═══════════ */}
-        <section id="fashion" className="ab-section" style={{ scrollMarginTop: 90 }}>
-          <motion.div {...fadeUp} className="ab-section-header">
-            <span className="lp-eyebrow ab-section-eyebrow">
-              <Shirt className="size-3" />
-              محلك ملابس أو أحذية؟
-            </span>
-            <h2 className="ab-section-title">
-              النظام بيتكلم <span className="lg-grad-text">لغة مقاسات وألوان</span>
-            </h2>
-          </motion.div>
-
-          {FASHION_STORY.intro.map((d, i) => (
-            <motion.p
-              key={i}
-              {...fadeUp}
-              transition={{ duration: 0.5, delay: i * 0.06 }}
-              style={{
-                marginTop: i === 0 ? 18 : 8,
-                maxWidth: 860,
-                fontSize: 14.2,
-                lineHeight: 2.05,
-                color: 'rgba(203,213,225,0.82)',
-              }}
-            >
-              {d}
-            </motion.p>
-          ))}
-
-          <div className="gd-fashion-shots">
-            {FASHION_STORY.shots.map((s) => (
-              <Shot key={s.src} src={s.src} cap={s.cap} alt={s.cap} />
-            ))}
-          </div>
         </section>
 
         {/* ═══════════ الأسئلة الشائعة ═══════════ */}
