@@ -41,6 +41,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { ListPager, usePager } from '../ListPager'
 import { Barcode } from '../Barcode'
 import { StockHero, TONE, SecLabel, Pill, STOCK_FIELD, STOCK_RING, type StockTone } from './stock-dialog-ui'
 import type { Branch, InventoryProduct } from '../InventoryView'
@@ -99,6 +100,10 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
       return true
     })
   }, [products, branchFilter, statusFilter, search])
+
+  // ⚡ v9: ترقيم العرض — 50 صنف في الـ DOM في كل مرة (ديسكتاب + موبايل نفس الصفحة)
+  const pager = usePager(filtered, 50, [branchFilter, statusFilter, search])
+  const shown = pager.pageRows
 
   const branchName = (id: number | null) => branches.find(b => b.id === id)?.name
 
@@ -188,7 +193,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.length === 0 ? (
+                {shown.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
                       <Package className="mx-auto mb-2 size-8 opacity-40" />
@@ -196,11 +201,12 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filtered.map(p => {
+                  shown.map(p => {
                     const out = p.quantity <= 0
                     const low = !out && p.quantity <= p.minQuantity
                     return (
-                      <TableRow key={p.id} className={out ? 'bg-destructive-subtle/50' : low ? 'bg-warning-subtle/40' : ''}>
+                      // ⚡ v9: content-visibility — الصفوف بره الشاشة مش بتتكلف في style recalc
+                      <TableRow key={p.id} className={cn('cv-auto', out ? 'bg-destructive-subtle/50' : low ? 'bg-warning-subtle/40' : '')}>
                         <TableCell className="font-medium">{p.name}</TableCell>
                         <TableCell>
                           <Barcode value={p.barcode} height={26} fontSize={10} fitContainer />
@@ -266,28 +272,39 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
             </Table>
           </div>
 
+          {/* ⚡ v9: ترقيم صفحات العرض */}
+          <ListPager
+            page={pager.page}
+            pageCount={pager.pageCount}
+            setPage={pager.setPage}
+            total={pager.total}
+            unitLabel="صنف"
+            className="hidden lg:flex"
+          />
+
           {/*
             نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
           */}
           <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
-            {filtered.length === 0 ? (
+            {shown.length === 0 ? (
               <p className="col-span-full py-10 text-center text-muted-foreground">
                 <Package className="mx-auto mb-2 size-8 opacity-40" />
                 لا توجد منتجات مطابقة
               </p>
             ) : (
-              filtered.map(p => {
+              shown.map(p => {
                 const out = p.quantity <= 0
                 const low = !out && p.quantity <= p.minQuantity
                 return (
+                  // ⚡ v9: content-visibility — كروت الصفوف بره الشاشة مش بتتكلف في style recalc
                   <div
                     key={p.id}
                     className={
-                      out
+                      (out
                         ? 'rounded-lg border bg-destructive-subtle/50 p-3'
                         : low
                         ? 'rounded-lg border bg-warning-subtle/40 p-3'
-                        : 'rounded-lg border bg-card p-3'
+                        : 'rounded-lg border bg-card p-3') + ' cv-auto'
                     }
                   >
                     {/* رأس الكارت: اسم + إجراءات */}
@@ -368,6 +385,16 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
               })
             )}
           </div>
+
+          {/* ⚡ v9: ترقيم صفحات العرض (موبايل) */}
+          <ListPager
+            page={pager.page}
+            pageCount={pager.pageCount}
+            setPage={pager.setPage}
+            total={pager.total}
+            unitLabel="صنف"
+            className="lg:hidden"
+          />
         </CardContent>
       </Card>
 

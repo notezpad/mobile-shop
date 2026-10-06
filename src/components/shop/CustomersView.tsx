@@ -45,6 +45,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { ListPager, usePager } from './ListPager'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency, formatArabicDate } from '@/lib/format'
@@ -272,6 +273,10 @@ export function CustomersView() {
     return rows
   }, [customers, status, sort])
   const hasFilters = status !== 'all' || sort !== 'default' || search.trim() !== ''
+
+  // ⚡ v9: ترقيم العرض — 50 عميل في الـ DOM في كل مرة (الإحصائيات فوق على كل النتائج)
+  const pager = usePager(shown, 50, [status, sort, search])
+  const pageRows = pager.pageRows
   const clearFilters = () => {
     setStatus('all')
     setSort('default')
@@ -593,7 +598,7 @@ export function CustomersView() {
             loading && 'opacity-60 transition-opacity',
           )}
         >
-          {shown.map((c, i) => (
+          {pageRows.map((c, i) => (
             <CustomerCard
               key={c.id}
               c={c}
@@ -619,6 +624,16 @@ export function CustomersView() {
               </span>
             </button>
           )}
+
+          {/* ⚡ v9: ترقيم صفحات العرض */}
+          <ListPager
+            page={pager.page}
+            pageCount={pager.pageCount}
+            setPage={pager.setPage}
+            total={pager.total}
+            unitLabel="عميل"
+            className="col-span-full"
+          />
         </div>
       )}
 
@@ -1059,7 +1074,7 @@ function CustomerCard({
 
   return (
     <article
-      className="animate-in-up group flex flex-col overflow-hidden rounded-3xl border bg-card shadow-sm transition-all duration-base ease-out hover:-translate-y-1.5 hover:shadow-2xl"
+      className="animate-in-up group flex flex-col overflow-hidden rounded-3xl border bg-card shadow-sm transition-all duration-base ease-out hover:-translate-y-1.5 hover:shadow-2xl cv-auto"
       style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
     >
       {/* ═══ وجه البطاقة ═══ */}

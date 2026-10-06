@@ -52,6 +52,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { ListPager, usePager } from './ListPager'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
@@ -301,6 +302,10 @@ export function SuppliersView() {
     return rows
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [suppliers, status, activity, sort])
+
+  // ⚡ v9: ترقيم العرض — 50 مورد في الـ DOM في كل مرة (الإحصائيات فوق على كل النتائج)
+  const pager = usePager(shown, 50, [status, activity, sort])
+  const pageRows = pager.pageRows
 
   // خطة السداد — «معايا كام؟» نسدّد الأقدم الأول ونقفل حسابات كاملة بقدر الميزانية (عرض فقط)
   const plan = React.useMemo(() => {
@@ -832,7 +837,7 @@ export function SuppliersView() {
               loading && 'opacity-60 transition-opacity',
             )}
           >
-            {shown.map((c, i) => (
+            {pageRows.map((c, i) => (
               <SupplierSlip
                 key={c.id}
                 c={c}
@@ -858,6 +863,15 @@ export function SuppliersView() {
                 </span>
               </button>
             )}
+
+            {/* ⚡ v9: ترقيم صفحات العرض (ديسكتوب) */}
+            <ListPager
+              page={pager.page}
+              pageCount={pager.pageCount}
+              setPage={pager.setPage}
+              total={pager.total}
+              unitLabel="مورد"
+            />
           </div>
 
           {/* قائمة مضغوطة — للشاشات الكبيرة */}
@@ -873,13 +887,13 @@ export function SuppliersView() {
                 <span className="w-[116px] text-center">إجراءات</span>
               </div>
               <ul className="divide-y">
-                {shown.map((c) => {
+                {pageRows.map((c) => {
                   const tone = toneOf(c.balance)
                   const t = TONES[tone]
                   return (
                     <li
                       key={c.id}
-                      className="group grid grid-cols-[2.2fr_1.2fr_1.1fr_1fr_.7fr_1.1fr_auto] items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-orange-500/[0.04]"
+                      className="group grid grid-cols-[2.2fr_1.2fr_1.1fr_1fr_.7fr_1.1fr_auto] items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-orange-500/[0.04] cv-auto"
                     >
                       <button type="button" onClick={() => setDetailSupplier(c)} className="flex min-w-0 items-center gap-2.5 text-start focus-visible:outline-none">
                         <span
@@ -924,6 +938,16 @@ export function SuppliersView() {
               </ul>
             </div>
           )}
+
+          {/* ⚡ v9: ترقيم صفحات العرض (موبايل) */}
+          <ListPager
+            page={pager.page}
+            pageCount={pager.pageCount}
+            setPage={pager.setPage}
+            total={pager.total}
+            unitLabel="مورد"
+            className="lg:hidden"
+          />
         </>
       )}
 
@@ -1438,7 +1462,7 @@ function SupplierSlip({
 
   return (
     <article
-      className="animate-in-up motion-reduce:animate-none group relative flex flex-col rounded-3xl border bg-card shadow-sm transition-all duration-base ease-out hover:-translate-y-1.5 hover:shadow-2xl"
+      className="animate-in-up motion-reduce:animate-none group relative flex flex-col rounded-3xl border bg-card shadow-sm transition-all duration-base ease-out hover:-translate-y-1.5 hover:shadow-2xl cv-auto"
       style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
     >
       {/* ═══ رأس البوليصة ═══ */}

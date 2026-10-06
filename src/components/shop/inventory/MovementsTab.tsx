@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import type { Branch, Movement } from '../InventoryView'
+import { ListPager, usePager } from '../ListPager'
 import {
   ACCENT,
   Signed,
@@ -131,6 +132,10 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
     return { inTotal, outTotal, net: inTotal - outTotal }
   }, [filtered])
 
+  // ⚡ v9: ترقيم العرض فقط — 30 حركة في الـ DOM في كل مرة.
+  // الملخص + الرسم البياني بتتحسب على كل الحركات المفلترة (تحت)، مش الصفحة الحالية.
+  const pager = usePager(filtered, 30, [branchFilter, typeFilter, from, to, search])
+
   // آخر ١٤ يوم: وارد لأعلى، صادر لأسفل
   const series = React.useMemo(() => {
     const days: { key: string; label: string; inn: number; out: number; today: boolean }[] = []
@@ -153,7 +158,7 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
     return { days, max }
   }, [filtered])
 
-  const groups = React.useMemo(() => groupByDay(filtered, (m) => m.createdAt), [filtered])
+  const groups = React.useMemo(() => groupByDay(pager.pageRows, (m) => m.createdAt), [pager.pageRows])
 
   const activePeriod: Period | null = React.useMemo(() => {
     for (const p of ['all', 'today', 'week', 'month'] as Period[]) {
@@ -376,7 +381,7 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
                     return (
                       <article
                         key={m.id}
-                        className="group relative flex items-center gap-3 rounded-xl border-b border-dashed px-3 py-3 transition-colors last:border-b-0 hover:bg-muted/40"
+                        className="group relative flex items-center gap-3 rounded-xl border-b border-dashed px-3 py-3 transition-colors last:border-b-0 hover:bg-muted/40 cv-auto"
                       >
                         <span
                           className="absolute top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full border-2 bg-card"
@@ -424,6 +429,15 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
           })}
         </div>
       )}
+
+      {/* ⚡ v9: ترقيم صفحات العرض (بيختفي لو مفيش صف تاني) */}
+      <ListPager
+        page={pager.page}
+        pageCount={pager.pageCount}
+        setPage={pager.setPage}
+        total={pager.total}
+        unitLabel="حركة"
+      />
     </div>
   )
 }

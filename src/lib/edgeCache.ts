@@ -147,3 +147,97 @@ export async function purgeCatalogCaches(
 ): Promise<void> {
   await purgeEdgeCache([PURGE_KEYS.products(branchId), PURGE_KEYS.categories, PURGE_KEYS.suppliers], tenantId, v)
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ⚡ v9 (2026-10-06): نماذج "النسخة التلقائية" (versioned cache)
+   ───────────────────────────────────────────────────────────────────────
+   الـ purge بالمفتاح الدقيق بيشتغل بس لما الاستدعاءات ليها شكل ثابت واحد
+   (زي dashboard?days=7). لكن endpoints زي /api/sales ليها آلاف الفاريانتس
+   (from/to/page/limit/…) — مسحهم كلهم واحد واحد مش عملي.
+
+   الحل: رقم نسخة مخزن على الحافة نفسه (مفتاح خاص `#ver`). القراءة بتقرا
+   النسخة الحالية وتستخدمها في المفتاح، وأي mutation بيزوّد الرقم بواحد →
+   كل الفاريانتس القديمة بتبقى معدية (orphan) وتتصرف تلقائياً بـ TTL.
+   تكلفة القراءة الإضافية = caches.match واحدة (زمن مهمل مقابل تشغيل
+   استعلامات ثقيلة).
+   ═════════════════════════════════════════════════════════════════════ */
+
+const verKey = (pathname: string, tenantId: number | string) =>
+  new Request(`https://${CACHE_HOST}${pathname}#ver&tenant=${tenantId}`)
+
+async function readCacheVersion(pathname: string, tenantId: number | string): Promise<string> {
+  if (!edgeCacheAvailable()) return '1'
+  try {
+    const hit = await (globalThis as unknown as { caches: { default: Cache } }).caches.default.match(
+      verKey(pathname, tenantId)
+    )
+    const n = hit ? parseInt(await hit.text(), 10) : 1
+    return Number.isFinite(n) && n > 0 ? String(n) : '1'
+  } catch {
+    return '1'
+  }
+}
+
+/**
+ * نسخة مخزنة مع حل رقم النسخة تلقائياً — استخدمها في الـ GET endpoints
+ * متعددة الفاريانتس. بترجع null لو مفيش نسخة صالحة.
+ */
+export async function matchEdgeCacheV(
+  pathname: string,
+  rawQuery: string,
+  tenantId: number | string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _ttl?: number
+): Promise<Response | null> {
+  const v = await readCacheVersion(pathname, tenantId)
+  return matchEdgeCache(pathname, rawQuery, tenantId, v)
+}
+
+/** تخزين مع رقم النسخة الحالي — مرّر res.clone() زي putEdgeCache بالظبط. */
+export async function putEdgeCacheV(
+  res: Response,
+  pathname: string,
+  rawQuery: string,
+  tenantId: number | string,
+  ttlSeconds: number
+): Promise<void> {
+  const v = await readCacheVersion(pathname, tenantId)
+  await putEdgeCache(res, pathname, rawQuery, tenantId, ttlSeconds, v)
+}
+
+/**
+ * إبطال فوري لكل الفاريانتس المخزنة لهذا المسار — نادِها بعد أي mutation
+ * يمس الجدول اللي الـ endpoint بيقرأ منه. آمنة تماماً (لو الكاش مش متاح
+ * بتعمل لا شيء).
+ */
+export async function bumpEdgeCache(pathname: string, tenantId: number | string): Promise<void> {
+  if (!edgeCacheAvailable()) return
+  try {
+    const cache = (globalThis as unknown as { caches: { default: Cache } }).caches.default
+    const cur = await readCacheVersion(pathname, tenantId)
+    const next = String(parseInt(cur, 10) + 1)
+    const stored = new Response(next, {
+      headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'public, max-age=86400' },
+    })
+    await cache.put(verKey(pathname, tenantId), stored)
+    // 🛡️ احتياط: امسح آخر مفتاح معروف بحالة ما حد خزّن بنسخة أقدم
+    await cache.delete(buildKey(pathname, '', tenantId, cur)).catch(() => undefined)
+  } catch {
+    /* الكاش ما يكسرش الـ mutation أبداً */
+  }
+}
+
+/**
+ * مفتاح rawQuery حتمي: باراميترات مرتبة أبجدياً — نفس الطلب بيفضل نفس
+ * المفتاح مهما كان ترتيب الباراميترات في الـ URL.
+ */
+export function sortedQuery(url: string): string {
+  try {
+    const sp = new URL(url).searchParams
+    const parts: string[] = []
+    sp.forEach((val, key) => parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(val)}`))
+    return parts.sort().join('&')
+  } catch {
+    return ''
+  }
+}

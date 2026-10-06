@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
+import { matchEdgeCacheV, putEdgeCacheV, bumpEdgeCache, sortedQuery } from '@/lib/edgeCache'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
@@ -51,6 +52,12 @@ async function __GET(req: NextRequest) {
     where.category = category
   }
 
+  // ⚡ EDGE CACHE v9: نسخة على الحافة (TTL 30s) + إبطال فوري بعد أي
+  // إضافة/حذف مصروف (bumpEdgeCache هنا وفي movements damage)
+  const sq = sortedQuery(req.url)
+  const cached = await matchEdgeCacheV('/api/expenses', sq, session.tenantId)
+  if (cached) return cached
+
   const rows = await db.expense.findMany({
     where,
     orderBy: { id: 'desc' },
@@ -69,13 +76,22 @@ async function __GET(req: NextRequest) {
     userName: r.userId ? (userNameById.get(r.userId) ?? null) : null,
   }))
 
-  const total = rows.reduce((s, r) => s + r.amount, 0)
-  const byCategory = rows.reduce((acc: Record<string, number>, r) => {
-    acc[r.category] = (acc[r.category] ?? 0) + r.amount
-    return acc
-  }, {})
+  // ⚡ v9 PERF FIX (2026-10-06): total + byCategory كانوا بيتحسبوا بـ JS reduce
+  // فوق كل الصفوف في الـ Worker — CPU مجاني على Cloudflare بيتحسب بالمللي ثانية
+  // (خطة 10ms/طلب). وبالمناسبة كان في خطأ دقة خفي: الإجماليات كانت على آخر
+  // 500 صف بس — دلوقتي aggregate/groupBy في PostgreSQL على كل صفوف الفترة
+  // (أسرع 10-50x على الـ Worker + أرقام صحيحة حتى لو السجل أطول من 500).
+  const [aggRows, catRows] = await Promise.all([
+    db.expense.aggregate({ where, _sum: { amount: true } }),
+    db.expense.groupBy({ by: ['category'], where, _sum: { amount: true } }),
+  ])
+  const total = Number(aggRows._sum.amount ?? 0)
+  const byCategory: Record<string, number> = {}
+  for (const r of catRows) byCategory[r.category] = Number(r._sum.amount ?? 0)
 
-  return NextResponse.json({ expenses: result, total, byCategory })
+  const res = NextResponse.json({ expenses: result, total, byCategory })
+  await putEdgeCacheV(res.clone(), '/api/expenses', sq, session.tenantId, 30)
+  return res
 }
 
 async function __POST(req: NextRequest) {
@@ -147,6 +163,8 @@ async function __POST(req: NextRequest) {
     return expense
   })
 
+  // ⚡ v9: إبطال كاش قائمة المصروفات فوراً
+  await bumpEdgeCache('/api/expenses', session.tenantId)
   return NextResponse.json(created, { status: 201 })
 }
 

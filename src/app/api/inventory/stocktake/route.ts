@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { bumpEdgeCache } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -130,6 +131,8 @@ async function __POST(req: NextRequest) {
     }
     return st
   })
+  // ⚡ v9: تسوية الجرد بيسجل حركات — إبطال كاش الدفتر فوراً
+  await bumpEdgeCache('/api/inventory/movements', s.tenantId)
   return NextResponse.json(created, { status: 201 })
 }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { matchEdgeCacheV, putEdgeCacheV, bumpEdgeCache, sortedQuery } from '@/lib/edgeCache'
 import { recordCommission, createPrincipalCashEntry } from '@/lib/commission'
 import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
 
@@ -38,6 +39,12 @@ async function __GET(req: NextRequest) {
   if (method && METHODS.has(method)) {
     where.method = method
   }
+
+  // ⚡ EDGE CACHE v9: دفتر المعاملات (TTL 30s) + إبطال فوري بعد إضافة/إلغاء
+  const sq = sortedQuery(req.url)
+  const cached = await matchEdgeCacheV('/api/finance', sq, session.tenantId)
+  if (cached) return cached
+
   const rows = await db.transaction.findMany({
     where,
     orderBy: { id: 'desc' },
@@ -57,7 +64,9 @@ async function __GET(req: NextRequest) {
     ...r,
     userName: r.userId ? (userNameById.get(r.userId) ?? null) : null,
   }))
-  return NextResponse.json(result)
+  const res = NextResponse.json(result)
+  await putEdgeCacheV(res.clone(), '/api/finance', sq, session.tenantId, 30)
+  return res
 }
 
 async function __POST(req: NextRequest) {
@@ -158,6 +167,8 @@ async function __POST(req: NextRequest) {
       linkedCashEntryId: principalEntry.id,
     }
   })
+  // ⚡ v9: إبطال كاش المعاملات فوراً
+  await bumpEdgeCache('/api/finance', session.tenantId)
   return NextResponse.json(tx, { status: 201 })
 }
 

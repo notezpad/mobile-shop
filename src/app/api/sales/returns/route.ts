@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireCapability, featureErrorResponse } from '@/lib/features'
 import { performSaleReturn, SaleReturnError } from '@/lib/sale-return'
+import { bumpEdgeCache } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -98,6 +99,8 @@ async function __POST(req: NextRequest) {
         note: body?.note,
       }),
     )
+    // ⚡ v9: المرتجع بيغيّر سجل المبيعات — إبطال كاش الحافة فوراً
+    await bumpEdgeCache('/api/sales', session.tenantId)
     return NextResponse.json(result, { status: 201 })
   } catch (e) {
     if (e instanceof SaleReturnError) {

@@ -1,7 +1,12 @@
 import { PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 import bcrypt from 'bcryptjs'
 
-const db = new PrismaClient()
+// ⚙️ v9: الـ schema بيستخدم engineType="client" (queryCompiler + driverAdapters)
+// عشان يشتغل على Cloudflare Workers — يعني الـ client محتاج pg adapter صريح
+// حتى في سكريبتات الصيانة (كان بينفجر بـ P2038 "Missing configured driver adapter").
+const DATABASE_URL = process.env.DATABASE_URL ?? 'postgresql://nezam:nezam@127.0.0.1:5433/nezampos'
+const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: DATABASE_URL, max: 10 } as never) })
 
 const DEMO_TENANT_ID = 'demo-tenant'
 const PLATFORM_TENANT_ID = 'platform-tenant'

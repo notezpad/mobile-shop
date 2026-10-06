@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
+import { bumpEdgeCache } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -72,6 +73,8 @@ async function __DELETE(
     await tx.expense.delete({ where: { id: eid } })
   })
 
+  // ⚡ v9: إبطال كاش قائمة المصروفات فوراً
+  await bumpEdgeCache('/api/expenses', session.tenantId)
   return NextResponse.json({ ok: true })
 }
 

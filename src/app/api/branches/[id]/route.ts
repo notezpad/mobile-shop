@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
+import { bumpEdgeCache } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +35,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         active: b?.active !== undefined ? Boolean(b.active) : branch.active,
       },
     })
+    // ⚡ v9: إبطال كاش الفروع فوراً
+    await bumpEdgeCache('/api/branches', s.tenantId)
     return NextResponse.json(updated)
   })
 }
@@ -57,6 +60,8 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
     await db.product.updateMany({ where: { branchId: bid, tenantId: s.tenantId }, data: { branchId: null } })
     await db.user.updateMany({ where: { branchId: bid, tenantId: s.tenantId }, data: { branchId: null } })
     await db.branch.delete({ where: { id: bid } })
+    // ⚡ v9: إبطال كاش الفروع فوراً
+    await bumpEdgeCache('/api/branches', s.tenantId)
     return NextResponse.json({ ok: true })
   })
 }

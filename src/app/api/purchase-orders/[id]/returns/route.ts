@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { performPurchaseReturn, PurchaseReturnError } from '@/lib/purchase-return'
+import { bumpEdgeCache } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,6 +82,9 @@ async function __POST(
         note: body.note ? String(body.note).trim() || null : null,
       })
     )
+    // ⚡ v9: إبطال كاش أوامر الشراء + المخزون (المرتجع بيخصم كميات) فوراً
+    await bumpEdgeCache('/api/purchase-orders', session.tenantId)
+    await bumpEdgeCache('/api/inventory/movements', session.tenantId)
     return NextResponse.json({ ok: true, ...result }, { status: 201 })
   } catch (e) {
     if (e instanceof PurchaseReturnError) {

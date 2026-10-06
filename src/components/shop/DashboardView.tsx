@@ -893,7 +893,7 @@ export function DashboardView() {
                 {data.lowStockProducts.map((p) => (
                   <li
                     key={p.id}
-                    className="flex items-center gap-2.5 rounded-xl bg-destructive-subtle/50 px-3 py-2.5 text-sm"
+                    className="flex items-center gap-2.5 rounded-xl bg-destructive-subtle/50 px-3 py-2.5 text-sm cv-auto"
                   >
                     <StatusDot status="danger" pulse />
                     <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span>
@@ -938,7 +938,7 @@ export function DashboardView() {
               ) : data?.activeMaintenanceOrders?.length ? (
                 <ul className="divide-y divide-border">
                   {data.activeMaintenanceOrders.map((o) => (
-                    <li key={o.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                    <li key={o.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0 cv-auto">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-bold">{o.customerName}</p>
                         <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
@@ -1029,7 +1029,7 @@ export function DashboardView() {
                     return (
                       <li
                         key={s.id}
-                        className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-1 px-5 py-3.5 transition-colors hover:bg-muted/40 md:grid-cols-[auto_minmax(0,1.3fr)_minmax(0,1fr)_auto]"
+                        className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-1 px-5 py-3.5 transition-colors hover:bg-muted/40 md:grid-cols-[auto_minmax(0,1.3fr)_minmax(0,1fr)_auto] cv-auto"
                       >
                         <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl', TONE[tone].chip)}>
                           <Icon className="size-4" strokeWidth={2.4} />

@@ -58,6 +58,7 @@ import { useShopStore } from '@/lib/store'
 import { useConfirm } from './ConfirmDialogProvider'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { cn } from '@/lib/utils'
+import { ListPager, usePager } from './ListPager'
 
 /* ───────────────────────── الأنواع والثوابت ───────────────────────── */
 
@@ -301,19 +302,23 @@ export function FinanceView() {
   // إجماليات «النتيجة» (بعد الفلاتر) — منفصلة عن إجماليات الفترة في الهيرو
   const viewStats = React.useMemo(() => summarize(visible), [visible])
 
+  // ⚡ v9: ترقيم العرض — 50 معاملة في الـ DOM في كل مرة (viewStats/maxAmt على الكل)
+  const pager = usePager(visible, 50, [method, kind, q, showCancelled])
+  const pageRows = pager.pageRows
+
   // أكبر مبلغ ظاهر — بيحدد طول الشريط في كل صف
   const maxAmt = React.useMemo(() => Math.max(1, ...visible.map((r) => r.amount)), [visible])
 
   const groups = React.useMemo(() => {
     const map = new Map<string, Txn[]>()
-    for (const r of visible) {
+    for (const r of pageRows) {
       const k = tzDateStr(new Date(r.createdAt), tz)
       const arr = map.get(k)
       if (arr) arr.push(r)
       else map.set(k, [r])
     }
     return Array.from(map, ([key, list]) => ({ key, list, s: summarize(list) }))
-  }, [visible, tz])
+  }, [pageRows, tz])
 
   const hasFilter = kind !== 'all' || q !== '' || method !== 'all' || !showCancelled
   const clearFilters = () => {
@@ -727,6 +732,15 @@ export function FinanceView() {
         </div>
       )}
 
+      {/* ⚡ v9: ترقيم صفحات العرض */}
+      <ListPager
+        page={pager.page}
+        pageCount={pager.pageCount}
+        setPage={pager.setPage}
+        total={pager.total}
+        unitLabel="معاملة"
+      />
+
       <TxnDialog open={dialogOpen} onOpenChange={setDialogOpen} rates={rates} onSaved={(id) => {
           load()
           if (id) {
@@ -981,7 +995,7 @@ function TxnRow({
   return (
     <li
       className={cn(
-        'group grid items-center gap-y-1 px-3 py-2.5 transition-colors duration-700 hover:bg-muted/40 animate-in-up motion-reduce:animate-none sm:px-3.5 sm:py-3',
+        'group grid items-center gap-y-1 px-3 py-2.5 transition-colors duration-700 hover:bg-muted/40 animate-in-up motion-reduce:animate-none sm:px-3.5 sm:py-3 cv-auto',
         GRID,
         cancelled && 'bg-muted/20',
         flash && 'bg-teal-500/15 hover:bg-teal-500/15'

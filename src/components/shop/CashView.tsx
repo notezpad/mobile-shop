@@ -48,6 +48,7 @@ import { api } from '@/lib/api'
 import { formatCurrency, formatArabicDate, formatArabicDateTime } from '@/lib/format'
 import { parseSignedAmount } from '@/lib/amount'
 import { cn } from '@/lib/utils'
+import { ListPager, usePager } from './ListPager'
 import { printListReportHtml, openPrintWindow, printLtr } from '@/lib/print'
 import { useShopStore } from '@/lib/store'
 import { useDataRefresh } from '@/lib/offline/data-events'
@@ -305,10 +306,16 @@ export function CashView() {
   const rowsIn = rows.filter((r) => r.e.amount >= 0).reduce((s, r) => s + r.e.amount, 0)
   const rowsOut = rows.filter((r) => r.e.amount < 0).reduce((s, r) => s + Math.abs(r.e.amount), 0)
 
+  // ⚡ v9: ترقيم العرض — 50 حركة في الـ DOM في كل مرة.
+  // أرصدة كل صف بعد الحركة (runningBalances) بتتحسب على كل الحركات فترقيم
+  // العرض مش بيكسر أي رقم. الإحصائيات/الدونات فوق على كل الحركات المحمّلة.
+  const pager = usePager(rows, 50, [period, from, to, dir, source, method, query])
+  const pageRows = pager.pageRows
+
   // تجميع الحركات باليوم
   const groups = React.useMemo(() => {
     const map = new Map<string, { key: string; items: typeof rows; net: number; inn: number; out: number }>()
-    for (const r of rows) {
+    for (const r of pageRows) {
       const k = dayKey(r.e.createdAt)
       let g = map.get(k)
       if (!g) { g = { key: k, items: [], net: 0, inn: 0, out: 0 }; map.set(k, g) }
@@ -317,7 +324,7 @@ export function CashView() {
       else g.out += Math.abs(r.e.amount)
     }
     return [...map.values()]
-  }, [rows])
+  }, [pageRows])
 
   const dayTitle = (k: string) => {
     const t = new Date(); const y = new Date(); y.setDate(y.getDate() - 1)
@@ -670,7 +677,7 @@ export function CashView() {
                         return (
                           <div
                             key={e.id}
-                            className="group relative grid grid-cols-2 items-center gap-x-3 gap-y-3 px-3.5 py-3.5 transition-colors hover:bg-muted/40 sm:px-4 sm:py-4 lg:grid-cols-[minmax(0,1fr)_150px_180px_160px]"
+                            className="group relative grid grid-cols-2 items-center gap-x-3 gap-y-3 px-3.5 py-3.5 transition-colors hover:bg-muted/40 sm:px-4 sm:py-4 lg:grid-cols-[minmax(0,1fr)_150px_180px_160px] cv-auto"
                           >
                             <span
                               className={cn(
@@ -771,6 +778,15 @@ export function CashView() {
               * الدفتر والرسوم تعرض آخر 200 حركة، أما رصيد الخزنة فهو إجمالي كل الحركات.
             </p>
           )}
+
+          {/* ⚡ v9: ترقيم صفحات العرض */}
+          <ListPager
+            page={pager.page}
+            pageCount={pager.pageCount}
+            setPage={pager.setPage}
+            total={pager.total}
+            unitLabel="حركة"
+          />
         </div>
 
         {/* ----- العمود الجانبي: دونات + طرق الدفع ----- */}

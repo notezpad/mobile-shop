@@ -942,7 +942,7 @@ export function ProductsView() {
                       <TableRow
                         key={p.id}
                         data-state={selectedIds.has(p.id) ? 'selected' : undefined}
-                        className={cn(!p.active && 'opacity-50', 'hover:bg-muted/40')}
+                        className={cn(!p.active && 'opacity-50', 'hover:bg-muted/40', 'cv-auto')}
                       >
                         <TableCell className="px-3 text-center">
                           <Checkbox checked={selectedIds.has(p.id)} onCheckedChange={() => toggleSelect(p.id)} />
@@ -1287,7 +1287,7 @@ function ProductTag({
 
   return (
     <article
-      className="animate-in-up motion-reduce:animate-none group relative pt-6"
+      className="animate-in-up motion-reduce:animate-none group relative pt-6 cv-auto"
       style={{ animationDelay: `${Math.min(index, 10) * 35}ms` }}
     >
       {/* الخيط */}

@@ -65,6 +65,7 @@ import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { cn } from '@/lib/utils'
+import { ListPager, usePager } from './ListPager'
 import { ExpenseHero, ROSE_BTN } from './expense-dialog-ui'
 
 /* ───────────────────────── الأنواع والثوابت ───────────────────────── */
@@ -595,9 +596,14 @@ export function ExpensesView() {
     )
   }, [expenses, search])
 
+  // ⚡ v9: ترقيم العرض — 50 مصروف في الـ DOM في كل مرة.
+  // الإجماليات + التحليل بالتصنيفات فوق بتتحسب على كل المصروفات (breakdown memo) مش الصفحة.
+  const pager = usePager(visible, 50, [search, from, to])
+  const pageRows = pager.pageRows
+
   const groups = React.useMemo(() => {
     const map = new Map<string, ExpenseRow[]>()
-    for (const e of visible) {
+    for (const e of pageRows) {
       const k = tzDateStr(new Date(e.createdAt), tz)
       const arr = map.get(k)
       if (arr) arr.push(e)
@@ -616,7 +622,7 @@ export function ExpensesView() {
         const biggest = items.reduce((m, x) => Math.max(m, x.amount), 0)
         return { key, items, sum, cats, biggest }
       })
-  }, [visible, tz])
+  }, [pageRows, tz])
 
   const activePeriod: Period | null = (() => {
     for (const p of ['all', 'today', 'week', 'month'] as Period[]) {
@@ -1065,7 +1071,7 @@ export function ExpensesView() {
                         const dayShare = g.sum > 0 ? (e.amount / g.sum) * 100 : 0
                         const isBiggest = g.items.length >= 3 && e.amount === g.biggest
                         return (
-                          <li key={e.id} className="group">
+                          <li key={e.id} className="group cv-auto">
                             {/* 📱 موبايل: كارت عمودي */}
                             <div className="flex flex-col gap-2.5 px-3.5 py-3 transition-colors hover:bg-muted/40 sm:hidden">
                               <div className="flex items-start gap-3">
@@ -1282,6 +1288,15 @@ export function ExpensesView() {
                   تم عرض آخر ٥٠٠ عملية فقط — ضيّق الفترة الزمنية لعرض باقي السجل
                 </p>
               )}
+
+              {/* ⚡ v9: ترقيم صفحات العرض */}
+              <ListPager
+                page={pager.page}
+                pageCount={pager.pageCount}
+                setPage={pager.setPage}
+                total={pager.total}
+                unitLabel="مصروف"
+              />
             </div>
           )}
         </div>

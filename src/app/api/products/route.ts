@@ -79,7 +79,12 @@ export async function GET(req: NextRequest) {
     }
 
     const page  = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
-    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)))
+    // ⚡ v9 FIX (2026-10-06): الـ clamp كان 100 بس شاشة المخزون بتطلب
+    // limit=1000&status=all — فكانت بتشوف أول 100 صنف بصمت! رفعنا السقف
+    // لـ 1000 لطلبات status=all (شاشات الإدارة/المخزون)، والكاشير (active)
+    // فضل محدود بـ 100 عشان الـ payload يفضل خفيف.
+    const rawLimit = Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10))
+    const limit = status === 'all' ? Math.min(1000, rawLimit) : Math.min(100, rawLimit)
     const skip  = (page - 1) * limit
 
     // ── Sorting + low-stock filter (Products management screen) ──

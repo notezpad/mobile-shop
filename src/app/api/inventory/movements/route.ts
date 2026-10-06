@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
+import { matchEdgeCacheV, putEdgeCacheV, bumpEdgeCache, sortedQuery } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +22,12 @@ async function __GET(req: NextRequest) {
   const from = searchParams.get('from')
   const to = searchParams.get('to')
   const q = searchParams.get('q')?.trim() || ''
+
+  // ⚡ EDGE CACHE v9: دفتر الحركات (TTL 15s) — إبطال فوري بعد أي حركة جديدة
+  // (POST هنا + التحويلات + الجرد) بـ bumpEdgeCache
+  const sq = sortedQuery(req.url)
+  const cached = await matchEdgeCacheV('/api/inventory/movements', sq, s.tenantId)
+  if (cached) return cached
 
   const where: any = { tenantId: s.tenantId, AND: [] as any[] }
   if (s.branchId) where.AND.push({ branchId: s.branchId })
@@ -72,7 +79,9 @@ async function __GET(req: NextRequest) {
     ...r,
     userName: r.userId ? (userNameById.get(r.userId) ?? null) : null,
   }))
-  return NextResponse.json(result)
+  const res = NextResponse.json(result)
+  await putEdgeCacheV(res.clone(), '/api/inventory/movements', sq, s.tenantId, 15)
+  return res
 }
 
 async function __POST(req: NextRequest) {
@@ -180,6 +189,10 @@ async function __POST(req: NextRequest) {
       })
       return { movementId: movement.id, lossValue }
     })
+
+    // ⚡ v9: إبطال كاش دفتر الحركات فوراً + كاش المصروفات لو الحركة هالك
+    await bumpEdgeCache('/api/inventory/movements', s.tenantId)
+    if (type === 'damage') await bumpEdgeCache('/api/expenses', s.tenantId)
 
     return NextResponse.json({
       ok: true,
