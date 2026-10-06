@@ -45,8 +45,7 @@ export async function GET(req: Request) {
     const monthStart = startOfMonthInTz(now, tz)
     const last30Start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
     const lastNStart = startOfDayInTz(new Date(now.getTime() - (chartDays - 1) * 24 * 60 * 60 * 1000), tz)
-    // keep last7Start alias for backward compat with existing references below
-    const last7Start = lastNStart
+    // (⚡ v9: alias last7Start اتشال — الرسم بيتجمع في SQL مباشرة بـ lastNStart)
 
     const tid = session.tenantId
     const chartEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000)
@@ -87,11 +86,27 @@ export async function GET(req: Request) {
       db.customer.count({ where: tenantFilter }),
       db.customer.aggregate({ where: { ...tenantFilter, balance: { gt: 0 } }, _sum: { balance: true } }),
       db.supplier.aggregate({ where: { ...tenantFilter, balance: { gt: 0 } }, _sum: { balance: true } }),
-      db.$queryRaw<{ createdAt: Date; total: number; profit: number }[]>`
-        SELECT s."createdAt", s."total"::float8 AS total,
-               COALESCE((SELECT SUM((i."price" - i."cost") * i."quantity") FROM "SaleItem" i WHERE i."saleId" = s."id"), 0)::float8 AS profit
+      // ⚡ v9 (2026-10-06): التجميع اليومي اتنقل لـ PostgreSQL (GROUP BY يوم
+      // بتوقيت المحل AT TIME ZONE). كان بيرجع كل فاتورة في الفترة + subquery
+      // ربح لكل فاتورة (O(n×m) على قاعدة البيانات) وبيعيد n صف للـ Worker
+      // ويجمعهم في JS — مع 30 يوم وشهر مزدحم كان بيحرق CPU زيادة على
+      // (10ms limit → Error 1102). دلوقتي: صف واحد لكل يوم بس، والحساب كله
+      // جوه Postgres (نفس نمط trendRows في /api/reports).
+      db.$queryRaw<{ date: string; total: number; profit: number }[]>`
+        SELECT to_char(s."createdAt" AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS date,
+               SUM(s."total")::float8 AS total,
+               COALESCE(SUM(ip.profit), 0)::float8 AS profit
         FROM "Sale" s
-        WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${last7Start} AND s."createdAt" < ${chartEnd}`,
+        LEFT JOIN (
+          -- مقيّد بنفس نافذة الرسم — مش GROUP BY على جدول SaleItem كله
+          SELECT i."saleId", SUM((i."price" - i."cost") * i."quantity") AS profit
+          FROM "SaleItem" i
+          JOIN "Sale" s2 ON s2."id" = i."saleId"
+          WHERE s2."tenantId" = ${tid} AND s2."status" = 'مكتملة' AND s2."createdAt" >= ${lastNStart} AND s2."createdAt" < ${chartEnd}
+          GROUP BY i."saleId"
+        ) ip ON ip."saleId" = s."id"
+        WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${lastNStart} AND s."createdAt" < ${chartEnd}
+        GROUP BY 1 ORDER BY 1`,
     ])
 
     const n = (v: unknown) => Number(v ?? 0)
@@ -107,9 +122,10 @@ export async function GET(req: Request) {
     const totalOutstandingDebt = n(custAgg._sum.balance)
     const totalSupplierDebt = n(suppAgg._sum.balance)
 
-    // Chart: group the (small) per-sale rows by local day — in the SHOP's
-    // timezone, so a sale at 1 AM lands in the same day bucket its own
-    // invoice date shows, instead of drifting a day off near UTC midnight.
+    // Chart: rows arrive already aggregated per local day from PostgreSQL
+    // (GROUP BY AT TIME ZONE — see query above). We only re-map the date to
+    // the dd/mm label the chart expects, filling empty days so the line
+    // never breaks.
     const toDdMm = (isoDate: string) => { const [, m, d] = isoDate.split('-'); return `${d}/${m}` }
     const dayMap = new Map<string, { total: number; profit: number }>()
     for (let i = chartDays - 1; i >= 0; i--) {
@@ -117,7 +133,7 @@ export async function GET(req: Request) {
       dayMap.set(toDdMm(dateStrInTz(d, tz)), { total: 0, profit: 0 })
     }
     for (const r of chartRows) {
-      const slot = dayMap.get(toDdMm(dateStrInTz(new Date(r.createdAt), tz)))
+      const slot = dayMap.get(toDdMm(r.date))
       if (slot) { slot.total += n(r.total); slot.profit += n(r.profit) }
     }
     const last7DaysSales = Array.from(dayMap.entries()).map(([date, v]) => ({ date, ...v }))

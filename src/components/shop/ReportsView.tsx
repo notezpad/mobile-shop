@@ -978,7 +978,10 @@ function Hl({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 
 
 function Chapter({ id, n, title, hint, children }: { id: string; n: string; title: string; hint: string; children: React.ReactNode }) {
   return (
-    <section id={id} className="animate-in-up scroll-mt-24 space-y-4">
+    // ⚡ v9: .cv-heavy (globals.css) — الأقسام بره الشاشة ما بتتكلفش رسم/حساب
+    // (الرسوم SVG ثقيلة) وأي دايلوج يفتح فوق الصفحة بيدفع recalc أقل بكثير.
+    // getBoundingClientRect بتاع ChapterMap شغال عادي لأن c-v بيحافظ على الصندوق.
+    <section id={id} className="cv-heavy animate-in-up scroll-mt-24 space-y-4">
       <div className="flex items-end gap-2 sm:gap-3">
         <span dir="ltr" className="bg-clip-text text-3xl font-black leading-none tabular-nums text-transparent sm:text-5xl" style={{ backgroundImage: `linear-gradient(to bottom, ${V}, ${F})` }}>{n}</span>
         <div className="min-w-0 flex-1 pb-0.5">

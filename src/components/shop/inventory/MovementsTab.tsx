@@ -122,6 +122,20 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
 
   const filtered = liveMovements
 
+  // ⚡ v9 (2026-10-06): تقسيم الدفتر — الـ API بيرجع حتى 1000 حركة وكانت
+  // كلها بتترسم في الـ DOM مرة واحدة (دفتر زمني)، فأي دايلوج فوق الصفحة
+  // بيدفع recalc ضخم. 50 حركة/صفحة — والإجماليات والرسم البياني بيتحسبوا
+  // من القائمة كاملة (مش الصفحة الحالية) فمفيش رقم بيتغير.
+  const PAGE_SIZE = 50
+  const [page, setPage] = React.useState(1)
+  React.useEffect(() => { setPage(1) }, [branchFilter, typeFilter, from, to, search, liveMovements])
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const paged = React.useMemo(
+    () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filtered, safePage]
+  )
+
   const summary = React.useMemo(() => {
     let inTotal = 0, outTotal = 0
     for (const m of filtered) {
@@ -153,7 +167,7 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
     return { days, max }
   }, [filtered])
 
-  const groups = React.useMemo(() => groupByDay(filtered, (m) => m.createdAt), [filtered])
+  const groups = React.useMemo(() => groupByDay(paged, (m) => m.createdAt), [paged])
 
   const activePeriod: Period | null = React.useMemo(() => {
     for (const p of ['all', 'today', 'week', 'month'] as Period[]) {
@@ -422,6 +436,20 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
               </section>
             )
           })}
+        </div>
+      )}
+
+      {/* ⚡ v9: تنقّل الدفتر — 50 حركة/صفحة (الإجماليات فوق على القائمة كاملة) */}
+      {filtered.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between gap-2 rounded-xl border bg-card px-3 py-2">
+          <span className="text-[11px] tabular-nums text-muted-foreground">
+            {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} من {filtered.length} حركة
+          </span>
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="sm" className="h-8" disabled={safePage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>السابق</Button>
+            <span className="px-1 text-xs tabular-nums text-muted-foreground">{safePage} / {totalPages}</span>
+            <Button variant="outline" size="sm" className="h-8" disabled={safePage >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>التالي</Button>
+          </div>
         </div>
       )}
     </div>

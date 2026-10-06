@@ -6,6 +6,7 @@ import {
   getTenantTimezone,
   localDateStrToUtcBounds,
 } from '@/lib/tenantTime'
+import { matchEdgeCache, putEdgeCache } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +28,18 @@ async function __GET(req: NextRequest) {
   const toStr = searchParams.get('to')
   const branchIdStr = searchParams.get('branchId')
   const branchId = branchIdStr ? Number(branchIdStr) : null
+
+  // ⚡ v9 EDGE CACHE (2026-10-06) — «التنقل للتقارير يبان فوري»:
+  // التقارير read-heavy بحت (نفس المدى بيفتح أكتر من مرة: تغيير تبويب،
+  // رجوع، تحديث بعد عملية بيع) والمجمّعات كلها في Postgres أصلاً —
+  // فنسخة مخزنة على الحافة لمدة 25 ثانية = الافتتاحيات المتتالية بـ ≈ صفر
+  // CPU. المفتاح يشمل المدى + الفرع + tenantId (مفيش تسريب بين المحلات)،
+  // والحد أقصى للقِدَم 25 ثانية + بيتصفّر بالـ TTL بعد أي بيع/مصروف —
+  // يعني عملياً بيانات حديثة. (مدى التواريخ غير محدود فمفيش purge بالمفتاح
+  // — الـ TTL هو ضمان الحداثة هنا، زي نهج /api/dashboard بالظبط.)
+  const reportQuery = `from=${fromStr ?? ''}&to=${toStr ?? ''}&branch=${branchIdStr ?? ''}`
+  const cachedReport = await matchEdgeCache('/api/reports', reportQuery, session.tenantId, '1')
+  if (cachedReport) return cachedReport
 
   // 🕐 ROOT FIX (2026-09-30): التواريخ كانت بتتفسّر بتوقيت السيرفر (UTC على
   // Cloudflare) — يعني "تقرير النهاردة" كان بيبدأ من 2 صباحاً بتوقيت القاهرة
@@ -102,11 +115,19 @@ async function __GET(req: NextRequest) {
     db.branch.findMany({ where: { tenantId: tid }, orderBy: [{ isMain: 'desc' }, { id: 'asc' }], select: { id: true, name: true } }),
     db.$queryRaw<{ date: string; total: number; profit: number }[]>`
       -- 🕐 التجميع اليومي بتوقيت المحل (AT TIME ZONE بيتعامل مع التوقيت الصيفي تلقائياً)
+      -- ⚡ v9: subquery الربح مقيّد بنفس النافذة (JOIN على Sale) بدل GROUP BY
+      -- على جدول SaleItem كله — أرخص في CPU مع نمو البيانات.
       SELECT to_char(s."createdAt" AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS date,
              SUM(s."total")::float8 AS total,
              COALESCE(SUM(ip.profit), 0)::float8 AS profit
       FROM "Sale" s
-      LEFT JOIN (SELECT i."saleId", SUM((i."price" - i."cost") * i."quantity") AS profit FROM "SaleItem" i GROUP BY i."saleId") ip ON ip."saleId" = s."id"
+      LEFT JOIN (
+        SELECT i."saleId", SUM((i."price" - i."cost") * i."quantity") AS profit
+        FROM "SaleItem" i
+        JOIN "Sale" s2 ON s2."id" = i."saleId"
+        WHERE s2."tenantId" = ${tid} AND (${bid}::int IS NULL OR s2."branchId" = ${bid}::int) AND s2."status" = 'مكتملة' AND s2."createdAt" >= ${from} AND s2."createdAt" < ${to}
+        GROUP BY i."saleId"
+      ) ip ON ip."saleId" = s."id"
       WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND s."status" = 'مكتملة' AND s."createdAt" >= ${from} AND s."createdAt" < ${to}
       GROUP BY 1 ORDER BY 1`,
     db.$queryRaw<{ name: string; qty: number; total: number; profit: number }[]>`
@@ -187,7 +208,7 @@ async function __GET(req: NextRequest) {
     return ((cur - prev) / Math.abs(prev)) * 100
   }
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     from: fromStr,
     to: toStr,
     branchId,
@@ -231,6 +252,10 @@ async function __GET(req: NextRequest) {
     totalPurchases,
     purchasesCount,
   })
+
+  // ⚡ v9: خزّن نسخة على الحافة (clone — الرد الأصلي يكمل للمتصفح)
+  await putEdgeCache(res.clone(), '/api/reports', reportQuery, session.tenantId, 25, '1')
+  return res
 }
 
 export async function GET(...args: Parameters<typeof __GET>) {

@@ -73,6 +73,24 @@ const DAMAGE_REASONS = [
   'أخرى',
 ]
 
+// ⚡ v9: رندر شرطي حسب حجم الشاشة — بدل ما الموبايل يرسم الجدول المخفي
+// (50 صف × باركود) والديسكتوب يرسم الكروت المخفية، بنرسم العرض المناسب فقط.
+// الصفحة client-only (dynamic ssr:false) فمفيش مشكلة hydration، و
+// matchMedia في الـ lazy initializer بيمنع أي وميض بين النمطين.
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = React.useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
+  )
+  React.useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const on = () => setIsDesktop(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  return isDesktop
+}
+
 export function StockTab({ products, branches, isEmployee, userBranchId, onChanged }: Props) {
   const [search, setSearch] = React.useState('')
   const [branchFilter, setBranchFilter] = React.useState<string>('all')
@@ -99,6 +117,37 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
       return true
     })
   }, [products, branchFilter, statusFilter, search])
+
+  // ⚡ v9 (2026-10-06): تقسيم الجدول — الصفحة كانت بترسم كل المنتجات (حتى
+  // 1000) مرتين: جدول + كروت موبايل، وكل صف فيه باركود مرسوم JSBarcode —
+  // فأي دايلوج يفتح فوق الصفحة بيدفع style/layout recalc على DOM ضخم
+  // (ده كان سبب «الدايلوج بيفتح في ثانية على صفحات المخزون حسب حجمها»).
+  // 50 صف في DOM كفاية بصرياً — والبحث/الفلاتر/الإكسل شغالين على القائمة كاملة.
+  const PAGE_SIZE = 50
+  const [page, setPage] = React.useState(1)
+  // أي تغيير فلتر يرجّع لصفحة 1
+  React.useEffect(() => { setPage(1) }, [search, branchFilter, statusFilter, products])
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const paged = React.useMemo(
+    () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filtered, safePage]
+  )
+  const isDesktop = useIsDesktop()
+
+  // شريط تنقّل صغير مشترك بين الجدول (ديسكتوب) والكروت (موبايل)
+  const pager = totalPages > 1 ? (
+    <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
+      <span className="text-[11px] tabular-nums text-muted-foreground">
+        {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} من {filtered.length}
+      </span>
+      <div className="flex items-center gap-1">
+        <Button variant="outline" size="sm" className="h-8" disabled={safePage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>السابق</Button>
+        <span className="px-1 text-xs tabular-nums text-muted-foreground">{safePage} / {totalPages}</span>
+        <Button variant="outline" size="sm" className="h-8" disabled={safePage >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>التالي</Button>
+      </div>
+    </div>
+  ) : null
 
   const branchName = (id: number | null) => branches.find(b => b.id === id)?.name
 
@@ -173,7 +222,8 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="hidden max-h-[60vh] overflow-auto lg:block">
+          {isDesktop && (
+          <div className="cv-scroll hidden max-h-[60vh] overflow-auto lg:block">
             <Table fixed>
               <TableHeader className="sticky top-0 bg-muted/50 backdrop-blur">
                 <TableRow>
@@ -196,7 +246,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filtered.map(p => {
+                  paged.map(p => {
                     const out = p.quantity <= 0
                     const low = !out && p.quantity <= p.minQuantity
                     return (
@@ -265,10 +315,13 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
               </TableBody>
             </Table>
           </div>
+          )}
+          {pager /* ⚡ v9: تنقّل 50 صف/صفحة */}
 
           {/*
             نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
           */}
+          {!isDesktop && (
           <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
             {filtered.length === 0 ? (
               <p className="col-span-full py-10 text-center text-muted-foreground">
@@ -276,7 +329,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                 لا توجد منتجات مطابقة
               </p>
             ) : (
-              filtered.map(p => {
+              paged.map(p => {
                 const out = p.quantity <= 0
                 const low = !out && p.quantity <= p.minQuantity
                 return (
@@ -368,6 +421,8 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
               })
             )}
           </div>
+          )}
+          {pager /* ⚡ v9: تنقّل 50 كارت/صفحة (موبايل) */}
         </CardContent>
       </Card>
 
