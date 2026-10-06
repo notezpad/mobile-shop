@@ -156,8 +156,10 @@ export function StockPage() {
 
             <div>
               <p className="text-sm font-semibold text-muted-foreground">قيمة البضاعة بسعر التكلفة</p>
-              <div className="mt-1 flex flex-wrap items-baseline gap-2">
-                <span className="text-5xl font-black tracking-tight tabular-nums sm:text-6xl">
+              {/* 📱 2026-10-07: [overflow-wrap:anywhere] + خط أصغر على الجوال
+                  عشان المبالغ المليونية والصفرية تتفضى من غير كسر التصميم */}
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className="min-w-0 text-4xl font-black tracking-tight tabular-nums [overflow-wrap:anywhere] min-[420px]:text-5xl sm:text-6xl">
                   {noData ? '—' : num(Math.round(stats.totalValueCost))}
                 </span>
                 <span className="text-lg font-bold text-muted-foreground">جنيه</span>
@@ -218,7 +220,7 @@ export function StockPage() {
               </span>
               <div className="min-w-0">
                 <p className="truncate text-xs font-medium text-muted-foreground">{it.label}</p>
-                <p className="text-2xl font-extrabold leading-tight tabular-nums">{noData ? '—' : num(it.value)}</p>
+                <p className="text-xl font-extrabold leading-tight tabular-nums [overflow-wrap:anywhere] min-[420px]:text-2xl">{noData ? '—' : num(it.value)}</p>
                 <p className="truncate text-[11px] text-muted-foreground">{it.hint}</p>
               </div>
             </div>

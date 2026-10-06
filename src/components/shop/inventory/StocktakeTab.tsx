@@ -315,7 +315,10 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                   onChange={(e) => setScan(e.target.value)}
                   placeholder="امسح الباركود أو اكتب اسم الصنف"
                   style={{ outline: 'none', boxShadow: 'none', border: 0 }}
-                  className="h-12 min-w-0 flex-1 bg-transparent font-mono text-lg text-foreground placeholder:font-sans placeholder:text-muted-foreground/70"
+                  /* 📱 2026-10-07: w-0 مع flex-1 — الحجم الجوهري للـ input (~216px)
+                      كان بيكبّر min-content بتاع الشبكة فيخلي الكارت أعرض من شاشة
+                      الجوال ويتقص. w-0 بيخليه ينضغط صح جوه الصف. */
+                  className="h-12 w-0 min-w-0 flex-1 bg-transparent font-mono text-lg text-foreground placeholder:font-sans placeholder:text-muted-foreground/70"
                 />
                 <Button type="submit" disabled={!scan.trim()} className="h-11 shrink-0 rounded-lg bg-stocktake px-5 text-stocktake-foreground hover:bg-stocktake-strong">
                   <CornerDownLeft className="size-4" />
@@ -344,7 +347,9 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
           </div>
 
           {/* العدّادات الرقمية */}
-          <aside className="flex items-center justify-center gap-5 border-t border-stocktake/15 bg-stocktake-soft p-5 lg:flex-col lg:border-s lg:border-t-0 lg:px-7">
+          {/* 📱 2026-10-07: العدّادات على الجوال تتكدس عمودي (الحلقة فوق الأرقام)
+              — عرضها الأفقي كان 353px وبيتقص على شاشات 360px */}
+          <aside className="flex flex-col items-center justify-center gap-4 border-t border-stocktake/15 bg-stocktake-soft p-5 sm:flex-row sm:gap-5 lg:flex-col lg:gap-6 lg:border-s lg:border-t-0 lg:px-7">
             <MatchRing value={matchedCount} total={items.length} />
             <div className="grid grid-cols-3 gap-5 text-center lg:gap-6">
               <Digit label="معدود" value={pad3(items.length)} className="text-stocktake" />

@@ -147,8 +147,10 @@ function BranchNode({
         <Building2 className="size-3" />
         {kind === 'from' ? 'نقطة الانطلاق' : 'جهة الوصول'}
       </p>
+      {/* 📱 2026-10-07: السطران بدل القص — اسم الفرع الطويل يظهر في سطرين
+          على الجوال بدل ما يتقطع بنقاط (line-clamp-1 الافتراضي) */}
       <Select value={value} onValueChange={onChange} disabled={disabled}>
-        <SelectTrigger className="h-auto w-full border-0 bg-transparent p-0 text-base font-extrabold shadow-none focus:ring-0 focus-visible:ring-0 sm:text-lg dark:bg-transparent">
+        <SelectTrigger className="h-auto w-full border-0 bg-transparent p-0 text-base font-extrabold shadow-none focus:ring-0 focus-visible:ring-0 sm:text-lg dark:bg-transparent [&_[data-slot=select-value]]:line-clamp-2 [&_[data-slot=select-value]]:whitespace-normal">
           <SelectValue placeholder={kind === 'from' ? 'اختر المصدر' : 'اختر الوجهة'} />
         </SelectTrigger>
         <SelectContent>

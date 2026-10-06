@@ -11,14 +11,12 @@ import {
   Loader2,
   ArrowDownToLine,
   ArrowUpFromLine,
-  SlidersHorizontal,
   Repeat,
   X,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import {
   Select,
@@ -73,24 +71,6 @@ const DAMAGE_REASONS = [
   'أخرى',
 ]
 
-// ⚡ v9: رندر شرطي حسب حجم الشاشة — بدل ما الموبايل يرسم الجدول المخفي
-// (50 صف × باركود) والديسكتوب يرسم الكروت المخفية، بنرسم العرض المناسب فقط.
-// الصفحة client-only (dynamic ssr:false) فمفيش مشكلة hydration، و
-// matchMedia في الـ lazy initializer بيمنع أي وميض بين النمطين.
-function useIsDesktop() {
-  const [isDesktop, setIsDesktop] = React.useState(
-    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
-  )
-  React.useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)')
-    const on = () => setIsDesktop(mq.matches)
-    on()
-    mq.addEventListener('change', on)
-    return () => mq.removeEventListener('change', on)
-  }, [])
-  return isDesktop
-}
-
 export function StockTab({ products, branches, isEmployee, userBranchId, onChanged }: Props) {
   const [search, setSearch] = React.useState('')
   const [branchFilter, setBranchFilter] = React.useState<string>('all')
@@ -118,89 +98,69 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
     })
   }, [products, branchFilter, statusFilter, search])
 
-  // ⚡ v9 (2026-10-06): تقسيم الجدول — الصفحة كانت بترسم كل المنتجات (حتى
-  // 1000) مرتين: جدول + كروت موبايل، وكل صف فيه باركود مرسوم JSBarcode —
-  // فأي دايلوج يفتح فوق الصفحة بيدفع style/layout recalc على DOM ضخم
-  // (ده كان سبب «الدايلوج بيفتح في ثانية على صفحات المخزون حسب حجمها»).
-  // 50 صف في DOM كفاية بصرياً — والبحث/الفلاتر/الإكسل شغالين على القائمة كاملة.
-  const PAGE_SIZE = 50
-  const [page, setPage] = React.useState(1)
-  // أي تغيير فلتر يرجّع لصفحة 1
-  React.useEffect(() => { setPage(1) }, [search, branchFilter, statusFilter, products])
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const safePage = Math.min(page, totalPages)
-  const paged = React.useMemo(
-    () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
-    [filtered, safePage]
-  )
-  const isDesktop = useIsDesktop()
-
-  // شريط تنقّل صغير مشترك بين الجدول (ديسكتوب) والكروت (موبايل)
-  const pager = totalPages > 1 ? (
-    <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
-      <span className="text-[11px] tabular-nums text-muted-foreground">
-        {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} من {filtered.length}
-      </span>
-      <div className="flex items-center gap-1">
-        <Button variant="outline" size="sm" className="h-8" disabled={safePage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>السابق</Button>
-        <span className="px-1 text-xs tabular-nums text-muted-foreground">{safePage} / {totalPages}</span>
-        <Button variant="outline" size="sm" className="h-8" disabled={safePage >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>التالي</Button>
-      </div>
-    </div>
-  ) : null
-
   const branchName = (id: number | null) => branches.find(b => b.id === id)?.name
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
+      {/* 📱 2026-10-07: الفلاتر — نفس نمط باقي الموقع (المنتجات):
+          على الجوال شبكة 2×2 — البحث بعرض كامل، والفرع + الحالة جنب بعض،
+          ومن sm+ وفوق يرجع صف أفقي زي الأصل. مفيش عناصر مكدّسة عمودي. */}
       <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 p-3">
-          <div className="min-w-[200px] flex-1">
-            <Label className="mb-1.5 flex items-center gap-1 text-xs">
-              <Search className="size-3" />
-              بحث بالاسم أو الباركود
-            </Label>
+        <CardContent className="grid grid-cols-2 gap-2 p-2 sm:flex sm:flex-wrap sm:items-end sm:gap-3 sm:p-3">
+          <div className="relative col-span-2 min-w-0 sm:min-w-[220px] sm:flex-1">
+            <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="اكتب اسم المنتج أو الباركود..."
               value={search}
               onChange={e => setSearch(e.target.value)}
+              className="h-10 rounded-xl border-0 bg-muted/60 pe-9 ps-9 shadow-none focus-visible:bg-background"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="مسح البحث"
+                className="absolute left-2.5 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full bg-foreground/10 text-muted-foreground hover:bg-foreground/20"
+              >
+                <X className="size-3" />
+              </button>
+            )}
           </div>
           {!isEmployee && (
-            <div className="w-full sm:w-56">
-              <Label className="mb-1.5 flex items-center gap-1 text-xs">
-                <SlidersHorizontal className="size-3" />
-                الفرع
-              </Label>
-              <Select value={branchFilter} onValueChange={setBranchFilter}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل الفروع</SelectItem>
-                  <SelectItem value="none">بدون فرع</SelectItem>
-                  {branches.map(b => (
-                    <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          <div className="w-full sm:w-48">
-            <Label className="mb-1.5 block text-xs">الحالة</Label>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select value={branchFilter} onValueChange={setBranchFilter}>
+              <SelectTrigger
+                aria-label="الفرع"
+                className="h-10 w-full min-w-0 rounded-xl border-0 bg-muted/60 shadow-none sm:w-56"
+              >
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">كل الحالات</SelectItem>
-                <SelectItem value="ok">متوفر</SelectItem>
-                <SelectItem value="low">قارب على النفاذ</SelectItem>
-                <SelectItem value="out">نفد</SelectItem>
+                <SelectItem value="all">كل الفروع</SelectItem>
+                <SelectItem value="none">بدون فرع</SelectItem>
+                {branches.map(b => (
+                  <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
-          </div>
+          )}
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger
+              aria-label="الحالة"
+              className="h-10 w-full min-w-0 rounded-xl border-0 bg-muted/60 shadow-none sm:w-48"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الحالات</SelectItem>
+              <SelectItem value="ok">متوفر</SelectItem>
+              <SelectItem value="low">قارب على النفاذ</SelectItem>
+              <SelectItem value="out">نفد</SelectItem>
+            </SelectContent>
+          </Select>
           {/* 🛡️ 2026-09-30: استبدال بضاعة مع مورد — بيخرج التالف ويدخل البديل
               وبيحسب فرق القيمة على حساب المورد تلقائياً */}
           {!isEmployee && (
-            <Button variant="outline" className="gap-1.5" onClick={() => setExchangeOpen(true)}>
+            <Button variant="outline" className="h-10 w-full gap-1.5 sm:w-auto" onClick={() => setExchangeOpen(true)}>
               <Repeat className="size-4" />
               استبدال مورد
             </Button>
@@ -222,8 +182,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {isDesktop && (
-          <div className="cv-scroll hidden max-h-[60vh] overflow-auto lg:block">
+          <div className="hidden max-h-[60vh] overflow-auto lg:block">
             <Table fixed>
               <TableHeader className="sticky top-0 bg-muted/50 backdrop-blur">
                 <TableRow>
@@ -232,8 +191,8 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                   <TableHead className="w-28">الفرع</TableHead>
                   <TableHead className="w-20 text-center">الكمية</TableHead>
                   <TableHead className="w-24 text-center">الحد الأدنى</TableHead>
-                  <TableHead className="w-28 text-center">التكلفة</TableHead>
-                  <TableHead className="w-28 text-center">البيع</TableHead>
+                  <TableHead className="w-32 text-center">التكلفة</TableHead>
+                  <TableHead className="w-32 text-center">البيع</TableHead>
                   <TableHead className="w-24 text-center">حركة</TableHead>
                 </TableRow>
               </TableHeader>
@@ -246,7 +205,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paged.map(p => {
+                  filtered.map(p => {
                     const out = p.quantity <= 0
                     const low = !out && p.quantity <= p.minQuantity
                     return (
@@ -270,8 +229,8 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                           )}
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground">{p.minQuantity}</TableCell>
-                        <TableCell className="text-muted-foreground text-center">{formatCurrency(p.cost)}</TableCell>
-                        <TableCell className="text-center font-medium">{formatCurrency(p.price)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-muted-foreground text-center tabular-nums">{formatCurrency(p.cost)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-center font-medium tabular-nums">{formatCurrency(p.price)}</TableCell>
                         <TableCell>
                           <div className="flex justify-center gap-1">
                             <Button
@@ -315,13 +274,10 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
               </TableBody>
             </Table>
           </div>
-          )}
-          {pager /* ⚡ v9: تنقّل 50 صف/صفحة */}
 
           {/*
             نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
           */}
-          {!isDesktop && (
           <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
             {filtered.length === 0 ? (
               <p className="col-span-full py-10 text-center text-muted-foreground">
@@ -329,7 +285,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                 لا توجد منتجات مطابقة
               </p>
             ) : (
-              paged.map(p => {
+              filtered.map(p => {
                 const out = p.quantity <= 0
                 const low = !out && p.quantity <= p.minQuantity
                 return (
@@ -391,9 +347,10 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                       <Barcode value={p.barcode} height={24} fontSize={9} fitContainer />
                     </div>
 
-                    {/* شبكة البيانات: كمية/حد أدنى/تكلفة/سعر */}
-                    <div className="mt-3 grid grid-cols-4 gap-1 border-t border-border/60 pt-2 text-center">
-                      <div>
+                    {/* 📱 2026-10-07: شبكة البيانات 2×2 بدل 4 أعمدة — عشان المبالغ
+                        المليونية (مثال: 1,250,000 جنيه) تتفضى من غير ما تتقطع */}
+                    <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-border/60 pt-2.5">
+                      <div className="flex items-center justify-between gap-2">
                         <p className="text-xs text-muted-foreground">الكمية</p>
                         {out ? (
                           <Badge variant="destructive">نفد</Badge>
@@ -403,17 +360,17 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                           <Badge variant="secondary">{p.quantity}</Badge>
                         )}
                       </div>
-                      <div>
+                      <div className="flex items-center justify-between gap-2">
                         <p className="text-xs text-muted-foreground">الحد الأدنى</p>
-                        <p className="text-xs tabular-nums text-muted-foreground">{p.minQuantity}</p>
+                        <p className="text-xs font-medium tabular-nums text-muted-foreground">{p.minQuantity}</p>
                       </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">التكلفة</p>
-                        <p className="text-xs tabular-nums text-muted-foreground">{formatCurrency(p.cost)}</p>
+                      <div className="flex min-w-0 items-center justify-between gap-2">
+                        <p className="shrink-0 text-xs text-muted-foreground">التكلفة</p>
+                        <p className="truncate text-xs tabular-nums text-muted-foreground">{formatCurrency(p.cost)}</p>
                       </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">السعر</p>
-                        <p className="text-xs font-semibold tabular-nums">{formatCurrency(p.price)}</p>
+                      <div className="flex min-w-0 items-center justify-between gap-2">
+                        <p className="shrink-0 text-xs text-muted-foreground">السعر</p>
+                        <p className="truncate text-xs font-semibold tabular-nums">{formatCurrency(p.price)}</p>
                       </div>
                     </div>
                   </div>
@@ -421,8 +378,6 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
               })
             )}
           </div>
-          )}
-          {pager /* ⚡ v9: تنقّل 50 كارت/صفحة (موبايل) */}
         </CardContent>
       </Card>
 

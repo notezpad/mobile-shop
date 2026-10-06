@@ -43,19 +43,10 @@ import {
 
 interface Props {
   movements: Movement[]
-  /** ⚡ v10: إجماليات + منحنى 14 يوم محسوبة في SQL من السيرفر (اختياري — fallback محلي لو غياب) */
-  meta?: MovementMeta | null
   branches: Branch[]
   isEmployee: boolean
   userBranchId: number | null
   onChanged: () => void
-}
-
-export interface MovementMeta {
-  total: number
-  inTotal: number
-  outTotal: number
-  series: { date: string; inn: number; out: number }[]
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -98,24 +89,16 @@ function periodRange(p: Period): { from: string; to: string } {
   return { from: toISODate(new Date(now.getFullYear(), now.getMonth(), 1)), to }
 }
 
-export function MovementsTab({ movements, meta, branches, isEmployee, userBranchId: _userBranchId, onChanged: _onChanged }: Props) {
+export function MovementsTab({ movements, branches, isEmployee, userBranchId: _userBranchId, onChanged: _onChanged }: Props) {
   const [search, setSearch] = React.useState('')
   const [branchFilter, setBranchFilter] = React.useState<string>('all')
   const [typeFilter, setTypeFilter] = React.useState<string>('all')
   const [from, setFrom] = React.useState('')
   const [to, setTo] = React.useState('')
 
-  // ⚡ v10 (2026-10-06): الـ API بيرجّع 50 حركة/صفحة من السيرفر + الإجماليات
-  // والمنحنى محسوبة جوه PostgreSQL — بدل 1000 صف كاملين في كل تحميل/فلتر
-  // (كان ده بيحرق CPU الـ Worker ⇒ Error 1102). التنقل بين الصفحات بقى
-  // طلب سيرفر خفيف، والفلاتر بتترسل للسيرفر (كانت كده أصلاً).
+  // Reload movements when filters change
   const [liveMovements, setLiveMovements] = React.useState<Movement[]>(movements)
-  const [liveMeta, setLiveMeta] = React.useState<MovementMeta | null>(meta ?? null)
   React.useEffect(() => { setLiveMovements(movements) }, [movements])
-  React.useEffect(() => { setLiveMeta(meta ?? null) }, [meta])
-
-  const [serverPage, setServerPage] = React.useState(1)
-  React.useEffect(() => { setServerPage(1) }, [branchFilter, typeFilter, from, to, search])
 
   React.useEffect(() => {
     const params = new URLSearchParams()
@@ -124,85 +107,33 @@ export function MovementsTab({ movements, meta, branches, isEmployee, userBranch
     if (from) params.set('from', from)
     if (to) params.set('to', to)
     if (search.trim()) params.set('q', search.trim())
-    params.set('page', String(serverPage))
-    params.set('limit', '50')
-    const url = `/api/inventory/movements?${params.toString()}`
+    const url = `/api/inventory/movements${params.toString() ? '?' + params.toString() : ''}`
     let alive = true
     const t = setTimeout(async () => {
       try {
         const res = await fetch(url, { cache: 'no-store' })
         if (!res.ok) return
-        const json = await res.json()
-        if (!alive) return
-        if (Array.isArray(json)) {
-          // fallback احتياطي لو الرد مصفوفة قديمة الشكل
-          setLiveMovements(json as Movement[])
-          setLiveMeta(null)
-        } else {
-          setLiveMovements((json.data ?? []) as Movement[])
-          setLiveMeta({
-            total: json.total ?? json.data?.length ?? 0,
-            inTotal: json.inTotal ?? 0,
-            outTotal: json.outTotal ?? 0,
-            series: json.series ?? [],
-          })
-        }
+        const data = await res.json()
+        if (alive) setLiveMovements(data as Movement[])
       } catch {}
     }, 250)
     return () => { alive = false; clearTimeout(t) }
-  }, [branchFilter, typeFilter, from, to, search, serverPage])
+  }, [branchFilter, typeFilter, from, to, search])
 
   const filtered = liveMovements
 
-  // ⚡ v10: التقسيم من السيرفر (الرد الحالي = صفحة واحدة بالظبط). fallback:
-  // تقسيم محلي لو مفيش meta (بيانات قديمة).
-  const PAGE_SIZE = 50
-  const usingServerPages = liveMeta !== null
-  const page = usingServerPages ? serverPage : serverPage
-  const [legacyPage, setLegacyPage] = React.useState(1)
-  React.useEffect(() => { setLegacyPage(1) }, [branchFilter, typeFilter, from, to, search, liveMovements])
-  const localTotalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const totalPages = usingServerPages
-    ? Math.max(1, Math.ceil((liveMeta?.total ?? 0) / PAGE_SIZE))
-    : localTotalPages
-  const activePage = usingServerPages ? page : Math.min(legacyPage, totalPages)
-  const setPage = usingServerPages ? setServerPage : setLegacyPage
-  const paged = React.useMemo(
-    () => (usingServerPages
-      ? filtered
-      : filtered.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE)),
-    [filtered, usingServerPages, activePage]
-  )
-
-  // ⚡ v10: ميزان الحركة من SQL (فيه meta) — fallback حساب محلي على الصفحة الحالية
   const summary = React.useMemo(() => {
-    if (liveMeta) {
-      return { inTotal: liveMeta.inTotal, outTotal: liveMeta.outTotal, net: liveMeta.inTotal - liveMeta.outTotal }
-    }
     let inTotal = 0, outTotal = 0
     for (const m of filtered) {
       if (m.quantity > 0) inTotal += m.quantity
       else outTotal += Math.abs(m.quantity)
     }
     return { inTotal, outTotal, net: inTotal - outTotal }
-  }, [liveMeta, filtered])
+  }, [filtered])
 
-  // آخر ١٤ يوم: وارد لأعلى، صادر لأسفل — التواريخ من السيرفر بتوقيت المحل
+  // آخر ١٤ يوم: وارد لأعلى، صادر لأسفل
   const series = React.useMemo(() => {
     const days: { key: string; label: string; inn: number; out: number; today: boolean }[] = []
-    if (liveMeta && liveMeta.series.length > 0) {
-      liveMeta.series.forEach((s, i) => {
-        days.push({
-          key: s.date,
-          label: String(Number(s.date.slice(8, 10)) || s.date.slice(8, 10)),
-          inn: s.inn,
-          out: s.out,
-          today: i === liveMeta.series.length - 1,
-        })
-      })
-      const max = Math.max(1, ...days.map((d) => Math.max(d.inn, d.out)))
-      return { days, max }
-    }
     const now = new Date()
     for (let i = 13; i >= 0; i--) {
       const d = new Date(now)
@@ -220,9 +151,9 @@ export function MovementsTab({ movements, meta, branches, isEmployee, userBranch
     }
     const max = Math.max(1, ...days.map((d) => Math.max(d.inn, d.out)))
     return { days, max }
-  }, [liveMeta, filtered])
+  }, [filtered])
 
-  const groups = React.useMemo(() => groupByDay(paged, (m) => m.createdAt), [paged])
+  const groups = React.useMemo(() => groupByDay(filtered, (m) => m.createdAt), [filtered])
 
   const activePeriod: Period | null = React.useMemo(() => {
     for (const p of ['all', 'today', 'week', 'month'] as Period[]) {
@@ -258,20 +189,20 @@ export function MovementsTab({ movements, meta, branches, isEmployee, userBranch
                 <ArrowUpDown className="size-4" />
               </span>
               ميزان الحركة
-              <span className="text-xs font-normal text-muted-foreground">· {num(liveMeta?.total ?? filtered.length)} حركة</span>
+              <span className="text-xs font-normal text-muted-foreground">· {num(filtered.length)} حركة</span>
             </div>
 
-            <div className="flex items-baseline gap-2" dir="ltr">
+            <div className="flex min-w-0 items-baseline gap-2" dir="ltr">
               <span
                 className={cn(
-                  'text-5xl font-black tracking-tight tabular-nums',
+                  'text-4xl font-black tracking-tight tabular-nums [overflow-wrap:anywhere] min-[420px]:text-5xl',
                   summary.net > 0 && 'text-emerald-600 dark:text-emerald-400',
                   summary.net < 0 && 'text-rose-600 dark:text-rose-400',
                 )}
               >
                 <Signed value={summary.net} />
               </span>
-              <span className="text-sm font-semibold text-muted-foreground" dir="rtl">وحدة صافي</span>
+              <span className="shrink-0 text-sm font-semibold text-muted-foreground" dir="rtl">وحدة صافي</span>
             </div>
 
             {/* ميزان وارد ⟷ صادر */}
@@ -344,20 +275,32 @@ export function MovementsTab({ movements, meta, branches, isEmployee, userBranch
       </section>
 
       {/* ═════════ شريط الفلاتر ═════════ */}
+      {/* 📱 2026-10-07: نفس نمط باقي الموقع — على الجوال العناصر جنب بعض في
+          شبكة 2×2 (الفرع + مسح الفلاتر، التواريخ من/إلى)، ومن sm+ صف أفقي */}
       <section className="space-y-3 rounded-2xl border bg-card p-3 sm:p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[200px] flex-1">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
+          <div className="relative col-span-2 min-w-0 sm:min-w-[220px] sm:flex-1">
             <Search className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="ابحث بالصنف أو الباركود أو الملاحظة…"
-              className="h-10 rounded-xl border-transparent bg-muted/60 pr-9 focus-visible:bg-background"
+              className="h-10 rounded-xl border-transparent bg-muted/60 pe-9 ps-9 focus-visible:bg-background"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="مسح البحث"
+                className="absolute left-2.5 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full bg-foreground/10 text-muted-foreground hover:bg-foreground/20"
+              >
+                <X className="size-3" />
+              </button>
+            )}
           </div>
           {!isEmployee && (
             <Select value={branchFilter} onValueChange={setBranchFilter}>
-              <SelectTrigger className="h-10 w-full rounded-xl sm:w-44"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-10 w-full min-w-0 rounded-xl sm:w-44" aria-label="الفرع"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">كل الفروع</SelectItem>
                 <SelectItem value="none">بدون فرع</SelectItem>
@@ -367,10 +310,22 @@ export function MovementsTab({ movements, meta, branches, isEmployee, userBranch
               </SelectContent>
             </Select>
           )}
+          {hasFilters && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearFilters}
+              className="h-10 w-full text-muted-foreground sm:h-9 sm:w-auto"
+            >
+              <X className="size-3.5" />
+              مسح الفلاتر
+            </Button>
+          )}
           <Segmented<Period>
             value={activePeriod ?? ('__custom' as Period)}
             onChange={applyPeriod}
             accent={ACCENT.movements}
+            className="col-span-2 w-full sm:col-auto sm:w-auto"
             options={[
               { value: 'all', label: 'الكل' },
               { value: 'today', label: 'اليوم' },
@@ -380,17 +335,15 @@ export function MovementsTab({ movements, meta, branches, isEmployee, userBranch
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>من</span>
-          <div className="w-40"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-8 rounded-lg text-xs" aria-label="من تاريخ" /></div>
-          <span>إلى</span>
-          <div className="w-40"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-8 rounded-lg text-xs" aria-label="إلى تاريخ" /></div>
-          {hasFilters && (
-            <Button variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground">
-              <X className="size-3.5" />
-              مسح الفلاتر
-            </Button>
-          )}
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="shrink-0">من</span>
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 min-w-0 flex-1 rounded-lg text-xs" aria-label="من تاريخ" />
+          </div>
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="shrink-0">إلى</span>
+            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 min-w-0 flex-1 rounded-lg text-xs" aria-label="إلى تاريخ" />
+          </div>
         </div>
 
         {/* نوع الحركة — شريط أيقونات قابل للتمرير */}
@@ -477,11 +430,11 @@ export function MovementsTab({ movements, meta, branches, isEmployee, userBranch
                         <div
                           dir="ltr"
                           className={cn(
-                            'flex min-w-[4.75rem] shrink-0 flex-col items-center rounded-xl px-3 py-1.5 font-mono',
+                            'flex min-w-[4.75rem] max-w-[9.5rem] shrink-0 flex-col items-center rounded-xl px-3 py-1.5 font-mono',
                             incoming ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400',
                           )}
                         >
-                          <span className="text-xl font-black leading-none tabular-nums"><Signed value={m.quantity} /></span>
+                          <span className="text-lg font-black leading-none tabular-nums [overflow-wrap:anywhere] min-[420px]:text-xl"><Signed value={m.quantity} /></span>
                           <span className="mt-0.5 font-sans text-[10px] font-medium opacity-70">وحدة</span>
                         </div>
                       </article>
@@ -491,20 +444,6 @@ export function MovementsTab({ movements, meta, branches, isEmployee, userBranch
               </section>
             )
           })}
-        </div>
-      )}
-
-      {/* ⚡ v10: تنقّل الدفتر — 50 حركة/صفحة من السيرفر (الإجماليات فوق من SQL) */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between gap-2 rounded-xl border bg-card px-3 py-2">
-          <span className="text-[11px] tabular-nums text-muted-foreground">
-            {(activePage - 1) * PAGE_SIZE + 1}–{Math.min(activePage * PAGE_SIZE, liveMeta?.total ?? filtered.length)} من {num(liveMeta?.total ?? filtered.length)} حركة
-          </span>
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="sm" className="h-8" disabled={activePage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>السابق</Button>
-            <span className="px-1 text-xs tabular-nums text-muted-foreground">{activePage} / {totalPages}</span>
-            <Button variant="outline" size="sm" className="h-8" disabled={activePage >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>التالي</Button>
-          </div>
         </div>
       )}
     </div>

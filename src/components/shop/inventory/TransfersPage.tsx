@@ -26,7 +26,7 @@ export function TransfersPage() {
   const isEmployee = user?.role === 'EMPLOYEE'
   const userBranchId = user?.branchId ?? null
 
-  const { branches, products, transfers, movements, movementMeta, stats, loading, reload } = useInventoryData()
+  const { branches, products, transfers, movements, stats, loading, reload } = useInventoryData()
 
   const exportExcel = () => {
     if (transfers.length === 0) return
@@ -85,13 +85,13 @@ export function TransfersPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {stats.pendingTransfers > 0 && (
               <div className="flex items-center gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-2">
                 <Clock className="size-4 text-amber-600 dark:text-amber-400" />
                 <div className="text-center">
                   <p className="text-[11px] font-semibold text-muted-foreground">بانتظار الشحن</p>
-                  <p className="text-xl font-black tabular-nums text-amber-700 dark:text-amber-300">
+                  <p className="text-xl font-black tabular-nums text-amber-700 dark:text-amber-300 min-[420px]:text-2xl">
                     {num(stats.pendingTransfers)}
                   </p>
                 </div>
@@ -110,7 +110,7 @@ export function TransfersPage() {
         active="transfers"
         counts={{
           stock: { text: `${num(stats.totalItems)} صنف` },
-          movements: { text: `${num(movementMeta?.total ?? movements.length)} حركة` },
+          movements: { text: `${num(movements.length)} حركة` },
           transfers: {
             text: loading ? '…' : `${num(transfers.length)} تحويل`,
             alert: stats.pendingTransfers > 0,

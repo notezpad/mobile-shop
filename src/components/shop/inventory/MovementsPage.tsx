@@ -22,18 +22,10 @@ export function MovementsPage() {
   const isEmployee = user?.role === 'EMPLOYEE'
   const userBranchId = user?.branchId ?? null
 
-  const { branches, movements, movementMeta, stats, loading, reload } = useInventoryData()
+  const { branches, movements, stats, loading, reload } = useInventoryData()
 
-  const exportExcel = async () => {
+  const exportExcel = () => {
     if (movements.length === 0) return
-    // ⚡ v10: التصدير بيجيب القائمة الكاملة (حتى 1000) وقت الضغط — مش الصفحة المحمّلة
-    let rows = movements
-    if ((movementMeta?.total ?? 0) > movements.length) {
-      const all = await fetch('/api/inventory/movements?limit=1000', { cache: 'no-store' })
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null)
-      if (all) rows = Array.isArray(all) ? all : all.data ?? movements
-    }
     exportSimpleExcel({
       fileName: excelFileName('حركات-المخزون'),
       shop: {
@@ -52,7 +44,7 @@ export function MovementsPage() {
         { header: 'ملاحظة', key: 'note', format: 'text' },
         { header: 'بواسطة', key: 'user', format: 'text' },
       ],
-      rows: rows.map((m) => ({
+      rows: movements.map((m) => ({
         date: new Date(m.createdAt).toLocaleString('ar-EG'),
         product: m.product.name,
         type: MOVEMENT_TYPE_LABELS[m.type] ?? m.type,
@@ -92,11 +84,11 @@ export function MovementsPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="rounded-2xl border border-sky-500/25 bg-sky-500/[0.07] px-4 py-2 text-center">
               <p className="text-[11px] font-semibold text-muted-foreground">إجمالي الحركات</p>
-              <p className="text-2xl font-black tabular-nums text-sky-700 dark:text-sky-300">
-                {loading ? '—' : num(movementMeta?.total ?? movements.length)}
+              <p className="text-xl font-black tabular-nums text-sky-700 dark:text-sky-300 min-[420px]:text-2xl">
+                {loading ? '—' : num(movements.length)}
               </p>
             </div>
             <Button variant="outline" onClick={exportExcel} disabled={movements.length === 0} className="h-10">
@@ -112,7 +104,7 @@ export function MovementsPage() {
         active="movements"
         counts={{
           stock: { text: `${num(stats.totalItems)} صنف` },
-          movements: { text: `${num(movementMeta?.total ?? movements.length)} حركة` },
+          movements: { text: `${num(movements.length)} حركة` },
           transfers: {
             text: stats.pendingTransfers > 0 ? `${num(stats.pendingTransfers)} معلّق` : undefined,
             alert: stats.pendingTransfers > 0,
@@ -127,7 +119,6 @@ export function MovementsPage() {
       {/* ═════════ الميزان + الفلاتر + الدفتر ═════════ */}
       <MovementsTab
         movements={movements}
-        meta={movementMeta}
         branches={branches}
         isEmployee={isEmployee}
         userBranchId={userBranchId}
