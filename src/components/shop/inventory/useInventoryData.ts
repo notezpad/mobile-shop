@@ -17,14 +17,6 @@ import * as React from 'react'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import type { Branch, InventoryProduct, Movement, Stocktake, Transfer } from './types'
 
-/** ⚡ v10: إجماليات + منحنى 14 يوم محسوبة في SQL من السيرفر */
-export interface MovementMeta {
-  total: number
-  inTotal: number
-  outTotal: number
-  series: { date: string; inn: number; out: number }[]
-}
-
 export interface InventoryStats {
   totalItems: number
   lowStock: number
@@ -43,8 +35,6 @@ export interface InventoryData {
   branches: Branch[]
   products: InventoryProduct[]
   movements: Movement[]
-  /** ⚡ v10: الرد دلوقتي 50 حركة/صفحة — الإجماليات الحقيقية هنا */
-  movementMeta: MovementMeta | null
   transfers: Transfer[]
   stocktakes: Stocktake[]
   loading: boolean
@@ -68,9 +58,6 @@ export function useInventoryData(): InventoryData {
   const [branches, setBranches] = React.useState<Branch[]>([])
   const [products, setProducts] = React.useState<InventoryProduct[]>([])
   const [movements, setMovements] = React.useState<Movement[]>([])
-  // ⚡ v10: الرد 50 حركة/صفحة + إجماليات SQL — عشان Error 1102 (تراكم CPU/ذاكرة
-  // من ردود 1000 صف مع كل فتح صفحة مخزون)
-  const [movementMeta, setMovementMeta] = React.useState<MovementMeta | null>(null)
   const [transfers, setTransfers] = React.useState<Transfer[]>([])
   const [stocktakes, setStocktakes] = React.useState<Stocktake[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -80,31 +67,17 @@ export function useInventoryData(): InventoryData {
     try {
       const [bs, ps, mv, tf, st] = await Promise.all([
         apiSafe<Branch[]>('/api/branches', []),
-        // ⚡ v10: meta=slim — بدون soldQuantity/تسعير ديناميكي (شاشة المخزون
-        // مش بتستخدمهم) + الكاش على الحافة 20 ثانية
-        apiSafe<{ data: InventoryProduct[] } | InventoryProduct[]>('/api/products?limit=1000&status=all&meta=slim', []),
-        // ⚡ v10: 50 حركة/صفحة + إجماليات SQL
-        apiSafe<{ data: Movement[]; total?: number; inTotal?: number; outTotal?: number; series?: MovementMeta['series'] } | Movement[]>('/api/inventory/movements?limit=50', []),
+        apiSafe<{ data: InventoryProduct[] } | InventoryProduct[]>('/api/products?limit=1000&status=all', []),
+        apiSafe<Movement[]>('/api/inventory/movements', []),
         apiSafe<Transfer[]>('/api/inventory/transfers', []),
         apiSafe<Stocktake[]>('/api/inventory/stocktake', []),
       ])
       const productsArr = Array.isArray(ps) ? ps : (ps as { data?: InventoryProduct[] })?.data ?? []
       setBranches(bs)
       setProducts(productsArr)
+      setMovements(mv)
       setTransfers(tf)
       setStocktakes(st)
-      if (Array.isArray(mv)) {
-        setMovements(mv)
-        setMovementMeta(null)
-      } else {
-        setMovements((mv as { data?: Movement[] })?.data ?? [])
-        setMovementMeta({
-          total: (mv as { total?: number })?.total ?? 0,
-          inTotal: (mv as { inTotal?: number })?.inTotal ?? 0,
-          outTotal: (mv as { outTotal?: number })?.outTotal ?? 0,
-          series: (mv as { series?: MovementMeta['series'] })?.series ?? [],
-        })
-      }
     } finally {
       setLoading(false)
     }
@@ -144,7 +117,6 @@ export function useInventoryData(): InventoryData {
     branches,
     products,
     movements,
-    movementMeta,
     transfers,
     stocktakes,
     loading,

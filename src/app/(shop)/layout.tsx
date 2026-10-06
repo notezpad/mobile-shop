@@ -3,19 +3,25 @@
 import * as React from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, Menu, CalendarDays, Home, ChevronRight } from 'lucide-react'
+import { Loader2, Menu, CalendarDays, Home, X } from 'lucide-react'
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Sidebar } from '@/components/shop/Sidebar'
 import { ThemeToggle } from '@/components/shop/ThemeToggle'
 import { NotificationBell } from '@/components/shop/NotificationBell'
 import { PWAInstallPrompt } from '@/components/shop/PWAInstallPrompt'
+import { ChunkGuard } from '@/components/shop/ChunkGuard'
 import { OfflineIndicator } from '@/components/shop/OfflineIndicator'
 import { TrialExpiredBanner } from '@/components/shop/TrialExpiredBanner'
 import { RoleBadge } from '@/components/shop/RoleBadge'
 import { useOfflineReady } from '@/lib/offline/use-offline'
-import { scheduleIdleWarmup } from '@/lib/view-preload'
 import { useShopStore } from '@/lib/store'
 import { api } from '@/lib/api'
-import { getMe, type AuthUser } from '@/lib/auth-client'
+import { getMe } from '@/lib/auth-client'
 
 const VIEW_PATHS: Record<string, string> = {
   '/dashboard': 'dashboard',
@@ -129,20 +135,6 @@ function LiveClock({ timeZone }: { timeZone: string }) {
   )
 }
 
-/** 🛡️ 2026-10-06: إغلاق السايدبار بزر Escape — بديل مباشر لسلوك Radix الشيتي
-    القديم من غير أي Radix. مركّب مستقل عشان الـ effect يعتمد على enabled بس. */
-function EscapeCloser({ onEscape, enabled }: { onEscape: () => void; enabled: boolean }) {
-  React.useEffect(() => {
-    if (!enabled) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onEscape()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onEscape, enabled])
-  return null
-}
-
 export default function ShopLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -157,154 +149,74 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   const tenantTimezone = useShopStore((s) => s.branding.timezone)
   const [mobileOpen, setMobileOpen] = React.useState(false)
 
-  // ─── Swipe-to-close for the mobile drawer (anchored right → drag right) ───
-  // transform-only (no re-render while dragging). On release we clear the inline
-  // styles so the existing CSS transition animates to open/closed from the finger.
-  const swipe = React.useRef({ x: 0, y: 0, t: 0, dx: 0, locked: false, active: false })
-  const onSwipeStart = (e: React.TouchEvent<HTMLElement>) => {
-    const p = e.touches[0]
-    swipe.current = { x: p.clientX, y: p.clientY, t: Date.now(), dx: 0, locked: false, active: true }
-  }
-  const onSwipeMove = (e: React.TouchEvent<HTMLElement>) => {
-    const s = swipe.current
-    if (!s.active) return
-    const p = e.touches[0]
-    const dx = p.clientX - s.x
-    const dy = p.clientY - s.y
-    if (!s.locked) {
-      if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { s.active = false; return }
-      if (dx > 10 && dx > Math.abs(dy)) s.locked = true
-      else return
-    }
-    s.dx = Math.max(0, dx)
-    const el = e.currentTarget
-    el.style.transition = 'none'
-    el.style.transform = `translateX(${s.dx}px)`
-  }
-  const onSwipeEnd = (e: React.TouchEvent<HTMLElement>) => {
-    const s = swipe.current
-    if (!s.active || !s.locked) { s.active = false; return }
-    s.active = false
-    const el = e.currentTarget
-    const velocity = s.dx / Math.max(1, Date.now() - s.t)
-    el.style.transition = ''
-    el.style.transform = ''
-    if (s.dx > 80 || velocity > 0.5) setMobileOpen(false)
-  }
-
   // ⚡ Initialize offline sync engine (flush outbox when network returns)
   useOfflineReady()
-
-  // ⚡ PERF: بعد الفتح بشوية، حمّل chunks أشهر صفحات (الداشبورد/نقطة
-  // البيع/المنتجات) في وقت الخمول — أول ضغطة تبقى فورية. بيتجاهل
-  // شبكات 2G/3G و Save-Data تلقائياً.
-  React.useEffect(() => {
-    if (bootState !== 'authed') return
-    const cancel = scheduleIdleWarmup()
-    return () => cancel?.()
-  }, [bootState])
 
   React.useEffect(() => {
     let alive = true
     ;(async () => {
-      // ⚡ PERF FIX (2026-10-05 — بطء فتح أي صفحة على الجوال):
-      //
-      // القديم: getMe() ← في انتظار → وبعدها /api/tenant + /api/subscription
-      // بالتوازي ← في انتظار → وبعدها bootState='authed' والصفحة تظهر.
-      // يعني shell كامل واقف ورا سبينر لحد ما تخلص **2 مرات متتالية** من
-      // الـ round-trips على شبكة موبايل + سيرفر بيقعد يفتح اتصال Postgres
-      // جديد لكل ريكويست. ده كان بيضيف 1-3 ثواني على كل فتح للتطبيق.
-      //
-      // الجديد:
-      //   1) bootState بيتقفل بمجرد ما getMe يرجع (أسرع FCP ممكن) —
-      //      بيانات المحل/الاشتراك دي للعرض فقط (اسم المحل، اللوجو،
-      //      البانر، الساعة) فمش لازم تحجب الشاشة.
-      //   2) tenant + subscription بييجوا في الخلفية بالتوازي بعد me.
-      //   3) fast-boot: للزيارات المتكررة في نفس التاب (أو PWA)، بنرجّع
-      //      اليوزر من sessionStorage فوراً ونفتح الشل على طول، وبعدين
-      //      نعيد التحقق من السيشن في الخلفية — لو السيشن خلصت فعلاً،
-      //      آلية الـ 401 الموجودة (SessionGuard + notifySessionExpired)
-      //      هتفرّغ اليوزر وترجّعه للوجين زي ما هي.
-      let cachedUser: AuthUser | null = null
-      try {
-        const raw = sessionStorage.getItem('boot-user-v1')
-        const parsed = raw ? JSON.parse(raw) : null
-        // صلاحية قصيرة جداً (10 دقايق) — كفاية للتنقل السريع بين فتح
-        // وتقفيل التاب، وقصيرة كفاية إن أي تغيير حساب حقيقي يتشاف فوراً
-        // من إعادة التحقق في الخلفية.
-        if (parsed?.user?.userId && Date.now() - parsed.at < 10 * 60 * 1000) {
-          cachedUser = parsed.user as AuthUser
-        }
-      } catch { /* ignore */ }
-
-      if (cachedUser) {
-        setUser(cachedUser)
-        setBootState('authed')
-      }
-
-      // الخطوة 1: السيشن (no-store دايمًا — مصدر الحقيقة للأمان)
+      // 🛡️ ROOT FIX (استهلاك موارد): التلات ريكويستات كانوا بيتنططوا
+      // بالتوازي لأي حد يفتح الصفحة — يعني زائر/بوت مش مسجّل دخول كان
+      // بيكلّف 3 ريكويستات + 3 اتصالات قاعدة بيانات. دلوقتي بنتأكد من
+      // السيشن الأول، وبعدها بس بنسحب بيانات المحل والاشتراك.
       const meResult = await Promise.allSettled([getMe()]).then((r) => r[0])
       if (!alive) return
 
       const me = meResult.status === 'fulfilled' ? meResult.value : null
       if (!me) {
-        // مفيش سيشن حقيقية → نمسح أي fast-boot مخبّأ ونطلع للوجين
-        try { sessionStorage.removeItem('boot-user-v1') } catch { /* ignore */ }
-        setUser(null)
         setBootState('guest')
         return
       }
-      try { sessionStorage.setItem('boot-user-v1', JSON.stringify({ user: me, at: Date.now() })) } catch { /* ignore */ }
       setUser(me)
 
-      // الخطوة 2 (خلفية): بيانات المحل + الاشتراك — بالتوازي وبغير حاجب
-      ;(async () => {
-        const [tenantResult, subResult] = await Promise.allSettled([
-          api<{ shopName?: string; phone?: string | null; address?: string | null; logoPath?: string | null; invoicePrefix?: string; timezone?: string }>('/api/tenant'),
-          api<any>('/api/subscription'),
-        ])
-        if (!alive) return
+      const [tenantResult, subResult] = await Promise.allSettled([
+        api<{ shopName?: string; phone?: string | null; address?: string | null; logoPath?: string | null; invoicePrefix?: string; timezone?: string }>('/api/tenant'),
+        api<any>('/api/subscription'),
+      ])
+      if (!alive) return
 
-        if (tenantResult.status === 'fulfilled') {
-          const t = tenantResult.value
-          if (t?.shopName) setShopName(t.shopName)
-          setBranding({
-            phone: t?.phone ?? null,
-            address: t?.address ?? null,
-            logoPath: t?.logoPath ?? null,
-            invoicePrefix: t?.invoicePrefix || 'INV',
-            // 🛡️ 2026-09-27: تولبار الساعة/التاريخ فوق بيتبع دلوقتي المنطقة
-            // الزمنية بتاعة المحل (مش جهاز المستخدم) — راجع LiveClock تحت.
-            timezone: t?.timezone || 'Africa/Cairo',
-          })
-        }
-
-        if (subResult.status === 'fulfilled') {
-          const d = subResult.value
-          setSubscription({
-            expired: Boolean(d?.expired),
-            expiringSoon: Boolean(d?.expiringSoon),
-            daysLeft: typeof d?.daysLeft === 'number' ? d.daysLeft : null,
-            endDate: d?.endDate ?? null,
-            planCode: d?.planCode ?? null,
-            planName: d?.planName ?? null,
-            period: d?.period ?? null,
-          })
-          if (Array.isArray(d?.enabledModules)) {
-            setPlan({
-              businessType: d.businessType === 'fashion' ? 'fashion' : 'electronics',
-              enabledModules: d.enabledModules,
-              capabilities: Array.isArray(d.capabilities) ? d.capabilities : [],
-            })
-          }
-        }
-      })()
-
-      // الخطوة 3: SUPER_ADMIN يتحوّل للوحة الأدمن (نفس السلوك القديم)
       if (me.role === 'SUPER_ADMIN' && !(me as any).impersonating) {
         setBootState('admin')
         router.replace('/')
         return
+      }
+
+      if (tenantResult.status === 'fulfilled') {
+        const t = tenantResult.value
+        if (t?.shopName) setShopName(t.shopName)
+        setBranding({
+          phone: t?.phone ?? null,
+          address: t?.address ?? null,
+          logoPath: t?.logoPath ?? null,
+          invoicePrefix: t?.invoicePrefix || 'INV',
+          // 🛡️ 2026-09-27: تولبار الساعة/التاريخ فوق بيتبع دلوقتي المنطقة
+          // الزمنية بتاعة المحل (مش جهاز المستخدم) — راجع LiveClock تحت.
+          timezone: t?.timezone || 'Africa/Cairo',
+        })
+      }
+
+      if (subResult.status === 'fulfilled') {
+        const d = subResult.value
+        // 🛡️ 2026-09-13: NO LONGER redirect on expired. Instead, store the
+        // subscription state in the shop store and let the user continue
+        // using the system. A `TrialExpiredBanner` will be shown at the top
+        // of every page encouraging them to subscribe via /pricing.
+        setSubscription({
+          expired: Boolean(d?.expired),
+          expiringSoon: Boolean(d?.expiringSoon),
+          daysLeft: typeof d?.daysLeft === 'number' ? d.daysLeft : null,
+          endDate: d?.endDate ?? null,
+          planCode: d?.planCode ?? null,
+          planName: d?.planName ?? null,
+          period: d?.period ?? null,
+        })
+        if (Array.isArray(d?.enabledModules)) {
+          setPlan({
+            businessType: d.businessType === 'fashion' ? 'fashion' : 'electronics',
+            enabledModules: d.enabledModules,
+            capabilities: Array.isArray(d.capabilities) ? d.capabilities : [],
+          })
+        }
       }
 
       setBootState('authed')
@@ -348,6 +260,9 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
       {/* Sticky trial/expiring banner — shown above everything else when
           subscription is expired or expiring soon. Does NOT lock the user
           out; just encourages them to subscribe. */}
+      {/* 🛡️ v14: يكشف فشل تحميل chunks بعد نشر نسخة جديدة ويعمل ريلود
+          تلقائي بدل الشاشة السوداء */}
+      <ChunkGuard />
       <TrialExpiredBanner />
       <OfflineIndicator />
       {/* Mobile top bar */}
@@ -376,62 +291,22 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
       </header>
 
       {/* Mobile sidebar */}
-      {/* 🛡️ 2026-10-06 — إصلاح تجمّد الجوال بالكامل: درَجер بسيط بدون Radix Dialog
-          خالص. التاريخ: باتش v5 حط forceMount على SheetContent عشان يسرّع
-          الفتح، بس ده خلّى Radix Overlay (اللي جوّه RemoveScroll) متركّب
-          على طول → listeners غير passiva على document بتعمل preventDefault
-          لكل touchmove = سكرول الجوال ميت + أي لمسة بتنزل 1px الـ click
-          بتاعها بيتلغى. وحتى بعد modal={false}، اختبارات المتصفح أثبتت إن
-          وجود الشيت الـ forceMounted بيفسد dispatch بتاع React للضغطات
-          الحقيقية (isTrusted) على الهيدر كله (المصدر: react-dialog 1.1.23
-          + Presence/DismissableLayer مع forceMount).
-          الحل النهائي: درَجر عادي — div ثابت بيتحرك بـ translate-x CSS.
-          * شجرة السايدبار متجمّعة دايمًا جوّاه → الفتح فوري (300ms أنيميشن
-            CSS نضيف من غير إعادة بناء — نفس هدف forceMount بالظبط).
-          * مقفول = translate-x-full (بره الشاشة) + inert (مش بياخد focus
-            ولا يترى لقارئات الشاشة) — مفيش أي طبقة فوق الصفحة.
-          * مفيش قفل سكرول خالص: الشل fixed inset-0 + overflow-hidden،
-            والمس على الـ Overlay (غير قابل للسكرول) مش بيسكرول حاجة وراه. */}
-      {/* الظل الخلفي */}
-      <div
-        aria-hidden="true"
-        onClick={() => setMobileOpen(false)}
-        className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 ${
-          mobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
-      />
-      {/* الدرج نفسه */}
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="قائمة التنقل"
-        inert={!mobileOpen}
-        className={`fixed inset-y-0 right-0 z-50 flex h-dvh w-[82vw] max-w-[300px] flex-col bg-background shadow-lg transition-transform duration-300 ease-in-out ${
-          mobileOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
-        style={{ touchAction: 'pan-y' }}
-        onTouchStart={onSwipeStart}
-        onTouchMove={onSwipeMove}
-        onTouchEnd={onSwipeEnd}
-        onTouchCancel={onSwipeEnd}
-      >
-        {/* مقبض الإغلاق: لسان على الحافة الحرّة للدرج (بدل علامة X) + سحب لليمين للإغلاق */}
-        <button
-          type="button"
-          onClick={() => setMobileOpen(false)}
-          className="sb-edge-tab"
-          data-open={mobileOpen}
-          aria-label="إغلاق القائمة"
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent
+          side="right"
+          showCloseButton={false}
+          className="h-dvh w-[82vw] max-w-[300px] gap-0 p-0 sm:max-w-[300px]"
         >
-          <span className="sb-edge-grip" aria-hidden="true" />
-          <ChevronRight className="size-3.5" aria-hidden="true" />
-          <span className="sr-only">إغلاق</span>
-        </button>
-        {/* w-full: السايدبار يملا الدرج بالكامل */}
-        <Sidebar className="w-full border-l-0" onNavigate={() => setMobileOpen(false)} />
-      </div>
-      {/* إغلاق بزرار Escape (سلوك الشيت القديم) */}
-      <EscapeCloser onEscape={() => setMobileOpen(false)} enabled={mobileOpen} />
+          <SheetTitle className="sr-only">القائمة</SheetTitle>
+          {/* زر الإغلاق على الشمال عشان ما يغطيش لوجو المحل */}
+          <SheetClose className="absolute left-3 top-4 z-10 flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted active:scale-90">
+            <X className="size-4" />
+            <span className="sr-only">إغلاق</span>
+          </SheetClose>
+          {/* w-full: السايدبار يملا الشيت بالكامل (كان 252px فيسيب شريط فاضي) */}
+          <Sidebar className="w-full border-l-0" onNavigate={() => setMobileOpen(false)} />
+        </SheetContent>
+      </Sheet>
 
       {/*
         Sidebar + Main content in a flex-row.

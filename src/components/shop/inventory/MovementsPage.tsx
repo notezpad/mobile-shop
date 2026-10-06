@@ -13,7 +13,7 @@ import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { MovementsTab } from './MovementsTab'
 import { useInventoryData } from './useInventoryData'
-import { InventoryCrossNav, InventoryStyles, MOVEMENT_TYPE_LABELS, num } from './shared'
+import { InventoryCrossNav, InventoryStyles, MOVEMENT_TYPE_LABELS, SectionBoundary, num } from './shared'
 
 export function MovementsPage() {
   const shopName = useShopStore((s) => s.shopName)
@@ -85,7 +85,8 @@ export function MovementsPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-2xl border border-sky-500/25 bg-sky-500/[0.07] px-4 py-2 text-center">
+            {/* 📱 v14: whitespace-nowrap عشان «إجمالي الحركات» ميلتفّش لسطرين */}
+            <div className="whitespace-nowrap rounded-2xl border border-sky-500/25 bg-sky-500/[0.07] px-4 py-2 text-center">
               <p className="text-[11px] font-semibold text-muted-foreground">إجمالي الحركات</p>
               <p className="text-xl font-black tabular-nums text-sky-700 dark:text-sky-300 min-[420px]:text-2xl">
                 {loading ? '—' : num(movements.length)}
@@ -117,13 +118,17 @@ export function MovementsPage() {
       />
 
       {/* ═════════ الميزان + الفلاتر + الدفتر ═════════ */}
-      <MovementsTab
-        movements={movements}
-        branches={branches}
-        isEmployee={isEmployee}
-        userBranchId={userBranchId}
-        onChanged={reload}
-      />
+      {/* 🛡️ v14: لو حصل أي كراش في الدفتر، الصفحة نفسها بتفضل شغالة
+          وبنعرض رسالة إعادة محاولة بدل شاشة سوداء فاضية */}
+      <SectionBoundary label="دفتر الحركات حصل فيه خطأ">
+        <MovementsTab
+          movements={movements}
+          branches={branches}
+          isEmployee={isEmployee}
+          userBranchId={userBranchId}
+          onChanged={reload}
+        />
+      </SectionBoundary>
     </div>
   )
 }

@@ -409,7 +409,8 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
 
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <h4 className="truncate font-bold leading-tight">{m.product?.name ?? '—'}</h4>
+                            {/* v14: الاسم بيلف بدل ما يتقص بنقاط */}
+                            <h4 className="font-bold leading-snug [overflow-wrap:anywhere]">{m.product?.name ?? '—'}</h4>
                             <span className="text-xs font-bold" style={{ color: meta.color }}>
                               {TYPE_LABELS[m.type] ?? m.type}
                             </span>

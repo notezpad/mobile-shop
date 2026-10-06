@@ -336,7 +336,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-muted-foreground">آخر صنف تم مسحه</p>
-                    <p className="truncate text-[15px] font-bold">{last.name}</p>
+                    <p className="text-[15px] font-bold leading-snug [overflow-wrap:anywhere]">{last.name}</p>
                   </div>
                   <span className="font-mono text-3xl font-black tabular-nums text-stocktake">×{last.qty}</span>
                 </div>
@@ -428,8 +428,8 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                          <span className="rounded-md bg-stocktake px-1.5 py-0.5 text-[10px] font-extrabold text-stocktake-foreground">بطاقة صنف</span>
                          <span className="font-mono text-[10px] font-bold text-muted-foreground">#{String(it.productId).padStart(4, '0')}</span>
                        </div>
-                       <h4 className="truncate text-base font-black leading-tight">{it.name}</h4>
-                       <p dir="ltr" className="mt-1 flex items-center gap-1 truncate text-start font-mono text-xs text-muted-foreground"><Hash className="size-3" />{it.barcode || 'بدون باركود'}</p>
+                       <h4 className="text-base font-black leading-snug [overflow-wrap:anywhere]">{it.name}</h4>
+                       <p dir="ltr" className="mt-1 flex items-center gap-1 text-start font-mono text-xs text-muted-foreground"><Hash className="size-3 shrink-0" />{it.barcode || 'بدون باركود'}</p>
                     </div>
                      <Button
                        type="button" variant="ghost" size="icon"

@@ -12,6 +12,7 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Repeat,
+  MapPin,
   X,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -41,6 +42,7 @@ import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Barcode } from '../Barcode'
 import { StockHero, TONE, SecLabel, Pill, STOCK_FIELD, STOCK_RING, type StockTone } from './stock-dialog-ui'
+import { num } from './shared'
 import type { Branch, InventoryProduct } from '../InventoryView'
 
 interface Props {
@@ -277,6 +279,9 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
 
           {/*
             نسخة الكروت — تظهر فقط على الشاشات الأصغر من lg.
+            📱 v14: تصميم جوال مخصّص بستايل صفحة المخزون — التسمية فوق
+            والقيمة تحتها (مش جنب بعض)، واسم المنتج بيلف بدل ما يتقص،
+            والمبالغ المليونية بتتفضى كاملة من غير أي truncate.
           */}
           <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:hidden">
             {filtered.length === 0 ? (
@@ -293,18 +298,20 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                     key={p.id}
                     className={
                       out
-                        ? 'rounded-lg border bg-destructive-subtle/50 p-3'
+                        ? 'relative overflow-hidden rounded-2xl border border-destructive/25 bg-destructive-subtle/40 p-3.5'
                         : low
-                        ? 'rounded-lg border bg-warning-subtle/40 p-3'
-                        : 'rounded-lg border bg-card p-3'
+                        ? 'relative overflow-hidden rounded-2xl border border-amber-500/30 bg-warning-subtle/30 p-3.5'
+                        : 'relative overflow-hidden rounded-2xl border bg-card p-3.5'
                     }
                   >
                     {/* رأس الكارت: اسم + إجراءات */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate font-medium leading-tight">{p.name}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {branchName(p.branchId) ?? 'بدون فرع'}
+                        {/* v14: الاسم بيلف بالكامل — ممنوع القص بنقاط */}
+                        <p className="font-bold leading-snug [overflow-wrap:anywhere]">{p.name}</p>
+                        <p className="mt-1 flex min-w-0 items-start gap-1 text-xs text-muted-foreground">
+                          <MapPin className="mt-0.5 size-3 shrink-0" />
+                          <span className="min-w-0 [overflow-wrap:anywhere]">{branchName(p.branchId) ?? 'بدون فرع'}</span>
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
@@ -343,34 +350,59 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                     </div>
 
                     {/* الباركود */}
-                    <div className="mt-2 rounded-md border bg-muted/30 py-1">
+                    <div className="mt-2.5 rounded-lg border bg-muted/30 py-1">
                       <Barcode value={p.barcode} height={24} fontSize={9} fitContainer />
                     </div>
 
-                    {/* 📱 2026-10-07: شبكة البيانات 2×2 بدل 4 أعمدة — عشان المبالغ
-                        المليونية (مثال: 1,250,000 جنيه) تتفضى من غير ما تتقطع */}
-                    <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-border/60 pt-2.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs text-muted-foreground">الكمية</p>
-                        {out ? (
-                          <Badge variant="destructive">نفد</Badge>
-                        ) : low ? (
-                          <Badge className="bg-warning-subtle text-warning-subtle-foreground">{p.quantity}</Badge>
-                        ) : (
-                          <Badge variant="secondary">{p.quantity}</Badge>
+                    {/* 📱 v14: بيانات الكارت — التسمية فوق والقيمة تحتها (الأسلوب
+                        الصح اللي طلبته)، والمبالغ المليونية كاملة من غير قص */}
+                    <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/60 pt-3">
+                      {/* الكمية المتاحة */}
+                      <div
+                        className={cn(
+                          'rounded-xl px-3 py-2',
+                          out ? 'bg-destructive/10' : low ? 'bg-amber-500/10' : 'bg-emerald-500/[0.08]',
+                        )}
+                      >
+                        <p className="text-[10px] font-semibold text-muted-foreground">الكمية المتاحة</p>
+                        <p
+                          className={cn(
+                            'mt-0.5 text-base font-black leading-tight tabular-nums [overflow-wrap:anywhere]',
+                            out
+                              ? 'text-destructive'
+                              : low
+                              ? 'text-amber-600 dark:text-amber-400'
+                              : 'text-emerald-700 dark:text-emerald-400',
+                          )}
+                        >
+                          {out ? 'نفدت' : num(p.quantity)}
+                        </p>
+                        {low && !out && (
+                          <p className="mt-0.5 text-[10px] font-medium leading-snug text-amber-700/80 dark:text-amber-400/80">
+                            وصلت للحد الأدنى
+                          </p>
                         )}
                       </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs text-muted-foreground">الحد الأدنى</p>
-                        <p className="text-xs font-medium tabular-nums text-muted-foreground">{p.minQuantity}</p>
+                      {/* الحد الأدنى */}
+                      <div className="rounded-xl bg-muted/50 px-3 py-2">
+                        <p className="text-[10px] font-semibold text-muted-foreground">الحد الأدنى</p>
+                        <p className="mt-0.5 text-base font-bold leading-tight tabular-nums text-muted-foreground">
+                          {num(p.minQuantity)}
+                        </p>
                       </div>
-                      <div className="flex min-w-0 items-center justify-between gap-2">
-                        <p className="shrink-0 text-xs text-muted-foreground">التكلفة</p>
-                        <p className="truncate text-xs tabular-nums text-muted-foreground">{formatCurrency(p.cost)}</p>
+                      {/* التكلفة */}
+                      <div className="rounded-xl bg-muted/50 px-3 py-2">
+                        <p className="text-[10px] font-semibold text-muted-foreground">التكلفة</p>
+                        <p className="mt-0.5 text-sm font-bold leading-tight tabular-nums text-muted-foreground [overflow-wrap:anywhere]">
+                          {formatCurrency(p.cost)}
+                        </p>
                       </div>
-                      <div className="flex min-w-0 items-center justify-between gap-2">
-                        <p className="shrink-0 text-xs text-muted-foreground">السعر</p>
-                        <p className="truncate text-xs font-semibold tabular-nums">{formatCurrency(p.price)}</p>
+                      {/* سعر البيع */}
+                      <div className="rounded-xl bg-emerald-500/[0.08] px-3 py-2">
+                        <p className="text-[10px] font-semibold text-emerald-700/70 dark:text-emerald-400/70">سعر البيع</p>
+                        <p className="mt-0.5 text-sm font-extrabold leading-tight tabular-nums text-emerald-700 dark:text-emerald-400 [overflow-wrap:anywhere]">
+                          {formatCurrency(p.price)}
+                        </p>
                       </div>
                     </div>
                   </div>

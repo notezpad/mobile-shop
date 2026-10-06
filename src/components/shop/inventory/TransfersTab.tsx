@@ -421,7 +421,7 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
                         {String(idx + 1).padStart(2, '0')}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold leading-tight">{it.name}</p>
+                        <p className="text-sm font-bold leading-snug [overflow-wrap:anywhere]">{it.name}</p>
                         <p className={cn('text-xs', over ? 'font-bold text-destructive' : 'text-muted-foreground')}>
                           المتاح {num(it.available)}
                         </p>
@@ -573,7 +573,7 @@ function ShipmentCard({ t, onOpen }: { t: Transfer; onOpen: () => void }) {
         <div className="grid grid-cols-[1fr_minmax(2rem,0.7fr)_1fr] items-center gap-2">
           <div className="min-w-0">
             <p className="text-xs font-bold text-muted-foreground">من</p>
-            <p className="truncate text-sm font-extrabold">{t.fromBranch?.name ?? '—'}</p>
+            <p className="text-sm font-extrabold leading-snug [overflow-wrap:anywhere]">{t.fromBranch?.name ?? '—'}</p>
           </div>
           <div className="relative flex items-center" dir="ltr">
             <span className="h-0 w-full border-t-2" style={{ borderColor: st.color, borderStyle: done ? 'solid' : 'dashed', opacity: cancelled ? 0.4 : 1 }} />
@@ -586,7 +586,7 @@ function ShipmentCard({ t, onOpen }: { t: Transfer; onOpen: () => void }) {
           </div>
           <div className="min-w-0 text-end">
             <p className="text-xs font-bold text-muted-foreground">إلى</p>
-            <p className="truncate text-sm font-extrabold">{t.toBranch?.name ?? '—'}</p>
+            <p className="text-sm font-extrabold leading-snug [overflow-wrap:anywhere]">{t.toBranch?.name ?? '—'}</p>
           </div>
         </div>
 
@@ -685,12 +685,12 @@ function TransferDetailDialog({
           <div className="grid grid-cols-[1fr_minmax(2.5rem,0.6fr)_1fr] items-center gap-2 rounded-2xl border bg-muted/30 p-3">
             <div className="min-w-0">
               <p className="text-xs text-muted-foreground">من</p>
-              <p className="truncate font-extrabold">{transfer.fromBranch?.name ?? '—'}</p>
+              <p className="font-extrabold leading-snug [overflow-wrap:anywhere]">{transfer.fromBranch?.name ?? '—'}</p>
             </div>
             <RouteLine color={st.color} flowing={transfer.status === 'pending'} dashed={!done} icon={false} />
             <div className="min-w-0 text-end">
               <p className="text-xs text-muted-foreground">إلى</p>
-              <p className="truncate font-extrabold">{transfer.toBranch?.name ?? '—'}</p>
+              <p className="font-extrabold leading-snug [overflow-wrap:anywhere]">{transfer.toBranch?.name ?? '—'}</p>
             </div>
           </div>
 
@@ -705,7 +705,7 @@ function TransferDetailDialog({
               <li key={idx} className="flex items-center gap-3 py-2.5">
                 <span className="w-5 font-mono text-xs text-muted-foreground">{String(idx + 1).padStart(2, '0')}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold">{it.product?.name}</p>
+                  <p className="text-sm font-bold leading-snug [overflow-wrap:anywhere]">{it.product?.name}</p>
                   <p className="font-mono text-xs text-muted-foreground" dir="ltr">{it.product?.barcode || '—'}</p>
                 </div>
                 <span className="rounded-lg bg-amber-500/10 px-2.5 py-1 font-mono text-sm font-black tabular-nums text-amber-700 dark:text-amber-400">

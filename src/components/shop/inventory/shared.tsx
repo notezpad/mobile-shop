@@ -16,9 +16,11 @@ import {
   ArrowUpDown,
   Truck,
   ScanLine,
+  AlertTriangle,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 
 /* ───────────── ألوان هوية كل جزء ───────────── */
 
@@ -356,7 +358,45 @@ export function Signed({ value, className }: { value: number; className?: string
   )
 }
 
-/* ───────────── حالة فارغة ───────────── */
+/* ───────────── حرس قسم (Error Boundary مصغّر) ─────────────
+   🛡️ 2026-10-07 (v14): لو حصل كراش في جزء معين من الصفحة (مثلًا الدفتر)،
+   الجزء ده بس بيتبدل برسالة ودودة وزر إعادة محاولة — بدل ما الصفحة كلها
+   تفضى (شاشة سوداء). الصفحات الكبيرة بتلف أقسامها الحساسة بيه. */
+
+export class SectionBoundary extends React.Component<
+  { children: React.ReactNode; label?: string },
+  { err: Error | null }
+> {
+  state = { err: null as Error | null }
+
+  static getDerivedStateFromError(err: Error) {
+    return { err }
+  }
+
+  componentDidCatch(err: Error) {
+    console.error('[section-boundary]', err)
+  }
+
+  render() {
+    if (this.state.err) {
+      return (
+        <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed py-10 text-center">
+          <div className="flex size-12 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="size-6" />
+          </div>
+          <div>
+            <p className="text-base font-bold">{this.props.label ?? 'الجزء ده حصل فيه خطأ'}</p>
+            <p className="mt-1 text-sm text-muted-foreground">جرّب تعيد المحاولة، ولو استمرت المشكلة حدّث الصفحة</p>
+          </div>
+          <Button variant="outline" onClick={() => this.setState({ err: null })}>
+            إعادة المحاولة
+          </Button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 export function EmptyState({
   icon: Icon,

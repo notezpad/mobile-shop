@@ -22,7 +22,7 @@ import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { StockTab } from './StockTab'
 import { useInventoryData } from './useInventoryData'
-import { InventoryCrossNav, InventoryStyles, num } from './shared'
+import { InventoryCrossNav, InventoryStyles, SectionBoundary, num } from './shared'
 
 export function StockPage() {
   const user = useShopStore((s) => s.user)
@@ -205,23 +205,24 @@ export function StockPage() {
           </div>
         </div>
 
-        {/* شريط الأرقام */}
+        {/* شريط الأرقام — 📱 v14: على الجوال مفيش قص (النص يلف سطرين لو احتاج)
+            ومن sm+ فوق رجعنا truncate زي ما هي لأن المساحة بتسمح */}
         <div className="relative grid grid-cols-2 border-t bg-muted/30 lg:grid-cols-4">
           {strip.map((it, i) => (
             <div
               key={it.label}
-              className={`flex items-center gap-3 p-4 ${i % 2 === 1 ? 'border-s' : ''} ${i >= 2 ? 'border-t lg:border-t-0' : ''} ${i >= 1 ? 'lg:border-s' : ''}`}
+              className={`flex items-center gap-2.5 p-3 min-[380px]:gap-3 min-[380px]:p-3.5 sm:p-4 ${i % 2 === 1 ? 'border-s' : ''} ${i >= 2 ? 'border-t lg:border-t-0' : ''} ${i >= 1 ? 'lg:border-s' : ''}`}
             >
               <span
-                className="flex size-10 shrink-0 items-center justify-center rounded-lg"
+                className="flex size-9 shrink-0 items-center justify-center rounded-lg sm:size-10"
                 style={{ backgroundColor: `${it.color}1f`, color: it.color }}
               >
-                <it.icon className="size-5" />
+                <it.icon className="size-4.5 sm:size-5" />
               </span>
-              <div className="min-w-0">
-                <p className="truncate text-xs font-medium text-muted-foreground">{it.label}</p>
-                <p className="text-xl font-extrabold leading-tight tabular-nums [overflow-wrap:anywhere] min-[420px]:text-2xl">{noData ? '—' : num(it.value)}</p>
-                <p className="truncate text-[11px] text-muted-foreground">{it.hint}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-medium leading-snug text-muted-foreground sm:truncate sm:text-xs">{it.label}</p>
+                <p className="text-lg font-extrabold leading-tight tabular-nums [overflow-wrap:anywhere] sm:text-xl sm:leading-tight">{noData ? '—' : num(it.value)}</p>
+                <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground sm:truncate sm:text-[11px]">{it.hint}</p>
               </div>
             </div>
           ))}
@@ -252,13 +253,15 @@ export function StockPage() {
           <Skeleton className="h-64 w-full rounded-3xl" />
         </div>
       ) : (
-        <StockTab
-          products={products}
-          branches={branches}
-          isEmployee={isEmployee}
-          userBranchId={userBranchId}
-          onChanged={reload}
-        />
+        <SectionBoundary label="قائمة الأصناف حصل فيها خطأ">
+          <StockTab
+            products={products}
+            branches={branches}
+            isEmployee={isEmployee}
+            userBranchId={userBranchId}
+            onChanged={reload}
+          />
+        </SectionBoundary>
       )}
     </div>
   )
