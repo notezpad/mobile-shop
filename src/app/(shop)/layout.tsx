@@ -373,13 +373,32 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         onTouchEnd={onSwipeEnd}
         onTouchCancel={onSwipeEnd}
       >
-        {/* مقبض الإغلاق: لسان على الحافة الحرّة للدرج (بدل علامة X) + سحب لليمين للإغلاق */}
+        {/* مقبض الإغلاق: لسان على الحافة الحرّة للدرج
+            🛡️ 2026-10-06 — عزل events:
+            • onPointerDown بدل onClick: أسرع استجابة، وبيشتغل قبل ما أي
+              bubble يوصل للدرج أو للسايدبار.
+            • stopPropagation على كل touch events: يمنع الـ swipe handlers
+              بتاعة الدرج من اعتبار الضغطة على المقبض بداية سحب.
+            • preventDefault على touchend: يقطع الـ "ghost click" اللي
+              بيوصل للعنصر اللي وراه بعد 300ms على بعض المتصفحات.
+            • touchAction none: يمنع المتصفح من تفسير اللمسة كسكرول. */}
         <button
           type="button"
-          onClick={() => setMobileOpen(false)}
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            setMobileOpen(false)
+          }}
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
+          }}
+          onTouchCancel={(e) => e.stopPropagation()}
           className="sb-edge-tab"
           data-open={mobileOpen}
           aria-label="إغلاق القائمة"
+          style={{ touchAction: 'none' }}
         >
           <span className="sb-edge-grip" aria-hidden="true" />
           <ChevronRight className="size-3.5" aria-hidden="true" />

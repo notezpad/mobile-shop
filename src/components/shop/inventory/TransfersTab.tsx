@@ -88,8 +88,10 @@ function RouteLine({
   dashed?: boolean
   icon?: boolean
 }) {
+  // 📱 2026-10-07: overflow-hidden بيفضّي مساهمة min-content للـ svg (w-full)
+  // في جريد المسار — من غيرها المسار الأوسط كان بيتضخم لـ 111px على الموبايل
   return (
-    <div className="relative flex h-10 min-w-10 items-center" dir="ltr">
+    <div className="relative flex h-10 min-w-10 items-center overflow-hidden" dir="ltr">
       <svg className="h-2 w-full" preserveAspectRatio="none" aria-hidden>
         <line
           x1="0"
@@ -138,7 +140,9 @@ function BranchNode({
   return (
     <div
       className={cn(
-        'relative rounded-2xl border-2 p-3 transition-colors sm:p-4',
+        // 📱 2026-10-07: min-w-0 — عقدة الفرع لازم تقدر تنكمش تحت min-content
+        // عشان اسم الفرع الطويل يلف لسطرين بدل ما يوسّع المسار بره الشاشة
+        'relative min-w-0 rounded-2xl border-2 p-3 transition-colors sm:p-4',
         selected ? 'bg-card' : 'border-dashed bg-muted/30',
       )}
       style={selected ? { borderColor: kind === 'from' ? AMBER : '#10b981' } : undefined}
@@ -150,7 +154,7 @@ function BranchNode({
       {/* 📱 2026-10-07: السطران بدل القص — اسم الفرع الطويل يظهر في سطرين
           على الجوال بدل ما يتقطع بنقاط (line-clamp-1 الافتراضي) */}
       <Select value={value} onValueChange={onChange} disabled={disabled}>
-        <SelectTrigger className="h-auto w-full border-0 bg-transparent p-0 text-base font-extrabold shadow-none focus:ring-0 focus-visible:ring-0 sm:text-lg dark:bg-transparent [&_[data-slot=select-value]]:line-clamp-2 [&_[data-slot=select-value]]:whitespace-normal">
+        <SelectTrigger className="h-auto w-full border-0 bg-transparent p-0 text-base font-extrabold shadow-none focus:ring-0 focus-visible:ring-0 sm:text-lg dark:bg-transparent [&_[data-slot=select-value]]:line-clamp-2 [&_[data-slot=select-value]]:min-w-0 [&_[data-slot=select-value]]:whitespace-normal">
           <SelectValue placeholder={kind === 'from' ? 'اختر المصدر' : 'اختر الوجهة'} />
         </SelectTrigger>
         <SelectContent>
@@ -320,9 +324,11 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
   return (
     <div className="space-y-6">
       {/* ═════════ غرفة العمليات: المسار + البوليصة ═════════ */}
-      <div className="animate-in-up grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+      {/* 📱 2026-10-07: grid-cols-1 (minmax(0,1fr)) على الموبايل — من غيرها
+          أي min-content جوّه الكروت كان بيكبّر المسار نفسه بره الشاشة */}
+      <div className="animate-in-up grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
         {/* المسار + إضافة أصناف */}
-        <section className="space-y-4">
+        <section className="min-w-0 space-y-4">
           <div className="relative overflow-hidden rounded-3xl border bg-card p-4 sm:p-5">
             <div
               aria-hidden
@@ -342,7 +348,12 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
                 مسار الشحنة
               </div>
 
-              <div className="grid grid-cols-[1fr_minmax(2.5rem,0.8fr)_1fr] items-center gap-1.5 sm:gap-3">
+              {/* 📱 2026-10-07: minmax(0,1fr) بدل 1fr — 1fr = minmax(auto,1fr) و
+                  auto-min كان بيمنع العمود من النكواش تحت عرض اسم الفرع، فكان
+                  الجريد بياخد 401px في شاشة 360px والكارتين يطلعوا بره الموبايل.
+                  والمسار الأوسط عرض ثابت صغير على الجوال — 0.8fr كان بياخد ~120px
+                  ويضيّق عقدتي الفرع لعمود كلمة-كلمة */}
+              <div className="grid grid-cols-[minmax(0,1fr)_2.5rem_minmax(0,1fr)] items-center gap-1.5 sm:grid-cols-[minmax(0,1fr)_minmax(2.5rem,0.8fr)_minmax(0,1fr)] sm:gap-3">
                 <BranchNode kind="from" value={from} onChange={setFrom} branches={branches} disabled={!!userBranchId} />
                 <RouteLine color={routeReady ? AMBER : '#94a3b8'} flowing={routeReady} icon={routeReady} />
                 <BranchNode kind="to" value={to} onChange={setTo} branches={branches} exclude={from} />
@@ -387,7 +398,7 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
         </section>
 
         {/* البوليصة */}
-        <section className="relative flex flex-col overflow-hidden rounded-3xl border bg-card shadow-sm">
+        <section className="relative flex min-w-0 flex-col overflow-hidden rounded-3xl border bg-card shadow-sm">
           <div className="h-2.5 shrink-0" style={{ backgroundImage: HAZARD }} />
 
           <div className="flex items-start justify-between gap-3 p-4 pb-3 sm:p-5 sm:pb-3">
@@ -570,7 +581,7 @@ function ShipmentCard({ t, onOpen }: { t: Transfer; onOpen: () => void }) {
         </div>
 
         {/* المسار المصغّر */}
-        <div className="grid grid-cols-[1fr_minmax(2rem,0.7fr)_1fr] items-center gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)] items-center gap-2">
           <div className="min-w-0">
             <p className="text-xs font-bold text-muted-foreground">من</p>
             <p className="text-sm font-extrabold leading-snug [overflow-wrap:anywhere]">{t.fromBranch?.name ?? '—'}</p>
@@ -682,7 +693,7 @@ function TransferDetailDialog({
             <DialogDescription>{fullDateLabel(transfer.completedAt ?? transfer.createdAt)}</DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-[1fr_minmax(2.5rem,0.6fr)_1fr] items-center gap-2 rounded-2xl border bg-muted/30 p-3">
+          <div className="grid grid-cols-[minmax(0,1fr)_2.5rem_minmax(0,1fr)] items-center gap-2 rounded-2xl border bg-muted/30 p-3">
             <div className="min-w-0">
               <p className="text-xs text-muted-foreground">من</p>
               <p className="font-extrabold leading-snug [overflow-wrap:anywhere]">{transfer.fromBranch?.name ?? '—'}</p>
