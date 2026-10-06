@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
+import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,6 +52,13 @@ async function __GET(req: NextRequest) {
     where.category = category
   }
 
+  // ⚡ v12 EDGE CACHE (Error 1102 / CPU limit): صفحة المصروفات من صفحات
+  // الإدارة — قايمة بـ 500 صف + أسماء المستخدمين في كل فتح. 20 ثانية كاش
+  // على الحافة (نفس نهج /api/products) + مسح فوري بعد أي مصروف جديد.
+  const rawQuery = `from=${from ?? ''}&to=${to ?? ''}&cat=${category && CATEGORIES.has(category) ? encodeURIComponent(category) : ''}`
+  const cachedExpenses = await matchEdgeCache('/api/expenses', rawQuery, session.tenantId, '1')
+  if (cachedExpenses) return cachedExpenses
+
   const rows = await db.expense.findMany({
     where,
     orderBy: { id: 'desc' },
@@ -75,7 +83,9 @@ async function __GET(req: NextRequest) {
     return acc
   }, {})
 
-  return NextResponse.json({ expenses: result, total, byCategory })
+  const res = NextResponse.json({ expenses: result, total, byCategory })
+  await putEdgeCache(res.clone(), '/api/expenses', rawQuery, session.tenantId, 20, '1')
+  return res
 }
 
 async function __POST(req: NextRequest) {
@@ -147,6 +157,8 @@ async function __POST(req: NextRequest) {
     return expense
   })
 
+  // ⚡ v12: مصروف جديد → امسح كاش قائمة المصروفات فورًا (والتقارير بتتكافأ بالـ TTL)
+  await purgeEdgeCache([PURGE_KEYS.expensesDefault], session.tenantId, '1')
   return NextResponse.json(created, { status: 201 })
 }
 

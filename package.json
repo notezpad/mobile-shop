@@ -12,7 +12,7 @@
     "db:reset": "prisma migrate reset",
     "cf:dev": "wrangler dev",
     "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "cf:build": "opennextjs-cloudflare build",
+    "cf:build": "opennextjs-cloudflare build && node scripts/populate-cache-assets.mjs",
     "cf:deploy": "opennextjs-cloudflare build && node scripts/populate-cache-assets.mjs && node node_modules/wrangler/bin/wrangler.js deploy",
     "cf:populate": "node scripts/populate-cache-assets.mjs"
   },

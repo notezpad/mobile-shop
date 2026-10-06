@@ -141,6 +141,21 @@ export const PURGE_KEYS = {
   }),
   categories: { pathname: '/api/categories', rawQuery: '' },
   suppliers: { pathname: '/api/suppliers', rawQuery: '' },
+  /**
+   * ⚡ v12 (2026-10-06): إصلاح سقوط الموقع على صفحات الإدارة.
+   * المستخدم جرّب تصفح كل الصفحات ~100 مرة بلا مشاكل، لكن /users و /reports
+   * و /branches بيسقطوا الموقع — لأن APIs دي مش متخزنة على الحافة، فكل طلب
+   * بيشتغّل Prisma (وإنشاء PrismaClient + تجهيز محرك WASM أول مرة في isolate
+   * جديد هو اللي بياكل الـ 10ms CPU → Error 1102 → الموقع كله بيقع).
+   * الفروع/المستخدمين بتتغير نادرًا → TTL أطول شوية (60/30 ثانية).
+   */
+  branches: { pathname: '/api/branches', rawQuery: '' },
+  /** تقرير الفروع (صفحة الفروع بتطلبه مع القائمة) — بيتأثر بأي بيع جديد أو تغيير فرع */
+  reportsBranches: { pathname: '/api/reports/branches', rawQuery: '' },
+  /** قائمة المستخدمين */
+  users: { pathname: '/api/users', rawQuery: '' },
+  /** قائمة المصروفات (بدون فلاتر — الفلاتر ليها مفتاحها الخاص وقت التخزين) */
+  expensesDefault: { pathname: '/api/expenses', rawQuery: '' },
 }
 
 /**

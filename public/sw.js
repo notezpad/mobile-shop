@@ -16,7 +16,7 @@
  *  ✅ Periodic sync (optional, for background data refresh)
  */
 
-const CACHE_VERSION = 'shop-erp-v5'
+const CACHE_VERSION = 'shop-erp-v6'
 const OFFLINE_URL = '/offline.html'
 
 // ─── Precache list ──────────────────────────────────────────
@@ -42,12 +42,55 @@ const PRECACHE_URLS = [
   '/icon-512.png',
 ]
 
+// 🛡️ v12 (2026-10-06) — «صفحات الطوارئ»: أغلفة HTML ثابتة 100%
+// (كل البيانات بتتجيب client-side من الـ APIs — مفيش أي بيانات مستخدم/محل
+// جوا ملف الصفحة نفسه — اتأكدنا من ده في فحص الكاش v11).
+// ⚠️ مختلفة عن PRECACHE_URLS القديمة اللي شالت Bug 2026-09-27: دي مش بتتقدم
+// في المسار العادي خالص — بتتقدم كـ «ملاذ أخير» فقط لما:
+//   1) الطلب يكون navigate-mode كامل (طلبات RSC بتعدّي فوق الـ SW من الأول
+//      بالـ early-return اللي فوق — فمستحيل تسمّم انتقالات الصفحات)،
+//   2) والشبكة تكون وقعت (5xx / Error 1102) بلا أي نسخة مخزنة للطلب نفسه.
+// النتيجة: حتى وقت انهيار كامل للـ Worker، المستخدم بيشوف التطبيق بدل
+// صفحة Error 1102 البيضا — وده اللي حصل مع صفحة دليل المستخدم
+// اللي كانت بتقع مع صفحات الإدارة لأن مفيش نسخة سليمة منها في الكاش.
+const FALLBACK_PAGES = [
+  '/pos',
+  '/dashboard',
+  '/products',
+  '/inventory',
+  '/customers',
+  '/users',
+  '/reports',
+  '/branches',
+  '/expenses',
+  '/guide',
+  '/login',
+]
+
+/** ملاذ أخير للتنقل: نسخة الطوارئ المخزنة عند التثبيت (لو الطلب نفسه مالوش نسخة) */
+async function lastResortPage(request) {
+  try {
+    const path = new URL(request.url).pathname
+    if (!FALLBACK_PAGES.includes(path)) return null
+    return (await caches.match(path, { ignoreSearch: true })) || null
+  } catch {
+    return null
+  }
+}
+
 // ─── Install: precache app shell ─────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_VERSION).then((cache) => {
       // Cache what we can — ignore individual failures
-      return cache.addAll(PRECACHE_URLS).catch(() => {})
+      const base = cache.addAll(PRECACHE_URLS).catch(() => {})
+      // 🛡️ v12: صفحات الطوارئ — واحدة واحدة (add بيفشل صامت لو الصفحة
+      // مش متاحة وقت التثبيت، ومابكسرش التثبيت). كلها HITs من
+      // الـ Static Assets فتكلفة التحميل ≈ صفر.
+      FALLBACK_PAGES.forEach((u) => {
+        cache.add(u).catch(() => {})
+      })
+      return base
     })
   )
   self.skipWaiting()
@@ -157,7 +200,17 @@ self.addEventListener('fetch', (event) => {
             if (preload.ok) {
               const clone = preload.clone()
               caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+              return preload
             }
+            // 🛡️ v11 — ROOT FIX لمظهر «الموقع وقع»:
+            // صفحة 5xx من Cloudflare (زي Error 1102 — Worker exceeded resource
+            // limits) ممنوع نوصلها للمستخدم وهناك نسخة سليمة مخزنة. نقدّم آخر
+            // نسخة HTML سليمة فورًا — التطبيق بيكمل شغال من الكاش والشل،
+            // والبيانات بتتحدّث من الـ APIs لوحدها في الخلفية.
+            // 🛡️ v12: لو مفيش نسخة للطلب نفسه (أول زيارة للصفحة دي) → نسخة
+            // الطوارئ المخزنة عند التثبيت (FALLBACK_PAGES).
+            const fallback = (await caches.match(request)) || (await lastResortPage(request))
+            if (fallback) return fallback
             return preload
           }
 
@@ -166,11 +219,18 @@ self.addEventListener('fetch', (event) => {
           if (response.ok) {
             const clone = response.clone()
             caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+            return response
+          }
+          // 🛡️ v11: نفس الحماية للـ fetch العادي (بدون preload)
+          // 🛡️ v12: + نسخة الطوارئ لو مفيش نسخة للطلب نفسه
+          if (response.status >= 500) {
+            const fallback = (await caches.match(request)) || (await lastResortPage(request))
+            if (fallback) return fallback
           }
           return response
         } catch {
-          // Offline → cache → offline page
-          const cached = await caches.match(request)
+          // Offline → cache → emergency page → offline page
+          const cached = (await caches.match(request)) || (await lastResortPage(request))
           return cached || caches.match(OFFLINE_URL)
         }
       })()

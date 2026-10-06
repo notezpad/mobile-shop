@@ -518,9 +518,10 @@ export async function POST(req: NextRequest) {
         PURGE_KEYS.dashboard(7),
         PURGE_KEYS.dashboard(14),
         PURGE_KEYS.dashboard(30),
+        PURGE_KEYS.reportsBranches, // ⚡ v12: تقرير الفروع (صفحة الفروع) بيتغير مع كل بيعة
       ],
       session.tenantId,
-      2
+      '2'
     )
     // ⚡ v9: البيع بيخصم مخزون — امسح كاش قائمة المنتجات كمان (نفس فرع البائع)
     // ⚡ v10: وكمان نسخة قائمة المخزون (شاشة المخزون) عشان الكميات تفضل حية

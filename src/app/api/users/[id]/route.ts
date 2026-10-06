@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse, hashPassword } from '@/lib/auth'
+import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -112,6 +113,8 @@ async function __PUT(
       createdAt: true,
     },
   })
+  // ⚡ v12: تعديل/إيقاف مستخدم → امسح كاش قائمة المستخدمين فورًا
+  await purgeEdgeCache([PURGE_KEYS.users], session.tenantId, '1')
   return NextResponse.json(updated)
 }
 
@@ -165,6 +168,8 @@ async function __DELETE(
       createdAt: true,
     },
   })
+  // ⚡ v12: حذف (إيقاف) مستخدم → امسح كاش قائمة المستخدمين فورًا
+  await purgeEdgeCache([PURGE_KEYS.users], session.tenantId, '1')
   return NextResponse.json(updated)
 }
 

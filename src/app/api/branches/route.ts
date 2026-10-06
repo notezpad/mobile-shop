@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,11 +28,22 @@ export async function GET() {
       if (fe) return NextResponse.json(fe.body, { status: fe.status })
       throw e
     }
+    // ⚡ v12 EDGE CACHE (Error 1102 / CPU limit): الفروع بتتغير نادرًا — 60 ثانية
+    // كاش على الحافة يعني أغلب طلبات صفحة الفروع/المستخدمين بتترجع من غير ما
+    // نشغّل Prisma أصلاً. أول تشغيل Prisma في isolate بارد هو اللي بياكل
+    // الـ 10ms CPU وبيوقع الموقع (شاهد wrangler tail: /api/branches كانت
+    // بتقع مع "Worker exceeded CPU time limit") — تقليل طلبات Prisma = قتل
+    // الـ 1102 من جذوره. أي إضافة/تعديل/حذف فرع بيمسح الكاش فورًا.
+    const cachedBranches = await matchEdgeCache('/api/branches', '', s.tenantId, '1')
+    if (cachedBranches) return cachedBranches
+
     const branches = await db.branch.findMany({
       where: { tenantId: s.tenantId },
       orderBy: [{ isMain: 'desc' }, { id: 'asc' }],
     })
-    return NextResponse.json(branches)
+    const res = NextResponse.json(branches)
+    await putEdgeCache(res.clone(), '/api/branches', '', s.tenantId, 60, '1')
+    return res
   })
 }
 
@@ -65,6 +77,8 @@ export async function POST(req: NextRequest) {
         isMain: count === 0,
       },
     })
+    // ⚡ v12: فرع جديد → امسح كاش الفروع وتقرير الفروع فورًا
+    await purgeEdgeCache([PURGE_KEYS.branches, PURGE_KEYS.reportsBranches], s.tenantId, '1')
     return NextResponse.json(created, { status: 201 })
   })
 }

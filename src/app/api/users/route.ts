@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse, hashPassword } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,13 @@ async function __GET() {
   try { await requireModule(session, 'users') } catch (e) {
     const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
+
+  // ⚡ v12 EDGE CACHE (Error 1102 / CPU limit): قائمة المستخدمين بتتغير نادرًا
+  // — 30 ثانية كاش على الحافة = أغلب فتحات صفحة المستخدمين من غير ما نشغّل
+  // Prisma أصلاً (أول تشغيل Prisma في isolate بارد بياكل الـ 10ms CPU كاملة
+  // وبيوقع الموقع). أي إضافة/تعديل/إيقاف مستخدم بيمسح الكاش فورًا.
+  const cachedUsers = await matchEdgeCache('/api/users', '', session.tenantId, '1')
+  if (cachedUsers) return cachedUsers
 
   const users = await db.user.findMany({
     where: { tenantId: session.tenantId },
@@ -32,7 +40,9 @@ async function __GET() {
       branch: { select: { name: true } },
     },
   })
-  return NextResponse.json(users)
+  const res = NextResponse.json(users)
+  await putEdgeCache(res.clone(), '/api/users', '', session.tenantId, 30, '1')
+  return res
 }
 
 async function __POST(req: NextRequest) {
@@ -97,6 +107,8 @@ async function __POST(req: NextRequest) {
       createdAt: true,
     },
   })
+  // ⚡ v12: مستخدم جديد → امسح كاش قائمة المستخدمين فورًا
+  await purgeEdgeCache([PURGE_KEYS.users], session.tenantId, '1')
   return NextResponse.json(created, { status: 201 })
 }
 

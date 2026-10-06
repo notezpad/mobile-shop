@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { matchEdgeCache, putEdgeCache } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +28,14 @@ export async function GET() {
       const err = authErrorResponse(e)
       return NextResponse.json(err?.body, { status: err?.status })
     }
+
+    // ⚡ v12 EDGE CACHE (Error 1102 / CPU limit): تقرير الفروع = 4 استعلامات
+    // تجميعية في كل فتح صفحة فروع. صفحة الفروع كانت من الصفحات اللي بيسقطها
+    // الموقع (مع /users و /reports) لأن الطلب ده كان بيشتغّل Prisma في
+    // isolate بارد كل مرة. 25 ثانية كاش (نفس نهج /api/reports) + مسح فوري
+    // بعد أي بيع/تغيير فرع = الافتتاحيات المتتالية بتكلف ≈ صفر CPU.
+    const cached = await matchEdgeCache('/api/reports/branches', '', s.tenantId, '1')
+    if (cached) return cached
 
     // 1) Branches list (1 query)
     const branches = await db.branch.findMany({
@@ -114,6 +123,8 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json(results)
+    const res = NextResponse.json(results)
+    await putEdgeCache(res.clone(), '/api/reports/branches', '', s.tenantId, 25, '1')
+    return res
   })
 }
