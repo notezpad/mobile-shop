@@ -54,10 +54,60 @@ const VIEW_PRELOADS: Record<string, () => Promise<unknown>> = {
 
 const preloading = new Set<string>()
 
+/**
+ * ⚡ v10 — Prefetch بيانات الصفحة لحظة لمس الرابط (مش لما الصفحة تفتح)
+ * ─────────────────────────────────────────────────────────────────────
+ * نفس فكرة TanStack Query prefetchQuery عند workeros: لما إصبع المستخدم
+ * يلمس رابط السايدبار بنبدأ طلب الـ API بتاع الصفحة فوراً (بالتوازي مع
+ * تحميل الـ chunk) — فلما الـ view يعمل mount ويعمل api() لنفس الـ URL،
+ * الاستجابة تكون إما وصلت خلاص (مخزنة في كاش الميموري بتاع SWR في
+ * api-offline.ts) أو in-flight وبيتشارك نفس الطلب (inFlightGets dedup).
+ *
+ * النتيجة: أول زيارة لكل صفحة في السيشن بيبقى فيها بيانات شبه جاهزة —
+ * مش سبينر من الصفر بعد الماونت.
+ *
+ * ملاحظات:
+ *  - مرة واحدة لكل مسار في السيشن (Set) — بعدها كاش SWR بيتحدث لوحده
+ *    مع كل زيارة (revalidate بالخلفية)، فمفيش داعي نكرر الطلب.
+ *  - الـ URLs لازم تطابق بالظبط اللي الـ views بتطلعه في وضعها الافتراضي.
+ *  - بيراعي Save-Data (زي preload الـ chunks بالظبط).
+ */
+const VIEW_DATA_PRELOADS: Record<string, () => void> = {
+  '/dashboard': () => prefetchData('/api/dashboard?days=7'),
+  '/pos': () => {
+    prefetchData('/api/products?search=&limit=100&pos=1')
+    prefetchData('/api/categories')
+    prefetchData('/api/customers')
+  },
+  '/products': () => prefetchData('/api/products?status=all&page=1&limit=50'),
+  '/sales': () => prefetchData('/api/sales?page=1&limit=50'),
+  '/customers': () => prefetchData('/api/customers'),
+  '/suppliers': () => prefetchData('/api/suppliers'),
+}
+
+const dataPrefetched = new Set<string>()
+
+function prefetchData(url: string): void {
+  if (dataPrefetched.has(url)) return
+  if (shouldSkipPreload()) return
+  dataPrefetched.add(url)
+  // استيراد ديناميكي عشان نحافظ على حدود الـ chunks زي ما هي
+  import('@/lib/api')
+    .then(({ api }) => api(url).catch(() => {}))
+    .catch(() => {
+      dataPrefetched.delete(url) // فشل الاستيراد؟ جرّب تاني في لمسة جاية
+    })
+}
+
 export function preloadView(path: string) {
   const load = VIEW_PRELOADS[path]
-  if (!load || preloading.has(path)) return
+  if (!load || preloading.has(path)) {
+    // حتى لو الـ chunk اتحمّل قبل كده، الـ data prefetch يتحطّط مرة واحدة
+    VIEW_DATA_PRELOADS[path]?.()
+    return
+  }
   preloading.add(path)
+  VIEW_DATA_PRELOADS[path]?.()
   load().catch(() => {
     // فشل الشبكة؟ اسمح بمحاولة تانية في لمسة جاية
     preloading.delete(path)

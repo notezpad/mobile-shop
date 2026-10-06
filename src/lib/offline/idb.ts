@@ -89,6 +89,35 @@ export const idb = {
     await tx('rows', 'readwrite', (s) => s.clear() as IDBRequest).catch(() => {})
   },
 
+  /**
+   * ⚡ v10: امسح صفوف الكاش اللي بتبدأ بأي بادئة من القائمة —
+   * بتُستدعى بعد أي كتابة ناجحة (invalidateApiCaches في api-offline.ts)
+   * عشان الـ GET الجاي بعد الـ mutation يجيب داتا حية من الشبكة.
+   */
+  async purgeRows(prefixes: string[]): Promise<void> {
+    if (!idbAvailable() || !prefixes.length) return
+    try {
+      const db = await openDB()
+      await new Promise<void>((resolve) => {
+        const t = db.transaction('rows', 'readwrite')
+        const store = t.objectStore('rows')
+        const req = store.openKeyCursor()
+        req.onsuccess = () => {
+          const cur = req.result
+          if (!cur) return
+          const k = String(cur.key)
+          if (prefixes.some((p) => k.startsWith(p))) store.delete(cur.key)
+          cur.continue()
+        }
+        t.oncomplete = () => resolve()
+        t.onerror = () => resolve()
+        t.onabort = () => resolve()
+      })
+    } catch {
+      /* ignore */
+    }
+  },
+
   // ── products store (offline POS search) ──
   /**
    * Replace ALL products in IndexedDB with a fresh batch from the server.

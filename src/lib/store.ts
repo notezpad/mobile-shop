@@ -235,6 +235,21 @@ export const useShopStore = create<ShopState>()(
           // the user isn't stuck; worst case they're prompted to log in
           // again if the server-side session actually survived.
         }
+        // ⚡ v10: مسح كاش الداتا المحلية (كاش الميموري SWR + صفوف IDB +
+        // منتجات بحث الـ POS أوفلاين) — من غير كده حساب تاني يدخل على نفس
+        // الجهاز ممكن يشوف بيانات الحساب القديم في أول ثواني (SWR بيرجّع
+        // الكاش فوراً). الـ drafts مش بتتلمس هنا لأنها per-tenant أصلاً.
+        try {
+          const [{ idb }, { clearMemoryApiCache }] = await Promise.all([
+            import('@/lib/offline/idb'),
+            import('@/lib/offline/api-offline'),
+          ])
+          clearMemoryApiCache()
+          await idb.clearCache()
+          await idb.replaceProducts([])
+        } catch {
+          /* ignore */
+        }
         // 🛡️ DON'T clear drafts on logout — the storage key is per-tenant
         // so another user on the same browser won't see them anyway.
         set({

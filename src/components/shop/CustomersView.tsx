@@ -98,7 +98,9 @@ export function CustomersView() {
   }, [search])
 
   React.useEffect(() => {
-    const t = setTimeout(load, 250)
+    // ⚡ v10: الديباونس للتايبينج بس — أول تحميل (مفيش بحث) يبدأ فوراً.
+    // مع كاش SWR (api-offline.ts) الزيارة المتكررة بترجع من الميموري فوراً أصلاً.
+    const t = setTimeout(load, search ? 250 : 0)
     return () => clearTimeout(t)
   }, [load])
 

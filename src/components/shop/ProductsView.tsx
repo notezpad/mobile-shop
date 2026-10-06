@@ -249,7 +249,10 @@ export function ProductsView() {
   }, [search, category, status, sort, lowOnly])
 
   React.useEffect(() => {
-    const t = setTimeout(() => loadProducts(page), 400)
+    // ⚡ v10: الديباونس للتايبينج/تغيير الفلاتر بس — أول تحميل بالوضع
+    // الافتراضي يبدأ فوراً (0ms) بدل انتظار 400ms قبل أول طلب.
+    const isDefaultState = !search.trim() && category === 'all' && status === 'all' && sort === 'newest' && !lowOnly && page === 1
+    const t = setTimeout(() => loadProducts(page), isDefaultState ? 0 : 400)
     return () => clearTimeout(t)
   }, [loadProducts, page])
 

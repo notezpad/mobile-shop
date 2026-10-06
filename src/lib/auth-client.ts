@@ -15,6 +15,28 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/**
+ * ⚡ v10 — أمان تغيير الحساب: مسح كل كاش الداتا المحلي عند دخول/خروج/تسجيل حساب.
+ *
+ * من v10 الكاش المحلي (ميموري + IDB) بقى بيتخدم للعرض الفوري (SWR)، فلازم
+ * لما الحساب يتغيّر نمنع أي بيانات تينانت قديم من تظهر للحساب الجديد على
+ * نفس الجهاز. بنمسح: صفوف كاش الـ API + منتجات بحث الـ POS أوفلاين + كاش
+ * الميموري — وده مش بيأثر على الـ outbox (كتابات معلقة متتلمسش هنا).
+ */
+async function clearLocalAccountData(): Promise<void> {
+  try {
+    const [{ idb }, { clearMemoryApiCache }] = await Promise.all([
+      import('./offline/idb'),
+      import('./offline/api-offline'),
+    ])
+    clearMemoryApiCache()
+    await idb.clearCache()
+    await idb.replaceProducts([])
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function apiLogin(
   email: string,
   password: string
@@ -34,7 +56,11 @@ export async function apiLogin(
       body: JSON.stringify({ email, password }),
     })
     const data = await res.json().catch(() => null)
-    if (res.ok && data?.ok) return data.user as AuthUser
+    if (res.ok && data?.ok) {
+      // ⚡ v10: حساب جديد → امسح كاش بيانات الحساب القديم فوراً (خلفية)
+      void clearLocalAccountData()
+      return data.user as AuthUser
+    }
     lastRes = res
     lastData = data
     if (!RETRYABLE_LOGIN_STATUS.has(res.status) || attempt === 2) break
@@ -59,11 +85,19 @@ export async function apiSignup(input: {
   if (!res.ok || !data?.ok) {
     throw new Error(data?.error || 'فشل إنشاء الحساب')
   }
+  // ⚡ v10: حساب جديد تماماً → أمان إضافي: مسح أي كاش محلي قديم
+  void clearLocalAccountData()
   return data.user as AuthUser
 }
 
 export async function apiLogout(): Promise<void> {
-  await fetch('/api/auth/logout', { method: 'POST' })
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' })
+  } finally {
+    // ⚡ v10: بعد الخروج امسح كاش بيانات الحساب — مفيش بيانات تظهر للي بعده
+    // على نفس الجهاز (والـ fetch نفسه مش لازم ينجح عشان نمسح المحلي)
+    await clearLocalAccountData()
+  }
 }
 
 export async function getMe(): Promise<AuthUser | null> {
