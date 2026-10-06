@@ -32,7 +32,6 @@ import {
   ACCENT,
   Signed,
   EmptyState,
-  LoadErrorBanner,
   Segmented,
   dayLabel,
   fullDateLabel,
@@ -99,19 +98,7 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
 
   // Reload movements when filters change
   const [liveMovements, setLiveMovements] = React.useState<Movement[]>(movements)
-
-  /* 🛡️ v17: سبب فشل جلب الحركات الحية (null = تمام). قبل كده أي فشل كان
-     بيتبلع بصمت والدفتر يفضل فاضي — والمستخدم يظن بياناته اتمسحت.
-     دلوقتي الفشل بيظهر برسالة واضحة + زر إعادة محاولة، والفرق بين
-     «الدفتر فاضي فعلاً» و«فشل التحميل» بقى واضح دايمًا. */
-  const [liveError, setLiveError] = React.useState<string | null>(null)
-  const [retryNonce, setRetryNonce] = React.useState(0)
-
-  React.useEffect(() => {
-    setLiveMovements(movements)
-    // 🛡️ v17: بيانات سليمة وصلت من المصدر المشترك = الفشل القديم اتحل — نلغي بانر الخطأ
-    if (Array.isArray(movements) && movements.length > 0) setLiveError(null)
-  }, [movements])
+  React.useEffect(() => { setLiveMovements(movements) }, [movements])
 
   React.useEffect(() => {
     const params = new URLSearchParams()
@@ -125,31 +112,13 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
     const t = setTimeout(async () => {
       try {
         const res = await fetch(url, { cache: 'no-store' })
-        if (!alive) return
-        if (!res.ok) {
-          // بنسيب البيانات القديمة اللي على الشاشة (لو فيه) ونعرض السبب بدل الصمت
-          setLiveError(`الخادم ردّ برمز ${res.status}`)
-          return
-        }
-        let data: unknown
-        try {
-          data = await res.json()
-        } catch {
-          setLiveError('رد غير مقروء من الخادم (جسم فاضي أو غير JSON)')
-          return
-        }
-        if (!Array.isArray(data)) {
-          setLiveError('رد غير متوقع من الخادم (المفروض مصفوفة)')
-          return
-        }
-        setLiveMovements(data as Movement[])
-        setLiveError(null)
-      } catch {
-        if (alive) setLiveError('تعذر الاتصال بالخادم — تأكد من اتصال الإنترنت وحاول تاني')
-      }
+        if (!res.ok) return
+        const data = await res.json()
+        if (alive) setLiveMovements(data as Movement[])
+      } catch {}
     }, 250)
     return () => { alive = false; clearTimeout(t) }
-  }, [branchFilter, typeFilter, from, to, search, retryNonce])
+  }, [branchFilter, typeFilter, from, to, search])
 
   const filtered = liveMovements
 
@@ -223,17 +192,17 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
               <span className="text-xs font-normal text-muted-foreground">· {num(filtered.length)} حركة</span>
             </div>
 
-            <div className="flex min-w-0 items-baseline gap-2" dir="ltr">
+            <div className="flex items-baseline gap-2" dir="ltr">
               <span
                 className={cn(
-                  'text-4xl font-black tracking-tight tabular-nums [overflow-wrap:anywhere] min-[420px]:text-5xl',
+                  'text-5xl font-black tracking-tight tabular-nums',
                   summary.net > 0 && 'text-emerald-600 dark:text-emerald-400',
                   summary.net < 0 && 'text-rose-600 dark:text-rose-400',
                 )}
               >
                 <Signed value={summary.net} />
               </span>
-              <span className="shrink-0 text-sm font-semibold text-muted-foreground" dir="rtl">وحدة صافي</span>
+              <span className="text-sm font-semibold text-muted-foreground" dir="rtl">وحدة صافي</span>
             </div>
 
             {/* ميزان وارد ⟷ صادر */}
@@ -306,32 +275,20 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
       </section>
 
       {/* ═════════ شريط الفلاتر ═════════ */}
-      {/* 📱 2026-10-07: نفس نمط باقي الموقع — على الجوال العناصر جنب بعض في
-          شبكة 2×2 (الفرع + مسح الفلاتر، التواريخ من/إلى)، ومن sm+ صف أفقي */}
       <section className="space-y-3 rounded-2xl border bg-card p-3 sm:p-4">
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
-          <div className="relative col-span-2 min-w-0 sm:min-w-[220px] sm:flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[200px] flex-1">
             <Search className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="ابحث بالصنف أو الباركود أو الملاحظة…"
-              className="h-10 rounded-xl border-transparent bg-muted/60 pe-9 ps-9 focus-visible:bg-background"
+              className="h-10 rounded-xl border-transparent bg-muted/60 pr-9 focus-visible:bg-background"
             />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                aria-label="مسح البحث"
-                className="absolute left-2.5 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full bg-foreground/10 text-muted-foreground hover:bg-foreground/20"
-              >
-                <X className="size-3" />
-              </button>
-            )}
           </div>
           {!isEmployee && (
             <Select value={branchFilter} onValueChange={setBranchFilter}>
-              <SelectTrigger className="h-10 w-full min-w-0 rounded-xl sm:w-44" aria-label="الفرع"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-10 w-full rounded-xl sm:w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">كل الفروع</SelectItem>
                 <SelectItem value="none">بدون فرع</SelectItem>
@@ -341,22 +298,10 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
               </SelectContent>
             </Select>
           )}
-          {hasFilters && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearFilters}
-              className="h-10 w-full text-muted-foreground sm:h-9 sm:w-auto"
-            >
-              <X className="size-3.5" />
-              مسح الفلاتر
-            </Button>
-          )}
           <Segmented<Period>
             value={activePeriod ?? ('__custom' as Period)}
             onChange={applyPeriod}
             accent={ACCENT.movements}
-            className="col-span-2 w-full sm:col-auto sm:w-auto"
             options={[
               { value: 'all', label: 'الكل' },
               { value: 'today', label: 'اليوم' },
@@ -366,15 +311,17 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-          <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="shrink-0">من</span>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 min-w-0 flex-1 rounded-lg text-xs" aria-label="من تاريخ" />
-          </div>
-          <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="shrink-0">إلى</span>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 min-w-0 flex-1 rounded-lg text-xs" aria-label="إلى تاريخ" />
-          </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>من</span>
+          <div className="w-40"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-8 rounded-lg text-xs" aria-label="من تاريخ" /></div>
+          <span>إلى</span>
+          <div className="w-40"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-8 rounded-lg text-xs" aria-label="إلى تاريخ" /></div>
+          {hasFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground">
+              <X className="size-3.5" />
+              مسح الفلاتر
+            </Button>
+          )}
         </div>
 
         {/* نوع الحركة — شريط أيقونات قابل للتمرير */}
@@ -394,26 +341,14 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
       </section>
 
       {/* ═════════ الدفتر: خط زمني ═════════ */}
-      {/* 🛡️ v17: لو التحميل فشل بنعرض سبب الفشل — ومفيش «الدفتر لسه فاضي»
-          الكاذبة (اللي بتخفي مشكلة شبكة/سيرفر خلفها). لو فيه بيانات قديمة
-          معروضة بتفضل ظاهرة والبانر فوقها. */}
-      {liveError && (
-        <LoadErrorBanner
-          label="تعذّر تحديث الحركات"
-          message={liveError}
-          onRetry={() => setRetryNonce((n) => n + 1)}
-        />
-      )}
       {groups.length === 0 ? (
-        liveError ? null : (
-          <EmptyState
-            icon={ArrowUpDown}
-            accent={ACCENT.movements}
-            title={hasFilters ? 'مفيش حركات مطابقة' : 'الدفتر لسه فاضي'}
-            hint={hasFilters ? 'جرّب تغيّر الفلاتر أو الفترة' : 'أي بيع أو توريد أو تحويل هيتسجل هنا لحظة حدوثه'}
-            action={hasFilters ? <Button variant="outline" onClick={clearFilters}>مسح الفلاتر</Button> : undefined}
-          />
-        )
+        <EmptyState
+          icon={ArrowUpDown}
+          accent={ACCENT.movements}
+          title={hasFilters ? 'مفيش حركات مطابقة' : 'الدفتر لسه فاضي'}
+          hint={hasFilters ? 'جرّب تغيّر الفلاتر أو الفترة' : 'أي بيع أو توريد أو تحويل هيتسجل هنا لحظة حدوثه'}
+          action={hasFilters ? <Button variant="outline" onClick={clearFilters}>مسح الفلاتر</Button> : undefined}
+        />
       ) : (
         <div className="space-y-7">
           {groups.map((g) => {
@@ -452,8 +387,7 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
 
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            {/* v14: الاسم بيلف بدل ما يتقص بنقاط */}
-                            <h4 className="font-bold leading-snug [overflow-wrap:anywhere]">{m.product?.name ?? '—'}</h4>
+                            <h4 className="truncate font-bold leading-tight">{m.product?.name ?? '—'}</h4>
                             <span className="text-xs font-bold" style={{ color: meta.color }}>
                               {TYPE_LABELS[m.type] ?? m.type}
                             </span>
@@ -474,11 +408,11 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
                         <div
                           dir="ltr"
                           className={cn(
-                            'flex min-w-[4.75rem] max-w-[9.5rem] shrink-0 flex-col items-center rounded-xl px-3 py-1.5 font-mono',
+                            'flex min-w-[4.75rem] shrink-0 flex-col items-center rounded-xl px-3 py-1.5 font-mono',
                             incoming ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400',
                           )}
                         >
-                          <span className="text-lg font-black leading-none tabular-nums [overflow-wrap:anywhere] min-[420px]:text-xl"><Signed value={m.quantity} /></span>
+                          <span className="text-xl font-black leading-none tabular-nums"><Signed value={m.quantity} /></span>
                           <span className="mt-0.5 font-sans text-[10px] font-medium opacity-70">وحدة</span>
                         </div>
                       </article>
