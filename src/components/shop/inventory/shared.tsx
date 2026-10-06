@@ -143,8 +143,19 @@ export function InventoryCrossNav({
 
 /* ───────────── تنسيق ───────────── */
 
-export const num = (n: number) =>
-  n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+/* 🛡️ 2026-10-07 (v16): دالة التنسيق الوحيدة لكل صفحات المخزون الأربعة.
+   قبل كده كانت `n.toLocaleString(...)` مباشرة — لو وصلها undefined/null/string
+   من أي API (حواف الشبكة، رد غير متوقع، Decimal متسلسل كنص...) كان بيقصف
+   "Cannot read properties of undefined (reading 'toLocaleString')" ويسقط الصفحة
+   كلها بعد ثواني من فتحها (شاشة الخطأ/السوداء في صفحة الحركات).
+   دلوقتي بتحوّل أي قيمة لرقم آمن: أي حاجة غير رقم مفهوم بترجع 0 بدل ما تكسّر الصفحة. */
+export const num = (n: number | string | null | undefined) => {
+  const v = typeof n === 'number' ? n : Number(n)
+  return (Number.isFinite(v) ? v : 0).toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })
+}
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
@@ -348,12 +359,15 @@ export function QtyStepper({
 
 /* ───────────── رقم بإشارة ───────────── */
 
-export function Signed({ value, className }: { value: number; className?: string }) {
-  const sign = value > 0 ? '+' : value < 0 ? '-' : ''
+export function Signed({ value, className }: { value: number | string | null | undefined; className?: string }) {
+  // 🛡️ v16: توحيد آمن — أي قيمة ناقصة/غريبة بتتعامل كصفر بدل ما تكسر الرندر
+  const v = typeof value === 'number' ? value : Number(value ?? 0)
+  const safe = Number.isFinite(v) ? v : 0
+  const sign = safe > 0 ? '+' : safe < 0 ? '-' : ''
   return (
     <span dir="ltr" className={cn('inline-flex items-baseline tabular-nums', className)}>
       {sign && <span>{sign}</span>}
-      <span>{num(Math.abs(value))}</span>
+      <span>{num(Math.abs(safe))}</span>
     </span>
   )
 }

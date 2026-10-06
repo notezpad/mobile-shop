@@ -1,7 +1,7 @@
 import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireAuthIgnoreSubscription, authErrorResponse } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +19,9 @@ export const dynamic = 'force-dynamic'
 async function __GET(req: NextRequest) {
   let session
   try {
-    session = await requireAuth()
+    // 🛡️ v15: مستخدم انتهت باقته بيرجع من Paymob ويستنين تأكيد الدفع —
+    // لازم يعرف يستعلم عن حالة الدفع حتى وهو منتهي (كان 402 قبل كده).
+    session = await requireAuthIgnoreSubscription()
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })

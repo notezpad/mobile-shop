@@ -114,7 +114,8 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
         const res = await fetch(url, { cache: 'no-store' })
         if (!res.ok) return
         const data = await res.json()
-        if (alive) setLiveMovements(data as Movement[])
+        // 🛡️ v16: لازم مصفوفة — أي رد غلط (object خطأ/null) بنعتبره قائمة فاضية
+        if (alive) setLiveMovements(Array.isArray(data) ? (data as Movement[]) : [])
       } catch {}
     }, 250)
     return () => { alive = false; clearTimeout(t) }

@@ -1,7 +1,7 @@
 import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireAuthIgnoreSubscription, authErrorResponse } from '@/lib/auth'
 import { createPaymobIntention, toCents } from '@/lib/paymob'
 
 export const dynamic = 'force-dynamic'
@@ -10,7 +10,11 @@ async function __POST(req: NextRequest) {
   // ── 1. Auth ────────────────────────────────────────────────────────
   let session
   try {
-    session = await requireAuth()
+    // 🛡️ 2026-10-07 (v15): requireAuthIgnoreSubscription — المستخدم اللي
+    // باقته انتهت هو بالظبط اللي لازم يقدر يدفع! قبل كده كان بياخد 402
+    // «اشتراكك منتهي» عند إنشاء جلسة الدفع نفسها = طريق مسدود: مش بيقدر
+    // يجدد ولا يدفع. تسجيل الدخول مطلوب زي ما هو.
+    session = await requireAuthIgnoreSubscription()
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })

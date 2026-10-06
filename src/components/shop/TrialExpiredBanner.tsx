@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   AlertTriangle,
   Clock,
@@ -26,11 +27,6 @@ import { useShopStore } from '@/lib/store'
  *     on the next session.
  *
  * Sibling of `OfflineIndicator` in (shop)/layout.tsx.
- *
- * ⚡ PERF FIX (2026-10-05): كان بيسحب framer-motion كامل (~35KB gzip)
- * في chunk الـ shell اللي بيتحمّل مع كل صفحة — عشان fade واحد بسيط.
- * اتعوّض بأنيميشن CSS بسيطة (animate-in fade-in) بدون أي فرق بصري،
- * وده بيشيل framer-motion من الـ shell خالص.
  */
 export function TrialExpiredBanner() {
   const subscription = useShopStore((s) => s.subscription)
@@ -50,15 +46,33 @@ export function TrialExpiredBanner() {
   const isExpired = subscription.expired
   const daysLeft = subscription.daysLeft ?? 0
 
+  // 🛡️ 2026-10-07 (v15): زر «اشترك الآن» بيودّي على طول لصفحة الدفع (checkout)
+  // لباقة المستخدم نفسها — بدل ما يروح صفحة الأسعار يلاقي زر «ابدأ تجربة 14 يوم»
+  // يضغط عليه فيطلعله إشعار أحمر إن باقته انتهت (طريق مسدود).
+  // لو ماعرفناش باقته (planCode ناقص/وهمي) بنرجّعه لصفحة الأسعار كخطة بديلة.
+  // (حساب عادي مش hook — عشان القواعد: فوق فيه early returns)
+  const subCode = subscription.planCode
+  const checkoutHref =
+    !subCode || subCode === '-' || subCode === 'platform'
+      ? '/pricing'
+      : `/checkout?plan=${encodeURIComponent(subCode)}&cycle=${
+          subscription.period === 'yearly' ? 'yearly' : 'monthly'
+        }`
+
   return (
-    <div
-      className={
-        'sticky top-0 z-40 w-full border-b backdrop-blur-sm animate-in fade-in duration-200 ' +
-        (isExpired
-          ? 'bg-gradient-to-l from-red-600/95 via-red-700/95 to-red-800/95 border-red-900/50'
-          : 'bg-gradient-to-l from-amber-500/95 via-amber-600/95 to-amber-700/95 border-amber-900/50')
-      }
-    >
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className={
+          'sticky top-0 z-40 w-full border-b backdrop-blur-sm ' +
+          (isExpired
+            ? 'bg-gradient-to-l from-red-600/95 via-red-700/95 to-red-800/95 border-red-900/50'
+            : 'bg-gradient-to-l from-amber-500/95 via-amber-600/95 to-amber-700/95 border-amber-900/50')
+        }
+      >
         <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-3 py-2 sm:px-6">
           {/* Icon */}
           <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/15">
@@ -95,9 +109,10 @@ export function TrialExpiredBanner() {
             )}
           </div>
 
-          {/* CTA — primary */}
+          {/* CTA — primary 🛡️ v15: عند الانتهاء بيروح مباشرة لصفحة دفع باقته،
+              وعند قرب الانتهاء (جدّد) لصفحة الأسعار عشان يقدر يبدّل لو حابب */}
           <Link
-            href="/pricing"
+            href={isExpired ? checkoutHref : '/pricing'}
             className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-white px-3 text-sm font-bold text-red-700 shadow-sm transition-colors hover:bg-red-50 sm:px-4"
           >
             {isExpired ? (
@@ -126,6 +141,7 @@ export function TrialExpiredBanner() {
             </button>
           )}
         </div>
-    </div>
+      </motion.div>
+    </AnimatePresence>
   )
 }

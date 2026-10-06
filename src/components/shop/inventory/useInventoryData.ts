@@ -54,6 +54,21 @@ async function apiSafe<T>(url: string, fallback: T): Promise<T> {
   }
 }
 
+/* 🛡️ 2026-10-07 (v16): للـ endpoints اللي المفروض ترجّع مصفوفة — لو السيرفر
+   ردّ 200 بجسم غلط (object خطأ، null، HTML…) بنرجّع [] بدل ما المصفوفة تبقى
+   object و .length يبقى undefined ويكسّر الصفحة عند التنسيق (سبب شاشة
+   الحركات السوداء). */
+async function apiSafeArray<T>(url: string, fallback: T[]): Promise<T[]> {
+  try {
+    const res = await fetch(url, { cache: 'no-store' })
+    if (!res.ok) return fallback
+    const data = await res.json()
+    return Array.isArray(data) ? (data as T[]) : fallback
+  } catch {
+    return fallback
+  }
+}
+
 export function useInventoryData(): InventoryData {
   const [branches, setBranches] = React.useState<Branch[]>([])
   const [products, setProducts] = React.useState<InventoryProduct[]>([])
@@ -66,18 +81,20 @@ export function useInventoryData(): InventoryData {
     setLoading(true)
     try {
       const [bs, ps, mv, tf, st] = await Promise.all([
-        apiSafe<Branch[]>('/api/branches', []),
+        apiSafeArray<Branch>('/api/branches', []),
         apiSafe<{ data: InventoryProduct[] } | InventoryProduct[]>('/api/products?limit=1000&status=all', []),
-        apiSafe<Movement[]>('/api/inventory/movements', []),
-        apiSafe<Transfer[]>('/api/inventory/transfers', []),
-        apiSafe<Stocktake[]>('/api/inventory/stocktake', []),
+        apiSafeArray<Movement>('/api/inventory/movements', []),
+        apiSafeArray<Transfer>('/api/inventory/transfers', []),
+        apiSafeArray<Stocktake>('/api/inventory/stocktake', []),
       ])
       const productsArr = Array.isArray(ps) ? ps : (ps as { data?: InventoryProduct[] })?.data ?? []
       setBranches(bs)
       setProducts(productsArr)
       setMovements(mv)
-      setTransfers(tf)
-      setStocktakes(st)
+      // 🛡️ v16: ضمان شكل العناصر الداخلية — items لازم تكون مصفوفة عشان
+      // التحويلات والجرد مايكسروش في .reduce/.length لو رد السيرفر ناقص
+      setTransfers(tf.map((t) => ({ ...t, items: Array.isArray(t?.items) ? t.items : [] })))
+      setStocktakes(st.map((s) => ({ ...s, items: Array.isArray(s?.items) ? s.items : [] })))
     } finally {
       setLoading(false)
     }

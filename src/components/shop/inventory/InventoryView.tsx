@@ -486,6 +486,8 @@ async function apiSafe<T>(url: string, fallback: T): Promise<T> {
     const res = await fetch(url, { cache: 'no-store' })
     if (!res.ok) return fallback
     const data = await res.json()
+    // 🛡️ v16: الحمولة المفروض مصفوفة — أي رد غلط بنرجّع الفول باك (زي useInventoryData)
+    if (Array.isArray(fallback) && !Array.isArray(data)) return fallback
     return data as T
   } catch {
     return fallback

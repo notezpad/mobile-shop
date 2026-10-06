@@ -74,11 +74,14 @@ export default function PricingPage() {
   const [billing, setBilling] = React.useState<'monthly' | 'yearly'>('monthly')
   // 🆕 Track auth state + current subscription so we can show the right CTA:
   //   - Not logged in → "ابدأ التجربة المجانية" (go to signup)
-  //   - Logged in, no sub or expired trial → "ابدأ تجربة 14 يوم" (start-trial API)
-  //   - Logged in, active sub (user is upgrading) → "اشترك الآن" (checkout via Paymob)
+  //   - Logged in, never used a trial → "ابدأ تجربة 14 يوم" (start-trial API)
+  //   - Logged in, active sub OR trial already used → "اشترك الآن" (checkout via Paymob)
   const [authed, setAuthed] = React.useState(false)
   const [authChecked, setAuthChecked] = React.useState(false)
   const [hasActiveSub, setHasActiveSub] = React.useState(false)
+  // 🛡️ v15: المستخدم اللي خد تجربة 14 يوم وخلاص (الباقة انتهت) — مينفعش
+  // نعرض له «ابدأ تجربة 14 يوم» تاني، لازم «اشترك الآن» وتحويل مباشر للدفع
+  const [trialUsed, setTrialUsed] = React.useState(false)
   const [trialStarting, setTrialStarting] = React.useState<string | null>(null)
 
   // Load public plans + auth state in parallel
@@ -98,10 +101,12 @@ export default function PricingPage() {
       if (meRes.status === 'fulfilled' && meRes.value) {
         setAuthed(true)
         // 🆕 Check current subscription status to decide CTA label
-        api<{ expired: boolean; planCode: string | null }>('/api/subscription')
+        api<{ expired: boolean; planCode: string | null; period?: string | null }>('/api/subscription')
           .then((d) => {
             if (!alive) return
             setHasActiveSub(!d?.expired && !!d?.planCode && d.planCode !== '-')
+            // 🛡️ v15: آخر اشتراك كان تجربة + انتهت = التجربة اتخدمت خلاص
+            setTrialUsed(Boolean(d?.expired) && d?.period === 'trial')
           })
           .catch(() => {
             // If we can't fetch subscription, assume no active sub → allow trial
@@ -129,10 +134,12 @@ export default function PricingPage() {
       return
     }
 
-    // 🆕 Logged in but no active sub → start a 14-day trial of this plan
-    // (no payment required). After trial expires, the banner will prompt
-    // them to subscribe via Paymob.
-    if (!hasActiveSub) {
+    // 🆕 Logged in but no active sub AND never used a trial → start a
+    // 14-day trial of this plan (no payment required). After trial expires,
+    // the banner will prompt them to subscribe via Paymob.
+    // 🛡️ v15: لو التجربة اتخدمت قبل كده (trialUsed) نروح للدفع مباشرة —
+    // مفيش لفتة «ابدأ تجربة» مرة تانية خالص.
+    if (!hasActiveSub && !trialUsed) {
       setTrialStarting(plan.code)
       try {
         const res = await api<{ ok: boolean; planCode: string; planName: string }>(
@@ -153,6 +160,15 @@ export default function PricingPage() {
           // fall through to checkout below
         } else if (msg.includes('ACTIVE_SUB_EXISTS')) {
           toast.info('لديك اشتراك نشط — سيتم تحويلك لصفحة الترقية')
+          // fall through to checkout below
+        } else if (
+          e?.status === 402 ||
+          msg.includes('منتهي') ||
+          msg.includes('انتهت')
+        ) {
+          // 🛡️ v15: صافي أمان — لو السيرفر رد «اشتراكك منتهي» لأي سبب،
+          // منوقفش المستخدم عند إشعار أحمر ميت: نحوّله لصفحة الدفع على طول
+          toast.info('انتهت باقتك — سيتم تحويلك لصفحة الاشتراك والدفع')
           // fall through to checkout below
         } else {
           toast.error(msg)
@@ -395,16 +411,18 @@ export default function PricingPage() {
                       </>
                     ) : (
                       <>
+                        {/* 🛡️ v15: اللي خلصت تجربته أو باقته نشطة → «اشترك الآن»
+                            (الدفع) — «ابدأ تجربة 14 يوم» للمؤهل للتجربة فقط */}
                         {authed
-                          ? (hasActiveSub ? 'اشترك الآن' : 'ابدأ تجربة 14 يوم')
+                          ? (hasActiveSub || trialUsed ? 'اشترك الآن' : 'ابدأ تجربة 14 يوم')
                           : 'ابدأ التجربة المجانية'}
                         <ArrowLeft className="size-4" />
                       </>
                     )}
                   </button>
 
-                  {/* Trial hint — only when logged in and no active sub */}
-                  {authed && !hasActiveSub && trialStarting !== plan.code && (
+                  {/* Trial hint — only for users still eligible for a trial */}
+                  {authed && !hasActiveSub && !trialUsed && trialStarting !== plan.code && (
                     <p className="pg-card-trial-hint">
                       <Sparkles className="size-3" />
                       تجربة 14 يوم بمميزات الباقة الكاملة — بدون دفع

@@ -2,7 +2,7 @@ import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { countableSubWhere } from '@/lib/subscription-status'
 import { db } from '@/lib/db'
-import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireAuthIgnoreSubscription, authErrorResponse } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +35,12 @@ export const dynamic = 'force-dynamic'
 async function __POST(req: NextRequest) {
   let session
   try {
-    session = await requireAuth()
+    // 🛡️ 2026-10-07 (v15): requireAuthIgnoreSubscription بدل requireAuth —
+    // قبل كده صاحب التجربة المنتهية كان بياخد 402 «اشتراكك منتهي» قبل ما
+    // يوصل لمنطق التجربة نفسه! مع إن القواعد تحت أصلاً بتمنع إعادة تجربة
+    // نفس الباقة وبتسمح بتجربة باقة مختلفة — وده طبيعي: التجربة هي طريق
+    // الرجوع للمستخدم اللي باقتها انتهت. تسجيل الدخول مطلوب زي ما هو.
+    session = await requireAuthIgnoreSubscription()
   } catch (e) {
     const err = authErrorResponse(e)
     if (err) return NextResponse.json(err.body, { status: err.status })

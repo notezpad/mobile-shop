@@ -46,7 +46,7 @@ export function MovementsPage() {
       ],
       rows: movements.map((m) => ({
         date: new Date(m.createdAt).toLocaleString('ar-EG'),
-        product: m.product.name,
+        product: m.product?.name ?? '—',
         type: MOVEMENT_TYPE_LABELS[m.type] ?? m.type,
         quantity: m.quantity,
         branch: m.branch?.name || '-',
