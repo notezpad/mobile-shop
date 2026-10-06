@@ -103,15 +103,27 @@ export function useInventoryData(): InventoryData {
       const [bs, ps, mv, tf, st] = await Promise.all([
         fetchSafe<Branch[]>('/api/branches', { wantArray: true, fallback: [] }),
         fetchSafe<{ data: InventoryProduct[] } | InventoryProduct[]>('/api/products?limit=1000&status=all', { wantArray: false, fallback: [] }),
-        fetchSafe<Movement[]>('/api/inventory/movements', { wantArray: true, fallback: [] }),
+        /* 🛡️ v18: سيرفر الإنتاج (تحديث v10) بيرجّع الحركات بشكل مقسّم صفحات
+           { data: [...], total, page, limit, totalPages, inTotal, outTotal, series }
+           — مش مصفوفة! لكن النسخ الأقدم بترجّع مصفوفة مباشرة. فبنقبل
+           الشكلين هنا (wantArray: false) والتطبيع بيبقى تحت — وأي شكل تالت
+           (زي { error }) بيتعامَل معاه كفشل حقيقي برسالة السيرفر نفسها. */
+        fetchSafe<unknown>('/api/inventory/movements', { wantArray: false, fallback: [] }),
         fetchSafe<Transfer[]>('/api/inventory/transfers', { wantArray: true, fallback: [] }),
         fetchSafe<Stocktake[]>('/api/inventory/stocktake', { wantArray: true, fallback: [] }),
       ])
       // 🛡️ v16: المنتجات ممكن ترجع مصفوفة مباشرة أو { data: [...] } — الاتنين مقبولين
       const psArr = Array.isArray(ps.data) ? ps.data : ((ps.data as { data?: InventoryProduct[] })?.data ?? [])
+      // 🛡️ v18: تطبيع الحركات — مصفوفة مباشرة أو { data: [...] } (سيرفر v10)
+      const mvRaw = mv.data as unknown
+      const mvArr: Movement[] | null = Array.isArray(mvRaw)
+        ? (mvRaw as Movement[])
+        : mvRaw !== null && typeof mvRaw === 'object' && Array.isArray((mvRaw as { data?: unknown }).data)
+          ? ((mvRaw as { data: Movement[] }).data)
+          : null
       setBranches(bs.data)
       setProducts(psArr)
-      setMovements(mv.data)
+      setMovements(mvArr ?? [])
       // 🛡️ v16: ضمان شكل العناصر الداخلية — items لازم تكون مصفوفة عشان
       // التحويلات والجرد مايكسروش في .reduce/.length لو رد السيرفر ناقص
       setTransfers(tf.data.map((t) => ({ ...t, items: Array.isArray(t?.items) ? t.items : [] })))
@@ -119,7 +131,16 @@ export function useInventoryData(): InventoryData {
       setLoadErrors({
         branches: bs.error,
         products: ps.error,
-        movements: mv.error,
+        /* 🛡️ v18: فشل الحركات = خطأ شبكة/رمز من fetchSafe، أو جسم ماعرفناش
+           شكله خالص — وساعتها نعرض رسالة السيرفر نفسها لو الجسم فيه { error } */
+        movements:
+          mv.error ??
+          (mvArr === null
+            ? typeof (mvRaw as { error?: unknown } | null)?.error === 'string' &&
+              ((mvRaw as { error?: unknown } | null)?.error as string).length > 0
+              ? ((mvRaw as { error: string }).error)
+              : 'رد غير متوقع من الخادم (تعذّر قراءة قائمة الحركات)'
+            : null),
         transfers: tf.error,
         stocktake: st.error,
       })

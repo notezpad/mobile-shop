@@ -76,7 +76,9 @@ export function TransfersPage() {
             <Truck className="size-6" />
           </span>
 
-          <div className="min-w-0 flex-1">
+          {/* 📱 v18: basis-52 — لو المساحة بعد الأيقونة والأزرار أقل من 208px
+              بلوك النص بيلف لسطر كامل لوحده بدل ما ينهار لعمود كلمة-كلمة */}
+          <div className="min-w-0 flex-1 basis-52">
             <h1 className="text-xl font-black tracking-tight sm:text-2xl">
               التحويلات <span className="text-amber-600 dark:text-amber-400">· مركز الشحن</span>
             </h1>
