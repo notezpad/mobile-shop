@@ -308,8 +308,6 @@ model Customer {
   @@index([tenantId])
   @@index([tenantId, name])
   @@index([tenantId, phone])
-  // ⚡ v9: إجمالي ديون العملاء (SUM balance WHERE > 0) — فهرس تغطية بدون heap fetch
-  @@index([tenantId, balance])
 }
 
 model Payment {
@@ -354,8 +352,6 @@ model Supplier {
   @@index([tenantId])
   @@index([tenantId, name])
   @@index([tenantId, phone])
-  // ⚡ v9: إجمالي مستحقات الموردين (SUM balance WHERE > 0)
-  @@index([tenantId, balance])
 }
 
 model SupplierPayment {
@@ -515,11 +511,6 @@ model Sale {
   @@index([tenantId])
   @@index([tenantId, createdAt])
   @@index([branchId])
-  // ⚡ v9: استعلامات الأرباح/التقارير بتفلتر tenantId + status='مكتملة' + نطاق
-  // createdAt دايماً — الفهرس المركّب بيقلب الـ seq scan لـ index scan.
-  @@index([tenantId, status, createdAt])
-  // ⚡ v9: فواتير الآجل المتأخرة في الداشبورد (dueDate < اليوم)
-  @@index([tenantId, dueDate])
   // 🛡️ 2026-09-30: رقم الفاتورة فريد داخل المحل — الضمانة الأخيرة ضد تكرار
   // الأرقام مع فواتير متزامنة (التوليد نفسه جوه الـ tx + retry على P2002).
   // الـ NULLs (فواتير قديمة قبل نظام الأرقام) مسموحة في Postgres.
@@ -646,9 +637,6 @@ model MaintenanceOrder {
   @@index([tenantId, status])
   @@index([tenantId, phone])
   @@index([tenantId, customerName])
-  // ⚡ v9: تقارير الصيانة بتجمّع حسب receivedAt/deliveredAt بنطاق زمني
-  @@index([tenantId, receivedAt])
-  @@index([tenantId, deliveredAt])
 }
 
 model Transaction {
@@ -775,8 +763,6 @@ model Transfer {
 
   @@index([tenantId])
   @@index([status])
-  // ⚡ v9: قائمة التحويلات (أحدث أولاً)
-  @@index([tenantId, createdAt])
 }
 
 model TransferItem {
@@ -807,8 +793,7 @@ model Stocktake {
   branch Branch?         @relation(fields: [branchId], references: [id])
   items  StocktakeItem[]
 
-  // ⚡ v9: قائمة الجرد (أحدث عمليات أولاً)
-  @@index([tenantId, createdAt])
+  @@index([tenantId])
 }
 
 model StocktakeItem {

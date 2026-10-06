@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, Menu, CalendarDays, Home, ChevronRight } from 'lucide-react'
+import { Loader2, Menu, CalendarDays, Home, X } from 'lucide-react'
 import { Sidebar } from '@/components/shop/Sidebar'
 import { ThemeToggle } from '@/components/shop/ThemeToggle'
 import { NotificationBell } from '@/components/shop/NotificationBell'
@@ -156,41 +156,6 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   const subscription = useShopStore((s) => s.subscription)
   const tenantTimezone = useShopStore((s) => s.branding.timezone)
   const [mobileOpen, setMobileOpen] = React.useState(false)
-
-  // ─── Swipe-to-close for the mobile drawer (anchored right → drag right) ───
-  // transform-only (no re-render while dragging). On release we clear the inline
-  // styles so the existing CSS transition animates to open/closed from the finger.
-  const swipe = React.useRef({ x: 0, y: 0, t: 0, dx: 0, locked: false, active: false })
-  const onSwipeStart = (e: React.TouchEvent<HTMLElement>) => {
-    const p = e.touches[0]
-    swipe.current = { x: p.clientX, y: p.clientY, t: Date.now(), dx: 0, locked: false, active: true }
-  }
-  const onSwipeMove = (e: React.TouchEvent<HTMLElement>) => {
-    const s = swipe.current
-    if (!s.active) return
-    const p = e.touches[0]
-    const dx = p.clientX - s.x
-    const dy = p.clientY - s.y
-    if (!s.locked) {
-      if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { s.active = false; return }
-      if (dx > 10 && dx > Math.abs(dy)) s.locked = true
-      else return
-    }
-    s.dx = Math.max(0, dx)
-    const el = e.currentTarget
-    el.style.transition = 'none'
-    el.style.transform = `translateX(${s.dx}px)`
-  }
-  const onSwipeEnd = (e: React.TouchEvent<HTMLElement>) => {
-    const s = swipe.current
-    if (!s.active || !s.locked) { s.active = false; return }
-    s.active = false
-    const el = e.currentTarget
-    const velocity = s.dx / Math.max(1, Date.now() - s.t)
-    el.style.transition = ''
-    el.style.transform = ''
-    if (s.dx > 80 || velocity > 0.5) setMobileOpen(false)
-  }
 
   // ⚡ Initialize offline sync engine (flush outbox when network returns)
   useOfflineReady()
@@ -409,22 +374,14 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         className={`fixed inset-y-0 right-0 z-50 flex h-dvh w-[82vw] max-w-[300px] flex-col bg-background shadow-lg transition-transform duration-300 ease-in-out ${
           mobileOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
-        style={{ touchAction: 'pan-y' }}
-        onTouchStart={onSwipeStart}
-        onTouchMove={onSwipeMove}
-        onTouchEnd={onSwipeEnd}
-        onTouchCancel={onSwipeEnd}
       >
-        {/* مقبض الإغلاق: لسان على الحافة الحرّة للدرج (بدل علامة X) + سحب لليمين للإغلاق */}
+        {/* زر الإغلاق على الشمال عشان ما يغطيش لوجو المحل */}
         <button
           type="button"
           onClick={() => setMobileOpen(false)}
-          className="sb-edge-tab"
-          data-open={mobileOpen}
-          aria-label="إغلاق القائمة"
+          className="absolute left-3 top-4 z-10 flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted active:scale-90"
         >
-          <span className="sb-edge-grip" aria-hidden="true" />
-          <ChevronRight className="size-3.5" aria-hidden="true" />
+          <X className="size-4" />
           <span className="sr-only">إغلاق</span>
         </button>
         {/* w-full: السايدبار يملا الدرج بالكامل */}

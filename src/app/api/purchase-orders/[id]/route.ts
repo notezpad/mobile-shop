@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { performPurchaseReturn, PurchaseReturnError } from '@/lib/purchase-return'
-import { bumpEdgeCache } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,9 +64,6 @@ async function __DELETE(
         orderId: oid,
       })
     )
-    // ⚡ v9: إبطال كاش أوامر الشراء + المخزون فوراً
-    await bumpEdgeCache('/api/purchase-orders', session.tenantId)
-    await bumpEdgeCache('/api/inventory/movements', session.tenantId)
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
     if (e instanceof PurchaseReturnError) {

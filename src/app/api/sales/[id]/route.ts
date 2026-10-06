@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
 import { createPrincipalCashEntry } from '@/lib/commission'
-import { bumpEdgeCache } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -264,9 +263,6 @@ async function __DELETE(
     }
     throw e
   }
-
-  // ⚡ v9: حذف/إرجاع فاتورة بيغيّر سجل المبيعات — إبطال كاش الحافة فوراً
-  await bumpEdgeCache('/api/sales', session.tenantId)
 
   return NextResponse.json({
     ok: true,

@@ -5,7 +5,7 @@ import type { Session } from '@/lib/auth'
 import { requireCapability, featureErrorResponse } from '@/lib/features'
 import { deductStock } from '@/lib/deduct-stock'
 import { getTenantTimezone, localDateStrToUtcBounds, dateStrInTz } from '@/lib/tenantTime'
-import { purgeEdgeCache, PURGE_KEYS, matchEdgeCacheV, putEdgeCacheV, bumpEdgeCache, sortedQuery } from '@/lib/edgeCache'
+import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 import type { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -53,15 +53,6 @@ export async function GET(req: NextRequest) {
     const from = searchParams.get('from')
     const to = searchParams.get('to')
 
-    // ⚡ EDGE CACHE v9: سجل المبيعات endpoint تقيل (فواتير + أصناف + عملاء
-    // لكل صف) وبيتطلب مع كل تنقلة صفحة/فلتر تاريخ. نسخة على الحافة بـ TTL
-    // 15s + إبطال فوري بزيادة رقم النسخة بعد أي بيع/حذف/مرتجع (bumpEdgeCache
-    // في POST/DELETE/returns). المفتاح بيشمل الـ rawQuery كامل مرتب فكل
-    // فاريانتس (from/to/page) ليها نسختها الصحيحة.
-    const sq = sortedQuery(req.url)
-    const cached = await matchEdgeCacheV('/api/sales', sq, session.tenantId)
-    if (cached) return cached
-
     // 🕐 ROOT FIX (2026-09-27): "from"/"to" used to be resolved with the
     // *browser's* tzOffset — which meant two employees of the SAME shop,
     // opening this page from different devices/countries, would see
@@ -108,15 +99,13 @@ export async function GET(req: NextRequest) {
       ...s,
       userName: s.userId ? (userNameById.get(s.userId) ?? null) : null,
     }))
-    const res = NextResponse.json({
+    return NextResponse.json({
       data: result,
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
     })
-    await putEdgeCacheV(res.clone(), '/api/sales', sq, session.tenantId, 15)
-    return res
   })
 }
 
@@ -535,8 +524,6 @@ export async function POST(req: NextRequest) {
     )
     // ⚡ v9: البيع بيخصم مخزون — امسح كاش قائمة المنتجات كمان (نفس فرع البائع)
     await purgeEdgeCache([PURGE_KEYS.products(session.branchId)], session.tenantId, '3')
-    // ⚡ v9: إبطال كل نسخ كاش سجل المبيعات فوراً (كل الفاريانتس)
-    await bumpEdgeCache('/api/sales', session.tenantId)
     return NextResponse.json(sale, { status: 201 })
   })
 }

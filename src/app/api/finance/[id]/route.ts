@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
-import { bumpEdgeCache } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -137,8 +136,6 @@ async function __DELETE(
     throw e
   }
 
-  // ⚡ v9: إبطال كاش المعاملات فوراً
-  await bumpEdgeCache('/api/finance', session.tenantId)
   return NextResponse.json({ ok: true })
 }
 

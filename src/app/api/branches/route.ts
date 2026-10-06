@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
-import { matchEdgeCacheV, putEdgeCacheV, bumpEdgeCache } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,16 +27,11 @@ export async function GET() {
       if (fe) return NextResponse.json(fe.body, { status: fe.status })
       throw e
     }
-    // ⚡ EDGE CACHE v9 (TTL 60s) — الفروع نادراً ما بتتغير؛ أي تعديل بيعمل bump
-    const cached = await matchEdgeCacheV('/api/branches', '', s.tenantId)
-    if (cached) return cached
     const branches = await db.branch.findMany({
       where: { tenantId: s.tenantId },
       orderBy: [{ isMain: 'desc' }, { id: 'asc' }],
     })
-    const res = NextResponse.json(branches)
-    await putEdgeCacheV(res.clone(), '/api/branches', '', s.tenantId, 60)
-    return res
+    return NextResponse.json(branches)
   })
 }
 
@@ -71,8 +65,6 @@ export async function POST(req: NextRequest) {
         isMain: count === 0,
       },
     })
-    // ⚡ v9: إبطال كاش الفروع فوراً
-    await bumpEdgeCache('/api/branches', s.tenantId)
     return NextResponse.json(created, { status: 201 })
   })
 }

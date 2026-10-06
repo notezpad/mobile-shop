@@ -695,7 +695,7 @@ export function SalesHistoryView() {
                     const no = splitNo(s)
                     const named = !!s.customer
                     return (
-                      <li key={s.id} className="cv-auto">
+                      <li key={s.id}>
                         <button
                           onClick={() => setSelectedId(open && !window.matchMedia('(min-width:1280px)').matches ? null : s.id)}
                           aria-pressed={active}

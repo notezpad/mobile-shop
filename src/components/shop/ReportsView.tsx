@@ -1195,7 +1195,7 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
   const [m, setM] = React.useState<'both' | 'total' | 'profit'>('both')
   const t = r.salesTrend
   return (
-    <section className="animate-in-up stagger-1 overflow-hidden rounded-3xl border bg-card shadow-sm cv-section">
+    <section className="animate-in-up stagger-1 overflow-hidden rounded-3xl border bg-card shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 p-4 pb-0 sm:p-5">
         <div className="min-w-0">
           <h2 className="truncate text-sm font-extrabold sm:text-base">منحنى المبيعات والربح</h2>

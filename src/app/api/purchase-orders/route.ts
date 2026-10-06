@@ -4,7 +4,6 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import type { Session } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
-import { matchEdgeCacheV, putEdgeCacheV, bumpEdgeCache, sortedQuery } from '@/lib/edgeCache'
 import { round2, REFUND_METHODS } from '@/lib/purchase-return'
 import { createPrincipalCashEntry } from '@/lib/commission'
 import { getTenantTimezone, dateStrInTz, localDateStrToUtcBounds } from '@/lib/tenantTime'
@@ -69,11 +68,6 @@ async function __GET(req: NextRequest) {
     if (to) createdAt.lte = localDateStrToUtcBounds(to, 'end', tz)
   }
 
-  // ⚡ EDGE CACHE v9 (TTL 30s) — إبطال فوري بعد أي أمر شراء/مرتجع
-  const sq = sortedQuery(req.url)
-  const cached = await matchEdgeCacheV('/api/purchase-orders', sq, session.tenantId)
-  if (cached) return cached
-
   const orders = await db.purchaseOrder.findMany({
     where: {
       tenantId: session.tenantId,
@@ -81,11 +75,9 @@ async function __GET(req: NextRequest) {
     },
     orderBy: { id: 'desc' },
     include: { items: true, supplier: true },
-    // ⚡ v9 (2026-10-06): سقف موحّد 1000 صف مع فلاتر وبدونها — قبلاً الطلب
-    // بفترة واسعة كان بيسحب السجل كله بأصنافه (كل صف بيشمل items + supplier)
-    // = ضغط CPU/ذاكرة على الـ Worker (خطة 10ms). الواجهة بتعرض 30 صف/صفحة
-    // (ListPager) والتصدير Excel بيعمل فلترة فترة أنضف.
-    take: 1000,
+    // Without a date filter (initial page load) cap the result so a shop
+    // with years of history doesn't pull every order on every visit.
+    ...(from || to ? {} : { take: 500 }),
   })
   const userIds = [...new Set(orders.map((o) => o.userId).filter(Boolean))] as string[]
   const users = userIds.length
@@ -99,9 +91,7 @@ async function __GET(req: NextRequest) {
     ...o,
     userName: o.userId ? (userNameById.get(o.userId) ?? null) : null,
   }))
-  const res = NextResponse.json(result)
-  await putEdgeCacheV(res.clone(), '/api/purchase-orders', sq, session.tenantId, 30)
-  return res
+  return NextResponse.json(result)
 }
 
 async function __POST(req: NextRequest) {
@@ -330,9 +320,6 @@ async function __POST(req: NextRequest) {
     }, { maxWait: 10000, timeout: 20000 })
   }
 
-  // ⚡ v9: إبطال كاش أوامر الشراء + المخزون (الاستلام بيزيد كميات) فوراً
-  await bumpEdgeCache('/api/purchase-orders', session.tenantId)
-  await bumpEdgeCache('/api/inventory/movements', session.tenantId)
   return NextResponse.json(order, { status: 201 })
 }
 

@@ -308,8 +308,7 @@ export function NotificationBell() {
               {unreadCount > 0 && (
                 <button className="notif-panel-markall" onClick={markAllRead}>
                   <CheckCheck className="size-3.5" />
-                  <span className="notif-lbl-full">تحديد الكل كمقروء</span>
-                  <span className="notif-lbl-short">الكل كمقروء</span>
+                  تحديد الكل كمقروء
                 </button>
               )}
               {notifications.length > 0 && (
@@ -324,8 +323,7 @@ export function NotificationBell() {
                   ) : (
                     <Trash2 className="size-3.5" />
                   )}
-                  <span className="notif-lbl-full">مسح الكل</span>
-                  <span className="notif-lbl-short">مسح</span>
+                  مسح الكل
                 </button>
               )}
             </div>

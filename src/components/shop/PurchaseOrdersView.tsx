@@ -32,7 +32,6 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatArabicDateTime, formatCurrency, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { ListPager, usePager } from './ListPager'
 import { PurchaseOrderDialog } from './PurchaseOrderDialog'
 import { PurchaseReturnDialog } from './PurchaseReturnDialog'
 import { useShopStore } from '@/lib/store'
@@ -360,10 +359,6 @@ export function PurchaseOrdersView() {
     [base, calcs, status]
   )
 
-  // ⚡ v9: ترقيم العرض — 30 أمر شراء في الـ DOM في كل مرة (الإحصائيات أعلاه على الكل)
-  const pager = usePager(filtered, 30, [query, status, groupBy, sort])
-  const pageOrders = pager.pageRows
-
   const segs = React.useMemo(() => {
     const r = {
       settled: { n: 0, amount: 0, net: 0 },
@@ -410,7 +405,7 @@ export function PurchaseOrdersView() {
   )
 
   const groups = React.useMemo(() => {
-    const sorted = [...pageOrders].sort(sorter)
+    const sorted = [...filtered].sort(sorter)
     if (groupBy === 'none') return [{ key: 'all', title: '', list: sorted }]
     const m = new Map<string, PurchaseOrder[]>()
     sorted.forEach((o) => {
@@ -430,7 +425,7 @@ export function PurchaseOrdersView() {
       arr.sort((a, b) => dueOf(b.list) - dueOf(a.list) || totOf(b.list) - totOf(a.list))
     }
     return arr
-  }, [pageOrders, sorter, groupBy, sort, calcs])
+  }, [filtered, sorter, groupBy, sort, calcs])
 
   const activeFilters =
     (status ? 1 : 0) + (supplier ? 1 : 0) + (method ? 1 : 0) + (by ? 1 : 0) + (onlyReturned ? 1 : 0) + (onlyLate ? 1 : 0) + (query.trim() ? 1 : 0)
@@ -883,15 +878,6 @@ export function PurchaseOrdersView() {
           })}
         </div>
       )}
-
-      {/* ⚡ v9: ترقيم صفحات العرض */}
-      <ListPager
-        page={pager.page}
-        pageCount={pager.pageCount}
-        setPage={pager.setPage}
-        total={pager.total}
-        unitLabel="أمر شراء"
-      />
 
       <PurchaseReturnDialog
         open={returnId !== null}
@@ -1527,7 +1513,7 @@ function Slip({
   const paidSub = [m, refundBack > 0 ? `بعد استرداد ${num(refundBack)}` : null].filter(Boolean).join(' · ')
 
   return (
-    <li className={cn('relative overflow-hidden rounded-2xl border bg-card transition-shadow cv-auto', open && 'shadow-md', c.fully && 'bg-muted/30')}>
+    <li className={cn('relative overflow-hidden rounded-2xl border bg-card transition-shadow', open && 'shadow-md', c.fully && 'bg-muted/30')}>
       <span aria-hidden className={cn('absolute inset-y-4 start-0 w-1.5 rounded-e-full', rail)} />
 
       <div className="flex items-stretch">
