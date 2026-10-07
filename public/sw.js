@@ -42,9 +42,16 @@
  *   كلهم — بحد أقصى 600 ملف + marker يتفصل بعد كل تحديث SW تلقائياً.
  *   + فولباك API أوفلاين مطرّد: exact match → نفس المسار بأي query
  *   (ignoreSearch) → 503 JSON — فالفلاتر المختلفة أوفلاين ما بترمش 503.
+ *
+ * 🛡️ 2026-10-07 (v11 — LOCAL-FIRST — جذر "كل حاجة صفر + الإجراء مش بيظهر إلا بعد المزامنة"):
+ *   الجذر كان في طبقة التطبيق (api-offline.ts): أي كتابة أوفلاين كانت
+ *   بتمسح كل كاش IDB → الصفحات بتفتح على أصفار + توست أحمر. الاتفصل ده
+ *   اتصلّح هناك (applyLocalMutation بدل المسح). هنا بنبقى نسخة جديدة
+ *   بس (v11) عشان activate يعيد تسخين كل حاجة (chunk-walk marker بيتمسح
+ *   مع الكاش القديم) — والـ endpoints الجديدة في PRECACHE_APIS تتخزن.
  */
 
-const CACHE_VERSION = 'shop-erp-v10'
+const CACHE_VERSION = 'shop-erp-v11'
 const OFFLINE_URL = '/offline.html'
 
 /**

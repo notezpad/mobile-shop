@@ -204,15 +204,24 @@ export function BranchesView() {
         void reloadBranchesOnly({ renamed: { id: editing.id, name: form.name.trim() } })
       } else {
         const created = await api<Branch>('/api/branches', { method: 'POST', body: form })
-        toast.success('تم إنشاء الفرع')
-        setOpen(false)
-        void reloadBranchesOnly({
-          added: {
-            id: created.id,
-            name: created.name,
-            isMain: created.isMain,
-          },
-        })
+        // 🛡️ v11: أوفلاين الرد بيبقى تأكيد حفظ محلي ({ok, offline:true}) من غير
+        // id — والفرع بيتدمج تلقائياً في كاش /api/branches المحلي، فبنسيب
+        // الإضافة المحلية اليدوية للرد الأونلاين بس.
+        if ((created as any)?.offline) {
+          toast.success('تم حفظ الفرع محلياً — سيتم المزامنة عند عودة الاتصال')
+          setOpen(false)
+          void reloadBranchesOnly({})
+        } else {
+          toast.success('تم إنشاء الفرع')
+          setOpen(false)
+          void reloadBranchesOnly({
+            added: {
+              id: created.id,
+              name: created.name,
+              isMain: created.isMain,
+            },
+          })
+        }
       }
     } catch (e: any) {
       toast.error(e?.message || 'فشل الحفظ')

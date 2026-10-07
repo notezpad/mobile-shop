@@ -158,6 +158,90 @@ export const idb = {
     }
   },
 
+  /**
+   * 🛡️ v11 (LOCAL-FIRST): كل الصفوف المخزنة اللي مفاتيحها بتبدأ ببادئة معينة
+   * — بتُستخدم من applyLocalMutation في api-offline.ts عشان بعد أي عملية
+   * أوفلاين ندمج السجل الجديد جوا نسخ الكاش نفسها (بدل ما نمسحها!) فالصفحات
+   * تعرض الإجراء لحظياً أوفلاين من غير ما تستنى المزامنة.
+   * بسقف أمان cap (افتراضي 40 صف) عشان ما نمشيش على آلاف المفاتيح.
+   */
+  async getRowsByPrefix(
+    prefix: string,
+    cap = 40,
+  ): Promise<Array<{ key: string; data: any; at: number }>> {
+    if (!idbAvailable() || !prefix) return []
+    try {
+      const db = await openDB()
+      const keys = await new Promise<string[]>((resolve) => {
+        try {
+          const t = db.transaction('rows', 'readonly')
+          const req = t.objectStore('rows').openKeyCursor()
+          const out: string[] = []
+          req.onsuccess = () => {
+            const cur = req.result
+            if (!cur) return resolve(out)
+            const k = String(cur.key)
+            if (k === prefix || k.startsWith(prefix)) out.push(k)
+            if (out.length >= cap) return resolve(out)
+            cur.continue()
+          }
+          req.onerror = () => resolve(out)
+        } catch {
+          resolve([])
+        }
+      })
+      const rows: Array<{ key: string; data: any; at: number }> = []
+      for (const key of keys.slice(0, cap)) {
+        const row = await tx<any>('rows', 'readonly', (s) => s.get(key) as IDBRequest<any>).catch(() => null)
+        if (row && typeof row === 'object' && 'data' in row) {
+          rows.push({ key, data: row.data, at: row.at })
+        }
+      }
+      return rows
+    } catch {
+      return []
+    }
+  },
+
+  // ── 🛡️ v11: كتابات مباشرة على متجر المنتجات (تعديل/حذف أوفلاين) ──
+  async putProduct(p: any): Promise<void> {
+    if (!idbAvailable() || !p || p.id === undefined) return
+    const db = await openDB()
+    await new Promise<void>((resolve) => {
+      const t = db.transaction('products', 'readwrite')
+      t.objectStore('products').put(p)
+      t.oncomplete = () => resolve()
+      t.onerror = () => resolve()
+      t.onabort = () => resolve()
+    })
+  },
+
+  async updateProduct(id: number, patch: any): Promise<void> {
+    try {
+      const p = await this.getProductById(id).catch(() => null)
+      if (!p) return
+      await this.putProduct({ ...p, ...patch, id: p.id })
+    } catch {
+      /* ignore */
+    }
+  },
+
+  async deleteProduct(id: number): Promise<void> {
+    if (!idbAvailable()) return
+    try {
+      const db = await openDB()
+      await new Promise<void>((resolve) => {
+        const t = db.transaction('products', 'readwrite')
+        t.objectStore('products').delete(id)
+        t.oncomplete = () => resolve()
+        t.onerror = () => resolve()
+        t.onabort = () => resolve()
+      })
+    } catch {
+      /* ignore */
+    }
+  },
+
   // ── products store (offline POS search) ──
   /**
    * Replace ALL products in IndexedDB with a fresh batch from the server.
@@ -249,8 +333,14 @@ export const idb = {
     return (all ?? []).sort((a, b) => a.createdAt - b.createdAt)
   },
 
-  async addToOutbox(entry: Omit<OutboxEntry, 'id' | 'createdAt' | 'tries'>): Promise<void> {
-    if (!idbAvailable()) return
+  /**
+   * 🛡️ v11: بترجّع القيد الكامل بعد الإنشاء — الـ id بيُستخدم لاشتقاق
+   * id مؤقت ثابت للمنتجات المضافة أوفلاين (نفس معادلة getOfflineAddedProducts
+   * و remapLocalProductIds في sync.ts: -(hashStr(entry.id)+1)) عشان أي
+   * فاتورة/أمر شراء يشاور على المنتج قبل المزامنة يتظبط تلقائياً.
+   */
+  async addToOutbox(entry: Omit<OutboxEntry, 'id' | 'createdAt' | 'tries'>): Promise<OutboxEntry | null> {
+    if (!idbAvailable()) return null
     const full: OutboxEntry = {
       ...entry,
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
@@ -259,6 +349,7 @@ export const idb = {
     }
     await tx('outbox', 'readwrite', (s) => s.put(full) as IDBRequest).catch(() => {})
     notifyOutboxChange()
+    return full
   },
 
   async removeFromOutbox(id: string): Promise<void> {

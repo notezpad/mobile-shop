@@ -280,7 +280,13 @@ export function PurchaseOrderDialog({
           paymentMethod: paid > 0 ? payMethod : 'cash',
         },
       })
-      toast.success(`تم تسجيل أمر الشراء بنجاح - ${order.orderNo}`)
+      // 🛡️ v11: أوفلاين الرد تأكيد حفظ محلي من غير orderNo — رسالة واضحة
+      // بدل "undefined"، والأمر بيتدمج لحظياً في كاش أوامر الشراء المحلي.
+      if (order?.offline) {
+        toast.success('تم حفظ أمر الشراء محلياً — سيتم المزامنة عند عودة الاتصال')
+      } else {
+        toast.success(`تم تسجيل أمر الشراء بنجاح - ${order.orderNo}`)
+      }
       onSaved?.()
       onOpenChange(false)
     } catch (e: any) {

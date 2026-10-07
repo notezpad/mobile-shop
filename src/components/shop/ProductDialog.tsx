@@ -153,8 +153,16 @@ export function ProductDialog({
           method: 'POST',
           body: payload,
         })
-        toast.success('تمت إضافة المنتج')
-        onSaved(created)
+        // 🛡️ v11: أوفلاين الرد بيحمل الـ id المؤقت للمنتج المدمج في الكاش
+        // المحلي — بنرجّعه مع الـ payload عشان إضافة المنتج الجديد للسلة
+        // (أمر الشراء/البيع) تشتغل أوفلاين والمزامنة تظبط الـ id بعدين.
+        if ((created as any)?.offline) {
+          toast.success('تم حفظ المنتج محلياً — سيتم المزامنة عند عودة الاتصال')
+          onSaved({ ...payload, id: (created as any).id } as ProductFormValues)
+        } else {
+          toast.success('تمت إضافة المنتج')
+          onSaved(created)
+        }
       }
       onOpenChange(false)
     } catch (e: any) {

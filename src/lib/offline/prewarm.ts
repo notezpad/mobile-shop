@@ -24,6 +24,17 @@ const PRECACHE_ENDPOINTS = [
   // — من غيرها أي فتح أوفلاين بيرجع getMe() = null = طرد للصفحة الرئيسية.
   // (write-through في getMe() بتغطي معظم الحالات؛ ده ضمان إضافي)
   '/api/auth/me',
+  // 🛡️ v11 (LOCAL-FIRST): مصادر الصفحات اللي بيتشتكي منها أوفلاين —
+  // سجل المبيعات / المصروفات / الخزنة / أوامر الشراء / المخزون. من غيرها
+  // أول فتح أوفلاين لصفحة ما اتفتحتش أونلاين كان بييجي فاضي + توست أحمر.
+  '/api/sales?page=1&limit=50',
+  '/api/expenses',
+  '/api/cash',
+  '/api/purchase-orders',
+  '/api/branches',
+  '/api/inventory/movements',
+  '/api/inventory/transfers',
+  '/api/inventory/stocktake',
 ]
 
 /**
