@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
-import { getTenantTimezone, startOfDayInTz } from '@/lib/tenantTime'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * منتجات اتضافت للكتالوج النهاردة، بكمية صفر (يعني لسه معملهاش دخول فعلي للمخزون)،
- * ولسه مش مرتبطة بأي أمر شراء سابق — دي المرشحة إنها "منتجات فاتورة النهاردة"
- * اللي لسه محتاجة تتحط في سلة أمر شراء.
+ * 🔔 v13: المنتجات اللي لسه ملهاش دخول فعلي للمخزون — أي منتج نشط كميته صفر
+ * ومش في أي أمر شراء، مهما كان تاريخ إضافته (قبل كده كانت «النهاردة» بس،
+ * فمنتج اتضاف أمس كان بيختفي من الإشعار). الاسم pending-today اتسب كما هو
+ * عشان مسار الـ API والكاش القديم ما يتكسروش.
+ * الأحدث أولاً، وبحد أقصى 200 عشان الإشعار ما يتحولش لقائمة ضخمة.
  */
 async function __GET() {
   let session
@@ -19,15 +20,10 @@ async function __GET() {
     return NextResponse.json(err?.body, { status: err?.status })
   }
 
-  // 🕐 نفس إصلاح توقيت المحل الموجود في /api/dashboard — "النهاردة" لازم
-  // يتحسب بتوقيت المحل نفسه، مش بتوقيت السيرفر (UTC).
-  const tz = await getTenantTimezone(session.tenantId)
-  const startOfDay = startOfDayInTz(new Date(), tz)
-
   const where: any = {
     tenantId: session.tenantId,
     quantity: 0,
-    createdAt: { gte: startOfDay },
+    active: true,
     purchaseOrderItems: { none: {} },
   }
   if (session.branchId) {
@@ -37,6 +33,7 @@ async function __GET() {
   const products = await db.product.findMany({
     where,
     orderBy: { createdAt: 'desc' },
+    take: 200,
     select: {
       id: true,
       name: true,

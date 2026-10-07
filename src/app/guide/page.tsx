@@ -46,6 +46,7 @@ import {
 } from 'lucide-react'
 import { LandingFooter } from '@/components/landing/LandingFooter'
 import { GEMS, TOUR_STEPS, FASHION_STORY, FAQ } from './guide-data'
+import { Journey } from './journey'
 import './guide.css'
 
 const fadeUp = {
@@ -56,6 +57,9 @@ const fadeUp = {
 }
 
 const SECTIONS = [
+  { href: '#journey', label: 'يوم كامل' },
+  { href: '#edge', label: 'اللي بيميزنا' },
+  { href: '#stock', label: 'دخول البضاعة' },
   { href: '#start', label: 'ابدأ في 5 دقائق' },
   { href: '#tour', label: 'الجولة التفاعلية' },
   { href: '#gems', label: 'ميزات ذكية' },
@@ -310,17 +314,16 @@ export default function GuidePage() {
             دليل الاستخدام — مُحدَّث 2026
           </span>
           <h1 className="gd-hero-title">
-            تعلّم نظام المحل في <span className="lg-grad-text">5 دقائق</span>
-            <br />— بالصور وخطوة بخطوة
+            شوف يوم كامل في محل موبايلات
+            <br />بدون ما <span className="lg-grad-text">تكتب ولا دفتر</span>
           </h1>
           <p className="gd-hero-sub">
-            مش هتقرا كتاب هنا. اضغط «التالي» وامشي في الجولة: كل شاشة قدامك بصورتها الحقيقية
-            وسطر واحد بيقول بتعمل إيه — والتفاصيل كلها موجودة لما تحبها.
+            من شراء البضاعة من المورد، للبيع والآجل والصيانة والمحافظ، لحد صافي ربحك آخر اليوم. حركة واحدة منك والنظام يحدّث المخزون والخزنة والحسابات لوحده. صور حقيقية من نظام شغال.
           </p>
           <div className="gd-hero-cta">
-            <a href="#tour" className="gd-btn-primary">
+            <a href="#journey" className="gd-btn-primary">
               <CirclePlay className="size-4" />
-              ابدأ الجولة دلوقتي
+              شوف يوم كامل في دقيقة
             </a>
             <Link href="/signup" className="gd-btn-ghost">
               <CircleDollarSign className="size-4" />
@@ -351,6 +354,8 @@ export default function GuidePage() {
             </a>
           ))}
         </nav>
+
+        <Journey />
 
         {/* ═══════════ ابدأ في 5 دقائق ═══════════ */}
         <section id="start" className="ab-section" style={{ scrollMarginTop: 90 }}>
