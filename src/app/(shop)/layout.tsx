@@ -3,7 +3,8 @@
 import * as React from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, Menu, CalendarDays, Home, X } from 'lucide-react'
+import { Loader2, Menu, CalendarDays, Home, ChevronRight } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Sidebar } from '@/components/shop/Sidebar'
 import { ThemeToggle } from '@/components/shop/ThemeToggle'
 import { NotificationBell } from '@/components/shop/NotificationBell'
@@ -382,20 +383,27 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         role="dialog"
         aria-modal="true"
         aria-label="قائمة التنقل"
+        data-state={mobileOpen ? 'open' : 'closed'}
         inert={!mobileOpen}
         className={`fixed inset-y-0 right-0 z-50 flex h-dvh w-[82vw] max-w-[300px] flex-col bg-background shadow-lg transition-transform duration-300 ease-in-out ${
           mobileOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        {/* زر الإغلاق على الشمال عشان ما يغطيش لوجو المحل */}
-        <button
+        {/* مقبض جانبي في منتصف الحافة، بعيد عن الشعار وعناصر التنقل */}
+        <Button
           type="button"
+          variant="sidebar-handle"
+          size="sidebar-handle"
+          aria-label="إغلاق القائمة"
+          title="إغلاق القائمة"
           onClick={() => setMobileOpen(false)}
-          className="absolute left-3 top-4 z-10 flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted active:scale-90"
         >
-          <X className="size-4" />
-          <span className="sr-only">إغلاق</span>
-        </button>
+          <span className="sidebar-close-handle-grip" aria-hidden="true">
+            <span />
+            <span />
+          </span>
+          <ChevronRight className="size-4" aria-hidden="true" strokeWidth={2.2} />
+        </Button>
         {/* w-full: السايدبار يملا الدرج بالكامل */}
         <Sidebar className="w-full border-l-0" onNavigate={() => setMobileOpen(false)} />
       </div>

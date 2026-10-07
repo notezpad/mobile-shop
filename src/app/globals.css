@@ -3,6 +3,79 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Mobile drawer handle: uses the existing sidebar palette in both themes. */
+:root {
+  --sidebar-handle-surface: var(--sidebar);
+  --sidebar-handle-ink: var(--sidebar-primary);
+  --sidebar-handle-border: var(--sidebar-border);
+  --sidebar-handle-active: var(--sidebar-accent);
+  --sidebar-handle-shadow: var(--shadow-lg);
+}
+
+.sidebar-close-handle {
+  position: absolute;
+  left: -22px;
+  top: calc(50% - 44px);
+  z-index: 10;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--sidebar-handle-border);
+  border-radius: 22px;
+  background: var(--sidebar-handle-surface);
+  color: var(--sidebar-handle-ink);
+  box-shadow: var(--sidebar-handle-shadow);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.sidebar-close-handle-size {
+  width: 44px;
+  height: 88px;
+  padding: 0;
+}
+
+.sidebar-close-handle:hover,
+.sidebar-close-handle:active {
+  background: var(--sidebar-handle-active);
+  border-color: var(--sidebar-handle-ink);
+}
+
+.sidebar-close-handle:focus-visible {
+  outline: 2px solid var(--sidebar-ring);
+  outline-offset: 4px;
+}
+
+.sidebar-close-handle-grip {
+  display: flex;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.sidebar-close-handle-grip > span {
+  width: 3px;
+  height: 18px;
+  border-radius: 3px;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+[role="dialog"][data-state="closed"] > .sidebar-close-handle {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@media (min-width: 1024px) {
+  .sidebar-close-handle { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-close-handle { transition: none; }
+}
+
 /* ============================================================
    نظام المحل — Design System 2026
    Style: Emerald Premium (Bento Modern)

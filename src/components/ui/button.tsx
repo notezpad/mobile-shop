@@ -27,6 +27,7 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+        "sidebar-handle": "sidebar-close-handle",
         // Subtle — for low-emphasis actions (filters, secondary toolbar buttons).
         // Uses primary-subtle for tonal weight without competing with primary.
         subtle:
@@ -41,6 +42,7 @@ const buttonVariants = cva(
         icon: "size-9",
         "icon-sm": "size-8 rounded-md",
         "icon-lg": "size-12 rounded-lg",
+        "sidebar-handle": "sidebar-close-handle-size",
       },
     },
     defaultVariants: {
