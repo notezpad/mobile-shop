@@ -3,26 +3,19 @@
 import * as React from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, Menu, CalendarDays, Home, X, WifiOff } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetTitle,
-} from '@/components/ui/sheet'
+import { Loader2, Menu, CalendarDays, Home, X } from 'lucide-react'
 import { Sidebar } from '@/components/shop/Sidebar'
 import { ThemeToggle } from '@/components/shop/ThemeToggle'
 import { NotificationBell } from '@/components/shop/NotificationBell'
 import { PWAInstallPrompt } from '@/components/shop/PWAInstallPrompt'
-import { ChunkGuard } from '@/components/shop/ChunkGuard'
 import { OfflineIndicator } from '@/components/shop/OfflineIndicator'
 import { TrialExpiredBanner } from '@/components/shop/TrialExpiredBanner'
 import { RoleBadge } from '@/components/shop/RoleBadge'
 import { useOfflineReady } from '@/lib/offline/use-offline'
+import { scheduleIdleWarmup } from '@/lib/view-preload'
 import { useShopStore } from '@/lib/store'
 import { api } from '@/lib/api'
-import { getMe, getMeOutcome } from '@/lib/auth-client'
+import { getMe, type AuthUser } from '@/lib/auth-client'
 
 const VIEW_PATHS: Record<string, string> = {
   '/dashboard': 'dashboard',
@@ -136,15 +129,24 @@ function LiveClock({ timeZone }: { timeZone: string }) {
   )
 }
 
+/** 🛡️ 2026-10-06: إغلاق السايدبار بزر Escape — بديل مباشر لسلوك Radix الشيتي
+    القديم من غير أي Radix. مركّب مستقل عشان الـ effect يعتمد على enabled بس. */
+function EscapeCloser({ onEscape, enabled }: { onEscape: () => void; enabled: boolean }) {
+  React.useEffect(() => {
+    if (!enabled) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onEscape()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onEscape, enabled])
+  return null
+}
+
 export default function ShopLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  // 🛡️ PWA (2026-10-07): 'offline-no-session' = النت مقطوع ومفيش نسخة
-  // سيشن محفوظة على الجهاز (مثلاً أول تشغيل قبل أي دخول). بدل ما كنا
-  // نطرد المستخدم لـ '/' بـ router.replace (اللي بيفشل أوفلاين لأنه
-  // بيطلب RSC payload من السيرفر والـ SW بيستبعده عمداً → شاشة مكسورة)،
-  // بنعرض شاشة أوفلاين واضحة مع زر إعادة محاولة.
-  const [bootState, setBootState] = React.useState<'loading' | 'authed' | 'guest' | 'admin' | 'offline-no-session'>('loading')
+  const [bootState, setBootState] = React.useState<'loading' | 'authed' | 'guest' | 'admin'>('loading')
   const setUser = useShopStore((s) => s.setUser)
   const setShopName = useShopStore((s) => s.setShopName)
   const setBranding = useShopStore((s) => s.setBranding)
@@ -158,81 +160,116 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   // ⚡ Initialize offline sync engine (flush outbox when network returns)
   useOfflineReady()
 
+  // ⚡ PERF: بعد الفتح بشوية، حمّل chunks أشهر صفحات (الداشبورد/نقطة
+  // البيع/المنتجات) في وقت الخمول — أول ضغطة تبقى فورية. بيتجاهل
+  // شبكات 2G/3G و Save-Data تلقائياً.
+  React.useEffect(() => {
+    if (bootState !== 'authed') return
+    const cancel = scheduleIdleWarmup()
+    return () => cancel?.()
+  }, [bootState])
+
   React.useEffect(() => {
     let alive = true
     ;(async () => {
-      // 🛡️ ROOT FIX (استهلاك موارد): التلات ريكويستات كانوا بيتنططوا
-      // بالتوازي لأي حد يفتح الصفحة — يعني زائر/بوت مش مسجّل دخول كان
-      // بيكلّف 3 ريكويستات + 3 اتصالات قاعدة بيانات. دلوقتي بنتأكد من
-      // السيشن الأول، وبعدها بس بنسحب بيانات المحل والاشتراك.
+      // ⚡ PERF FIX (2026-10-05 — بطء فتح أي صفحة على الجوال):
+      //
+      // القديم: getMe() ← في انتظار → وبعدها /api/tenant + /api/subscription
+      // بالتوازي ← في انتظار → وبعدها bootState='authed' والصفحة تظهر.
+      // يعني shell كامل واقف ورا سبينر لحد ما تخلص **2 مرات متتالية** من
+      // الـ round-trips على شبكة موبايل + سيرفر بيقعد يفتح اتصال Postgres
+      // جديد لكل ريكويست. ده كان بيضيف 1-3 ثواني على كل فتح للتطبيق.
+      //
+      // الجديد:
+      //   1) bootState بيتقفل بمجرد ما getMe يرجع (أسرع FCP ممكن) —
+      //      بيانات المحل/الاشتراك دي للعرض فقط (اسم المحل، اللوجو،
+      //      البانر، الساعة) فمش لازم تحجب الشاشة.
+      //   2) tenant + subscription بييجوا في الخلفية بالتوازي بعد me.
+      //   3) fast-boot: للزيارات المتكررة في نفس التاب (أو PWA)، بنرجّع
+      //      اليوزر من sessionStorage فوراً ونفتح الشل على طول، وبعدين
+      //      نعيد التحقق من السيشن في الخلفية — لو السيشن خلصت فعلاً،
+      //      آلية الـ 401 الموجودة (SessionGuard + notifySessionExpired)
+      //      هتفرّغ اليوزر وترجّعه للوجين زي ما هي.
+      let cachedUser: AuthUser | null = null
+      try {
+        const raw = sessionStorage.getItem('boot-user-v1')
+        const parsed = raw ? JSON.parse(raw) : null
+        // صلاحية قصيرة جداً (10 دقايق) — كفاية للتنقل السريع بين فتح
+        // وتقفيل التاب، وقصيرة كفاية إن أي تغيير حساب حقيقي يتشاف فوراً
+        // من إعادة التحقق في الخلفية.
+        if (parsed?.user?.userId && Date.now() - parsed.at < 10 * 60 * 1000) {
+          cachedUser = parsed.user as AuthUser
+        }
+      } catch { /* ignore */ }
+
+      if (cachedUser) {
+        setUser(cachedUser)
+        setBootState('authed')
+      }
+
+      // الخطوة 1: السيشن (no-store دايمًا — مصدر الحقيقة للأمان)
       const meResult = await Promise.allSettled([getMe()]).then((r) => r[0])
       if (!alive) return
 
       const me = meResult.status === 'fulfilled' ? meResult.value : null
       if (!me) {
-        // 🛡️ PWA ROOT FIX: الفشل هنا ليه سببين مختلفين تماماً:
-        // (1) السيرفر رفض فعلاً (401) → زائر حقيقي → guest طبيعي.
-        // (2) النت مقطوع ومفيش نسخة سيشن محفوظة → ماتطردش، اعرف
-        //     المستخدم إيه اللي حاصل وسيبه يعيد المحاولة.
-        setBootState(getMeOutcome() === 'offline' ? 'offline-no-session' : 'guest')
+        // مفيش سيشن حقيقية → نمسح أي fast-boot مخبّأ ونطلع للوجين
+        try { sessionStorage.removeItem('boot-user-v1') } catch { /* ignore */ }
+        setUser(null)
+        setBootState('guest')
         return
       }
+      try { sessionStorage.setItem('boot-user-v1', JSON.stringify({ user: me, at: Date.now() })) } catch { /* ignore */ }
       setUser(me)
 
-      const [tenantResult, subResult] = await Promise.allSettled([
-        api<{ shopName?: string; phone?: string | null; address?: string | null; logoPath?: string | null; invoicePrefix?: string; timezone?: string }>('/api/tenant'),
-        api<any>('/api/subscription'),
-      ])
-      if (!alive) return
+      // الخطوة 2 (خلفية): بيانات المحل + الاشتراك — بالتوازي وبغير حاجب
+      ;(async () => {
+        const [tenantResult, subResult] = await Promise.allSettled([
+          api<{ shopName?: string; phone?: string | null; address?: string | null; logoPath?: string | null; invoicePrefix?: string; timezone?: string }>('/api/tenant'),
+          api<any>('/api/subscription'),
+        ])
+        if (!alive) return
 
-      if (me.role === 'SUPER_ADMIN' && !(me as any).impersonating) {
-        setBootState('admin')
-        // 🛡️ PWA: أوفلاين الـ router.replace بيفشل (RSC من السيرفر) —
-        // full navigation بيمر من الـ SW اللي بيخدم الـ HTML المتخزن.
-        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-          window.location.replace('/')
-        } else {
-          router.replace('/')
-        }
-        return
-      }
-
-      if (tenantResult.status === 'fulfilled') {
-        const t = tenantResult.value
-        if (t?.shopName) setShopName(t.shopName)
-        setBranding({
-          phone: t?.phone ?? null,
-          address: t?.address ?? null,
-          logoPath: t?.logoPath ?? null,
-          invoicePrefix: t?.invoicePrefix || 'INV',
-          // 🛡️ 2026-09-27: تولبار الساعة/التاريخ فوق بيتبع دلوقتي المنطقة
-          // الزمنية بتاعة المحل (مش جهاز المستخدم) — راجع LiveClock تحت.
-          timezone: t?.timezone || 'Africa/Cairo',
-        })
-      }
-
-      if (subResult.status === 'fulfilled') {
-        const d = subResult.value
-        // 🛡️ 2026-09-13: NO LONGER redirect on expired. Instead, store the
-        // subscription state in the shop store and let the user continue
-        // using the system. A `TrialExpiredBanner` will be shown at the top
-        // of every page encouraging them to subscribe via /pricing.
-        setSubscription({
-          expired: Boolean(d?.expired),
-          expiringSoon: Boolean(d?.expiringSoon),
-          daysLeft: typeof d?.daysLeft === 'number' ? d.daysLeft : null,
-          endDate: d?.endDate ?? null,
-          planCode: d?.planCode ?? null,
-          planName: d?.planName ?? null,
-          period: d?.period ?? null,
-        })
-        if (Array.isArray(d?.enabledModules)) {
-          setPlan({
-            businessType: d.businessType === 'fashion' ? 'fashion' : 'electronics',
-            enabledModules: d.enabledModules,
-            capabilities: Array.isArray(d.capabilities) ? d.capabilities : [],
+        if (tenantResult.status === 'fulfilled') {
+          const t = tenantResult.value
+          if (t?.shopName) setShopName(t.shopName)
+          setBranding({
+            phone: t?.phone ?? null,
+            address: t?.address ?? null,
+            logoPath: t?.logoPath ?? null,
+            invoicePrefix: t?.invoicePrefix || 'INV',
+            // 🛡️ 2026-09-27: تولبار الساعة/التاريخ فوق بيتبع دلوقتي المنطقة
+            // الزمنية بتاعة المحل (مش جهاز المستخدم) — راجع LiveClock تحت.
+            timezone: t?.timezone || 'Africa/Cairo',
           })
         }
+
+        if (subResult.status === 'fulfilled') {
+          const d = subResult.value
+          setSubscription({
+            expired: Boolean(d?.expired),
+            expiringSoon: Boolean(d?.expiringSoon),
+            daysLeft: typeof d?.daysLeft === 'number' ? d.daysLeft : null,
+            endDate: d?.endDate ?? null,
+            planCode: d?.planCode ?? null,
+            planName: d?.planName ?? null,
+            period: d?.period ?? null,
+          })
+          if (Array.isArray(d?.enabledModules)) {
+            setPlan({
+              businessType: d.businessType === 'fashion' ? 'fashion' : 'electronics',
+              enabledModules: d.enabledModules,
+              capabilities: Array.isArray(d.capabilities) ? d.capabilities : [],
+            })
+          }
+        }
+      })()
+
+      // الخطوة 3: SUPER_ADMIN يتحوّل للوحة الأدمن (نفس السلوك القديم)
+      if (me.role === 'SUPER_ADMIN' && !(me as any).impersonating) {
+        setBootState('admin')
+        router.replace('/')
+        return
       }
 
       setBootState('authed')
@@ -248,12 +285,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
 
   React.useEffect(() => {
     if (bootState === 'guest') {
-      // 🛡️ PWA: نفس منطق الأمان — أوفلاين نستخدم location بدل router.
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-        window.location.replace('/')
-      } else {
-        router.replace('/')
-      }
+      router.replace('/')
     }
   }, [bootState, router])
 
@@ -261,28 +293,6 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="size-8 animate-spin text-primary" />
-      </div>
-    )
-  }
-
-  // 🛡️ PWA: النت مقطوع + مفيش حساب محفوظ → شاشة أوفلاين واضحة (مش طرد مكسور)
-  if (bootState === 'offline-no-session') {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center">
-        <div className="flex size-16 items-center justify-center rounded-2xl bg-orange-500/10 ring-1 ring-orange-500/20">
-          <WifiOff className="size-8 text-orange-500" />
-        </div>
-        <h1 className="text-xl font-bold text-foreground">أنت غير متصل بالإنترنت</h1>
-        <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-          النظام يشتغل بدون إنترنت بعد أول تسجيل دخول على الجهاز ده.
-          وصّل الإنترنت وسجّل دخولك مرة واحدة، وبعدها تقدر تفتح النظام وتشتغل فيه عادي حتى لو النت مقطوع.
-        </p>
-        <div className="flex items-center gap-2">
-          <Button onClick={() => window.location.reload()}>إعادة المحاولة</Button>
-          <Button variant="outline" onClick={() => window.location.replace('/')}>
-            الصفحة الرئيسية
-          </Button>
-        </div>
       </div>
     )
   }
@@ -300,10 +310,23 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
     // بيتحركوا أبدًا مع سكرول الصفحة على الموبايل — السكرول بس داخل منطقة
     // المحتوى. (h-screen = 100vh كان أطول من الشاشة الظاهرة في كروم موبايل.)
     <div className="fixed inset-0 flex flex-col bg-background overflow-hidden overscroll-none">
-      {/* 🛡️ v14: يكشف فشل تحميل chunks بعد نشر نسخة جديدة ويعمل ريلود
-          تلقائي بدل الشاشة السوداء */}
-      <ChunkGuard />
-      <OfflineIndicator />
+      {/* 🎨 v15 — البانرات العائمة (اشتراك/أوفلاين/مزامنة):
+          حاوية fixed أسفل الشاشة بـ pointer-events-none — البانرات بتظهر
+          كطبقة عائمة فوق المحتوى بدون ما تاخد أي ارتفاع من تدفق الصفحة
+          = صفر إزاحة للهيدر/التولبار/العناصر مهما ظهرت أو اختفت.
+          الكروت نفسها pointer-events-auto فبتستقبل الضغط هي فقط.
+          على نقطة البيع (موبايل/تابلت) بترتفع فوق شريط إتمام البيع الثابت.
+          الترتيب: كارت الاشتراك فوق، وبانر الحالة تحته قريب من الحافة. */}
+      <div
+        className={`pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-2 px-3 ${
+          pathname === '/pos'
+            ? 'pb-[calc(env(safe-area-inset-bottom)+5.25rem)] lg:pb-[calc(env(safe-area-inset-bottom)+0.75rem)]'
+            : 'pb-[calc(env(safe-area-inset-bottom)+0.75rem)]'
+        }`}
+      >
+        <TrialExpiredBanner />
+        <OfflineIndicator />
+      </div>
       {/* Mobile top bar */}
       <header className="z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-card/90 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-md lg:hidden">
         <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -330,27 +353,59 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
       </header>
 
       {/* Mobile sidebar */}
-      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent
-          side="right"
-          showCloseButton={false}
-          className="h-dvh w-[82vw] max-w-[300px] gap-0 p-0 sm:max-w-[300px]"
+      {/* 🛡️ 2026-10-06 — إصلاح تجمّد الجوال بالكامل: درَجер بسيط بدون Radix Dialog
+          خالص. التاريخ: باتش v5 حط forceMount على SheetContent عشان يسرّع
+          الفتح، بس ده خلّى Radix Overlay (اللي جوّه RemoveScroll) متركّب
+          على طول → listeners غير passiva على document بتعمل preventDefault
+          لكل touchmove = سكرول الجوال ميت + أي لمسة بتنزل 1px الـ click
+          بتاعها بيتلغى. وحتى بعد modal={false}، اختبارات المتصفح أثبتت إن
+          وجود الشيت الـ forceMounted بيفسد dispatch بتاع React للضغطات
+          الحقيقية (isTrusted) على الهيدر كله (المصدر: react-dialog 1.1.23
+          + Presence/DismissableLayer مع forceMount).
+          الحل النهائي: درَجر عادي — div ثابت بيتحرك بـ translate-x CSS.
+          * شجرة السايدبار متجمّعة دايمًا جوّاه → الفتح فوري (300ms أنيميشن
+            CSS نضيف من غير إعادة بناء — نفس هدف forceMount بالظبط).
+          * مقفول = translate-x-full (بره الشاشة) + inert (مش بياخد focus
+            ولا يترى لقارئات الشاشة) — مفيش أي طبقة فوق الصفحة.
+          * مفيش قفل سكرول خالص: الشل fixed inset-0 + overflow-hidden،
+            والمس على الـ Overlay (غير قابل للسكرول) مش بيسكرول حاجة وراه. */}
+      {/* الظل الخلفي */}
+      <div
+        aria-hidden="true"
+        onClick={() => setMobileOpen(false)}
+        className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 ${
+          mobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+      />
+      {/* الدرج نفسه */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="قائمة التنقل"
+        inert={!mobileOpen}
+        className={`fixed inset-y-0 right-0 z-50 flex h-dvh w-[82vw] max-w-[300px] flex-col bg-background shadow-lg transition-transform duration-300 ease-in-out ${
+          mobileOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {/* زر الإغلاق على الشمال عشان ما يغطيش لوجو المحل */}
+        <button
+          type="button"
+          onClick={() => setMobileOpen(false)}
+          className="absolute left-3 top-4 z-10 flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted active:scale-90"
         >
-          <SheetTitle className="sr-only">القائمة</SheetTitle>
-          {/* زر الإغلاق على الشمال عشان ما يغطيش لوجو المحل */}
-          <SheetClose className="absolute left-3 top-4 z-10 flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted active:scale-90">
-            <X className="size-4" />
-            <span className="sr-only">إغلاق</span>
-          </SheetClose>
-          {/* w-full: السايدبار يملا الشيت بالكامل (كان 252px فيسيب شريط فاضي) */}
-          <Sidebar className="w-full border-l-0" onNavigate={() => setMobileOpen(false)} />
-        </SheetContent>
-      </Sheet>
+          <X className="size-4" />
+          <span className="sr-only">إغلاق</span>
+        </button>
+        {/* w-full: السايدبار يملا الدرج بالكامل */}
+        <Sidebar className="w-full border-l-0" onNavigate={() => setMobileOpen(false)} />
+      </div>
+      {/* إغلاق بزرار Escape (سلوك الشيت القديم) */}
+      <EscapeCloser onEscape={() => setMobileOpen(false)} enabled={mobileOpen} />
 
       {/*
         Sidebar + Main content in a flex-row.
-        The sidebar is in the flex flow (not fixed), so the OfflineIndicator
-        above it pushes it down correctly — no overlap.
+        البانرات (اشتراك/أوفلاين/مزامنة) بقت عائمة fixed أسفل الشاشة —
+        فالسايدبار والمحتوى بياخدوا الارتفاع الكامل دايماً بدون أي إزاحة.
       */}
       <div className="flex flex-1 min-h-0">
         {/* Icon rail sidebar — md to lg only (68px collapsed) */}
@@ -380,9 +435,6 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         {/* Scrollable content area — renders the page */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain min-h-0 min-w-0">
           <div className="p-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 min-w-0">
-            {/* 🎨 2026-10-07: بطاقة الاشتراك جوه منطقة المحتوى (مش فوق الشِل) —
-                الهيدر والسايدبار ثابتين ومفيش إزاحة للتطبيق كله */}
-            <TrialExpiredBanner />
             {children}
           </div>
         </div>

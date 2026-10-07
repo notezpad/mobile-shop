@@ -74,9 +74,32 @@
  *        (رخيصة: skip-if-cached).
  *     ✅ فحص البصمة نفسه متسامح: لو /login مش متاح (أوفلاين) بنسكب
  *        الفحص ودورة جاية تعيده — عمره ما بيمسح كاش وهو مش متأكد.
+ *
+ * 🛡️ 2026-10-07 (v13 — STAMP COVERAGE — جذر "سقوط الجرد أوفلاين بعد نشر v8"):
+ *
+ *   المشكلة اللي حصلت فعلاً: نشر v8 غيّر chunk واحد مشترك بس (useInventoryData
+ *   — بيتشارك بين صفحات المخزون). ملف /login ما بيذكرش اسم الـ chunk ده في
+ *   مراجعه (ولا حتى chunk خريطة الاستيراد الديناميكي اللي بيشاور عليه) —
+ *   فبصمة v12 (المبنية من /login لوحدها) ما اتغيّرتش → مفيش مسح → chunks
+ *   البيلد القديم فضلت مخزنة. أونلاين كان بيجيب الكود الجديد (network-first)
+ *   فكل حاجة شغّالة، لكن أوفلاين الكاش ردّ بالـ hook القديم مع صفحات جديدة
+ *   بتقرأ منه حقلاً مش موجود → TypeError: Cannot read properties of
+ *   undefined (reading 'stocktake') — وأول مرة نلاحظها كانت في صفحة الجرد.
+ *
+ *   الحل في v13 — البصمة بتبقى من **3 مصادر** بدل مصدر واحد:
+ *     1) fetch طازج لـ /login (زي v12 — بيغطي تغييرات الغلاف المشترك)
+ *     2) fetch طازج لـ /inventory/movements (صفحة بتشاور على خريطة الـ
+ *        dynamic imports المركزية — أي chunk ديناميكي يتغيّر اسمها بتتبدّل)
+ *     3) 🛡️ الأهم: مراجع chunks من **كل HTML مخزن في الكاش** — أول ما
+ *        المستخدم يتصفح أي صفحة أونلاين بعد نشر، الـ HTML الجديد بيتخزن
+ *        بمراجع chunks جديدة → البصمة تتغير → مسح كامل + مسيرةfresh
+ *        في نفس الدورة. يعني أي نشر بأي شكل بيكتشف تلقائياً من غير أي
+ *        جهد إضافي — من خلال التصفح الطبيعي — من غير ما نعتمد على ملف واحد بعينه.
+ *     + CACHE_VERSION اترفعت → أول تحديث لـ v13 يمسح أي كاش مخلوط قديم
+ *       (الجهاز اللي وقعت فيه المشكلة بيتشافى فوراً من غير خطوات يدوية).
  */
 
-const CACHE_VERSION = 'shop-erp-v12'
+const CACHE_VERSION = 'shop-erp-v13'
 const OFFLINE_URL = '/offline.html'
 
 /**
@@ -272,28 +295,87 @@ async function walkChunkGraph(cache, routeUrls) {
   return { processed, failed }
 }
 
-// ─── 🛡️ v12: بصمة البيلد (BUILD STAMP) ───────────────────────────
-// بنجيب /login (prerendered وخفيفة ومش محتاجة تسجيل دخول) ونستخرج منها
-// قائمة مسارات chunks — أي تغيير في الكود بيغيّر اسم chunk واحد على الأقل
-// في الجراف فقائمة الـ HTML بتتغيّر → بصمة مختلفة → نشر جديد.
-function djb2Hash(s) {
-  let h = 5381
-  for (let i = 0; i < s.length; i++) h = (((h << 5) + h + s.charCodeAt(i)) | 0) >>> 0
-  return h.toString(36)
+// ─── 🛡️ v12/v13: بصمة البيلد (BUILD STAMP) ────────────────────
+// v13: البصمة من 3 مصادر بدل /login لوحدها:
+//   1) fetch طازج لـ /login — تغييرات الغلاف المشترك
+//   2) fetch طازج لـ /inventory/movements — صفحة بتشاور على خريطة الـ
+//      dynamic imports المركزية (أي chunk ديناميكي يتغيّر اسمها بتتبدّل)
+//   3) مراجع chunks من كل HTML مخزّن في الكاش — أول تصفح لأي صفحة بعد
+//      نشر بيجيب HTML جديد بمراجع جديدة → البصمة تتغيّر → مسح كامل.
+// (سبب v13: نشر غيّر chunk مشترك مش ظاهر في مراجع /login → البصمة
+//  ما اتغيّرتش → chunks قديمة مخلوطة مع جديدة → سقوط الجرد أوفلاين).
+/** الصفحات اللي بنجيبها fetch طازج مع كل فحص بصمة (رخيصة وprerendered) */
+const STAMP_PAGES = ['/login', '/inventory/movements']
+
+/**
+ * 🛡️ v13: هل المسار ده HTML صفحة (مش asset/api/marker)؟ — لفلترة
+ * مدخلات الكاش عند استخراج مراجع chunks منها. متسامح: لو الـ headers
+ * مش متاحة (بيئات اختبار) بنتعامل معاه كـ HTML لو شكله صفحة.
+ */
+function isLikelyHtmlPath(path) {
+  if (path.startsWith('/_next/') || path.startsWith('/api/')) return false
+  if (path.startsWith('/__nezam')) return false // stamp + walk marker
+  const last = path.slice(path.lastIndexOf('/') + 1)
+  if (last.includes('.')) return false // offline.html / manifest.json / أيقونات
+  return true
 }
 
-async function computeBuildStamp() {
+async function computeBuildStamp(cache) {
   try {
-    const res = await fetch('/login?__swst=' + Date.now(), {
-      cache: 'no-store',
-      redirect: 'follow',
-      credentials: 'same-origin',
-    })
-    if (!res || !res.ok) return null
-    const html = await res.text()
-    const refs = Array.from(new Set(html.match(CHUNK_REF_RE) || [])).sort()
-    if (!refs.length) return null
-    return djb2Hash(refs.join('|'))
+    const refs = new Set()
+    // 1+2) الصفحات المرجعية — أي صفحة فاشلة بيتسكب (المهم واحدة ناجحة على الأقل)
+    for (const page of STAMP_PAGES) {
+      try {
+        const res = await fetch(page + '?__swst=' + Date.now(), {
+          cache: 'no-store',
+          redirect: 'follow',
+          credentials: 'same-origin',
+        })
+        if (res && res.ok) {
+          const html = await res.text()
+          for (const m of html.match(CHUNK_REF_RE) || []) refs.add(m)
+        }
+      } catch {
+        /* صفحة فاشلة — بنكمل بالباقي */
+      }
+    }
+    // 3) 🛡️ مراجع كل HTML مخزّن — قلب كشف النشر بدون fetch إضافي
+    if (cache) {
+      try {
+        const keys = await cache.keys()
+        for (const req of keys) {
+          try {
+            let path = ''
+            try {
+              path = new URL(req.url).pathname
+            } catch {
+              continue
+            }
+            if (!isLikelyHtmlPath(path)) continue
+            const hit = await cache.match(req)
+            if (!hit) continue
+            // لو الـ headers موجودة نتأكد إنه HTML فعلاً (الحماية من أي
+            // مدخل غريب متخزن بمسار صفحة) — لو مش متاحة بنثق بالشكل
+            let ct = ''
+            try {
+              ct = (hit.headers && hit.headers.get && hit.headers.get('content-type')) || ''
+            } catch {
+              ct = ''
+            }
+            if (ct && ct.indexOf('text/html') === -1) continue
+            const html = await hit.text()
+            for (const m of html.match(CHUNK_REF_RE) || []) refs.add(m)
+          } catch {
+            /* مدخل فاسد — بنسكبه */
+          }
+        }
+      } catch {
+        /* keys فشلت — بنكمل بمراجع الـ fetch بس */
+      }
+    }
+    const list = Array.from(refs).sort()
+    if (!list.length) return null
+    return list
   } catch {
     return null
   }
@@ -304,34 +386,63 @@ async function computeBuildStamp() {
  * بيتمسح معاه) فإعادة التسخين والمسيرة بتبدأ فوراً في نفس الدورة.
  * بترجع true لو الكاش اتغيّر للتو (نشر جديد) — للّوج فقط.
  * أي فشل (أوفلاين/رد غلط) = بنسكب الفحص بدون أي مسح — أمان أولاً.
+ *
+ * 🛡️ v13: بنخزّن **قائمة المراجع نفسها** (JSON) مش الهاش بس، والمسح
+ * بيحصل فقط لو ظهرت أسماء chunks جديدة (GROWTH) — لأن التقليص طبيعي
+ * بعد المسح (المراجع القديمة بتختفي من الكاش) ومفاده مش نشر. كده
+ * مفيش purge إضافي بعد أول مسح، وأي نشر حقيقي بيضيف أسماء جديدة فبيمسح فوراً.
  */
 async function ensureFreshBuildCache(cache) {
   try {
-    const stamp = await computeBuildStamp()
-    if (!stamp) return false // مش قادر يتأكد — مفيش مسح
+    // 🛡️ v13: البصمة بتحط نظرة على الكاش كمان — HTML المخزّن بيفضح
+    // أسماء chunks جديدة أول ما تتصفح أي صفحة بعد نشر
+    const refs = await computeBuildStamp(cache)
+    if (!refs || !refs.length) return false // مش قادر يتأكد — مفيش مسح
     const stored = await cache.match(BUILD_STAMP_KEY)
-    const storedStamp = stored ? (await stored.text()).trim() : null
-    if (storedStamp === stamp) return false // نفس البيلد — مفيش شغل
-    // أول مرة (مفيش بصمة قديمة)؟ خزّن البصمة بس — مش محتاجين مسح
-    if (!storedStamp) {
+    let storedRefs = null
+    if (stored) {
+      try {
+        const parsed = JSON.parse(await stored.text())
+        if (Array.isArray(parsed)) storedRefs = parsed
+      } catch {
+        storedRefs = null
+      }
+    }
+    // أول مرة (مفيش قائمة قديمة صالحة)؟ خزّن القائمة بس — مش محتاجين مسح
+    if (!storedRefs) {
       await cache.put(
         BUILD_STAMP_KEY,
-        new Response(stamp, {
-          headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' },
+        new Response(JSON.stringify(refs), {
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
         })
       )
+      return false
+    }
+    // 🛡️ النشر الحقيقي بيضيف أسماء chunks جديدة — التقليص مش نشر
+    const hasGrowth = refs.some((r) => storedRefs.indexOf(r) === -1)
+    if (!hasGrowth) {
+      // تحديث سلبي (تقليص بعد مسح مثلاً) — بنخزّن القائمة الحالية عشان
+      // كشف النشر الجاي يبقى مقابل أحدث واقع مش قديم
+      if (refs.length !== storedRefs.length) {
+        await cache.put(
+          BUILD_STAMP_KEY,
+          new Response(JSON.stringify(refs), {
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+          })
+        )
+      }
       return false
     }
     // 🛡️ نشر جديد مؤكد → مسح كامل عشان chunks البيلد القديم ما تفضلش
     // مخزنة وتلخبط الأوفلاين (ودي كانت جذر "خطأ غير متوقع" بعد كل نشر)
     const keys = await cache.keys()
     await Promise.all(keys.map((k) => cache.delete(k)))
-    // وبعد المسح بنخزّن بصمة البيلد الجديد (الخطوة دي لازم تكون بعد
-    // المسح عشان البصمة نفسها ما تتمسحش مع الكاش القديم)
+    // وبعد المسح بنخزّن قائمة المراجع الجديدة (الخطوة دي لازم تكون بعد
+    // المسح عشان القائمة نفسها ما تتمسحش مع الكاش القديم)
     await cache.put(
       BUILD_STAMP_KEY,
-      new Response(stamp, {
-        headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' },
+      new Response(JSON.stringify(refs), {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
       })
     )
     return true

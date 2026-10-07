@@ -5,13 +5,18 @@ import { WifiOff, RefreshCw, CloudUpload, CheckCircle2, AlertCircle } from 'luci
 import { useSyncState, usePendingOperations, syncNow } from '@/lib/offline/use-offline'
 
 /**
- * OfflineIndicator — shows a banner at the top when:
- * 1. User is offline (orange "أنت غير متصل")
- * 2. There are pending operations (blue "X عملية بانتظار المزامنة")
- * 3. Sync is in progress (spinner "جارٍ المزامنة...")
- * 4. Sync completed with errors (red "فشلت X عمليات")
+ * OfflineIndicator — floating status toasts (bottom-center overlay):
+ * 1. User is offline → orange gradient pill (with live pulse + pending count)
+ * 2. Sync in progress → blue gradient pill with spinner
+ * 3. Pending operations while online → light glass card + "مزامنة الآن"
+ * 4. Sync result → emerald/rose toast (auto-hides after 5s)
  *
- * Also shows a "Sync now" button when online with pending operations.
+ * 🎨 v15: الكروت دي بترجع من غير تمركز ثابت — الحاوية fixed بتاعتها في
+ * (shop)/layout.tsx فبتظهر فوق المحتوى من غير ما تزحّح أي عنصر (الهيدر
+ * والتولبار ثابتين في أماكنهم مهما ظهر أو اختفى من البانرات دي).
+ *
+ * Also keeps the protective side-effects (SW update nudge, chunk-error
+ * self-heal reload, global error logger) — untouched since v13/v12.
  *
  * ⚡ PERF FIX (2026-10-05): اتبدّل framer-motion بـ CSS animation
  * (animate-in fade-in) — المكون ده عايش في الـ shell اللي بيتحمّل مع
@@ -142,18 +147,40 @@ export function OfflineIndicator() {
     setTimeout(() => setSyncResult(null), 5000)
   }
 
-  // Offline → orange banner
+  // ────────────────────────────────────────────────────────────────────
+  // 🎨 v15 — FLOATING TOASTS (صفر إزاحة للعناصر)
+  //
+  // المكون بيرجّع «الكارت نفسه» فقط — التمركز الثابت بيتم في الشِل
+  // (layout.tsx) جوّه حاوية fixed inset-x-0 bottom-0 pointer-events-none.
+  // يعني الكارت بيتعرض فوق المحتوى كطبقة عائمة، وعمره ما بياخد ارتفاع
+  // من تدفق الصفحة → الهيدر/التولبار/السايدبار ما بيتزحّقوش خالص.
+  // كل كارت عليه pointer-events-auto عشان يستقبل الضغط/اللمس هو فقط.
+  // ────────────────────────────────────────────────────────────────────
+
+  // Offline → orange gradient pill with a live pulse dot
   if (!sync.online) {
     return (
       <div
-        className="relative z-[60] shrink-0 flex items-center justify-center gap-2 bg-orange-500 px-4 py-2 text-white animate-in fade-in duration-200"
+        role="status"
+        aria-live="polite"
+        className="pointer-events-auto flex w-full max-w-[min(92vw,460px)] items-center gap-2.5 rounded-2xl bg-gradient-to-l from-amber-500 via-orange-500 to-orange-600 py-2.5 pe-3 ps-3 text-white shadow-xl shadow-orange-950/30 ring-1 ring-white/25 backdrop-blur-md animate-in slide-in-from-bottom-4 fade-in duration-300"
       >
-        <WifiOff className="size-4" />
-        <span className="text-sm font-medium">
-          أنت تعمل بدون إنترنت — التطبيق شغّال ببيانات جهازك، والتغييرات هتتزامن تلقائياً عند رجوع النت
+        {/* نبضة حية — إحساس إن النظام "بيتنفس" وواعي بحالته */}
+        <span aria-hidden="true" className="relative mx-0.5 flex size-2 shrink-0">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-60" />
+          <span className="relative inline-flex size-2 rounded-full bg-white/95" />
         </span>
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/20">
+          <WifiOff className="size-[18px]" />
+        </div>
+        <div className="min-w-0 flex-1 leading-tight">
+          <p className="truncate text-[13px] font-extrabold">أنت تعمل بدون إنترنت</p>
+          <p className="truncate text-[11px] font-medium text-white/85">
+            التطبيق شغّال ببيانات جهازك — التغييرات بتتزامن تلقائياً
+          </p>
+        </div>
         {sync.pending > 0 && (
-          <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold">
+          <span className="shrink-0 whitespace-nowrap rounded-full bg-white/25 px-2.5 py-1 text-[11px] font-bold tabular-nums">
             {sync.pending} بانتظار المزامنة
           </span>
         )}
@@ -161,72 +188,84 @@ export function OfflineIndicator() {
     )
   }
 
-  // Syncing → blue banner with spinner
+  // Syncing → blue gradient pill with spinner
   if (sync.syncing) {
     return (
       <div
-        className="relative z-[60] shrink-0 flex items-center justify-center gap-2 bg-blue-500 px-4 py-2 text-white animate-in fade-in duration-200"
+        role="status"
+        aria-live="polite"
+        className="pointer-events-auto flex w-full max-w-[min(92vw,460px)] items-center gap-2.5 rounded-2xl bg-gradient-to-l from-blue-500 via-blue-600 to-indigo-600 py-2.5 pe-3 ps-3 text-white shadow-xl shadow-blue-950/30 ring-1 ring-white/25 backdrop-blur-md animate-in slide-in-from-bottom-4 fade-in duration-300"
       >
-        <RefreshCw className="size-4 animate-spin" />
-        <span className="text-sm font-medium">جارٍ مزامنة البيانات...</span>
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/20">
+          <RefreshCw className="size-[18px] animate-spin" />
+        </div>
+        <div className="min-w-0 flex-1 leading-tight">
+          <p className="truncate text-[13px] font-extrabold">جارٍ مزامنة البيانات…</p>
+          <p className="truncate text-[11px] font-medium text-white/85">
+            ثواني ويكتمل رفع كل حاجة للسيرفر
+          </p>
+        </div>
       </div>
     )
   }
 
-  // Pending operations + online → show "Sync now" banner
+  // Pending operations + online → light glass card with "Sync now" action
   if (sync.pending > 0) {
+    const labelPreview =
+      entries.length > 0 && entries.length <= 3
+        ? entries.map((e) => e.label).join('، ')
+        : ''
     return (
-      <div
-        className="relative z-[60] shrink-0 flex items-center justify-between gap-2 bg-blue-50 px-4 py-2 text-blue-900 border-b border-blue-200 animate-in fade-in duration-200"
-      >
-        <div className="flex items-center gap-2">
-          <CloudUpload className="size-4 text-blue-500" />
-          <span className="text-sm font-medium">
-            {sync.pending} عملية بانتظار المزامنة
-            {sync.prewarmed > 0 && (
-              <span className="mr-2 text-xs text-blue-600/70">
-                · {sync.prewarmed} منتج محفوظ offline
-              </span>
-            )}
-          </span>
-          {entries.length > 0 && entries.length <= 3 && (
-            <span className="text-xs text-blue-700/70">
-              ({entries.map((e) => e.label).join('، ')})
-            </span>
-          )}
+      <div className="pointer-events-auto flex w-full max-w-[min(92vw,460px)] items-center gap-2.5 rounded-2xl bg-white/95 py-2.5 pe-2.5 ps-3 text-slate-800 shadow-xl shadow-slate-900/10 ring-1 ring-slate-900/10 backdrop-blur-xl animate-in slide-in-from-bottom-4 fade-in duration-300">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
+          <CloudUpload className="size-[18px]" />
+        </div>
+        <div className="min-w-0 flex-1 leading-tight">
+          <p className="truncate text-[13px] font-extrabold">
+            <span className="tabular-nums">{sync.pending}</span> عملية بانتظار المزامنة
+          </p>
+          <p className="truncate text-[11px] font-medium text-slate-500">
+            {labelPreview ||
+              (sync.prewarmed > 0
+                ? `هتترفع تلقائياً · ${sync.prewarmed} منتج محفوظ على جهازك`
+                : 'هتترفع تلقائياً للسيرفر')}
+          </p>
         </div>
         <button
           onClick={handleSyncNow}
-          className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1 text-xs font-bold text-white transition-colors hover:bg-blue-700"
+          className="flex h-8 shrink-0 items-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-bold text-white shadow-sm shadow-blue-600/30 transition-all hover:bg-blue-700 active:scale-95"
         >
-          <RefreshCw className="size-3" />
+          <RefreshCw className="size-3.5" />
           مزامنة الآن
         </button>
       </div>
     )
   }
 
-  // Sync result (temporary)
+  // Sync result (temporary toast — auto-hides after 5s)
   if (syncResult) {
+    const ok = syncResult.failed === 0
     return (
       <div
-        className={`relative z-[60] shrink-0 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium animate-in fade-in duration-200 ${
-          syncResult.failed > 0
-            ? 'bg-rose-50 text-rose-700'
-            : 'bg-emerald-50 text-emerald-700'
+        role="status"
+        className={`pointer-events-auto flex w-full max-w-[min(92vw,460px)] items-center gap-2.5 rounded-2xl py-2.5 pe-3 ps-3 shadow-xl ring-1 backdrop-blur-xl animate-in slide-in-from-bottom-4 fade-in duration-300 ${
+          ok
+            ? 'bg-emerald-50/95 text-emerald-800 shadow-emerald-900/10 ring-emerald-600/20'
+            : 'bg-rose-50/95 text-rose-800 shadow-rose-900/10 ring-rose-600/20'
         }`}
       >
-        {syncResult.failed > 0 ? (
-          <>
-            <AlertCircle className="size-4" />
-            تمت مزامنة {syncResult.done} عملية، فشلت {syncResult.failed}
-          </>
-        ) : (
-          <>
-            <CheckCircle2 className="size-4" />
-            تمت مزامنة {syncResult.done} عملية بنجاح
-          </>
-        )}
+        <div
+          className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${
+            ok ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'
+          }`}
+        >
+          {ok ? <CheckCircle2 className="size-[18px]" /> : <AlertCircle className="size-[18px]" />}
+        </div>
+        <p className="min-w-0 flex-1 truncate text-[13px] font-bold leading-tight">
+          {ok
+            ? `تمت مزامنة ${syncResult.done} عملية بنجاح`
+            : `تمت مزامنة ${syncResult.done}، وفشلت ${syncResult.failed} — هتتجرب تاني تلقائياً`}
+        </p>
       </div>
     )
   }
