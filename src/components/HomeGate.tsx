@@ -96,7 +96,18 @@ export function HomeGate({ children }: { children: React.ReactNode }) {
 
   // مستخدم محل مسجّل → /dashboard (navigation واحدة داخل effect، مش في الـ render)
   React.useEffect(() => {
-    if (boot === 'shop') router.replace('/dashboard')
+    if (boot === 'shop') {
+      // 🛡️ PWA (2026-10-07): أوفلاين الـ router.replace بيفشل — الـ App
+      // Router بيطلب RSC payload من نفس المسار والـ SW بيستبعده عمداً
+      // (حماية من خلط HTML قديم مع RSC) → الـ transition بيتعلّق/يتكسر.
+      // الحل: full navigation عبر window.location — الطلب بيطلع
+      // navigate-mode والـ SW يخدمه من كاش الصفحات المتخزنة.
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        window.location.replace('/dashboard')
+      } else {
+        router.replace('/dashboard')
+      }
+    }
   }, [boot, router])
 
   if (boot === 'superadmin') return <SuperAdminApp />

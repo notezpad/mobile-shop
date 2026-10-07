@@ -16,11 +16,12 @@
  *  ✅ Periodic sync (optional, for background data refresh)
  */
 
-// 🛡️ 2026-10-07 (v17): رفعنا رقم الكاش من v4 لـ v5 — عند التنشيط بيمسح كل
-// كاش النسخة القديمة، وفيه كان ممكن تكون اتخزنت ردود API غلط/فاضية (بسبب
-// الباج القديم اللي كان بيخزّن أي رد حتى لو 500) فبتتقدم للمستخدم لاحقاً
-// كأن البيانات "اتمسحت". المسح التلقائي ده بينضف أي سموم قديمة.
-const CACHE_VERSION = 'shop-erp-v5'
+// 🛡️ 2026-10-07 (v20/PWA): رفعنا الكاش من v5 لـ v6 — أول تشغيل للنسخة
+// دي بينضف أي كاش قديم (HTML/ردود سمومة محتملة)، وبعدها بناء كاش جديد
+// ينطّق مع سلسلة الأوفلاين الجديدة (نسخة السيشن في IDB + تسخين مسارات
+// التطبيق). المستخدم هيعيد تخزين الصفحات تلقائياً من أول زيارة أونلاين
+// + prewarm الـ app shell بيغطي المسارات الأساسية فوراً.
+const CACHE_VERSION = 'shop-erp-v6'
 const OFFLINE_URL = '/offline.html'
 
 // ─── Precache list ──────────────────────────────────────────
@@ -139,20 +140,32 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       (async () => {
+        // 🛡️ ROOT FIX (2026-10-07, v20/PWA): cache.put() بيرفض طلبات
+        // navigate-mode بـ TypeError **بصمت** (الـ .then() كان بيبلع
+        // الـ rejection) — يعني من أول يوم الـ SW ما خزّن ولا صفحة HTML
+        // واحدة من التنقلات! أي refresh أوفلاين كان بيقع في offline.html
+        // = «ولا كأني في PWA». الحل: مفتاح كاش Request عادي (GET) بنفس
+        // الـ URL — الـ match بيوافق بالـ URL مهما كان الـ mode.
+        // + حماية: نختزن الردود السليمة فقط (ok) — صفحات 500 اللي بيرجعها
+        // الديف/الإيدج وقت ضعف الشبكة ممنوع تتخزن وتسمّم الأوفلاين.
+        const cacheKey = new Request(request.url, { method: 'GET' })
         try {
           // Use navigation preload if available
           const preload = await event.preloadResponse
           if (preload) {
-            // Cache the preloaded response
-            const clone = preload.clone()
-            caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+            if (preload.ok) {
+              const clone = preload.clone()
+              caches.open(CACHE_VERSION).then((cache) => cache.put(cacheKey, clone))
+            }
             return preload
           }
 
           // Normal fetch
           const response = await fetch(request)
-          const clone = response.clone()
-          caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+          if (response && response.ok) {
+            const clone = response.clone()
+            caches.open(CACHE_VERSION).then((cache) => cache.put(cacheKey, clone))
+          }
           return response
         } catch {
           // Offline → cache → offline page
@@ -284,11 +297,25 @@ self.addEventListener('message', (event) => {
       break
 
     case 'PRECACHE_URLS':
-      // Precache additional URLs sent by the client
+      // 🛡️ PWA (2026-10-07): تسخين مسارات التطبيق (HTML) — متسامح مسار-بمسار:
+      // القديم كان cache.addAll(urls) اللي بيفشل كله لو مسار واحد فشل.
+      // كمان بنسكب المسارات المتخزنة أصلاً — الرسالة بتوصل مع كل prewarm
+      // (كل 20 دقيقة أونلاين) فمفيش أي لزوم لإعادة جلب حاجة موجودة.
       if (Array.isArray(event.data.urls)) {
-        caches.open(CACHE_VERSION).then((cache) => {
-          cache.addAll(event.data.urls).catch(() => {})
-        })
+        event.waitUntil(
+          caches.open(CACHE_VERSION).then((cache) =>
+            Promise.allSettled(
+              event.data.urls.map((u) =>
+                cache.match(u, { ignoreSearch: true }).then((hit) => {
+                  if (hit) return
+                  return cache
+                    .add(new Request(u, { redirect: 'follow' }))
+                    .catch(() => {})
+                }).catch(() => {})
+              )
+            )
+          )
+        )
       }
       break
 

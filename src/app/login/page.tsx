@@ -7,13 +7,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles, Eye, EyeOff, Lock, Mail, ShieldCheck,
   Loader2, AlertCircle, ArrowRight, TrendingUp,
-  Store, Boxes, Wallet, Check, Zap, Users, BarChart3,
+  Store, Boxes, Wallet, Check, Zap, Users, BarChart3, WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Field } from "@/components/ui/field";
 import { api } from "@/lib/api";
+import { getOfflineUser, saveAuthSnapshot, type AuthUser } from "@/lib/auth-client";
+import { useShopStore } from "@/lib/store";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -35,12 +37,45 @@ const RECENT_TXS = [
 
 export default function LoginPage() {
   const router = useRouter();
+  const setUser = useShopStore((s) => s.setUser);
   const [email,    setEmail]    = React.useState("");
   const [password, setPassword] = React.useState("");
   const [showPass, setShowPass] = React.useState(false);
   const [remember, setRemember] = React.useState(true);
   const [loading,  setLoading]  = React.useState(false);
   const [error,    setError]    = React.useState<LoginError | null>(null);
+
+  // 🛡️ PWA (2026-10-07): حالة الاتصال + الحساب المحفوظ على الجهاز.
+  // لو المستخدم أوفلاين وكان سجّل دخول من الجهاز ده قبل كده، بنعرض له
+  // زر «متابعة بالحساب المحفوظ» بيدخّله النظام من كاش الجهاز — من غير
+  // إنترنت — بدل رسالة فشل ميتة.
+  const [online,   setOnline]   = React.useState(true);
+  const [savedUser, setSavedUser] = React.useState<AuthUser | null>(null);
+
+  React.useEffect(() => {
+    const updateOnline = () => setOnline(navigator.onLine);
+    updateOnline();
+    window.addEventListener("online", updateOnline);
+    window.addEventListener("offline", updateOnline);
+    let alive = true;
+    ;(async () => {
+      const u = await getOfflineUser();
+      if (alive && u) setSavedUser(u);
+    })();
+    return () => {
+      window.removeEventListener("online", updateOnline);
+      window.removeEventListener("offline", updateOnline);
+      alive = false;
+    };
+  }, []);
+
+  const enterWithSavedSession = () => {
+    if (!savedUser) return;
+    setUser(savedUser);
+    // Full navigation (مش router.push): أوفلاين الـ RSC transition بيفشل،
+    // أما full load فبيخدمها الـ SW من كاش الصفحات مباشرة.
+    window.location.href = "/dashboard";
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,6 +97,9 @@ export default function LoginPage() {
         idempotent: true,
       });
       if (data?.ok && data.user) {
+        // 🛡️ PWA: احفظ نسخة السيشن فوراً عند نجاح الدخول — أول تذكرة
+        // لدخول أوفلاين ناجح بعدها في أي وقت.
+        void saveAuthSnapshot(data.user as AuthUser);
         toast.success(`أهلاً بك ${data.user.name ?? ""} 👋`);
         router.push(data.user.role === "SUPER_ADMIN" ? "/" : "/dashboard");
         router.refresh();
@@ -109,6 +147,45 @@ export default function LoginPage() {
                 <p className="text-sm text-muted-foreground mt-0.5">سجّل الدخول للوصول إلى لوحة التحكم</p>
               </div>
             </div>
+
+            {/* 🛡️ PWA: بطاقة الدخول بالحساب المحفوظ أوفلاين */}
+            {!online && savedUser && (
+              <button
+                type="button"
+                onClick={enterWithSavedSession}
+                className="flex w-full items-center gap-3 rounded-xl border border-orange-300/60 bg-orange-50 dark:border-orange-700/60 dark:bg-orange-950/30 p-3 text-right transition-colors hover:bg-orange-100 dark:hover:bg-orange-900/40"
+              >
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-base font-bold text-white">
+                  {(savedUser.name || "؟").trim().charAt(0)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-foreground">
+                    متابعة بالحساب المحفوظ — {savedUser.name}
+                  </span>
+                  <span dir="ltr" className="block truncate text-[11px] text-muted-foreground">
+                    {savedUser.email}
+                  </span>
+                </span>
+                <ArrowRight className="size-4 shrink-0 text-orange-500 rtl:rotate-180" />
+              </button>
+            )}
+
+            {/* 🛡️ PWA: تنبيه واضح عند الانقطاع (بدل فشل صامت بعد إدخال البيانات) */}
+            {!online && (
+              <div className="flex items-start gap-2 rounded-xl border border-orange-300/50 bg-orange-50 dark:border-orange-700/50 dark:bg-orange-950/30 px-3 py-2.5 text-sm">
+                <WifiOff className="size-4 shrink-0 mt-0.5 text-orange-500" />
+                <div>
+                  <p className="font-semibold text-orange-700 dark:text-orange-300 text-xs">
+                    لا يوجد اتصال بالإنترنت الآن
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {savedUser
+                      ? "تقدر تكمل بالنظام من الحساب المحفوظ فوق."
+                      : "تسجيل الدخول يحتاج اتصالاً — النظام يشتغل أوفلاين بعد أول دخول ناجح على الجهاز."}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Error banner */}
             <AnimatePresence>

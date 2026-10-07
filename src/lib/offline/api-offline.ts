@@ -113,161 +113,7 @@ async function fetchWithRetry(
   throw lastError ?? new Error('طلب فاشل')
 }
 
-const inFlightGets = getInFlight()
-
-/**
- * ⚡ v10: التخزين على globalThis مش module-scope — لأن الـ bundler بيضمّن
- * نسخ متعددة من الموديول ده في chunks مختلفة (كل dynamic import boundary
- * بياخد نسخة)، وكل نسخة كانت هتبقى ليها كاش منفصل = الكاش مش هيتبادل
- * بين الـ views خالص. globalThis = instance واحدة حقيقية مهما كان عدد النسخ.
- */
-type SwrStore = {
-  mem: Map<string, { data: any; at: number }>
-  revalidating: Set<string>
-  inFlight: Map<string, Promise<any>>
-  invalidatedAt: number
-}
-function getStore(): SwrStore {
-  const g = globalThis as any
-  if (!g.__nezamSwrStore) {
-    g.__nezamSwrStore = {
-      mem: new Map(),
-      revalidating: new Set(),
-      inFlight: new Map(),
-      invalidatedAt: 0,
-    } as SwrStore
-  }
-  return g.__nezamSwrStore as SwrStore
-}
-function getInFlight(): Map<string, Promise<any>> {
-  return getStore().inFlight
-}
-
-/**
- * ⚡ v10 — SWR (stale-while-revalidate) memory layer — "سرعة workeros"
- * ─────────────────────────────────────────────────────────────────────
- * قبل كده: كل فتح صفحة = انتظار الشبكة بالكامل حتى لو النسخة المخزنة طازة
- * (network-first دايماً) — عشان كده كل صفحة كانت بتعرض سبينر/سكيليتون
- * في كل زيارة، والتطبيق المرجعي (workeros / TanStack Query) بيفرق عنه
- * بمراحل: بيرسم الداتا من الكاش في الميموري لحظياً وبيحدّث في الخلفية.
- *
- * دلوقتي: الـ GETs المسموح ليها (اللسته تحت) لو فيها نسخة طازة (أقل من
- * نافذة الطزاجة بتاعتها) بترجع فوراً من الميموري (بدون أي انتظار) +
- * بنبدأ تحديث خلفي صامت للنسخة الجاية. لو مفيش في الميموري (reload
- * مثلاً) بنجرب IDB (بتالحافة المخزنة) — ولسه أسرع بكتير من الشبكة.
- *
- * قواعد الصحة:
- *  - أي كتابة ناجحة (أو حتى متصفة أوفلاين في الـ outbox) بتمسح كل كاش
- *    الـ API (الميموري + صفوف IDB) — فبعد أي إضافة/تعديل/حذف التحديث
- *    الجاي بيروح للشبكة دايماً، ومفيش بيانات قديمة تتع بعد mutation.
- *  - مسارات الحساسات (auth/subscription/payments/admin) مستثناة خالص —
- *    بتتكلم مع الشبكة دايماً زي الأول.
- *  - أي GET فيه نص بحث مش فاضي مستثنى — نتايج الكتابة لازم تكون حية.
- */
-const memCache = {
-  get: (k: string) => getStore().mem.get(k),
-  set: (k: string, v: { data: any; at: number }) => getStore().mem.set(k, v),
-  delete: (k: string) => getStore().mem.delete(k),
-  clear: () => getStore().mem.clear(),
-  get size() { return getStore().mem.size },
-  keys: () => getStore().mem.keys(),
-}
-const MEM_CACHE_MAX = 80
-/**
- * طابع زمني آخر إبطال — بيرفع أمان مسح IDB اللي بيحصل async: أي صف
- * في IDB وقت كتابته (at) أقدم من الطباع ده بيتتجاهل حتى لو "طازة" —
- * ده بيمنع الـ race اللي ممكن الـ GET بعد الـ mutation يقرا الصف القديم
- * قبل ما الـ purge يخلص.
- */
-/**
- * طابع زمني آخر إبطال — بيرفع أمان مسح IDB اللي بيحصل async: أي صف
- * في IDB وقت كتابته (at) أقدم من الطباع ده بيتتجاهل حتى لو "طازة" —
- * ده بيمنع الـ race اللي ممكن الـ GET بعد الـ mutation يقرا الصف القديم
- * قبل ما الـ purge يخلص. (متخزن في الـ store المشترك — كل النسخ تشوفه)
- */
-function getInvalidatedAt(): number {
-  return getStore().invalidatedAt
-}
-
-/** مسارات الـ API اللي بنتكاشها (بيتمسحوا كلهم بعد أي كتابة) */
-const API_CACHE_PREFIXES = [
-  '/api/dashboard',
-  '/api/products',
-  '/api/customers',
-  '/api/suppliers',
-  '/api/categories',
-  '/api/sales',
-  '/api/expenses',
-  '/api/cash',
-  '/api/tenant',
-]
-
-/**
- * نافذة الطزاجة (ms) لكل endpoint. ترجع null = ممنوع يُخدم من الكاش
- * (network-first زي ما هو) — نفس فلسفة staleTime في TanStack Query
- * عند workeros (15 ثانية → 3 دقائق).
- */
-function swrFreshMs(url: string): number | null {
-  const qIndex = url.indexOf('?')
-  const path = qIndex === -1 ? url : url.slice(0, qIndex)
-  // مستثناات أمان — قرارات حساسة لازم دايماً شبكة حية
-  if (path.startsWith('/api/auth')) return null
-  if (path.startsWith('/api/subscription')) return null
-  if (path.startsWith('/api/pay')) return null
-  if (path.startsWith('/api/admin')) return null
-  if (path.startsWith('/api/upload')) return null
-  // نص بحث فعلي (مش فاضي) → نتايج حية دايماً
-  if (/[?&]search=[^&]/.test(url)) return null
-  if (path === '/api/categories') return 60_000
-  if (path === '/api/tenant') return 60_000
-  if (path === '/api/suppliers') return 30_000
-  if (path === '/api/dashboard') return 30_000
-  if (path === '/api/products') return 20_000
-  if (path === '/api/customers') return 15_000
-  if (path === '/api/sales') return 15_000
-  if (path === '/api/expenses') return 15_000
-  if (path === '/api/cash') return 15_000
-  return null
-}
-
-/** تحديث خلفي صامت — يعبّي الميموري + IDB للنسخة الجاية بدون ما حد يستنى */
-async function revalidateGet(url: string): Promise<void> {
-  if (getStore().revalidating.has(url)) return
-  if (!isOnline()) return
-  getStore().revalidating.add(url)
-  try {
-    const res = await fetch(url, { method: 'GET', cache: 'no-store' })
-    if (!res.ok) return
-    const text = await res.text()
-    let data: any = null
-    if (text) {
-      try { data = JSON.parse(text) } catch { data = text }
-    }
-    memCache.set(url, { data, at: Date.now() })
-    void idb.setCached(url, data).catch(() => {})
-  } catch {
-    // فشل صامت — النسخة القديمة تفضل صالحة للزيارة الجاية
-  } finally {
-    getStore().revalidating.delete(url)
-  }
-}
-
-/** مسح كاش الميموري (يُستدعى من auth-client عند تغيير الحساب أيضاً) */
-export function clearMemoryApiCache(): void {
-  memCache.clear()
-}
-
-/**
- * بعد أي كتابة ناجحة (أو متصفة أوفلاين): نمسح كل كاش الـ API —
- * التحديث الجاي بعد mutation بيكلم الشبكة دايماً (نفس فكرة purge
- * الخادمي في src/lib/edgeCache.ts من v9 — الكتابة الواحدة بتأثر على
- * أكتر من قائمة، فبنمسح الكل: الخريطة صغيرة والصحة أهم).
- */
-function invalidateApiCaches(): void {
-  memCache.clear()
-  getStore().invalidatedAt = Date.now()
-  void idb.purgeRows(API_CACHE_PREFIXES).catch(() => {})
-}
+const inFlightGets = new Map<string, Promise<any>>()
 
 export function isOnline(): boolean {
   return typeof navigator === 'undefined' ? true : navigator.onLine !== false
@@ -376,9 +222,6 @@ export async function offlineFetch<T = any>(
         if (res.status === 401) notifySessionExpired()
         throw err
       }
-      // ⚡ v10: أي كتابة ناجحة تمسح كاش الـ API (ميموري + IDB) — عشان
-      // أي GET جاي بعد الـ mutation يروح للشبكة ويجيب الداتا الجديدة.
-      invalidateApiCaches()
       // 🛡️ ROOT FIX (2026-09-27): announce that this kind of data changed so
       // every mounted view/dialog showing it (not just the one that made the
       // request) can refetch live instead of needing a hard refresh. See
@@ -387,6 +230,20 @@ export async function offlineFetch<T = any>(
       return data as T
     } catch (err: any) {
       if (isNetworkError(err)) {
+        // 🛡️ PWA ROOT FIX (2026-10-07): عمليات المصادقة ممنوع تدخل الـ
+        // outbox نهائياً. قبل كده أي POST بيفشل بالشبكة كان بيتحطّ في
+        // قائمة الانتظار — يعني POST /api/auth/login بكلمة المرور كان
+        // بيقعد مخزّن على الجهاز ويترفع فعلياً في المزامنة اللاحقة،
+        // والواجهة بترجّع "فشل تسجيل الدخول" أو نتيجة مربكة. الدخول/
+        // إنشاء حساب/الخروج عمليات تحقق سيرفر خالص — مالهاش معنى
+        // أوفلاين، فنرمي خطأ واضح فوراً.
+        if (url.startsWith('/api/auth/')) {
+          throw new Error(
+            isOnline()
+              ? 'تعذّر الوصول إلى الخادم — حاول مرة أخرى'
+              : 'أنت غير متصل بالإنترنت — تسجيل الدخول يحتاج اتصالاً. لو سجّلت دخولك قبل كده على الجهاز ده، افتح النظام من أيقونة التطبيق وسيُدخلك الحساب المحفوظ تلقائياً.'
+          )
+        }
         // 🛡️ 2026-09-30 (M7): idempotency for queued sales — a network error
         // AFTER the server committed used to keep the outbox entry and re-POST
         // it later, creating a duplicate invoice (double stock/till/debt).
@@ -408,9 +265,6 @@ export async function offlineFetch<T = any>(
           body: queuedBody,
           label: getOperationLabel(url, method, queuedBody),
         })
-        // ⚡ v10: الكتابة الموفّقة أوفلاين هتغيّر السيرفر بعد المزامنة —
-        // نمسح الكاش دلوقتي عشان أي GET جاي ميرجّعش داتا قديمة.
-        invalidateApiCaches()
         // Optimistic: local screens usually already update their own state,
         // but nudge everyone else too (e.g. a list of the same data open in
         // another dialog) — harmless offline since it just re-reads cache.
@@ -438,25 +292,6 @@ async function runGet<T>(
   url: string,
   options?: { method?: string; body?: any; signal?: AbortSignal },
 ): Promise<T> {
-  // ⚡ v10 SWR fast path — نسخة طازة في الكاش؟ ارجّعها فوراً + حدّث في الخلفية.
-  // (بنستثني النداءات اللي فيها signal — الاتفاق مع النداء دي فيه إلغاء محتمل)
-  const freshMs = swrFreshMs(url)
-  if (freshMs !== null && !options?.signal) {
-    const mem = memCache.get(url)
-    if (mem && Date.now() - mem.at < freshMs) {
-      void revalidateGet(url)
-      return mem.data as T
-    }
-    // مفيش في الميموري (reload مثلاً) — جرب IDB قبل ما نسيب المستخدم يستنى الشبكة
-    // (بشرط إن الصف مكتوب بعد آخر إبطال — حماية من race مسح IDB الغير متزامن)
-    const idbHit = await idb.getCached<T>(url)
-    if (idbHit && idbHit.at > getInvalidatedAt() && Date.now() - idbHit.at < freshMs) {
-      memCache.set(url, { data: idbHit.data, at: idbHit.at })
-      void revalidateGet(url)
-      return idbHit.data
-    }
-  }
-
   // Step 1: Try fetching from server (with retry on transient 5xx)
   try {
     const res = await fetchWithRetry(
@@ -479,14 +314,6 @@ async function runGet<T>(
     }
     // Success → cache + return
     // لا ننتظر كتابة IndexedDB (بطيئة على الموبايل) — الكاش للأوفلاين فقط
-    if (freshMs !== null) {
-      // ⚡ v10: اعتمّ الكاش في الميموري للزيارات الجاية (نفس فكرة gcTime)
-      if (memCache.size >= MEM_CACHE_MAX) {
-        const oldest = memCache.keys().next().value
-        if (oldest !== undefined) memCache.delete(oldest)
-      }
-      memCache.set(url, { data, at: Date.now() })
-    }
     void idb.setCached(url, data).catch(() => {})
     return data as T
   } catch (err: any) {

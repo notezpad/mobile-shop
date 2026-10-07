@@ -1,7 +1,8 @@
 'use client'
 
 import * as React from 'react'
-import { WifiOff, RefreshCw, CloudUpload, CheckCircle2, AlertCircle } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Wifi, WifiOff, RefreshCw, CloudUpload, CheckCircle2, AlertCircle } from 'lucide-react'
 import { useSyncState, usePendingOperations, syncNow } from '@/lib/offline/use-offline'
 
 /**
@@ -12,10 +13,6 @@ import { useSyncState, usePendingOperations, syncNow } from '@/lib/offline/use-o
  * 4. Sync completed with errors (red "فشلت X عمليات")
  *
  * Also shows a "Sync now" button when online with pending operations.
- *
- * ⚡ PERF FIX (2026-10-05): اتبدّل framer-motion بـ CSS animation
- * (animate-in fade-in) — المكون ده عايش في الـ shell اللي بيتحمّل مع
- * كل صفحة، وframer-motion كان بيزيد ~35KB gzip على كل تحميل بدون داعي.
  */
 export function OfflineIndicator() {
   const sync = useSyncState()
@@ -37,39 +34,45 @@ export function OfflineIndicator() {
   // Offline → orange banner
   if (!sync.online) {
     return (
-      <div
-        className="relative z-[60] shrink-0 flex items-center justify-center gap-2 bg-orange-500 px-4 py-2 text-white animate-in fade-in duration-200"
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="relative z-[60] shrink-0 flex items-center justify-center gap-2 bg-orange-500 px-4 py-2 text-white"
       >
         <WifiOff className="size-4" />
         <span className="text-sm font-medium">
-          أنت غير متصل — التغييرات تُحفظ محلياً وستُزامن عند عودة الاتصال
+          أنت تعمل بدون إنترنت — كمّل شغلك عادي، كل حاجة بتتحفظ على الجهاز وسترفع تلقائياً عند رجوع الاتصال
         </span>
         {sync.pending > 0 && (
           <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold">
             {sync.pending} بانتظار المزامنة
           </span>
         )}
-      </div>
+      </motion.div>
     )
   }
 
   // Syncing → blue banner with spinner
   if (sync.syncing) {
     return (
-      <div
-        className="relative z-[60] shrink-0 flex items-center justify-center gap-2 bg-blue-500 px-4 py-2 text-white animate-in fade-in duration-200"
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="relative z-[60] shrink-0 flex items-center justify-center gap-2 bg-blue-500 px-4 py-2 text-white"
       >
         <RefreshCw className="size-4 animate-spin" />
         <span className="text-sm font-medium">جارٍ مزامنة البيانات...</span>
-      </div>
+      </motion.div>
     )
   }
 
   // Pending operations + online → show "Sync now" banner
   if (sync.pending > 0) {
     return (
-      <div
-        className="relative z-[60] shrink-0 flex items-center justify-between gap-2 bg-blue-50 px-4 py-2 text-blue-900 border-b border-blue-200 animate-in fade-in duration-200"
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="relative z-[60] shrink-0 flex items-center justify-between gap-2 bg-blue-50 px-4 py-2 text-blue-900 border-b border-blue-200"
       >
         <div className="flex items-center gap-2">
           <CloudUpload className="size-4 text-blue-500" />
@@ -94,15 +97,18 @@ export function OfflineIndicator() {
           <RefreshCw className="size-3" />
           مزامنة الآن
         </button>
-      </div>
+      </motion.div>
     )
   }
 
   // Sync result (temporary)
   if (syncResult) {
     return (
-      <div
-        className={`relative z-[60] shrink-0 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium animate-in fade-in duration-200 ${
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className={`relative z-[60] shrink-0 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium ${
           syncResult.failed > 0
             ? 'bg-rose-50 text-rose-700'
             : 'bg-emerald-50 text-emerald-700'
@@ -119,7 +125,7 @@ export function OfflineIndicator() {
             تمت مزامنة {syncResult.done} عملية بنجاح
           </>
         )}
-      </div>
+      </motion.div>
     )
   }
 

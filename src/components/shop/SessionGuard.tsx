@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { useShopStore } from '@/lib/store'
+import { clearAuthSnapshot } from '@/lib/auth-client'
 
 /**
  * 🛡️ FIX (stuck-logout / "unauthorized" toast storm / data goes blank):
@@ -29,6 +30,10 @@ export function SessionGuard() {
   React.useEffect(() => {
     const onSessionExpired = () => {
       setUser(null)
+      // 🛡️ PWA (2026-10-07): سيشن منتهية حقيقية (401 من السيرفر) = نمسح
+      // كمان النسخة المحفوظة أوفلاين — وإلا المستخدم كان ممكن يعيد فتح
+      // النظام أوفلاين بحساب سيسحنه انتهت فعلياً على السيرفر.
+      void clearAuthSnapshot()
     }
     window.addEventListener('shop:session-expired', onSessionExpired)
     return () => window.removeEventListener('shop:session-expired', onSessionExpired)

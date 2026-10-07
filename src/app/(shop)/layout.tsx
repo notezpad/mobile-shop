@@ -3,7 +3,14 @@
 import * as React from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, Menu, CalendarDays, Home, ChevronRight } from 'lucide-react'
+import { Loader2, Menu, CalendarDays, Home, X, WifiOff } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Sidebar } from '@/components/shop/Sidebar'
 import { ThemeToggle } from '@/components/shop/ThemeToggle'
 import { NotificationBell } from '@/components/shop/NotificationBell'
@@ -15,7 +22,7 @@ import { RoleBadge } from '@/components/shop/RoleBadge'
 import { useOfflineReady } from '@/lib/offline/use-offline'
 import { useShopStore } from '@/lib/store'
 import { api } from '@/lib/api'
-import { getMe } from '@/lib/auth-client'
+import { getMe, getMeOutcome } from '@/lib/auth-client'
 
 const VIEW_PATHS: Record<string, string> = {
   '/dashboard': 'dashboard',
@@ -129,24 +136,15 @@ function LiveClock({ timeZone }: { timeZone: string }) {
   )
 }
 
-/** 🛡️ 2026-10-06: إغلاق السايدبار بزر Escape — بديل مباشر لسلوك Radix الشيتي
-    القديم من غير أي Radix. مركّب مستقل عشان الـ effect يعتمد على enabled بس. */
-function EscapeCloser({ onEscape, enabled }: { onEscape: () => void; enabled: boolean }) {
-  React.useEffect(() => {
-    if (!enabled) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onEscape()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onEscape, enabled])
-  return null
-}
-
 export default function ShopLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const [bootState, setBootState] = React.useState<'loading' | 'authed' | 'guest' | 'admin'>('loading')
+  // 🛡️ PWA (2026-10-07): 'offline-no-session' = النت مقطوع ومفيش نسخة
+  // سيشن محفوظة على الجهاز (مثلاً أول تشغيل قبل أي دخول). بدل ما كنا
+  // نطرد المستخدم لـ '/' بـ router.replace (اللي بيفشل أوفلاين لأنه
+  // بيطلب RSC payload من السيرفر والـ SW بيستبعده عمداً → شاشة مكسورة)،
+  // بنعرض شاشة أوفلاين واضحة مع زر إعادة محاولة.
+  const [bootState, setBootState] = React.useState<'loading' | 'authed' | 'guest' | 'admin' | 'offline-no-session'>('loading')
   const setUser = useShopStore((s) => s.setUser)
   const setShopName = useShopStore((s) => s.setShopName)
   const setBranding = useShopStore((s) => s.setBranding)
@@ -156,41 +154,6 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   const subscription = useShopStore((s) => s.subscription)
   const tenantTimezone = useShopStore((s) => s.branding.timezone)
   const [mobileOpen, setMobileOpen] = React.useState(false)
-
-  // ─── Swipe-to-close for the mobile drawer (anchored right → drag right) ───
-  // transform-only (no re-render while dragging). On release we clear the inline
-  // styles so the existing CSS transition animates to open/closed from the finger.
-  const swipe = React.useRef({ x: 0, y: 0, t: 0, dx: 0, locked: false, active: false })
-  const onSwipeStart = (e: React.TouchEvent<HTMLElement>) => {
-    const p = e.touches[0]
-    swipe.current = { x: p.clientX, y: p.clientY, t: Date.now(), dx: 0, locked: false, active: true }
-  }
-  const onSwipeMove = (e: React.TouchEvent<HTMLElement>) => {
-    const s = swipe.current
-    if (!s.active) return
-    const p = e.touches[0]
-    const dx = p.clientX - s.x
-    const dy = p.clientY - s.y
-    if (!s.locked) {
-      if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { s.active = false; return }
-      if (dx > 10 && dx > Math.abs(dy)) s.locked = true
-      else return
-    }
-    s.dx = Math.max(0, dx)
-    const el = e.currentTarget
-    el.style.transition = 'none'
-    el.style.transform = `translateX(${s.dx}px)`
-  }
-  const onSwipeEnd = (e: React.TouchEvent<HTMLElement>) => {
-    const s = swipe.current
-    if (!s.active || !s.locked) { s.active = false; return }
-    s.active = false
-    const el = e.currentTarget
-    const velocity = s.dx / Math.max(1, Date.now() - s.t)
-    el.style.transition = ''
-    el.style.transform = ''
-    if (s.dx > 80 || velocity > 0.5) setMobileOpen(false)
-  }
 
   // ⚡ Initialize offline sync engine (flush outbox when network returns)
   useOfflineReady()
@@ -207,7 +170,11 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
 
       const me = meResult.status === 'fulfilled' ? meResult.value : null
       if (!me) {
-        setBootState('guest')
+        // 🛡️ PWA ROOT FIX: الفشل هنا ليه سببين مختلفين تماماً:
+        // (1) السيرفر رفض فعلاً (401) → زائر حقيقي → guest طبيعي.
+        // (2) النت مقطوع ومفيش نسخة سيشن محفوظة → ماتطردش، اعرف
+        //     المستخدم إيه اللي حاصل وسيبه يعيد المحاولة.
+        setBootState(getMeOutcome() === 'offline' ? 'offline-no-session' : 'guest')
         return
       }
       setUser(me)
@@ -220,7 +187,13 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
 
       if (me.role === 'SUPER_ADMIN' && !(me as any).impersonating) {
         setBootState('admin')
-        router.replace('/')
+        // 🛡️ PWA: أوفلاين الـ router.replace بيفشل (RSC من السيرفر) —
+        // full navigation بيمر من الـ SW اللي بيخدم الـ HTML المتخزن.
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+          window.location.replace('/')
+        } else {
+          router.replace('/')
+        }
         return
       }
 
@@ -275,7 +248,12 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
 
   React.useEffect(() => {
     if (bootState === 'guest') {
-      router.replace('/')
+      // 🛡️ PWA: نفس منطق الأمان — أوفلاين نستخدم location بدل router.
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        window.location.replace('/')
+      } else {
+        router.replace('/')
+      }
     }
   }, [bootState, router])
 
@@ -283,6 +261,28 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="size-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  // 🛡️ PWA: النت مقطوع + مفيش حساب محفوظ → شاشة أوفلاين واضحة (مش طرد مكسور)
+  if (bootState === 'offline-no-session') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center">
+        <div className="flex size-16 items-center justify-center rounded-2xl bg-orange-500/10 ring-1 ring-orange-500/20">
+          <WifiOff className="size-8 text-orange-500" />
+        </div>
+        <h1 className="text-xl font-bold text-foreground">أنت غير متصل بالإنترنت</h1>
+        <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+          النظام يشتغل بدون إنترنت بعد أول تسجيل دخول على الجهاز ده.
+          وصّل الإنترنت وسجّل دخولك مرة واحدة، وبعدها تقدر تفتح النظام وتشتغل فيه عادي حتى لو النت مقطوع.
+        </p>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => window.location.reload()}>إعادة المحاولة</Button>
+          <Button variant="outline" onClick={() => window.location.replace('/')}>
+            الصفحة الرئيسية
+          </Button>
+        </div>
       </div>
     )
   }
@@ -334,81 +334,22 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
       </header>
 
       {/* Mobile sidebar */}
-      {/* 🛡️ 2026-10-06 — إصلاح تجمّد الجوال بالكامل: درَجر بسيط بدون Radix Dialog
-          خالص. التاريخ: باتش v5 حط forceMount على SheetContent عشان يسرّع
-          الفتح، بس ده خلّى Radix Overlay (اللي جوّه RemoveScroll) متركّب
-          على طول → listeners غير passive على document بتعمل preventDefault
-          لكل touchmove = سكرول الجوال ميت + أي لمسة بتنزل 1px الـ click
-          بتاعها بيتلغى. وحتى بعد modal={false}، اختبارات المتصفح أثبتت إن
-          وجود الشيت الـ forceMounted بيفسد dispatch بتاع React للضغطات
-          الحقيقية (isTrusted) على الهيدر كله (المصدر: react-dialog 1.1.23
-          + Presence/DismissableLayer مع forceMount).
-          الحل النهائي: درَجر عادي — div ثابت بيتحرك بـ translate-x CSS.
-          * شجرة السايدبار متجمّعة دايمًا جوّاه → الفتح فوري (300ms أنيميشن
-            CSS نضيف من غير إعادة بناء — نفس هدف forceMount بالظبط).
-          * مقفول = translate-x-full (بره الشاشة) + inert (مش بياخد focus
-            ولا يترى لقارئات الشاشة) — مفيش أي طبقة فوق الصفحة.
-          * مفيش قفل سكرول خالص: الشل fixed inset-0 + overflow-hidden،
-            والمس على الـ Overlay (غير قابل للسكرول) مش بيسكرول حاجة وراه. */}
-      {/* الظل الخلفي */}
-      <div
-        aria-hidden="true"
-        onClick={() => setMobileOpen(false)}
-        className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 ${
-          mobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
-      />
-      {/* الدرج نفسه */}
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="قائمة التنقل"
-        inert={!mobileOpen}
-        className={`fixed inset-y-0 right-0 z-50 flex h-dvh w-[82vw] max-w-[300px] flex-col bg-background shadow-lg transition-transform duration-300 ease-in-out ${
-          mobileOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
-        style={{ touchAction: 'pan-y' }}
-        onTouchStart={onSwipeStart}
-        onTouchMove={onSwipeMove}
-        onTouchEnd={onSwipeEnd}
-        onTouchCancel={onSwipeEnd}
-      >
-        {/* مقبض الإغلاق: لسان على الحافة الحرّة للدرج
-            🛡️ 2026-10-06 — عزل events:
-            • onPointerDown بدل onClick: أسرع استجابة، وبيشتغل قبل ما أي
-              bubble يوصل للدرج أو للسايدبار.
-            • stopPropagation على كل touch events: يمنع الـ swipe handlers
-              بتاعة الدرج من اعتبار الضغطة على المقبض بداية سحب.
-            • preventDefault على touchend: يقطع الـ "ghost click" اللي
-              بيوصل للعنصر اللي وراه بعد 300ms على بعض المتصفحات.
-            • touchAction none: يمنع المتصفح من تفسير اللمسة كسكرول. */}
-        <button
-          type="button"
-          onPointerDown={(e) => {
-            e.stopPropagation()
-            setMobileOpen(false)
-          }}
-          onTouchStart={(e) => e.stopPropagation()}
-          onTouchMove={(e) => e.stopPropagation()}
-          onTouchEnd={(e) => {
-            e.stopPropagation()
-            e.preventDefault()
-          }}
-          onTouchCancel={(e) => e.stopPropagation()}
-          className="sb-edge-tab"
-          data-open={mobileOpen}
-          aria-label="إغلاق القائمة"
-          style={{ touchAction: 'none' }}
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent
+          side="right"
+          showCloseButton={false}
+          className="h-dvh w-[82vw] max-w-[300px] gap-0 p-0 sm:max-w-[300px]"
         >
-          <span className="sb-edge-grip" aria-hidden="true" />
-          <ChevronRight className="size-3.5" aria-hidden="true" />
-          <span className="sr-only">إغلاق</span>
-        </button>
-        {/* w-full: السايدبار يملا الدرج بالكامل */}
-        <Sidebar className="w-full border-l-0" onNavigate={() => setMobileOpen(false)} />
-      </div>
-      {/* إغلاق بزرار Escape (سلوك الشيت القديم) */}
-      <EscapeCloser onEscape={() => setMobileOpen(false)} enabled={mobileOpen} />
+          <SheetTitle className="sr-only">القائمة</SheetTitle>
+          {/* زر الإغلاق على الشمال عشان ما يغطيش لوجو المحل */}
+          <SheetClose className="absolute left-3 top-4 z-10 flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted active:scale-90">
+            <X className="size-4" />
+            <span className="sr-only">إغلاق</span>
+          </SheetClose>
+          {/* w-full: السايدبار يملا الشيت بالكامل (كان 252px فيسيب شريط فاضي) */}
+          <Sidebar className="w-full border-l-0" onNavigate={() => setMobileOpen(false)} />
+        </SheetContent>
+      </Sheet>
 
       {/*
         Sidebar + Main content in a flex-row.

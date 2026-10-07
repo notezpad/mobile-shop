@@ -20,7 +20,39 @@ const PRECACHE_ENDPOINTS = [
   '/api/subscription',
   '/api/tenant',
   '/api/notifications?unread=false',
+  // 🛡️ PWA (2026-10-07): نسخة السيشن — دي كانت الناقصة الجوهرية!
+  // من غيرها getMe() أوفلاين كان بيرجّع null → طرد للرئيسية →
+  // «لا يوجد إنترنت» عند الدخول. الـ fetch بيفشل بـ 401 لو مسجّل
+  // خروج → بسكّب (if (!res.ok) continue) فمفيش تسريب لحساب قديم.
+  '/api/auth/me',
 ]
+
+/**
+ * 🛡️ PWA (2026-10-07): مسارات HTML الأساسية — بنبعتها للـ SW يخزّنها
+ * (navigate HTML) حتى لو المستخدم لسه مازارهاش، فأول فتح أوفلاين
+ * لأي صفحة أساسية بيلاقيها جاهزة في كاش الصفحات بدل offline.html.
+ * المسارات دي static prerendered (كاش v11) — جلبها من الإيدج رخيص
+ * جداً، وبيتخطى أي مسار متخزن أصلاً (cache.match قبل الجلب — شوف
+ * معالج PRECACHE_URLS في public/sw.js).
+ */
+const APP_SHELL_ROUTES = [
+  '/dashboard', '/pos', '/products', '/sales',
+  '/inventory', '/customers', '/finance', '/expenses',
+  '/cash', '/reports', '/settings', '/purchases',
+  '/suppliers', '/maintenance', '/branches', '/users',
+]
+
+function prewarmAppShell(): void {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+  navigator.serviceWorker.ready
+    .then((reg) => {
+      const sw = reg.active || navigator.serviceWorker.controller
+      sw?.postMessage({ type: 'PRECACHE_URLS', urls: APP_SHELL_ROUTES })
+    })
+    .catch(() => {
+      /* SW مش جاهز/غير مسجل — الأوفلاين هيتخزن من الزيارات العادية */
+    })
+}
 
 /**
  * Pull all products into IndexedDB for offline POS search.
@@ -81,6 +113,11 @@ export async function prewarmAll(): Promise<{ products: number; endpoints: numbe
   ])
 
   await idb.setMeta('lastPrewarmAt', Date.now())
+
+  // 🛡️ PWA: خزّن صفحات التطبيق الأساسية في كاش الـ SW — بعد ما الـ
+  // endpoints خلصت عشان ماتزاحمش في الشبكة.
+  prewarmAppShell()
+
   return { products, endpoints }
 }
 
