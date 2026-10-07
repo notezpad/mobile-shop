@@ -128,16 +128,38 @@ export async function prewarmAppShell(): Promise<void> {
 /**
  * Pull all products into IndexedDB for offline POS search.
  * Fetches with status=all to get every product (active + inactive).
+ *
+ * 🛡️ PWA OFFLINE FIX v5 (2026-10-07) — جذر "البحث أوفلاين بيقلك غير متصل":
+ * /api/products بيرجع دايماً ظرف { data, total, page, limit, totalPages } —
+ * النسخة القديمة كانت بتستنى Array فشرط Array.isArray كان بيفشل دايماً →
+ * replaceProducts عمره ما كان بينادي → متجر products في IDB كان فاضي →
+ * أي بحث أوفلاين (نقطة البيع/المنتجات/أمر الشراء) كان بيرجع "غير متصل".
+ * كمان السيرفر بيحد limit بـ 100 كحد أقصى فبنمشي بالترقيم لحد ما نكمّل total.
  */
 export async function prewarmProducts(): Promise<number> {
   try {
-    const res = await fetch('/api/products?status=all')
-    if (!res.ok) return 0
-    const products = await res.json()
-    if (!Array.isArray(products) || products.length === 0) return 0
-    await idb.replaceProducts(products)
+    const LIMIT = 100
+    const MAX_PAGES = 60 // سقف أمان: 6000 منتج
+    const all: any[] = []
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const res = await fetch(`/api/products?status=all&limit=${LIMIT}&page=${page}`)
+      if (!res.ok) break
+      const raw = await res.json().catch(() => null)
+      const arr = Array.isArray(raw)
+        ? raw
+        : raw && Array.isArray(raw.data)
+          ? raw.data
+          : null
+      if (!arr || arr.length === 0) break
+      all.push(...arr)
+      const total = Number(raw?.total ?? all.length)
+      // آخر صفحة: مفيش زيادة عن total أو الصفحة جت ناقصة
+      if (!(total > all.length) || arr.length < LIMIT) break
+    }
+    if (all.length === 0) return 0
+    await idb.replaceProducts(all)
     await idb.setMeta('productsPrewarmedAt', Date.now())
-    return products.length
+    return all.length
   } catch {
     return 0
   }

@@ -113,7 +113,161 @@ async function fetchWithRetry(
   throw lastError ?? new Error('طلب فاشل')
 }
 
-const inFlightGets = new Map<string, Promise<any>>()
+const inFlightGets = getInFlight()
+
+/**
+ * ⚡ v10: التخزين على globalThis مش module-scope — لأن الـ bundler بيضمّن
+ * نسخ متعددة من الموديول ده في chunks مختلفة (كل dynamic import boundary
+ * بياخد نسخة)، وكل نسخة كانت هتبقى ليها كاش منفصل = الكاش مش هيتبادل
+ * بين الـ views خالص. globalThis = instance واحدة حقيقية مهما كان عدد النسخ.
+ */
+type SwrStore = {
+  mem: Map<string, { data: any; at: number }>
+  revalidating: Set<string>
+  inFlight: Map<string, Promise<any>>
+  invalidatedAt: number
+}
+function getStore(): SwrStore {
+  const g = globalThis as any
+  if (!g.__nezamSwrStore) {
+    g.__nezamSwrStore = {
+      mem: new Map(),
+      revalidating: new Set(),
+      inFlight: new Map(),
+      invalidatedAt: 0,
+    } as SwrStore
+  }
+  return g.__nezamSwrStore as SwrStore
+}
+function getInFlight(): Map<string, Promise<any>> {
+  return getStore().inFlight
+}
+
+/**
+ * ⚡ v10 — SWR (stale-while-revalidate) memory layer — "سرعة workeros"
+ * ─────────────────────────────────────────────────────────────────────
+ * قبل كده: كل فتح صفحة = انتظار الشبكة بالكامل حتى لو النسخة المخزنة طازة
+ * (network-first دايماً) — عشان كده كل صفحة كانت بتعرض سبينر/سكيليتون
+ * في كل زيارة، والتطبيق المرجعي (workeros / TanStack Query) بيفرق عنه
+ * بمراحل: بيرسم الداتا من الكاش في الميموري لحظياً وبيحدّث في الخلفية.
+ *
+ * دلوقتي: الـ GETs المسموح ليها (اللسته تحت) لو فيها نسخة طازة (أقل من
+ * نافذة الطزاجة بتاعتها) بترجع فوراً من الميموري (بدون أي انتظار) +
+ * بنبدأ تحديث خلفي صامت للنسخة الجاية. لو مفيش في الميموري (reload
+ * مثلاً) بنجرب IDB (بتالحافة المخزنة) — ولسه أسرع بكتير من الشبكة.
+ *
+ * قواعد الصحة:
+ *  - أي كتابة ناجحة (أو حتى متصفة أوفلاين في الـ outbox) بتمسح كل كاش
+ *    الـ API (الميموري + صفوف IDB) — فبعد أي إضافة/تعديل/حذف التحديث
+ *    الجاي بيروح للشبكة دايماً، ومفيش بيانات قديمة تتع بعد mutation.
+ *  - مسارات الحساسات (auth/subscription/payments/admin) مستثناة خالص —
+ *    بتتكلم مع الشبكة دايماً زي الأول.
+ *  - أي GET فيه نص بحث مش فاضي مستثنى — نتايج الكتابة لازم تكون حية.
+ */
+const memCache = {
+  get: (k: string) => getStore().mem.get(k),
+  set: (k: string, v: { data: any; at: number }) => getStore().mem.set(k, v),
+  delete: (k: string) => getStore().mem.delete(k),
+  clear: () => getStore().mem.clear(),
+  get size() { return getStore().mem.size },
+  keys: () => getStore().mem.keys(),
+}
+const MEM_CACHE_MAX = 80
+/**
+ * طابع زمني آخر إبطال — بيرفع أمان مسح IDB اللي بيحصل async: أي صف
+ * في IDB وقت كتابته (at) أقدم من الطباع ده بيتتجاهل حتى لو "طازة" —
+ * ده بيمنع الـ race اللي ممكن الـ GET بعد الـ mutation يقرا الصف القديم
+ * قبل ما الـ purge يخلص.
+ */
+/**
+ * طابع زمني آخر إبطال — بيرفع أمان مسح IDB اللي بيحصل async: أي صف
+ * في IDB وقت كتابته (at) أقدم من الطباع ده بيتتجاهل حتى لو "طازة" —
+ * ده بيمنع الـ race اللي ممكن الـ GET بعد الـ mutation يقرا الصف القديم
+ * قبل ما الـ purge يخلص. (متخزن في الـ store المشترك — كل النسخ تشوفه)
+ */
+function getInvalidatedAt(): number {
+  return getStore().invalidatedAt
+}
+
+/** مسارات الـ API اللي بنتكاشها (بيتمسحوا كلهم بعد أي كتابة) */
+const API_CACHE_PREFIXES = [
+  '/api/dashboard',
+  '/api/products',
+  '/api/customers',
+  '/api/suppliers',
+  '/api/categories',
+  '/api/sales',
+  '/api/expenses',
+  '/api/cash',
+  '/api/tenant',
+]
+
+/**
+ * نافذة الطزاجة (ms) لكل endpoint. ترجع null = ممنوع يُخدم من الكاش
+ * (network-first زي ما هو) — نفس فلسفة staleTime في TanStack Query
+ * عند workeros (15 ثانية → 3 دقائق).
+ */
+function swrFreshMs(url: string): number | null {
+  const qIndex = url.indexOf('?')
+  const path = qIndex === -1 ? url : url.slice(0, qIndex)
+  // مستثناات أمان — قرارات حساسة لازم دايماً شبكة حية
+  if (path.startsWith('/api/auth')) return null
+  if (path.startsWith('/api/subscription')) return null
+  if (path.startsWith('/api/pay')) return null
+  if (path.startsWith('/api/admin')) return null
+  if (path.startsWith('/api/upload')) return null
+  // نص بحث فعلي (مش فاضي) → نتايج حية دايماً
+  if (/[?&]search=[^&]/.test(url)) return null
+  if (path === '/api/categories') return 60_000
+  if (path === '/api/tenant') return 60_000
+  if (path === '/api/suppliers') return 30_000
+  if (path === '/api/dashboard') return 30_000
+  if (path === '/api/products') return 20_000
+  if (path === '/api/customers') return 15_000
+  if (path === '/api/sales') return 15_000
+  if (path === '/api/expenses') return 15_000
+  if (path === '/api/cash') return 15_000
+  return null
+}
+
+/** تحديث خلفي صامت — يعبّي الميموري + IDB للنسخة الجاية بدون ما حد يستنى */
+async function revalidateGet(url: string): Promise<void> {
+  if (getStore().revalidating.has(url)) return
+  if (!isOnline()) return
+  getStore().revalidating.add(url)
+  try {
+    const res = await fetch(url, { method: 'GET', cache: 'no-store' })
+    if (!res.ok) return
+    const text = await res.text()
+    let data: any = null
+    if (text) {
+      try { data = JSON.parse(text) } catch { data = text }
+    }
+    memCache.set(url, { data, at: Date.now() })
+    void idb.setCached(url, data).catch(() => {})
+  } catch {
+    // فشل صامت — النسخة القديمة تفضل صالحة للزيارة الجاية
+  } finally {
+    getStore().revalidating.delete(url)
+  }
+}
+
+/** مسح كاش الميموري (يُستدعى من auth-client عند تغيير الحساب أيضاً) */
+export function clearMemoryApiCache(): void {
+  memCache.clear()
+}
+
+/**
+ * بعد أي كتابة ناجحة (أو متصفة أوفلاين): نمسح كل كاش الـ API —
+ * التحديث الجاي بعد mutation بيكلم الشبكة دايماً (نفس فكرة purge
+ * الخادمي في src/lib/edgeCache.ts من v9 — الكتابة الواحدة بتأثر على
+ * أكتر من قائمة، فبنمسح الكل: الخريطة صغيرة والصحة أهم).
+ */
+function invalidateApiCaches(): void {
+  memCache.clear()
+  getStore().invalidatedAt = Date.now()
+  void idb.purgeRows(API_CACHE_PREFIXES).catch(() => {})
+}
 
 export function isOnline(): boolean {
   return typeof navigator === 'undefined' ? true : navigator.onLine !== false
@@ -137,26 +291,146 @@ export function isNetworkError(err: any): boolean {
 }
 
 /**
- * Check if a URL is a product search that can be answered from IndexedDB.
+ * 🛡️ v5: تجزئة ثابتة — بنمشي عليها في تعيين الـ ids المؤقتة للمنتجات
+ * المضافة أوفلاين (id سالب مشتق من entry id بتاع الـ outbox — ثابت عبر
+ * كل القراءات عشان السلة/الفاتورة تفضل متطابقة مع القائمة).
  */
-function isProductSearch(url: string): boolean {
-  return url.startsWith('/api/products?') && url.includes('search=')
+export function hashStr(s: string): number {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+
+/** مسارات الـ GET الحساسة اللي ما بنخدمهاش من كاش قديم بمسار مطابق */
+const SENSITIVE_GET_PATH_RE = /^\/api\/(?:auth|admin|pay|upload)\b/
+
+/** قائمة المنتجات (endpoint القائمة فقط — مش /api/products/<id>/units وهكذا) */
+function isProductsListUrl(url: string): boolean {
+  return url.startsWith('/api/products?')
 }
 
 /**
- * Search products in IndexedDB when offline.
- * Returns array of products matching the search query.
+ * 🛡️ v5: المنتجات اللي اتضافت أوفلاين ولسه في الـ outbox — بنرجّعها
+ * كأصناف كاملة عشان تظهر فوراً في القوائم والبحث وفعايلة البيع.
+ * الـ id بيبقى سالب (مشتق ثابت من entry id) لحد ما المزامنة ترجّع
+ * الـ id الحقيقي (يُخزّن في localProductMap — شوف sync.ts) ساعتها
+ * بنعرضه بالـ id الحقيقي.
  */
-async function localProductSearch<T>(url: string): Promise<T | null> {
-  if (!idbAvailable()) return null
-  const u = new URL(url, 'http://localhost')
-  const search = u.searchParams.get('search') || ''
-  if (!search.trim()) return null
-  const results = await idb.searchProducts(search.trim())
-  if (results.length > 0) return results as T
-  return null
+async function getOfflineAddedProducts(): Promise<any[]> {
+  if (!idbAvailable()) return []
+  try {
+    const outbox = await idb.getOutbox()
+    if (!outbox.length) return []
+    const map = await idb.getLocalProductMap().catch(() => ({}) as Record<string, number>)
+    const added: any[] = []
+    for (const entry of outbox) {
+      if (entry.method !== 'POST') continue
+      if (!entry.url.startsWith('/api/products')) continue
+      const b = entry.body
+      if (!b || typeof b !== 'object') continue
+      added.push({
+        ...b,
+        id: map[entry.id] ?? -(hashStr(entry.id) + 1),
+        active: b.active !== false,
+        soldQuantity: 0,
+        matchedVariantId: null,
+        matchedVariantLabel: null,
+        dynamicRetailPrice: null,
+        imagePath: b.imagePath ?? null,
+        _offlineAdded: true,
+      })
+    }
+    return added
+  } catch {
+    return []
+  }
 }
 
+/**
+ * 🛡️ v5: فلترة قائمة قديمة بكلمة بحث — بيتمسح بيها كلمة `search=` في
+ * الـ URL على آخر نسخة مخزّنة من نفس المسار (عملاء/موردين/أي قائمة).
+ * بترجع null لو الداتا مش قائمة قابلة للفلترة (سيبها زي ما هي).
+ */
+function filterStaleListBySearch(url: string, data: any): any | null {
+  try {
+    const u = new URL(url, 'http://localhost')
+    const q = (u.searchParams.get('search') || '').trim()
+    if (!q) return null
+    const nq = q.toLowerCase()
+    const isArr = Array.isArray(data)
+    const list = isArr ? data : Array.isArray(data?.data) ? data.data : null
+    if (!list) return null
+    const filtered = list.filter((item: any) => {
+      if (!item || typeof item !== 'object') return false
+      const haystacks = [item.name, item.phone, item.barcode, item.code]
+      return haystacks.some(
+        (v) => typeof v === 'string' && v.toLowerCase().includes(nq)
+      ) || (typeof item.barcode === 'string' && item.barcode.includes(q))
+    })
+    if (isArr) return filtered
+    return { ...data, data: filtered, total: filtered.length, totalPages: 1 }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 🛡️ v5: جواب كامل لقائمة /api/products?... من المتجر المحلي — بنفس
+ * شكل السيرفر { data, total, page, limit, totalPages } عشان كل الشاشات
+ * (المنتجات/نقطة البيع/أمر الشراء) تشتغل أوفلاين من غير ما تحس.
+ * الدعم: search (مطابقة جزئية زي السيرفر) + status + page/limit.
+ * والمنتجات المضافة أوفلاين بتظهر في النتايج فوراً.
+ */
+async function offlineProductsAnswer<T>(url: string): Promise<T | null> {
+  if (!idbAvailable()) return null
+  try {
+    const u = new URL(url, 'http://localhost')
+    const q = (u.searchParams.get('search') || '').trim()
+    const status = u.searchParams.get('status') || 'active'
+    const page = Math.max(1, parseInt(u.searchParams.get('page') || '1', 10) || 1)
+    const limit = Math.min(100, Math.max(1, parseInt(u.searchParams.get('limit') || '50', 10) || 50))
+
+    let list: any[] = await idb.getAllProducts()
+    const added = await getOfflineAddedProducts()
+    if (added.length) {
+      const seen = new Set(list.map((p) => p.id))
+      for (const p of added) if (!seen.has(p.id)) list.push(p)
+    }
+    if (list.length === 0) return null
+
+    if (status === 'active') list = list.filter((p) => p.active !== false)
+    else if (status === 'inactive') list = list.filter((p) => p.active === false)
+
+    if (q) {
+      const nq = q.toLowerCase()
+      list = list.filter(
+        (p) =>
+          String(p?.name || '').toLowerCase().includes(nq) ||
+          String(p?.barcode || '').includes(q)
+      )
+    }
+
+    // الأحدث أولاً (زي ترتيب السيرفر id desc) — والمضاف أوفلاين على الوش
+    list.sort(
+      (a, b) =>
+        (b?._offlineAdded ? 1 : 0) - (a?._offlineAdded ? 1 : 0) ||
+        (Number(b?.id) || 0) - (Number(a?.id) || 0)
+    )
+
+    const total = list.length
+    const start = (page - 1) * limit
+    const data = list.slice(start, start + limit)
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    } as T
+  } catch {
+    return null
+  }
+}
 /**
  * Offline-aware fetch wrapper.
  */
@@ -222,6 +496,9 @@ export async function offlineFetch<T = any>(
         if (res.status === 401) notifySessionExpired()
         throw err
       }
+      // ⚡ v10: أي كتابة ناجحة تمسح كاش الـ API (ميموري + IDB) — عشان
+      // أي GET جاي بعد الـ mutation يروح للشبكة ويجيب الداتا الجديدة.
+      invalidateApiCaches()
       // 🛡️ ROOT FIX (2026-09-27): announce that this kind of data changed so
       // every mounted view/dialog showing it (not just the one that made the
       // request) can refetch live instead of needing a hard refresh. See
@@ -230,20 +507,6 @@ export async function offlineFetch<T = any>(
       return data as T
     } catch (err: any) {
       if (isNetworkError(err)) {
-        // 🛡️ PWA ROOT FIX (2026-10-07): عمليات المصادقة ممنوع تدخل الـ
-        // outbox نهائياً. قبل كده أي POST بيفشل بالشبكة كان بيتحطّ في
-        // قائمة الانتظار — يعني POST /api/auth/login بكلمة المرور كان
-        // بيقعد مخزّن على الجهاز ويترفع فعلياً في المزامنة اللاحقة،
-        // والواجهة بترجّع "فشل تسجيل الدخول" أو نتيجة مربكة. الدخول/
-        // إنشاء حساب/الخروج عمليات تحقق سيرفر خالص — مالهاش معنى
-        // أوفلاين، فنرمي خطأ واضح فوراً.
-        if (url.startsWith('/api/auth/')) {
-          throw new Error(
-            isOnline()
-              ? 'تعذّر الوصول إلى الخادم — حاول مرة أخرى'
-              : 'أنت غير متصل بالإنترنت — تسجيل الدخول يحتاج اتصالاً. لو سجّلت دخولك قبل كده على الجهاز ده، افتح النظام من أيقونة التطبيق وسيُدخلك الحساب المحفوظ تلقائياً.'
-          )
-        }
         // 🛡️ 2026-09-30 (M7): idempotency for queued sales — a network error
         // AFTER the server committed used to keep the outbox entry and re-POST
         // it later, creating a duplicate invoice (double stock/till/debt).
@@ -265,6 +528,9 @@ export async function offlineFetch<T = any>(
           body: queuedBody,
           label: getOperationLabel(url, method, queuedBody),
         })
+        // ⚡ v10: الكتابة الموفّقة أوفلاين هتغيّر السيرفر بعد المزامنة —
+        // نمسح الكاش دلوقتي عشان أي GET جاي ميرجّعش داتا قديمة.
+        invalidateApiCaches()
         // Optimistic: local screens usually already update their own state,
         // but nudge everyone else too (e.g. a list of the same data open in
         // another dialog) — harmless offline since it just re-reads cache.
@@ -292,6 +558,25 @@ async function runGet<T>(
   url: string,
   options?: { method?: string; body?: any; signal?: AbortSignal },
 ): Promise<T> {
+  // ⚡ v10 SWR fast path — نسخة طازة في الكاش؟ ارجّعها فوراً + حدّث في الخلفية.
+  // (بنستثني النداءات اللي فيها signal — الاتفاق مع النداء دي فيه إلغاء محتمل)
+  const freshMs = swrFreshMs(url)
+  if (freshMs !== null && !options?.signal) {
+    const mem = memCache.get(url)
+    if (mem && Date.now() - mem.at < freshMs) {
+      void revalidateGet(url)
+      return mem.data as T
+    }
+    // مفيش في الميموري (reload مثلاً) — جرب IDB قبل ما نسيب المستخدم يستنى الشبكة
+    // (بشرط إن الصف مكتوب بعد آخر إبطال — حماية من race مسح IDB الغير متزامن)
+    const idbHit = await idb.getCached<T>(url)
+    if (idbHit && idbHit.at > getInvalidatedAt() && Date.now() - idbHit.at < freshMs) {
+      memCache.set(url, { data: idbHit.data, at: idbHit.at })
+      void revalidateGet(url)
+      return idbHit.data
+    }
+  }
+
   // Step 1: Try fetching from server (with retry on transient 5xx)
   try {
     const res = await fetchWithRetry(
@@ -314,6 +599,14 @@ async function runGet<T>(
     }
     // Success → cache + return
     // لا ننتظر كتابة IndexedDB (بطيئة على الموبايل) — الكاش للأوفلاين فقط
+    if (freshMs !== null) {
+      // ⚡ v10: اعتمّ الكاش في الميموري للزيارات الجاية (نفس فكرة gcTime)
+      if (memCache.size >= MEM_CACHE_MAX) {
+        const oldest = memCache.keys().next().value
+        if (oldest !== undefined) memCache.delete(oldest)
+      }
+      memCache.set(url, { data, at: Date.now() })
+    }
     void idb.setCached(url, data).catch(() => {})
     return data as T
   } catch (err: any) {
@@ -322,14 +615,33 @@ async function runGet<T>(
     // wrong data and hide the real problem (e.g. "please login again").
     if (err?.status && err.status >= 400 && err.status < 500) throw err
 
-    // Step 2: network error or 5xx → try cached response
+    // Step 2: network error or 5xx → try cached response (نفس الـ URL بالظبط)
     const cached = await idb.getCached<T>(url)
     if (cached) return cached.data
 
-    // Step 3: Try local product search from IndexedDB
-    if (isProductSearch(url)) {
-      const localResults = await localProductSearch<T>(url)
-      if (localResults) return localResults
+    // 🛡️ Step 2b (v5): قوائم المنتجات أوفلاين — من متجر IDB الكامل +
+    // المنتجات المضافة محلياً (outbox) — بنفس شكل ظرف السيرفر عشان
+    // البحث والقوائم والفعايلة تشتغل أوفلاين بلا "غير متصل".
+    if (isProductsListUrl(url)) {
+      const local = await offlineProductsAnswer<T>(url)
+      if (local) return local
+    }
+
+    // 🛡️ Step 2c (v5): نفس المسار بأي query (تقارير بتواريخ متغيرة/
+    // إشعارات/فلاتر) — آخر نسخة معروفة أحسن من خطأ، والمسارات الحساسة
+    // (auth/admin/pay/upload) مستثناة. ولو الـ URL فيه كلمة بحث بنفلتر
+    // القائمة القديمة بيها بدل ما نرجّع اللستة كاملة كأنها نتايج بحث.
+    try {
+      const u = new URL(url, 'http://localhost')
+      if (!SENSITIVE_GET_PATH_RE.test(u.pathname)) {
+        const stale = await idb.getCachedByPath(u.pathname)
+        if (stale && typeof stale.data !== 'undefined') {
+          const filtered = filterStaleListBySearch(url, stale.data)
+          return (filtered ?? stale.data) as T
+        }
+      }
+    } catch {
+      /* ignore */
     }
 
     // Step 4: No cache, no local data

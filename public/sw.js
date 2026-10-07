@@ -31,10 +31,40 @@
  *   (مطابقة URL دقيقة) — فأي fetch خام يلاقي جوابه أوفلاين.
  *   + PURGE_API_CACHE: مسح ردود الـ API من كاش الـ SW عند خروج/انتهاء
  *   السيشن (خصوصية الجهاز المشترك) — بيتنادى من clearAuthSnapshot.
+ *
+ * 🛡️ 2026-10-07 (v10 — تسخين جراف الـ chunks — جذر "الصفحات بتدي خطأ غير متوقع"):
+ *   تسخين الـ HTML لوحده مش كفاية: الصفحات بتستخدم next/dynamic (ssr:false)
+ *   فالكود الحقيقي بيتحمّل في chunks منفصلة وقت الزيارة. لو الصفحة ما
+ *   اتفتحتش أونلاين بعد آخر تحديث للـ SW (الكاش بيتعمله wipe في activate)
+ *   الـ chunks بتاعتها مش متخزنة → dynamic import أوفلاين بيفشل → error
+ *   boundary ("خطأ غير متوقع"). الحل: بعد تسخين أي مسار، بنمشي على جراف
+ *   الـ assets (HTML → scripts → chunks المضمّنة جواها recursively) ونخزّنهم
+ *   كلهم — بحد أقصى 600 ملف + marker يتفصل بعد كل تحديث SW تلقائياً.
+ *   + فولباك API أوفلاين مطرّد: exact match → نفس المسار بأي query
+ *   (ignoreSearch) → 503 JSON — فالفلاتر المختلفة أوفلاين ما بترمش 503.
  */
 
-const CACHE_VERSION = 'shop-erp-v9'
+const CACHE_VERSION = 'shop-erp-v10'
 const OFFLINE_URL = '/offline.html'
+
+/**
+ * 🛡️ v10: marker بتاع مسيرة جراف الـ chunks — بيتخزن في الكاش بعد أول
+ * مسيرة ناجحة. activate بيمسح الكاشات القديمة عند أي تحديث SW → الماركر
+ * بيتمسح معاهم → المسيرة بتعيد نفسها تلقائياً بعد كل تحديث (لما الكاش
+ * يكون فاضي ومحتاج تسخين كامل). من غيرها المسيرة هتتكرر مع كل دورة sync.
+ */
+const CHUNK_WALK_MARKER = '/__nezam-chunk-walk-v10'
+/** سقف أمان لعدد الـ assets في المسيرة الواحدة (البيلد الحالي ~130 ملف) */
+const WALK_MAX_ASSETS = 600
+
+// 🛡️ v10: استخراج مسارات الـ assets:
+//   - من HTML: مراجع مطلقة (/​_next/static/... + /fonts/...)
+//   - من JS/CSS: مراجع نسبية جوا كود Turbopack ("static/chunks/xxx.js")
+//     — دي الطريقة اللي dynamic import (next/dynamic) بيبني بيها روابط
+//     الـ chunks وقت التشغيل.
+const ASSET_RE_HTML = /\/_next\/static\/[a-zA-Z0-9_\-.\/%]+\.(?:js|css)/g
+const FONT_RE_HTML = /\/fonts\/[a-zA-Z0-9_\-.\/%]+\.(?:woff2?|ttf)/g
+const ASSET_RE_CODE = /(?:\/_next\/)?static\/(?:chunks|css|media)\/[a-zA-Z0-9_\-.\/%]+\.(?:js|css|woff2?)/g
 
 // ─── Precache list ──────────────────────────────────────────
 // 🛡️ 2026-09-27: مسارات التطبيق (HTML كامل) ممنوع تتخزن هنا — كانت بتعمل
@@ -136,6 +166,61 @@ function offlineDocumentResponse() {
   })
 }
 
+// ─── 🛡️ v10: مسيرة جراف الـ chunks ──────────────────────────────
+// من أغلفة HTML المخزنة بنستخرج روابط الـ assets، وبنخزّن كل واحد،
+// وبنمسح جوا كل JS/CSS مراجع chunks إضافية (dynamic imports بتاعة
+// next/dynamic) — BFS بحد أقصى WALK_MAX_ASSETS ومتسامحة تماماً:
+// أي ملف فاشل بيتسكب والباقي يكمل.
+async function walkChunkGraph(cache, routeUrls) {
+  const visited = new Set()
+  const queue = []
+
+  const enqueue = (raw) => {
+    if (!raw) return
+    // المراجع من HTML مطلقة (/​_next/...) ومن الكود نسبية (static/...)
+    const path = raw.startsWith('/_next/') ? raw : '/_next/' + raw
+    if (visited.has(path)) return
+    if (visited.size >= WALK_MAX_ASSETS) return
+    visited.add(path)
+    queue.push(path)
+  }
+
+  // 1) البذرة: assets المذكورة في كل HTML مسار متسخّن
+  for (const u of routeUrls || []) {
+    try {
+      const hit = await cache.match(u, { ignoreSearch: true })
+      if (!hit) continue
+      const html = await hit.text()
+      for (const m of html.matchAll(ASSET_RE_HTML)) enqueue(m[0])
+      for (const m of html.matchAll(FONT_RE_HTML)) enqueue(m[0])
+    } catch {
+      /* skip this route */
+    }
+  }
+
+  // 2) BFS: خزّن كل asset، وامسح جوّا الـ JS/CSS مراجع جديدة
+  let processed = 0
+  while (queue.length > 0 && processed < WALK_MAX_ASSETS) {
+    const path = queue.shift()
+    processed++
+    try {
+      let res = await cache.match(path)
+      if (!res) {
+        const fetched = await fetch(path, { cache: 'no-store' })
+        if (!fetched || !fetched.ok) continue
+        await cache.put(path, fetched.clone()).catch(() => {})
+        res = fetched
+      }
+      if (/\.(js|css)$/.test(path) && res) {
+        const text = await res.clone().text()
+        for (const m of text.matchAll(ASSET_RE_CODE)) enqueue(m[0])
+      }
+    } catch {
+      /* skip this asset */
+    }
+  }
+}
+
 // ─── Fetch handler ──────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
   const { request } = event
@@ -181,13 +266,40 @@ self.addEventListener('fetch', (event) => {
           return response
         })
         .catch(() => {
-          // Offline → try cache (رد سليم فقط)، ثم 503 JSON واضح
+          // Offline → try cache (رد سليم فقط):
+          // 1) الـ URL بالظبط (الـ query مهم — داتا مختلفة)
+          // 2) 🛡️ v10: نفس المسار بأي query (ignoreSearch) — فلاتر مختلفة
+          //    أوفلاين بترجع آخر نسخة معروفة بدل 503 فجّ.
+          //    ⚠️ الاستثناء: URLs البحث (search= غير فاضي) — بيسكبها عشان
+          //    طبقة التطبيق (api-offline) تفلتر النتايج محلياً بدل ما ترجّع
+          //    لستة كاملة غير مفلترة وكأنها نتايج البحث.
+          // 3) 503 JSON واضح.
+          const hasSearch = (() => {
+            try { return !!url.searchParams.get('search') } catch { return false }
+          })()
           return caches.match(request).then((cached) => {
             if (cached && cached.ok) return cached
-            return new Response(
-              JSON.stringify({ error: 'أنت غير متصل بالإنترنت' }),
-              { status: 503, headers: { 'Content-Type': 'application/json' } }
-            )
+            if (hasSearch) {
+              return new Response(
+                JSON.stringify({ error: 'أنت غير متصل بالإنترنت' }),
+                { status: 503, headers: { 'Content-Type': 'application/json' } }
+              )
+            }
+            return caches
+              .match(request, { ignoreSearch: true })
+              .then((loose) => {
+                if (loose && loose.ok) return loose
+                return new Response(
+                  JSON.stringify({ error: 'أنت غير متصل بالإنترنت' }),
+                  { status: 503, headers: { 'Content-Type': 'application/json' } }
+                )
+              })
+              .catch(() =>
+                new Response(
+                  JSON.stringify({ error: 'أنت غير متصل بالإنترنت' }),
+                  { status: 503, headers: { 'Content-Type': 'application/json' } }
+                )
+              )
           })
         })
     )
@@ -373,8 +485,10 @@ self.addEventListener('message', (event) => {
       // — الرسالة بتيجي مع كل دورة sync فمفيش لزوم لإعادة جلب موجودة.
       if (Array.isArray(event.data.urls)) {
         event.waitUntil(
-          caches.open(CACHE_VERSION).then((cache) =>
-            Promise.allSettled(
+          (async () => {
+            const cache = await caches.open(CACHE_VERSION)
+            // 1) أغلفة HTML — زي v7 (تخزين متسامح skip-if-cached)
+            await Promise.allSettled(
               event.data.urls.map((u) =>
                 cache.match(u, { ignoreSearch: true }).then((hit) => {
                   if (hit) return
@@ -384,7 +498,26 @@ self.addEventListener('message', (event) => {
                 }).catch(() => {})
               )
             )
-          )
+            // 2) 🛡️ v10: مسيرة جراف الـ chunks — بتجعل كل مسار متسخّن
+            //    مكتمل أوفلاين (HTML + كل الـ JS/CSS اللي بيحتاجه، شامل
+            //    chunks الـ next/dynamic اللي مش مكتوبة في الـ HTML).
+            //    الماركر بيمنع التكرار مع كل دورة sync — وبيتمسح تلقائياً
+            //    مع كل تحديث SW (activate بيمسح الكاش) فبتعيد التسخين.
+            try {
+              const marker = await cache.match(CHUNK_WALK_MARKER)
+              if (!marker) {
+                await walkChunkGraph(cache, event.data.urls)
+                await cache.put(
+                  CHUNK_WALK_MARKER,
+                  new Response('1', {
+                    headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' },
+                  })
+                )
+              }
+            } catch {
+              /* مسيرة فاشلة — الدورة الجاية تعيد (الماركر مش هيتكتب) */
+            }
+          })()
         )
       }
       break

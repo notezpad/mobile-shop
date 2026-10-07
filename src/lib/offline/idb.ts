@@ -84,21 +84,78 @@ export const idb = {
     await tx('rows', 'readwrite', (s) => s.put({ data, at: Date.now() }, url)).catch(() => {})
   },
 
-  /**
-   * 🛡️ PWA (2026-10-07): حذف مفتاح واحد من الكاش بشكل مستهدف — بدون مسح
-   * كل الصفوف. بتُستخدم أساساً لمسح نسخة السيشن المحفوظة ('/api/auth/me')
-   * عند تسجيل الخروج أو عند 401 حقيقي من السيرفر، عشان مستخدم تاني على
-   * نفس الجهاز (أو نفس المستخدم بعد انتهاء السيشن) ميرجعش للنظام بحساب
-   * قديم كان محفوظ أوفلاين.
-   */
-  async removeCached(url: string): Promise<void> {
-    if (!idbAvailable()) return
-    await tx('rows', 'readwrite', (s) => s.delete(url) as IDBRequest).catch(() => {})
-  },
-
   async clearCache(): Promise<void> {
     if (!idbAvailable()) return
     await tx('rows', 'readwrite', (s) => s.clear() as IDBRequest).catch(() => {})
+  },
+
+  /**
+   * 🛡️ v5: آخر نسخة مخزّنة لنفس المسار بأي query — fallback للـ GETs اللي
+   * الـ query بتاعها بيتغير (تقارير بتواريخ/فلاتر فروع/إشعارات) — بدل ما
+   * المطابقة الحرفية تفشل أوفلاين وترمي خطأ، بنرجّع آخر نسخة معروفة.
+   * بيفضّل الأحدث (at) — وبيرجع null لو مفيش أي نسخة لنفس المسار.
+   */
+  async getCachedByPath(pathname: string): Promise<{ data: any; at: number } | null> {
+    if (!idbAvailable() || !pathname) return null
+    try {
+      const db = await openDB()
+      const candidates = await new Promise<string[]>((resolve) => {
+        try {
+          const t = db.transaction('rows', 'readonly')
+          const req = t.objectStore('rows').openKeyCursor()
+          const keys: string[] = []
+          req.onsuccess = () => {
+            const cur = req.result
+            if (!cur) return resolve(keys)
+            const k = String(cur.key)
+            if (k === pathname || k.startsWith(pathname + '?')) keys.push(k)
+            cur.continue()
+          }
+          req.onerror = () => resolve(keys)
+        } catch {
+          resolve([])
+        }
+      })
+      if (!candidates.length) return null
+      // نقرأ القيم ونفضّل الأحدث — بسقف أمان 20 مرشّح
+      let best: { data: any; at: number } | null = null
+      for (const k of candidates.slice(0, 20)) {
+        const row = await tx<{ data: any; at: number }>('rows', 'readonly', (s) => s.get(k) as IDBRequest<any>).catch(() => null)
+        if (row && (!best || row.at > best.at)) best = row
+      }
+      return best
+    } catch {
+      return null
+    }
+  },
+
+  /**
+   * ⚡ v10: امسح صفوف الكاش اللي بتبدأ بأي بادئة من القائمة —
+   * بتُستدعى بعد أي كتابة ناجحة (invalidateApiCaches في api-offline.ts)
+   * عشان الـ GET الجاي بعد الـ mutation يجيب داتا حية من الشبكة.
+   */
+  async purgeRows(prefixes: string[]): Promise<void> {
+    if (!idbAvailable() || !prefixes.length) return
+    try {
+      const db = await openDB()
+      await new Promise<void>((resolve) => {
+        const t = db.transaction('rows', 'readwrite')
+        const store = t.objectStore('rows')
+        const req = store.openKeyCursor()
+        req.onsuccess = () => {
+          const cur = req.result
+          if (!cur) return
+          const k = String(cur.key)
+          if (prefixes.some((p) => k.startsWith(p))) store.delete(cur.key)
+          cur.continue()
+        }
+        t.oncomplete = () => resolve()
+        t.onerror = () => resolve()
+        t.onabort = () => resolve()
+      })
+    } catch {
+      /* ignore */
+    }
   },
 
   // ── products store (offline POS search) ──
@@ -124,34 +181,23 @@ export const idb = {
   /**
    * Search products offline by name or barcode.
    * Returns up to 50 matching products.
+   *
+   * 🛡️ v5: مطابقة جزئية (substring) زي السيرفر بالظبط (contains insensitive
+   * على الاسم والباركود) — النسخة القديمة كانت prefix على index IDB فكلمة
+   * في نص الاسم كانت تفشل، والباركود كمان كان محتاج مطابقة من البداية.
    */
   async searchProducts(query: string): Promise<any[]> {
     if (!idbAvailable() || !query.trim()) return []
-    const db = await openDB()
-    return new Promise<any[]>((resolve, reject) => {
-      const t = db.transaction('products', 'readonly')
-      const store = t.objectStore('products')
-      const idx = store.index('byName')
-      const range = IDBKeyRange.bound(query, query + '\uffff')
-      const req = idx.getAll(range)
-      req.onsuccess = () => {
-        const results = (req.result as any[]).filter((p) => p.active !== false)
-        // Also search by barcode
-        const barcodeIdx = store.index('byBarcode')
-        const barcodeRange = IDBKeyRange.bound(query, query + '\uffff')
-        const barcodeReq = barcodeIdx.getAll(barcodeRange)
-        barcodeReq.onsuccess = () => {
-          const barcodeResults = (barcodeReq.result as any[]).filter(
-            (p) => p.active !== false && !results.some((r) => r.id === p.id)
-          )
-          // Combine + deduplicate + limit
-          const all = [...results, ...barcodeResults].slice(0, 50)
-          resolve(all)
-        }
-        barcodeReq.onerror = () => resolve(results.slice(0, 50))
-      }
-      req.onerror = () => reject(req.error)
+    const q = query.trim()
+    const nq = q.toLowerCase()
+    const all = await this.getAllProducts()
+    const results = (all || []).filter((p) => {
+      if (!p || p.active === false) return false
+      if (String(p.name || '').toLowerCase().includes(nq)) return true
+      if (String(p.barcode || '').includes(q)) return true
+      return false
     })
+    return results.slice(0, 50)
   },
 
   /**
@@ -248,6 +294,22 @@ export const idb = {
   async setMeta(key: string, value: any): Promise<void> {
     if (!idbAvailable()) return
     await tx('meta', 'readwrite', (s) => s.put(value, key) as IDBRequest).catch(() => {})
+  },
+
+  // ── 🛡️ v5: خريطة المنتجات المضافة أوفلاين (localRef → realId) ──
+  // لما منتج يتضاف أوفلاين بيتقيد في الـ outbox، ولما يُستخدم في فاتورة
+  // قبل المزامنة الفاتورة بتحمل id مؤقت سالب. عند المزامنة: منتج الـ POST
+  // بيرجع الـ id الحقيقي بنخزنه هنا، وبنستبدل الـ ids السالبة في باقي
+  // العمليات قبل إرسالها — فمفيش فاتورة بتضيع لأن منتجها لسه محلي.
+  async getLocalProductMap(): Promise<Record<string, number>> {
+    const m = await this.getMeta<Record<string, number>>('localProductMap')
+    return m && typeof m === 'object' ? m : {}
+  },
+
+  async setLocalProductMapEntry(localRef: string, realId: number): Promise<void> {
+    const map = await this.getLocalProductMap()
+    map[localRef] = realId
+    await this.setMeta('localProductMap', map)
   },
 }
 

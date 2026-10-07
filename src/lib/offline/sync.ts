@@ -9,9 +9,48 @@
  */
 
 import { idb, type OutboxEntry } from './idb'
-import { isOnline, isNetworkError } from './api-offline'
+import { isOnline, isNetworkError, hashStr } from './api-offline'
 import { prewarmAll } from './prewarm'
 import { emitDataChanged } from './data-events'
+
+/**
+ * 🛡️ v5: استبدال الـ ids المؤقتة السالبة للمنتجات المضافة أوفلاين بالـ ids
+ * الحقيقية قبل إرسال أي عملية للمزامنة. لما مستخدم يضيف منتج أوفلاين ثم
+ * يبيعه قبل رجوع النت، الفاتورة في الـ outbox بتحمل productId سالب —
+ * من غير الاستبدال ده فاتورة البيع كانت هتفشل على السيرفر (منتج مش موجود)
+ * وتتضيع بعد 5 محاولات. الخريطة بتتبني من ردود إنشاء المنتجات الناجحة
+ * (localProductMap — شوف idb.ts) والمفاتيح فيها الـ refs المحلية.
+ */
+function remapLocalProductIds(body: any, map: Record<string, number>): any {
+  if (!body || typeof body !== 'object') return body
+  const synToReal = new Map<number, number>()
+  for (const [ref, real] of Object.entries(map)) {
+    const syn = -(hashStr(ref) + 1)
+    if (Number.isFinite(real)) synToReal.set(syn, real)
+  }
+  if (synToReal.size === 0) return body
+  const walk = (v: any): any => {
+    if (Array.isArray(v)) return v.map(walk)
+    if (v && typeof v === 'object') {
+      const out: any = {}
+      for (const [k, val] of Object.entries(v)) {
+        if (
+          k === 'productId' &&
+          typeof val === 'number' &&
+          val < 0 &&
+          synToReal.has(val)
+        ) {
+          out[k] = synToReal.get(val)
+        } else {
+          out[k] = walk(val)
+        }
+      }
+      return out
+    }
+    return v
+  }
+  return walk(body)
+}
 
 export type SyncState = {
   online: boolean
@@ -54,13 +93,18 @@ export async function flushOutbox(): Promise<{ done: number; failed: number }> {
 
   try {
     const entries = await idb.getOutbox()
+    // 🛡️ v5: خريطة المنتجات المضافة أوفلاين (localRef → realId) — بتُستخدم
+    // لاستبدال الـ ids السالبة في أي عملية قبل إرسالها (شوف remapLocalProductIds).
+    const localMap = await idb.getLocalProductMap().catch(() => ({}) as Record<string, number>)
 
     for (const entry of entries) {
       try {
+        const mappedBody =
+          entry.body !== undefined ? remapLocalProductIds(entry.body, localMap) : undefined
         const res = await fetch(entry.url, {
           method: entry.method,
-          headers: entry.body !== undefined ? { 'Content-Type': 'application/json' } : {},
-          body: entry.body !== undefined ? JSON.stringify(entry.body) : undefined,
+          headers: mappedBody !== undefined ? { 'Content-Type': 'application/json' } : {},
+          body: mappedBody !== undefined ? JSON.stringify(mappedBody) : undefined,
         })
 
         if (!res.ok) {
@@ -86,6 +130,19 @@ export async function flushOutbox(): Promise<{ done: number; failed: number }> {
         }
 
         // Success
+        // 🛡️ v5: منتج أُضيف أوفلاين اتعمل على السيرفر للحظة — نخزّن الـ id
+        // الحقيقي عشان باقي العمليات اللي بتشاور عليه (فواتير/حركات) تتظبط.
+        if (entry.method === 'POST' && entry.url.startsWith('/api/products')) {
+          try {
+            const created = await res.clone().json()
+            const realId = Number(created?.id)
+            if (Number.isFinite(realId) && realId > 0) {
+              await idb.setLocalProductMapEntry(entry.id, realId)
+            }
+          } catch {
+            /* الرد مش JSON — نتجاهل */
+          }
+        }
         await idb.removeFromOutbox(entry.id)
         // 🛡️ ROOT FIX (2026-09-27): an operation made while offline just
         // landed on the server for real — tell any open screen that shows
