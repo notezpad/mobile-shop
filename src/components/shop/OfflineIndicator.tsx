@@ -92,6 +92,44 @@ export function OfflineIndicator() {
     }
   }, [])
 
+  // 🛡️ v13 (تشخيص جذر "خطأ غير متوقع"): مسجّل أخطاء عالمي — أي خطأ JS
+  // في أي مكان (حتى خارج error boundary) بيتسجل في localStorage (آخر 10)
+  // بنفس صيغة سجل الـ boundary — فلو حصل عطل وصوّر المستخدم الشاشة أو
+  // دخل من جهاز تاني، السجل كله موجود للتشخيص الدقيق.
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    const push = (source: string, message: string, extra?: Record<string, unknown>) => {
+      try {
+        const KEY = 'nezam-error-log'
+        const raw = localStorage.getItem(KEY)
+        const list: unknown[] = raw ? JSON.parse(raw) : []
+        list.unshift({
+          at: new Date().toISOString(),
+          source,
+          message: String(message).slice(0, 500),
+          href: window.location.href,
+          ...extra,
+        })
+        localStorage.setItem(KEY, JSON.stringify(list.slice(0, 10)))
+      } catch {
+        /* التسجيل ترف */
+      }
+    }
+    const onError = (e: ErrorEvent) => {
+      if (e?.message) push('window', e.message)
+    }
+    const onRejection = (e: PromiseRejectionEvent) => {
+      const m = String((e?.reason as any)?.message || e?.reason || '')
+      if (m) push('unhandledrejection', m)
+    }
+    window.addEventListener('error', onError)
+    window.addEventListener('unhandledrejection', onRejection)
+    return () => {
+      window.removeEventListener('error', onError)
+      window.removeEventListener('unhandledrejection', onRejection)
+    }
+  }, [])
+
   // Don't show anything if everything is fine
   if (sync.online && !sync.syncing && sync.pending === 0 && !syncResult) {
     return null

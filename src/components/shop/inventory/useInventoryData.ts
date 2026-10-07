@@ -40,6 +40,8 @@ export interface InventoryData {
   stocktakes: Stocktake[]
   loading: boolean
   noData: boolean
+  /** 🛡️ v13: دايماً null — الشاشات اللي بتعرضه متقعش (الخطأ بيروح للشبكة/الكاش) */
+  error: string | null
   stats: InventoryStats
   reload: () => void
 }
@@ -61,17 +63,23 @@ async function apiSafe<T>(url: string, fallback: T): Promise<T> {
 }
 
 /**
- * 🛡️ v12 (ROOT FIX — "خطأ غير متوقع" في صفحات المخزون): تطبيع صارم
- * لأشكال الردود — أي رد مش قائمة حقيقية بنفكّ ظرفه ({data:[...]}) أو
- * بنرجّع [] — فمستحيل كومبوننت يستقبل غير مصفوفة مهما كان شكل الرد من
- * السيرفر أو من الكاش المحلي. (ده بيقطع خالص صنف الأعطال اللي بيحصل
- * لما الكاش/السيرفر يرجّعوا شكل غير متوقع).
+ * 🛡️ v12/v13: تطبيع صارم لأشكال الردود — أي رد مش قائمة حقيقية بنفكّ ظرفه:
+ * أولاً الحقول المعروفة ({data:[...]} / {items:[...]}...)، ولو مفيش
+ * منها حقل مصفوفة — بنلقط **أول حقل مصفوفة** في الظرف (أي اسم جديد يختاره
+ * السيرفر لقائمة واحدة) — ومستحيل كومبوننت يستقبل غير مصفوفة مهما كان
+ * شكل الرد من السيرفر أو من الكاش المحلي.
  */
 function asArray<T>(v: unknown): T[] {
   if (Array.isArray(v)) return v as T[]
   if (v && typeof v === 'object') {
-    const d = (v as { data?: unknown }).data
-    if (Array.isArray(d)) return d as T[]
+    const o = v as Record<string, unknown>
+    const known = ['data', 'items', 'results', 'rows', 'list', 'movements', 'transfers', 'stocktakes', 'branches', 'products']
+    for (const k of known) {
+      if (Array.isArray(o[k])) return o[k] as T[]
+    }
+    for (const k of Object.keys(o)) {
+      if (Array.isArray(o[k])) return o[k] as T[]
+    }
   }
   return []
 }
@@ -143,6 +151,7 @@ export function useInventoryData(): InventoryData {
     stocktakes,
     loading,
     noData: loading && products.length === 0,
+    error: null,
     stats,
     reload: load,
   }

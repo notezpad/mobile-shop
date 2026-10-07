@@ -254,6 +254,8 @@ async function revalidateGet(url: string): Promise<void> {
     if (text) {
       try { data = JSON.parse(text) } catch { data = text }
     }
+    // 🛡️ v13: بنخزّن الرد بطبيعته المصحّحة (درع الأشكال) عشان الكاش كله نضيف
+    data = normalizeListShape(url, data)
     memCache.set(url, { data, at: Date.now() })
     void idb.setCached(url, data).catch(() => {})
   } catch {
@@ -299,6 +301,54 @@ export function isNetworkError(err: any): boolean {
     msg.includes('econnrefused') ||
     (err instanceof TypeError && msg.includes('fetch'))
   )
+}
+
+/**
+ * 🛡️ v13 — درع الأشكال (SHAPE SHIELD) — قطع جذري لصنف أعطال كامل:
+ * "خطأ غير متوقع" لما السيرفر/الكاش يرجّع قائمة داخل ظرف {data:[...]} بينما
+ * الشاشة متوقعة مصفوفة عارية (أو العكس). الـ endpoints دي ردودها في كل
+ * النسخة مصفوفات عارية (غير مُصفّحة)، فلو وصلت كظرف بحقل مصفوفة واحد
+ * معروف ومن غير meta ترقيم — بنفكّ الظرف ونرجّع المصفوفة نفسها.
+ * المصفوفة العارية تمر زي ما هي، والأظرف المُصفّحة (بها page/total) بتتجاهل.
+ */
+const BARE_LIST_PATH_RE =
+  /^\/api\/(?:branches|finance|purchase-orders|reports\/branches|inventory\/(?:movements|transfers|stocktake)|suppliers)$/
+
+const LIST_UNWRAP_KEYS = [
+  'data',
+  'items',
+  'results',
+  'rows',
+  'list',
+  'branches',
+  'orders',
+  'movements',
+  'transfers',
+  'stocktakes',
+  'suppliers',
+] as const
+
+export function normalizeListShape(url: string, data: any): any {
+  try {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return data
+    const u = new URL(url, 'http://localhost')
+    if (!BARE_LIST_PATH_RE.test(u.pathname)) return data
+    // نسخة مُصفّحة (page/limit) ظرفها مقصود — ممنوع نلمسه
+    if (u.searchParams.has('page') || u.searchParams.has('limit')) return data
+    if ('total' in data || 'totalPages' in data) return data
+    // أولاً: الحقول المعروفة
+    for (const k of LIST_UNWRAP_KEYS) {
+      const v = (data as any)[k]
+      if (Array.isArray(v)) return v
+    }
+    // ثانياً: لو الظرف فيه **حقل مصفوفة واحد فقط** باسم أي حاجة — هو ده
+    // القائمة الملفوفة (سيرفر أحدث غيّر اسم الحقل) — نقطعه
+    const arrayKeys = Object.keys(data).filter((k) => Array.isArray((data as any)[k]))
+    if (arrayKeys.length === 1) return (data as any)[arrayKeys[0]]
+    return data
+  } catch {
+    return data
+  }
 }
 
 /**
@@ -601,15 +651,16 @@ async function runGet<T>(
     const mem = memCache.get(url)
     if (mem && Date.now() - mem.at < freshMs) {
       void revalidateGet(url)
-      return mem.data as T
+      return normalizeListShape(url, mem.data) as T
     }
     // مفيش في الميموري (reload مثلاً) — جرب IDB قبل ما نسيب المستخدم يستنى الشبكة
     // (بشرط إن الصف مكتوب بعد آخر إبطال — حماية من race مسح IDB الغير متزامن)
     const idbHit = await idb.getCached<T>(url)
     if (idbHit && idbHit.at > getInvalidatedAt() && Date.now() - idbHit.at < freshMs) {
-      memCache.set(url, { data: idbHit.data, at: idbHit.at })
+      const fixed = normalizeListShape(url, idbHit.data)
+      memCache.set(url, { data: fixed, at: idbHit.at })
       void revalidateGet(url)
-      return idbHit.data
+      return fixed
     }
   }
 
@@ -635,6 +686,8 @@ async function runGet<T>(
     }
     // Success → cache + return
     // لا ننتظر كتابة IndexedDB (بطيئة على الموبايل) — الكاش للأوفلاين فقط
+    // 🛡️ v13: درع الأشكال — أي رد قائمة بيتصلّح قبل التخزين قبل الرجوع
+    data = normalizeListShape(url, data)
     if (freshMs !== null) {
       // ⚡ v10: اعتمّ الكاش في الميموري للزيارات الجاية (نفس فكرة gcTime)
       if (memCache.size >= MEM_CACHE_MAX) {
@@ -653,7 +706,7 @@ async function runGet<T>(
 
     // Step 2: network error or 5xx → try cached response (نفس الـ URL بالظبط)
     const cached = await idb.getCached<T>(url)
-    if (cached) return cached.data
+    if (cached) return normalizeListShape(url, cached.data) as T
 
     // 🛡️ Step 2b (v5): قوائم المنتجات أوفلاين — من متجر IDB الكامل +
     // المنتجات المضافة محلياً (outbox) — بنفس شكل ظرف السيرفر عشان
@@ -672,8 +725,10 @@ async function runGet<T>(
       if (!SENSITIVE_GET_PATH_RE.test(u.pathname)) {
         const stale = await idb.getCachedByPath(u.pathname)
         if (stale && typeof stale.data !== 'undefined') {
-          const filtered = filterStaleListBySearch(url, stale.data)
-          return (filtered ?? stale.data) as T
+          // 🛡️ v13: نصلّح الشكل الأول وبعدها نفلتر بالبحث لو موجود
+          const fixed = normalizeListShape(url, stale.data)
+          const filtered = filterStaleListBySearch(url, fixed)
+          return (filtered ?? fixed) as T
         }
       }
     } catch {

@@ -74,6 +74,22 @@ interface BranchReport {
   productCount: number
 }
 
+// 🛡️ v13: فك أي ظرف رد فيه حقل مصفوفة ({data:[...]} وأمثاله) — مستحيل
+// تستقبل الشاشة غير مصفوفة من أي سيرفر أو كاش
+function asArrayBranches<T>(v: unknown): T[] {
+  if (Array.isArray(v)) return v as T[]
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>
+    for (const k of ['data', 'items', 'results', 'rows', 'list', 'branches']) {
+      if (Array.isArray(o[k])) return o[k] as T[]
+    }
+    for (const k of Object.keys(o)) {
+      if (Array.isArray(o[k])) return o[k] as T[]
+    }
+  }
+  return []
+}
+
 /* ───────────────────────── هوية الصفحة ─────────────────────────
    «خط الفروع»: الفروع = محطات على خط واحد (زي خط المترو).
    العنوان هو أول المحطة، والفرع الرئيسي «محطة التبادل»، والفرع الموقوف محطة مغلقة
@@ -136,7 +152,10 @@ export function BranchesView() {
         api<Branch[]>('/api/branches'),
         api<BranchReport[]>('/api/reports/branches'),
       ])
-      setBranches(bs); setReports(rs)
+      // 🛡️ v13: تطبيع صارم — أي شكل رد ({data:[...]} أو مصفوفة) بينتهي مصفوفة
+      // فمستحيل شاشة الفروع تقع على .map بأي شكل رد من السيرفر أو الكاش
+      setBranches(Array.isArray(bs) ? bs : asArrayBranches<Branch>(bs))
+      setReports(Array.isArray(rs) ? rs : asArrayBranches<BranchReport>(rs))
     } catch (e: any) {
       toast.error(e?.message || 'فشل تحميل الفروع')
     } finally {
