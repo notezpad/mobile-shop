@@ -1,7 +1,5 @@
 'use client'
 
-import { idb } from './offline/idb'
-
 export interface AuthUser {
   userId: string
   name: string
@@ -13,76 +11,61 @@ export interface AuthUser {
 
 const RETRYABLE_LOGIN_STATUS = new Set([500, 502, 503, 504])
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
+// 🛡️ PWA OFFLINE ROOT FIX (2026-10-07):
+// getMe() عند الأوفلاين كان بيرجع دايماً null — لأن /api/auth/me **عمرها ما
+// اتخزنت في IDB** (مفيش حد بيكتبها رغم إن نفس الدالة بتقراها!). النتيجة:
+// أي ريفرش أوفلاين → bootState='guest' → طرد للموقع الرئيسي، وضغط "تسجيل
+// الدخول" يفشل = "لا كأني في PWA".
+//
+// الحل الجذري — write-through:
+//   1. أي getMe ناجح أونلاين بيكتب نسخة سيشن في IDB فوراً (تحت)
+//   2. الأوفلاين يقرأها (TTL 14 يوم) فيفضل المستخدم داخل التطبيق
+//   3. الأمان محفوظ: تسجيل خروج/401 حقيقي بيمسح النسخة فوراً
+//      (clearLocalAccountData بتمسح كل rows + purgeCachedSession هنا)
+const SESSION_IDB_KEY = '/api/auth/me'
+const SESSION_OFFLINE_TTL_MS = 14 * 24 * 60 * 60 * 1000
 
-/* ══════════════════════════════════════════════════════════════
-   🛡️ PWA ROOT FIX (2026-10-07) — «السيشن تعيش محلياً»
-   ══════════════════════════════════════════════════════════════
-   المشكلة الجذرية اللي كانت بتخلّي PWA «ما تشتغلش» أوفلاين:
-   getMe() كان عنده fallback بيقرأ نسخة السيشن من IndexedDB تحت
-   المفتاح '/api/auth/me' — لكن لا يوجد أي كود في المشروع كله
-   يكتب هذا المفتاح أصلاً! (الـ SW يستبعد /api/auth/* عمداً، و
-   prewarm ما كانش يتضمنه) → أي فتح/refresh أوفلاين كان بيرجع
-   null → الـ layout بيعتبرك زائر → طرد للرئيسية → تسجيل دخول
-   بيفشل «لا يوجد إنترنت» — كأن مفيش PWA خالص.
-
-   الحل الجذري:
-   1) كل تأكيد سيشن ناجح (getMe / apiLogin) بيكتب نسخة السيشن في IDB.
-   2) عند فشل الشبكة getMe() بيرجّع النسخة المحفوظة → النظام يفتح
-      أوفلاين وبيانات الكاش شغالة عادي.
-   3) عند 401 حقيقي أو logout بنمسح النسخة — فمفيش رجوع لحساب
-      منتهي ولا تسريب لمستخدم تاني على نفس الجهاز.
-   4) تتبع سبب فشل getMe (getMeOutcome) عشان الـ layout يفرّق بين
-      «السيرفر قال غير مسجل» و«النت مقطوع» — الأول يطرد للدخول
-      طبيعي، والتاني يعرض شاشة أوفلاين بدل الطرد المكسور.
-
-   ⚠️ ملاحظة أمان: النسخة المحفوظة تحمل هوية المستخدم فقط (الاسم/
-   الإيميل/الدور/tenantId) — لا كلمة مرور ولا كوكيز. وبتمسح عند
-   logout وعند أول 401 من السيرفر، وحتى لو اتستخدمت أوفلاين بعد
-   انتهاء سيشن حقيقية، أول استدعاء API لما يرجع النت هيرجع 401
-   → SessionGuard بيمسحها فوراً ويطرد للدخول.
-   ══════════════════════════════════════════════════════════════ */
-
-const ME_SNAPSHOT_URL = '/api/auth/me'
-
-/** سبب آخر نتيجة لـ getMe() — بيقرأه (shop)/layout.tsx عند فشل السيشن. */
-export type MeOutcome = 'authed' | 'unauthorized' | 'offline' | 'error'
-let lastMeOutcome: MeOutcome = 'error'
-export function getMeOutcome(): MeOutcome {
-  return lastMeOutcome
-}
-
-/** كتابة نسخة السيشن محلياً (IndexedDB) — تُستدعى عند كل دخول ناجح. */
-export async function saveAuthSnapshot(user: AuthUser): Promise<void> {
-  // 🛡️ PWA: استيراد ثابت (مش dynamic import) — الـ dynamic import كان
-  // بيمسك إقلاع الأوفلاين كله في dev/Turbopack (تحميل الـ lazy chunk
-  // بيحتاج الـ runtime/HMR اللي ميت أوفلاين)، وفي الإنتاج كمان بنشيل
-  // أي اعتماد على جلب chunk في اللحظة الحرجة. الوحدة صغيرة — التكلفة صفر.
+async function cacheSessionSnapshot(user: AuthUser): Promise<void> {
   try {
-    await idb.setCached(ME_SNAPSHOT_URL, { ok: true, user })
-  } catch {
-    /* IDB غير متاح — الأوفلاين مش هيشتغل لكن النظام أونلاين سليم */
-  }
-}
-
-/** مسح نسخة السيشن المحفوظة — عند logout أو 401 حقيقي. */
-export async function clearAuthSnapshot(): Promise<void> {
-  try {
-    await idb.removeCached(ME_SNAPSHOT_URL)
+    const { idb } = await import('./offline/idb')
+    await idb.setCached(SESSION_IDB_KEY, { ok: true, user })
   } catch {
     /* ignore */
   }
 }
 
-/** قراءة الحساب المحفوظ أوفلاين (لصفحة الدخول: «الدخول بالحساب المحفوظ»). */
-export async function getOfflineUser(): Promise<AuthUser | null> {
+async function purgeCachedSession(): Promise<void> {
   try {
-    const cached = await idb.getCached<{ user: AuthUser }>(ME_SNAPSHOT_URL)
-    return cached?.data?.user ?? null
+    const { idb } = await import('./offline/idb')
+    await idb.purgeRows([SESSION_IDB_KEY])
   } catch {
-    return null
+    /* ignore */
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * ⚡ v10 — أمان تغيير الحساب: مسح كل كاش الداتا المحلي عند دخول/خروج/تسجيل حساب.
+ *
+ * من v10 الكاش المحلي (ميموري + IDB) بقى بيتخدم للعرض الفوري (SWR)، فلازم
+ * لما الحساب يتغيّر نمنع أي بيانات تينانت قديم من تظهر للحساب الجديد على
+ * نفس الجهاز. بنمسح: صفوف كاش الـ API + منتجات بحث الـ POS أوفلاين + كاش
+ * الميموري — وده مش بيأثر على الـ outbox (كتابات معلقة متتلمسش هنا).
+ */
+async function clearLocalAccountData(): Promise<void> {
+  try {
+    const [{ idb }, { clearMemoryApiCache }] = await Promise.all([
+      import('./offline/idb'),
+      import('./offline/api-offline'),
+    ])
+    clearMemoryApiCache()
+    await idb.clearCache()
+    await idb.replaceProducts([])
+  } catch {
+    /* ignore */
   }
 }
 
@@ -106,9 +89,8 @@ export async function apiLogin(
     })
     const data = await res.json().catch(() => null)
     if (res.ok && data?.ok) {
-      // 🛡️ PWA: احفظ نسخة السيشن فوراً عند نجاح الدخول — لو المستخدم قفل
-      // التطبيق وفتحه أوفلاين بعدها بيرجع للنظام من غير ما يتحطّم.
-      void saveAuthSnapshot(data.user as AuthUser)
+      // ⚡ v10: حساب جديد → امسح كاش بيانات الحساب القديم فوراً (خلفية)
+      void clearLocalAccountData()
       return data.user as AuthUser
     }
     lastRes = res
@@ -135,19 +117,19 @@ export async function apiSignup(input: {
   if (!res.ok || !data?.ok) {
     throw new Error(data?.error || 'فشل إنشاء الحساب')
   }
-  void saveAuthSnapshot(data.user as AuthUser)
+  // ⚡ v10: حساب جديد تماماً → أمان إضافي: مسح أي كاش محلي قديم
+  void clearLocalAccountData()
   return data.user as AuthUser
 }
 
 export async function apiLogout(): Promise<void> {
   try {
     await fetch('/api/auth/logout', { method: 'POST' })
-  } catch {
-    /* أوفلاين: طلب الخروج فشل — نمسح النسخة المحلية برضه (تحت) */
+  } finally {
+    // ⚡ v10: بعد الخروج امسح كاش بيانات الحساب — مفيش بيانات تظهر للي بعده
+    // على نفس الجهاز (والـ fetch نفسه مش لازم ينجح عشان نمسح المحلي)
+    await clearLocalAccountData()
   }
-  // 🛡️ PWA: الخروج = مسح النسخة المحفوظة دايماً — حتى لو طلب الخروج نفسه
-  // فشل أوفلاين، نية المستخدم واضحة: مفيش حساب محفوظ على الجهاز ده.
-  await clearAuthSnapshot()
 }
 
 export async function getMe(): Promise<AuthUser | null> {
@@ -161,43 +143,33 @@ export async function getMe(): Promise<AuthUser | null> {
     // round trip every time, so this always reflects the current cookie.
     const res = await fetch('/api/auth/me', { cache: 'no-store' })
     if (!res.ok) {
-      // 401 = السيرفر وصل وقال بوضوح «السيشن انتهت» → نمسح النسخة المحلية
-      // عشان سيشن منتهية/مستخدم تاني ميرجعش أوفلاين.
-      if (res.status === 401) {
-        lastMeOutcome = 'unauthorized'
-        void clearAuthSnapshot()
-        return null
-      }
-      // 🛡️ PWA ROOT FIX (2026-10-07): 5xx من الإيدج/السيرفر (502/503/504
-      // — شائعة جداً على موبايل «متصفح لكن الخادم ماشي») = نتعامل معها
-      // زي الأوفلاين بالظبط: نرجّع النسخة المحفوظة عشان المستخدم ماتطردش
-      // من النظام بسبب خطأ لحظي مش بسبب سيشن منتهية.
-      if (res.status >= 500) {
-        lastMeOutcome = 'offline'
-        const cached = await idb.getCached<{ user: AuthUser }>(ME_SNAPSHOT_URL)
-        return cached?.data?.user ?? null
-      }
-      lastMeOutcome = 'error'
+      // 🛡️ السيرفر قال بوضوح "مش مسجل" (401 مثلاً) — نلغي أي نسخة سيشن
+      // أوفلاين عشان جهاز مشترك ما يرجّعش سيشن قديم بعد خروج حقيقي.
+      void purgeCachedSession()
       return null
     }
     const data = await res.json()
-    if (!data?.ok || !data.user) {
-      lastMeOutcome = 'error'
+    if (!data?.ok) {
+      void purgeCachedSession()
       return null
     }
-    lastMeOutcome = 'authed'
-    // 🛡️ PWA: كل تأكيد سيشن ناجح = نسخة محفوظة جديدة. دي الحلقة اللي كانت
-    // ناقصة تماماً — من غيرها fallback الأوفلاين كان بيقرأ خزانة فاضية.
-    void saveAuthSnapshot(data.user as AuthUser)
+    // ⚡ PWA OFFLINE: write-through — نسخة سيشن في IDB فوراً عشان أي فتح
+    // أوفلاين بعدين يلاقي نفسه مسجل دخول (راجع الثوابت فوق).
+    void cacheSessionSnapshot(data.user as AuthUser)
     return data.user as AuthUser
   } catch {
-    // ⚡ Offline (الشبكة فشلت — مش السيرفر رفض): نرجّع نسخة السيشن المحفوظة
-    // من IndexedDB. دي اللي بتخلي النظام يفتح أوفلاين ويشتغل بكاش البيانات.
-    lastMeOutcome = 'offline'
+    // ⚡ Offline: try to return cached user from IndexedDB
+    // This allows the app to boot offline (showing cached data)
     if (typeof window !== 'undefined' && typeof indexedDB !== 'undefined') {
       try {
-        const cached = await idb.getCached<{ user: AuthUser }>(ME_SNAPSHOT_URL)
-        if (cached?.data?.user) return cached.data.user
+        const { idb } = await import('./offline/idb')
+        const cached = await idb.getCached<{ user: AuthUser }>(SESSION_IDB_KEY)
+        if (cached?.data?.user) {
+          // TTL أمان: نسخة أقدم من 14 يوم لا تُعتمد — قديمة أكد لازم تسجيل دخول جديد
+          if (Date.now() - cached.at < SESSION_OFFLINE_TTL_MS) {
+            return cached.data.user
+          }
+        }
       } catch {
         /* ignore */
       }

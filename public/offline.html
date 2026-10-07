@@ -64,6 +64,22 @@
       transform: translateY(-2px);
       box-shadow: 0 12px 24px rgba(16, 185, 129, 0.4);
     }
+    .actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    button.ghost {
+      background: transparent;
+      color: #10b981;
+      border: 1.5px solid rgba(16, 185, 129, 0.5);
+      box-shadow: none;
+    }
+    button.ghost:hover {
+      background: rgba(16, 185, 129, 0.1);
+      box-shadow: none;
+    }
     .hint {
       margin-top: 32px;
       padding: 12px 16px;
@@ -90,13 +106,17 @@
     </div>
     <h1>أنت غير متصل بالإنترنت</h1>
     <p>
-      لا يمكن تحميل هذه الصفحة. تحقق من اتصالك بالإنترنت ثم حاول مرة أخرى.
+      لا يمكن تحميل هذه الصفحة الجديدة الآن، لكن التطبيق يشتغل بدون إنترنت:
       <br>
-      يمكنك تصفح الصفحات التي زرتها مؤخراً في وضع عدم الاتصال.
+      افتح النظام وتنقّل بين الصفحات اللي زرتها مؤخراً — بياناتك محفوظة على جهازك،
+      وأي تعديل هيتزامن تلقائياً أول ما يرجع النت.
     </p>
-    <button onclick="window.location.reload()">إعادة المحاولة</button>
+    <div class="actions">
+      <button onclick="window.location.replace('/dashboard')">فتح النظام</button>
+      <button class="ghost" onclick="window.location.reload()">إعادة المحاولة</button>
+    </div>
     <div class="hint">
-      💡 نصيحة: يمكنك إضافة النظام إلى شاشتك الرئيسية لاستخدامه كتطبيق.
+      💡 فتح النظام من الأيقونة المثبتة على شاشتك أسرع — ويشتغل حتى بدون إنترنت.
     </div>
   </div>
   <script>

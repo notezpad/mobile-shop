@@ -1,45 +1,39 @@
 /**
- * Service Worker 2026 — نظام المحل PWA
+ * Service Worker 2026 — نظام المحل PWA (v7 — OFFLINE-PROOF)
  *
- * Features:
- *  ✅ Precaching (app shell + critical assets)
- *  ✅ Network-first for API (fresh data, cache fallback)
- *  ✅ Stale-while-revalidate for static assets (JS/CSS/images)
- *  ✅ Cache-first for fonts + icons
- *  ✅ Offline page fallback
- *  ✅ Background sync (flush outbox when network returns)
- *  ✅ Push notifications (display push from server)
- *  ✅ Skip-waiting on install (instant activation)
- *  ✅ Cache cleanup on activate
- *  ✅ Navigation preload (faster page loads)
- *  ✅ Message handler (client → SW communication)
- *  ✅ Periodic sync (optional, for background data refresh)
+ * 🛡️ 2026-10-07 (v21/PWA — جذر مشكلة "لا كأني في PWA"):
+ *
+ *   المشكلة 1: إطلاق التطبيق المثبَّت أوفلاين كان يطلع ERR_FAILED (صفحة كروم
+ *   الرمادية). السبب: مفتاح كاش التنقلات كان بيشمل الـ query string كامل —
+ *   الـ PWA بيفتح /dashboard?source=pwa بينما المتخزن هو /dashboard فقط →
+ *   miss → ومكان الفولباك offline.html كان ممكن يكون هو نفسه مش متخزن
+ *   (addAll الذرّية: فشل أي أيقونة = فشل الكل بصمت) → respondWith رجّع
+ *   undefined = خطأ شبكة خام.
+ *
+ *   المشكلة 2: ريفرش أوفلاين كان يرمي المستخدم على الصفحة الرئيسية —
+ *   ده جزئه العميل (سيشن /api/auth/me مش متخزنة في IDB) لكن ده معناه
+ *   إن صفحات التطبيق نفسها لازم تكون متاحة أوفلاين برضه — تم إصلاح
+ *   التخزين + سيشن العميل في نفس هذا الإصدار.
+ *
+ * الحلول في v7:
+ *   ✅ مطابقة تنقلات بـ ignoreSearch — /dashboard?source=pwa بيلحق /dashboard
+ *   ✅ سلسلة فولباك مضمونة 100%: كاش → نفس المسار بأي query → offline.html
+ *      → مستند أوفلاين مدمج داخل السوفتوير نفسه (مستحيل يرجع undefined)
+ *   ✅ تخزين مسبق متسامح (URL-بـ-URL) بدل addAll الذرّية
+ *   ✅ تخزين ردود التنقل السليمة فقط (ok) تحت مفتاح GET عادي
+ *   ✅ كل حمايات v4-v6 القديمة: استبعاد RSC، منع تخزين /api/auth/*،
+ *      cache-first للملفات الـ immutable، network-first للـ API
  */
 
-// 🛡️ 2026-10-07 (v20/PWA): رفعنا الكاش من v5 لـ v6 — أول تشغيل للنسخة
-// دي بينضف أي كاش قديم (HTML/ردود سمومة محتملة)، وبعدها بناء كاش جديد
-// ينطّق مع سلسلة الأوفلاين الجديدة (نسخة السيشن في IDB + تسخين مسارات
-// التطبيق). المستخدم هيعيد تخزين الصفحات تلقائياً من أول زيارة أونلاين
-// + prewarm الـ app shell بيغطي المسارات الأساسية فوراً.
-const CACHE_VERSION = 'shop-erp-v6'
+const CACHE_VERSION = 'shop-erp-v7'
 const OFFLINE_URL = '/offline.html'
 
 // ─── Precache list ──────────────────────────────────────────
-// 🛡️ 2026-09-27: app routes (dashboard/pos/products/settings/finance)
-// USED to be listed here and precached as full HTML documents. That
-// caused the "sidebar link sometimes doesn't open the page until I
-// refresh" bug: Next.js's App Router does client-side transitions by
-// fetching an RSC payload from the SAME pathname as the page (a plain
-// GET, not a `navigate`-mode request) — and the catch-all handler below
-// would serve the STALE PRECACHED FULL HTML for that exact URL instead
-// of forwarding to the network, so the router silently got the wrong
-// payload shape and the on-screen content never changed (URL/history
-// still updated, which is why it looked random/intermittent). A full
-// page refresh worked because that request IS `navigate`-mode, which
-// always goes to the network first (see below). It was also a stale/
-// cross-tenant risk on a shared device: a dashboard HTML precached for
-// one logged-in tenant could get served to a different tenant later.
-// Only truly static, non-personalized assets belong in this list now.
+// 🛡️ 2026-09-27: مسارات التطبيق (HTML كامل) ممنوع تتخزن هنا — كانت بتعمل
+// bug "لينك السايدبار مش بيفتح غير بعد ريفرش" (الـ RSC payload بيتخزن غلط).
+// المسارات بتتخزن تلقائياً أثناء الاستخدام الطبيعي + رسالة PRECACHE_URLS
+// من التطبيق بتسخّن المسارات الأساسية بشكل متسامح (شوف message handler).
+// هنا فقط أصول ثابتة غير شخصية — والمهم ترتيبها: offline.html أولاً.
 const PRECACHE_URLS = [
   '/offline.html',
   '/manifest.json',
@@ -47,13 +41,36 @@ const PRECACHE_URLS = [
   '/icon-512.png',
 ]
 
-// ─── Install: precache app shell ─────────────────────────────
+// ─── Install: precache app shell (متسامح — مفيش فشل ذرّي) ────
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_VERSION).then((cache) => {
-      // Cache what we can — ignore individual failures
-      return cache.addAll(PRECACHE_URLS).catch(() => {})
-    })
+    (async () => {
+      const cache = await caches.open(CACHE_VERSION)
+      // 🛡️ v7: كل URL لوحده — فشل أيقونة واحدة عمره ما يبطّل offline.html
+      await Promise.allSettled(
+        PRECACHE_URLS.map(async (u) => {
+          try {
+            const res = await fetch(u, { cache: 'no-store', redirect: 'follow' })
+            if (res && (res.ok || res.type === 'opaque')) {
+              await cache.put(u, res)
+            }
+          } catch {
+            /* skip this one */
+          }
+        })
+      )
+      // 🛡️ ضمانة إضافية: offline.html لازم يكون موجود مهما حصل —
+      // لو لأي سبب لسه مش متخزن، جرّب مرة أخيرة بـ cache-buster.
+      try {
+        const hit = await cache.match(OFFLINE_URL)
+        if (!hit) {
+          const res = await fetch(OFFLINE_URL + '?sw=' + Date.now(), { cache: 'no-store' })
+          if (res && res.ok) await cache.put(OFFLINE_URL, res)
+        }
+      } catch {
+        /* آخر أمان: الفولباك المدمج تحت هيغطي */
+      }
+    })()
   )
   self.skipWaiting()
 })
@@ -77,6 +94,40 @@ self.addEventListener('activate', (event) => {
   self.clients.claim()
 })
 
+// ─── 🛡️ v7: مستند أوفلاين مدمج (آخر خط أمان — مضمون الوجود دائماً) ──
+// لو offline.html نفسه مش في الكاش (متصفح مسح البيانات مثلاً) — بدل ما
+// respondWith يرجع undefined (ERR_FAILED) بنرجّع HTML عربي كامل من الذاكرة.
+const INLINE_OFFLINE_HTML = `<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>غير متصل — نظام المحل</title><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Cairo',-apple-system,BlinkMacSystemFont,sans-serif;background:#0c0e14;color:#f1f5f9;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center;padding:24px}
+.c{max-width:400px;width:100%}
+.i{width:80px;height:80px;margin:0 auto 24px;border-radius:20px;background:linear-gradient(135deg,#10b981,#059669);display:flex;align-items:center;justify-content:center;box-shadow:0 20px 40px rgba(16,185,129,.3)}
+.i svg{width:40px;height:40px;color:#fff}
+h1{font-size:1.5rem;font-weight:800;margin-bottom:12px}
+p{font-size:.9rem;color:#94a3b8;line-height:1.6;margin-bottom:24px}
+button{background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;padding:12px 28px;border-radius:12px;font-size:.9rem;font-weight:700;cursor:pointer;font-family:inherit}
+</style></head><body><div class="c">
+<div class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg></div>
+<h1>أنت غير متصل بالإنترنت</h1>
+<p>لا يمكن تحميل هذه الصفحة الآن. الصفحات التي زرتها مؤخراً تعمل بدون إنترنت.</p>
+<button onclick="window.location.reload()">إعادة المحاولة</button>
+</div><script>window.addEventListener('online',function(){window.location.reload()})</script>
+</body></html>`
+
+function offlineDocumentResponse() {
+  return new Response(INLINE_OFFLINE_HTML, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Offline-Fallback': 'sw-inline',
+    },
+  })
+}
+
 // ─── Fetch handler ──────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
   const { request } = event
@@ -95,9 +146,8 @@ self.addEventListener('fetch', (event) => {
   // would otherwise fall into the generic "static asset" cache below and
   // could be answered with a stale cached HTML document for that path
   // instead of the fresh RSC payload Next.js expects, silently breaking
-  // the transition (see the note on PRECACHE_URLS above for the full
-  // story). These requests must always go straight to the network with
-  // no Service Worker caching involved.
+  // the transition. These requests must always go straight to the network
+  // with no Service Worker caching involved.
   const isNextRouterRequest =
     request.headers.get('RSC') === '1' ||
     request.headers.has('Next-Router-State-Tree') ||
@@ -108,11 +158,11 @@ self.addEventListener('fetch', (event) => {
 
   // ── API requests → network-first ─────────────────────────
   if (url.pathname.startsWith('/api/')) {
-    // 🛡️ /api/auth/* بيحدد مين مسجّل دخول — ممنوع يتخزن نهائياً
+    // 🛡️ /api/auth/* بيحدد مين مسجّل دخول — ممنوع يتخزن في كاش الـ SW نهائياً
+    // (السيشن الأوفلاين مسؤولية طبقة العميل: IDB مع مسح عند تغيير الحساب)
     if (url.pathname.startsWith('/api/auth/')) return
     // 🛡️ 2026-10-07 (v17): ناخد نسخة في الكاش للعمل أوفلاين **لو الرد سليم
-    // فقط**. الباج القديم كان بيخزّن أي رد (حتى 500/403/رد فاضي) — فلو
-    // حصل خطأ مرة واحدة بيفضل متراكم ويترجع لاحقاً بدل البيانات الحقيقية.
+    // فقط**. الباج القديم كان بيخزّن أي رد (حتى 500/403/رد فاضي).
     event.respondWith(
       fetch(request)
         .then((response) => {
@@ -123,7 +173,7 @@ self.addEventListener('fetch', (event) => {
           return response
         })
         .catch(() => {
-          // Offline → try cache (رد سليم فقط)، ثم 503
+          // Offline → try cache (رد سليم فقط)، ثم 503 JSON واضح
           return caches.match(request).then((cached) => {
             if (cached && cached.ok) return cached
             return new Response(
@@ -136,51 +186,64 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // ── Navigation → network-first + preload + offline fallback
+  // ── Navigation → network-first + فولباك أوفلاين مضمون 100% ──
   if (request.mode === 'navigate') {
     event.respondWith(
       (async () => {
-        // 🛡️ ROOT FIX (2026-10-07, v20/PWA): cache.put() بيرفض طلبات
-        // navigate-mode بـ TypeError **بصمت** (الـ .then() كان بيبلع
-        // الـ rejection) — يعني من أول يوم الـ SW ما خزّن ولا صفحة HTML
-        // واحدة من التنقلات! أي refresh أوفلاين كان بيقع في offline.html
-        // = «ولا كأني في PWA». الحل: مفتاح كاش Request عادي (GET) بنفس
-        // الـ URL — الـ match بيوافق بالـ URL مهما كان الـ mode.
-        // + حماية: نختزن الردود السليمة فقط (ok) — صفحات 500 اللي بيرجعها
-        // الديف/الإيدج وقت ضعف الشبكة ممنوع تتخزن وتسمّم الأوفلاين.
+        const cache = await caches.open(CACHE_VERSION)
+        // 🛡️ (v6): مفتاح كاش Request عادي (GET) — لأن cache.put() بيرفض
+        // طلبات navigate-mode بـ TypeError بصمت. Match بيوافق بالـ URL.
         const cacheKey = new Request(request.url, { method: 'GET' })
         try {
-          // Use navigation preload if available
-          const preload = await event.preloadResponse
-          if (preload) {
-            if (preload.ok) {
-              const clone = preload.clone()
-              caches.open(CACHE_VERSION).then((cache) => cache.put(cacheKey, clone))
-            }
-            return preload
+          // Use navigation preload if available (يتفشل أوفلاين — بنلقطه)
+          let response = null
+          try {
+            response = await event.preloadResponse
+          } catch {
+            /* offline — below fetch will fail too and we fall back */
           }
-
-          // Normal fetch
-          const response = await fetch(request)
+          if (!response) {
+            response = await fetch(request)
+          }
           if (response && response.ok) {
             const clone = response.clone()
-            caches.open(CACHE_VERSION).then((cache) => cache.put(cacheKey, clone))
+            cache.put(cacheKey, clone).catch(() => {})
           }
           return response
         } catch {
-          // Offline → cache → offline page
-          const cached = await caches.match(request)
-          return cached || caches.match(OFFLINE_URL)
+          // ════ OFFLINE recovery chain (v7) ════
+          // 1) نفس الـ URL بالظبط (بأي query)
+          let hit = null
+          try { hit = await caches.match(request) } catch { /* ignore */ }
+          // 2) 🛡️ THE FIX: تجاهل الـ query — /dashboard?source=pwa بيلحق
+          //    /dashboard المخزنة. ده كان سبب ERR_FAILED عند إطلاق الـ PWA.
+          if (!hit) {
+            try { hit = await caches.match(request, { ignoreSearch: true }) } catch { /* ignore */ }
+          }
+          // 3) نفس المسار بأي مفتاح مخزّن (أي query تاني)
+          if (!hit) {
+            try {
+              const keys = await cache.keys()
+              const key = keys.find((k) => {
+                try { return new URL(k.url).pathname === url.pathname } catch { return false }
+              })
+              if (key) hit = await cache.match(key)
+            } catch { /* ignore */ }
+          }
+          // 4) صفحة الأوفلاين المخزنة مسبقاً
+          if (!hit) {
+            try { hit = await caches.match(OFFLINE_URL) } catch { /* ignore */ }
+          }
+          // 5) 🛡️ آخر أمان مضمون: مستند أوفلاين مدمج — مستحيل نرجّع undefined
+          //    (undefined = ERR_FAILED — ده بالظبط اللي كان بيحصل للمستخدم)
+          return hit || offlineDocumentResponse()
         }
       })()
     )
     return
   }
 
-  // 🛡️ ROOT FIX: ملفات /_next/static/* أسماؤها فيها hash ومش بتتغير
-  // أبداً. القديم كان stale-while-revalidate: يرجّع النسخة المخزنة
-  // *ويعمل كمان ريكويست شبكة لنفس الملف في كل مرة* — أي ~25 ريكويست
-  // زيادة على السيرفر في كل فتح صفحة بدون أي فايدة. دلوقتي cache-first
+  // 🛡️ ملفات /_next/static/* أسماؤها فيها hash ومش بتتغير أبداً — cache-first
   // بالكامل: لو الملف موجود في الكاش خلاص، صفر شبكة.
   const isImmutable =
     url.pathname.startsWith('/_next/static/') ||
@@ -297,10 +360,9 @@ self.addEventListener('message', (event) => {
       break
 
     case 'PRECACHE_URLS':
-      // 🛡️ PWA (2026-10-07): تسخين مسارات التطبيق (HTML) — متسامح مسار-بمسار:
-      // القديم كان cache.addAll(urls) اللي بيفشل كله لو مسار واحد فشل.
-      // كمان بنسكب المسارات المتخزنة أصلاً — الرسالة بتوصل مع كل prewarm
-      // (كل 20 دقيقة أونلاين) فمفيش أي لزوم لإعادة جلب حاجة موجودة.
+      // 🛡️ تسخين مسارات التطبيق (HTML) — متسامح مسار-بمسار: فشل مسار واحد
+      // عمره ما يبطّل الباقي. وبنسكب المسارات المتخزنة أصلاً (ignoreSearch)
+      // — الرسالة بتيجي مع كل دورة sync فمفيش لزوم لإعادة جلب موجودة.
       if (Array.isArray(event.data.urls)) {
         event.waitUntil(
           caches.open(CACHE_VERSION).then((cache) =>
