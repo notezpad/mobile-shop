@@ -14,6 +14,9 @@ import {
   Repeat,
   MapPin,
   X,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -27,7 +30,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -41,6 +43,7 @@ import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Barcode } from '../Barcode'
+import { ProductAvatar } from '../ProductAvatar'
 import { StockHero, TONE, SecLabel, Pill, STOCK_FIELD, STOCK_RING, type StockTone } from './stock-dialog-ui'
 import { num } from './shared'
 import type { Branch, InventoryProduct } from '../InventoryView'
@@ -73,6 +76,105 @@ const DAMAGE_REASONS = [
   'أخرى',
 ]
 
+/* ───────────── جدول الأصناف (ديسكتوب) — مساعدات ───────────── */
+
+type StockState = 'out' | 'low' | 'ok'
+type SortKey = 'name' | 'quantity' | 'cost' | 'price' | 'value'
+type SortState = { key: SortKey; dir: 'asc' | 'desc' } | null
+
+const stockState = (p: InventoryProduct): StockState =>
+  p.quantity <= 0 ? 'out' : p.quantity <= p.minQuantity ? 'low' : 'ok'
+
+// نفس ألوان حالة المخزون المستخدمة في صفحة المنتجات
+const STOCK_UI: Record<StockState, { label: string; bar: string; text: string; chip: string; stripe: string; row: string }> = {
+  out: {
+    label: 'نفد',
+    bar: 'bg-destructive',
+    text: 'text-destructive',
+    chip: 'bg-destructive/10 text-destructive',
+    stripe: 'bg-destructive',
+    row: 'bg-destructive-subtle/30',
+  },
+  low: {
+    label: 'منخفض',
+    bar: 'bg-warning',
+    text: 'text-warning-subtle-foreground',
+    chip: 'bg-warning-subtle text-warning-subtle-foreground',
+    stripe: 'bg-warning',
+    row: 'bg-warning-subtle/25',
+  },
+  ok: {
+    label: 'متوفر',
+    bar: 'bg-success',
+    text: 'text-success-subtle-foreground',
+    chip: 'bg-success-subtle text-success-subtle-foreground',
+    stripe: 'bg-transparent',
+    row: '',
+  },
+}
+
+/** عدّاد مخزون من 10 خانات: الهدف = ٣ أضعاف الحد الأدنى (أو الكمية الحالية لو أكبر). */
+function StockMeter({ p }: { p: InventoryProduct }) {
+  const st = stockState(p)
+  const target = Math.max(p.minQuantity * 3, p.quantity, 1)
+  const filled = p.quantity <= 0 ? 0 : Math.min(10, Math.max(1, Math.round((p.quantity / target) * 10)))
+  return (
+    <div
+      role="meter"
+      aria-label="مستوى المخزون"
+      aria-valuemin={0}
+      aria-valuemax={target}
+      aria-valuenow={Math.max(0, p.quantity)}
+      className="flex h-1.5 gap-[3px]"
+    >
+      {Array.from({ length: 10 }).map((_, i) => (
+        <span key={i} className={cn('flex-1 rounded-full', i < filled ? STOCK_UI[st].bar : 'bg-foreground/10')} />
+      ))}
+    </div>
+  )
+}
+
+// رأس عمود ثابت أثناء السكرول (solid عشان الصفوف ما تبانش من تحته)
+const HEAD_CELL = 'sticky top-0 z-10 h-11 bg-muted'
+
+function SortHead({
+  label,
+  k,
+  sort,
+  onSort,
+  className,
+}: {
+  label: string
+  k: SortKey
+  sort: SortState
+  onSort: (k: SortKey) => void
+  className?: string
+}) {
+  const active = sort?.key === k
+  return (
+    <TableHead
+      className={cn(HEAD_CELL, className)}
+      aria-sort={active ? (sort!.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(k)}
+        className={cn(
+          '-mx-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+          active && 'text-foreground',
+        )}
+      >
+        {label}
+        {active ? (
+          sort!.dir === 'asc' ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />
+        ) : (
+          <ArrowUpDown className="size-3 opacity-40" />
+        )}
+      </button>
+    </TableHead>
+  )
+}
+
 export function StockTab({ products, branches, isEmployee, userBranchId, onChanged }: Props) {
   const [search, setSearch] = React.useState('')
   const [branchFilter, setBranchFilter] = React.useState<string>('all')
@@ -101,6 +203,44 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
   }, [products, branchFilter, statusFilter, search])
 
   const branchName = (id: number | null) => branches.find(b => b.id === id)?.name
+
+  // ترتيب جدول الديسكتوب: ضغطة = تصاعدي، تانية = تنازلي، تالتة = رجوع للترتيب الأصلي
+  const [sort, setSort] = React.useState<SortState>(null)
+  const onSort = (key: SortKey) =>
+    setSort(prev => {
+      if (!prev || prev.key !== key) return { key, dir: 'asc' }
+      if (prev.dir === 'asc') return { key, dir: 'desc' }
+      return null
+    })
+
+  const rows = React.useMemo(() => {
+    if (!sort) return filtered
+    const val = (p: InventoryProduct) =>
+      sort.key === 'name' ? p.name
+      : sort.key === 'quantity' ? p.quantity
+      : sort.key === 'cost' ? p.cost
+      : sort.key === 'price' ? p.price
+      : p.quantity * p.cost
+    const m = sort.dir === 'asc' ? 1 : -1
+    return [...filtered].sort((a, b) => {
+      const x = val(a), y = val(b)
+      return (typeof x === 'string' && typeof y === 'string' ? x.localeCompare(y, 'ar') : (x as number) - (y as number)) * m
+    })
+  }, [filtered, sort])
+
+  // ملخص القائمة الحالية (بعد الفلاتر)
+  const summary = React.useMemo(() => {
+    let ok = 0, low = 0, out = 0, qty = 0, value = 0
+    for (const p of filtered) {
+      const st = stockState(p)
+      if (st === 'ok') ok++
+      else if (st === 'low') low++
+      else out++
+      qty += Math.max(0, p.quantity)
+      value += Math.max(0, p.quantity) * Math.max(0, p.cost)
+    }
+    return { ok, low, out, qty, value }
+  }, [filtered])
 
   return (
     <div className="space-y-4">
@@ -173,108 +313,198 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
       {/* Table */}
       <Card>
         <CardHeader className="border-b pb-3">
-          <CardTitle className="flex items-center justify-between text-base">
+          <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
             <span className="flex items-center gap-2">
               <Package className="size-4 text-primary" />
               قائمة الأصناف
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">
+                {num(filtered.length)} من {num(products.length)}
+              </span>
             </span>
-            <span className="text-xs font-normal text-muted-foreground">
-              {filtered.length} من {products.length}
+            {/* ملخص الحالات للقائمة الحالية — ديسكتوب فقط */}
+            <span className="hidden items-center gap-1.5 text-xs font-semibold lg:flex">
+              <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1', STOCK_UI.ok.chip)}>
+                <span className="size-1.5 rounded-full bg-success" />
+                متوفر <b className="tabular-nums">{num(summary.ok)}</b>
+              </span>
+              <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1', STOCK_UI.low.chip)}>
+                <span className="size-1.5 rounded-full bg-warning" />
+                منخفض <b className="tabular-nums">{num(summary.low)}</b>
+              </span>
+              <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1', STOCK_UI.out.chip)}>
+                <span className="size-1.5 rounded-full bg-destructive" />
+                نفد <b className="tabular-nums">{num(summary.out)}</b>
+              </span>
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="hidden max-h-[60vh] overflow-auto lg:block">
-            <Table fixed>
-              <TableHeader className="sticky top-0 bg-muted/50 backdrop-blur">
-                <TableRow>
-                  <TableHead>الصنف</TableHead>
-                  <TableHead className="w-44">الباركود</TableHead>
-                  <TableHead className="w-28">الفرع</TableHead>
-                  <TableHead className="w-20 text-center">الكمية</TableHead>
-                  <TableHead className="w-24 text-center">الحد الأدنى</TableHead>
-                  <TableHead className="w-32 text-center">التكلفة</TableHead>
-                  <TableHead className="w-32 text-center">البيع</TableHead>
-                  <TableHead className="w-24 text-center">حركة</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
-                      <Package className="mx-auto mb-2 size-8 opacity-40" />
-                      لا توجد منتجات مطابقة
-                    </TableCell>
+          {/* ═════════ جدول الأصناف — ديسكتوب (lg فأكثر) ═════════
+              حاوية السكرول بتتحكم في الرأس والتذييل الثابتين (sticky)، والجدول جواها
+              dir=rtl (نفس حل مكوّن Table) عشان السكرول الأفقي يفضل متوقّع. */}
+          <div className="hidden lg:block">
+            <div dir="ltr" className="max-h-[68vh] overflow-auto">
+              <table dir="rtl" className="w-full min-w-[960px] table-fixed caption-bottom text-sm">
+                <TableHeader className="bg-transparent">
+                  <TableRow className="hover:bg-transparent">
+                    <SortHead label="الصنف" k="name" sort={sort} onSort={onSort} />
+                    <TableHead className={cn(HEAD_CELL, 'w-36')}>الباركود</TableHead>
+                    <SortHead label="المخزون" k="quantity" sort={sort} onSort={onSort} className="w-44" />
+                    <SortHead label="التكلفة" k="cost" sort={sort} onSort={onSort} className="w-24 text-center" />
+                    <SortHead label="سعر البيع" k="price" sort={sort} onSort={onSort} className="w-28 text-center" />
+                    <SortHead label="قيمة المخزون" k="value" sort={sort} onSort={onSort} className="w-28 text-center" />
+                    <TableHead className={cn(HEAD_CELL, 'w-28 text-center')}>حركة</TableHead>
                   </TableRow>
-                ) : (
-                  filtered.map(p => {
-                    const out = p.quantity <= 0
-                    const low = !out && p.quantity <= p.minQuantity
-                    return (
-                      <TableRow key={p.id} className={out ? 'bg-destructive-subtle/50' : low ? 'bg-warning-subtle/40' : ''}>
-                        <TableCell className="font-medium">{p.name}</TableCell>
-                        <TableCell>
-                          <Barcode value={p.barcode} height={26} fontSize={10} fitContainer />
-                        </TableCell>
-                        <TableCell>
-                          {branchName(p.branchId) ?? (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {out ? (
-                            <Badge variant="destructive">نفد</Badge>
-                          ) : low ? (
-                            <Badge className="bg-warning-subtle text-warning-subtle-foreground">{p.quantity}</Badge>
-                          ) : (
-                            <Badge variant="secondary">{p.quantity}</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center text-muted-foreground">{p.minQuantity}</TableCell>
-                        <TableCell className="whitespace-nowrap text-muted-foreground text-center tabular-nums">{formatCurrency(p.cost)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-center font-medium tabular-nums">{formatCurrency(p.price)}</TableCell>
-                        <TableCell>
-                          <div className="flex justify-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="size-8 p-0 text-success-subtle-foreground hover:bg-success-subtle hover:text-success-subtle-foreground"
-                              onClick={() => setAdjOpen({ product: p, type: 'in' })}
-                              title="إضافة كمية (وارد)"
-                            >
-                              <Plus className="size-3.5" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="size-8 p-0 text-destructive-subtle-foreground hover:bg-destructive-subtle hover:text-destructive-subtle-foreground"
-                              onClick={() => setAdjOpen({ product: p, type: 'out' })}
-                              disabled={p.quantity <= 0}
-                              title="خصم كمية (صادر)"
-                            >
-                              <Minus className="size-3.5" />
-                            </Button>
-                            {/* 🛡️ 2026-09-30: تسجيل هالك — بيسجّل الخسارة في المصروفات */}
-                            {!isEmployee && (
+                </TableHeader>
+                <TableBody>
+                  {rows.length === 0 ? (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={7} className="py-14 text-center text-muted-foreground">
+                        <span className="mx-auto mb-3 flex size-14 items-center justify-center rounded-2xl bg-muted">
+                          <Package className="size-7 opacity-50" />
+                        </span>
+                        <p className="font-bold text-foreground/80">لا توجد منتجات مطابقة</p>
+                        <p className="mt-1 text-xs">جرّب تغيّر البحث أو الفلاتر</p>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    rows.map(p => {
+                      const st = stockState(p)
+                      const ui = STOCK_UI[st]
+                      const out = st === 'out'
+                      const bName = branchName(p.branchId)
+                      const margin = p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : null
+                      const stockValue = Math.max(0, p.quantity) * Math.max(0, p.cost)
+                      return (
+                        <TableRow key={p.id} className={cn('group hover:bg-muted/50', ui.row)}>
+                          {/* الصنف: شريط حالة جانبي + صورة + اسم + تصنيف/فرع */}
+                          <TableCell className="relative whitespace-normal">
+                            <span aria-hidden className={cn('absolute inset-y-0 start-0 w-[3px]', ui.stripe)} />
+                            <div className="flex items-center gap-3">
+                              <ProductAvatar name={p.name} imagePath={p.imagePath} size="sm" />
+                              <div className="min-w-0">
+                                <p className="line-clamp-2 font-bold leading-snug [overflow-wrap:anywhere]" title={p.name}>
+                                  {p.name}
+                                </p>
+                                <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                                  <span className="[overflow-wrap:anywhere]">{p.category || 'بدون تصنيف'}</span>
+                                  <span className="inline-flex items-center gap-1">
+                                    <MapPin className="size-3 shrink-0" />
+                                    <span className="[overflow-wrap:anywhere]">{bName ?? 'بدون فرع'}</span>
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
+                          </TableCell>
+
+                          {/* الباركود */}
+                          <TableCell>
+                            <Barcode value={p.barcode} height={22} fontSize={9} fitContainer />
+                          </TableCell>
+
+                          {/* المخزون: كمية + عدّاد + حالة */}
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <span className={cn('min-w-9 text-xl font-black leading-none tabular-nums', ui.text)}>
+                                {num(Math.max(0, p.quantity))}
+                              </span>
+                              <div className="min-w-0 flex-1 space-y-1.5">
+                                <StockMeter p={p} />
+                                <p className="flex items-center gap-1.5 text-[11px] leading-none text-muted-foreground">
+                                  <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-bold', ui.chip)}>{ui.label}</span>
+                                  <span className="tabular-nums">الحد الأدنى {num(p.minQuantity)}</span>
+                                </p>
+                              </div>
+                            </div>
+                          </TableCell>
+
+                          {/* التكلفة */}
+                          <TableCell className="text-center tabular-nums text-muted-foreground">
+                            {formatCurrency(p.cost)}
+                          </TableCell>
+
+                          {/* سعر البيع + هامش الربح */}
+                          <TableCell className="text-center">
+                            <p className="font-extrabold tabular-nums">{formatCurrency(p.price)}</p>
+                            {margin !== null && (
+                              <p
+                                className={cn(
+                                  'mt-0.5 text-[10px] font-semibold tabular-nums',
+                                  margin < 0 ? 'text-destructive' : 'text-success-subtle-foreground',
+                                )}
+                              >
+                                هامش {margin}%
+                              </p>
+                            )}
+                          </TableCell>
+
+                          {/* قيمة المخزون (كمية × تكلفة) */}
+                          <TableCell className={cn('text-center font-bold tabular-nums', out && 'text-muted-foreground/60')}>
+                            {formatCurrency(stockValue)}
+                          </TableCell>
+
+                          {/* إجراءات الحركة */}
+                          <TableCell>
+                            <div className="flex justify-center gap-1">
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="size-8 p-0 text-warning-subtle-foreground hover:bg-warning-subtle hover:text-warning-subtle-foreground"
-                                onClick={() => setAdjOpen({ product: p, type: 'damage' })}
-                                disabled={p.quantity <= 0}
-                                title="تسجيل هالك (بيسجّل الخسارة في المصروفات)"
+                                className="size-8 rounded-lg p-0 text-success-subtle-foreground hover:bg-success-subtle hover:text-success-subtle-foreground"
+                                onClick={() => setAdjOpen({ product: p, type: 'in' })}
+                                title="إضافة كمية (وارد)"
+                                aria-label="إضافة كمية (وارد)"
                               >
-                                <AlertTriangle className="size-3.5" />
+                                <Plus className="size-3.5" />
                               </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="size-8 rounded-lg p-0 text-destructive-subtle-foreground hover:bg-destructive-subtle hover:text-destructive-subtle-foreground"
+                                onClick={() => setAdjOpen({ product: p, type: 'out' })}
+                                disabled={p.quantity <= 0}
+                                title="خصم كمية (صادر)"
+                                aria-label="خصم كمية (صادر)"
+                              >
+                                <Minus className="size-3.5" />
+                              </Button>
+                              {/* 🛡️ 2026-09-30: تسجيل هالك — بيسجّل الخسارة في المصروفات */}
+                              {!isEmployee && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="size-8 rounded-lg p-0 text-warning-subtle-foreground hover:bg-warning-subtle hover:text-warning-subtle-foreground"
+                                  onClick={() => setAdjOpen({ product: p, type: 'damage' })}
+                                  disabled={p.quantity <= 0}
+                                  title="تسجيل هالك (بيسجّل الخسارة في المصروفات)"
+                                  aria-label="تسجيل هالك"
+                                >
+                                  <AlertTriangle className="size-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  )}
+                </TableBody>
+                {rows.length > 0 && (
+                  <tfoot className="sticky bottom-0 z-10">
+                    <tr className="border-t bg-muted text-sm font-bold">
+                      <td colSpan={2} className="px-3 py-2.5 text-muted-foreground">
+                        إجمالي القائمة الحالية · <span className="tabular-nums text-foreground">{num(filtered.length)}</span> صنف
+                      </td>
+                      <td className="px-3 py-2.5 tabular-nums">
+                        {num(summary.qty)} <span className="text-xs font-medium text-muted-foreground">قطعة</span>
+                      </td>
+                      <td colSpan={2} />
+                      <td className="px-3 py-2.5 text-center tabular-nums">{formatCurrency(summary.value)}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
                 )}
-              </TableBody>
-            </Table>
+              </table>
+            </div>
           </div>
 
           {/*

@@ -23,6 +23,7 @@ export interface InventoryProduct {
   minQuantity: number
   branchId: number | null
   category: string | null
+  imagePath?: string | null
 }
 
 export interface Movement {
