@@ -365,7 +365,7 @@ export function ProductDialog({
                 </Field>
               )}
 
-              <Field label="رصيد افتتاحي (اختياري)" htmlFor="p-qty" hint="للبضاعة الموجودة عندك فعلاً. البضاعة الجديدة من مورد تدخل بأمر شراء">
+              <Field label="الكمية" htmlFor="p-qty">
                 <InkInput
                   id="p-qty"
                   num

@@ -523,7 +523,7 @@ export function PurchaseOrderDialog({
                 {visiblePendingToday.length > 0 && (
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-700/25 bg-cyan-600/[0.07] px-4 py-3">
                     <p className="text-sm font-medium">
-                      في <b className="font-extrabold tabular-nums">{visiblePendingToday.length}</b> منتج كميته صفر ولسه ملهمش أمر شراء
+                      في <b className="font-extrabold tabular-nums">{visiblePendingToday.length}</b> منتج جديد اتضاف النهارده ولسه ملهمش أمر شراء
                     </p>
                     <Button
                       type="button"
