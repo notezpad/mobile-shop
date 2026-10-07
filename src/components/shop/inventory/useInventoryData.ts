@@ -32,6 +32,30 @@ export interface InventoryStats {
   pendingTotal: number
 }
 
+/**
+ * 🛡️ v14: أخطاء التحميل لكل مصدر على حدة — صفحات المخزون بتقرأها عشان
+ * تعرض بانر "تعذّر تحميل ..." مع زر إعادة المحاولة:
+ *   صفحة /inventory           ← loadErrors.products
+ *   صفحة /inventory/movements ← loadErrors.movements
+ *   صفحة /inventory/transfers ← loadErrors.transfers
+ *   صفحة /inventory/stocktake ← loadErrors.stocktake  (بالمفرد!)
+ *
+ * ⚠️ العقد الصارم: الكائن دايماً موجود وبكل المفاتيح (string | null) —
+ * القيمة null = مفيش مشكلة في المصدر ده، والنص = رسالة الخطأ الحقيقية.
+ * مستحيل يبقى undefined مهما حصل، لأن فكّ undefined كان هو سبب سقوط
+ * الصفحات الأربعة ("Cannot read properties of undefined (reading 'products')").
+ */
+export interface InventoryLoadErrors {
+  branches: string | null
+  products: string | null
+  movements: string | null
+  transfers: string | null
+  /** مفتاح بالمفرد — صفحة الجرد بتقرأه كده بالظبط (مطابق لمسار /api/inventory/stocktake) */
+  stocktake: string | null
+  /** مفتاح بالجمع — احتياط لأي كود بيقرأه بالشكل ده */
+  stocktakes: string | null
+}
+
 export interface InventoryData {
   branches: Branch[]
   products: InventoryProduct[]
@@ -42,6 +66,8 @@ export interface InventoryData {
   noData: boolean
   /** 🛡️ v13: دايماً null — الشاشات اللي بتعرضه متقعش (الخطأ بيروح للشبكة/الكاش) */
   error: string | null
+  /** 🛡️ v14: أخطاء لكل مصدر على حدة (null = تمام) — موجود دايماً، عمره ما undefined */
+  loadErrors: InventoryLoadErrors
   stats: InventoryStats
   reload: () => void
 }
@@ -52,13 +78,34 @@ export interface InventoryData {
  * بتكون false وبنرجّع fallback فاضي = كل حاجة صفر. دلوقتي القراءة بتمرّ
  * من طبقة api() (offlineFetch) اللي بتخزن كل جواب ناجح في IDB وبترجّع آخر
  * نسخة معروفة أوفلاين — فالصفحات الأربعة بتشتغل بآخر بيانات حقيقية.
+ *
+ * 🛡️ v14: بترجّع كمان رسالة الخطأ الحقيقية (لو حصلت) عشان loadErrors —
+ * معظم الأخطاء جايّة من طبقة offlineFetch برسائل عربية جاهزة.
  */
-async function apiSafe<T>(url: string, fallback: T): Promise<T> {
+/**
+ * 🛡️ v14: استخراج رسالة عربية صادقة من أي خطأ — الخطأ من طبقة offlineFetch
+ * جاي برسالة جاهزة أصلاً، وده fallback لأي شكل غريب (مش Error/مفيش message).
+ * مُصدَّرة للاختبار ولأي طبقة بيانات تانية تحتاج نفس السلوك.
+ */
+export function loadErrorMessage(e: unknown): string {
+  if (e instanceof Error && typeof e.message === 'string' && e.message) return e.message
+  if (e && typeof e === 'object') {
+    const m = (e as { message?: unknown }).message
+    if (typeof m === 'string' && m) return m
+  }
+  if (typeof e === 'string' && e) return e
+  return 'تعذّر تحميل البيانات — جرّب تاني'
+}
+
+async function apiSafe<T>(
+  url: string,
+  fallback: T,
+): Promise<{ data: T; error: string | null }> {
   try {
     const data = await api<T>(url)
-    return (data ?? fallback) as T
-  } catch {
-    return fallback
+    return { data: (data ?? fallback) as T, error: null }
+  } catch (e) {
+    return { data: fallback, error: loadErrorMessage(e) }
   }
 }
 
@@ -84,6 +131,15 @@ function asArray<T>(v: unknown): T[] {
   return []
 }
 
+const EMPTY_LOAD_ERRORS: InventoryLoadErrors = {
+  branches: null,
+  products: null,
+  movements: null,
+  transfers: null,
+  stocktake: null,
+  stocktakes: null,
+}
+
 export function useInventoryData(): InventoryData {
   const [branches, setBranches] = React.useState<Branch[]>([])
   const [products, setProducts] = React.useState<InventoryProduct[]>([])
@@ -91,6 +147,8 @@ export function useInventoryData(): InventoryData {
   const [transfers, setTransfers] = React.useState<Transfer[]>([])
   const [stocktakes, setStocktakes] = React.useState<Stocktake[]>([])
   const [loading, setLoading] = React.useState(true)
+  // 🛡️ v14: الكائن موجود من أول رندر — الصفحات بتفكّه وتقرأ مفاتيحه فوراً
+  const [loadErrors, setLoadErrors] = React.useState<InventoryLoadErrors>(EMPTY_LOAD_ERRORS)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -103,11 +161,20 @@ export function useInventoryData(): InventoryData {
         apiSafe<Stocktake[]>('/api/inventory/stocktake', []),
       ])
       // 🛡️ v12: تطبيع صارم — كل مصدر بيدخل الـ state كـ Array حقيقية
-      setBranches(asArray<Branch>(bs))
-      setProducts(asArray<InventoryProduct>(ps))
-      setMovements(asArray<Movement>(mv))
-      setTransfers(asArray<Transfer>(tf))
-      setStocktakes(asArray<Stocktake>(st))
+      setBranches(asArray<Branch>(bs.data))
+      setProducts(asArray<InventoryProduct>(ps.data))
+      setMovements(asArray<Movement>(mv.data))
+      setTransfers(asArray<Transfer>(tf.data))
+      setStocktakes(asArray<Stocktake>(st.data))
+      // 🛡️ v14: أخطاء كل مصدر على حدة — مصدر فاشل ما يمنعش الباقي يظهر
+      setLoadErrors({
+        branches: bs.error,
+        products: ps.error,
+        movements: mv.error,
+        transfers: tf.error,
+        stocktake: st.error,
+        stocktakes: st.error,
+      })
     } finally {
       setLoading(false)
     }
@@ -152,6 +219,9 @@ export function useInventoryData(): InventoryData {
     loading,
     noData: loading && products.length === 0,
     error: null,
+    // 🛡️ v14: كل استدعاء بيرجّع كائن جديد لكن بنفس الشكل الكامل —
+    // أي قراءة loadErrors.X في أي صفحة من الأربعة آمنة 100%
+    loadErrors,
     stats,
     reload: load,
   }
