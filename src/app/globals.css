@@ -3,24 +3,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Mobile drawer handle: emerald touch — أخضر واضح من غير ما تضغط. */
+/* Mobile drawer handle: uses the existing sidebar palette in both themes. */
 :root {
-  --sidebar-handle-surface: color-mix(in oklab, var(--primary) 13%, var(--sidebar));
-  --sidebar-handle-ink: var(--primary);
-  --sidebar-handle-border: color-mix(
-    in oklab,
-    var(--primary) 34%,
-    var(--sidebar-border)
-  );
-  --sidebar-handle-halo: color-mix(in oklab, var(--primary) 46%, transparent);
-  --sidebar-handle-active: var(--primary);
-  --sidebar-handle-active-ink: var(--primary-foreground);
+  --sidebar-handle-surface: var(--sidebar);
+  --sidebar-handle-ink: var(--sidebar-primary);
+  --sidebar-handle-border: var(--sidebar-border);
+  --sidebar-handle-active: var(--sidebar-accent);
   --sidebar-handle-shadow: var(--shadow-lg);
-}
-
-.dark {
-  --sidebar-handle-surface: color-mix(in oklab, var(--primary) 22%, var(--sidebar));
-  --sidebar-handle-halo: color-mix(in oklab, var(--primary) 42%, transparent);
 }
 
 .sidebar-close-handle {
@@ -34,17 +23,13 @@
   border-radius: 22px;
   background: var(--sidebar-handle-surface);
   color: var(--sidebar-handle-ink);
-  box-shadow: var(--sidebar-handle-shadow), 0 0 0 0 var(--sidebar-handle-halo);
-  animation: sidebar-handle-glow 3.2s var(--ease-out) infinite;
-  /* بدون تصغير عند الضغط — بيخلي الحواف والسهم فضيّين (زغللة) على الجوال. */
-  scale: none;
+  box-shadow: var(--sidebar-handle-shadow);
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   transition: background-color var(--duration-fast) var(--ease-out),
     border-color var(--duration-fast) var(--ease-out),
-    box-shadow var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .sidebar-close-handle-size {
@@ -53,15 +38,10 @@
   padding: 0;
 }
 
-/* الضغط: المقبض بيمتلّى أخضر كامل. */
 .sidebar-close-handle:hover,
 .sidebar-close-handle:active {
   background: var(--sidebar-handle-active);
-  border-color: color-mix(in oklab, var(--primary) 60%, transparent);
-  color: var(--sidebar-handle-active-ink);
-  box-shadow: var(--sidebar-handle-shadow),
-    0 0 18px 3px color-mix(in oklab, var(--primary) 48%, transparent);
-  animation: none;
+  border-color: var(--sidebar-handle-ink);
 }
 
 .sidebar-close-handle:focus-visible {
@@ -75,56 +55,12 @@
   pointer-events: none;
 }
 
-/* الخطوط الخضراء بنبض خفيف — إيقاع "اسحبني". */
 .sidebar-close-handle-grip > span {
   width: 3px;
   height: 18px;
   border-radius: 3px;
   background: currentColor;
-  opacity: 0.5;
-  animation: sidebar-handle-grip 3.2s var(--ease-out) infinite;
-}
-
-.sidebar-close-handle-grip > span + span {
-  animation-delay: 0.4s;
-}
-
-/* السهم بيهزّ نفسه ناحية الدرج — بخطوات صحيحة عشان يفضل حاد. */
-.sidebar-close-handle > svg {
-  animation: sidebar-handle-nudge 3.2s steps(1, end) infinite;
-}
-
-/* التنفس: هالة خضراء بتوسع وتضيق حوالين المقبض — بتنادي من غير ما تضغط. */
-@keyframes sidebar-handle-glow {
-  0%,
-  100% {
-    box-shadow: var(--sidebar-handle-shadow),
-      0 0 0 0 var(--sidebar-handle-halo);
-  }
-  50% {
-    box-shadow: var(--sidebar-handle-shadow),
-      0 0 20px 4px var(--sidebar-handle-halo);
-  }
-}
-
-@keyframes sidebar-handle-grip {
-  0%,
-  100% {
-    opacity: 0.45;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-@keyframes sidebar-handle-nudge {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  50% {
-    transform: translateX(2px);
-  }
+  opacity: 0.45;
 }
 
 [role="dialog"][data-state="closed"] > .sidebar-close-handle {
@@ -133,18 +69,11 @@
 }
 
 @media (min-width: 1024px) {
-  .sidebar-close-handle {
-    display: none;
-  }
+  .sidebar-close-handle { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sidebar-close-handle,
-  .sidebar-close-handle-grip > span,
-  .sidebar-close-handle > svg {
-    transition: none;
-    animation: none;
-  }
+  .sidebar-close-handle { transition: none; }
 }
 
 /* ============================================================
