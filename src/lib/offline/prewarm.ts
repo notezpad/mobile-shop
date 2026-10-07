@@ -30,6 +30,7 @@ const PRECACHE_ENDPOINTS = [
   '/api/sales?page=1&limit=50',
   '/api/expenses',
   '/api/cash',
+  '/api/finance',
   '/api/purchase-orders',
   '/api/branches',
   '/api/inventory/movements',

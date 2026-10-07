@@ -1,5 +1,5 @@
 /**
- * Service Worker 2026 — نظام المحل PWA (v7 — OFFLINE-PROOF)
+ * Service Worker 2026 — نظام المحل PWA (v12 — SELF-HEALING OFFLINE-PROOF)
  *
  * 🛡️ 2026-10-07 (v21/PWA — جذر مشكلة "لا كأني في PWA"):
  *
@@ -49,18 +49,54 @@
  *   اتصلّح هناك (applyLocalMutation بدل المسح). هنا بنبقى نسخة جديدة
  *   بس (v11) عشان activate يعيد تسخين كل حاجة (chunk-walk marker بيتمسح
  *   مع الكاش القديم) — والـ endpoints الجديدة في PRECACHE_APIS تتخزن.
+ *
+ * 🛡️ 2026-10-07 (v12 — SELF-HEALING — جذر "خطأ غير متوقع" في الأونلاين والأوفلاين بعد أي نشر):
+ *
+ *   المشكلة: بعد كل نشر جديد (build جديد) أسماء ملفات الـ chunks بتتغيّر
+ *   (hash جديد)، لكن:
+ *     1) CACHE_VERSION ثابت → مفيش activate يمسح الكاش → chunks البيلد
+ *        القديم بتفضل مخزنة وأي صفحة مش متفتحة من البيلد الجديد أوفلاين
+ *        = chunks ناقصة = dynamic import يفشل = "خطأ غير متوقع".
+ *     2) ماركر مسيرة الـ chunks كان بيتكتب حتى لو المسيرة فشلت جزئياً
+ *        (النت ققع وسط المسيرة مثلاً) → المسيرة ما بتتعادش أبداً →
+ *        صفحات ناقصة أوفلاين للأبد لحد ما SW جديد ينزل.
+ *     3) أثناء/بعد النشر مباشرة، أي HTML/RSC قديم في المتصفح بيحاول
+ *        يحمّل chunks بأسماء من البيلد القديم → 404 → نفس الخطأ حتى
+ *        الأونلاين (وده اللي كان بيحصل لصفحات المخزون).
+ *
+ *   الحلول في v12:
+ *     ✅ BUILD STAMP: مع كل دورة تسخين بنبني بصمة للبيلد الحالي من قائمة
+ *        chunks ملف /login، ولو اتغيّرت عن المخزنة = نشر جديد → مسح كامل
+ *        للكاش + إعادة تسخين ومسيرة من الصفر. (كاش العمره ما بيبقى مخلّع
+ *        من البيلد اللي شغال فعلاً على السيرفر).
+ *     ✅ المسيرة الصادقة: الماركر بيتكتب فقط لو المسيرة كملت من غير أي
+ *        ملف فاشل — أي فشل = إعادة المحاولة في دورة الـ sync الجاية
+ *        (رخيصة: skip-if-cached).
+ *     ✅ فحص البصمة نفسه متسامح: لو /login مش متاح (أوفلاين) بنسكب
+ *        الفحص ودورة جاية تعيده — عمره ما بيمسح كاش وهو مش متأكد.
  */
 
-const CACHE_VERSION = 'shop-erp-v11'
+const CACHE_VERSION = 'shop-erp-v12'
 const OFFLINE_URL = '/offline.html'
+
+/**
+ * 🛡️ v12: مفتاح صف بصمة البيلد في الكاش. لو البصمة اتغيّرت = نشر جديد
+ * = مسح كامل + إعادة تسخين. (صف نصي عادي في نفس الكاش — بيتمسح تلقائياً
+ * مع activate بتاع أي SW جديد، وبيتحدّث مع أول دورة تسخين بعد كل نشر).
+ */
+const BUILD_STAMP_KEY = '/__nezam-build-stamp'
+/** regex استخراج أسماء chunks من HTML /login — بصمة البيلد */
+const CHUNK_REF_RE = /\/_next\/static\/chunks\/[a-zA-Z0-9_\-.]+\.js/g
 
 /**
  * 🛡️ v10: marker بتاع مسيرة جراف الـ chunks — بيتخزن في الكاش بعد أول
  * مسيرة ناجحة. activate بيمسح الكاشات القديمة عند أي تحديث SW → الماركر
  * بيتمسح معاهم → المسيرة بتعيد نفسها تلقائياً بعد كل تحديث (لما الكاش
  * يكون فاضي ومحتاج تسخين كامل). من غيرها المسيرة هتتكرر مع كل دورة sync.
+ * 🛡️ v12: الماركر بقى **صادق** — بيتكتب فقط لو المسيرة خلصت من غير أي
+ * ملف فاشل، فالنت المققع وسط المسيرة مش هيبطل الصفحات أوفلاين للأبد.
  */
-const CHUNK_WALK_MARKER = '/__nezam-chunk-walk-v10'
+const CHUNK_WALK_MARKER = '/__nezam-chunk-walk-v12'
 /** سقف أمان لعدد الـ assets في المسيرة الواحدة (البيلد الحالي ~130 ملف) */
 const WALK_MAX_ASSETS = 600
 
@@ -178,9 +214,15 @@ function offlineDocumentResponse() {
 // وبنمسح جوا كل JS/CSS مراجع chunks إضافية (dynamic imports بتاعة
 // next/dynamic) — BFS بحد أقصى WALK_MAX_ASSETS ومتسامحة تماماً:
 // أي ملف فاشل بيتسكب والباقي يكمل.
+/**
+ * 🛡️ v12: بترجع { processed, failed } — الـ failed بيحدد هل المسيرة
+ * تستاهل ماركر (أمانة) ولا لأ. أي فشل شبكة وسط المسيرة = مفيش ماركر =
+ * إعادة كاملة في الدورة الجاية (skip-if-cached بياخدها رخيصة).
+ */
 async function walkChunkGraph(cache, routeUrls) {
   const visited = new Set()
   const queue = []
+  let failed = 0
 
   const enqueue = (raw) => {
     if (!raw) return
@@ -196,12 +238,12 @@ async function walkChunkGraph(cache, routeUrls) {
   for (const u of routeUrls || []) {
     try {
       const hit = await cache.match(u, { ignoreSearch: true })
-      if (!hit) continue
+      if (!hit) { failed++; continue }
       const html = await hit.text()
       for (const m of html.matchAll(ASSET_RE_HTML)) enqueue(m[0])
       for (const m of html.matchAll(FONT_RE_HTML)) enqueue(m[0])
     } catch {
-      /* skip this route */
+      failed++
     }
   }
 
@@ -214,7 +256,7 @@ async function walkChunkGraph(cache, routeUrls) {
       let res = await cache.match(path)
       if (!res) {
         const fetched = await fetch(path, { cache: 'no-store' })
-        if (!fetched || !fetched.ok) continue
+        if (!fetched || !fetched.ok) { failed++; continue }
         await cache.put(path, fetched.clone()).catch(() => {})
         res = fetched
       }
@@ -223,8 +265,78 @@ async function walkChunkGraph(cache, routeUrls) {
         for (const m of text.matchAll(ASSET_RE_CODE)) enqueue(m[0])
       }
     } catch {
-      /* skip this asset */
+      failed++
     }
+  }
+
+  return { processed, failed }
+}
+
+// ─── 🛡️ v12: بصمة البيلد (BUILD STAMP) ───────────────────────────
+// بنجيب /login (prerendered وخفيفة ومش محتاجة تسجيل دخول) ونستخرج منها
+// قائمة مسارات chunks — أي تغيير في الكود بيغيّر اسم chunk واحد على الأقل
+// في الجراف فقائمة الـ HTML بتتغيّر → بصمة مختلفة → نشر جديد.
+function djb2Hash(s) {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = (((h << 5) + h + s.charCodeAt(i)) | 0) >>> 0
+  return h.toString(36)
+}
+
+async function computeBuildStamp() {
+  try {
+    const res = await fetch('/login?__swst=' + Date.now(), {
+      cache: 'no-store',
+      redirect: 'follow',
+      credentials: 'same-origin',
+    })
+    if (!res || !res.ok) return null
+    const html = await res.text()
+    const refs = Array.from(new Set(html.match(CHUNK_REF_RE) || [])).sort()
+    if (!refs.length) return null
+    return djb2Hash(refs.join('|'))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 🛡️ v12: فحص بصمة البيلد — لو النشر اتغيّر بنمسح الكاش كله (الماركر
+ * بيتمسح معاه) فإعادة التسخين والمسيرة بتبدأ فوراً في نفس الدورة.
+ * بترجع true لو الكاش اتغيّر للتو (نشر جديد) — للّوج فقط.
+ * أي فشل (أوفلاين/رد غلط) = بنسكب الفحص بدون أي مسح — أمان أولاً.
+ */
+async function ensureFreshBuildCache(cache) {
+  try {
+    const stamp = await computeBuildStamp()
+    if (!stamp) return false // مش قادر يتأكد — مفيش مسح
+    const stored = await cache.match(BUILD_STAMP_KEY)
+    const storedStamp = stored ? (await stored.text()).trim() : null
+    if (storedStamp === stamp) return false // نفس البيلد — مفيش شغل
+    // أول مرة (مفيش بصمة قديمة)؟ خزّن البصمة بس — مش محتاجين مسح
+    if (!storedStamp) {
+      await cache.put(
+        BUILD_STAMP_KEY,
+        new Response(stamp, {
+          headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' },
+        })
+      )
+      return false
+    }
+    // 🛡️ نشر جديد مؤكد → مسح كامل عشان chunks البيلد القديم ما تفضلش
+    // مخزنة وتلخبط الأوفلاين (ودي كانت جذر "خطأ غير متوقع" بعد كل نشر)
+    const keys = await cache.keys()
+    await Promise.all(keys.map((k) => cache.delete(k)))
+    // وبعد المسح بنخزّن بصمة البيلد الجديد (الخطوة دي لازم تكون بعد
+    // المسح عشان البصمة نفسها ما تتمسحش مع الكاش القديم)
+    await cache.put(
+      BUILD_STAMP_KEY,
+      new Response(stamp, {
+        headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' },
+      })
+    )
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -494,6 +606,10 @@ self.addEventListener('message', (event) => {
         event.waitUntil(
           (async () => {
             const cache = await caches.open(CACHE_VERSION)
+            // 0) 🛡️ v12: فحص بصمة البيلد — نشر جديد؟ امسح الكاش كله وابدأ
+            //    من الصفر (بيمنع خلط chunks بيلد قديم مع HTML بيلد جديد —
+            //    جذر "خطأ غير متوقع" الأونلاين والأوفلاين بعد النشر).
+            await ensureFreshBuildCache(cache)
             // 1) أغلفة HTML — زي v7 (تخزين متسامح skip-if-cached)
             await Promise.allSettled(
               event.data.urls.map((u) =>
@@ -505,21 +621,23 @@ self.addEventListener('message', (event) => {
                 }).catch(() => {})
               )
             )
-            // 2) 🛡️ v10: مسيرة جراف الـ chunks — بتجعل كل مسار متسخّن
-            //    مكتمل أوفلاين (HTML + كل الـ JS/CSS اللي بيحتاجه، شامل
-            //    chunks الـ next/dynamic اللي مش مكتوبة في الـ HTML).
-            //    الماركر بيمنع التكرار مع كل دورة sync — وبيتمسح تلقائياً
-            //    مع كل تحديث SW (activate بيمسح الكاش) فبتعيد التسخين.
+            // 2) 🛡️ v12: مسيرة جراف الـ chunks الصادقة — الماركر بيتكتب
+            //    فقط لو المسيرة كملت بلا أي فشل. فشل واحد (نت مقعع وسط
+            //    التسخين مثلاً) = مفيش ماركر = الدورة الجاية (كل دورة sync)
+            //    تعيد المحاولة تلقائياً لحد ما تكتمل.
             try {
               const marker = await cache.match(CHUNK_WALK_MARKER)
               if (!marker) {
-                await walkChunkGraph(cache, event.data.urls)
-                await cache.put(
-                  CHUNK_WALK_MARKER,
-                  new Response('1', {
-                    headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' },
-                  })
-                )
+                const { failed } = await walkChunkGraph(cache, event.data.urls)
+                if (failed === 0) {
+                  await cache.put(
+                    CHUNK_WALK_MARKER,
+                    new Response('1', {
+                      headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' },
+                    })
+                  )
+                }
+                // failed > 0 → مفيش ماركر → الدورة الجاية تعيد تلقائياً
               }
             } catch {
               /* مسيرة فاشلة — الدورة الجاية تعيد (الماركر مش هيتكتب) */
@@ -580,6 +698,16 @@ self.addEventListener('message', (event) => {
       caches.delete(CACHE_VERSION).then(() => {
         event.source?.postMessage({ type: 'CACHE_CLEARED' })
       })
+      break
+
+    case 'FORCE_FULL_REFRESH':
+      // 🛡️ v12: أداة إسعاف — التطبيق يقدر يطلب مسح كامل + إعادة تسخين
+      // (مثلاً بعد اكتشاف chunks قديمة). الماركر والمسيرة بيتبدأوا من الأول.
+      event.waitUntil(
+        caches.delete(CACHE_VERSION).then(() => {
+          event.source?.postMessage({ type: 'CACHE_CLEARED' })
+        })
+      )
       break
 
     case 'GET_CACHE_SIZE':

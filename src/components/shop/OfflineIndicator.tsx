@@ -49,6 +49,49 @@ export function OfflineIndicator() {
     }
   }, [])
 
+  // 🛡️ v12 ROOT FIX ("خطأ غير متوقع" بعد أي نشر): شفاء ذاتي من أخطاء
+  // تحميل الـ chunks. بعد كل نشر جديد أسماء ملفات الـ JS بتتغيّر — فأي
+  // HTML/RSC قديم في المتصفح (من جلسة قبل النشر) بيحاول يحمّل chunk
+  // باسم قديم → 404 → dynamic import يفشل → الصفحة تموت على error
+  // boundary. بدل الشاشة الميتة: بنكتشف الخطأ ده وبنعمل reload واحد
+  // (بحد أقصى مرة كل دقيقة عشان ما ندخلشش حلقة) — الـ reload بيجيب
+  // HTML جديد بأسماء chunks جديدة وكل حاجة ترجع تشتغل من غير تدخل.
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    const CHUNK_ERR_RE =
+      /chunkloaderror|loading chunk|loading css chunk|dynamically imported module|failed to fetch dynamically|error loading dynamically|importing a module script|chunk.*failed|failed to load chunk/i
+    let armed = true
+    const heal = () => {
+      if (!armed) return
+      // أوفلاين؟ المشكلة مش النشر — السيشن بتاعة الأوفلاين بتتكفل بحالتها
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return
+      try {
+        const KEY = 'nezam-chunk-heal-at'
+        const last = Number(sessionStorage.getItem(KEY) || 0)
+        if (Date.now() - last < 60_000) return // حماية من حلقة reload
+        sessionStorage.setItem(KEY, String(Date.now()))
+      } catch {
+        /* sessionStorage مرفوض — نكمل بالريلود على أي حال */
+      }
+      armed = false
+      window.location.reload()
+    }
+    const onError = (e: ErrorEvent) => {
+      if (e?.message && CHUNK_ERR_RE.test(e.message)) heal()
+    }
+    const onRejection = (e: PromiseRejectionEvent) => {
+      const msg = String((e?.reason as any)?.message || e?.reason || '')
+      if (msg && CHUNK_ERR_RE.test(msg)) heal()
+    }
+    window.addEventListener('error', onError)
+    window.addEventListener('unhandledrejection', onRejection)
+    return () => {
+      armed = false
+      window.removeEventListener('error', onError)
+      window.removeEventListener('unhandledrejection', onRejection)
+    }
+  }, [])
+
   // Don't show anything if everything is fine
   if (sync.online && !sync.syncing && sync.pending === 0 && !syncResult) {
     return null

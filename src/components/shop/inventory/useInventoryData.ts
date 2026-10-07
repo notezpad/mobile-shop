@@ -60,6 +60,22 @@ async function apiSafe<T>(url: string, fallback: T): Promise<T> {
   }
 }
 
+/**
+ * 🛡️ v12 (ROOT FIX — "خطأ غير متوقع" في صفحات المخزون): تطبيع صارم
+ * لأشكال الردود — أي رد مش قائمة حقيقية بنفكّ ظرفه ({data:[...]}) أو
+ * بنرجّع [] — فمستحيل كومبوننت يستقبل غير مصفوفة مهما كان شكل الرد من
+ * السيرفر أو من الكاش المحلي. (ده بيقطع خالص صنف الأعطال اللي بيحصل
+ * لما الكاش/السيرفر يرجّعوا شكل غير متوقع).
+ */
+function asArray<T>(v: unknown): T[] {
+  if (Array.isArray(v)) return v as T[]
+  if (v && typeof v === 'object') {
+    const d = (v as { data?: unknown }).data
+    if (Array.isArray(d)) return d as T[]
+  }
+  return []
+}
+
 export function useInventoryData(): InventoryData {
   const [branches, setBranches] = React.useState<Branch[]>([])
   const [products, setProducts] = React.useState<InventoryProduct[]>([])
@@ -78,12 +94,12 @@ export function useInventoryData(): InventoryData {
         apiSafe<Transfer[]>('/api/inventory/transfers', []),
         apiSafe<Stocktake[]>('/api/inventory/stocktake', []),
       ])
-      const productsArr = Array.isArray(ps) ? ps : (ps as { data?: InventoryProduct[] })?.data ?? []
-      setBranches(bs)
-      setProducts(productsArr)
-      setMovements(mv)
-      setTransfers(tf)
-      setStocktakes(st)
+      // 🛡️ v12: تطبيع صارم — كل مصدر بيدخل الـ state كـ Array حقيقية
+      setBranches(asArray<Branch>(bs))
+      setProducts(asArray<InventoryProduct>(ps))
+      setMovements(asArray<Movement>(mv))
+      setTransfers(asArray<Transfer>(tf))
+      setStocktakes(asArray<Stocktake>(st))
     } finally {
       setLoading(false)
     }
