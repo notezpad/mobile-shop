@@ -23,9 +23,17 @@
  *   ✅ تخزين ردود التنقل السليمة فقط (ok) تحت مفتاح GET عادي
  *   ✅ كل حمايات v4-v6 القديمة: استبعاد RSC، منع تخزين /api/auth/*،
  *      cache-first للملفات الـ immutable، network-first للـ API
+ *
+ * 🛡️ 2026-10-07 (v9 — تسخين طبقة الـ API للـ fetches الخام):
+ *   صفحات المخزون (وغيرها) بتقرأ بياناتها بـ fetch خام مباشر — مش عبر
+ *   طبقة IDB بتاعة التطبيق — فأوفلاين كانت بتاخد 503 ("رمز 503").
+ *   الحل: رسالة PRECACHE_APIS بتخزّن ردود الـ API في كاش الـ SW نفسه
+ *   (مطابقة URL دقيقة) — فأي fetch خام يلاقي جوابه أوفلاين.
+ *   + PURGE_API_CACHE: مسح ردود الـ API من كاش الـ SW عند خروج/انتهاء
+ *   السيشن (خصوصية الجهاز المشترك) — بيتنادى من clearAuthSnapshot.
  */
 
-const CACHE_VERSION = 'shop-erp-v8'
+const CACHE_VERSION = 'shop-erp-v9'
 const OFFLINE_URL = '/offline.html'
 
 // ─── Precache list ──────────────────────────────────────────
@@ -379,6 +387,53 @@ self.addEventListener('message', (event) => {
           )
         )
       }
+      break
+
+    case 'PRECACHE_APIS':
+      // 🛡️ v9: تسخين ردود الـ API في كاش الـ SW — الطبقة اللي بتقرأ منها
+      // fetches الخام أوفلاين (صفحات المخزون والحركات والجرد). هنا المطابقة
+      // بالـ URL **الكامل** (الـ query مهم في الـ APIs — فلتر مختلف = داتا
+      // مختلفة) ومتسامح URL-بـ-URL: فشل endpoint واحد عمره ما يبطّل الباقي.
+      if (Array.isArray(event.data.urls)) {
+        event.waitUntil(
+          caches.open(CACHE_VERSION).then((cache) =>
+            Promise.allSettled(
+              event.data.urls.map((u) =>
+                cache.match(u).then((hit) => {
+                  if (hit) return
+                  return cache
+                    .add(new Request(u, { redirect: 'follow', credentials: 'same-origin' }))
+                    .catch(() => {})
+                }).catch(() => {})
+              )
+            )
+          )
+        )
+      }
+      break
+
+    case 'PURGE_API_CACHE':
+      // 🛡️ v9: مسح ردود الـ API المخزنة من كاش الـ SW (بيتنادى عند خروج
+      // / انتهاء سيشن عبر clearAuthSnapshot) — عشان جهاز مشترك ما يقدرش
+      // يعرض بيانات تينانت قديم أوفلاين. بنمسح /api/* فقط — الصفحات
+      // والأصول الثابتة تفضل متخزنة (مش شخصية).
+      event.waitUntil(
+        caches.open(CACHE_VERSION)
+          .then((cache) =>
+            cache.keys().then((keys) =>
+              Promise.all(
+                keys
+                  .filter((k) => {
+                    try { return new URL(k.url).pathname.startsWith('/api/') } catch { return false }
+                  })
+                  .map((k) => cache.delete(k))
+              )
+            )
+          )
+          .then(() => {
+            event.source?.postMessage({ type: 'API_CACHE_PURGED' })
+          })
+      )
       break
 
     case 'CLEAR_CACHE':

@@ -279,6 +279,22 @@ export function saveAuthSnapshot(user: AuthUser): Promise<void> {
 
 /** مسح نسخة السيشن من الجهاز — عند خروج أو انتهاء سيشن حقيقي */
 export function clearAuthSnapshot(): Promise<void> {
+  // 🛡️ PWA OFFLINE FIX v4 (2026-10-07): خصوصية الجهاز المشترك — بنمسح
+  // برضه ردود الـ API المخزنة في كاش الـ Service Worker (صفحات المخزون
+  // بتقرأ منها أوفلاين). من غير كده مستخدم تاني على نفس الجهاز ممكن
+  // يفتح الصفحات أوفلاين ويشوف بيانات التينانت القديم.
+  // fire-and-forget: مينوقفش خروج لو الـ SW مش متاح.
+  try {
+    if (
+      typeof navigator !== 'undefined' &&
+      'serviceWorker' in navigator &&
+      navigator.serviceWorker.controller
+    ) {
+      navigator.serviceWorker.controller.postMessage({ type: 'PURGE_API_CACHE' })
+    }
+  } catch {
+    /* ignore */
+  }
   return purgeCachedSession()
 }
 

@@ -10,7 +10,7 @@
 
 import { idb } from './idb'
 
-/** The endpoints we pre-cache for offline page loads. */
+/** The endpoints we pre-cache for offline page loads (IDB layer — طبقة api()). */
 const PRECACHE_ENDPOINTS = [
   '/api/dashboard',
   '/api/products?status=all',
@@ -24,6 +24,21 @@ const PRECACHE_ENDPOINTS = [
   // — من غيرها أي فتح أوفلاين بيرجع getMe() = null = طرد للصفحة الرئيسية.
   // (write-through في getMe() بتغطي معظم الحالات؛ ده ضمان إضافي)
   '/api/auth/me',
+]
+
+/**
+ * 🛡️ PWA OFFLINE FIX v4 (2026-10-07): endpoints المخزون — بتتلحق بـ
+ * كاش الـ SW نفسه (مش IDB فقط) لأن صفحات المخزون بتقرأ بـ fetch خام
+ * مباشر، والـ fetch الخام أوفلاين بياخد جوابه من كاش الـ SW.
+ * من غير كده صفحة المخزون كانت بتفتح أوفلاين بصفر + "الخطأ: رمز 503".
+ */
+const SW_API_ENDPOINTS = [
+  ...PRECACHE_ENDPOINTS,
+  '/api/branches',
+  '/api/products?limit=1000&status=all',
+  '/api/inventory/movements',
+  '/api/inventory/transfers',
+  '/api/inventory/stocktake',
 ]
 
 /**
@@ -41,16 +56,61 @@ const APP_SHELL_ROUTES = [
   '/sales',
   '/customers',
   '/inventory',
-  // 🛡️ PWA OFFLINE FIX (2026-10-07): باقي شاشات البيع الأساسية — عشان
-  // الضغط على أي لينك من القايمة الجانبية أوفلاين يفتح الصفحة من الكاش
-  // بدل ERR_FAILED (الـ SW بيرد بالصفحة المخزنة أو صفحة الأوفلاين).
+  // 🛡️ PWA OFFLINE FIX (2026-10-07): كل شاشات النظام — الضغط على أي لينك
+  // من القايمة الجانبية أوفلاين لازم يفتح الصفحة من الكاش بدل ERR_FAILED
+  // أو صفحة "أنت غير متصل". الصفحات كلها prerendered على الحافة فالتسخين رخيص.
   '/suppliers',
   '/purchases',
   '/expenses',
   '/cash',
   '/reports',
   '/finance',
+  '/inventory/movements',
+  '/inventory/transfers',
+  '/inventory/stocktake',
+  '/settings',
+  '/branches',
+  '/users',
+  '/maintenance',
+  '/guide',
 ]
+
+/**
+ * 🛡️ PWA OFFLINE FIX v4: بعد أي تحديث للـ Service Worker الكاش بيتعمله
+ * wipe (activate بيمسح الكاشات القديمة) — فالثروتل 20-دقيقة كان هيمنع
+ * إعادة التسخين والجهاز يفضل أوفلاين فاضي! بنلغي الثروتل لحظة ما SW
+ * جديد ياخد الكونترول (controllerchange) فأول دورة sync تالية تعيد
+ * تسخين كل حاجة تلقائياً.
+ */
+let swResetInstalled = false
+export function installPrewarmResetOnSwUpdate(): void {
+  if (swResetInstalled || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+  swResetInstalled = true
+  try {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      void idb.setMeta('lastPrewarmAt', 0).catch(() => {})
+    })
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * 🛡️ PWA OFFLINE FIX v4: إرسال ردود الـ API لكاش الـ SW (الطبقة اللي
+ * بتقرأ منها fetches الخام أوفلاين) — رسالة PRECACHE_APIS، متسامحة
+ * URL-بـ-URL جوا الـ SW نفسه.
+ */
+async function warmSwApiCache(): Promise<void> {
+  try {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    const reg = await navigator.serviceWorker.ready
+    const sw = reg?.active
+    if (!sw) return
+    sw.postMessage({ type: 'PRECACHE_APIS', urls: SW_API_ENDPOINTS })
+  } catch {
+    /* ignore */
+  }
+}
 
 export async function prewarmAppShell(): Promise<void> {
   try {
@@ -99,6 +159,9 @@ export async function prewarmEndpoints(): Promise<number> {
       /* skip failed endpoints */
     }
   }
+  // 🛡️ v4: وبالتوازي — نسخّن كاش الـ SW برضه (لصفحات الـ fetch الخام):
+  // بنسيبه في الخلفية عشان منعطلش رجوع العدد للمُنادي.
+  void warmSwApiCache()
   return cached
 }
 
@@ -111,7 +174,18 @@ export async function prewarmAll(): Promise<{ products: number; endpoints: numbe
     return { products: 0, endpoints: 0 }
   }
 
-  // Check if we already pre-warmed recently (within 5 minutes)
+  // 🛡️ v4: لو SW جديد استلم الكونترول (تحديث) بنلغي الثروتل — الكاش
+  // الجديد فاضي ومحتاج تسخين كامل فوراً. (idempotent — بنسجعه مرة واحدة)
+  installPrewarmResetOnSwUpdate()
+
+  // 🛡️ v4: أغلفة الصفحات بتتسخّن مع كل دورة sync — الـ SW بيسكب المتخزن
+  // أصلاً (cache.match قبل الـ fetch) فتكلفة الدورة شبه صفر، وميزة الأمان
+  // كبيرة: أي صفحة جديدة اتقفلت من كاش تحديث SW بترجع تلقائياً.
+  void prewarmAppShell()
+  void warmSwApiCache()
+
+  // Check if we already pre-warmed recently (within 20 minutes) —
+  // المنتجات والـ endpoints دي الأتقل (سحب كامل) فبنعملها بالثروتل فقط.
   const lastPrewarm = await idb.getMeta<number>('lastPrewarmAt')
   if (lastPrewarm && Date.now() - lastPrewarm < 20 * 60 * 1000) {
     // Already warmed recently — skip
@@ -124,9 +198,6 @@ export async function prewarmAll(): Promise<{ products: number; endpoints: numbe
   ])
 
   await idb.setMeta('lastPrewarmAt', Date.now())
-
-  // 🛡️ PWA: سخّن أغلفة HTML (مستقلة عن النتيجة — رسالة بسيطة للـ SW)
-  void prewarmAppShell()
 
   return { products, endpoints }
 }
