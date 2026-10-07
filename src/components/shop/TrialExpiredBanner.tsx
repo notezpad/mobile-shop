@@ -2,55 +2,42 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  AlertTriangle,
-  Clock,
-  Sparkles,
-  X,
-  CreditCard,
-} from 'lucide-react'
+import { motion } from 'framer-motion'
+import { AlertTriangle, Clock, Sparkles, X, CreditCard, ChevronLeft } from 'lucide-react'
 import { useShopStore } from '@/lib/store'
+import { cn } from '@/lib/utils'
 
 /**
- * TrialExpiredBanner — sticky top banner shown when the tenant's
- * subscription has expired.
+ * TrialExpiredBanner — بطاقة تنبيه الاشتراك.
  *
- * Behavior (2026-09-13):
- *   - When `subscription.expired` is true, we render a prominent red banner
- *     at the very top of every shop page encouraging the user to subscribe.
- *   - The user is NOT locked out — they can still navigate, view data, and
- *     use the system. The banner just reminds them to subscribe.
- *   - When `subscription.expiringSoon` is true (≤7 days left), we render a
- *     softer amber banner as a heads-up.
- *   - The banner is dismissible per-session via localStorage, but reappears
- *     on the next session.
- *
- * Sibling of `OfflineIndicator` in (shop)/layout.tsx.
+ * 🎨 2026-10-07: إعادة تصميم كاملة.
+ *   - قبل كده كان شريط أحمر/كهرماني مصمت فوق الشِل كله (فوق السايدبار والهيدر)،
+ *     وبينزّل التطبيق كله لتحت فيتحرّك التولبار والسايدبار بشكل غريب.
+ *   - دلوقتي بطاقة هادية (خلفية شفافة ملوّنة + شريط جانبي) داخل منطقة المحتوى
+ *     نفسها، فوق محتوى الصفحة مباشرة: الهيدر والسايدبار ثابتين مكانهم ومفيش
+ *     أي إزاحة للشِل. بتتحرّك مع سكرول المحتوى بدل ما تاخد مساحة دايمة.
+ *   - المستخدم مش مقفول برا النظام: التنبيه تذكير بس.
+ *   - التنبيه الكهرماني (قرب الانتهاء) بيتقفل؛ الأحمر (منتهي) لأ.
  */
 export function TrialExpiredBanner() {
   const subscription = useShopStore((s) => s.subscription)
   const [dismissed, setDismissed] = React.useState(false)
 
-  // Reset dismissed when subscription state changes from expired→active
+  // لو الاشتراك رجع سليم نصفّر حالة الإغلاق
   React.useEffect(() => {
     if (!subscription.expired && !subscription.expiringSoon) {
       setDismissed(false)
     }
   }, [subscription.expired, subscription.expiringSoon])
 
-  // Don't render anything if subscription is healthy or banner was dismissed
   if (dismissed) return null
   if (!subscription.expired && !subscription.expiringSoon) return null
 
   const isExpired = subscription.expired
   const daysLeft = subscription.daysLeft ?? 0
 
-  // 🛡️ 2026-10-07 (v15): زر «اشترك الآن» بيودّي على طول لصفحة الدفع (checkout)
-  // لباقة المستخدم نفسها — بدل ما يروح صفحة الأسعار يلاقي زر «ابدأ تجربة 14 يوم»
-  // يضغط عليه فيطلعله إشعار أحمر إن باقته انتهت (طريق مسدود).
-  // لو ماعرفناش باقته (planCode ناقص/وهمي) بنرجّعه لصفحة الأسعار كخطة بديلة.
-  // (حساب عادي مش hook — عشان القواعد: فوق فيه early returns)
+  // 🛡️ v15: «اشترك الآن» بيودّي مباشرة لصفحة الدفع لباقة المستخدم نفسها
+  // (لو الباقة مجهولة نرجّعه لصفحة الأسعار).
   const subCode = subscription.planCode
   const checkoutHref =
     !subCode || subCode === '-' || subCode === 'platform'
@@ -59,89 +46,86 @@ export function TrialExpiredBanner() {
           subscription.period === 'yearly' ? 'yearly' : 'monthly'
         }`
 
+  const tone = isExpired
+    ? {
+        box: 'border-rose-500/25 bg-rose-500/[0.06]',
+        stripe: 'bg-rose-500',
+        glow: 'bg-rose-500/15',
+        icon: 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
+        chip: 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
+        btn: 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/25',
+      }
+    : {
+        box: 'border-amber-500/30 bg-amber-500/[0.07]',
+        stripe: 'bg-amber-500',
+        glow: 'bg-amber-500/15',
+        icon: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+        chip: 'bg-amber-500/10 text-amber-800 dark:text-amber-300',
+        btn: 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/25',
+      }
+
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}
-        className={
-          'sticky top-0 z-40 w-full border-b backdrop-blur-sm ' +
-          (isExpired
-            ? 'bg-gradient-to-l from-red-600/95 via-red-700/95 to-red-800/95 border-red-900/50'
-            : 'bg-gradient-to-l from-amber-500/95 via-amber-600/95 to-amber-700/95 border-amber-900/50')
-        }
-      >
-        <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-3 py-2 sm:px-6">
-          {/* Icon */}
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/15">
-            {isExpired ? (
-              <AlertTriangle className="size-5 text-white" />
-            ) : (
-              <Clock className="size-5 text-white" />
-            )}
-          </div>
+    <motion.div
+      role="status"
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className={cn('relative mb-4 overflow-hidden rounded-2xl border sm:mb-5', tone.box)}
+    >
+      {/* شريط جانبي + وهج ناعم (زخرفة فقط) */}
+      <span aria-hidden className={cn('absolute inset-y-0 start-0 w-1', tone.stripe)} />
+      <span aria-hidden className={cn('pointer-events-none absolute -top-10 -end-10 size-32 rounded-full blur-2xl', tone.glow)} />
 
-          {/* Text — collapses on mobile */}
-          <div className="min-w-0 flex-1">
-            {isExpired ? (
-              <>
-                <p className="text-sm font-bold text-white leading-tight sm:text-base">
-                  انتهت فترة التجربة المجانية
-                </p>
-                <p className="text-[11px] text-white/85 leading-tight sm:text-xs">
-                  النظام لا يزال متاحاً — اشترك الآن للمتابعة بدون انقطاع
-                  {subscription.planName && (
-                    <span className="hidden sm:inline"> · باقتك السابقة: {subscription.planName}</span>
-                  )}
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-bold text-white leading-tight sm:text-base">
-                  باقتك تنتهي خلال {daysLeft} يوم
-                </p>
-                <p className="text-[11px] text-white/85 leading-tight sm:text-xs">
-                  جدّد اشتراكك الآن لتجنب انقطاع الخدمة
-                </p>
-              </>
-            )}
-          </div>
+      <div className="relative flex flex-wrap items-center gap-x-4 gap-y-3 py-3 pe-3 ps-4 sm:flex-nowrap sm:py-3.5 sm:pe-4 sm:ps-5">
+        {/* الأيقونة */}
+        <span className={cn('flex size-11 shrink-0 items-center justify-center rounded-xl', tone.icon)}>
+          {isExpired ? <AlertTriangle className="size-5" /> : <Clock className="size-5" />}
+        </span>
 
-          {/* CTA — primary 🛡️ v15: عند الانتهاء بيروح مباشرة لصفحة دفع باقته،
-              وعند قرب الانتهاء (جدّد) لصفحة الأسعار عشان يقدر يبدّل لو حابب */}
+        {/* النص */}
+        <div className="min-w-0 flex-1 basis-[13rem]">
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] font-extrabold leading-snug text-foreground">
+            {isExpired ? 'انتهت فترة التجربة المجانية' : `باقتك تنتهي خلال ${daysLeft} يوم`}
+            {isExpired && subscription.planName && (
+              <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-bold', tone.chip)}>
+                {subscription.planName}
+              </span>
+            )}
+          </p>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+            {isExpired
+              ? 'النظام لسه شغال معاك — اشترك دلوقتي عشان تكمل من غير انقطاع.'
+              : 'جدّد اشتراكك دلوقتي عشان تتجنب انقطاع الخدمة.'}
+          </p>
+        </div>
+
+        {/* الإجراءات */}
+        <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
           <Link
             href={isExpired ? checkoutHref : '/pricing'}
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-white px-3 text-sm font-bold text-red-700 shadow-sm transition-colors hover:bg-red-50 sm:px-4"
-          >
-            {isExpired ? (
-              <>
-                <CreditCard className="size-4" />
-                <span className="hidden sm:inline">اشترك الآن</span>
-                <span className="sm:hidden">اشترك</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="size-4" />
-                <span className="hidden sm:inline">جدّد الآن</span>
-                <span className="sm:hidden">جدّد</span>
-              </>
+            className={cn(
+              'inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold text-white shadow-md transition-all active:scale-[0.97] sm:flex-none',
+              tone.btn,
             )}
+          >
+            {isExpired ? <CreditCard className="size-4" /> : <Sparkles className="size-4" />}
+            {isExpired ? 'اشترك الآن' : 'جدّد الآن'}
+            <ChevronLeft className="size-4 opacity-70" />
           </Link>
 
-          {/* Dismiss — only for expiring-soon, not for expired */}
+          {/* الإغلاق — للتنبيه المبكر فقط */}
           {!isExpired && (
             <button
+              type="button"
               onClick={() => setDismissed(true)}
               aria-label="إغلاق التنبيه"
-              className="flex size-7 shrink-0 items-center justify-center rounded-md text-white/80 transition-colors hover:bg-white/20 hover:text-white"
+              className="flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
             >
               <X className="size-4" />
             </button>
           )}
         </div>
-      </motion.div>
-    </AnimatePresence>
+      </div>
+    </motion.div>
   )
 }

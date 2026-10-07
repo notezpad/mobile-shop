@@ -1348,6 +1348,11 @@ export function POSView() {
 
   // طباعة الإيصال. لو الطابعة الحرارية متظبطة بنطبع عليها بس — القديم كان بيفتح نافذتين طباعة.
   const printReceipt = (sale: any) => {
+      // 🛡️ PWA OFFLINE ROOT FIX (2026-10-07): الطباعة محتاجة فاتورة حقيقية
+      // فيها items — لو الرد مجرد تأكيد حفظ محلي (أي شكل غير متوقع) نتجاهل
+      // الطباعة بصمت بدل ما نكسر الشاشة بـ
+      // "Cannot read properties of undefined (reading 'map')".
+      if (!sale || !Array.isArray(sale.items)) return
       const _ts = getStoredPrinterSettings()
       if (_ts.width) {
         printThermalReceipt({
@@ -1458,9 +1463,41 @@ export function POSView() {
           ...(dueDate ? { dueDate: new Date(`${dueDate}T12:00:00`).toISOString() } : {}),
         },
       })
-      toast.success(`تمت عملية البيع بنجاح - ${sale.invoiceNo}`)
-      printReceipt(sale)
-      setLastSale(sale)
+      // 🛡️ PWA OFFLINE ROOT FIX (2026-10-07): أوفلاين الـ api بيرجّع رد
+      // تأكيد حفظ محلي ({ok, offline:true, message}) من غير invoiceNo ولا
+      // items — والكود القديم كان بيكمل على طول printReceipt(sale) وبينفجر
+      // بـ "Cannot read properties of undefined (reading 'map')" رغم إن
+      // الفاتورة نفسها اتحفظت في outbox وستمم المزامنة! (ده بالظبط الخطأ
+      // الأحمر اللي كان بيطلع للكاشير وهو شغال أوفلاين)
+      //
+      // دلوقتي: لو الرد تأكيد حفظ محلي — نبني إيصال محلي من السلة نفسها
+      // (الأسماء والأسعار موجودة عندنا) ونطبعه بـ رقم مؤقت "محلي-xxxxx"،
+      // والفاتورة الأصلية بتتسجل برقمها الرسمي لما المزامنة تحصل.
+      const offlineQueued = !!sale?.offline
+      let receiptSale = sale
+      if (offlineQueued) {
+        receiptSale = {
+          id: 0,
+          invoiceNo: `محلي-${String(Date.now()).slice(-6)}`,
+          total,
+          paid,
+          status: 'PENDING_SYNC',
+          createdAt: new Date().toISOString(),
+          items: cart.map((i) => ({
+            name: i.product.name,
+            quantity: i.quantity,
+            price: i.price,
+          })),
+          customer: resolvedCustomer
+            ? { name: resolvedCustomer.name, phone: (resolvedCustomer as any).phone }
+            : null,
+        }
+        toast.success('تم حفظ الفاتورة على الجهاز — هتتزامن تلقائياً عند رجوع النت')
+      } else {
+        toast.success(`تمت عملية البيع بنجاح - ${sale?.invoiceNo}`)
+      }
+      printReceipt(receiptSale)
+      setLastSale(receiptSale)
 
       setCart([])
       setCustomerName('')

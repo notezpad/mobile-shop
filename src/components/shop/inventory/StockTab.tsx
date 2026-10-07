@@ -43,6 +43,7 @@ import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Barcode } from '../Barcode'
+import { NoBarcode } from '../NoBarcode'
 import { ProductAvatar } from '../ProductAvatar'
 import { StockHero, TONE, SecLabel, Pill, STOCK_FIELD, STOCK_RING, type StockTone } from './stock-dialog-ui'
 import { num } from './shared'
@@ -311,8 +312,8 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
       </Card>
 
       {/* Table */}
-      <Card>
-        <CardHeader className="border-b pb-3">
+      <Card className="gap-0 overflow-hidden py-0">
+        <CardHeader className="border-b py-3.5">
           <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
             <span className="flex items-center gap-2">
               <Package className="size-4 text-primary" />
@@ -344,7 +345,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
               dir=rtl (نفس حل مكوّن Table) عشان السكرول الأفقي يفضل متوقّع. */}
           <div className="hidden lg:block">
             <div dir="ltr" className="max-h-[68vh] overflow-auto">
-              <table dir="rtl" className="w-full min-w-[960px] table-fixed caption-bottom text-sm">
+              <table dir="rtl" className="w-full min-w-[992px] table-fixed caption-bottom text-sm">
                 <TableHeader className="bg-transparent">
                   <TableRow className="hover:bg-transparent">
                     <SortHead label="الصنف" k="name" sort={sort} onSort={onSort} />
@@ -353,7 +354,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                     <SortHead label="التكلفة" k="cost" sort={sort} onSort={onSort} className="w-24 text-center" />
                     <SortHead label="سعر البيع" k="price" sort={sort} onSort={onSort} className="w-28 text-center" />
                     <SortHead label="قيمة المخزون" k="value" sort={sort} onSort={onSort} className="w-28 text-center" />
-                    <TableHead className={cn(HEAD_CELL, 'w-28 text-center')}>حركة</TableHead>
+                    <TableHead className={cn(HEAD_CELL, 'w-36 pe-5 text-center')}>حركة</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -399,7 +400,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
 
                           {/* الباركود */}
                           <TableCell>
-                            <Barcode value={p.barcode} height={22} fontSize={9} fitContainer />
+                            {p.barcode ? <Barcode value={p.barcode} height={22} fontSize={9} fitContainer /> : <NoBarcode />}
                           </TableCell>
 
                           {/* المخزون: كمية + عدّاد + حالة */}
@@ -444,7 +445,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                           </TableCell>
 
                           {/* إجراءات الحركة */}
-                          <TableCell>
+                          <TableCell className="pe-5">
                             <div className="flex justify-center gap-1">
                               <Button
                                 size="sm"

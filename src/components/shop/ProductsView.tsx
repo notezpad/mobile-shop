@@ -61,6 +61,7 @@ import { ProductVariantsDialog } from './ProductVariantsDialog'
 import { CollectionDiscountDialog } from './CollectionDiscountDialog'
 import { Package, Percent } from 'lucide-react'
 import { Barcode } from './Barcode'
+import { NoBarcode } from './NoBarcode'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { useDataRefresh } from '@/lib/offline/data-events'
@@ -920,7 +921,7 @@ export function ProductsView() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead className="w-10 px-3 text-center">
+                    <TableHead className="w-14 px-3 text-center [&:has([role=checkbox])]:pr-5">
                       <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} />
                     </TableHead>
                     <TableHead>المنتج</TableHead>
@@ -944,7 +945,7 @@ export function ProductsView() {
                         data-state={selectedIds.has(p.id) ? 'selected' : undefined}
                         className={cn(!p.active && 'opacity-50', 'hover:bg-muted/40')}
                       >
-                        <TableCell className="px-3 text-center">
+                        <TableCell className="px-3 text-center [&:has([role=checkbox])]:pr-5">
                           <Checkbox checked={selectedIds.has(p.id)} onCheckedChange={() => toggleSelect(p.id)} />
                         </TableCell>
                         <TableCell>
@@ -968,7 +969,7 @@ export function ProductsView() {
                           </button>
                         </TableCell>
                         <TableCell>
-                          <Barcode value={p.barcode} height={20} fontSize={8} fitContainer />
+                          {p.barcode ? <Barcode value={p.barcode} height={20} fontSize={8} fitContainer /> : <NoBarcode compact />}
                         </TableCell>
                         <TableCell className="text-center tabular-nums text-muted-foreground">
                           {formatCurrency(p.cost)}

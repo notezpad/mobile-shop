@@ -41,6 +41,15 @@ const APP_SHELL_ROUTES = [
   '/sales',
   '/customers',
   '/inventory',
+  // 🛡️ PWA OFFLINE FIX (2026-10-07): باقي شاشات البيع الأساسية — عشان
+  // الضغط على أي لينك من القايمة الجانبية أوفلاين يفتح الصفحة من الكاش
+  // بدل ERR_FAILED (الـ SW بيرد بالصفحة المخزنة أو صفحة الأوفلاين).
+  '/suppliers',
+  '/purchases',
+  '/expenses',
+  '/cash',
+  '/reports',
+  '/finance',
 ]
 
 export async function prewarmAppShell(): Promise<void> {

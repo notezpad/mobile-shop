@@ -75,6 +75,15 @@ const TYPE_META: Record<string, { icon: LucideIcon; color: string }> = {
 }
 const metaOf = (t: string) => TYPE_META[t] ?? { icon: ArrowUpDown, color: '#64748b' }
 
+// أعمدة جدول الدفتر (ديسكتوب): نوع | صنف | تفاصيل | منفّذ/فرع | وقت | كمية
+// نفس القالب للهيدر والصفوف عشان كل عمود يقع تحت عنوانه بالظبط.
+// inline style بدل class عشان القالب يتطبق مضمون (الحاوية نفسها hidden تحت lg)
+const LEDGER_STYLE: React.CSSProperties = {
+  gridTemplateColumns: '9.5rem minmax(0,1.25fr) minmax(0,1.35fr) 11rem 5.5rem 7.5rem',
+}
+// خلية بخط فاصل رأسي واضح بين الأعمدة (logical → صح في RTL)
+const LEDGER_CELL = 'flex min-w-0 flex-col justify-center border-e border-border/60 px-4 py-3 last:border-e-0'
+
 type Period = 'all' | 'today' | 'week' | 'month'
 
 function periodRange(p: Period): { from: string; to: string } {
@@ -430,7 +439,9 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
           />
         )
       ) : (
-        <div className="space-y-7">
+        <>
+        {/* جوال/تابلت: الخط الزمني الأصلي */}
+        <div className="space-y-7 lg:hidden">
           {groups.map((g) => {
             const dayIn = g.items.reduce((s, m) => s + (m.quantity > 0 ? m.quantity : 0), 0)
             const dayOut = g.items.reduce((s, m) => s + (m.quantity < 0 ? Math.abs(m.quantity) : 0), 0)
@@ -504,6 +515,122 @@ export function MovementsTab({ movements, branches, isEmployee, userBranchId: _u
             )
           })}
         </div>
+
+        {/* ═════════ ديسكتوب: جدول دفتر منظّم بخطوط واضحة ═════════ */}
+        <div className="hidden overflow-clip rounded-2xl border bg-card lg:block">
+          {/* رأس الأعمدة */}
+          <div style={LEDGER_STYLE} className="grid border-b bg-muted/70 text-xs font-bold text-muted-foreground">
+            {['النوع', 'الصنف', 'التفاصيل', 'المنفّذ / الفرع', 'الوقت'].map((h) => (
+              <div key={h} className="border-e border-border/60 px-4 py-2.5">{h}</div>
+            ))}
+            <div className="px-4 py-2.5 text-center">الكمية</div>
+          </div>
+
+          {groups.map((g) => {
+            const dayIn = g.items.reduce((sum, m) => sum + (m.quantity > 0 ? m.quantity : 0), 0)
+            const dayOut = g.items.reduce((sum, m) => sum + (m.quantity < 0 ? Math.abs(m.quantity) : 0), 0)
+            return (
+              <section key={g.key} className="border-b last:border-b-0">
+                {/* شريط اليوم */}
+                <header className="flex items-center gap-3 border-b bg-muted/40 px-4 py-2.5">
+                  <span className="size-3 rounded-full border-[3px] border-sky-500 bg-background ring-4 ring-sky-500/15" />
+                  <h3 className="text-sm font-extrabold">{dayLabel(g.key)}</h3>
+                  <span className="rounded-full bg-background px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground ring-1 ring-border">
+                    {num(g.items.length)} حركة
+                  </span>
+                  <span className="flex-1" />
+                  <span dir="ltr" className="flex items-center gap-2 text-xs font-bold tabular-nums">
+                    {dayOut > 0 && (
+                      <span className="rounded-md bg-rose-500/10 px-2 py-0.5 text-rose-600 dark:text-rose-400">
+                        <Signed value={-dayOut} />
+                      </span>
+                    )}
+                    {dayIn > 0 && (
+                      <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-emerald-600 dark:text-emerald-400">
+                        <Signed value={dayIn} />
+                      </span>
+                    )}
+                  </span>
+                </header>
+
+                {g.items.map((m) => {
+                  const meta = metaOf(m.type)
+                  const incoming = m.quantity >= 0
+                  return (
+                    <article
+                      key={m.id}
+                      style={LEDGER_STYLE}
+                      className="grid border-b border-border/70 transition-colors last:border-b-0 hover:bg-muted/30"
+                    >
+                      {/* النوع + شريط لوني على الحافة */}
+                      <div className={cn(LEDGER_CELL, 'relative')}>
+                        <span aria-hidden className="absolute inset-y-0 start-0 w-[3px]" style={{ backgroundColor: meta.color }} />
+                        <span
+                          className="inline-flex w-fit items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold"
+                          style={{ color: meta.color, borderColor: `${meta.color}40`, backgroundColor: `${meta.color}14` }}
+                        >
+                          <meta.icon className="size-3.5 shrink-0" />
+                          {TYPE_LABELS[m.type] ?? m.type}
+                        </span>
+                      </div>
+
+                      {/* الصنف + الباركود */}
+                      <div className={LEDGER_CELL}>
+                        <p className="font-bold leading-snug [overflow-wrap:anywhere]">{m.product?.name ?? '—'}</p>
+                        {m.product?.barcode && (
+                          <p dir="ltr" className="mt-0.5 w-fit font-mono text-[11px] tracking-wide text-muted-foreground">
+                            {m.product.barcode}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* التفاصيل / الملاحظة */}
+                      <div className={LEDGER_CELL}>
+                        {m.note ? (
+                          <p className="line-clamp-2 text-sm text-foreground/80 [overflow-wrap:anywhere]" title={m.note}>{m.note}</p>
+                        ) : (
+                          <span className="text-muted-foreground/50">—</span>
+                        )}
+                      </div>
+
+                      {/* المنفّذ والفرع */}
+                      <div className={cn(LEDGER_CELL, 'gap-1 text-xs text-muted-foreground')}>
+                        <span className="flex items-center gap-1.5">
+                          <User className="size-3 shrink-0" />
+                          <span className="truncate">{m.userName || '—'}</span>
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <MapPin className="size-3 shrink-0" />
+                          <span className="truncate">{m.branch?.name || 'بدون فرع'}</span>
+                        </span>
+                      </div>
+
+                      {/* الوقت */}
+                      <div className={cn(LEDGER_CELL, 'text-sm tabular-nums text-muted-foreground')} title={fullDateLabel(m.createdAt)}>
+                        {timeLabel(m.createdAt)}
+                      </div>
+
+                      {/* الكمية */}
+                      <div className={cn(LEDGER_CELL, 'items-center')}>
+                        <div
+                          dir="ltr"
+                          className={cn(
+                            'flex min-w-[4.5rem] flex-col items-center rounded-xl px-3 py-1.5 font-mono',
+                            incoming ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400',
+                          )}
+                        >
+                          <span className="text-lg font-black leading-none tabular-nums"><Signed value={m.quantity} /></span>
+                          <span className="mt-0.5 font-sans text-[10px] font-medium opacity-70">وحدة</span>
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })}
+              </section>
+            )
+          })}
+        </div>
+        </>
       )}
     </div>
   )

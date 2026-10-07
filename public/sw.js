@@ -25,7 +25,7 @@
  *      cache-first للملفات الـ immutable، network-first للـ API
  */
 
-const CACHE_VERSION = 'shop-erp-v7'
+const CACHE_VERSION = 'shop-erp-v8'
 const OFFLINE_URL = '/offline.html'
 
 // ─── Precache list ──────────────────────────────────────────

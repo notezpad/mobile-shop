@@ -22,6 +22,33 @@ export function OfflineIndicator() {
   const { entries } = usePendingOperations()
   const [syncResult, setSyncResult] = React.useState<{ done: number; failed: number } | null>(null)
 
+  // 🛡️ PWA OFFLINE ROOT FIX (2026-10-07): دفعة فحص تحديث الـ Service Worker.
+  // الجهاز اللي فضل أوفلاين وقت النشر بيكمّل شغال بالـ SW القديم (بأخطائه
+  // القديمة زي ERR_FAILED) لحد ما حاجة تطلب sw.js تاني — بنطلب الفحص عند
+  // تحميل المكون + عند رجوع النت + كل 30 دقيقة. آمن تماماً: لو مفيش
+  // إصدار جديد الفحص بيرجع بدون أي تأثير، والإصدار الجديد عندنا بيعمل
+  // skipWaiting + clients.claim بنفسه فبينتشد فوراً.
+  React.useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    const nudge = () => {
+      try {
+        navigator.serviceWorker
+          .getRegistration()
+          .then((r) => r?.update().catch(() => {}))
+          .catch(() => {})
+      } catch {
+        /* ignore */
+      }
+    }
+    nudge()
+    window.addEventListener('online', nudge)
+    const t = window.setInterval(nudge, 30 * 60 * 1000)
+    return () => {
+      window.removeEventListener('online', nudge)
+      window.clearInterval(t)
+    }
+  }, [])
+
   // Don't show anything if everything is fine
   if (sync.online && !sync.syncing && sync.pending === 0 && !syncResult) {
     return null
