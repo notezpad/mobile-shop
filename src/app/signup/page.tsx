@@ -172,7 +172,7 @@ function SignupContent() {
     try {
       // 📊 التقاط مصدر الاكتساب (utm_* + click ids) من طبقة التتبع
       const attribution = getAttributionForServer()
-      const data = await api<{ ok: boolean; user?: any; error?: string; tracking?: { registrationEventId: string; trialEventId: string } }>('/api/auth/signup', {
+      const data = await api<{ ok: boolean; user?: any; error?: string; tracking?: { registrationEventId: string; trialEventId: string; planName?: string } }>('/api/auth/signup', {
         method: 'POST',
         body: { shopName: shopName.trim(), name: name.trim(), email: email.trim().toLowerCase(), phone: phone.trim(), password, inviteCode: inviteCode.trim() || undefined, agree, planCode: selectedPlan || undefined, attribution: attribution ?? undefined },
       })

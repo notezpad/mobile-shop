@@ -88,6 +88,8 @@ export interface TrackingMetaConfig {
   datasetId: string
   /** Conversions API Access Token — SECRET (Backend فقط، يُعرض Masked) */
   capiToken: string
+  /** Test Event Code من Events Manager → Test Events — يعمل فقط عند تفعيل Test Mode */
+  testEventCode: string
 }
 
 export interface TrackingTikTokConfig {
@@ -143,6 +145,7 @@ export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
     pixelId: '',
     datasetId: '',
     capiToken: '',
+    testEventCode: '',
   },
   tiktok: {
     enabled: false,

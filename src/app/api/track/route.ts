@@ -1,7 +1,7 @@
 import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { getTrackingConfig } from '@/lib/tracking/config'
-import { trackServerEvent, extractRequestContext } from '@/lib/tracking/server'
+import { trackServerEvent, extractRequestContext, runNonBlocking } from '@/lib/tracking/server'
 import { TRACKING_EVENTS, TrackingEventParams } from '@/lib/tracking/types'
 
 export const dynamic = 'force-dynamic'
@@ -49,15 +49,19 @@ async function __POST(req: NextRequest) {
   // يمرر أيضاً gaClientId/gaSessionId من كوكيز GA4 + ttp من كوكي TikTok
   const reqCtx = extractRequestContext(req.headers, cfg.google.ga4MeasurementId)
 
-  void trackServerEvent({
+  // ⚠️ نفس eventId المستخدم في بكسل المتصفح حرفياً — هذا شرط الـ
+  // Deduplication في Meta/TikTok (كان يُسبق بـ relay- فيُضاعف العدّ).
+  // runNonBlocking: على Cloudflare يستخدم waitUntil حتى لا يُلغى
+  // الإرسال بعد رجوع الاستجابة.
+  runNonBlocking(() => trackServerEvent({
     eventName: eventName as any,
-    eventId: `relay-${eventId}`,
+    eventId,
     params,
     context: {
       ...reqCtx,
       pageUrl: typeof body.pageUrl === 'string' ? body.pageUrl.slice(0, 500) : undefined,
     },
-  })
+  }))
 
   // Non-blocking — لا ننتظر المنصات
   return NextResponse.json({ ok: true })

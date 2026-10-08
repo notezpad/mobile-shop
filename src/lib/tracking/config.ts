@@ -63,6 +63,7 @@ function mergeConfig(raw: unknown): TrackingConfig {
     base.meta.pixelId = str(m.pixelId)
     base.meta.datasetId = str(m.datasetId)
     base.meta.capiToken = str(m.capiToken)
+    base.meta.testEventCode = str(m.testEventCode)
   }
   if (r.tiktok && typeof r.tiktok === 'object') {
     const t = r.tiktok as Record<string, any>
@@ -170,6 +171,7 @@ export async function saveTrackingConfig(patch: unknown): Promise<TrackingConfig
     if (typeof m.enabled === 'boolean') next.meta.enabled = m.enabled
     if (typeof m.pixelId === 'string') next.meta.pixelId = sanitizeId(m.pixelId)
     if (typeof m.datasetId === 'string') next.meta.datasetId = sanitizeId(m.datasetId)
+    if (typeof m.testEventCode === 'string') next.meta.testEventCode = sanitizeId(m.testEventCode)
     next.meta.capiToken = applySecretPatch(current.meta.capiToken, m.capiToken)
   }
   if (p.tiktok && typeof p.tiktok === 'object') {

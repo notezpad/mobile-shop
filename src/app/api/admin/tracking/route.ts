@@ -131,7 +131,7 @@ async function __PUT(req: NextRequest) {
     }
   }
   sanitizePatch(body.google, ['ga4MeasurementId', 'adsConversionId', 'gtmId', 'registration', 'trial', 'purchase'])
-  sanitizePatch(body.meta, ['pixelId', 'datasetId'])
+  sanitizePatch(body.meta, ['pixelId', 'datasetId', 'testEventCode'])
   sanitizePatch(body.tiktok, ['pixelId', 'testEventCode'])
 
   // تحقق صيغة أساسية قبل الحفظ (تحذيرات غير معيقة) — يعمل على قيم نظيفة

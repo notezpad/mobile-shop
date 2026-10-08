@@ -203,9 +203,26 @@ export async function trackServerEvent(input: ServerTrackInput): Promise<ServerT
 
   const results: ProviderResult[] = []
 
+  // 🔍 الأحداث المهمة بس هيتم تسجيل سبب التخطي في السجل — عشان لوحة
+  // الأدمن تورّي *ليه* منصة مفعّلة ما بترسلش (توكن ناقص مثلاً) بدل
+  // الصمت التام اللي كان يخلي صاحب المنصة في حيرة "ليه مفيش أحداث؟".
+  // PageView/ViewContent متسجلش ليها skipped عشان ما تزحمش السجل.
+  const isImportantEvent =
+    eventName === TRACKING_EVENTS.CompleteRegistration ||
+    eventName === TRACKING_EVENTS.StartTrial ||
+    eventName === TRACKING_EVENTS.InitiateCheckout ||
+    eventName === TRACKING_EVENTS.Purchase
+
   // ── Meta Conversions API ─────────────────────────────────────────
-  if (cfg.meta.enabled && cfg.meta.pixelId && cfg.meta.capiToken) {
-    if (await alreadySent('meta', eventId)) {
+  if (cfg.meta.enabled && cfg.meta.pixelId) {
+    if (!cfg.meta.capiToken) {
+      // بكسل المتصفح يشتغل بدون توكن، لكن كل أحداث السيرفر محتاجة
+      // Conversions API Token — من غيره ميتا ما تستقبلش حاجة من ريليه السيرفر.
+      results.push({ provider: 'meta', eventId, status: 'skipped', reason: 'CAPI token missing — browser pixel only' })
+      if (isImportantEvent) {
+        await recordEvent('meta', eventId, eventName, 'skipped', {}, 'Conversions API Token ناقص — أدخله من تبويب الإعدادات (Events Manager ← إعدادات البكسل ← Conversions API ← Generate access token)', input.subscriptionId)
+      }
+    } else if (await alreadySent('meta', eventId)) {
       results.push({ provider: 'meta', eventId, status: 'skipped', reason: 'duplicate' })
     } else if (!gate) {
       results.push({ provider: 'meta', eventId, status: 'skipped', reason: 'tracking disabled' })
@@ -218,8 +235,13 @@ export async function trackServerEvent(input: ServerTrackInput): Promise<ServerT
   }
 
   // ── TikTok Events API ────────────────────────────────────────────
-  if (cfg.tiktok.enabled && cfg.tiktok.pixelId && cfg.tiktok.eventsApiToken) {
-    if (await alreadySent('tiktok', eventId)) {
+  if (cfg.tiktok.enabled && cfg.tiktok.pixelId) {
+    if (!cfg.tiktok.eventsApiToken) {
+      results.push({ provider: 'tiktok', eventId, status: 'skipped', reason: 'Events API token missing — browser pixel only' })
+      if (isImportantEvent) {
+        await recordEvent('tiktok', eventId, eventName, 'skipped', {}, 'Events API Token ناقص — أدخله من تبويب الإعدادات (TikTok Events Manager ← إعدادات البكسل ← Events API Tokens)', input.subscriptionId)
+      }
+    } else if (await alreadySent('tiktok', eventId)) {
       results.push({ provider: 'tiktok', eventId, status: 'skipped', reason: 'duplicate' })
     } else if (!gate) {
       results.push({ provider: 'tiktok', eventId, status: 'skipped', reason: 'tracking disabled' })
@@ -232,8 +254,13 @@ export async function trackServerEvent(input: ServerTrackInput): Promise<ServerT
   }
 
   // ── GA4 Measurement Protocol (Server) ────────────────────────────
-  if (cfg.google.enabled && cfg.google.ga4MeasurementId && cfg.google.ga4ApiSecret) {
-    if (await alreadySent('ga4', eventId)) {
+  if (cfg.google.enabled && cfg.google.ga4MeasurementId) {
+    if (!cfg.google.ga4ApiSecret) {
+      results.push({ provider: 'ga4', eventId, status: 'skipped', reason: 'GA4 API secret missing — browser gtag only' })
+      if (isImportantEvent) {
+        await recordEvent('ga4', eventId, eventName, 'skipped', {}, 'GA4 API Secret ناقص — أدخله من تبويب الإعدادات (Analytics ← Admin ← Data Streams ← Measurement Protocol API secrets)', input.subscriptionId)
+      }
+    } else if (await alreadySent('ga4', eventId)) {
       results.push({ provider: 'ga4', eventId, status: 'skipped', reason: 'duplicate' })
     } else if (!gate) {
       results.push({ provider: 'ga4', eventId, status: 'skipped', reason: 'tracking disabled' })
@@ -313,7 +340,12 @@ async function sendMetaCapi(
           },
         },
       ],
-      ...(cfg.general.testMode ? { test_event_code: undefined } : {}),
+      // كود الاختبار من Meta Events Manager → Test Events (وضع الاختبار فقط).
+      // بدون كود صالح في وضع الاختبار تُرسل الأحداث لبيانات الإنتاج —
+      // لذا نمرره فقط عند تفعيل Test Mode وتوفر الكود (نفس نمط TikTok).
+      ...(cfg.general.testMode && cfg.meta.testEventCode
+        ? { test_event_code: cfg.meta.testEventCode }
+        : {}),
     }
     debugLog('meta capi →', eventName, eventId)
     const res = await fetchWithTimeout(

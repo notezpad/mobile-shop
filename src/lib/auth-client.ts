@@ -25,6 +25,23 @@ const RETRYABLE_LOGIN_STATUS = new Set([500, 502, 503, 504])
 const SESSION_IDB_KEY = '/api/auth/me'
 const SESSION_OFFLINE_TTL_MS = 14 * 24 * 60 * 60 * 1000
 
+// ⚡ FAST-BOOT (2026-10-08): مفتاح كاش "آخر قرار HomeGate" في sessionStorage —
+// بيتكتب من HomeGate لما السيرفر يأكد سوبر أدمن، وبيتقري قبل أول paint
+// عشان الريفرش ما يعملش فلاش اللاندنج قبل لوحة الأدمن. auth-client بيمسحه
+// عند أي دخول/خروج حساب عشان الكاش ما يعيش أطول من سيشن واحدة.
+export const HOME_GATE_BOOT_KEY = 'nezam:home-gate-boot'
+
+/** مسح كاش fast-boot بتاع HomeGate (fire-safe — آمن ينادى من أي مكان) */
+export function clearHomeGateBootCache(): void {
+  try {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem(HOME_GATE_BOOT_KEY)
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 async function cacheSessionSnapshot(user: AuthUser): Promise<void> {
   try {
     const { idb } = await import('./offline/idb')
@@ -115,6 +132,8 @@ export async function apiLogin(
     if (res.ok && data?.ok) {
       // ⚡ v10: حساب جديد → امسح كاش بيانات الحساب القديم فوراً (خلفية)
       void clearLocalAccountData()
+      // ⚡ fast-boot: حساب مختلف محتمل → أي قرار HomeGate قديم ما يتحمش
+      clearHomeGateBootCache()
       return data.user as AuthUser
     }
     lastRes = res
@@ -153,6 +172,8 @@ export async function apiLogout(): Promise<void> {
     // ⚡ v10: بعد الخروج امسح كاش بيانات الحساب — مفيش بيانات تظهر للي بعده
     // على نفس الجهاز (والـ fetch نفسه مش لازم ينجح عشان نمسح المحلي)
     await clearLocalAccountData()
+    // ⚡ fast-boot: خروج → ريفرش جاي يرجع للسلوك الطبيعي (لاندنج أولاً)
+    clearHomeGateBootCache()
   }
 }
 

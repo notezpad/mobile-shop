@@ -355,6 +355,9 @@ function markClientSent(eventId: string): boolean {
 let deferredPixelsLoaded = false
 function loadDeferredPixels(): void {
   if (typeof window === 'undefined' || !config || deferredPixelsLoaded) return
+  // 🛡️ المفتاح الرئيسي OFF → لا تحميل لأي بكسل إعلاني نهائياً — نفس
+  // العقد الموثق في اللوحة: "عند الإيقاف يتوقف كل الإرسال لكل المنصات".
+  if (!config.general.enabled) return
   if (!config.meta.enabled && !config.tiktok.enabled) return
   deferredPixelsLoaded = true
 
@@ -384,6 +387,19 @@ export function initTracking(cfg: PublicTrackingConfig): void {
 
   // 1) كوكي _fbc عند وجود fbclid في الرابط (advanced matching Meta)
   captureAttribution()
+
+  if (!cfg.general.enabled) {
+    // 🛡️ المفتاح الرئيسي OFF → لا سكريبتات تتبع تُحمّل نهائياً (نفس
+    // عقد اللوحة). الواجهة العامة تفضل متاحة للفحص والتشخيص فقط.
+    window.NezamTracking = {
+      config: cfg,
+      track: trackEvent,
+      setConsent,
+      getConsent,
+      version: '1.1.0',
+    }
+    return
+  }
 
   if (cfg.general.consentManagement) {
     // 2) Consent defaults قبل أي سكريبت تتبع (Google Consent Mode v2)

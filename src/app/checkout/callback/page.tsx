@@ -31,6 +31,8 @@ function CheckoutCallbackContent() {
       // Direct navigation without order id — show status param result
       return
     }
+    // narrow صريح — إعلانات الدوال الـ hoisted لا تحتفظ بتضييق النوع
+    const orderId: string = merchantOrderId
 
     let mounted = true
     let attempts = 0
@@ -40,7 +42,7 @@ function CheckoutCallbackContent() {
       if (!mounted) return
       try {
         const result = await api<{ status: 'pending' | 'paid' | 'failed' }>(
-          `/api/paymob/status?merchant_order_id=${encodeURIComponent(merchantOrderId)}`
+          `/api/paymob/status?merchant_order_id=${encodeURIComponent(orderId)}`
         )
         if (!mounted) return
 
