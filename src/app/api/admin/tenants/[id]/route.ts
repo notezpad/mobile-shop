@@ -36,8 +36,11 @@ async function __GET(
   const now = new Date()
   const last30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
-  // ⚡ SANDBOX DEMO ADAPTER (2026-10-08): استعلام الربح كان بصيغة PostgreSQL
-  // (::float8 + أسماء أعمدة مقتبسة) — أعيدت كتابته بصيغة SQLite المتوافقة.
+  // ⚡ PERF FIX: was two findMany calls — one pulling every sale from the
+  // last 30 days, another pulling those same sales WITH every line item
+  // included — just to sum them in JS. Same math, now done by Postgres in
+  // a single small query each (matches the pattern already used in
+  // /api/reports and /api/dashboard).
   const [productsCount, salesCount, usersCount, cashAgg, sales30Agg, profit30Row] =
     await Promise.all([
       db.product.count({ where: { tenantId: id } }),
@@ -52,9 +55,9 @@ async function __GET(
         _sum: { total: true },
       }),
       db.$queryRaw<{ profit: number }[]>`
-        SELECT COALESCE(SUM((i.price - i.cost) * i.quantity), 0) AS profit
-        FROM SaleItem i JOIN Sale s ON s.id = i.saleId
-        WHERE s.tenantId = ${id} AND s.status = 'مكتملة' AND s.createdAt >= ${last30}`,
+        SELECT COALESCE(SUM((i."price" - i."cost") * i."quantity"), 0)::float8 AS profit
+        FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
+        WHERE s."tenantId" = ${id} AND s."status" = 'مكتملة' AND s."createdAt" >= ${last30}`,
     ])
 
   const sales30Total = sales30Agg._sum.total ?? 0

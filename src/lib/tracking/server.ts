@@ -29,12 +29,7 @@
  */
 
 import { db } from '@/lib/db'
-// ⚡ SANDBOX DEMO ADAPTER (2026-10-08): النسخة الأصلية تستورد getCloudflareContext
-// من '@opennextjs/cloudflare' — غير متاح في بيئة المعاينة. الدالة المحلية تحت
-// بترجع null فيواجه Node العادي (fire-and-forget) — نفس سلوك التطوير المحلي.
-function getCloudflareContext(): unknown {
-  return null
-}
+import { getCloudflareContext } from '@opennextjs/cloudflare'
 import {
   TrackingConfig,
   TrackingEventParams,

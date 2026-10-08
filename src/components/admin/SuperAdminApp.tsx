@@ -997,10 +997,8 @@ export function SuperAdminApp() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlView = searchParams.get("view") as AdminView | null;
-  // ⚡ DEMO (2026-10-08): الافتراضي هنا كان "dashboard" — في بيئة المعاينة
-  // بنفتح على "plans" (الصفحة قيد التطوير). في الموقع الحقيقي يفضل dashboard.
   const active: AdminView =
-    urlView && ALL_NAV.some((n) => n.key === urlView) ? urlView : "plans";
+    urlView && ALL_NAV.some((n) => n.key === urlView) ? urlView : "dashboard";
 
   const setActive = React.useCallback(
     (view: AdminView) => {
