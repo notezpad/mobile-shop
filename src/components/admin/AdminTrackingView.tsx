@@ -94,6 +94,7 @@ interface Payload {
   config: TrackingSettings
   statuses: ProviderStatus[]
   events: TrackingEventRow[]
+  tablesReady?: boolean
   stats: {
     sentCount: number
     failedCount: number
@@ -230,6 +231,27 @@ export function AdminTrackingView() {
 
   return (
     <div className="space-y-4 max-w-4xl">
+      {/* ─── 🛡️ تنبيه: جداول التتبع غير مُهيّأة (قبل الترحيل) ─── */}
+      {data.tablesReady === false && (
+        <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
+          <p className="flex items-center gap-2 font-semibold text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="size-4" />
+            جداول التتبع غير موجودة في قاعدة البيانات — خطوة تهيئة مطلوبة
+          </p>
+          <div className="mt-2 space-y-1 text-xs leading-relaxed text-muted-foreground">
+            <p>الإعدادات أدناه تعمل وتُحفظ طبيعياً، لكن لن تُسجَّل الأحداث حتى إنشاء الجدولين. اختر إحدى طريقتين:</p>
+            <p>
+              <b className="text-foreground">1) الأسهل:</b> افتح <b className="text-foreground">Supabase → SQL Editor</b> وشغّل ملف{' '}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]" dir="ltr">prisma/migrations/20261008_add_tracking_tables/migration.sql</code>
+            </p>
+            <p>
+              <b className="text-foreground">2) أو:</b> من جهازك مع <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]" dir="ltr">DATABASE_URL</code> الخاص بالإنتاج شغّل{' '}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]" dir="ltr">npx prisma migrate deploy</code>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ─── حالة المنصات ─── */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {data.statuses.map((s) => (

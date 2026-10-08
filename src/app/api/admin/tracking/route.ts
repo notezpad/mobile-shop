@@ -28,33 +28,47 @@ async function __GET() {
   const cfg = await getTrackingConfig()
   const statuses = getProviderStatuses(cfg)
 
-  // آخر الأحداث — بدون أي بيانات حساسة (payload تقني فقط)
-  const events = await db.trackingEvent.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-    select: {
-      id: true,
-      eventId: true,
-      eventName: true,
-      provider: true,
-      source: true,
-      status: true,
-      error: true,
-      subscriptionId: true,
-      createdAt: true,
-    },
-  })
+  // آخر الأحداث + الإحصائيات — 🛡️ محمية بالكامل:
+  // إذا لم تُنشأ جداول التتبع بعد (قبل تشغيل الترحيل) نُرجع قيماً فارغة
+  // مع tablesReady=false بدلاً من 500 — والإعدادات تعمل بشكل طبيعي.
+  let events: Array<Record<string, unknown>> = []
+  let sentCount = 0
+  let failedCount = 0
+  let lastEvent: Record<string, unknown> | null = null
+  let tablesReady = true
+  try {
+    // آخر الأحداث — بدون أي بيانات حساسة (payload تقني فقط)
+    events = await db.trackingEvent.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        eventId: true,
+        eventName: true,
+        provider: true,
+        source: true,
+        status: true,
+        error: true,
+        subscriptionId: true,
+        createdAt: true,
+      },
+    })
 
-  // إحصائيات سريعة
-  const [sentCount, failedCount] = await Promise.all([
-    db.trackingEvent.count({ where: { status: 'sent' } }),
-    db.trackingEvent.count({ where: { status: 'failed' } }),
-  ])
+    // إحصائيات سريعة
+    const [sent, failed] = await Promise.all([
+      db.trackingEvent.count({ where: { status: 'sent' } }),
+      db.trackingEvent.count({ where: { status: 'failed' } }),
+    ])
+    sentCount = sent
+    failedCount = failed
 
-  const lastEvent = await db.trackingEvent.findFirst({
-    orderBy: { createdAt: 'desc' },
-    select: { eventName: true, status: true, error: true, createdAt: true, provider: true },
-  })
+    lastEvent = await db.trackingEvent.findFirst({
+      orderBy: { createdAt: 'desc' },
+      select: { eventName: true, status: true, error: true, createdAt: true, provider: true },
+    })
+  } catch {
+    tablesReady = false
+  }
 
   return NextResponse.json({
     config: {
@@ -82,6 +96,7 @@ async function __GET() {
     statuses,
     events,
     stats: { sentCount, failedCount, lastEvent },
+    tablesReady,
   })
 }
 
