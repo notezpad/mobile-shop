@@ -110,28 +110,6 @@ interface Payload {
 
 const SECRET_CLEAR = '__CLEAR__'
 
-// 🧪 نتيجة أداة التشخيص (POST /api/admin/tracking/test)
-interface TestPayload {
-  ok: boolean
-  eventId: string
-  checkedAt: string
-  config: {
-    general: { enabled: boolean; testMode: boolean; consentManagement: boolean; debugMode: boolean }
-    meta: { enabled: boolean; pixelId: string; capiTokenSet: boolean; testEventCodeSet: boolean }
-    tiktok: { enabled: boolean; pixelId: string; eventsApiTokenSet: boolean; testEventCodeSet: boolean }
-    google: { enabled: boolean; ga4MeasurementId: string; ga4ApiSecretSet: boolean }
-  }
-  results: Array<{ provider: string; eventId: string; status: string; error?: string; reason?: string }>
-  hints: string[]
-  whereToLook: string[]
-  browser?: {
-    gtag: boolean
-    fbq: boolean
-    ttq: boolean
-    consent: { analytics: boolean; marketing: boolean } | null
-  }
-}
-
 export function AdminTrackingView() {
   const [data, setData] = React.useState<Payload | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -203,31 +181,6 @@ export function AdminTrackingView() {
     }
   }
 
-  // 🧪 أداة التشخيص: حدث اختباري عبر المسار الحقيقي نفسه + تقرير بوابات
-  const [testing, setTesting] = React.useState(false)
-  const [testResult, setTestResult] = React.useState<TestPayload | null>(null)
-  const runTest = async () => {
-    setTesting(true)
-    try {
-      const d = await api<TestPayload>('/api/admin/tracking/test', { method: 'POST' })
-      // فحوصات المتصفح تُحسب لحظة الاختبار (الكلاينت فقط)
-      const w = window as any
-      setTestResult({
-        ...d,
-        browser: {
-          gtag: typeof w.gtag === 'function',
-          fbq: typeof w.fbq === 'function',
-          ttq: typeof w.ttq?.track === 'function',
-          consent: w.NezamTracking?.getConsent?.() ?? null,
-        },
-      })
-    } catch (e: any) {
-      toast.error(e?.message || 'فشل تشغيل الاختبار')
-    } finally {
-      setTesting(false)
-    }
-  }
-
   if (loading || !data) {
     return (
       <div className="space-y-4">
@@ -258,10 +211,22 @@ export function AdminTrackingView() {
     return (
       <div className="flex gap-1.5">
         <div className="relative flex-1">
+          {/* 🛠️ كان type="password" فيعتبره Chrome حقل «كلمة سر» ويملأ الحقل النصي
+              السابق (GA4 Measurement ID) بالإيميل المحفوظ. الحل: حقل نصي عادي
+              مُقنَّع بـ CSS — لا يوجد password field فلا يعمل الـ autofill. */}
           <Input
-            type={visible && hasValue ? 'text' : 'password'}
+            type="text"
+            name={`secret-${key}`}
             dir="ltr"
             autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
+            data-1p-ignore
+            data-bwignore="true"
+            data-form-type="other"
+            style={visible && hasValue ? undefined : ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)}
             placeholder={cleared ? 'سيتم الإزالة عند الحفظ' : opts.set ? `محفوظ (${opts.masked ?? '••••'}) — اكتب قيمة جديدة للتغيير` : opts.placeholder}
             value={cleared ? '' : secrets[key]}
             onChange={(e) => setSecrets((s) => ({ ...s, [key]: e.target.value }))}
@@ -386,84 +351,6 @@ export function AdminTrackingView() {
             </p>
           </div>
 
-          {/* ─── 🧪 أداة التشخيص — ليه مفيش أحداث بتوصل؟ ─── */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <FlaskConical className="size-4 text-primary" />
-                اختبار الإرسال للمنصات
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                يرسل حدثاً اختبارياً حقيقياً عبر نفس مسار الإنتاج، ويعرض نتيجة كل منصة (نجح / فشل + رسالة الخطأ الحرفية منها) وأي بوابات إعداد ناقصة. مع وضع الاختبار + كود الاختبار يظهر الحدث فوراً في تبويب Test Events.
-              </p>
-              <div className="flex items-center gap-2">
-                <Button onClick={runTest} disabled={testing} variant="outline" className="min-w-40">
-                  {testing ? <Loader2 className="size-4 animate-spin" /> : <FlaskConical className="size-4" />}
-                  {testing ? 'جاري الاختبار…' : 'تشغيل الاختبار الآن'}
-                </Button>
-                {testResult && <span className="text-[11px] text-muted-foreground" dir="ltr">{testResult.eventId}</span>}
-              </div>
-
-              {testResult && (
-                <div className="space-y-3 pt-1">
-                  {/* بوابات المتصفح */}
-                  <div className="flex flex-wrap gap-2 text-[11px]">
-                    <Badge variant="outline" className={testResult.browser?.gtag ? 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400' : ''}>gtag: {testResult.browser?.gtag ? 'محمل' : 'غير محمل'}</Badge>
-                    <Badge variant="outline" className={testResult.browser?.fbq ? 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400' : ''}>Meta Pixel: {testResult.browser?.fbq ? 'محمل' : 'غير محمل'}</Badge>
-                    <Badge variant="outline" className={testResult.browser?.ttq ? 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400' : ''}>TikTok Pixel: {testResult.browser?.ttq ? 'محمل' : 'غير محمل'}</Badge>
-                    {testResult.browser?.consent && (
-                      <Badge variant="outline">موافقة المتصفح: تحليلات {testResult.browser.consent.analytics ? '✓' : '✗'} · تسويق {testResult.browser.consent.marketing ? '✓' : '✗'}</Badge>
-                    )}
-                  </div>
-
-                  {/* نتيجة كل منصة من السيرفر */}
-                  <div className="overflow-hidden rounded-md border">
-                    {testResult.results.length === 0 ? (
-                      <p className="p-3 text-xs text-muted-foreground">لا توجد منصة مفعّلة إطلاقاً — فعّل منصة واحدة على الأقل من الإعدادات بالأسفل ثم أعد الاختبار.</p>
-                    ) : (
-                      testResult.results.map((r, i) => (
-                        <div key={i} className="flex flex-wrap items-center gap-2 border-b p-3 text-xs last:border-b-0">
-                          <b className="min-w-16">{r.provider}</b>
-                          {r.status === 'sent' ? (
-                            <Badge className="gap-1 bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/15 dark:text-emerald-400"><CheckCircle2 className="size-3" /> وصلت للمنصة</Badge>
-                          ) : r.status === 'failed' ? (
-                            <Badge className="gap-1 bg-destructive/15 text-destructive hover:bg-destructive/15"><XCircle className="size-3" /> فشل</Badge>
-                          ) : (
-                            <Badge variant="outline" className="gap-1 text-muted-foreground"><AlertTriangle className="size-3" /> تخطي</Badge>
-                          )}
-                          {(r.error || r.reason) && (
-                            <span className="min-w-0 flex-1 break-words text-muted-foreground" dir="auto">{r.error || r.reason}</span>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  {/* إرشادات حسب الحالة */}
-                  {testResult.hints.length > 0 && (
-                    <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
-                      <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400"><AlertTriangle className="size-3.5" /> ما ناقص عندك الآن:</p>
-                      <ul className="list-inside list-disc space-y-1 text-xs leading-relaxed text-muted-foreground">
-                        {testResult.hints.map((h, i) => <li key={i}>{h}</li>)}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* فين تبص في المنصات */}
-                  {testResult.whereToLook.length > 0 && (
-                    <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3">
-                      <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="size-3.5" /> فين تشوف الحدث الاختباري:</p>
-                      <ul className="list-inside list-disc space-y-1 text-xs leading-relaxed text-muted-foreground">
-                        {testResult.whereToLook.map((h, i) => <li key={i}>{h}</li>)}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
           {/* ─── عام ─── */}
           <Card>
             <CardHeader className="pb-3">
@@ -516,7 +403,7 @@ export function AdminTrackingView() {
               <CardContent className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="GA4 Measurement ID" hint="من Analytics → Data Streams (G-XXXXXXXXXX)">
-                    <Input dir="ltr" placeholder="G-XXXXXXXXXX" value={cfg.google.ga4MeasurementId} onChange={(e) => setGoogle({ ga4MeasurementId: sanitizeId(e.target.value) })} />
+                    <Input dir="ltr" autoComplete="off" data-lpignore="true" data-1p-ignore placeholder="G-XXXXXXXXXX" value={cfg.google.ga4MeasurementId} onChange={(e) => setGoogle({ ga4MeasurementId: sanitizeId(e.target.value) })} />
                   </Field>
                   <Field label="GA4 API Secret (Server-side)" hint="من نفس صفحة الـ Data Stream ← Measurement Protocol API secrets ← Create — ليس كلمة مرور حسابك">
                     {secretInput('ga4ApiSecret', { set: cfg.google.ga4ApiSecretSet, masked: cfg.google.ga4ApiSecretMasked, placeholder: 'غير مضبوط — اختياري', onClear: () => clearSecret('ga4ApiSecret') })}
@@ -525,17 +412,17 @@ export function AdminTrackingView() {
                 <Separator />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Google Ads Conversion ID" hint="من Ads → Conversion (AW-XXXXXXXXX)">
-                    <Input dir="ltr" placeholder="AW-123456789" value={cfg.google.adsConversionId} onChange={(e) => setGoogle({ adsConversionId: sanitizeId(e.target.value) })} />
+                    <Input dir="ltr" autoComplete="off" data-lpignore="true" data-1p-ignore placeholder="AW-123456789" value={cfg.google.adsConversionId} onChange={(e) => setGoogle({ adsConversionId: sanitizeId(e.target.value) })} />
                   </Field>
                   <div className="grid grid-cols-3 gap-2">
                     <Field label="تسمية التسجيل" hint="Signup">
-                      <Input dir="ltr" placeholder="abc123" value={cfg.google.adsLabels.registration} onChange={(e) => setGoogle({ adsLabels: { ...cfg.google.adsLabels, registration: e.target.value } })} />
+                      <Input dir="ltr" autoComplete="off" data-lpignore="true" data-1p-ignore placeholder="abc123" value={cfg.google.adsLabels.registration} onChange={(e) => setGoogle({ adsLabels: { ...cfg.google.adsLabels, registration: e.target.value } })} />
                     </Field>
                     <Field label="تسمية التجربة" hint="Trial">
-                      <Input dir="ltr" placeholder="def456" value={cfg.google.adsLabels.trial} onChange={(e) => setGoogle({ adsLabels: { ...cfg.google.adsLabels, trial: e.target.value } })} />
+                      <Input dir="ltr" autoComplete="off" data-lpignore="true" data-1p-ignore placeholder="def456" value={cfg.google.adsLabels.trial} onChange={(e) => setGoogle({ adsLabels: { ...cfg.google.adsLabels, trial: e.target.value } })} />
                     </Field>
                     <Field label="تسمية الشراء" hint="Purchase">
-                      <Input dir="ltr" placeholder="ghi789" value={cfg.google.adsLabels.purchase} onChange={(e) => setGoogle({ adsLabels: { ...cfg.google.adsLabels, purchase: e.target.value } })} />
+                      <Input dir="ltr" autoComplete="off" data-lpignore="true" data-1p-ignore placeholder="ghi789" value={cfg.google.adsLabels.purchase} onChange={(e) => setGoogle({ adsLabels: { ...cfg.google.adsLabels, purchase: e.target.value } })} />
                     </Field>
                   </div>
                 </div>
@@ -544,7 +431,7 @@ export function AdminTrackingView() {
                   <SwitchRow label="Google Tag / GTM" desc="تحميل حاوية GTM بدلاً من gtag مباشر" checked={cfg.google.useGtm} onChange={(v) => setGoogle({ useGtm: v })} />
                   {cfg.google.useGtm && (
                     <Field label="Google Tag ID" hint="GTM-XXXXXXX أو G-XXXX">
-                      <Input dir="ltr" placeholder="GTM-XXXXXXX" value={cfg.google.gtmId} onChange={(e) => setGoogle({ gtmId: sanitizeId(e.target.value) })} />
+                      <Input dir="ltr" autoComplete="off" data-lpignore="true" data-1p-ignore placeholder="GTM-XXXXXXX" value={cfg.google.gtmId} onChange={(e) => setGoogle({ gtmId: sanitizeId(e.target.value) })} />
                     </Field>
                   )}
                 </div>
@@ -568,10 +455,10 @@ export function AdminTrackingView() {
               <CardContent className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Meta Pixel ID" hint="من Events Manager ← Data Sources ← انسخ ID البكسل (أرقام فقط)">
-                    <Input dir="ltr" placeholder="123456789012345" value={cfg.meta.pixelId} onChange={(e) => setMeta({ pixelId: sanitizeId(e.target.value) })} />
+                    <Input dir="ltr" autoComplete="off" data-lpignore="true" data-1p-ignore placeholder="123456789012345" value={cfg.meta.pixelId} onChange={(e) => setMeta({ pixelId: sanitizeId(e.target.value) })} />
                   </Field>
                   <Field label="Dataset ID" hint="اختياري — نفس الـ Pixel ID غالباً في الإعدادات الحديثة">
-                    <Input dir="ltr" placeholder="نفس Pixel ID افتراضياً" value={cfg.meta.datasetId} onChange={(e) => setMeta({ datasetId: sanitizeId(e.target.value) })} />
+                    <Input dir="ltr" autoComplete="off" data-lpignore="true" data-1p-ignore placeholder="نفس Pixel ID افتراضياً" value={cfg.meta.datasetId} onChange={(e) => setMeta({ datasetId: sanitizeId(e.target.value) })} />
                   </Field>
                 </div>
                 <Field label="Conversions API Access Token 🔒" hint="مطلوب لأحداث السيرفر (التسجيل/الدفع) — من: Events Manager ← افتح البكسل ← Settings ← Conversions API ← Generate access token">
@@ -584,7 +471,7 @@ export function AdminTrackingView() {
                   </p>
                 )}
                 <Field label="Test Event Code (اختياري)" hint="من Events Manager → Test Events — يُرسل فقط عند تفعيل وضع الاختبار">
-                  <Input dir="ltr" placeholder="TEST12345" value={cfg.meta.testEventCode} onChange={(e) => setMeta({ testEventCode: sanitizeId(e.target.value) })} />
+                  <Input dir="ltr" autoComplete="off" data-lpignore="true" data-1p-ignore placeholder="TEST12345" value={cfg.meta.testEventCode} onChange={(e) => setMeta({ testEventCode: sanitizeId(e.target.value) })} />
                 </Field>
                 <p className="text-[11px] text-muted-foreground">
                   عند التفعيل: الأحداث المهمة تُرسل Browser + Server بنفس event_id (Deduplication تلقائي في Events Manager).
@@ -605,7 +492,7 @@ export function AdminTrackingView() {
             {cfg.tiktok.enabled && (
               <CardContent className="space-y-3">
                 <Field label="TikTok Pixel ID" hint="من Events Manager → Web Events">
-                  <Input dir="ltr" placeholder="CXXXXXXXXXXXXXXXXXXX" value={cfg.tiktok.pixelId} onChange={(e) => setTikTok({ pixelId: sanitizeId(e.target.value) })} />
+                  <Input dir="ltr" autoComplete="off" data-lpignore="true" data-1p-ignore placeholder="CXXXXXXXXXXXXXXXXXXX" value={cfg.tiktok.pixelId} onChange={(e) => setTikTok({ pixelId: sanitizeId(e.target.value) })} />
                 </Field>
                 <Field label="Events API Access Token 🔒" hint="مطلوب لأحداث السيرفر — من: TikTok Events Manager ← افتح مصدر الويب ← Settings ← Events API Tokens">
                   {secretInput('eventsApiToken', { set: cfg.tiktok.eventsApiTokenSet, masked: cfg.tiktok.eventsApiTokenMasked, placeholder: 'أدخل توكن Events API', onClear: () => clearSecret('eventsApiToken') })}
@@ -617,7 +504,7 @@ export function AdminTrackingView() {
                   </p>
                 )}
                 <Field label="Test Event Code (اختياري)" hint="من Events Manager → Test Events — يُرسل فقط عند تفعيل وضع الاختبار">
-                  <Input dir="ltr" placeholder="TESTXXXX" value={cfg.tiktok.testEventCode} onChange={(e) => setTikTok({ testEventCode: sanitizeId(e.target.value) })} />
+                  <Input dir="ltr" autoComplete="off" data-lpignore="true" data-1p-ignore placeholder="TESTXXXX" value={cfg.tiktok.testEventCode} onChange={(e) => setTikTok({ testEventCode: sanitizeId(e.target.value) })} />
                 </Field>
               </CardContent>
             )}

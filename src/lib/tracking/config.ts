@@ -44,15 +44,15 @@ function mergeConfig(raw: unknown): TrackingConfig {
   if (r.google && typeof r.google === 'object') {
     const g = r.google as Record<string, any>
     base.google.enabled = bool(g.enabled, base.google.enabled)
-    base.google.ga4MeasurementId = str(g.ga4MeasurementId)
+    base.google.ga4MeasurementId = idStr(g.ga4MeasurementId)
     base.google.ga4ApiSecret = str(g.ga4ApiSecret)
-    base.google.adsConversionId = str(g.adsConversionId)
+    base.google.adsConversionId = idStr(g.adsConversionId)
     if (g.adsLabels && typeof g.adsLabels === 'object') {
       base.google.adsLabels.registration = str(g.adsLabels.registration)
       base.google.adsLabels.trial = str(g.adsLabels.trial)
       base.google.adsLabels.purchase = str(g.adsLabels.purchase)
     }
-    base.google.gtmId = str(g.gtmId)
+    base.google.gtmId = idStr(g.gtmId)
     base.google.useGtm = bool(g.useGtm, base.google.useGtm)
     base.google.enhancedConversions = bool(g.enhancedConversions, base.google.enhancedConversions)
     base.google.consentMode = bool(g.consentMode, base.google.consentMode)
@@ -60,7 +60,7 @@ function mergeConfig(raw: unknown): TrackingConfig {
   if (r.meta && typeof r.meta === 'object') {
     const m = r.meta as Record<string, any>
     base.meta.enabled = bool(m.enabled, base.meta.enabled)
-    base.meta.pixelId = str(m.pixelId)
+    base.meta.pixelId = idStr(m.pixelId)
     base.meta.datasetId = str(m.datasetId)
     base.meta.capiToken = str(m.capiToken)
     base.meta.testEventCode = str(m.testEventCode)
@@ -68,7 +68,7 @@ function mergeConfig(raw: unknown): TrackingConfig {
   if (r.tiktok && typeof r.tiktok === 'object') {
     const t = r.tiktok as Record<string, any>
     base.tiktok.enabled = bool(t.enabled, base.tiktok.enabled)
-    base.tiktok.pixelId = str(t.pixelId)
+    base.tiktok.pixelId = idStr(t.pixelId)
     base.tiktok.eventsApiToken = str(t.eventsApiToken)
     base.tiktok.testEventCode = str(t.testEventCode)
   }
@@ -86,6 +86,11 @@ function withEnvSecrets(cfg: TrackingConfig): TrackingConfig {
   if (envGa4) cfg.google.ga4ApiSecret = envGa4
   // 🛡️ ترحيل سلس: المتغير القديم للـ GA4 (قبل طبقة التتبع) يعمل
   // كـ fallback عندما لا يكون الـ Measurement ID مضبوطاً من اللوحة.
+  // الحقل «Google Tag ID» يقبل G-… (حسب تلميح الواجهة). لو وُضع فيه معرّف G-
+  // ولم يكن Measurement ID صالحاً → نعتمده كـ GA4 ID بدل ضياع التتبع بصمت.
+  const G_RE = /^G-[A-Z0-9]+$/i
+  if (cfg.google.ga4MeasurementId && !G_RE.test(cfg.google.ga4MeasurementId)) cfg.google.ga4MeasurementId = ''
+  if (!cfg.google.ga4MeasurementId && G_RE.test(cfg.google.gtmId)) cfg.google.ga4MeasurementId = cfg.google.gtmId
   if (!cfg.google.ga4MeasurementId) {
     const legacyGa4 = readEnv('NEXT_PUBLIC_GA_MEASUREMENT_ID')
     if (legacyGa4) cfg.google.ga4MeasurementId = legacyGa4
@@ -93,6 +98,11 @@ function withEnvSecrets(cfg: TrackingConfig): TrackingConfig {
   return cfg
 }
 
+/** معرّفات المنصات لا تحتوي @ أبداً — قيمة بها @ هي إيميل ملأه المتصفح بالخطأ */
+function idStr(v: unknown): string {
+  const x = str(v)
+  return x.includes('@') ? '' : x
+}
 function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : ''
 }
@@ -152,14 +162,15 @@ export async function saveTrackingConfig(patch: unknown): Promise<TrackingConfig
     if (typeof g.enabled === 'boolean') next.google.enabled = g.enabled
     // 🧼 sanitizeId: تنظيف المحارف الخفية المتسربة عند النسخ (RTL) —
     // يُصلح أيضاً أي قيمة فاسدة محفوظة مسبقاً عند أول حفظ قادم.
-    if (typeof g.ga4MeasurementId === 'string') next.google.ga4MeasurementId = sanitizeId(g.ga4MeasurementId)
-    if (typeof g.adsConversionId === 'string') next.google.adsConversionId = sanitizeId(g.adsConversionId)
+    if (typeof g.ga4MeasurementId === 'string') next.google.ga4MeasurementId = noEmail(g.ga4MeasurementId)
+    if (typeof g.adsConversionId === 'string') next.google.adsConversionId = noEmail(g.adsConversionId)
     if (g.adsLabels && typeof g.adsLabels === 'object') {
       for (const k of ['registration', 'trial', 'purchase'] as const) {
-        if (typeof g.adsLabels[k] === 'string') next.google.adsLabels[k] = sanitizeId(g.adsLabels[k] as string)
+        // لو لصق المستخدم «AW-123/abc» كاملاً نأخذ الـ label فقط، وإلا يصير send_to مكرراً
+        if (typeof g.adsLabels[k] === 'string') next.google.adsLabels[k] = sanitizeId(g.adsLabels[k] as string).split('/').pop() ?? ''
       }
     }
-    if (typeof g.gtmId === 'string') next.google.gtmId = sanitizeId(g.gtmId)
+    if (typeof g.gtmId === 'string') next.google.gtmId = noEmail(g.gtmId)
     if (typeof g.useGtm === 'boolean') next.google.useGtm = g.useGtm
     if (typeof g.enhancedConversions === 'boolean') next.google.enhancedConversions = g.enhancedConversions
     if (typeof g.consentMode === 'boolean') next.google.consentMode = g.consentMode
@@ -169,15 +180,15 @@ export async function saveTrackingConfig(patch: unknown): Promise<TrackingConfig
   if (p.meta && typeof p.meta === 'object') {
     const m = p.meta as Record<string, any>
     if (typeof m.enabled === 'boolean') next.meta.enabled = m.enabled
-    if (typeof m.pixelId === 'string') next.meta.pixelId = sanitizeId(m.pixelId)
-    if (typeof m.datasetId === 'string') next.meta.datasetId = sanitizeId(m.datasetId)
+    if (typeof m.pixelId === 'string') next.meta.pixelId = noEmail(m.pixelId)
+    if (typeof m.datasetId === 'string') next.meta.datasetId = noEmail(m.datasetId)
     if (typeof m.testEventCode === 'string') next.meta.testEventCode = sanitizeId(m.testEventCode)
     next.meta.capiToken = applySecretPatch(current.meta.capiToken, m.capiToken)
   }
   if (p.tiktok && typeof p.tiktok === 'object') {
     const t = p.tiktok as Record<string, any>
     if (typeof t.enabled === 'boolean') next.tiktok.enabled = t.enabled
-    if (typeof t.pixelId === 'string') next.tiktok.pixelId = sanitizeId(t.pixelId)
+    if (typeof t.pixelId === 'string') next.tiktok.pixelId = noEmail(t.pixelId)
     if (typeof t.testEventCode === 'string') next.tiktok.testEventCode = sanitizeId(t.testEventCode)
     next.tiktok.eventsApiToken = applySecretPatch(current.tiktok.eventsApiToken, t.eventsApiToken)
   }
@@ -192,6 +203,12 @@ export async function saveTrackingConfig(patch: unknown): Promise<TrackingConfig
 
   invalidateTrackingConfigCache()
   return next
+}
+
+/** تنظيف معرّف + رفض أي قيمة تحتوي @ (إيميل متسرب من autofill) */
+function noEmail(v: string): string {
+  const x = sanitizeId(v)
+  return x.includes('@') ? '' : x
 }
 
 function applySecretPatch(current: string, incoming: unknown): string {

@@ -192,9 +192,14 @@ export async function trackServerEvent(input: ServerTrackInput): Promise<ServerT
     fn?: string[]
     ln?: string[]
     externalId?: string[]
+    /** TikTok يشترط E.164 مع «+» قبل التهشئة (Meta بدون +) */
+    ttPh?: string[]
   } = {}
   if (context.email) hashed.em = [await sha256Hex(normalizeEmail(context.email))]
-  if (context.phone) hashed.ph = [await sha256Hex(normalizePhone(context.phone))]
+  if (context.phone) {
+    hashed.ph = [await sha256Hex(normalizePhone(context.phone))]
+    hashed.ttPh = [await sha256Hex(`+${normalizePhone(context.phone)}`)]
+  }
   if (context.firstName) hashed.fn = [await sha256Hex(context.firstName.trim().toLowerCase())]
   if (context.lastName) hashed.ln = [await sha256Hex(context.lastName.trim().toLowerCase())]
   if (context.externalId) hashed.externalId = [context.externalId]
@@ -260,6 +265,13 @@ export async function trackServerEvent(input: ServerTrackInput): Promise<ServerT
       if (isImportantEvent) {
         await recordEvent('ga4', eventId, eventName, 'skipped', {}, 'GA4 API Secret ناقص — أدخله من تبويب الإعدادات (Analytics ← Admin ← Data Streams ← Measurement Protocol API secrets)', input.subscriptionId)
       }
+    } else if (
+      // GA4 لا يعمل Dedupe بين gtag (المتصفح) و Measurement Protocol إلا لـ purchase
+      // عبر transaction_id — وكل أحداثنا تُرسل من المتصفح أيضاً، فإرسالها من
+      // السيرفر يضاعف التقارير. نكتفي بـ Purchase وبهوية متصفح حقيقية (client_id).
+      !(eventName === TRACKING_EVENTS.Purchase && context.gaClientId)
+    ) {
+      results.push({ provider: 'ga4', eventId, status: 'skipped', reason: 'counted by browser gtag (GA4 has no MP/gtag dedupe)' })
     } else if (await alreadySent('ga4', eventId)) {
       results.push({ provider: 'ga4', eventId, status: 'skipped', reason: 'duplicate' })
     } else if (!gate) {
@@ -314,8 +326,10 @@ async function sendMetaCapi(
           event_name: metaEventName(eventName),
           event_time: Math.floor(Date.now() / 1000),
           event_id: eventId,
-          action_source: 'website',
-          event_source_url: context.pageUrl,
+          // Meta تشترط client_user_agent لأحداث website. أحداث الـ Webhook
+          // (الدفع) لا تملك سياق متصفح → تُرسل system_generated بدل أن تُرفض.
+          action_source: context.userAgent ? 'website' : 'system_generated',
+          ...(context.userAgent && context.pageUrl ? { event_source_url: context.pageUrl } : {}),
           user_data: {
             ...(hashed.em ? { em: hashed.em } : {}),
             ...(hashed.ph ? { ph: hashed.ph } : {}),
@@ -415,7 +429,7 @@ export function buildTikTokEvent(
     event_id: eventId,
     user: {
       ...(hashed.em ? { email: hashed.em[0] } : {}),
-      ...(hashed.ph ? { phone: hashed.ph[0] } : {}),
+      ...((hashed.ttPh ?? hashed.ph) ? { phone: (hashed.ttPh ?? hashed.ph)![0] } : {}),
       // external_id في TikTok يجب أن يكون SHA-256
       ...(hashedExternalId ? { external_id: hashedExternalId } : {}),
       ...(context.clientIp ? { ip: context.clientIp } : {}),
@@ -444,6 +458,7 @@ export function buildTikTokEvent(
       ...(params.transactionId ? { order_id: params.transactionId } : {}),
       ...(context.pageUrl ? { event_source_url: context.pageUrl } : {}),
     },
+    ...(context.pageUrl ? { page: { url: context.pageUrl } } : {}),
     limited_data_use: false,
   }
 }
@@ -661,6 +676,8 @@ export function extractRequestContext(
   gaClientId?: string
   gaSessionId?: string
   ttp?: string
+  fbp?: string
+  fbc?: string
 } {
   const ip =
     req.get('cf-connecting-ip') ||
@@ -671,6 +688,9 @@ export function extractRequestContext(
   const cookies = parseCookies(req.get('cookie'))
   const ga = extractGaCookies(cookies, gaMeasurementId)
   const ttp = cookies['_ttp'] || undefined
-  return { clientIp: ip, userAgent, ...ga, ttp }
+  // كوكيز Meta: _fbp (معرف المتصفح) و _fbc (من fbclid) — أهم مفاتيح مطابقة CAPI
+  const fbp = cookies['_fbp'] || undefined
+  const fbc = cookies['_fbc'] || undefined
+  return { clientIp: ip, userAgent, ...ga, ttp, fbp, fbc }
 }
 

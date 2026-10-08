@@ -53,6 +53,8 @@ let config: PublicTrackingConfig | null = null
 let lastPageViewPath: string | null = null
 let lastPageViewAt = 0
 const loadedScripts = new Set<string>()
+// أحداث أُطلقت قبل جاهزية الإعدادات (الإعدادات تُجلب وقت التشغيل) — تُنفَّذ عند initTracking
+const pendingEvents: Array<{ name: string; params: TrackingEventParams; options: TrackOptions }> = []
 
 // ─── Consent (Google Consent Mode v2 + طبقة موافقة قابلة للتوسع) ──────
 
@@ -158,22 +160,37 @@ function loadScriptOnce(id: string, src: string, inline?: string): void {
   }
 }
 
+/**
+ * Google tag (gtag.js) — يخدم GA4 و Google Ads معاً.
+ * 🛠️ إصلاح: كان يُحمَّل فقط عند وجود GA4 Measurement ID، ولا يُستدعى
+ * gtag('config','AW-…') أبداً. النتيجة: Google Ads وحده (بدون GA4) لا يُحمَّل
+ * فيه gtag أصلاً فتضيع كل التحويلات بصمت. الآن يُحمَّل بأي معرف صالح
+ * ويُضبط كل معرف (G- و AW-) على حدة.
+ */
 function loadGa4(cfg: PublicTrackingConfig): void {
-  if (!cfg.google.enabled || !cfg.google.ga4MeasurementId) return
-  const id = cfg.google.ga4MeasurementId
-  loadScriptOnce('ga4-lib', `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}`)
+  if (!cfg.google.enabled) return
+  const ga4 = /^G-[A-Z0-9]+$/i.test(cfg.google.ga4MeasurementId) ? cfg.google.ga4MeasurementId : ''
+  const aw = /^AW-\d+$/i.test(cfg.google.adsConversionId) ? cfg.google.adsConversionId : ''
+  const first = ga4 || aw
+  if (!first) return
+  loadScriptOnce('ga4-lib', `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(first)}`)
+  const configs: string[] = []
+  if (ga4) configs.push(`gtag('config', ${JSON.stringify(ga4)}, { send_page_view: false });`)
+  if (aw) configs.push(`gtag('config', ${JSON.stringify(aw)});`)
   loadScriptOnce('ga4-init', '', `
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     window.gtag = window.gtag || gtag;
     gtag('js', new Date());
-    gtag('config', '${id.replace(/'/g, '')}', { send_page_view: false });
+    ${configs.join('\n    ')}
   `)
 }
 
 function loadGtm(cfg: PublicTrackingConfig): void {
   if (!cfg.google.enabled || !cfg.google.useGtm || !cfg.google.gtmId) return
   const id = cfg.google.gtmId.replace(/[^A-Z0-9-]/gi, '')
+  // معرّف G-… ليس حاوية GTM (يُعامل كـ GA4 في config.ts) — تحميله كحاوية يفشل
+  if (!/^GTM-[A-Z0-9]+$/i.test(id)) return
   loadScriptOnce('gtm', '', `
     (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});
     var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
@@ -400,6 +417,7 @@ export function initTracking(cfg: PublicTrackingConfig): void {
       getConsent,
       version: '1.1.0',
     }
+    pendingEvents.length = 0
     return
   }
 
@@ -433,6 +451,13 @@ export function initTracking(cfg: PublicTrackingConfig): void {
   if (cfg.general.debugMode) {
     console.log('[tracking] initialized with config:', JSON.stringify(cfg))
   }
+
+  flushPendingEvents()
+}
+
+function flushPendingEvents(): void {
+  const queued = pendingEvents.splice(0, pendingEvents.length)
+  for (const e of queued) trackEvent(e.name, e.params, e.options)
 }
 
 // ─── تحويلات الأسماء لكل منصة ────────────────────────────────────────
@@ -473,7 +498,13 @@ export function trackEvent(
   params: TrackingEventParams = {},
   options: TrackOptions = {}
 ): void {
-  if (typeof window === 'undefined' || !config || !config.general.enabled) return
+  if (typeof window === 'undefined') return
+  if (!config) {
+    // الإعدادات لم تصل بعد → لا نُسقط الحدث، نؤجله (حد أقصى 20)
+    if (pendingEvents.length < 20) pendingEvents.push({ name: eventName, params, options })
+    return
+  }
+  if (!config.general.enabled) return
 
   const eventId = params.eventId
   const debugLog = (...a: unknown[]) => {
@@ -630,7 +661,7 @@ export function trackPageView(path: string, pageLocation?: string): void {
     } catch { /* ignore */ }
   }
   // GTM — بث page_view للـ container عند تفعيله
-  if (config.google.enabled && config.google.useGtm && config.google.gtmId && consent.analytics) {
+  if (config.google.enabled && config.google.useGtm && /^GTM-/i.test(config.google.gtmId) && consent.analytics) {
     try {
       window.dataLayer?.push({ event: 'nezam_page_view', page_path: path })
     } catch { /* ignore */ }
