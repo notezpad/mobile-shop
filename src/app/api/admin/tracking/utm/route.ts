@@ -1,4 +1,4 @@
-import { withDb, db } from '@/lib/db'
+import { withDb, db, describeDbConnection } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireSuperAdmin, authErrorResponse } from '@/lib/auth'
 import { buildUtmUrl, sha256Hex, UtmPlatform } from '@/lib/tracking/utm'
@@ -6,6 +6,17 @@ import { getCampaignPerformance } from '@/lib/tracking/analytics'
 import { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * ⚡ SANDBOX DEMO ADAPTER: خيار mode:'insensitive' خاص بـ PostgreSQL ويرفضه
+ * Prisma على SQLite (بيئة المعاينة) فيُسقط الاستعلام كله. على SQLite نستخدم
+ * contains العادي — LIKE متساوي الحالات للاتينية أصلاً فالسلوك مكافئ،
+ * وفي الإنتاج (PostgreSQL) يمر الخيار كما هو بلا أي تغيير.
+ */
+const LIKE = (() => {
+  const insensitive = describeDbConnection() !== 'sqlite-local'
+  return (v: string) => (insensitive ? { contains: v, mode: 'insensitive' as const } : { contains: v })
+})()
 
 /**
  * GET /api/admin/tracking/utm
@@ -31,10 +42,10 @@ async function __GET(req: NextRequest) {
     ...(q
       ? {
           OR: [
-            { name: { contains: q, mode: 'insensitive' } },
-            { utmCampaign: { contains: q, mode: 'insensitive' } },
-            { utmSource: { contains: q, mode: 'insensitive' } },
-            { fullUrl: { contains: q, mode: 'insensitive' } },
+            { name: LIKE(q) },
+            { utmCampaign: LIKE(q) },
+            { utmSource: LIKE(q) },
+            { fullUrl: LIKE(q) },
           ],
         }
       : {}),

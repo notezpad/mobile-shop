@@ -419,6 +419,17 @@ export async function getAttribution(db: DbLike, f: AttributionFilters): Promise
 /** أداء آخر 30 يوماً لكل حملة (utm_campaign) — للعرض في مكتبة الحملات */
 export async function getCampaignPerformance(db: DbLike, campaigns: string[]): Promise<Record<string, { registrations: number; purchases: number; revenue: number }>> {
   if (!campaigns.length) return {}
+  try {
+    return await campaignPerformanceRaw(db, campaigns)
+  } catch {
+    // المسار الخام خاص بـ PostgreSQL (NOW()/regexp_replace/CASTs) — على أي
+    // محرك آخر (مثل SQLite في بيئة المعاينة) نستخدم مسار ORM المكافئ
+    // تماماً بنفس دلالات العدّ (نمط getFunnelFallback أعلاه).
+    return campaignPerformanceOrm(db as any, campaigns)
+  }
+}
+
+async function campaignPerformanceRaw(db: DbLike, campaigns: string[]): Promise<Record<string, { registrations: number; purchases: number; revenue: number }>> {
   const q = new RawQuery()
   const list = campaigns.map((c) => q.p(c)).join(', ')
   q.add(`WITH ev AS (
@@ -453,6 +464,119 @@ export async function getCampaignPerformance(db: DbLike, campaigns: string[]): P
       purchases: Number(r.purchases ?? 0),
       revenue: Number(r.revenue ?? 0),
     }
+  }
+  return out
+}
+
+/**
+ * مسار ORM مكافئ لـ campaignPerformanceRaw — نفس دلالات العدّ حرفياً:
+ *   - أحداث آخر 30 يوماً مُكرَّرة Dedup على (eventId, eventName, subscriptionId)
+ *   - Registrations: userId مقتطع من eventId بالصيغة signup-<userId>
+ *   - Purchases: subscriptionId → Subscription → Tenant(ownerEmail) → User
+ *   - التصنيف بـ firstTouchCampaign (lowercase) بغض النظر عن status
+ *   - revenue = مجموع amountPaid لأحداث Purchase المُكرَّرة (مرة لكل حدث)
+ */
+async function campaignPerformanceOrm(db: any, campaigns: string[]): Promise<Record<string, { registrations: number; purchases: number; revenue: number }>> {
+  const wanted = new Set(campaigns.map((c) => c.toLowerCase()))
+  const since = new Date(Date.now() - 30 * 864e5)
+
+  const evRows: Array<{ eventId: string; eventName: string; subscriptionId: number | null }> =
+    await db.trackingEvent.findMany({
+      where: { createdAt: { gte: since }, eventName: { in: ['CompleteRegistration', 'Purchase'] } },
+      select: { eventId: true, eventName: true, subscriptionId: true },
+      take: 50000,
+    })
+  const seen = new Set<string>()
+  const events = evRows.filter((e) => {
+    const key = `${e.eventId}|${e.eventName}|${e.subscriptionId ?? ''}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  if (!events.length) return {}
+
+  // resolved userId لكل حدث
+  const purchaseSubIds = new Set<number>()
+  for (const e of events) {
+    if (e.eventName === 'Purchase' && e.subscriptionId != null) purchaseSubIds.add(e.subscriptionId)
+  }
+  const subToUser = new Map<number, string>()
+  if (purchaseSubIds.size) {
+    const subs = await db.subscription.findMany({
+      where: { id: { in: [...purchaseSubIds] } },
+      select: { id: true, tenant: { select: { id: true, ownerEmail: true } } },
+      take: 1000,
+    })
+    const tenantIds = [...new Set(subs.map((s: any) => s.tenant.id))]
+    const users = await db.user.findMany({
+      where: { tenantId: { in: tenantIds } },
+      select: { id: true, tenantId: true, email: true },
+      take: 2000,
+    })
+    for (const s of subs) {
+      const u = users.find((x: any) => x.tenantId === s.tenant.id && x.email === s.tenant.ownerEmail)
+      if (u) subToUser.set(s.id, u.id)
+    }
+  }
+
+  const userIds = new Set<string>()
+  for (const e of events) {
+    if (e.eventName === 'CompleteRegistration' && e.eventId.startsWith('signup-')) {
+      userIds.add(e.eventId.slice('signup-'.length))
+    }
+  }
+  for (const uid of subToUser.values()) userIds.add(uid)
+  const userCamp = new Map<string, string>()
+  if (userIds.size) {
+    const attrs = await db.userAttribution.findMany({
+      where: { userId: { in: [...userIds] } },
+      select: { userId: true, firstTouchCampaign: true },
+      take: 5000,
+    })
+    for (const a of attrs) {
+      if (a.firstTouchCampaign) userCamp.set(a.userId, a.firstTouchCampaign.toLowerCase())
+    }
+  }
+
+  // تجميع
+  const regIds = new Map<string, Set<string>>()
+  const purIds = new Map<string, Set<string>>()
+  const purAmount = new Map<string, Map<string, number>>()
+  const amounts = new Map<number, number | null>()
+  if (subToUser.size) {
+    const subs = await db.subscription.findMany({
+      where: { id: { in: [...subToUser.keys()] } },
+      select: { id: true, amountPaid: true },
+      take: 1000,
+    })
+    for (const s of subs) amounts.set(s.id, s.amountPaid ?? null)
+  }
+  for (const e of events) {
+    const uid = e.eventName === 'CompleteRegistration'
+      ? (e.eventId.startsWith('signup-') ? e.eventId.slice('signup-'.length) : '')
+      : (e.subscriptionId != null ? subToUser.get(e.subscriptionId) : undefined)
+    const camp = uid ? userCamp.get(uid) : undefined
+    if (!camp || !wanted.has(camp)) continue
+    if (e.eventName === 'CompleteRegistration') {
+      if (!regIds.has(camp)) regIds.set(camp, new Set())
+      regIds.get(camp)!.add(e.eventId)
+    } else {
+      if (!purIds.has(camp)) purIds.set(camp, new Set())
+      purIds.get(camp)!.add(e.eventId)
+      if (!purAmount.has(camp)) purAmount.set(camp, new Map())
+      // أول حدث فقط يحسب المبلغ (Dedup eventId كما في COUNT/SUM الخام)
+      if (!purAmount.get(camp)!.has(e.eventId)) {
+        purAmount.get(camp)!.set(e.eventId, e.subscriptionId != null ? (amounts.get(e.subscriptionId) ?? 0) : 0)
+      }
+    }
+  }
+
+  const out: Record<string, { registrations: number; purchases: number; revenue: number }> = {}
+  for (const camp of wanted) {
+    const regs = regIds.get(camp)?.size ?? 0
+    const purs = purIds.get(camp)?.size ?? 0
+    const rev = purs ? [...(purAmount.get(camp)?.values() ?? [])].reduce((a, b) => a + b, 0) : 0
+    if (regs || purs) out[camp] = { registrations: regs, purchases: purs, revenue: rev }
   }
   return out
 }
