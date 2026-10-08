@@ -8,6 +8,7 @@ import {
   maskSecret,
   getProviderStatuses,
 } from '@/lib/tracking/config'
+import { sanitizeId } from '@/lib/tracking/sanitize'
 
 export const dynamic = 'force-dynamic'
 
@@ -120,11 +121,28 @@ async function __PUT(req: NextRequest) {
     return NextResponse.json({ error: 'بيانات غير صالحة' }, { status: 400 })
   }
 
-  // تحقق صيغة أساسية قبل الحفظ (تحذيرات غير معيقة)
+  // 🧼 تنظيف معرفات المنصات قبل التحقق والحفظ — محارف خفية تتسرب عند
+  // النسخ من صفحات Google/Meta داخل بيئة RTL (RLM/LRM/ZWNJ…) أو شرطات
+  // شبيهة (– — −) كانت تُفسد التحقق وتُحفظ فتكسر التتبع بصمت.
+  const sanitizePatch = (obj: Record<string, unknown> | undefined, keys: string[]) => {
+    if (!obj || typeof obj !== 'object') return
+    for (const k of keys) {
+      if (typeof obj[k] === 'string') obj[k] = sanitizeId(obj[k] as string)
+    }
+  }
+  sanitizePatch(body.google, ['ga4MeasurementId', 'adsConversionId', 'gtmId', 'registration', 'trial', 'purchase'])
+  sanitizePatch(body.meta, ['pixelId', 'datasetId'])
+  sanitizePatch(body.tiktok, ['pixelId', 'testEventCode'])
+
+  // تحقق صيغة أساسية قبل الحفظ (تحذيرات غير معيقة) — يعمل على قيم نظيفة
   const warnings: string[] = []
   const g = body.google ?? {}
-  if (typeof g.ga4MeasurementId === 'string' && g.ga4MeasurementId && !/^G-[A-Z0-9]+$/i.test(g.ga4MeasurementId.trim())) {
-    warnings.push('GA4 Measurement ID يجب أن يبدأ بـ G- (مثال: G-XXXXXXXXXX)')
+  if (typeof g.ga4MeasurementId === 'string' && g.ga4MeasurementId) {
+    if (g.ga4MeasurementId.includes('@')) {
+      warnings.push('يبدو أنك وضعت بريداً إلكترونياً في خانة GA4 Measurement ID — ضع المعرف الذي يبدأ بـ G- من Analytics ← Data Streams (مثال: G-XXXXXXXXXX)')
+    } else if (!/^G-[A-Z0-9]+$/i.test(g.ga4MeasurementId.trim())) {
+      warnings.push('GA4 Measurement ID يجب أن يبدأ بـ G- (مثال: G-XXXXXXXXXX)')
+    }
   }
   if (typeof g.adsConversionId === 'string' && g.adsConversionId && !/^AW-\d+$/i.test(g.adsConversionId.trim())) {
     warnings.push('Google Ads Conversion ID يجب أن يبدأ بـ AW- (مثال: AW-123456789)')

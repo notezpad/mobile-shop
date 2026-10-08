@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/table'
 import {
   FilterBar, RangeFilterState, initialRange, rangeParams, fetchJson,
-  fmtNum, fmtPct100, fmtMoney, EmptyHint,
+  fmtNum, fmtPct100, fmtMoney, EmptyHint, DataIssueBanner,
 } from './shared'
 
 interface AttributionRow {
@@ -29,6 +29,12 @@ interface AttributionRow {
   purchases: number
   trialToPaid: number | null
   revenue: number
+}
+
+interface AttributionPayload {
+  rows: AttributionRow[]
+  dataReady?: boolean
+  errorDetail?: string
 }
 
 type SortKey = 'purchases' | 'revenue' | 'trials' | 'conversion' | 'registrations'
@@ -68,6 +74,7 @@ export function TrackingAttribution() {
   const [sortBy, setSortBy] = React.useState<SortKey>('purchases')
   const [order, setOrder] = React.useState<'asc' | 'desc'>('desc')
   const [rows, setRows] = React.useState<AttributionRow[] | null>(null)
+  const [issue, setIssue] = React.useState<{ dataReady?: boolean; errorDetail?: string } | null>(null)
   const [loading, setLoading] = React.useState(true)
 
   const load = React.useCallback(async () => {
@@ -76,8 +83,9 @@ export function TrackingAttribution() {
       const qs = rangeParams(filters)
       qs.set('sortBy', sortBy)
       qs.set('order', order)
-      const res = await fetchJson<{ rows: AttributionRow[] }>(`/api/admin/tracking/attribution?${qs.toString()}`)
+      const res = await fetchJson<AttributionPayload>(`/api/admin/tracking/attribution?${qs.toString()}`)
       setRows(res.rows)
+      setIssue({ dataReady: res.dataReady, errorDetail: res.errorDetail })
     } catch (e: any) {
       toast.error(e?.message || 'فشل تحميل تقرير الإسناد')
     } finally {
@@ -107,6 +115,8 @@ export function TrackingAttribution() {
           <FilterBar value={filters} onChange={setFilters} />
         </CardContent>
       </Card>
+
+      {issue?.dataReady === false && <DataIssueBanner errorDetail={issue.errorDetail} />}
 
       <Card>
         <CardHeader className="pb-2">

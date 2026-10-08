@@ -46,8 +46,18 @@ async function __GET(req: NextRequest) {
     limit: Math.min(Number(sp.get('limit')) || 100, 500),
   }
 
-  const rows = await getAttribution(db as any, filters)
-  return NextResponse.json({ rows, filters }, { headers: { 'Cache-Control': 'no-store' } })
+  // 🛡️ لا يُرجع 500 أبداً — فشل الاستعلام يرجع صفوفاً فارغة + سبب واضح
+  // يظهر في بانر الواجهة (نفس نمط شاشة الإعدادات).
+  try {
+    const rows = await getAttribution(db as any, filters)
+    return NextResponse.json({ rows, filters, dataReady: true }, { headers: { 'Cache-Control': 'no-store' } })
+  } catch (e) {
+    const detail = String(e instanceof Error ? e.message : e).slice(0, 300)
+    return NextResponse.json(
+      { rows: [], filters, dataReady: false, errorDetail: detail },
+      { headers: { 'Cache-Control': 'no-store' } },
+    )
+  }
 }
 
 export async function GET(...args: Parameters<typeof __GET>) {

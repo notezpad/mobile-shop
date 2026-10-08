@@ -180,6 +180,47 @@ export function EmptyHint({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * 🛡️ بانر مشترك لعدم جهوزية بيانات التحليلات — يظهر بدل 500:
+ * يشرح خطوة الإصلاح (تشغيل TRACKING_TABLES.sql) ويعرض تفاصيل الخطأ
+ * التقنية بشكل قابل للطي حتى تصلنا رسالة السبب الحقيقي من الإنتاج.
+ */
+export function DataIssueBanner({ errorDetail, degraded }: { errorDetail?: string; degraded?: boolean }) {
+  const [open, setOpen] = React.useState(false)
+  if (degraded) {
+    return (
+      <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+        ⚠️ يتم العرض الآن بالمسار الاحتياطي (استعلام مبسط) — الأرقام صحيحة لكن فلاتر المصدر/الحملة معطلة مؤقتاً.
+        {errorDetail && (
+          <>
+            {' '}
+            <button onClick={() => setOpen((v) => !v)} className="underline underline-offset-2">
+              {open ? 'إخفاء التفاصيل' : 'التفاصيل'}
+            </button>
+            {open && <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-all font-mono text-[10px] opacity-80" dir="ltr">{errorDetail}</pre>}
+          </>
+        )}
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs leading-relaxed text-amber-800 dark:text-amber-300">
+      <b>تعذّر قراءة بيانات التحليلات.</b> السبب غالباً أن جدولا التتبع أو جدول الحملات لم يُنشأ بعد في قاعدة البيانات.
+      <br />
+      الحل: شغّل ملف <code className="rounded bg-amber-500/20 px-1 font-mono">TRACKING_TABLES.sql</code> في Supabase ← SQL Editor (آمن — لا يمس البيانات) ثم أعد تحميل الصفحة.
+      {errorDetail && (
+        <>
+          {' '}
+          <button onClick={() => setOpen((v) => !v)} className="underline underline-offset-2">
+            {open ? 'إخفاء تفاصيل الخطأ' : 'تفاصيل الخطأ'}
+          </button>
+          {open && <pre className="mt-1.5 max-h-28 overflow-auto whitespace-pre-wrap break-all rounded bg-amber-500/10 p-2 font-mono text-[10px] opacity-90" dir="ltr">{errorDetail}</pre>}
+        </>
+      )}
+    </div>
+  )
+}
+
 export function CopyButton({ text, label = 'نسخ', size = 'sm' }: { text: string; label?: string; size?: 'sm' | 'icon' }) {
   const [copied, setCopied] = React.useState(false)
   const copy = async () => {

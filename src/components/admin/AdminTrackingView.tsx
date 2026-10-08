@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/table'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
+import { sanitizeId } from '@/lib/tracking/sanitize'
 import { TrackingFunnel } from './tracking/TrackingFunnel'
 import { TrackingAttribution } from './tracking/TrackingAttribution'
 import { UtmBuilder } from './tracking/UtmBuilder'
@@ -143,14 +144,23 @@ export function AdminTrackingView() {
         general: data.config.general,
         google: {
           ...data.config.google,
+          // 🧼 تنظيف قبل الإرسال — يُصلح قيمة فاسدة محفوظة سابقاً حتى لو
+          // لم يعدل المستخدم الحقل (يكفي الضغط على حفظ مرة واحدة)
+          ga4MeasurementId: sanitizeId(data.config.google.ga4MeasurementId),
+          adsConversionId: sanitizeId(data.config.google.adsConversionId),
+          gtmId: sanitizeId(data.config.google.gtmId),
           ga4ApiSecret: secrets.ga4ApiSecret === SECRET_CLEAR ? SECRET_CLEAR : secrets.ga4ApiSecret || '',
         },
         meta: {
           ...data.config.meta,
+          pixelId: sanitizeId(data.config.meta.pixelId),
+          datasetId: sanitizeId(data.config.meta.datasetId),
           capiToken: secrets.capiToken === SECRET_CLEAR ? SECRET_CLEAR : secrets.capiToken || '',
         },
         tiktok: {
           ...data.config.tiktok,
+          pixelId: sanitizeId(data.config.tiktok.pixelId),
+          testEventCode: sanitizeId(data.config.tiktok.testEventCode),
           eventsApiToken: secrets.eventsApiToken === SECRET_CLEAR ? SECRET_CLEAR : secrets.eventsApiToken || '',
         },
       }
@@ -368,7 +378,7 @@ export function AdminTrackingView() {
               <CardContent className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="GA4 Measurement ID" hint="من Analytics → Data Streams (G-XXXXXXXXXX)">
-                    <Input dir="ltr" placeholder="G-XXXXXXXXXX" value={cfg.google.ga4MeasurementId} onChange={(e) => setGoogle({ ga4MeasurementId: e.target.value })} />
+                    <Input dir="ltr" placeholder="G-XXXXXXXXXX" value={cfg.google.ga4MeasurementId} onChange={(e) => setGoogle({ ga4MeasurementId: sanitizeId(e.target.value) })} />
                   </Field>
                   <Field label="GA4 API Secret (Server-side)" hint="للإرسال عبر Measurement Protocol — سري، لا يُعرض">
                     {secretInput('ga4ApiSecret', { set: cfg.google.ga4ApiSecretSet, masked: cfg.google.ga4ApiSecretMasked, placeholder: 'غير مضبوط — اختياري', onClear: () => clearSecret('ga4ApiSecret') })}
@@ -377,7 +387,7 @@ export function AdminTrackingView() {
                 <Separator />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Google Ads Conversion ID" hint="من Ads → Conversion (AW-XXXXXXXXX)">
-                    <Input dir="ltr" placeholder="AW-123456789" value={cfg.google.adsConversionId} onChange={(e) => setGoogle({ adsConversionId: e.target.value })} />
+                    <Input dir="ltr" placeholder="AW-123456789" value={cfg.google.adsConversionId} onChange={(e) => setGoogle({ adsConversionId: sanitizeId(e.target.value) })} />
                   </Field>
                   <div className="grid grid-cols-3 gap-2">
                     <Field label="تسمية التسجيل" hint="Signup">
@@ -396,7 +406,7 @@ export function AdminTrackingView() {
                   <SwitchRow label="Google Tag / GTM" desc="تحميل حاوية GTM بدلاً من gtag مباشر" checked={cfg.google.useGtm} onChange={(v) => setGoogle({ useGtm: v })} />
                   {cfg.google.useGtm && (
                     <Field label="Google Tag ID" hint="GTM-XXXXXXX أو G-XXXX">
-                      <Input dir="ltr" placeholder="GTM-XXXXXXX" value={cfg.google.gtmId} onChange={(e) => setGoogle({ gtmId: e.target.value })} />
+                      <Input dir="ltr" placeholder="GTM-XXXXXXX" value={cfg.google.gtmId} onChange={(e) => setGoogle({ gtmId: sanitizeId(e.target.value) })} />
                     </Field>
                   )}
                 </div>
@@ -420,10 +430,10 @@ export function AdminTrackingView() {
               <CardContent className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Meta Pixel ID" hint="من Events Manager">
-                    <Input dir="ltr" placeholder="123456789012345" value={cfg.meta.pixelId} onChange={(e) => setMeta({ pixelId: e.target.value })} />
+                    <Input dir="ltr" placeholder="123456789012345" value={cfg.meta.pixelId} onChange={(e) => setMeta({ pixelId: sanitizeId(e.target.value) })} />
                   </Field>
                   <Field label="Dataset ID" hint="اختياري — نفس الـ Pixel ID غالباً في الإعدادات الحديثة">
-                    <Input dir="ltr" placeholder="نفس Pixel ID افتراضياً" value={cfg.meta.datasetId} onChange={(e) => setMeta({ datasetId: e.target.value })} />
+                    <Input dir="ltr" placeholder="نفس Pixel ID افتراضياً" value={cfg.meta.datasetId} onChange={(e) => setMeta({ datasetId: sanitizeId(e.target.value) })} />
                   </Field>
                 </div>
                 <Field label="Conversions API Access Token 🔒" hint="سري — يُستخدم من Backend فقط، يظهر Masked ولا يُعرض مطلقاً">
@@ -448,13 +458,13 @@ export function AdminTrackingView() {
             {cfg.tiktok.enabled && (
               <CardContent className="space-y-3">
                 <Field label="TikTok Pixel ID" hint="من Events Manager → Web Events">
-                  <Input dir="ltr" placeholder="CXXXXXXXXXXXXXXXXXXX" value={cfg.tiktok.pixelId} onChange={(e) => setTikTok({ pixelId: e.target.value })} />
+                  <Input dir="ltr" placeholder="CXXXXXXXXXXXXXXXXXXX" value={cfg.tiktok.pixelId} onChange={(e) => setTikTok({ pixelId: sanitizeId(e.target.value) })} />
                 </Field>
                 <Field label="Events API Access Token 🔒" hint="سري — يُستخدم من Backend فقط">
                   {secretInput('eventsApiToken', { set: cfg.tiktok.eventsApiTokenSet, masked: cfg.tiktok.eventsApiTokenMasked, placeholder: 'أدخل توكن Events API', onClear: () => clearSecret('eventsApiToken') })}
                 </Field>
                 <Field label="Test Event Code (اختياري)" hint="من Events Manager → Test Events — يُرسل فقط عند تفعيل وضع الاختبار">
-                  <Input dir="ltr" placeholder="TESTXXXX" value={cfg.tiktok.testEventCode} onChange={(e) => setTikTok({ testEventCode: e.target.value })} />
+                  <Input dir="ltr" placeholder="TESTXXXX" value={cfg.tiktok.testEventCode} onChange={(e) => setTikTok({ testEventCode: sanitizeId(e.target.value) })} />
                 </Field>
               </CardContent>
             )}

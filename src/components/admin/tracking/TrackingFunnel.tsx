@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { TrendingUp, ArrowDown } from 'lucide-react'
-import { FilterBar, RangeFilterState, initialRange, rangeParams, fetchJson, fmtNum, fmtPct, StatChip, EmptyHint } from './shared'
+import { FilterBar, RangeFilterState, initialRange, rangeParams, fetchJson, fmtNum, fmtPct, StatChip, EmptyHint, DataIssueBanner } from './shared'
 
 interface FunnelData {
   visitors: number
@@ -21,6 +21,9 @@ interface FunnelData {
   steps: { key: string; label: string; count: number; fromPrev: number | null }[]
   overallFromVisitors: number | null
   overallFromRegistrations: number | null
+  dataReady?: boolean
+  degraded?: boolean
+  errorDetail?: string
 }
 
 const STAGE_COLORS: Record<string, string> = {
@@ -61,6 +64,9 @@ export function TrackingFunnel() {
           <FilterBar value={filters} onChange={setFilters} />
         </CardContent>
       </Card>
+
+      {data?.dataReady === false && <DataIssueBanner errorDetail={data.errorDetail} />}
+      {data?.degraded && <DataIssueBanner degraded errorDetail={data.errorDetail} />}
 
       {/* نسب التحويل الكلية */}
       {data && (
