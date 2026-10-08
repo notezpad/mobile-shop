@@ -1,22 +1,16 @@
 // Simplified Nezam POS Schema (multi-tenant SaaS)
 // Each Tenant represents a shop. All data is isolated by tenantId.
 
+// ⚡ SANDBOX DEMO ADAPTER (2026-10-08):
+// النسخة الأصلية للموقع الحقيقي: postgresql (Supabase) + driverAdapters +
+// queryCompiler (Cloudflare Workers). بيئة المعاينة المحلية تستخدم SQLite.
 generator client {
-  provider        = "prisma-client-js"
-  // FIX Error 1102 (2026-09-27): the default Rust/WASM query engine is loaded
-  // into every Cloudflare Worker isolate (tens of MB + heavy startup CPU),
-  // which blows the Worker CPU/memory limit on cold starts — even for pages
-  // that never touch the DB. The TypeScript "client" engine removes it.
-  previewFeatures = ["driverAdapters", "queryCompiler"]
-  engineType      = "client"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  // Pooled connection (via Supabase's PgBouncer, port 6543) — used at runtime
-  url       = env("DATABASE_URL")
-  // Direct connection (port 5432) — used only for migrations
-  directUrl = env("DIRECT_URL")
+  provider = "sqlite"
+  url      = "file:../db/custom.db"
 }
 
 model Tenant {

@@ -54,7 +54,7 @@ async function __GET(req: NextRequest) {
 
   const [
     rangeAgg, dailyAgg, monthlyAgg, yearlyAgg,
-    monthlyRows, methodRows, transactions, count,
+    monthlyRaw, methodRows, transactions, count,
   ] = await Promise.all([
     db.subscription.aggregate({
       where: { ...baseWhere, createdAt: { gte: from, lte: to } },
@@ -75,15 +75,13 @@ async function __GET(req: NextRequest) {
       where: { ...baseWhere, createdAt: { gte: startOfYear > from ? startOfYear : from, lte: to } },
       _sum: { amountPaid: true },
     }),
-    // Last 12 months breakdown for the chart, grouped in SQL.
-    db.$queryRaw<{ month: string; revenue: number; count: number }[]>`
-      SELECT to_char(date_trunc('month', "createdAt"), 'YYYY-MM') AS month,
-             SUM("amountPaid")::float8 AS revenue,
-             COUNT(*)::int AS count
-      FROM "Subscription"
-      WHERE "tenantId" != ${PLATFORM_TENANT_ID} AND "amountPaid" > 0
-        AND "createdAt" >= ${twelveMonthsAgo}
-      GROUP BY 1 ORDER BY 1`,
+    // ⚡ SANDBOX DEMO ADAPTER (2026-10-08): كان استعلام SQL بصيغة PostgreSQL
+    // (to_char/date_trunc/::float8) — اتحول لقراءة Prisma عادية + تجميع في JS
+    // (مجموعة بيانات المعاينة صغيرة، نفس الأرقام بالظبط).
+    db.subscription.findMany({
+      where: { ...baseWhere, createdAt: { gte: twelveMonthsAgo } },
+      select: { createdAt: true, amountPaid: true },
+    }),
     db.subscription.groupBy({
       by: ['paymentMethod'],
       where: { ...baseWhere, createdAt: { gte: from, lte: to } },
@@ -109,8 +107,17 @@ async function __GET(req: NextRequest) {
   const avgMonthly = totalRevenue / 12
 
   // Fill in the 12-month window (including months with zero revenue, which
-  // the GROUP BY above never returns a row for) — only 12 iterations.
-  const monthlyByKey = new Map(monthlyRows.map((r) => [r.month, r]))
+  // the grouping never returns a row for) — only 12 iterations.
+  const grouped = new Map<string, { revenue: number; count: number }>()
+  for (const s of monthlyRaw) {
+    const d = new Date(s.createdAt)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const row = grouped.get(key) ?? { revenue: 0, count: 0 }
+    row.revenue += s.amountPaid
+    row.count += 1
+    grouped.set(key, row)
+  }
+  const monthlyByKey = grouped
   const monthly: Array<{ month: string; revenue: number; count: number }> = []
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)

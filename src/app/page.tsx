@@ -1,60 +1,44 @@
-import type { Metadata } from 'next'
-import { LandingPage } from '@/components/landing/LandingPage'
-import { HomeGate } from '@/components/HomeGate'
-import { SITE_URL, SITE_NAME, SITE_NAME_AR, SITE_DESCRIPTION } from '@/lib/site'
-import { buildPageMetadata } from '@/lib/seo'
+'use client'
 
 /**
- * 🛡️ الصفحة الرئيسية — Server Component (SSR / static).
- * كل نص الـ Landing (H1، المزايا، الأسعار، الأسئلة الشائعة) موجود في الـ HTML
- * اللي محركات البحث بتستلمه، من غير ما تحتاج تشغّل JavaScript.
+ * ⚡ SANDBOX DEMO ENTRY (2026-10-08):
+ * في الموقع الحقيقي هذه الصفحة هي اللاندنج + HomeGate (يقرر الزائر vs
+ * المسجّل vs السوبر أدمن). في بيئة المعاينة هنا بنفتح لوحة الأدمن مباشرة
+ * على صفحة "المحلات المشتركة" — وهي الصفحة المطلوب تطوير ستايلها.
  *
- * مفيش cookies() أو headers() هنا عمداً، عشان Next يعمل prerender ثابت
- * للصفحة — يعني صفر CPU على الـ Worker لكل زحفة بوت.
+ * (النسخة الأصلية محفوظة في مستودع الموقع — هذا ملف عرض فقط.)
  */
-// Title / Description / OG / canonical مأخوذين حرفيًا من src/lib/seo.ts
-export const metadata: Metadata = buildPageMetadata('/')
 
-// أسعار الباقات — لازم تطابق اللي معروض فعلاً في صفحة الأسعار.
-const softwareAppJsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'SoftwareApplication',
-  name: SITE_NAME,
-  alternateName: SITE_NAME_AR,
-  applicationCategory: 'BusinessApplication',
-  operatingSystem: 'Web, iOS, Android, Windows, macOS',
-  url: SITE_URL,
-  inLanguage: 'ar',
-  description: SITE_DESCRIPTION,
-  offers: [
-    { '@type': 'Offer', name: 'باقة أساسية - موبايل وكمبيوتر', price: '299', priceCurrency: 'EGP' },
-    { '@type': 'Offer', name: 'باقة احترافية - موبايل وكمبيوتر', price: '599', priceCurrency: 'EGP' },
-    { '@type': 'Offer', name: 'باقة أساسية - ملابس وأحذية', price: '349', priceCurrency: 'EGP' },
-    { '@type': 'Offer', name: 'باقة احترافية - ملابس وأحذية', price: '699', priceCurrency: 'EGP' },
-  ],
-  featureList: [
-    'نقطة بيع (POS) كاملة بالباركود',
-    'إدارة مخزون ذكية مع تنبيهات النفاد',
-    'متابعة الصيانة أول بأول',
-    'معاملات مالية ومحافظ إلكترونية متعددة',
-    'تقارير وأرباح لحظية',
-    'بيع بالجملة والقطاعي',
-    'يعمل بدون إنترنت (PWA)',
-  ],
-  // ⚠️ اتشال aggregateRating عمداً: ما ينفعش يترجع إلا لو فيه تقييمات حقيقية
-  // ظاهرة للزائر في الصفحة (سياسة جوجل للـ structured data).
-}
+import * as React from 'react'
+import dynamic from 'next/dynamic'
+import { Loader2 } from 'lucide-react'
+import { useShopStore } from '@/lib/store'
 
-export default function Page() {
-  return (
-    <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareAppJsonLd) }}
-      />
-      <HomeGate>
-        <LandingPage />
-      </HomeGate>
-    </>
-  )
+const SuperAdminApp = dynamic(
+  () => import('@/components/admin/SuperAdminApp').then((m) => m.SuperAdminApp),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="size-6 animate-spin text-amber-500" />
+      </div>
+    ),
+  },
+)
+
+export default function AdminDemoPage() {
+  const setUser = useShopStore((s) => s.setUser)
+
+  React.useEffect(() => {
+    setUser({
+      userId: 'demo-super-admin',
+      name: 'أحمد الأدمن',
+      email: 'admin@nezam.pos',
+      role: 'SUPER_ADMIN',
+      tenantId: 'platform-tenant',
+      branchId: null,
+    })
+  }, [setUser])
+
+  return <SuperAdminApp />
 }
