@@ -15,6 +15,7 @@
 
 import { db } from '@/lib/db'
 import { readEnv } from '@/lib/env'
+import { sanitizeId } from './sanitize'
 import {
   DEFAULT_TRACKING_CONFIG,
   TRACKING_CONFIG_VERSION,
@@ -148,14 +149,16 @@ export async function saveTrackingConfig(patch: unknown): Promise<TrackingConfig
   if (p.google && typeof p.google === 'object') {
     const g = p.google as Record<string, any>
     if (typeof g.enabled === 'boolean') next.google.enabled = g.enabled
-    if (typeof g.ga4MeasurementId === 'string') next.google.ga4MeasurementId = g.ga4MeasurementId.trim()
-    if (typeof g.adsConversionId === 'string') next.google.adsConversionId = g.adsConversionId.trim()
+    // 🧼 sanitizeId: تنظيف المحارف الخفية المتسربة عند النسخ (RTL) —
+    // يُصلح أيضاً أي قيمة فاسدة محفوظة مسبقاً عند أول حفظ قادم.
+    if (typeof g.ga4MeasurementId === 'string') next.google.ga4MeasurementId = sanitizeId(g.ga4MeasurementId)
+    if (typeof g.adsConversionId === 'string') next.google.adsConversionId = sanitizeId(g.adsConversionId)
     if (g.adsLabels && typeof g.adsLabels === 'object') {
       for (const k of ['registration', 'trial', 'purchase'] as const) {
-        if (typeof g.adsLabels[k] === 'string') next.google.adsLabels[k] = (g.adsLabels[k] as string).trim()
+        if (typeof g.adsLabels[k] === 'string') next.google.adsLabels[k] = sanitizeId(g.adsLabels[k] as string)
       }
     }
-    if (typeof g.gtmId === 'string') next.google.gtmId = g.gtmId.trim()
+    if (typeof g.gtmId === 'string') next.google.gtmId = sanitizeId(g.gtmId)
     if (typeof g.useGtm === 'boolean') next.google.useGtm = g.useGtm
     if (typeof g.enhancedConversions === 'boolean') next.google.enhancedConversions = g.enhancedConversions
     if (typeof g.consentMode === 'boolean') next.google.consentMode = g.consentMode
@@ -165,15 +168,15 @@ export async function saveTrackingConfig(patch: unknown): Promise<TrackingConfig
   if (p.meta && typeof p.meta === 'object') {
     const m = p.meta as Record<string, any>
     if (typeof m.enabled === 'boolean') next.meta.enabled = m.enabled
-    if (typeof m.pixelId === 'string') next.meta.pixelId = m.pixelId.trim()
-    if (typeof m.datasetId === 'string') next.meta.datasetId = m.datasetId.trim()
+    if (typeof m.pixelId === 'string') next.meta.pixelId = sanitizeId(m.pixelId)
+    if (typeof m.datasetId === 'string') next.meta.datasetId = sanitizeId(m.datasetId)
     next.meta.capiToken = applySecretPatch(current.meta.capiToken, m.capiToken)
   }
   if (p.tiktok && typeof p.tiktok === 'object') {
     const t = p.tiktok as Record<string, any>
     if (typeof t.enabled === 'boolean') next.tiktok.enabled = t.enabled
-    if (typeof t.pixelId === 'string') next.tiktok.pixelId = t.pixelId.trim()
-    if (typeof t.testEventCode === 'string') next.tiktok.testEventCode = t.testEventCode.trim()
+    if (typeof t.pixelId === 'string') next.tiktok.pixelId = sanitizeId(t.pixelId)
+    if (typeof t.testEventCode === 'string') next.tiktok.testEventCode = sanitizeId(t.testEventCode)
     next.tiktok.eventsApiToken = applySecretPatch(current.tiktok.eventsApiToken, t.eventsApiToken)
   }
 

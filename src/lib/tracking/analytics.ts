@@ -42,6 +42,8 @@ export interface FunnelResult {
   steps: { key: string; label: string; count: number; fromPrev: number | null }[]
   overallFromVisitors: number | null
   overallFromRegistrations: number | null
+  /** true إذا حُسب عبر المسار الاحتياطي ORM (فشل SQL الخام) */
+  fallback?: boolean
 }
 
 export interface AttributionFilters extends FunnelFilters {
@@ -164,6 +166,66 @@ export async function getFunnel(db: DbLike, f: FunnelFilters): Promise<FunnelRes
     steps,
     overallFromVisitors: visitors > 0 ? purchases / visitors : null,
     overallFromRegistrations: registrations > 0 ? purchases / registrations : null,
+  }
+}
+
+// ─── 1-ب) قمع احتياطي عبر Prisma ORM (بدون SQL خام) ──────────────────
+/**
+ * نسخة احتياطية آمنة من القمع تعمل عبر استعلامات ORM فقط — تُستخدم
+ * إذا فشل مسار SQL الخام في بيئة التشغيل (wasm/Hyperdrive مثلاً).
+ * تحسب نفس الأرقام الحقيقية (distinct eventId لكل مرحلة) — لكن فقط
+ * بدون فلاتر source/medium/campaign (هذه تحتاج JOIN غير متاح في ORM).
+ * مطابقة لسلوك المسار الخام: فلتر المنصة يُطبق على مراحل الأحداث فقط
+ * (الزوار داخليون دائماً provider='internal').
+ */
+export async function getFunnelFallback(db: any, f: FunnelFilters): Promise<FunnelResult> {
+  const timeWhere: Record<string, unknown> = {
+    createdAt: { gte: new Date(f.from), lt: new Date(f.to) },
+  }
+  const hasPlatform = !!(f.platform && f.platform !== 'all')
+  const platformWhere = hasPlatform ? { provider: f.platform } : {}
+
+  const distinctIds = async (where: Record<string, unknown>): Promise<Set<string>> => {
+    const rows: Array<{ eventId: string }> = await db.trackingEvent.findMany({
+      where,
+      select: { eventId: true },
+      distinct: ['eventId'],
+      take: 50000,
+    })
+    return new Set(rows.map((r) => r.eventId))
+  }
+
+  // الزوار: بدون فلتر منصة (مطابق للمسار الخام — PageView داخلي)
+  const stage = async (name: string, applyPlatform: boolean): Promise<number> =>
+    (await distinctIds({ ...timeWhere, ...(applyPlatform ? platformWhere : {}), eventName: name })).size
+
+  const [visitors, registrations, trials, checkouts, purchases] = await Promise.all([
+    stage('PageView', false),
+    stage('CompleteRegistration', hasPlatform),
+    stage('StartTrial', hasPlatform),
+    stage('InitiateCheckout', hasPlatform),
+    stage('Purchase', hasPlatform),
+  ])
+
+  const defs: [string, string, number][] = [
+    ['visitors', 'الزوار', visitors],
+    ['registrations', 'التسجيلات', registrations],
+    ['trials', 'التجارب', trials],
+    ['checkouts', 'بدء الدفع', checkouts],
+    ['purchases', 'المدفوعات', purchases],
+  ]
+  let prev: number | null = null
+  const steps = defs.map(([key, label, count]) => {
+    const fromPrev = prev === null || prev === 0 ? null : count / prev
+    prev = count
+    return { key, label, count, fromPrev }
+  })
+  return {
+    visitors, registrations, trials, checkouts, purchases,
+    steps,
+    overallFromVisitors: visitors > 0 ? purchases / visitors : null,
+    overallFromRegistrations: registrations > 0 ? purchases / registrations : null,
+    fallback: true,
   }
 }
 
