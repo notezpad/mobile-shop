@@ -6505,3 +6505,14 @@ html::-webkit-scrollbar-thumb:active {
   content-visibility: auto;
   contain-intrinsic-size: auto 44px;
 }
+
+/* ⚡ NO-FLASH (HomeGate): أثناء ريفرش السوبر أدمن */
+html[data-hg-boot] [data-hg-landing] { display: none !important; }
+html[data-hg-boot] body::after {
+  content: ""; position: fixed; top: 50%; left: 50%;
+  width: 28px; height: 28px; margin: -14px 0 0 -14px;
+  border: 3px solid currentColor; border-right-color: transparent;
+  border-radius: 9999px; opacity: .6; z-index: 9999;
+  animation: hg-spin .7s linear infinite;
+}
+@keyframes hg-spin { to { transform: rotate(360deg); } }

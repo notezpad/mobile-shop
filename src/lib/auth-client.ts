@@ -35,7 +35,10 @@ export const HOME_GATE_BOOT_KEY = 'nezam:home-gate-boot'
 export function clearHomeGateBootCache(): void {
   try {
     if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(HOME_GATE_BOOT_KEY)
       window.sessionStorage.removeItem(HOME_GATE_BOOT_KEY)
+      document.documentElement.removeAttribute('data-hg-boot')
+  document.getElementById('hg-boot-style')?.remove()
     }
   } catch {
     /* ignore */

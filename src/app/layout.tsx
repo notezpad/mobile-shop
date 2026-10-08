@@ -201,6 +201,14 @@ export default async function RootLayout({
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
       <head>
+        {/* ⚡ NO-FLASH: لو السوبر أدمن عامل ريفرش على "/" نخفي اللاندنج قبل أول
+            paint (الكاش في sessionStorage بيكتبه HomeGate). الزوار/البوتات
+            مالهمش كاش → مفيش أي تأثير على SEO. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{if(location.pathname!=='/')return;var r=localStorage.getItem('nezam:home-gate-boot');if(!r)return;var p=JSON.parse(r);if(p&&p.user&&((p.boot==='superadmin'&&p.user.role==='SUPER_ADMIN')||p.boot==='shop')){var h=document.documentElement;h.setAttribute('data-hg-boot','');var st=document.createElement('style');st.id='hg-boot-style';st.textContent='[data-hg-landing]{display:none!important}body::after{content:"";position:fixed;top:50%;left:50%;width:28px;height:28px;margin:-14px 0 0 -14px;border:3px solid currentColor;border-right-color:transparent;border-radius:9999px;opacity:.6;z-index:9999;animation:hgspin .7s linear infinite}@keyframes hgspin{to{transform:rotate(360deg)}}';document.head.appendChild(st);var done=function(){h.removeAttribute('data-hg-boot');var e=document.getElementById('hg-boot-style');if(e)e.remove();if(mo)mo.disconnect()};var mo=null;try{mo=new MutationObserver(function(){if(document.readyState!=='loading'&&!document.querySelector('[data-hg-landing]'))done()});mo.observe(document.documentElement,{childList:true,subtree:true})}catch(x){}setTimeout(done,4000)}}catch(e){}})();`,
+          }}
+        />
         {/* 🛡️ SEO: JSON-LD Structured Data */}
         <script
           type="application/ld+json"

@@ -52,14 +52,14 @@ type Boot = 'checking' | 'guest' | 'shop' | 'superadmin'
 // الحقيقية كوكي httpOnly على السيرفر. نفس فلسفة write-through بتاع IDB
 // في auth-client لكن للسرعة الفورية بدل الأوفلاين.
 interface BootCache {
-  boot: 'superadmin'
+  boot: 'superadmin' | 'shop'
   user: AuthUser
 }
 
 function readBootCache(): BootCache | null {
   if (typeof window === 'undefined') return null
   try {
-    const raw = window.sessionStorage.getItem(HOME_GATE_BOOT_KEY)
+    const raw = window.localStorage.getItem(HOME_GATE_BOOT_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<BootCache> | null
     // تحقق صارم: القرار الوحيد اللي بنسرّع فيه هو "سوبر أدمن مؤكد" —
@@ -78,15 +78,28 @@ function readBootCache(): BootCache | null {
   return null
 }
 
-function writeBootCache(user: AuthUser): void {
+// 🛡️ FIX (2026-10-08): كان sessionStorage — بيموت مع قفل التاب/فتح تاب جديد/الـ PWA
+// فأول ريفرش في أي تاب جديد كان بيفلاش اللاندنج. دلوقتي localStorage
+// (بيتمسح عند الدخول/الخروج أو لو السيرفر قال إن السيشن انتهت).
+function writeBootCache(user: AuthUser, boot: 'superadmin' | 'shop' = 'superadmin'): void {
   try {
-    window.sessionStorage.setItem(
+    window.localStorage.setItem(
       HOME_GATE_BOOT_KEY,
-      JSON.stringify({ boot: 'superadmin', user } satisfies BootCache)
+      JSON.stringify({ boot, user } satisfies BootCache)
     )
   } catch {
     /* ignore — وضع التصفح الخاص/الكوتا الممتلئة مش مشكلة، بس بيفقد السرعة */
   }
+}
+
+// ⚡ NO-FLASH FIX: السكريبت الحقيقي في <head> بتاع app/layout.tsx — بيحط
+// data-hg-boot على <html> قبل أول paint لو فيه كاش سوبر أدمن (والستايل في
+// globals.css بيخفي اللاندنج ويعرض سبينر). هنا بس بنشيل العلامة أول ما
+// القرار يتحسم.
+function removeBootFlag() {
+  if (typeof document === 'undefined') return
+  document.documentElement.removeAttribute('data-hg-boot')
+  document.getElementById('hg-boot-style')?.remove()
 }
 
 export function HomeGate({ children }: { children: React.ReactNode }) {
@@ -114,6 +127,8 @@ export function HomeGate({ children }: { children: React.ReactNode }) {
       setUser(cached.user) // نسخة عرض فورية — getMe هيحدّثها بالبيانات الطازة
       setBoot('superadmin')
     }
+    // 🛡️ FIX: نشيل السبينر المؤقت فوراً — React هيرسم لوحة الأدمن (أو اللاندنج) في نفس الفريم
+    removeBootFlag()
   }, [setUser])
 
   React.useEffect(() => {
@@ -142,7 +157,7 @@ export function HomeGate({ children }: { children: React.ReactNode }) {
 
       // قرار غير أدمن (مستخدم محل / impersonation / دور اتغير) → أي كاش
       // أدمن قديم لازم يتشال عشان الريفرش الجاي ما يفلاشش لوحة غلط.
-      clearHomeGateBootCache()
+      writeBootCache(me, 'shop') // الريفرش الجاي: سبينر بدل فلاش اللاندنج قبل /dashboard
 
       const tenantResult = await Promise.allSettled([
         api<{
@@ -198,6 +213,11 @@ export function HomeGate({ children }: { children: React.ReactNode }) {
     }
   }, [boot, router])
 
+  // أول ما القرار يتحسم (أو الأدمن يترسم) نشيل الستايل المؤقت.
+  React.useEffect(() => {
+    removeBootFlag()
+  }, [boot])
+
   if (boot === 'superadmin') return <SuperAdminApp />
 
   if (boot === 'shop') {
@@ -210,5 +230,9 @@ export function HomeGate({ children }: { children: React.ReactNode }) {
 
   // 'checking' و 'guest' → الـ Landing (متسلّمة في الـ HTML من السيرفر)
   // الزائر الجديد/البوتات: بلا أي انتظار — زي ما هو.
-  return <>{children}</>
+  return (
+    <>
+      <div data-hg-landing="">{children}</div>
+    </>
+  )
 }
