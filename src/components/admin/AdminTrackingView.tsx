@@ -20,6 +20,7 @@ import {
   Save, Loader2, Globe, BarChart3, Facebook, Music2, Megaphone,
   ShieldCheck, FlaskConical, Bug, ToggleLeft, Activity, RefreshCw,
   Eye, EyeOff, Trash2, CheckCircle2, XCircle, AlertTriangle, Clock,
+  TrendingUp, Target, Link2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -35,6 +36,9 @@ import {
 } from '@/components/ui/table'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
+import { TrackingFunnel } from './tracking/TrackingFunnel'
+import { TrackingAttribution } from './tracking/TrackingAttribution'
+import { UtmBuilder } from './tracking/UtmBuilder'
 
 // ─── Types (توافق مع استجابة /api/admin/tracking) ────────────────────
 
@@ -286,11 +290,29 @@ export function AdminTrackingView() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="settings">
-        <TabsList className="grid w-full grid-cols-2 sm:w-96">
+      <Tabs defaultValue="funnel">
+        <TabsList className="grid w-full max-w-full grid-cols-3 sm:grid-cols-5">
+          <TabsTrigger value="funnel" className="gap-1"><TrendingUp className="size-3.5" /> القمع</TabsTrigger>
+          <TabsTrigger value="attribution" className="gap-1"><Target className="size-3.5" /> المصادر</TabsTrigger>
+          <TabsTrigger value="utm" className="gap-1"><Link2 className="size-3.5" /> الحملات</TabsTrigger>
           <TabsTrigger value="settings">الإعدادات</TabsTrigger>
-          <TabsTrigger value="events" className="gap-1"><FlaskConical className="size-3.5" /> سجل الأحداث</TabsTrigger>
+          <TabsTrigger value="events" className="gap-1"><FlaskConical className="size-3.5" /> السجل</TabsTrigger>
         </TabsList>
+
+        {/* ═══════════ القمع التحليلي ═══════════ */}
+        <TabsContent value="funnel" className="mt-4">
+          <TrackingFunnel />
+        </TabsContent>
+
+        {/* ═══════════ تقارير الإسناد ═══════════ */}
+        <TabsContent value="attribution" className="mt-4">
+          <TrackingAttribution />
+        </TabsContent>
+
+        {/* ═══════════ UTM Builder ═══════════ */}
+        <TabsContent value="utm" className="mt-4">
+          <UtmBuilder />
+        </TabsContent>
 
         {/* ═══════════ الإعدادات ═══════════ */}
         <TabsContent value="settings" className="mt-4 space-y-4">

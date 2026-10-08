@@ -632,7 +632,52 @@ export function trackPageView(path: string, pageLocation?: string): void {
     } catch { /* ignore */ }
   }
 
+  // 🧭 تسجيل جلسة الزيارة داخلياً (Visitors للقمع التحليلي) — إضافي،
+  // لا يُرسل لأي منصة ويتبع موافقة التحليلات. fire-and-forget.
+  logVisitorSession(path)
+
   if (config.general.debugMode) console.log('[tracking] PageView:', path)
+}
+
+// ─── تسجيل جلسة الزيارة (Visitors — القمع التحليلي) ──────────────────
+// صف واحد لكل جلسة متصفح في TrackingEvent (provider='internal') —
+// Idempotent على السيرفر (upsert) + flag محلي — لا يمس أي مزود.
+const PV_SESSION_KEY = 'nezam_pv_session'
+let pvLoggedThisSession = false
+
+function pvSessionId(): string | null {
+  try {
+    let sid = window.sessionStorage.getItem(PV_SESSION_KEY)
+    if (!sid) {
+      const rand = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+      sid = `pv-${rand}`
+      window.sessionStorage.setItem(PV_SESSION_KEY, sid)
+    }
+    return sid
+  } catch { return null }
+}
+
+function logVisitorSession(path: string): void {
+  if (pvLoggedThisSession || !config) return
+  const consent = config.general.consentManagement ? getConsent() : { analytics: true, marketing: true }
+  if (!consent.analytics) return // قياس تحليلي — يتبع موافقة analytics_storage
+  const sid = pvSessionId()
+  if (!sid) return
+  pvLoggedThisSession = true
+  try {
+    void fetch('/api/tracking/pageview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventId: sid,
+        pageUrl: path.slice(0, 500),
+        referrer: (document.referrer || '').slice(0, 500),
+      }),
+      keepalive: true,
+    }).catch(() => {})
+  } catch { /* private mode */ }
 }
 
 // ─── Relay للسيرفر (ViewContent — matching أفضل على CAPI) ────────────

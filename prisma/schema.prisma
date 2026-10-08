@@ -897,3 +897,26 @@ model UserAttribution {
   @@index([lastTouchSource])
   @@index([firstTouchSource])
 }
+
+// 🔗 مكتبة حملات UTM — روابط مُنسّقة لمنصات الإعلان (Funnel/Attribution تكملتها)
+model UtmCampaign {
+  id             Int      @id @default(autoincrement())
+  name           String // اسم الحملة (للعرض)
+  platform       String // meta | google | tiktok | custom
+  destinationUrl String // الرابط الأساسي Canonical (بدون UTM)
+  utmSource      String
+  utmMedium      String
+  utmCampaign    String
+  utmContent     String?
+  utmTerm        String?
+  utmId          String?
+  fullUrl        String // الرابط الكامل النهائي
+  urlHash        String @unique // SHA-256 للرابط الكامل — منع التكرار
+  archived       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([platform])
+  @@index([utmCampaign])
+  @@index([archived, createdAt])
+}
