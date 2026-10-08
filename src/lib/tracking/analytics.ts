@@ -17,9 +17,23 @@
  *       Registrations: eventId 'signup-<userId>'
  *       البقية:        subscriptionId → Tenant.ownerEmail → User
  *   - لا تُغيّر أي شيء في نظام التتبع الحالي — قراءة فقط.
+ *
+ * ⚠️ إصلاح 42601 (2026-10-08) — مهم جداً لبيئة Cloudflare Workers:
+ * ────────────────────────────────────────────────────────────────────
+ * كانت هذه الاستعلامات تُبنى بـ $queryRaw + أجزاء Prisma.sql/Prisma.raw/
+ * Prisma.empty المتراكبة. عميل Prisma الـ WASM ('@prisma/client/wasm'
+ * المستخدم في workerd) يُفسد تسلسل الأجزاء المتراكبة: يحوّلها إلى
+ * باراميترات $n بدل دمجها في نص SQL — فيصل إلى Postgres حرفياً:
+ *     WITH $1 ev AS (...) SELECT ... $4 AS registrations ...
+ * → Raw query failed. Code: 42601 — syntax error at or near "$1".
+ * (محرك Node يدمجها صح، لذا كانت الاختبارات المحلية تمر بينما الإنتاج
+ * يفشل — وهذا هو سبب «القمع يفشل فقط على Cloudflare».)
+ *
+ * الحل هنا: نصوص SQL مسطّحة تُبنى كنص واحد + باراميترات قياسية فقط
+ * (نص/تاريخ/عدد) عبر $queryRawUnsafe — لا يمر بأي تسطيح أجزاء، فهو
+ * آمن ومتطابق على المحركين (Node و WASM). كل المعرفات الديناميكية
+ * تأتي من قوائم ثابتة برمجية (ليست مدخلات مستخدم) فلا حقن SQL.
  */
-
-import { Prisma } from '@prisma/client'
 
 export const INTERNAL_PROVIDER = 'internal'
 
@@ -64,81 +78,114 @@ export interface AttributionRow {
   revenue: number
 }
 
-type DbLike = { $queryRaw: (q: TemplateStringsArray | Prisma.Sql, ...p: unknown[]) => Promise<any[]> }
+/** الحد الأدنى المطلوب من العميل — متوافق مع PrismaClient على المحركين */
+type DbLike = { $queryRawUnsafe: (q: string, ...p: unknown[]) => Promise<any[]> }
 
-// ─── مساعدات بناء الشروط ─────────────────────────────────────────────
+// ─── باني الاستعلام المسطّح ──────────────────────────────────────────
+
+/**
+ * يجمع نص SQL وباراميتراته في خطوة واحدة: كل استدعاء p(value) يضيف
+ * القيمة ويعيد العنصر النائب $n بترتيب ظهوره في النص — فلا يمكن أن
+ * يختل الترتيب بين النص والقيم، ولا يوجد أي كائن Sql داخل القيم.
+ */
+class RawQuery {
+  private parts: string[] = []
+  readonly params: unknown[] = []
+
+  add(text: string): this {
+    this.parts.push(text)
+    return this
+  }
+
+  /** يضيف باراميتراً قياسياً ويعيد عنصره النائب $n */
+  p(value: unknown): string {
+    this.params.push(value)
+    return `$${this.params.length}`
+  }
+
+  text(): string {
+    return this.parts.join('')
+  }
+}
+
+// ─── مساعدات بناء الشروط (نصوص ثابتة فقط) ───────────────────────────
 
 function touchCol(f: FunnelFilters, field: 'Source' | 'Medium' | 'Campaign'): string {
   return f.model === 'last' ? `lastTouch${field}` : `firstTouch${field}`
 }
 
-/** شروط مطابقة الإسناد (source/medium/campaign) على جدول UserAttribution بمعرّف alias */
-function attrConditions(f: FunnelFilters, alias: string): Prisma.Sql[] {
-  const parts: Prisma.Sql[] = []
-  if (f.source) parts.push(Prisma.sql`LOWER(COALESCE(${Prisma.raw(alias)}.${Prisma.raw(`"${touchCol(f, 'Source')}"`)})) = LOWER(${f.source})`)
-  if (f.medium) parts.push(Prisma.sql`LOWER(COALESCE(${Prisma.raw(alias)}.${Prisma.raw(`"${touchCol(f, 'Medium')}"`)})) = LOWER(${f.medium})`)
-  if (f.campaign) parts.push(Prisma.sql`LOWER(COALESCE(${Prisma.raw(alias)}.${Prisma.raw(`"${touchCol(f, 'Campaign')}"`)})) = LOWER(${f.campaign})`)
-  return parts
-}
-
 const hasAttrFilter = (f: FunnelFilters): boolean => !!(f.source || f.medium || f.campaign)
-
-/** شرط فلتر المنصة على عمود provider */
-function platformCond(f: FunnelFilters, col: string): Prisma.Sql {
-  if (!f.platform || f.platform === 'all') return Prisma.empty
-  return Prisma.sql` AND ${Prisma.raw(col)} = ${f.platform}`
-}
 
 const DIRECT = '(مباشر)'
 const NONE = '—'
+
+/**
+ * شروط مطابقة الإسناد (source/medium/campaign) — قيم الفلاتر تمر
+ * كباراميترات، وأسماء الأعمدة من قائمة ثابتة (ليست مدخلات مستخدم).
+ */
+function attrConditionsText(q: RawQuery, f: FunnelFilters, alias: string): string {
+  const conds: string[] = []
+  if (f.source) conds.push(`LOWER(${alias}."${touchCol(f, 'Source')}") = LOWER(${q.p(f.source)})`)
+  if (f.medium) conds.push(`LOWER(${alias}."${touchCol(f, 'Medium')}") = LOWER(${q.p(f.medium)})`)
+  if (f.campaign) conds.push(`LOWER(${alias}."${touchCol(f, 'Campaign')}") = LOWER(${q.p(f.campaign)})`)
+  return conds.join(' AND ')
+}
+
+/** شرط فلتر المنصة على عمود provider — باراميتر بسيط */
+function platformCondText(q: RawQuery, f: FunnelFilters): string {
+  if (!f.platform || f.platform === 'all') return ''
+  return ` AND e."provider" = ${q.p(f.platform)}`
+}
 
 // ─── 1) القمع التحليلي ───────────────────────────────────────────────
 
 export async function getFunnel(db: DbLike, f: FunnelFilters): Promise<FunnelResult> {
   const useAttr = hasAttrFilter(f)
+  const q = new RawQuery()
 
-  const attrCte = useAttr
-    ? Prisma.sql`attr AS (
-        SELECT ua."userId" FROM "UserAttribution" ua WHERE ${Prisma.join(attrConditions(f, 'ua'), ' AND ')}
-      ),`
-    : Prisma.empty
+  const fromP = q.p(new Date(f.from))
+  const toP = q.p(new Date(f.to))
 
-  // Registrations — eventId بصيغة signup-<userId>
-  const regsExpr = useAttr
-    ? Prisma.sql`(SELECT COUNT(DISTINCT e."eventId")::int FROM ev e
-        WHERE e."eventName" = 'CompleteRegistration' ${platformCond(f, 'e."provider"')}
-          AND regexp_replace(e."eventId", '^signup-', '') IN (SELECT "userId" FROM attr))`
-    : Prisma.sql`(SELECT COUNT(DISTINCT e."eventId")::int FROM ev e
-        WHERE e."eventName" = 'CompleteRegistration' ${platformCond(f, 'e."provider"')})`
+  q.add('WITH ')
+  if (useAttr) {
+    q.add(`attr AS (
+        SELECT ua."userId" FROM "UserAttribution" ua WHERE ${attrConditionsText(q, f, 'ua')}
+      ),
+      `)
+  }
+  q.add(`ev AS (
+      SELECT DISTINCT t."eventId", t."eventName", t."provider", t."subscriptionId"
+      FROM "TrackingEvent" t
+      WHERE t."createdAt" >= ${fromP}
+        AND t."createdAt" < ${toP}
+        AND t."eventName" IN ('PageView', 'CompleteRegistration', 'StartTrial', 'InitiateCheckout', 'Purchase')
+    )
+    SELECT`)
 
-  // مراحل الاشتراك — عبر subscriptionId → tenant → المستخدم المالك → الإسناد
-  const subStageExpr = (eventName: string): Prisma.Sql =>
-    useAttr
-      ? Prisma.sql`(SELECT COUNT(DISTINCT e."eventId")::int FROM ev e
+  const platform = platformCondText(q, f)
+  const attrUser = useAttr ? ` AND u."id" IN (SELECT "userId" FROM attr)` : ''
+  const attrReg = useAttr ? `\n          AND regexp_replace(e."eventId", '^signup-', '') IN (SELECT "userId" FROM attr)` : ''
+
+  // الترتيب مهم: النص يُبنى بالتوازي مع ترقيم الباراميترات
+  q.add(`
+      (SELECT COUNT(*)::int FROM ev WHERE "eventName" = 'PageView') AS visitors,
+      (SELECT COUNT(DISTINCT e."eventId")::int FROM ev e
+        WHERE e."eventName" = 'CompleteRegistration'${platform}${attrReg}) AS registrations,`)
+
+  const stage = (eventName: string, alias: string): string => `
+      (SELECT COUNT(DISTINCT e."eventId")::int FROM ev e
           JOIN "Subscription" s ON s."id" = e."subscriptionId"
           JOIN "Tenant" tn ON tn."id" = s."tenantId"
           JOIN "User" u ON u."tenantId" = tn."id" AND u."email" = tn."ownerEmail"
-          WHERE e."eventName" = ${eventName} ${platformCond(f, 'e."provider"')}
-            AND u."id" IN (SELECT "userId" FROM attr))`
-      : Prisma.sql`(SELECT COUNT(DISTINCT e."eventId")::int FROM ev e
-          WHERE e."eventName" = ${eventName} ${platformCond(f, 'e."provider"')})`
+          WHERE e."eventName" = ${q.p(eventName)}${platformCondText(q, f)}${attrUser}) AS ${alias}`
 
-  const rows: Array<Record<string, number>> = await db.$queryRaw`
-    WITH ${attrCte}
-    ev AS (
-      SELECT DISTINCT t."eventId", t."eventName", t."provider", t."subscriptionId"
-      FROM "TrackingEvent" t
-      WHERE t."createdAt" >= ${f.from}::timestamptz
-        AND t."createdAt" < ${f.to}::timestamptz
-        AND t."eventName" IN ('PageView', 'CompleteRegistration', 'StartTrial', 'InitiateCheckout', 'Purchase')
-    )
-    SELECT
-      (SELECT COUNT(*)::int FROM ev WHERE "eventName" = 'PageView') AS visitors,
-      ${regsExpr} AS registrations,
-      ${subStageExpr('StartTrial')} AS trials,
-      ${subStageExpr('InitiateCheckout')} AS checkouts,
-      ${subStageExpr('Purchase')} AS purchases
-  `
+  q.add(stage('StartTrial', 'trials'))
+  q.add(',')
+  q.add(stage('InitiateCheckout', 'checkouts'))
+  q.add(',')
+  q.add(stage('Purchase', 'purchases'))
+
+  const rows: Array<Record<string, number>> = await db.$queryRawUnsafe(q.text(), ...q.params)
 
   const r = rows[0] ?? {}
   const visitors = Number(r.visitors ?? 0)
@@ -240,43 +287,46 @@ export async function getFunnelFallback(db: any, f: FunnelFilters): Promise<Funn
  */
 export async function getAttribution(db: DbLike, f: AttributionFilters): Promise<AttributionRow[]> {
   const useAttr = hasAttrFilter(f)
+  const q = new RawQuery()
 
-  const attrCte = Prisma.sql`ua AS (SELECT * FROM "UserAttribution")`
+  const fromP = q.p(new Date(f.from))
+  const toP = q.p(new Date(f.to))
 
-  // ربط بجدول الإسناد: مع فلاتر → INNER مع شروط، بدون → LEFT محافظ
-  const uaJoin = (userCol: string): Prisma.Sql =>
-    useAttr
-      ? Prisma.sql`JOIN ua ON ua."userId" = ${Prisma.raw(userCol)} AND ${Prisma.join(attrConditions(f, 'ua'), ' AND ')}`
-      : Prisma.sql`LEFT JOIN ua ON ua."userId" = ${Prisma.raw(userCol)}`
-
-  // أعمدة التصنيف تتبع نموذج الإسناد (first/last touch)
   const srcColName = touchCol(f, 'Source')
   const medColName = touchCol(f, 'Medium')
   const campColName = touchCol(f, 'Campaign')
-  const groupCols = (alias: string): Prisma.Sql =>
-    Prisma.sql`COALESCE(${Prisma.raw(alias)}.${Prisma.raw(`"${srcColName}"`)}, ${DIRECT}) AS src,
-               COALESCE(${Prisma.raw(alias)}.${Prisma.raw(`"${medColName}"`)}, ${NONE}) AS med,
-               COALESCE(${Prisma.raw(alias)}.${Prisma.raw(`"${campColName}"`)}, ${NONE}) AS camp`
 
-  // ملاحظة: التصنيف والفلاتر كلاهما يتبع نموذج الإسناد المختار (first/last)
-  const p = platformCond(f, 'e."provider"')
+  /**
+   * أعمدة التصنيف تتبع نموذج الإسناد (first/last touch).
+   * ملاحظة: التصنيف والفلاتر كلاهما يتبع نموذج الإسناد المختار.
+   */
+  const groupCols = (alias: string): string =>
+    `COALESCE(${alias}."${srcColName}", ${q.p(DIRECT)}) AS src,
+               COALESCE(${alias}."${medColName}", ${q.p(NONE)}) AS med,
+               COALESCE(${alias}."${campColName}", ${q.p(NONE)}) AS camp`
 
-  const sql = Prisma.sql`
-    WITH ${attrCte},
+  // ربط بجدول الإسناد: مع فلاتر → INNER مع شروط، بدون → LEFT محافظ
+  const uaJoin = (userCol: string): string =>
+    useAttr
+      ? `JOIN ua ON ua."userId" = ${userCol} AND ${attrConditionsText(q, f, 'ua')}`
+      : `LEFT JOIN ua ON ua."userId" = ${userCol}`
+
+  q.add(`WITH ua AS (SELECT * FROM "UserAttribution"),
     ev AS (
       SELECT DISTINCT t."eventId", t."eventName", t."provider", t."subscriptionId"
       FROM "TrackingEvent" t
-      WHERE t."createdAt" >= ${f.from}::timestamptz AND t."createdAt" < ${f.to}::timestamptz
+      WHERE t."createdAt" >= ${fromP} AND t."createdAt" < ${toP}
     ),
     g_regs AS (
       SELECT ${groupCols('ua')}, COUNT(DISTINCT re."userId")::int AS registrations
       FROM (
         SELECT DISTINCT regexp_replace(e."eventId", '^signup-', '') AS "userId"
-        FROM ev e WHERE e."eventName" = 'CompleteRegistration' ${p}
+        FROM ev e WHERE e."eventName" = 'CompleteRegistration'${platformCondText(q, f)}
       ) re
       ${uaJoin('re."userId"')}
       GROUP BY 1, 2, 3
-    ),
+    ),`)
+  q.add(`
     g_trials AS (
       SELECT ${groupCols('ua')}, COUNT(DISTINCT e."eventId")::int AS trials
       FROM ev e
@@ -284,9 +334,10 @@ export async function getAttribution(db: DbLike, f: AttributionFilters): Promise
       JOIN "Tenant" tn ON tn."id" = s."tenantId"
       JOIN "User" u ON u."tenantId" = tn."id" AND u."email" = tn."ownerEmail"
       ${uaJoin('u."id"')}
-      WHERE e."eventName" = 'StartTrial' ${p}
+      WHERE e."eventName" = 'StartTrial'${platformCondText(q, f)}
       GROUP BY 1, 2, 3
-    ),
+    ),`)
+  q.add(`
     g_checkouts AS (
       SELECT ${groupCols('ua')}, COUNT(DISTINCT e."eventId")::int AS checkouts
       FROM ev e
@@ -294,26 +345,28 @@ export async function getAttribution(db: DbLike, f: AttributionFilters): Promise
       JOIN "Tenant" tn ON tn."id" = s."tenantId"
       JOIN "User" u ON u."tenantId" = tn."id" AND u."email" = tn."ownerEmail"
       ${uaJoin('u."id"')}
-      WHERE e."eventName" = 'InitiateCheckout' ${p}
+      WHERE e."eventName" = 'InitiateCheckout'${platformCondText(q, f)}
       GROUP BY 1, 2, 3
-    ),
+    ),`)
+  q.add(`
     g_purch AS (
       SELECT src, med, camp, COUNT(*)::int AS purchases, SUM(amount)::float AS revenue
       FROM (
         SELECT DISTINCT ON (e."eventId")
           e."eventId", s."amountPaid" AS amount,
-          COALESCE(ua.${Prisma.raw(`"${srcColName}"`)}, ${DIRECT}) AS src,
-          COALESCE(ua.${Prisma.raw(`"${medColName}"`)}, ${NONE}) AS med,
-          COALESCE(ua.${Prisma.raw(`"${campColName}"`)}, ${NONE}) AS camp
+          COALESCE(ua."${srcColName}", ${q.p(DIRECT)}) AS src,
+          COALESCE(ua."${medColName}", ${q.p(NONE)}) AS med,
+          COALESCE(ua."${campColName}", ${q.p(NONE)}) AS camp
         FROM ev e
         JOIN "Subscription" s ON s."id" = e."subscriptionId"
         JOIN "Tenant" tn ON tn."id" = s."tenantId"
         JOIN "User" u ON u."tenantId" = tn."id" AND u."email" = tn."ownerEmail"
         ${uaJoin('u."id"')}
-        WHERE e."eventName" = 'Purchase' ${p}
+        WHERE e."eventName" = 'Purchase'${platformCondText(q, f)}
       ) x
       GROUP BY src, med, camp
-    )
+    )`)
+  q.add(`
     SELECT
       COALESCE(r.src, t.src, c.src, pu.src) AS source,
       COALESCE(r.med, t.med, c.med, pu.med) AS medium,
@@ -326,22 +379,23 @@ export async function getAttribution(db: DbLike, f: AttributionFilters): Promise
     FROM g_regs r
     FULL OUTER JOIN g_trials t ON t.src = r.src AND t.med = r.med AND t.camp = r.camp
     FULL OUTER JOIN g_checkouts c ON c.src = COALESCE(r.src, t.src) AND c.med = COALESCE(r.med, t.med) AND c.camp = COALESCE(r.camp, t.camp)
-    FULL OUTER JOIN g_purch pu ON pu.src = COALESCE(r.src, t.src, c.src) AND pu.med = COALESCE(r.med, t.med, c.med) AND pu.camp = COALESCE(r.camp, t.camp, c.camp)
-  `
+    FULL OUTER JOIN g_purch pu ON pu.src = COALESCE(r.src, t.src, c.src) AND pu.med = COALESCE(r.med, t.med, c.med) AND pu.camp = COALESCE(r.camp, t.camp, c.camp)`)
 
   // الترتيب — بعناصر ثابتة فقط (لا SQL injection)
-  const sortMap: Record<string, Prisma.Sql> = {
-    purchases: Prisma.sql`purchases`,
-    revenue: Prisma.sql`revenue`,
-    trials: Prisma.sql`trials`,
-    registrations: Prisma.sql`registrations`,
-    conversion: Prisma.sql`(COALESCE(pu.purchases, 0)::float / NULLIF(COALESCE(r.registrations, 0), 0))`,
+  const sortMap: Record<string, string> = {
+    purchases: 'purchases',
+    revenue: 'revenue',
+    trials: 'trials',
+    registrations: 'registrations',
+    conversion: '(COALESCE(pu.purchases, 0)::float / NULLIF(COALESCE(r.registrations, 0), 0))',
   }
   const orderBy = sortMap[f.sortBy ?? 'registrations'] ?? sortMap.registrations
-  const dir = f.order === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`
+  const dir = f.order === 'asc' ? 'ASC' : 'DESC'
   const limit = Math.min(Math.max(f.limit ?? 100, 1), 500)
 
-  const rows: Array<Record<string, unknown>> = await db.$queryRaw`${sql} ORDER BY ${orderBy} ${dir} NULLS LAST LIMIT ${limit}`
+  q.add(` ORDER BY ${orderBy} ${dir} NULLS LAST LIMIT ${q.p(limit)}`)
+
+  const rows: Array<Record<string, unknown>> = await db.$queryRawUnsafe(q.text(), ...q.params)
 
   return rows.map((r) => {
     const trials = Number(r.trials ?? 0)
@@ -365,9 +419,9 @@ export async function getAttribution(db: DbLike, f: AttributionFilters): Promise
 /** أداء آخر 30 يوماً لكل حملة (utm_campaign) — للعرض في مكتبة الحملات */
 export async function getCampaignPerformance(db: DbLike, campaigns: string[]): Promise<Record<string, { registrations: number; purchases: number; revenue: number }>> {
   if (!campaigns.length) return {}
-  const list = Prisma.join(campaigns.map((c) => Prisma.sql`${c}`), ', ')
-  const rows: Array<Record<string, unknown>> = await db.$queryRaw`
-    WITH ev AS (
+  const q = new RawQuery()
+  const list = campaigns.map((c) => q.p(c)).join(', ')
+  q.add(`WITH ev AS (
       SELECT DISTINCT t."eventId", t."eventName", t."subscriptionId"
       FROM "TrackingEvent" t
       WHERE t."createdAt" >= NOW() - INTERVAL '30 days'
@@ -381,11 +435,17 @@ export async function getCampaignPerformance(db: DbLike, campaigns: string[]): P
     LEFT JOIN "Subscription" s ON s."id" = e."subscriptionId"
     LEFT JOIN "Tenant" tn ON tn."id" = s."tenantId"
     LEFT JOIN "User" u ON u."tenantId" = tn."id" AND u."email" = tn."ownerEmail"
-    LEFT JOIN "UserAttribution" ua ON ua."userId" = u."id"
+    LEFT JOIN "UserAttribution" ua ON ua."userId" = (
+      CASE WHEN e."eventName" = 'CompleteRegistration'
+        THEN regexp_replace(e."eventId", '^signup-', '')
+        ELSE u."id" END
+    )
     WHERE LOWER(COALESCE(ua."firstTouchCampaign", '')) IN (${list})
       AND e."eventName" IN ('CompleteRegistration', 'Purchase')
-    GROUP BY 1
-  `
+    GROUP BY 1`)
+
+  const rows: Array<Record<string, unknown>> = await db.$queryRawUnsafe(q.text(), ...q.params)
+
   const out: Record<string, { registrations: number; purchases: number; revenue: number }> = {}
   for (const r of rows) {
     out[String(r.camp)] = {
