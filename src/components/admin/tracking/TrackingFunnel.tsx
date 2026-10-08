@@ -278,28 +278,35 @@ export function TrackingFunnel() {
   return (
     <div className="space-y-4" dir="rtl">
       {/* شريط التحكم */}
-      <Card className="border-dashed">
-        <CardContent className="space-y-3 p-4">
-          <FilterBar value={filters} onChange={setFilters} />
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-            <div className="flex rounded-xl border bg-background p-0.5">
-              <button onClick={() => setView('funnel')} className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${view === 'funnel' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
-                <BarChart3 className="size-3.5" /> قمع
-              </button>
-              <button onClick={() => setView('table')} className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${view === 'table' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
-                <Table2 className="size-3.5" /> جدول
-              </button>
-            </div>
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-              {updatedAt && <span>آخر تحديث {updatedAt.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>}
-              <button onClick={() => setLive((v) => !v)} className={`flex items-center gap-1 rounded-full border px-2.5 py-1 font-medium transition-colors ${live ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'hover:text-foreground'}`}>
-                <Radio className={`size-3 ${live ? 'animate-pulse' : ''}`} /> {live ? 'مباشر' : 'تحديث تلقائي'}
-              </button>
-              <button onClick={() => load()} className="rounded-full border p-1.5 hover:text-foreground" aria-label="تحديث">
-                <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-          </div>
+      <Card>
+        <CardContent className="p-3 sm:p-4">
+          <FilterBar
+            value={filters}
+            onChange={setFilters}
+            trailing={
+              <>
+                <div className="flex rounded-xl border bg-muted/40 p-1">
+                  <button type="button" onClick={() => setView('funnel')} title="عرض القمع" className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${view === 'funnel' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                    <BarChart3 className="size-3.5" /> قمع
+                  </button>
+                  <button type="button" onClick={() => setView('table')} title="عرض الجدول" className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${view === 'table' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                    <Table2 className="size-3.5" /> جدول
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLive((v) => !v)}
+                  title={updatedAt ? `آخر تحديث ${updatedAt.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}` : undefined}
+                  className={`flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-colors ${live ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  <Radio className={`size-3.5 ${live ? 'animate-pulse' : ''}`} /> {live ? 'مباشر' : 'تلقائي'}
+                </button>
+                <button type="button" onClick={() => load()} className="flex size-9 items-center justify-center rounded-xl border text-muted-foreground hover:text-foreground" aria-label="تحديث" title="تحديث الآن">
+                  <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+              </>
+            }
+          />
         </CardContent>
       </Card>
 

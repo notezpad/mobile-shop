@@ -89,27 +89,58 @@ export function rangeParams(f: RangeFilterState): URLSearchParams {
   return p
 }
 
+const PLATFORM_LABELS: Record<string, string> = {
+  all: 'كل المنصات',
+  meta: 'ميتا (فيسبوك وإنستجرام)',
+  google_ads: 'إعلانات جوجل',
+  ga4: 'جوجل أناليتكس',
+  tiktok: 'تيك توك',
+}
+
+const MODEL_LABELS: Record<'first' | 'last', { label: string; hint: string }> = {
+  first: { label: 'أول نقرة', hint: 'ينسب العميل لأول مصدر جاء منه' },
+  last: { label: 'آخر نقرة', hint: 'ينسب العميل لآخر مصدر قبل التحويل' },
+}
+
+const UTM_FIELDS: { key: 'source' | 'medium' | 'campaign'; label: string; placeholder: string }[] = [
+  { key: 'source', label: 'المصدر', placeholder: 'مثال: facebook' },
+  { key: 'medium', label: 'الوسيلة', placeholder: 'مثال: cpc' },
+  { key: 'campaign', label: 'الحملة', placeholder: 'مثال: ramadan_offer' },
+]
+
+/**
+ * 🎛️ شريط الفلاتر 2026 — صف واحد مضغوط بالعربي بالكامل:
+ * الفترة + المنصة + نموذج الإسناد + زر "فلاتر متقدمة" (مصدر/وسيلة/حملة)
+ * مع شرائح للفلاتر النشطة قابلة للإزالة، و slot اختياري للأدوات الجانبية.
+ */
 export function FilterBar({
   value,
   onChange,
   showModel = true,
+  trailing,
 }: {
   value: RangeFilterState
   onChange: (next: RangeFilterState) => void
   showModel?: boolean
+  trailing?: React.ReactNode
 }) {
   const set = (patch: Partial<RangeFilterState>) => onChange({ ...value, ...patch })
+  const activeUtm = UTM_FIELDS.filter((f) => value[f.key].trim())
+  const [advanced, setAdvanced] = React.useState(activeUtm.length > 0)
+  const activeCount = activeUtm.length + (value.platform !== 'all' ? 1 : 0)
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-3" dir="rtl">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex rounded-lg border bg-background p-0.5">
+        {/* الفترة */}
+        <div className="flex rounded-xl border bg-muted/40 p-1">
           {PRESETS.map((p) => (
             <button
               key={p.key}
+              type="button"
               onClick={() => set({ preset: p.key })}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                value.preset === p.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                value.preset === p.key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {p.label}
@@ -117,45 +148,104 @@ export function FilterBar({
           ))}
         </div>
 
-        {value.preset === 'custom' && (
-          <div className="flex items-center gap-1.5 text-xs">
-            <Input type="date" className="h-8 w-[135px]" value={value.fromStr} onChange={(e) => set({ fromStr: e.target.value })} />
-            <span className="text-muted-foreground">→</span>
-            <Input type="date" className="h-8 w-[135px]" value={value.toStr} onChange={(e) => set({ toStr: e.target.value })} />
-          </div>
-        )}
-
+        {/* المنصة */}
         <Select value={value.platform} onValueChange={(v) => set({ platform: v })}>
-          <SelectTrigger className="h-8 w-[150px] text-xs" dir="rtl">
-            <SelectValue placeholder="المنصة" />
+          <SelectTrigger className="h-9 w-auto min-w-[140px] gap-2 rounded-xl text-xs" dir="rtl">
+            <span className="text-muted-foreground">المنصة:</span>
+            <SelectValue>{PLATFORM_LABELS[value.platform] ?? value.platform}</SelectValue>
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">كل المنصات</SelectItem>
-            <SelectItem value="meta">Meta</SelectItem>
-            <SelectItem value="google_ads">Google Ads</SelectItem>
-            <SelectItem value="ga4">GA4</SelectItem>
-            <SelectItem value="tiktok">TikTok</SelectItem>
+          <SelectContent dir="rtl">
+            {Object.entries(PLATFORM_LABELS).map(([k, l]) => (
+              <SelectItem key={k} value={k}>{l}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
+        {/* نموذج الإسناد */}
         {showModel && (
           <Select value={value.model} onValueChange={(v) => set({ model: v as 'first' | 'last' })}>
-            <SelectTrigger className="h-8 w-[135px] text-xs" dir="rtl">
-              <SelectValue placeholder="نموذج الإسناد" />
+            <SelectTrigger className="h-9 w-auto min-w-[140px] gap-2 rounded-xl text-xs" dir="rtl">
+              <span className="text-muted-foreground">الإسناد:</span>
+              <SelectValue>{MODEL_LABELS[value.model].label}</SelectValue>
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="first">First Touch</SelectItem>
-              <SelectItem value="last">Last Touch</SelectItem>
+            <SelectContent dir="rtl">
+              {(Object.keys(MODEL_LABELS) as ('first' | 'last')[]).map((k) => (
+                <SelectItem key={k} value={k}>
+                  <div className="flex flex-col text-right">
+                    <span>{MODEL_LABELS[k].label}</span>
+                    <span className="text-[10px] text-muted-foreground">{MODEL_LABELS[k].hint}</span>
+                  </div>
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         )}
+
+        {/* فلاتر متقدمة */}
+        <button
+          type="button"
+          onClick={() => setAdvanced((v) => !v)}
+          className={`flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-colors ${
+            advanced || activeUtm.length ? 'border-primary/40 bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 5h18M6 12h12M10 19h4" strokeLinecap="round" /></svg>
+          فلاتر الحملة
+          {activeUtm.length > 0 && (
+            <span className="flex size-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">{activeUtm.length}</span>
+          )}
+        </button>
+
+        {trailing && <div className="ms-auto flex flex-wrap items-center gap-2">{trailing}</div>}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Input className="h-8 w-[120px] text-xs" placeholder="Source" value={value.source} onChange={(e) => set({ source: e.target.value })} dir="ltr" />
-        <Input className="h-8 w-[120px] text-xs" placeholder="Medium" value={value.medium} onChange={(e) => set({ medium: e.target.value })} dir="ltr" />
-        <Input className="h-8 w-[150px] text-xs" placeholder="Campaign" value={value.campaign} onChange={(e) => set({ campaign: e.target.value })} dir="ltr" />
-      </div>
+      {/* تاريخ مخصص */}
+      {value.preset === 'custom' && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed bg-muted/20 p-2.5 text-xs animate-in fade-in slide-in-from-top-1">
+          <span className="text-muted-foreground">من</span>
+          <Input type="date" className="h-8 w-[150px] rounded-lg" value={value.fromStr} onChange={(e) => set({ fromStr: e.target.value })} />
+          <span className="text-muted-foreground">إلى</span>
+          <Input type="date" className="h-8 w-[150px] rounded-lg" value={value.toStr} onChange={(e) => set({ toStr: e.target.value })} />
+        </div>
+      )}
+
+      {/* حقول الحملة */}
+      {advanced && (
+        <div className="grid gap-2 rounded-xl border border-dashed bg-muted/20 p-2.5 sm:grid-cols-3 animate-in fade-in slide-in-from-top-1">
+          {UTM_FIELDS.map((f) => (
+            <label key={f.key} className="space-y-1">
+              <span className="text-[11px] font-medium text-muted-foreground">{f.label}</span>
+              <Input
+                className="h-8 rounded-lg text-xs"
+                placeholder={f.placeholder}
+                value={value[f.key]}
+                onChange={(e) => set({ [f.key]: e.target.value } as Partial<RangeFilterState>)}
+                dir="ltr"
+              />
+            </label>
+          ))}
+        </div>
+      )}
+
+      {/* الفلاتر النشطة */}
+      {activeCount > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+          <span className="text-muted-foreground">فلاتر مفعّلة:</span>
+          {value.platform !== 'all' && (
+            <button type="button" onClick={() => set({ platform: 'all' })} className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-primary hover:bg-primary/20">
+              {PLATFORM_LABELS[value.platform] ?? value.platform} ✕
+            </button>
+          )}
+          {activeUtm.map((f) => (
+            <button key={f.key} type="button" onClick={() => set({ [f.key]: '' } as Partial<RangeFilterState>)} className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-primary hover:bg-primary/20">
+              {f.label}: <span dir="ltr">{value[f.key]}</span> ✕
+            </button>
+          ))}
+          <button type="button" onClick={() => set({ platform: 'all', source: '', medium: '', campaign: '' })} className="text-muted-foreground underline underline-offset-2 hover:text-foreground">
+            مسح الكل
+          </button>
+        </div>
+      )}
     </div>
   )
 }
