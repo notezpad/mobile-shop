@@ -4,6 +4,8 @@ import { db } from '@/lib/db'
 import { paymobVerifyHmacAsync } from '@/lib/paymob'
 import { readEnv } from '@/lib/env'
 import { computeEndDate, computeAmount } from '@/lib/admin-utils'
+import { runNonBlocking, trackServerEvent } from '@/lib/tracking/server'
+import { TRACKING_EVENTS } from '@/lib/tracking/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -134,6 +136,34 @@ async function __POST(req: NextRequest) {
       })
 
       console.log(`[paymob/webhook] Subscription ${subscriptionId} activated — end ${newEndDate.toISOString()}`)
+
+      // ═══ 📊 Tracking: Purchase — تأكيد الدفع الحقيقي ═══
+      // الشرط الوحيد لإطلاق Purchase: HMAC موثق + success=true
+      // + تحديث الاشتراك إلى active فعلياً في قاعدة البيانات.
+      //
+      // IDEMPOTENCY: eventId ثابت = purchase-sub-<id> — إن أُعيد
+      // إرسال الـ Webhook (Retry من Paymob) أو وصل نفس العملية من
+      // مسار آخر، فحص alreadySent داخل trackServerEvent + الفهرس
+      // الفريد (provider + eventId) يمنع العد المزدوج نهائياً.
+      // فشل التتبع لا يؤثر على نجاح الدفع إطلاقاً (Non-blocking).
+      const paidAmount = computeAmount(sub.plan, sub.period as 'monthly' | 'yearly', amount)
+      runNonBlocking(() => trackServerEvent({
+        eventName: TRACKING_EVENTS.Purchase,
+        eventId: `purchase-sub-${subscriptionId}`,
+        params: {
+          value: paidAmount,
+          currency: 'EGP',
+          transactionId: String(txnId || obj.order?.id || subscriptionId),
+          contentName: sub.plan.name, contentType: 'subscription_plan',
+          contentId: String(sub.plan.id), planId: String(sub.plan.id),
+          planName: sub.plan.name, period: sub.period,
+        },
+        context: {
+          email: sub.tenant?.ownerEmail || undefined,
+          externalId: sub.tenantId,
+        },
+        subscriptionId: subscriptionId,
+      }))
     } else if (isVoided || isRefunded) {
       // ── Transaction voided / refunded — revert subscription ──
       // If the subscription is still pending, mark failed.

@@ -8,6 +8,8 @@ import {
   CheckCircle2, XCircle, Clock, Loader2, ArrowLeft, RefreshCw, Home,
 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { trackEvent } from '@/lib/tracking/client'
+import { TRACKING_EVENTS } from '@/lib/tracking/types'
 
 type OrderStatus = 'checking' | 'paid' | 'failed' | 'pending' | 'no_order_id'
 
@@ -68,6 +70,51 @@ function CheckoutCallbackContent() {
       if (timer) clearTimeout(timer)
     }
   }, [merchantOrderId])
+
+  // ═══ 📊 Tracking Browser-side: Purchase ═══
+  // يُطلق فقط بعد أن يُؤكد السيرفر نجاح الدفع فعلياً (الاشتراك active
+  // في قاعدة البيانات بعد تحقق Paymob Webhook) — وليس عند فتح الصفحة
+  // أو مجرد الوصول إليها.
+  //
+  // منع التكرار:
+  //   - eventId ثابت من السيرفر (purchase-sub-<id>) = نفس معرف حدث
+  //     الـ Webhook → المنصات تعمل Deduplication تلقائياً.
+  //   - Refresh / إعادة فتح الصفحة → نفس eventId + حماية sessionStorage
+  //     في طبقة التتبع → لا إطلاق مكرر.
+  //   - فشل التتبع لا يغيّر عرض النتيجة إطلاقاً.
+  React.useEffect(() => {
+    if (status !== 'paid') return
+    const subId = Number(searchParams.get('subscriptionId') ?? merchantOrderId?.match(/sub-(\d+)/)?.[1] ?? 0)
+    if (!subId) return
+    ;(async () => {
+      try {
+        const info = await api<{
+          ok: boolean
+          eventId: string
+          value: number
+          currency: string
+          transactionId: string
+          planName?: string
+          planId: string
+          period?: string
+        }>(`/api/tracking/purchase-info?subscriptionId=${subId}`)
+        if (!info?.ok) return
+        trackEvent(TRACKING_EVENTS.Purchase, {
+          eventId: info.eventId,
+          value: info.value,
+          currency: info.currency,
+          transactionId: info.transactionId,
+          contentName: info.planName,
+          contentId: info.planId,
+          planName: info.planName,
+          planId: info.planId,
+          period: info.period,
+        })
+      } catch {
+        // 409 = الدفع غير مؤكد، 403 = ليس مالكاً — التتبع صامت دائماً
+      }
+    })()
+  }, [status, searchParams, merchantOrderId])
 
   return (
     <div className="cb-status-wrap">

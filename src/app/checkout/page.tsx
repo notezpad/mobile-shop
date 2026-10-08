@@ -14,6 +14,8 @@ import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import { getMe } from '@/lib/auth-client'
+import { trackEvent, relayEventToServer } from '@/lib/tracking/client'
+import { TRACKING_EVENTS } from '@/lib/tracking/types'
 
 function CheckoutContent() {
   const router = useRouter()
@@ -50,12 +52,30 @@ function CheckoutContent() {
         if (found) {
           setPlan(found)
           setPlanId(found.id)
+          // ═══ 📊 Tracking: ViewContent ═══
+          // مشاهدة صفحة الخدمة/الباقة ببيانات حقيقية فقط —
+          // لا بيانات مختلقة. eventId عشوائي يُمرر للسيرفر (relay)
+          // بنفس المعرف → Deduplication بين البكسل و CAPI.
+          try {
+            const vcEventId = `vc-${crypto.randomUUID()}`
+            const vcParams = {
+              contentName: found.name,
+              contentType: 'subscription_plan',
+              contentId: found.code,
+              planId: String(found.id),
+              planName: found.name,
+              value: cycle === 'monthly' ? found.priceMonthly : found.priceYearly,
+              currency: 'EGP',
+            }
+            trackEvent(TRACKING_EVENTS.ViewContent, { ...vcParams, eventId: vcEventId })
+            void relayEventToServer(TRACKING_EVENTS.ViewContent, vcEventId, vcParams)
+          } catch { /* التتبع لا يوقف الصفحة */ }
         }
       })
       .catch(() => {})
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [planCode])
+  }, [planCode, cycle])
 
   const price = plan ? (cycle === 'monthly' ? plan.priceMonthly : plan.priceYearly) : 0
   const displayAmount = price.toLocaleString('en-US')
@@ -101,7 +121,7 @@ function CheckoutContent() {
     if (!planId) { toast.error('فشل تحميل الباقة — حاول مرة أخرى'); return }
     setSubmitting(true)
     try {
-      const result = await api<{ ok: boolean; checkoutUrl: string; subscriptionId: number }>('/api/paymob/checkout', {
+      const result = await api<{ ok: boolean; checkoutUrl: string; subscriptionId: number; tracking?: { checkoutEventId: string; value: number; currency: string; planId: string; planName: string; period: string } }>('/api/paymob/checkout', {
         method: 'POST',
         body: {
           planId, period: cycle,
@@ -111,6 +131,21 @@ function CheckoutContent() {
         },
       })
       if (!result?.checkoutUrl) throw new Error('استجابة غير صالحة من بوابة الدفع')
+      // ═══ 📊 Tracking Browser-side: InitiateCheckout ═══
+      // يُطلق هنا فقط: السيرفر أنشأ اشتراك pending حقيقي + جلسة دفع
+      // Paymob فعلياً — بنفس event_id الذي أرسله السيرفر.
+      try {
+        trackEvent(TRACKING_EVENTS.InitiateCheckout, {
+          eventId: result.tracking?.checkoutEventId,
+          value: result.tracking?.value,
+          currency: result.tracking?.currency ?? 'EGP',
+          planId: result.tracking?.planId,
+          planName: result.tracking?.planName,
+          period: result.tracking?.period,
+          contentName: result.tracking?.planName,
+          contentType: 'subscription_plan',
+        })
+      } catch { /* التتبع لا يوقف الدفع */ }
       window.location.href = result.checkoutUrl
     } catch (err: any) {
       console.error('[Checkout] Paymob session error:', err)

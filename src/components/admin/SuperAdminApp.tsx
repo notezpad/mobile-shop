@@ -11,6 +11,7 @@ import {
   Ticket,
   Wallet,
   Settings as SettingsIcon,
+  Megaphone,
   LogOut,
   Menu,
   Shield,
@@ -36,6 +37,7 @@ import { AdminPlansView } from './AdminPlansView'
 import { AdminCodesView } from './AdminCodesView'
 import { AdminFinanceView } from './AdminFinanceView'
 import { AdminSettingsView } from './AdminSettingsView'
+import { AdminTrackingView } from './AdminTrackingView'
 
 type AdminView =
   | 'dashboard'
@@ -44,6 +46,7 @@ type AdminView =
   | 'plans'
   | 'codes'
   | 'finance'
+  | 'tracking'
   | 'settings'
 
 const NAV: { key: AdminView; label: string; icon: any; group: string }[] = [
@@ -53,6 +56,7 @@ const NAV: { key: AdminView; label: string; icon: any; group: string }[] = [
   { key: 'plans', label: 'خطط الاشتراك', icon: Package, group: 'الباقات' },
   { key: 'codes', label: 'أكواد الاشتراك', icon: Ticket, group: 'أكواد التفعيل' },
   { key: 'finance', label: 'الإيرادات', icon: Wallet, group: 'المالية' },
+  { key: 'tracking', label: 'التسويق والتتبع', icon: Megaphone, group: 'التسويق' },
   { key: 'settings', label: 'إعدادات المنصة', icon: SettingsIcon, group: 'الإعدادات' },
 ]
 
@@ -63,6 +67,7 @@ const VIEW_TITLES: Record<AdminView, string> = {
   plans: 'خطط الاشتراك',
   codes: 'أكواد الاشتراك',
   finance: 'الإيرادات',
+  tracking: 'التسويق والتتبع',
   settings: 'إعدادات المنصة',
 }
 
@@ -256,6 +261,8 @@ export function SuperAdminApp() {
         return <AdminCodesView />
       case 'finance':
         return <AdminFinanceView />
+      case 'tracking':
+        return <AdminTrackingView />
       case 'settings':
         return <AdminSettingsView />
       default:

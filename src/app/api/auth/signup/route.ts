@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { hashPassword, createSession } from '@/lib/auth'
+import { runNonBlocking, trackServerEvent, extractRequestContext } from '@/lib/tracking/server'
+import { TRACKING_EVENTS } from '@/lib/tracking/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +36,12 @@ async function __POST(req: NextRequest) {
     // 🆕 Optional: user can pre-select a plan code from the pricing page.
     // Defaults to 'electronics-basic' if not provided.
     const requestedPlanCode = String(body.planCode ?? 'electronics-basic').trim()
+
+    // 📊 Attribution (اختياري — يُرسله المتصفح من طبقة التتبع):
+    // first/last touch + click ids — تُحفظ في جدول مستقل بدون تعديل User
+    const attribution = (body.attribution && typeof body.attribution === 'object')
+      ? (body.attribution as Record<string, any>)
+      : null
 
     if (!shopName) {
       return NextResponse.json({ error: 'اسم المحل مطلوب' }, { status: 400 })
@@ -167,6 +175,71 @@ async function __POST(req: NextRequest) {
       branchId: null,
     })
 
+    // ═══ 📊 Marketing & Tracking — بعد نجاح التسجيل فعلياً ═══
+    // الحدثان يُرسلان Server-side (Meta CAPI / TikTok Events API / GA4 MP)
+    // بمعرفات ثابتة، ونُعيدها للمتصفح ليُطلق نفس الأحداث Browser-side
+    // بنفس event_id → Deduplication مثالي في كل المنصات.
+    // فشل التتبع لا يؤثر على نجاح التسجيل إطلاقاً (Non-blocking).
+    const trialSub = tenant.subscriptions[0]
+    const regEventId = `signup-${user.id}`
+    const trialEventId = `trial-sub-${trialSub?.id ?? 'unknown'}`
+    // يشمل gaClientId/gaSessionId/ttp من كوكيز المتصفح
+    const reqCtx = extractRequestContext(req.headers)
+    const trackingCtx = {
+      ...reqCtx,
+      email: user.email,
+      phone: phone || undefined,
+      firstName: name.split(' ')[0] || undefined,
+      lastName: name.split(' ').slice(1).join(' ') || undefined,
+      externalId: user.id,
+    }
+
+    // 🧭 حفظ مصدر الاكتساب (first/last touch + click ids)
+    if (attribution) {
+      const t = attribution as Record<string, any>
+      const first = (t.first && typeof t.first === 'object') ? t.first : {}
+      const last = (t.last && typeof t.last === 'object') ? t.last : {}
+      const s = (v: unknown, max = 120) => (typeof v === 'string' ? v.slice(0, max) : null)
+      await db.userAttribution.upsert({
+        where: { userId: user.id },
+        update: {},
+        create: {
+          userId: user.id,
+          firstTouchSource: s(first.source), firstTouchMedium: s(first.medium),
+          firstTouchCampaign: s(first.campaign), firstTouchContent: s(first.content),
+          firstTouchTerm: s(first.term),
+          firstTouchAt: first.at ? new Date(String(first.at)) : null,
+          lastTouchSource: s(last.source), lastTouchMedium: s(last.medium),
+          lastTouchCampaign: s(last.campaign), lastTouchContent: s(last.content),
+          lastTouchTerm: s(last.term),
+          lastTouchAt: last.at ? new Date(String(last.at)) : new Date(),
+          gclid: s(t.gclid, 200), fbclid: s(t.fbclid, 200), ttclid: s(t.ttclid, 200),
+          wbraid: s(t.wbraid, 200), gbraid: s(t.gbraid, 200),
+          landingPage: s(t.landingPage, 500), referrer: s(t.referrer, 500),
+        },
+      }).catch(() => {}) // فشل الإسناد لا يوقف التسجيل
+    }
+
+    runNonBlocking(() => trackServerEvent({
+      eventName: TRACKING_EVENTS.CompleteRegistration,
+      eventId: regEventId,
+      params: { contentName: trialPlan.name, contentType: 'subscription_plan', contentId: String(trialPlan.id) },
+      context: trackingCtx,
+      subscriptionId: trialSub?.id,
+    }))
+    // بدء التجربة فعلياً (14 يوم) حدث منفصل عن التسجيل
+    runNonBlocking(() => trackServerEvent({
+      eventName: TRACKING_EVENTS.StartTrial,
+      eventId: trialEventId,
+      params: {
+        contentName: trialPlan.name, contentType: 'subscription_plan',
+        contentId: String(trialPlan.id), planId: String(trialPlan.id),
+        planName: trialPlan.name, period: 'trial', currency: 'EGP',
+      },
+      context: trackingCtx,
+      subscriptionId: trialSub?.id,
+    }))
+
     return NextResponse.json({
       ok: true,
       user: {
@@ -176,6 +249,12 @@ async function __POST(req: NextRequest) {
         tenantId: tenant.id,
         email: user.email,
         branchId: null,
+      },
+      // 📊 معرفات الأحداث — المتصفح يُطلق نفس الأحداث بنفس event_id
+      tracking: {
+        registrationEventId: regEventId,
+        trialEventId,
+        planName: trialPlan.name,
       },
     })
   } catch (e: any) {

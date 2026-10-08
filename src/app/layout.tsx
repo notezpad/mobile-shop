@@ -4,7 +4,9 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
-import { GoogleAnalytics } from "@/components/analytics";
+import { TrackingBootstrap } from "@/components/tracking/TrackingBootstrap";
+import { getTrackingConfig } from "@/lib/tracking/config";
+import { toPublicConfig } from "@/lib/tracking/types";
 import {
   SITE_URL,
   SITE_NAME,
@@ -159,7 +161,7 @@ export const viewport: Viewport = {
   interactiveWidget: "resizes-content",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -193,6 +195,11 @@ export default function RootLayout({
     description: SITE_DESCRIPTION,
   };
 
+  // 📊 Tracking Layer — الإعدادات تُقرأ من قاعدة البيانات (PlatformSetting)
+  // وتُمرَّر للمتصفح بدون أي Secrets. الطبقة المركزية توزع الأحداث على
+  // المنصات المفعّلة فقط (GA4 / Ads / Meta / TikTok).
+  const trackingConfig = toPublicConfig(await getTrackingConfig());
+
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
       <head>
@@ -216,8 +223,8 @@ export default function RootLayout({
           <SonnerToaster position="top-center" richColors />
         </Providers>
 
-        {/* 📊 Google Analytics — بيغطي كل الصفحات تلقائياً من هنا */}
-        <GoogleAnalytics />
+        {/* 📊 Marketing & Tracking Layer — مركزية من إعدادات لوحة الأدمن */}
+        <TrackingBootstrap config={trackingConfig} />
 
         {/* ⚡ Service Worker registration — moved to body as a client script.
             Next.js 16 warns about <script> tags inside <head> of a Server Component

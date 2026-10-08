@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { countableSubWhere } from '@/lib/subscription-status'
 import { db } from '@/lib/db'
 import { requireAuthIgnoreSubscription, authErrorResponse } from '@/lib/auth'
+import { runNonBlocking, trackServerEvent, extractRequestContext } from '@/lib/tracking/server'
+import { TRACKING_EVENTS } from '@/lib/tracking/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -128,6 +130,28 @@ async function __POST(req: NextRequest) {
     },
   })
 
+  // ═══ 📊 Tracking: StartTrial — بعد نجاح بدء التجربة فعلياً ═══
+  // (حالة Trial نشطة في قاعدة البيانات = مصدر الحقيقة، ليس الضغط على زر)
+  // فشل التتبع لا يؤثر على نجاح التجربة إطلاقاً (Non-blocking).
+  const trialEventId = `trial-sub-${sub.id}`
+  // يشمل gaClientId/gaSessionId/ttp من كوكيز المتصفح
+  const reqCtx = extractRequestContext(req.headers)
+  runNonBlocking(() => trackServerEvent({
+    eventName: TRACKING_EVENTS.StartTrial,
+    eventId: trialEventId,
+    params: {
+      contentName: plan.name, contentType: 'subscription_plan',
+      contentId: String(plan.id), planId: String(plan.id),
+      planName: plan.name, period: 'trial', currency: 'EGP',
+    },
+    context: {
+      ...reqCtx,
+      email: session.email,
+      externalId: session.userId,
+    },
+    subscriptionId: sub.id,
+  }))
+
   return NextResponse.json({
     ok: true,
     planCode: plan.code,
@@ -135,6 +159,8 @@ async function __POST(req: NextRequest) {
     subscriptionId: sub.id,
     endDate: endDate.toISOString(),
     trialDays,
+    // 📊 المتصفح يُطلق StartTrial بنفس event_id → Deduplication
+    tracking: { trialEventId, planName: plan.name },
   })
 }
 

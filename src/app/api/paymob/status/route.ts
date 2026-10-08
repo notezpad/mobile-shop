@@ -2,6 +2,8 @@ import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuthIgnoreSubscription, authErrorResponse } from '@/lib/auth'
+import { runNonBlocking, trackServerEvent, extractRequestContext } from '@/lib/tracking/server'
+import { TRACKING_EVENTS } from '@/lib/tracking/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,6 +62,48 @@ async function __GET(req: NextRequest) {
   if (sub.status === 'active') status = 'paid'
   else if (sub.status === 'failed' || sub.status === 'cancelled') status = 'failed'
   else status = 'pending'
+
+  // ═══ 📊 Tracking: ضمان وصول Purchase (Self-Healing) ═══
+  // لو الاشتراك مدفوع لكن حدث Purchase لم يُسجل لأي منصة (Webhook
+  // تأخر أو فشل إرسال التتبع مؤقتاً) — نطلبه من هنا بنفس eventId
+  // الثابت (purchase-sub-<id>) → Idempotency تمنع أي تكرار.
+  // الاستعلام الخفيف يجري فقط في حالة paid.
+  if (status === 'paid') {
+    const hasPurchaseEvent = await db.trackingEvent.findFirst({
+      where: { eventId: `purchase-sub-${subscriptionId}`, status: 'sent' },
+      select: { id: true },
+    }).catch(() => null)
+    if (!hasPurchaseEvent) {
+      const full = await db.subscription.findUnique({
+        where: { id: subscriptionId },
+        include: { plan: true, tenant: true },
+      })
+      if (full && full.status === 'active') {
+        const txnMatch = full.paymentNote?.match(/paymob-txn:(\d+)/)
+        // هذا المسار يُستدعى من متصفح المستخدم (صفحة النجاح) — كوكيز GA4/TikTok
+        // متاحة في الطلب لتعزيز المطابقة. نفس eventId الثابت → لا تكرار.
+        const reqCtx = extractRequestContext(req.headers)
+        runNonBlocking(() => trackServerEvent({
+          eventName: TRACKING_EVENTS.Purchase,
+          eventId: `purchase-sub-${full.id}`,
+          params: {
+            value: full.amountPaid,
+            currency: 'EGP',
+            transactionId: String(txnMatch?.[1] || full.id),
+            contentName: full.plan.name, contentType: 'subscription_plan',
+            contentId: String(full.plan.id), planId: String(full.plan.id),
+            planName: full.plan.name, period: full.period,
+          },
+          context: {
+            ...reqCtx,
+            email: full.tenant?.ownerEmail || undefined,
+            externalId: full.tenantId,
+          },
+          subscriptionId: full.id,
+        }))
+      }
+    }
+  }
 
   return NextResponse.json({ status })
 }

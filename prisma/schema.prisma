@@ -830,3 +830,70 @@ model Notification {
   @@index([isRead])
   @@index([createdAt])
 }
+
+// ================= Marketing & Tracking =================
+
+// 📊 سجل أحداث التتبع — مصدر الحقيقة لـ:
+//   1) Idempotency: الفهرس الفريد (provider + eventId) يمنع إرسال نفس
+//      الحدث مرتين (Webhook retries / صفحة النجاح Refresh / إعادة فتح).
+//   2) شاشة Debug/Test في لوحة الأدمن (اسم الحدث، المنصة، الحالة، الخطأ).
+//   ⚠️ لا يحتوي أبداً على بيانات حساسة خام (كلمات مرور/بطاقات/توكنات).
+//      بيانات matching تُخزَّنهازية فقط (SHA-256) داخل payload.
+model TrackingEvent {
+  id             Int      @id @default(autoincrement())
+  // معرّف ثابت وفريد لكل عملية تجارية، مثال:
+  //   purchase-sub-123 | trial-sub-45 | checkout-sub-45 | signup-ckxxx
+  // نفس المعرّف يُستخدم من Browser و Server لضمان Deduplication.
+  eventId        String
+  eventName      String // PageView | ViewContent | CompleteRegistration | StartTrial | InitiateCheckout | Purchase
+  provider       String // meta | tiktok | ga4 | google_ads
+  source         String // server | browser
+  status         String   @default("sent") // sent | failed | skipped
+  error          String?
+  // JSON sanitized — قيم تقنية فقط (value/currency/plan/ids) بدون PII خام
+  payload        String?
+  subscriptionId Int?
+  createdAt      DateTime @default(now())
+
+  @@unique([provider, eventId])
+  @@index([eventName, createdAt])
+  @@index([createdAt])
+  @@index([subscriptionId])
+}
+
+// 🧭 إسناد مصادر الاكتساب (Attribution) لكل مستخدم — أول وآخر Touch.
+// تُلتقط من URL (utm_* + gclid/fbclid/ttclid) في المتصفح ثم تُحفظ
+// عند إنشاء الحساب. جدول مستقل حتى لا يُغيّر جدول User الأساسي.
+model UserAttribution {
+  userId String @id
+
+  firstTouchSource   String?
+  firstTouchMedium   String?
+  firstTouchCampaign String?
+  firstTouchContent  String?
+  firstTouchTerm     String?
+  firstTouchAt       DateTime?
+
+  lastTouchSource   String?
+  lastTouchMedium   String?
+  lastTouchCampaign String?
+  lastTouchContent  String?
+  lastTouchTerm     String?
+  lastTouchAt       DateTime?
+
+  // معرّفات النقر من منصات الإعلان (حسب المتاح)
+  gclid       String?
+  fbclid      String?
+  ttclid      String?
+  wbraid      String?
+  gbraid      String?
+  // سياق الهبوط
+  landingPage String?
+  referrer    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lastTouchSource])
+  @@index([firstTouchSource])
+}

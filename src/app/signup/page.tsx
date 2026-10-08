@@ -32,6 +32,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { trackEvent, getAttributionForServer } from "@/lib/tracking/client";
+import { TRACKING_EVENTS } from "@/lib/tracking/types";
 
 const PLAN_META: Record<string, {
   name: string
@@ -168,11 +170,32 @@ function SignupContent() {
     if (!validate()) { toast.error('من فضلك صحّح الأخطاء'); return }
     setLoading(true)
     try {
-      const data = await api<{ ok: boolean; user?: any; error?: string }>('/api/auth/signup', {
+      // 📊 التقاط مصدر الاكتساب (utm_* + click ids) من طبقة التتبع
+      const attribution = getAttributionForServer()
+      const data = await api<{ ok: boolean; user?: any; error?: string; tracking?: { registrationEventId: string; trialEventId: string } }>('/api/auth/signup', {
         method: 'POST',
-        body: { shopName: shopName.trim(), name: name.trim(), email: email.trim().toLowerCase(), phone: phone.trim(), password, inviteCode: inviteCode.trim() || undefined, agree, planCode: selectedPlan || undefined },
+        body: { shopName: shopName.trim(), name: name.trim(), email: email.trim().toLowerCase(), phone: phone.trim(), password, inviteCode: inviteCode.trim() || undefined, agree, planCode: selectedPlan || undefined, attribution: attribution ?? undefined },
       })
       if (data?.ok && data.user) {
+        // ═══ 📊 Tracking Browser-side ═══
+        // يُطلق هنا فقط لأن الاستجابة تأتي من السيرفر بعد نجاح إنشاء
+        // الحساب فعلياً — وليس عند فتح الصفحة أو الضغط أو وجود خطأ.
+        // نفس event_id الذي أرسله السيرفر → Deduplication مثالي.
+        try {
+          trackEvent(TRACKING_EVENTS.CompleteRegistration, {
+            eventId: data.tracking?.registrationEventId,
+            contentName: data.tracking?.planName,
+            contentType: 'subscription_plan',
+          })
+          if (data.tracking?.trialEventId) {
+            trackEvent(TRACKING_EVENTS.StartTrial, {
+              eventId: data.tracking.trialEventId,
+              currency: 'EGP',
+              planName: data.tracking.planName,
+              period: 'trial',
+            })
+          }
+        } catch { /* التتبع لا يوقف التسجيل أبداً */ }
         toast.success(`تم إنشاء محلك «${shopName.trim()}» — تجربة 14 يوم 🎉`)
         router.push('/dashboard')
         router.refresh()

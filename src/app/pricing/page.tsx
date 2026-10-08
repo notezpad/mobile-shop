@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import { getMe } from '@/lib/auth-client'
+import { trackEvent } from '@/lib/tracking/client'
+import { TRACKING_EVENTS } from '@/lib/tracking/types'
 
 interface Plan {
   id: number
@@ -142,11 +144,23 @@ export default function PricingPage() {
     if (!hasActiveSub && !trialUsed) {
       setTrialStarting(plan.code)
       try {
-        const res = await api<{ ok: boolean; planCode: string; planName: string }>(
+        const res = await api<{ ok: boolean; planCode: string; planName: string; tracking?: { trialEventId: string } }>(
           '/api/subscription/start-trial',
           { method: 'POST', body: { planCode: plan.code } },
         )
         if (res?.ok) {
+          // ═══ 📊 Tracking Browser-side: StartTrial ═══
+          // يُطلق فقط لأن السيرفر أكد نجاح بدء التجربة فعلياً
+          // (اشتراك trial نشط في قاعدة البيانات) — نفس event_id.
+          try {
+            trackEvent(TRACKING_EVENTS.StartTrial, {
+              eventId: res.tracking?.trialEventId,
+              currency: 'EGP',
+              planName: res.planName,
+              planId: String(plan.id),
+              period: 'trial',
+            })
+          } catch { /* التتبع لا يوقف التجربة */ }
           toast.success(`تم بدء تجربة 14 يوم لباقة «${res.planName}» 🎉`)
           router.push('/dashboard')
           return

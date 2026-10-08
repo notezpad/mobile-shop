@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuthIgnoreSubscription, authErrorResponse } from '@/lib/auth'
 import { createPaymobIntention, toCents } from '@/lib/paymob'
+import { runNonBlocking, trackServerEvent, extractRequestContext } from '@/lib/tracking/server'
+import { TRACKING_EVENTS } from '@/lib/tracking/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -123,6 +125,32 @@ async function __POST(req: NextRequest) {
       },
     })
 
+    // ═══ 📊 Tracking: InitiateCheckout ═══
+    // يُطلق هنا فقط: بيانات الباقة حقيقية + جلسة دفع Paymob أُنشئت
+    // فعلياً (اشتراك pending حقيقي + intention ناجح). ليس عند زيارة
+    // صفحة الأسعار ولا عند اختيار الباقة ولا مجرد الضغط على زر.
+    const checkoutEventId = `checkout-sub-${pendingSub.id}`
+    // يشمل clientIp/userAgent + gaClientId/gaSessionId/ttp من كوكيز المتصفح
+    const reqCtx = extractRequestContext(req.headers)
+    runNonBlocking(() => trackServerEvent({
+      eventName: TRACKING_EVENTS.InitiateCheckout,
+      eventId: checkoutEventId,
+      params: {
+        value: amount,
+        currency: 'EGP',
+        contentName: plan.name, contentType: 'subscription_plan',
+        contentId: String(plan.id), planId: String(plan.id),
+        planName: plan.name, period,
+      },
+      context: {
+        ...reqCtx,
+        email: email,
+        phone: phone || undefined,
+        externalId: session.userId,
+      },
+      subscriptionId: pendingSub.id,
+    }))
+
     return NextResponse.json({
       ok: true,
       checkoutUrl,
@@ -131,6 +159,8 @@ async function __POST(req: NextRequest) {
       amount,
       period,
       planName: plan.name,
+      // 📊 المتصفح يُطلق InitiateCheckout بنفس event_id → Deduplication
+      tracking: { checkoutEventId, value: amount, currency: 'EGP', planId: String(plan.id), planName: plan.name, period },
     })
   } catch (e: any) {
     await db.subscription.update({
