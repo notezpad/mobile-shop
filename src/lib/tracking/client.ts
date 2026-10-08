@@ -353,7 +353,7 @@ function markClientSent(eventId: string): boolean {
  * يُطلق PageView أولي للبكسلات بعد تحميلها (لم تُحسب بعد).
  */
 let deferredPixelsLoaded = false
-function loadDeferredPixels(): void {
+function loadDeferredPixels(firePageView = true): void {
   if (typeof window === 'undefined' || !config || deferredPixelsLoaded) return
   // 🛡️ المفتاح الرئيسي OFF → لا تحميل لأي بكسل إعلاني نهائياً — نفس
   // العقد الموثق في اللوحة: "عند الإيقاف يتوقف كل الإرسال لكل المنصات".
@@ -371,7 +371,9 @@ function loadDeferredPixels(): void {
     console.log('[tracking] deferred ad pixels loaded (marketing consent granted)')
   }
 
-  // PageView أولي — هذه البكسلات لم ترَ أي صفحة بعد
+  // PageView أولي — هذه البكسلات لم ترَ أي صفحة بعد.
+  // عند الإقلاع (موافقة محفوظة) يتولى PageViewTracker الإرسال → نتجنب التكرار.
+  if (!firePageView) return
   if (willLoadMeta && typeof window.fbq === 'function') {
     try { window.fbq('track', 'PageView', undefined) } catch { /* ignore */ }
   }
@@ -410,7 +412,7 @@ export function initTracking(cfg: PublicTrackingConfig): void {
     loadGtm(cfg)
 
     // 4) Meta/TikTok مؤجلة — فقط إذا سبق أن وافق المستخدم على التسويق
-    if (getConsent().marketing) loadDeferredPixels()
+    if (getConsent().marketing) loadDeferredPixels(false)
   } else {
     // بدون إدارة موافقة — تحميل كل المنصات المفعّلة مباشرة (السلوك السابق)
     loadGa4(cfg)

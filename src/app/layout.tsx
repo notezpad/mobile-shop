@@ -5,8 +5,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
 import { TrackingBootstrap } from "@/components/tracking/TrackingBootstrap";
-import { getTrackingConfig } from "@/lib/tracking/config";
-import { toPublicConfig } from "@/lib/tracking/types";
 import {
   SITE_URL,
   SITE_NAME,
@@ -195,11 +193,11 @@ export default async function RootLayout({
     description: SITE_DESCRIPTION,
   };
 
-  // 📊 Tracking Layer — الإعدادات تُقرأ من قاعدة البيانات (PlatformSetting)
-  // وتُمرَّر للمتصفح بدون أي Secrets. الطبقة المركزية توزع الأحداث على
-  // المنصات المفعّلة فقط (GA4 / Ads / Meta / TikTok).
-  const trackingConfig = toPublicConfig(await getTrackingConfig());
-
+  // 📊 Tracking Layer — 🛠️ الإعدادات لم تعد تُقرأ هنا.
+  // السبب: الـ layout الجذري كان يقرأ PlatformSetting أثناء الـ prerender/build
+  // فتُخبَّز الإعدادات (غالباً الافتراضية enabled=false) داخل HTML الصفحات الثابتة،
+  // فلا يصل أي تغيير من لوحة الأدمن للمتصفح ولا يُحمَّل أي بكسل.
+  // الآن TrackingBootstrap يجلبها وقت التشغيل من /api/tracking/config (no-store).
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
       <head>
@@ -224,7 +222,7 @@ export default async function RootLayout({
         </Providers>
 
         {/* 📊 Marketing & Tracking Layer — مركزية من إعدادات لوحة الأدمن */}
-        <TrackingBootstrap config={trackingConfig} />
+        <TrackingBootstrap />
 
         {/* ⚡ Service Worker registration — moved to body as a client script.
             Next.js 16 warns about <script> tags inside <head> of a Server Component
