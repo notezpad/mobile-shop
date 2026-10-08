@@ -363,7 +363,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
   };
 
   return (
-    <div className={page === "funnel" ? "min-w-0" : "space-y-4 max-w-4xl"}>
+    <div className="space-y-4 max-w-4xl">
       {(page === "settings" || page === "events") && (
         <>
           {/* ─── 🛡️ تنبيه: جداول التتبع غير مُهيّأة (قبل الترحيل) ─── */}
