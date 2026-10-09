@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse, hashPassword } from '@/lib/auth'
-import { requireModule, featureErrorResponse } from '@/lib/features'
+import { requireModule, featureErrorResponse, assertWithinPlanLimit } from '@/lib/features'
 import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
@@ -54,6 +54,12 @@ async function __POST(req: NextRequest) {
     return NextResponse.json(err?.body, { status: err?.status })
   }
   try { await requireModule(session, 'users') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
+  }
+
+  // 🛡️ 2026-10-10 FIX: فحص حد المستخدمين (maxUsers) — قبل الإصلاح ده الحد
+  // كان بيتحفظ في الباقة بس مكانش بيتفحص، فكان يقدر يعمل مستخدمين بلا حدود.
+  try { await assertWithinPlanLimit(session, 'users') } catch (e) {
     const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 

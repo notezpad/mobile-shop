@@ -24,6 +24,12 @@ async function __GET() {
     'fashion-pro',
   ]
 
+  // 🎨 2026-10-09 (plans redesign): richer per-plan analytics for the admin
+  // UI — period split, trials, MRR, expiring-soon and the next-to-expire
+  // subscribers. All additive: every pre-existing field is unchanged.
+  const now = new Date()
+  const expiringLimit = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+
   const plans = await db.plan.findMany({
     orderBy: { sortOrder: 'asc' },
     include: {
@@ -32,32 +38,65 @@ async function __GET() {
           status: 'active',
           tenant: { id: { not: PLATFORM_TENANT_ID } },
         },
-        select: { id: true },
+        select: {
+          id: true,
+          period: true,
+          endDate: true,
+          tenant: { select: { shopName: true } },
+        },
+        orderBy: { endDate: 'asc' },
       },
     },
   })
 
-  const rows = plans.map((p) => ({
-    id: p.id,
-    code: p.code,
-    name: p.name,
-    description: p.description,
-    priceMonthly: p.priceMonthly,
-    priceYearly: p.priceYearly,
-    maxUsers: p.maxUsers,
-    maxProducts: p.maxProducts,
-    maxBranches: p.maxBranches,
-    trialDays: p.trialDays,
-    features: p.features,
-    isActive: p.isActive,
-    sortOrder: p.sortOrder,
-    subscribersCount: p.subscriptions.length,
-    businessType: (p as any).businessType ?? null,
-    enabledModules: (p as any).enabledModules ?? null,
-    capabilities: (p as any).capabilities ?? null,
-    // 🛡️ 2026-09-17 (v3): flag to distinguish canonical vs custom plans
-    isCanonical: CANONICAL_PLAN_CODES.includes(p.code),
-  }))
+  const rows = plans.map((p) => {
+    const subs = p.subscriptions
+    const trialCount = subs.filter((s) => s.period === 'trial').length
+    const yearlyCount = subs.filter((s) => s.period === 'yearly').length
+    const monthlyCount = subs.length - trialCount - yearlyCount
+    // Estimated monthly recurring revenue: trials pay nothing, yearly subs
+    // contribute priceYearly / 12, everything else the monthly price.
+    const mrr = Math.round(
+      monthlyCount * p.priceMonthly + (yearlyCount * p.priceYearly) / 12
+    )
+    const expiringSoonCount = subs.filter(
+      (s) => s.endDate >= now && s.endDate <= expiringLimit
+    ).length
+
+    return {
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      description: p.description,
+      priceMonthly: p.priceMonthly,
+      priceYearly: p.priceYearly,
+      maxUsers: p.maxUsers,
+      maxProducts: p.maxProducts,
+      maxBranches: p.maxBranches,
+      trialDays: p.trialDays,
+      features: p.features,
+      isActive: p.isActive,
+      sortOrder: p.sortOrder,
+      subscribersCount: subs.length,
+      businessType: (p as any).businessType ?? null,
+      enabledModules: (p as any).enabledModules ?? null,
+      capabilities: (p as any).capabilities ?? null,
+      // 🛡️ 2026-09-17 (v3): flag to distinguish canonical vs custom plans
+      isCanonical: CANONICAL_PLAN_CODES.includes(p.code),
+      // ── new analytics fields ──
+      trialCount,
+      monthlyCount,
+      yearlyCount,
+      mrr,
+      expiringSoonCount,
+      nextExpiring: subs.slice(0, 5).map((s) => ({
+        id: s.id,
+        shopName: s.tenant?.shopName ?? '—',
+        period: s.period,
+        endDate: s.endDate.toISOString(),
+      })),
+    }
+  })
 
   return NextResponse.json({ items: rows })
 }

@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils";
 import { trackEvent, getAttributionForServer } from "@/lib/tracking/client";
 import { TRACKING_EVENTS } from "@/lib/tracking/types";
 
-const PLAN_META: Record<string, {
+type PlanMetaEntry = {
   name: string
   shortName: string
   icon: React.ElementType
@@ -46,7 +46,21 @@ const PLAN_META: Record<string, {
   badgeClass: string
   desc: string
   price: string
-}> = {
+}
+
+// 🛡️ 2026-10-10 FIX: شكل الباقة القادمة من الداتابيز (عبر /api/plans/public)
+interface ApiPlan {
+  code: string
+  name: string
+  description: string | null
+  priceMonthly: number
+  priceYearly: number
+  businessType?: string
+}
+
+// ⚠️ PLAN_META هنا للشكل فقط (أيقونة/ألوان/وصف) — أي باقة تظهر فعلياً
+// بيتحدد من الداتابيز عبر /api/plans/public (المفعّلة فقط)، مش من هنا.
+const PLAN_META: Record<string, PlanMetaEntry> = {
   'electronics-basic': {
     name: 'أساسية - موبايل وكمبيوتر',
     shortName: 'موبايل أساسية',
@@ -105,6 +119,12 @@ const BENEFITS = [
   'ألغِ في أي وقت بدون أي التزام',
 ]
 
+function planPriceLabel(p: { priceMonthly: number; priceYearly: number }): string {
+  return p.priceMonthly > 0
+    ? `${p.priceMonthly.toLocaleString('en-US')} EGP`
+    : `${p.priceYearly.toLocaleString('en-US')} EGP`
+}
+
 function getPasswordStrength(pwd: string): { score: 0 | 1 | 2 | 3; label: string; color: string; bg: string } {
   if (!pwd) return { score: 0, label: '', color: '', bg: '' }
   let score = 0
@@ -128,7 +148,88 @@ function SignupContent() {
   const [selectedPlan, setSelectedPlan] = React.useState<string>(
     searchParams.get('plan') ?? ''
   )
-  const planMeta = PLAN_META[selectedPlan]
+
+  // 🛡️ 2026-10-10 FIX: صفحة التسجيل كانت بتعرض 4 باقات ثابتة في الكود
+  // (PLAN_META) مش مربوطة بالداتابيز — فالباقة اللي الأدمن يعطّلها من
+  // لوحة التحكم كانت بتظهر هنا عادي رغم إنها مخفية من /pricing والرئيسية.
+  // الآن: الباقات المعروضة = اللي /api/plans/public بيرجعه فقط (المفعّلة)،
+  // و PLAN_META بيفضل مسؤول عن الشكل بس.
+  // null = لسه بنحمّل · فشل الشبكة = plansFailed → نرجع للقائمة الثابتة
+  const [apiPlans, setApiPlans] = React.useState<ApiPlan[] | null>(null)
+  const [plansFailed, setPlansFailed] = React.useState(false)
+
+  React.useEffect(() => {
+    let alive = true
+    api<{ items: ApiPlan[] }>('/api/plans/public')
+      .then((d) => {
+        if (!alive) return
+        setApiPlans(Array.isArray(d?.items) ? d.items : [])
+      })
+      .catch(() => {
+        // فشل الشبكة فقط → نرجع للقائمة الثابتة عشان التسجيل ميتوقفش،
+        // والسيرفر بيتحقق من الباقة تاني عند إنشاء الحساب فعلياً.
+        if (!alive) return
+        setPlansFailed(true)
+      })
+    return () => { alive = false }
+  }, [])
+
+  // لو الباقة المختارة من الرابط (?plan=...) مش ضمن المفعّلة → نمسح الاختيار
+  React.useEffect(() => {
+    if (apiPlans === null) return
+    if (selectedPlan && !apiPlans.some((p) => p.code === selectedPlan)) {
+      setSelectedPlan('')
+    }
+  }, [apiPlans, selectedPlan])
+
+  const plansLoading = apiPlans === null && !plansFailed
+
+  // بانر الباقة المختارة — بيرجع null لو الباقة مش ضمن المفعّلة
+  const planMeta = React.useMemo<PlanMetaEntry | null>(() => {
+    const api = apiPlans?.find((p) => p.code === selectedPlan)
+    const fb = PLAN_META[selectedPlan]
+    // الرابط فيه باقة معطّلة/مش موجودة → مفيش بانر (الـ effect بيمسح الاختيار)
+    if (apiPlans !== null && !api) return null
+    // لسه بنحمّل أو فشل الشبكة → نعرض الشكل الثابت مؤقتاً
+    if (!api) return fb ?? null
+    return {
+      name: api.name || fb?.name || api.code,
+      shortName: fb?.shortName ?? (api.name || api.code),
+      icon: fb?.icon ?? Sparkles,
+      cardBg: fb?.cardBg ?? 'bg-muted/60 dark:bg-muted/30',
+      cardBorder: fb?.cardBorder ?? 'border-border',
+      cardSelected: fb?.cardSelected ?? 'ring-2 ring-primary border-primary',
+      iconColor: fb?.iconColor ?? 'text-primary',
+      badgeClass: fb?.badgeClass ?? 'bg-muted text-foreground',
+      desc: fb?.desc ?? api.description ?? '',
+      price: planPriceLabel(api),
+    }
+  }, [apiPlans, selectedPlan])
+
+  // قائمة اختيار الباقات — من الداتابيز (المفعّلة فقط) أو الثابتة عند فشل الشبكة
+  const pickerEntries = React.useMemo<{ code: string; meta: PlanMetaEntry }[]>(() => {
+    if (apiPlans === null) {
+      return Object.entries(PLAN_META).map(([code, m]) => ({ code, meta: m }))
+    }
+    return apiPlans.map((p) => {
+      const fb = PLAN_META[p.code]
+      return {
+        code: p.code,
+        meta: {
+          name: p.name || fb?.name || p.code,
+          shortName: fb?.shortName ?? (p.name || p.code),
+          icon: fb?.icon ?? Sparkles,
+          cardBg: fb?.cardBg ?? 'bg-muted/60 dark:bg-muted/30',
+          cardBorder: fb?.cardBorder ?? 'border-border',
+          cardSelected: fb?.cardSelected ?? 'ring-2 ring-primary border-primary',
+          iconColor: fb?.iconColor ?? 'text-primary',
+          badgeClass: fb?.badgeClass ?? 'bg-muted text-foreground',
+          desc: fb?.desc ?? p.description ?? '',
+          price: planPriceLabel(p),
+        },
+      }
+    })
+  }, [apiPlans])
 
   const [shopName, setShopName] = React.useState('')
   const [name, setName] = React.useState('')
@@ -266,8 +367,19 @@ function SignupContent() {
                     <AlertCircle className="size-3 shrink-0" />{getFieldError('plan')}
                   </p>
                 )}
+                {plansLoading ? (
+                  <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-muted/30 py-6">
+                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">جاري تحميل الباقات...</span>
+                  </div>
+                ) : pickerEntries.length === 0 ? (
+                  <div className="rounded-xl border border-border bg-muted/30 px-4 py-6 text-center">
+                    <p className="text-xs font-bold text-foreground">لا توجد باقات متاحة حالياً</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">يرجى التواصل معنا لمعرفة تفاصيل الاشتراك المتاح.</p>
+                  </div>
+                ) : (
                 <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(PLAN_META).map(([code, meta]) => {
+                  {pickerEntries.map(({ code, meta }) => {
                     const Icon = meta.icon
                     const isSelected = selectedPlan === code
                     return (
@@ -292,6 +404,7 @@ function SignupContent() {
                     )
                   })}
                 </div>
+                )}
               </div>
             )}
 

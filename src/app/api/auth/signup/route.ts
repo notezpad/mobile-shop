@@ -80,11 +80,23 @@ async function __POST(req: NextRequest) {
     // grant a 14-day trial of it (period='trial', amountPaid=0).
     let trialPlan = await db.plan.findUnique({ where: { code: requestedPlanCode } })
 
-    // If the requested plan doesn't exist OR is a zero-price plan (trial/free/etc.),
-    // fall back to electronics-basic. This is a safety net — the pricing page
-    // only shows paid plans, but a manual API call could send anything.
-    if (!trialPlan || (trialPlan.priceMonthly === 0 && trialPlan.priceYearly === 0)) {
-      trialPlan = await db.plan.findUnique({ where: { code: 'electronics-basic' } })
+    // 🛡️ 2026-10-10 FIX: الباقة المعطّلة (isActive=false) كانت بتتقبل هنا!
+    // الأدمن يعطّل الباقة فتختفي من كل الصفحات، لكن طلب مباشر للـ API
+    // كان لسه بيقدر يسجّل بيها. الآن نفس فلاتر /api/plans/public بالظبط:
+    // لازم الباقة مفعّلة ومدفوعة، وإلا نتعامل معها كأنها مش موجودة.
+    if (trialPlan && (!trialPlan.isActive || (trialPlan.priceMonthly === 0 && trialPlan.priceYearly === 0))) {
+      trialPlan = null
+    }
+    // If the requested plan doesn't exist OR is inactive OR is a zero-price plan
+    // (trial/free/etc.), fall back to electronics-basic. This is a safety net —
+    // the pricing page only shows paid plans, but a manual API call could send anything.
+    if (!trialPlan) {
+      const fallbackPlan = await db.plan.findUnique({ where: { code: 'electronics-basic' } })
+      // الباقة الاحتياطية لازم تكون مفعّلة ومدفوعة برضه — وإلا نسيبها null
+      // عشان الـ last-resort تحت ينشئ نسخة سليمة مفعّلة.
+      trialPlan = fallbackPlan && fallbackPlan.isActive && (fallbackPlan.priceMonthly > 0 || fallbackPlan.priceYearly > 0)
+        ? fallbackPlan
+        : null
     }
     // Last-resort fallback: if even electronics-basic is missing from DB,
     // create it on the fly with the canonical config from seed-plans.ts.

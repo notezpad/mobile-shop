@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { buildDefaultUnitsData } from '@/lib/default-units'
-import { getPlanContext } from '@/lib/features'
+import { getPlanContext, assertWithinPlanLimit, featureErrorResponse } from '@/lib/features'
 import { computeDynamicRetailPrice } from '@/lib/retail-pricing'
 import { matchEdgeCache, putEdgeCache, purgeCatalogCaches } from '@/lib/edgeCache'
 
@@ -276,6 +276,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null)
     if (!body || typeof body !== 'object') {
       return NextResponse.json({ error: 'بيانات غير صالحة' }, { status: 400 })
+    }
+    // 🛡️ 2026-10-10 FIX: فحص حد المنتجات (maxProducts) — قبل الإصلاح ده الحد
+    // كان بيتحفظ في الباقة بس مكانش بيتفحص، فكان يقدر يضيف منتجات بلا حدود.
+    try {
+      await assertWithinPlanLimit(session, 'products')
+    } catch (e) {
+      const fe = featureErrorResponse(e)
+      if (fe) return NextResponse.json(fe.body, { status: fe.status })
+      throw e
     }
     const name = String(body.name ?? '').trim()
     if (!name) {

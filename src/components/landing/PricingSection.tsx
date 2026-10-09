@@ -33,7 +33,15 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
   const { vertical } = useVertical()
   const meta = VERTICAL_META[vertical]
   const [yearly, setYearly] = React.useState(false)
-  const [plans, setPlans] = React.useState<LandingPlan[]>(FALLBACK_PLANS)
+  // 🛡️ 2026-10-10 FIX: زر تعطيل الباقة كان ملوش تأثير على صفحة الهبوط —
+  // السبب: القائمة كانت بتبدأ بـ FALLBACK_PLANS (4 باقات ثابتة في الكود)
+  // وبيانات الـ API بتتدمج فوقها. الباقة المعطّلة مش بترجع من الـ API
+  // (فلتر isActive) فكان بيرجع تلقائياً للباقة الثابتة ويعرضها برضه!
+  // الآن: نعرض بالظبط اللي الـ API بيرجعه (الباقات المفعّلة فقط)،
+  // والـ FALLBACK_PLANS بتتستخدم فقط لو الطلب فشل خالص (مشكلة شبكة)
+  // عشان الصفحة تفضل شغالة في الأوفلاين — زي الهدف الأصلي.
+  const [plans, setPlans] = React.useState<LandingPlan[]>([])
+  const [loaded, setLoaded] = React.useState(false)
 
   React.useEffect(() => {
     let alive = true
@@ -41,29 +49,33 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
       .then((data) => {
         if (!alive) return
         const items = data?.items
-        if (!Array.isArray(items) || items.length === 0) return
-        // Merge live DB data over the fallback, matched by `code`, so the
-        // page always shows the correct 4 plans even if the DB is missing one.
-        const merged = FALLBACK_PLANS.map((fb) => {
-          const fromApi = items.find((p) => p.code === fb.code)
-          if (!fromApi) return fb
+        // الـ API رجّع بنجاح (حتى لو فاضي لأن الأدمن عطّل كل الباقات)
+        // → نعرض الباقات المفعّلة فقط من الداتابيز.
+        const mapped: LandingPlan[] = (Array.isArray(items) ? items : []).map((p) => {
+          // مزايا/وصف الباقة الثابتة كمرجع احتياطي لو الداتابيز ناقصة الحقل
+          const fb = FALLBACK_PLANS.find((f) => f.code === p.code)
           return {
-            ...fb,
-            name: fromApi.name || fb.name,
-            description: fromApi.description || fb.description,
-            priceMonthly: fromApi.priceMonthly ?? fb.priceMonthly,
-            priceYearly: fromApi.priceYearly ?? fb.priceYearly,
-            maxUsers: fromApi.maxUsers ?? fb.maxUsers,
-            maxProducts: fromApi.maxProducts ?? fb.maxProducts,
-            maxBranches: fromApi.maxBranches ?? fb.maxBranches,
-            features: fromApi.features?.length ? fromApi.features : fb.features,
-            businessType: (fromApi.businessType as Vertical) || fb.businessType,
+            code: p.code,
+            name: p.name || fb?.name || p.code,
+            description: p.description || fb?.description || '',
+            priceMonthly: p.priceMonthly ?? fb?.priceMonthly ?? 0,
+            priceYearly: p.priceYearly ?? fb?.priceYearly ?? 0,
+            maxUsers: p.maxUsers ?? fb?.maxUsers ?? 1,
+            maxProducts: p.maxProducts ?? fb?.maxProducts ?? 50,
+            maxBranches: p.maxBranches ?? fb?.maxBranches ?? 1,
+            businessType: (p.businessType === 'fashion' ? 'fashion' : 'electronics') as Vertical,
+            isPro: p.code.endsWith('-pro'),
+            features: p.features?.length ? p.features : fb?.features ?? [],
           }
         })
-        setPlans(merged)
+        setPlans(mapped)
+        setLoaded(true)
       })
       .catch(() => {
-        /* keep fallback plans — page always looks complete */
+        // فشل الشبكة فقط → نرجع للباقات الثابتة عشان الصفحة ماتبقاش فاضية
+        if (!alive) return
+        setPlans(FALLBACK_PLANS)
+        setLoaded(true)
       })
     return () => {
       alive = false
@@ -156,9 +168,16 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
             transition={{ duration: 0.3 }}
             className="mx-auto grid max-w-6xl grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4"
           >
-            {allVisiblePlans.length === 0
+            {!loaded
               ? [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[420px] rounded-2xl" />)
-              : allVisiblePlans.map((plan, i) => (
+              : allVisiblePlans.length === 0
+                ? (
+                  <div className="col-span-full rounded-2xl border border-white/10 bg-white/5 px-6 py-12 text-center">
+                    <p className="text-lg font-bold text-white">لا توجد باقات متاحة حالياً</p>
+                    <p className="mt-2 text-sm lg-muted">يرجى التواصل معنا لمعرفة تفاصيل الاشتراك المتاح.</p>
+                  </div>
+                )
+                : allVisiblePlans.map((plan, i) => (
                   <PlanCard
                     key={plan.code}
                     plan={plan}

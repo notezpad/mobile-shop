@@ -42,6 +42,28 @@ export type PlanContext = {
   businessType: 'electronics' | 'fashion'
   enabledModules: string[]
   capabilities: string[]
+  /** 🛡️ 2026-10-10: حدود الباقة — بتتقرا من نفس Plan المحفوظ.
+   * لو مفيش اشتراك/باقة (tenant منتهي مثلاً) القيمة = UNLIMITED_PLAN_LIMIT
+   * عشان ما نمنعش مرتين — الـ auth layer هو اللي بيقفل المنتهي أصلاً. */
+  limits: {
+    maxUsers: number
+    maxProducts: number
+    maxBranches: number
+  }
+}
+
+/**
+ * 🛡️ 2026-10-10: تمثيل "غير محدود" في الـ admin UI (plan-shared.tsx).
+ * أي حد >= القيمة دي بيتعامل كأنه بلا حدود (مفيش فحص).
+ */
+export const UNLIMITED_PLAN_LIMIT = 999_999
+
+export type LimitKind = 'users' | 'products' | 'branches'
+
+const LIMIT_KIND_LABEL: Record<LimitKind, string> = {
+  users: 'مستخدمين',
+  products: 'منتجات',
+  branches: 'فروع',
 }
 
 /**
@@ -111,6 +133,11 @@ async function loadPlanContext(tenantId: string): Promise<PlanContext> {
     businessType,
     enabledModules: enforced.modules,
     capabilities: enforced.capabilities,
+    limits: {
+      maxUsers: plan?.maxUsers ?? UNLIMITED_PLAN_LIMIT,
+      maxProducts: plan?.maxProducts ?? UNLIMITED_PLAN_LIMIT,
+      maxBranches: plan?.maxBranches ?? UNLIMITED_PLAN_LIMIT,
+    },
   }
 }
 
@@ -166,6 +193,47 @@ export async function requireCapability(
   if (!ctx.capabilities.includes(capability)) {
     throw new FeatureError(
       'الميزة دي متاحة في باقة أعلى (Pro) — يرجى ترقية الاشتراك',
+      403,
+    )
+  }
+}
+
+/**
+ * 🛡️ 2026-10-10: فحص حدود الباقة (maxUsers / maxProducts / maxBranches).
+ *
+ * قبل الإصلاح ده: الحدود كانت بتتحفظ في الـ DB من لوحة الأدمن بس مكان أي
+ * فحص فعلي في الـ APIs — فصاحب الباقة كان يقدر يعمل فروع/مستخدمين/منتجات
+ * بلا حدود مهما كانت الباقة بتقول.
+ *
+ * القواعد:
+ *  - SUPER_ADMIN يتجاوز الفحص (زي requireModule/requireCapability).
+ *  - الحد >= UNLIMITED_PLAN_LIMIT (999999) = "غير محدود" → مفيش فحص.
+ *  - لو العدد الحالي >= الحد → FeatureError برسالة عربية واضحة (403).
+ *
+ * الاستخدام داخل POST handlers:
+ *   try { await assertWithinPlanLimit(session, 'branches') }
+ *   catch (e) { const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e }
+ */
+export async function assertWithinPlanLimit(
+  session: Pick<Session, 'tenantId' | 'role'>,
+  kind: LimitKind,
+): Promise<void> {
+  // Super admin bypasses all plan gating.
+  if (session.role === 'SUPER_ADMIN') return
+  const ctx = await getPlanContext(session.tenantId)
+  const limit = ctx.limits[kind]
+  if (!limit || limit >= UNLIMITED_PLAN_LIMIT) return
+
+  const count =
+    kind === 'users'
+      ? await db.user.count({ where: { tenantId: session.tenantId } })
+      : kind === 'products'
+        ? await db.product.count({ where: { tenantId: session.tenantId } })
+        : await db.branch.count({ where: { tenantId: session.tenantId } })
+
+  if (count >= limit) {
+    throw new FeatureError(
+      `وصلت للحد الأقصى لباقتك الحالية (${limit} ${LIMIT_KIND_LABEL[kind]} فقط) — قم بترقية الباقة لإضافة المزيد`,
       403,
     )
   }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
-import { requireModule, featureErrorResponse } from '@/lib/features'
+import { requireModule, featureErrorResponse, assertWithinPlanLimit } from '@/lib/features'
 import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
@@ -58,6 +58,15 @@ export async function POST(req: NextRequest) {
     }
     try {
       await requireModule(s, 'branches')
+    } catch (e) {
+      const fe = featureErrorResponse(e)
+      if (fe) return NextResponse.json(fe.body, { status: fe.status })
+      throw e
+    }
+    // 🛡️ 2026-10-10 FIX: فحص حد الفروع (maxBranches) — قبل الإصلاح ده الحد
+    // كان بيتحفظ في الباقة بس مكانش بيتفحص هنا، فكان يقدر يعمل فروع بلا حدود.
+    try {
+      await assertWithinPlanLimit(s, 'branches')
     } catch (e) {
       const fe = featureErrorResponse(e)
       if (fe) return NextResponse.json(fe.body, { status: fe.status })

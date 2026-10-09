@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════
-   Source Report — v2026.2
-   ملفوف في @layer components لضمان الأولوية على Tailwind utilities.
+   Source Report — تقارير المصادر (TrackingAttribution)
+   مطوّر 2026 — أنماط معزولة بـ .source-report
    ═══════════════════════════════════════════════════════════════════ */
 @layer components {
 
-/* ═══ جذر التقرير ═══ */
+/* ═══ الجذر ═══ */
 .source-report {
   --background: oklch(0.978 0.006 220);
   --foreground: oklch(0.24 0.018 240);
