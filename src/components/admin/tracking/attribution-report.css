@@ -1,0 +1,314 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Source Report — v2026.2
+   ملفوف في @layer components لضمان الأولوية على Tailwind utilities.
+   ═══════════════════════════════════════════════════════════════════ */
+@layer components {
+
+/* ═══ جذر التقرير ═══ */
+.source-report {
+  --background: oklch(0.978 0.006 220);
+  --foreground: oklch(0.24 0.018 240);
+  --card: oklch(1 0 0);
+  --muted: oklch(0.956 0.008 220);
+  --muted-foreground: oklch(0.49 0.022 240);
+  --border: oklch(0.89 0.012 220);
+  --primary: oklch(0.48 0.14 165);
+  --primary-foreground: oklch(1 0 0);
+  --report-registration: oklch(0.51 0.19 259);
+  --report-registration-soft: oklch(0.955 0.025 259);
+  --report-trial: oklch(0.5 0.18 350);
+  --report-trial-soft: oklch(0.957 0.026 350);
+  --report-paid: oklch(0.45 0.13 170);
+  --report-paid-soft: oklch(0.95 0.032 170);
+  --report-revenue: oklch(0.39 0.105 172);
+  --report-on-revenue: oklch(0.99 0.004 172);
+  --report-card-shadow: 0 1px 2px oklch(0.27 0.035 220 / 0.05), 0 4px 14px oklch(0.27 0.035 220 / 0.06);
+  --report-surface: var(--card);
+  --report-soft: var(--muted);
+  --report-ink: var(--foreground);
+  --report-line: var(--border);
+  --report-positive: var(--report-paid);
+  --report-positive-soft: var(--report-paid-soft);
+  --report-blue: oklch(0.53 0.2 260);
+  --report-red: oklch(0.57 0.22 25);
+  --report-teal: oklch(0.48 0.12 181);
+  --report-pink: oklch(0.55 0.21 353);
+  --report-gold: oklch(0.58 0.12 80);
+  --report-google-mark: conic-gradient(var(--report-blue) 0deg 100deg, var(--report-teal) 100deg 180deg, var(--report-gold) 180deg 240deg, var(--report-red) 240deg 300deg, var(--report-blue) 300deg);
+  color: var(--report-ink);
+  min-width: 0;
+  display: grid;
+  gap: 22px;
+  background: var(--background);
+  padding: 24px;
+}
+
+.dark .source-report {
+  --background: oklch(0.17 0.008 220);
+  --foreground: oklch(0.95 0.008 220);
+  --card: oklch(0.22 0.009 220);
+  --muted: oklch(0.27 0.01 220);
+  --muted-foreground: oklch(0.73 0.02 220);
+  --border: oklch(0.34 0.015 220);
+  --primary: oklch(0.74 0.14 165);
+  --primary-foreground: oklch(0.18 0.015 165);
+  --report-registration: oklch(0.79 0.12 259);
+  --report-registration-soft: oklch(0.27 0.05 259);
+  --report-trial: oklch(0.79 0.12 350);
+  --report-trial-soft: oklch(0.27 0.045 350);
+  --report-paid: oklch(0.79 0.12 170);
+  --report-paid-soft: oklch(0.27 0.043 170);
+  --report-revenue: oklch(0.35 0.075 172);
+  --report-blue: oklch(0.75 0.14 260);
+  --report-red: oklch(0.73 0.17 25);
+  --report-teal: oklch(0.76 0.13 181);
+  --report-pink: oklch(0.76 0.16 353);
+  --report-gold: oklch(0.8 0.13 80);
+}
+
+/* ═══ الرأس ═══ */
+.report-header,
+.report-toolbar,
+.report-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+}
+.report-header h2 { font-size: 24px; line-height: 1.5; font-weight: 800; margin: 0; letter-spacing: -0.01em; }
+.report-header p { color: var(--muted-foreground); font-size: 13px; margin: 6px 0 0; }
+.report-heading-mark { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.report-heading-mark > svg {
+  color: var(--primary-foreground);
+  background: linear-gradient(135deg, var(--primary), color-mix(in oklab, var(--primary) 75%, oklch(0.35 0.14 165)));
+  padding: 10px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  box-shadow: 0 4px 12px -4px color-mix(in oklab, var(--primary) 55%, transparent);
+}
+.report-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.report-meta-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.report-meta-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px; border-radius: 6px;
+  background: var(--report-soft); color: var(--muted-foreground);
+  font-size: 11px; font-weight: 600;
+  border: 1px solid color-mix(in oklab, var(--report-line) 60%, transparent);
+}
+.report-meta-chip svg { width: 12px; height: 12px; opacity: 0.75; }
+
+/* ═══ شريط الفلتر ═══ */
+.report-filter-band { border-block: 1px solid var(--report-line); padding: 16px 0; }
+.report-filter-band [data-slot="select-trigger"] { background: var(--report-surface); }
+.source-report .report-filter-band [role="group"],
+.source-report .report-filter-band button,
+.source-report .report-filter-band [data-slot="select-trigger"] { border-radius: 8px; }
+
+/* ═══ KPIs ═══ */
+.report-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; padding-block: 0 4px; }
+.report-kpi {
+  --kpi-ink: var(--report-registration);
+  --kpi-surface: var(--report-registration-soft);
+  position: relative;
+  padding: 18px;
+  border: 1px solid color-mix(in oklab, var(--kpi-ink) 22%, var(--kpi-surface));
+  border-top: 3px solid var(--kpi-ink);
+  border-radius: 10px;
+  background:
+    radial-gradient(180px 80px at 100% 0%, color-mix(in oklab, var(--kpi-ink) 8%, transparent), transparent 70%),
+    var(--kpi-surface);
+  box-shadow: var(--report-card-shadow);
+  min-width: 0;
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+.report-kpi:hover { transform: translateY(-2px); box-shadow: 0 4px 8px oklch(0.27 0.035 220 / 0.06), 0 12px 28px -8px oklch(0.27 0.035 220 / 0.10); }
+.report-kpi:nth-child(2) { --kpi-ink: var(--report-trial); --kpi-surface: var(--report-trial-soft); }
+.report-kpi:nth-child(3) { --kpi-ink: var(--report-paid); --kpi-surface: var(--report-paid-soft); }
+.report-kpi:nth-child(4) {
+  --kpi-ink: var(--report-on-revenue);
+  --kpi-surface: var(--report-revenue);
+  border-color: var(--report-revenue);
+}
+.report-kpi-label { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; gap: 8px; color: var(--kpi-ink); font-size: 12px; font-weight: 700; }
+.report-kpi-label svg { width: 30px; height: 30px; padding: 7px; border-radius: 8px; background: color-mix(in oklab, var(--kpi-ink) 14%, transparent); }
+.report-kpi strong { display: block; color: var(--kpi-ink); font-size: 30px; font-weight: 800; margin-block: 14px 6px; line-height: 1.4; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; letter-spacing: -0.02em; }
+.report-kpi small { color: var(--muted-foreground); font-size: 11px; }
+.report-kpi:nth-child(4) small { color: color-mix(in oklab, var(--report-on-revenue) 85%, var(--report-revenue)); }
+.report-kpi-rank {
+  position: absolute; top: 10px; inset-inline-end: 12px;
+  font-size: 10px; font-weight: 800;
+  color: color-mix(in oklab, var(--kpi-ink) 55%, transparent);
+  letter-spacing: 0.08em; font-variant-numeric: tabular-nums;
+}
+.report-kpi-bar { height: 4px; border-radius: 999px; background: color-mix(in oklab, var(--kpi-ink) 15%, transparent); overflow: hidden; margin-top: 8px; }
+.report-kpi-bar > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--kpi-ink), color-mix(in oklab, var(--kpi-ink) 55%, transparent)); transition: width 700ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+/* ═══ شريط القمع ═══ */
+.report-flow {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--report-line); border-radius: 10px;
+  background: var(--report-surface); overflow: hidden;
+  box-shadow: var(--report-card-shadow);
+}
+.report-flow-step {
+  position: relative; padding: 16px 18px; min-width: 0;
+  border-inline-end: 1px solid var(--report-line);
+  transition: background 200ms ease;
+}
+.report-flow-step:last-child { border-inline-end: 0; }
+.report-flow-step:hover { background: color-mix(in oklab, var(--muted) 50%, transparent); }
+.report-flow-head { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--muted-foreground); }
+.report-flow-dot { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; }
+.report-flow-step:nth-child(1) .report-flow-dot { background: var(--report-registration); }
+.report-flow-step:nth-child(2) .report-flow-dot { background: var(--report-trial); }
+.report-flow-step:nth-child(3) .report-flow-dot { background: var(--report-paid); }
+.report-flow-step:nth-child(4) .report-flow-dot { background: var(--report-revenue); }
+.report-flow-value { display: flex; align-items: baseline; gap: 6px; margin-top: 10px; font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; color: var(--report-ink); }
+.report-flow-value small { font-size: 11px; font-weight: 600; color: var(--muted-foreground); letter-spacing: 0; }
+.report-flow-track { height: 4px; border-radius: 999px; background: var(--report-soft); overflow: hidden; margin-top: 10px; }
+.report-flow-track > span { display: block; height: 100%; border-radius: 999px; transition: width 700ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.report-flow-step:nth-child(1) .report-flow-track > span { background: var(--report-registration); }
+.report-flow-step:nth-child(2) .report-flow-track > span { background: var(--report-trial); }
+.report-flow-step:nth-child(3) .report-flow-track > span { background: var(--report-paid); }
+.report-flow-step:nth-child(4) .report-flow-track > span { background: var(--report-revenue); }
+.report-flow-rate { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; padding: 2px 7px; border-radius: 5px; background: var(--report-soft); color: var(--muted-foreground); font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.report-flow-rate[data-tone="good"] { background: var(--report-positive-soft); color: var(--report-positive); }
+
+/* ═══ الـ workspace ═══ */
+.report-workspace { border: 1px solid var(--report-line); border-radius: 10px; background: var(--report-surface); overflow: hidden; min-width: 0; box-shadow: var(--report-card-shadow); }
+.report-toolbar { padding: 18px 20px; border-bottom: 1px solid var(--report-line); border-top: 3px solid var(--primary); }
+.report-table-heading h3 { margin: 0; font-size: 15px; font-weight: 800; }
+.report-count { color: var(--muted-foreground); font-size: 11px; display: inline-block; margin-inline-start: 10px; font-weight: 500; }
+.report-search { width: 260px; max-width: 100%; position: relative; min-width: 0; }
+.report-search > svg { position: absolute; top: 11px; inset-inline-start: 11px; width: 15px; height: 15px; color: var(--muted-foreground); pointer-events: none; }
+.report-search input { padding-inline-start: 34px; height: 38px; width: 100%; border-radius: 8px; }
+
+/* ═══ الجدول ═══ */
+.source-report table { table-layout: fixed; min-width: 1060px; width: 100%; border-collapse: separate; border-spacing: 0; }
+.source-report th {
+  font-size: 12px; color: var(--report-ink); height: 52px;
+  padding: 10px 12px; background: var(--report-soft);
+  border-bottom: 1px solid var(--report-line);
+  position: sticky; top: 0; z-index: 5;
+}
+.source-report td { padding: 16px 12px; height: 76px; color: var(--report-ink); border-bottom: 1px solid color-mix(in oklab, var(--report-line) 55%, transparent); }
+.source-report tbody tr { transition: background 150ms ease; }
+.source-report tbody tr:hover td { background: color-mix(in oklab, var(--muted) 45%, transparent); }
+.source-report .report-source-col { width: 215px; position: sticky; inset-inline-start: 0; z-index: 2; }
+.source-report th.report-source-col { z-index: 6; }
+.source-report td.report-source-col { background: var(--report-surface); }
+.source-report tbody tr:hover td.report-source-col { background: color-mix(in oklab, var(--muted) 45%, var(--report-surface)); }
+.report-medium-col { width: 145px; }
+.report-campaign-col { width: 160px; }
+.report-number-col { width: 94px; text-align: center; font-variant-numeric: tabular-nums; }
+.report-revenue-col { width: 145px; text-align: end; font-variant-numeric: tabular-nums; }
+.report-sort { font-size: inherit; gap: 4px; height: auto; padding: 4px 0; }
+.report-sort[data-active="true"] { color: var(--primary); }
+.report-sort svg { width: 12px; height: 12px; }
+
+/* ═══ Brand Mark ═══ */
+.report-source { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; align-items: center; }
+.report-brand {
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  border: 1px solid color-mix(in oklab, var(--brand-ink, var(--muted-foreground)) 22%, transparent);
+  background:
+    radial-gradient(80% 80% at 50% 20%, color-mix(in oklab, var(--brand-ink, var(--muted-foreground)) 18%, transparent), transparent 70%),
+    color-mix(in oklab, var(--brand-ink, var(--muted-foreground)) 8%, var(--report-surface));
+  color: var(--brand-ink, var(--muted-foreground));
+  border-radius: 10px;
+  font-size: 25px; font-family: Arial, sans-serif; font-weight: 800;
+}
+.report-brand svg { width: 22px; height: 22px; }
+.report-brand[data-brand="meta"], .report-brand[data-brand="facebook"] { --brand-ink: var(--report-blue); }
+.report-brand[data-brand="instagram"] { --brand-ink: var(--report-pink); }
+.report-brand[data-brand="tiktok"] { --brand-ink: var(--report-ink); }
+.report-brand[data-brand="whatsapp"], .report-brand[data-brand="direct"] { --brand-ink: var(--report-teal); }
+.report-brand[data-brand="google"] { --brand-ink: var(--report-blue); }
+.report-google { background: var(--report-google-mark); background-clip: text; color: transparent; }
+.report-source-name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.report-source-raw { margin-top: 4px; font-size: 10px; color: var(--muted-foreground); text-align: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ═══ Chips ═══ */
+.report-channel { display: inline-flex; padding: 4px 9px; border-radius: 6px; color: var(--muted-foreground); background: var(--report-soft); font-size: 10.5px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; border: 1px solid color-mix(in oklab, var(--report-line) 55%, transparent); }
+.report-channel[data-paid="true"] { background: var(--report-positive-soft); color: var(--report-positive); border-color: color-mix(in oklab, var(--report-positive) 25%, transparent); }
+.report-campaign { overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--muted-foreground); }
+.source-report td.report-purchases { color: var(--report-positive); font-weight: 800; }
+
+/* ═══ الأرقام + الشرائط المصغّرة ═══ */
+.report-number-wrap { display: inline-flex; align-items: center; gap: 8px; justify-content: center; min-width: 0; }
+.report-number-bar { width: 42px; height: 4px; border-radius: 999px; background: var(--report-soft); overflow: hidden; flex-shrink: 0; }
+.report-number-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--primary), color-mix(in oklab, var(--primary) 55%, transparent)); border-radius: 999px; transition: width 500ms ease; }
+
+/* ═══ Conversion Pill ═══ */
+.report-conversion { display: grid; gap: 7px; justify-items: center; font-size: 12px; }
+.report-conv-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 800; font-variant-numeric: tabular-nums; background: var(--report-soft); color: var(--muted-foreground); border: 1px solid color-mix(in oklab, var(--report-line) 60%, transparent); }
+.report-conv-pill[data-level="high"] { background: var(--report-positive-soft); color: var(--report-positive); border-color: color-mix(in oklab, var(--report-positive) 30%, transparent); }
+.report-conv-pill[data-level="mid"] { background: oklch(0.96 0.04 80 / 0.9); color: oklch(0.48 0.15 80); border-color: oklch(0.85 0.09 80); }
+.report-conv-pill[data-level="low"] { background: oklch(0.96 0.04 25 / 0.9); color: var(--report-red); border-color: color-mix(in oklab, var(--report-red) 30%, transparent); }
+.dark .report-conv-pill[data-level="mid"] { background: oklch(0.3 0.06 80); color: oklch(0.85 0.13 80); border-color: oklch(0.4 0.08 80); }
+.dark .report-conv-pill[data-level="low"] { background: oklch(0.28 0.07 25); color: oklch(0.82 0.14 25); border-color: oklch(0.4 0.1 25); }
+.report-conversion progress { width: 58px; height: 4px; border: 0; border-radius: 2px; overflow: hidden; background: var(--report-soft); appearance: none; }
+.report-conversion progress::-webkit-progress-bar { background: var(--report-soft); }
+.report-conversion progress::-webkit-progress-value { background: var(--primary); transition: width 500ms ease; }
+.report-conversion progress::-moz-progress-bar { background: var(--primary); }
+
+/* ═══ الفوتر ═══ */
+.report-footer { padding: 14px 20px; border-top: 1px solid var(--report-line); background: var(--report-surface); font-size: 11px; color: var(--muted-foreground); }
+.report-pagination { display: flex; align-items: center; gap: 10px; }
+.report-pagination span { min-width: 60px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--report-ink); }
+.report-note { font-size: 11px; color: var(--muted-foreground); margin: 0; line-height: 1.9; padding-inline: 4px; }
+
+/* ═══ الحالات ═══ */
+.report-state { min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 28px; }
+.report-state > svg { color: var(--muted-foreground); width: 40px; height: 40px; padding: 8px; background: var(--report-soft); border-radius: 12px; box-sizing: content-box; margin-bottom: 4px; }
+.report-state h3 { margin: 0; font-size: 15px; font-weight: 800; }
+.report-state p { margin: 0; color: var(--muted-foreground); font-size: 12px; max-width: 340px; line-height: 1.75; }
+.report-skeleton { padding: 20px; display: grid; gap: 12px; }
+.report-loading { animation: report-spin 1s linear infinite; }
+@keyframes report-spin { to { transform: rotate(360deg); } }
+
+@keyframes report-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.report-rise { animation: report-rise 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+/* ═══ الموبايل ═══ */
+@media (max-width: 700px) {
+  .source-report { gap: 18px; padding: 12px; }
+  .report-header { gap: 8px; }
+  .report-header h2 { font-size: 20px; }
+  .report-header p { font-size: 11px; }
+  .report-heading-mark > svg { width: 38px; height: 38px; padding: 8px; }
+  .report-meta-chips { display: none; }
+  .report-action-label { display: none; }
+  .report-actions [data-slot="button"] { width: 36px; padding: 0; }
+  .report-filter-band div:has(> input[type="date"]) { display: grid; grid-template-columns: auto minmax(0, 1fr); }
+  .report-filter-band input[type="date"] { width: 100%; min-width: 0; color: var(--report-ink); }
+  .report-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .report-kpi { padding: 14px 12px; border-radius: 10px; }
+  .report-kpi-label { grid-template-columns: 26px minmax(0, 1fr); gap: 6px; font-size: 11px; }
+  .report-kpi-label svg { width: 26px; height: 26px; padding: 6px; }
+  .report-kpi strong { font-size: 22px; margin-block: 10px 4px; }
+  .report-kpi-rank { font-size: 9px; top: 8px; inset-inline-end: 10px; }
+  .report-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .report-flow-step { border-inline-end: 1px solid var(--report-line); }
+  .report-flow-step:nth-child(2) { border-inline-end: 0; }
+  .report-flow-step:nth-child(-n+2) { border-bottom: 1px solid var(--report-line); }
+  .report-flow-value { font-size: 20px; }
+  .report-toolbar { grid-template-columns: minmax(0, 1fr); padding: 14px; gap: 12px; }
+  .report-search { width: 100%; }
+  .source-report .report-source-col { width: 175px; }
+  .report-footer { grid-template-columns: minmax(0, 1fr); padding: 12px 14px; gap: 12px; }
+  .report-pagination { justify-content: space-between; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .source-report *, .source-report *::before, .source-report *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+} /* نهاية @layer components */

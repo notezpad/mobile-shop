@@ -133,13 +133,14 @@ export function FilterBar({
     <div className="space-y-3" dir="rtl">
       <div className="flex flex-wrap items-center gap-2">
         {/* الفترة */}
-        <div className="flex rounded-xl border bg-muted/40 p-1">
+        <div role="group" aria-label="الفترة الزمنية" className="flex rounded-xl border bg-muted/40 p-1">
           {PRESETS.map((p) => (
             <button
               key={p.key}
               type="button"
+              aria-pressed={value.preset === p.key}
               onClick={() => set({ preset: p.key })}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all focus-visible:outline-2 focus-visible:outline-primary ${
                 value.preset === p.key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
             >

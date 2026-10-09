@@ -1,23 +1,13 @@
 'use client'
 
-/**
- * 🎯 تقارير الإسناد — أي مصدر/حملة يجلب العملاء المدفوعين فعلياً.
- * First Touch / Last Touch + ترتيب حسب Purchases / Revenue / Trials / Conversion.
- */
-
 import * as React from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Badge } from '@/components/ui/badge'
-import { toast } from 'sonner'
-import { Target, ArrowUpDown } from 'lucide-react'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
-import {
-  FilterBar, RangeFilterState, initialRange, rangeParams, fetchJson,
-  fmtNum, fmtPct100, fmtMoney, EmptyHint, DataIssueBanner,
-} from './shared'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Target, Search, Download, RefreshCw, ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Users, CreditCard, Wallet, FlaskConical, Globe, Infinity as MetaIcon, Instagram, Music2, MessageCircle, Mail, Send, AlertCircle } from 'lucide-react'
+import { FilterBar, type RangeFilterState, initialRange, rangeParams, fetchJson, fmtNum, fmtPct100, fmtMoney, DataIssueBanner } from './shared'
+import './attribution-report.css'
 
 interface AttributionRow {
   source: string
@@ -30,43 +20,43 @@ interface AttributionRow {
   trialToPaid: number | null
   revenue: number
 }
-
-interface AttributionPayload {
-  rows: AttributionRow[]
-  dataReady?: boolean
-  errorDetail?: string
-}
-
+interface AttributionPayload { rows: AttributionRow[]; dataReady?: boolean; errorDetail?: string }
 type SortKey = 'purchases' | 'revenue' | 'trials' | 'conversion' | 'registrations'
-
-/** رأس جدول قابل للترتيب — خارج المكون لتفادي إعادة الإنشاء عند كل render */
-function SortTh({ k, sortBy, order, onSort, children }: {
-  k: SortKey
-  sortBy: SortKey
-  order: 'asc' | 'desc'
-  onSort: (k: SortKey) => void
-  children: React.ReactNode
-}) {
-  return (
-    <TableHead>
-      <button
-        onClick={() => onSort(k)}
-        className={`inline-flex items-center gap-1 hover:text-foreground ${sortBy === k ? 'font-bold text-foreground' : ''}`}
-      >
-        {children}
-        <ArrowUpDown className="size-3" />
-        {sortBy === k && <span className="text-[9px]">{order === 'desc' ? '▼' : '▲'}</span>}
-      </button>
-    </TableHead>
-  )
+type BrandKey = 'direct' | 'google' | 'meta' | 'facebook' | 'instagram' | 'tiktok' | 'whatsapp' | 'email' | 'telegram' | 'other'
+const PAGE_SIZE = 10
+const SORT_LABELS: Record<SortKey, string> = { purchases: 'الاشتراكات المدفوعة', revenue: 'الإيرادات', trials: 'التجارب المجانية', conversion: 'التحويل من تجربة إلى اشتراك', registrations: 'التسجيلات' }
+const DIRECT_VALUES = new Set(['(مباشر)', 'مباشر', 'direct', '(direct)'])
+const MISSING_VALUES = new Set(['', '—', '-', '(none)', 'none', '(not set)', 'null'])
+const SOURCE_NAMES: Record<string, { label: string; brand: BrandKey }> = {
+  google: { label: 'Google', brand: 'google' }, google_ads: { label: 'Google Ads', brand: 'google' }, googleads: { label: 'Google Ads', brand: 'google' }, adwords: { label: 'Google Ads', brand: 'google' },
+  meta: { label: 'Meta', brand: 'meta' }, facebook: { label: 'Facebook', brand: 'facebook' }, fb: { label: 'Facebook', brand: 'facebook' },
+  instagram: { label: 'Instagram', brand: 'instagram' }, ig: { label: 'Instagram', brand: 'instagram' },
+  tiktok: { label: 'TikTok', brand: 'tiktok' }, tik_tok: { label: 'TikTok', brand: 'tiktok' },
+  whatsapp: { label: 'WhatsApp', brand: 'whatsapp' }, wa: { label: 'WhatsApp', brand: 'whatsapp' },
+  newsletter: { label: 'النشرة البريدية', brand: 'email' }, email: { label: 'البريد الإلكتروني', brand: 'email' }, telegram: { label: 'Telegram', brand: 'telegram' },
 }
-
-const SORT_LABELS: Record<SortKey, string> = {
-  purchases: 'المدفوعات',
-  revenue: 'الإيراد',
-  trials: 'التجارب',
-  conversion: 'نسبة التحويل',
-  registrations: 'التسجيلات',
+const MEDIUM_NAMES: Record<string, string> = { cpc: 'إعلانات بالنقرة', ppc: 'إعلانات بالنقرة', paid_search: 'بحث مدفوع', paid_social: 'إعلانات اجتماعية', paid_social_video: 'إعلانات فيديو', paid_social_story: 'إعلانات القصص', display: 'إعلانات عرض', shopping: 'إعلانات تسوّق', organic: 'وصول عضوي', organic_search: 'بحث عضوي', social: 'تواصل اجتماعي', referral: 'إحالة من موقع', email: 'بريد إلكتروني', video: 'فيديو', youtube: 'فيديو يوتيوب' }
+const PAID_MEDIA = new Set(['cpc', 'ppc', 'paid_search', 'paid_social', 'paid_social_video', 'paid_social_story', 'display', 'shopping'])
+function sourceIdentity(source: string) {
+  const key = source.trim().toLowerCase()
+  if (DIRECT_VALUES.has(key)) return { label: 'زيارة مباشرة', brand: 'direct' as BrandKey }
+  if (MISSING_VALUES.has(key) || key === 'unknown') return { label: 'مصدر غير محدد', brand: 'other' as BrandKey }
+  return SOURCE_NAMES[key] ?? { label: source, brand: 'other' as BrandKey }
+}
+function mediumLabel(medium: string) {
+  const key = medium.trim().toLowerCase()
+  return MISSING_VALUES.has(key) ? 'غير محددة' : (MEDIUM_NAMES[key] ?? medium)
+}
+function campaignLabel(campaign: string) { return MISSING_VALUES.has(campaign.trim().toLowerCase()) ? 'بدون حملة' : campaign }
+function BrandMark({ brand }: { brand: BrandKey }) {
+  const icons = { direct: Globe, meta: MetaIcon, instagram: Instagram, tiktok: Music2, whatsapp: MessageCircle, email: Mail, telegram: Send, other: Globe }
+  const Icon = brand !== 'facebook' && brand !== 'google' ? icons[brand] : null
+  return <span className="report-brand" data-brand={brand} aria-hidden="true">{brand === 'google' ? <span className="report-google">G</span> : brand === 'facebook' ? 'f' : Icon ? <Icon /> : null}</span>
+}
+function SortHead({ column, sortBy, order, onSort, children, className = 'report-number-col' }: { column: SortKey; sortBy: SortKey; order: 'asc' | 'desc'; onSort: (key: SortKey) => void; children: React.ReactNode; className?: string }) {
+  const active = column === sortBy
+  const Icon = active ? (order === 'desc' ? ArrowDown : ArrowUp) : ArrowUpDown
+  return <TableHead scope="col" className={className} aria-sort={active ? (order === 'desc' ? 'descending' : 'ascending') : 'none'}><Button type="button" variant="ghost" className="report-sort" data-active={active} onClick={() => onSort(column)} aria-label={`ترتيب حسب ${SORT_LABELS[column]}`} title={SORT_LABELS[column]}>{children}<Icon /></Button></TableHead>
 }
 
 export function TrackingAttribution() {
@@ -76,112 +66,105 @@ export function TrackingAttribution() {
   const [rows, setRows] = React.useState<AttributionRow[] | null>(null)
   const [issue, setIssue] = React.useState<{ dataReady?: boolean; errorDetail?: string } | null>(null)
   const [loading, setLoading] = React.useState(true)
-
+  const [error, setError] = React.useState<string | null>(null)
+  const [search, setSearch] = React.useState('')
+  const [page, setPage] = React.useState(1)
+  const requestId = React.useRef(0)
   const load = React.useCallback(async () => {
+    const id = ++requestId.current
     setLoading(true)
+    setError(null)
     try {
       const qs = rangeParams(filters)
       qs.set('sortBy', sortBy)
       qs.set('order', order)
       const res = await fetchJson<AttributionPayload>(`/api/admin/tracking/attribution?${qs.toString()}`)
-      setRows(res.rows)
-      setIssue({ dataReady: res.dataReady, errorDetail: res.errorDetail })
-    } catch (e: any) {
-      toast.error(e?.message || 'فشل تحميل تقرير الإسناد')
-    } finally {
-      setLoading(false)
-    }
+      if (id !== requestId.current) return
+      setRows(Array.isArray(res.rows) ? res.rows : [])
+      setIssue({ ...(res.dataReady === undefined ? {} : { dataReady: res.dataReady }), ...(res.errorDetail === undefined ? {} : { errorDetail: res.errorDetail }) })
+    } catch (e: unknown) {
+      if (id !== requestId.current) return
+      setRows(null)
+      setIssue(null)
+      setError(e instanceof Error ? e.message : 'تعذّر تحميل تقرير المصادر')
+    } finally { if (id === requestId.current) setLoading(false) }
   }, [filters, sortBy, order])
-
-  React.useEffect(() => {
-    void Promise.resolve().then(load)
-  }, [load])
-
-  const changeSort = (key: SortKey) => {
-    if (sortBy === key) {
-      setOrder((o) => (o === 'desc' ? 'asc' : 'desc'))
-    } else {
-      setSortBy(key)
-      setOrder('desc')
+  React.useEffect(() => { void load(); return () => { requestId.current += 1 } }, [load])
+  const changeFilters = (next: RangeFilterState) => { setPage(1); setRows(null); setFilters(next) }
+  const changeSort = (key: SortKey) => { setPage(1); setSortBy(key); setOrder(sortBy === key ? (order === 'desc' ? 'asc' : 'desc') : 'desc') }
+  const visibleRows = React.useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return (rows ?? []).filter((row) => !query || [row.source, row.medium, row.campaign, sourceIdentity(row.source).label, mediumLabel(row.medium), campaignLabel(row.campaign)].some((value) => value.toLowerCase().includes(query))).sort((a, b) => {
+      const av = sortBy === 'conversion' ? a.trialToPaid : a[sortBy]
+      const bv = sortBy === 'conversion' ? b.trialToPaid : b[sortBy]
+      if (av === null && bv === null) return 0
+      if (av === null) return 1
+      if (bv === null) return -1
+      return order === 'desc' ? bv - av : av - bv
+    })
+  }, [rows, search, sortBy, order])
+  const totals = React.useMemo(() => (rows ?? []).reduce((sum, row) => ({ registrations: sum.registrations + row.registrations, trials: sum.trials + row.trials, purchases: sum.purchases + row.purchases, revenue: sum.revenue + row.revenue }), { registrations: 0, trials: 0, purchases: 0, revenue: 0 }), [rows])
+  const pageCount = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE))
+  const currentPage = Math.min(page, pageCount)
+  const start = (currentPage - 1) * PAGE_SIZE
+  const pageRows = visibleRows.slice(start, start + PAGE_SIZE)
+  const unavailable = loading || Boolean(error) || issue?.dataReady === false
+  const exportCsv = () => {
+    if (unavailable || !visibleRows.length) return
+    const headers = ['المصدر', 'قناة الوصول', 'الحملة', 'التسجيلات', 'التجارب المجانية', 'بدء الدفع', 'الاشتراكات المدفوعة', 'التحويل من تجربة إلى اشتراك (%)', 'الإيرادات (ج.م)']
+    const escape = (value: string | number | null) => {
+      let text = value == null ? '' : String(value)
+      if (/^[\s]*[=+@-]/.test(text)) text = `'${text}`
+      return `"${text.replace(/"/g, '""')}"`
     }
+    const lines = [headers, ...visibleRows.map((r) => [sourceIdentity(r.source).label, mediumLabel(r.medium), campaignLabel(r.campaign), r.registrations, r.trials, r.checkouts, r.purchases, r.trialToPaid, r.revenue])]
+    const url = URL.createObjectURL(new Blob(['\uFEFF' + lines.map((r) => r.map(escape).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8;' }))
+    const link = document.createElement('a'); link.href = url; link.download = `source-report-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
-
-  const hasData = rows && rows.length > 0
-
+  const stats = [
+    { label: 'التسجيلات', value: fmtNum(totals.registrations), hint: 'حسابات جديدة', icon: Users },
+    { label: 'التجارب المجانية', value: fmtNum(totals.trials), hint: 'تجارب بدأت خلال الفترة', icon: FlaskConical },
+    { label: 'الاشتراكات المدفوعة', value: fmtNum(totals.purchases), hint: 'عمليات شراء مؤكدة', icon: CreditCard, tone: 'positive' },
+    { label: 'إجمالي الإيرادات', value: fmtMoney(totals.revenue), hint: 'المبالغ المدفوعة فعليًا', icon: Wallet, tone: 'positive' },
+  ]
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardContent className="p-4">
-          <FilterBar value={filters} onChange={setFilters} />
-        </CardContent>
-      </Card>
-
-      {issue?.dataReady === false && <DataIssueBanner errorDetail={issue.errorDetail} />}
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center justify-between gap-2 text-base">
-            <span className="flex items-center gap-2">
-              <Target className="size-4 text-primary" /> المصادر والحملات
-            </span>
-            {hasData && <Badge variant="outline" className="text-[10px]">{fmtNum(rows!.length)} مجموعة</Badge>}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading && !rows ? (
-            <div className="space-y-2.5">
-              {[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-9 w-full" />)}
-            </div>
-          ) : !hasData ? (
-            <EmptyHint>
-              لا توجد بيانات إسناد في هذه الفترة بهذه الفلاتر.
-              <br />
-              <span className="text-xs">التسجيلات تأتي من أحداث CompleteRegistration الحقيقية، وتُصنف حسب First/Last Touch المحفوظ لكل مستخدم.</span>
-            </EmptyHint>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>المصدر</TableHead>
-                    <TableHead>الوسيط</TableHead>
-                    <TableHead>الحملة</TableHead>
-                    <SortTh k="registrations" sortBy={sortBy} order={order} onSort={changeSort}>تسجيلات</SortTh>
-                    <SortTh k="trials" sortBy={sortBy} order={order} onSort={changeSort}>تجارب</SortTh>
-                    <TableHead>بدء دفع</TableHead>
-                    <SortTh k="purchases" sortBy={sortBy} order={order} onSort={changeSort}>مدفوعات</SortTh>
-                    <TableHead>تجربة→دفع</TableHead>
-                    <SortTh k="revenue" sortBy={sortBy} order={order} onSort={changeSort}>الإيراد</SortTh>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows!.map((r, i) => (
-                    <TableRow key={`${r.source}|${r.medium}|${r.campaign}|${i}`} className={i === 0 && sortBy !== 'registrations' ? 'bg-emerald-500/5' : ''}>
-                      <TableCell className="font-medium" dir="ltr">{r.source}</TableCell>
-                      <TableCell dir="ltr" className="text-muted-foreground">{r.medium}</TableCell>
-                      <TableCell dir="ltr" className="max-w-[180px] truncate text-muted-foreground" title={r.campaign}>{r.campaign}</TableCell>
-                      <TableCell className="tabular-nums">{fmtNum(r.registrations)}</TableCell>
-                      <TableCell className="tabular-nums">{fmtNum(r.trials)}</TableCell>
-                      <TableCell className="tabular-nums">{fmtNum(r.checkouts)}</TableCell>
-                      <TableCell>
-                        <span className={`tabular-nums font-bold ${r.purchases > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
-                          {fmtNum(r.purchases)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="tabular-nums">{fmtPct100(r.trialToPaid)}</TableCell>
-                      <TableCell className="tabular-nums font-bold">{fmtMoney(r.revenue)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-          <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-            الترتيب الحالي: <b>{SORT_LABELS[sortBy]}</b> ({order === 'desc' ? 'تنازلي' : 'تصاعدي'}) — اضغط على رأس أي عمود لتغييره.
-            الإيراد = مجموع المدفوع الفعلي للاشتراكات المرتبطة بعمليات Purchase المؤكدة.
-          </p>
-        </CardContent>
-      </Card>
-    </div>
+    <section className="source-report" dir="rtl" aria-label="تقارير المصادر">
+      <header className="report-header">
+        <div className="min-w-0"><div className="report-heading-mark"><Target /><h2>تقارير المصادر</h2></div><p>أداء قنوات الوصول والحملات الإعلانية</p></div>
+        <div className="report-actions">
+          <Button type="button" variant="outline" onClick={() => void load()} disabled={loading} aria-label="تحديث التقرير" title="تحديث التقرير"><RefreshCw className={loading ? 'report-loading' : ''} /><span className="report-action-label">تحديث</span></Button>
+          <Button type="button" onClick={exportCsv} disabled={unavailable || !visibleRows.length} aria-label="تصدير التقرير CSV" title="تصدير التقرير CSV"><Download /><span className="report-action-label">تصدير CSV</span></Button>
+        </div>
+      </header>
+      <div className="report-filter-band"><FilterBar value={filters} onChange={changeFilters} /></div>
+      {issue?.dataReady === false && <DataIssueBanner {...(issue.errorDetail === undefined ? {} : { errorDetail: issue.errorDetail })} />}
+      <div className="report-kpis">{stats.map((stat) => <div key={stat.label} className="report-kpi" data-tone={stat.tone}><div className="report-kpi-label"><stat.icon /><span>{stat.label}</span></div><strong>{unavailable || rows === null ? '—' : stat.value}</strong><small>{stat.hint}</small></div>)}</div>
+      <div className="report-workspace" aria-busy={loading}>
+        <div className="report-toolbar">
+          <div className="min-w-0"><h3 className="text-sm font-bold">المصادر والحملات <span className="report-count">{rows && !unavailable ? `${fmtNum(visibleRows.length)} مصدر / حملة` : ''}</span></h3></div>
+          <div className="report-search"><Search aria-hidden="true" /><Input aria-label="بحث في المصادر والحملات" placeholder="ابحث عن مصدر أو حملة…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} /></div>
+        </div>
+        {loading ? <div className="report-skeleton" role="status" aria-label="جارٍ تحميل التقرير">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-14 w-full" />)}</div> : error ? <div className="report-state" role="alert"><AlertCircle /><h3>تعذّر تحميل التقرير</h3><p>{error}</p><Button variant="outline" onClick={() => void load()}><RefreshCw />إعادة المحاولة</Button></div> : issue?.dataReady === false ? <div className="report-state"><AlertCircle /><h3>بيانات التقرير غير متاحة حاليًا</h3><Button variant="outline" onClick={() => void load()}><RefreshCw />إعادة المحاولة</Button></div> : !visibleRows.length ? <div className="report-state"><Search /><h3>{search ? 'لا توجد نتائج مطابقة' : 'لا توجد بيانات في هذه الفترة'}</h3><p>{search ? 'جرّب اسم مصدر أو حملة أخرى.' : 'لم تُسجّل تحويلات بالمصادر والفلاتر المحددة.'}</p>{search ? <Button variant="outline" onClick={() => { setSearch(''); setPage(1) }}>مسح البحث</Button> : <Button variant="outline" onClick={() => changeFilters({ ...initialRange })}>إعادة ضبط الفلاتر</Button>}</div> : <Table aria-label="أداء المصادر والحملات">
+          <TableHeader><TableRow>
+            <TableHead scope="col" className="report-source-col">المصدر</TableHead><TableHead scope="col" className="report-medium-col">قناة الوصول</TableHead><TableHead scope="col" className="report-campaign-col">الحملة</TableHead>
+            <SortHead column="registrations" {...{ sortBy, order }} onSort={changeSort}>التسجيلات</SortHead><SortHead column="trials" {...{ sortBy, order }} onSort={changeSort}>التجارب</SortHead><TableHead scope="col" className="report-number-col">بدء الدفع</TableHead><SortHead column="purchases" {...{ sortBy, order }} onSort={changeSort}>الاشتراكات</SortHead><SortHead column="conversion" {...{ sortBy, order }} onSort={changeSort}>تجربة ← اشتراك</SortHead><SortHead column="revenue" {...{ sortBy, order }} onSort={changeSort} className="report-revenue-col">الإيرادات</SortHead>
+          </TableRow></TableHeader>
+          <TableBody>{pageRows.map((r, i) => {
+            const identity = sourceIdentity(r.source)
+            const direct = identity.brand === 'direct'
+            const channel = direct && MISSING_VALUES.has(r.medium.trim().toLowerCase()) ? 'وصول مباشر' : mediumLabel(r.medium)
+            return <TableRow key={`${r.source}|${r.medium}|${r.campaign}|${start + i}`}>
+              <TableCell className="report-source-col"><div className="report-source"><BrandMark brand={identity.brand} /><div className="min-w-0"><div className="report-source-name" title={identity.label}>{identity.label}</div><div className="report-source-raw" title={r.source} dir={direct ? 'rtl' : 'ltr'}>{direct ? 'بدون مصدر إحالة' : r.source}</div></div></div></TableCell>
+              <TableCell><span className="report-channel" data-paid={PAID_MEDIA.has(r.medium.trim().toLowerCase())} title={r.medium}>{channel}</span></TableCell>
+              <TableCell><div className="report-campaign" dir={campaignLabel(r.campaign) === 'بدون حملة' ? 'rtl' : 'ltr'} title={r.campaign}>{campaignLabel(r.campaign)}</div></TableCell>
+              <TableCell className="report-number-col">{fmtNum(r.registrations)}</TableCell><TableCell className="report-number-col">{fmtNum(r.trials)}</TableCell><TableCell className="report-number-col">{fmtNum(r.checkouts)}</TableCell><TableCell className={`report-number-col ${r.purchases > 0 ? 'report-purchases' : ''}`}>{fmtNum(r.purchases)}</TableCell>
+              <TableCell className="report-number-col"><div className="report-conversion"><span dir="ltr">{fmtPct100(r.trialToPaid)}</span>{r.trialToPaid !== null && <progress max={100} value={Math.max(0, Math.min(100, r.trialToPaid))} aria-label={`التحويل من تجربة إلى اشتراك: ${fmtPct100(r.trialToPaid)}`} />}</div></TableCell><TableCell className="report-revenue-col font-bold">{fmtMoney(r.revenue)}</TableCell>
+            </TableRow>
+          })}</TableBody>
+        </Table>}
+        {!loading && !error && issue?.dataReady !== false && visibleRows.length > 0 && <footer className="report-footer"><span>عرض {fmtNum(start + 1)}–{fmtNum(Math.min(start + PAGE_SIZE, visibleRows.length))} من {fmtNum(visibleRows.length)} نتيجة</span><div className="report-pagination"><Button type="button" variant="outline" size="icon" aria-label="الصفحة السابقة" title="الصفحة السابقة" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}><ChevronRight /></Button><span aria-live="polite">{fmtNum(currentPage)} / {fmtNum(pageCount)}</span><Button type="button" variant="outline" size="icon" aria-label="الصفحة التالية" title="الصفحة التالية" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}><ChevronLeft /></Button></div></footer>}
+      </div>
+      <p className="report-note">{filters.model === 'first' ? 'الإسناد لأول مصدر وصل منه العميل.' : 'الإسناد لآخر مصدر قبل التحويل.'} التحويل: من تجربة مجانية إلى اشتراك مدفوع. الإيرادات: المدفوع فعليًا للاشتراكات المرتبطة بعمليات شراء مؤكدة.</p>
+    </section>
   )
 }
