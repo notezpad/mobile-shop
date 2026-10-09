@@ -4,14 +4,12 @@
  * ═══════════════════════════════════════════════════════════════════
  *  محطة الإشارة — Signal Station · صفحات التسويق والتتبع
  * ═══════════════════════════════════════════════════════════════════
- *  الهوية: فوسفوري لايم على أوبسيديان (رادار عملياتيات عسكري)
+ *  الهوية: أمبر (هوية لوحة السوبر أدمن) + أخضر للحالات النشطة، بألوان الثيم فاتح/داكن
  *  ─ عناصر التوقيع الخاص بهذه الصفحة فقط ─
- *   • RadarScope: رادار حي بمكنسة دوّارة + بقع المنصات (متصل = وميض)
  *   • شارة «البث نشط/متوقف» تتفاعل لحظياً مع القاطع الرئيسي
- *   • نسيج دوائر كهربائية (PCB) على كل الألواح الداكنة
  *   • بطاقات القنوات CH-01..04 مع أعمدة إشارة (SignalBars) و LED
  *   • صفوف مفاتيح كوحدة تحكم فيزيائية (LED بجانب كل مفتاح)
- *   • سجل البث: تيرمينال داكن دائماً بخط أحادي
+ *   • سجل البث: جدول بخط أحادي بألوان الثيم
  *   • شريط حفظ لاصق يظهر عند وجود تغييرات غير محفوظة (حفظ/تراجع)
  *
  *  🔒 الأسرار لا تُعرض أبداً — تظهر كنص Masked، وتُحفظ فقط عند إدخال
@@ -31,7 +29,6 @@ import {
   FlaskConical,
   Bug,
   Power,
-  Activity,
   RefreshCw,
   Eye,
   EyeOff,
@@ -148,24 +145,9 @@ const SECRET_CLEAR = "__CLEAR__";
 export type TrackingPage =
   | "funnel" | "attribution" | "campaigns" | "settings" | "events";
 
-/* ─── نسيج الدوائر الكهربائية — بصمة هذه الصفحة ─────────────────────── */
-const CIRCUIT_BG: React.CSSProperties = {
-  backgroundImage: [
-    "radial-gradient(circle at 1px 1px, rgba(163,230,53,.10) 1px, transparent 1.7px)",
-    "linear-gradient(rgba(163,230,53,.035) 1px, transparent 1px)",
-    "linear-gradient(90deg, rgba(163,230,53,.035) 1px, transparent 1px)",
-  ].join(", "),
-  backgroundSize: "26px 26px, 26px 26px, 26px 26px",
-};
-
-const FLOW_STRIP: React.CSSProperties = {
-  backgroundImage:
-    "repeating-linear-gradient(90deg, rgba(163,230,53,.4) 0 8px, transparent 8px 20px)",
-};
-
 /* نمط الإدخال التقني: خط أحادي + تركيز لايمي */
 const MONO_INPUT =
-  "font-mono text-[13px] focus-visible:border-lime-500/60 focus-visible:ring-lime-500/25";
+  "font-mono text-[13px] focus-visible:border-amber-500/60 focus-visible:ring-amber-500/25";
 
 /* ═════════════════════════ المكون الرئيسي ═════════════════════════ */
 
@@ -380,7 +362,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
           <button
             type="button"
             tabIndex={-1}
-            className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-lime-600 dark:hover:text-lime-300"
+            className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-amber-600 dark:hover:text-amber-300"
             onClick={() => setShowSecret((v) => ({ ...v, [key]: !v[key] }))}
             title={visible ? "إخفاء" : "إظهار"}
           >
@@ -417,183 +399,117 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
     <div className="mx-auto w-full max-w-5xl space-y-3.5">
       {(isSettings || isEvents) && (
         <>
-          {/* ─── 📡 الهيرو: محطة الإشارة ─── */}
-          <section className="animate-in-up relative overflow-hidden rounded-xl border border-lime-500/20 bg-zinc-950 text-zinc-100 shadow-lg shadow-zinc-950/20">
-            <div aria-hidden className="absolute inset-0" style={CIRCUIT_BG} />
+          {/* ─── الهيدر: عنوان الصفحة + حالة البث + الإحصاء ─── */}
+          <section className="animate-in-up relative overflow-hidden rounded-xl border border-border bg-card shadow-sm">
             <div
               aria-hidden
-              className="absolute -top-28 start-1/4 size-96 rounded-full bg-lime-400/[0.06] blur-3xl"
+              className="absolute inset-y-0 start-0 w-1 bg-gradient-to-b from-amber-400 to-amber-600"
             />
-            <RadioTower
-              aria-hidden
-              strokeWidth={1}
-              className="absolute -bottom-10 -start-8 size-40 rotate-[-8deg] text-lime-400/[0.07]"
-            />
-
-            <div className="relative flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center">
-              <RadarScope statuses={data.statuses} />
-
-              <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-4 p-4 ps-5 sm:p-5 sm:ps-6 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span
                     dir="ltr"
-                    className="rounded border border-lime-400/30 bg-lime-400/10 px-1.5 py-0.5 font-mono text-[9.5px] font-black tracking-[0.28em] text-lime-300"
+                    className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[9.5px] font-black tracking-[0.28em] text-amber-700 dark:text-amber-300"
                   >
                     {isSettings ? "TRK · CFG" : "TRK · LOG"}
                   </span>
-                  {/* شارة البث — تتفاعل لحظياً مع القاطع الرئيسي */}
                   <span
                     className={cn(
                       "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[10.5px] font-black",
                       cfg.general.enabled
-                        ? "border-lime-400/40 bg-lime-400/15 text-lime-300"
-                        : "border-zinc-700 bg-zinc-800/60 text-zinc-400",
+                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                        : "border-border bg-muted text-muted-foreground",
                     )}
                   >
                     <span className="relative flex size-2">
                       {cfg.general.enabled && (
-                        <span className="absolute inline-flex size-full animate-ping rounded-full bg-lime-400 opacity-60" />
+                        <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60" />
                       )}
                       <span
                         className={cn(
                           "relative inline-flex size-2 rounded-full",
                           cfg.general.enabled
-                            ? "bg-lime-400 shadow-[0_0_6px_rgba(163,230,53,.7)]"
-                            : "bg-zinc-500",
+                            ? "bg-emerald-500"
+                            : "bg-muted-foreground/50",
                         )}
                       />
-                      {cfg.general.enabled ? "البث نشط" : "البث متوقف"}
                     </span>
+                    {cfg.general.enabled ? "البث نشط" : "البث متوقف"}
                   </span>
                 </div>
-
-                <h1 className="mt-2 text-xl font-black tracking-tight text-zinc-50 sm:text-2xl">
-                  {isSettings ? "محطة الإشارة" : "سجل البث"}
+                <h1 className="mt-2 text-xl font-black tracking-tight text-foreground sm:text-2xl">
+                  {isSettings ? "إعدادات التتبع" : "سجل الأحداث"}
                 </h1>
-                <p className="mt-1 text-xs text-zinc-400">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {isSettings
                     ? "إعدادات التتبع والتسويق — Google · Meta · TikTok"
                     : "أحداث التتبع المرسلة من السيرفر لكل منصة"}
                 </p>
+              </div>
 
-                {/* العداد الرئيسي + شرائح الإحصاء */}
-                <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2.5">
-                  <div className="shrink-0">
-                    <p
-                      dir="ltr"
-                      className="font-mono text-[2rem] font-black leading-none tabular-nums"
+              <div className="grid grid-cols-3 gap-2">
+                <HeroStat
+                  label="قنوات نشطة"
+                  value={`${connectedCount}/${data.statuses.length}`}
+                  tone="success"
+                />
+                <HeroStat label="أحداث مرسلة" value={String(data.stats.sentCount)} />
+                <HeroStat
+                  label="أحداث فاشلة"
+                  value={String(data.stats.failedCount)}
+                  tone={data.stats.failedCount > 0 ? "danger" : undefined}
+                />
+              </div>
+            </div>
+
+            {(isSettings || data.stats.lastEvent) && (
+              <div className="flex flex-wrap items-center gap-2 border-t border-border bg-muted/30 px-4 py-2.5 ps-5 sm:px-5 sm:ps-6">
+                {isSettings && (
+                  <>
+                    <Button
+                      onClick={save}
+                      disabled={saving}
+                      className="h-9 min-w-32 bg-gradient-to-l from-amber-600 to-amber-500 font-extrabold text-white shadow-md shadow-amber-900/20 transition-all hover:brightness-110"
                     >
-                      <span className="text-lime-300">{connectedCount}</span>
-                      <span className="text-zinc-600">
-                        /{data.statuses.length}
-                      </span>
-                    </p>
-                    <p className="mt-1 text-[11px] font-bold text-zinc-400">
-                      قنوات بث نشطة
-                    </p>
-                  </div>
-                  <div className="flex h-full flex-col justify-center gap-1.5 border-s border-lime-400/15 ps-4">
-                    <span className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
-                      <Activity className="size-3.5 shrink-0 text-lime-300" />
-                      أحداث مرسلة:
-                      <b className="font-mono tabular-nums text-zinc-100">
-                        {data.stats.sentCount}
-                      </b>
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 text-xs text-zinc-300">
-                      <AlertTriangle
-                        className={cn(
-                          "size-3.5 shrink-0",
-                          data.stats.failedCount > 0
-                            ? "text-red-400"
-                            : "text-zinc-500",
-                        )}
-                      />
-                      أحداث فاشلة:
-                      <b
-                        className={cn(
-                          "font-mono tabular-nums",
-                          data.stats.failedCount > 0
-                            ? "text-red-300"
-                            : "text-zinc-200",
-                        )}
-                      >
-                        {data.stats.failedCount}
-                      </b>
-                    </span>
-                    {data.stats.lastEvent && (
-                      <span className="inline-flex max-w-full items-center gap-1.5 truncate text-xs text-zinc-400">
-                        <Clock className="size-3.5 shrink-0" />
-                        آخر حدث:
-                        <b className="font-mono text-zinc-100">
-                          {data.stats.lastEvent.eventName}
-                        </b>
-                        <span className="font-mono text-[10px] text-zinc-500">
-                          ({data.stats.lastEvent.provider} ·{" "}
-                          {new Date(
-                            data.stats.lastEvent.createdAt,
-                          ).toLocaleString("ar-EG")}
-                          )
-                        </span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* أوامر الهيرو */}
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  {isSettings ? (
-                    <>
-                      <Button
-                        onClick={save}
-                        disabled={saving}
-                        className="h-9 min-w-32 bg-gradient-to-l from-lime-600 to-lime-400 font-extrabold text-zinc-950 shadow-md shadow-lime-950/40 transition-all hover:brightness-105"
-                      >
-                        {saving ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <Save className="size-4" />
-                        )}
-                        حفظ الإعدادات
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={load}
-                        disabled={loading}
-                        className="h-9 border-zinc-700 bg-transparent text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
-                      >
-                        <RefreshCw
-                          className={cn(
-                            "size-4",
-                            loading && "animate-spin",
-                          )}
-                        />
-                        إعادة تحميل
-                      </Button>
-                    </>
-                  ) : (
+                      {saving ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Save className="size-4" />
+                      )}
+                      حفظ الإعدادات
+                    </Button>
                     <Button
                       variant="outline"
                       onClick={load}
                       disabled={loading}
-                      className="h-9 border-zinc-700 bg-transparent text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
+                      className="h-9"
                     >
                       <RefreshCw
                         className={cn("size-4", loading && "animate-spin")}
                       />
-                      تحديث السجل
+                      إعادة تحميل
                     </Button>
-                  )}
-                </div>
+                  </>
+                )}
+                {data.stats.lastEvent && (
+                  <span className="ms-auto inline-flex max-w-full items-center gap-1.5 truncate text-xs text-muted-foreground">
+                    <Clock className="size-3.5 shrink-0" />
+                    آخر حدث:
+                    <b className="font-mono text-foreground">
+                      {data.stats.lastEvent.eventName}
+                    </b>
+                    <span className="font-mono text-[10px]">
+                      ({data.stats.lastEvent.provider} ·{" "}
+                      {new Date(data.stats.lastEvent.createdAt).toLocaleString(
+                        "ar-EG",
+                      )}
+                      )
+                    </span>
+                  </span>
+                )}
               </div>
-            </div>
-
-            {/* شريط البث — إشارة تتدفق على حافة المحطة */}
-            <div
-              aria-hidden
-              className="flow-strip relative h-[3px] w-full"
-              style={FLOW_STRIP}
-            />
+            )}
           </section>
 
           {/* ─── 🛡️ تنبيه: جداول التتبع غير مُهيّأة (قبل الترحيل) ─── */}
@@ -643,12 +559,14 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
             </div>
           )}
 
-          {/* ─── حالة القنوات — أعمدة إشارة ─── */}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {data.statuses.map((s, i) => (
-              <ChannelCard key={s.key} s={s} index={i} />
-            ))}
-          </div>
+          {/* ─── حالة القنوات — في الإعدادات فقط ─── */}
+          {isSettings && (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {data.statuses.map((s, i) => (
+                <ChannelCard key={s.key} s={s} index={i} />
+              ))}
+            </div>
+          )}
         </>
       )}
 
@@ -661,12 +579,12 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
       {page === "settings" && (
         <div className="space-y-3.5">
           {/* ─── توضيح مهم: لا إيميل/كلمة مرور في أي حقل هنا ─── */}
-          <div className="animate-in-up stagger-1 relative overflow-hidden rounded-xl border border-lime-500/35 bg-lime-500/[0.06] p-3.5 text-sm">
+          <div className="animate-in-up stagger-1 relative overflow-hidden rounded-xl border border-emerald-500/35 bg-emerald-500/[0.06] p-3.5 text-sm">
             <div
               aria-hidden
-              className="absolute inset-y-0 start-0 w-1 bg-gradient-to-b from-lime-400 to-lime-600"
+              className="absolute inset-y-0 start-0 w-1 bg-gradient-to-b from-emerald-400 to-emerald-600"
             />
-            <p className="flex items-start gap-2 font-extrabold text-lime-700 dark:text-lime-300">
+            <p className="flex items-start gap-2 font-extrabold text-emerald-700 dark:text-emerald-300">
               <ShieldCheck className="mt-0.5 size-4 shrink-0" />
               لا تحتاج إيميل أو كلمة مرور لأي منصة هنا
             </p>
@@ -1063,7 +981,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
             <Button
               onClick={save}
               disabled={saving}
-              className="h-9 min-w-36 bg-gradient-to-l from-lime-600 to-lime-400 font-extrabold text-zinc-950 shadow-md shadow-lime-950/40 transition-all hover:brightness-105"
+              className="h-9 min-w-36 bg-gradient-to-l from-amber-600 to-amber-500 font-extrabold text-white shadow-md shadow-amber-900/20 transition-all hover:brightness-110"
             >
               {saving ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -1077,21 +995,16 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
           {/* ─── شريط الحفظ اللاصق — يظهر فقط عند وجود تغييرات ─── */}
           {dirty && (
             <div className="sticky bottom-3 z-30 animate-in-up">
-              <div className="relative flex flex-wrap items-center gap-3 overflow-hidden rounded-xl border border-lime-400/40 bg-zinc-950/95 px-3.5 py-2.5 shadow-2xl shadow-zinc-950/50 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/90">
-                <div
-                  aria-hidden
-                  className="absolute inset-0 opacity-60"
-                  style={CIRCUIT_BG}
-                />
+              <div className="relative flex flex-wrap items-center gap-3 overflow-hidden rounded-xl border border-amber-500/40 bg-card/95 px-3.5 py-2.5 shadow-2xl shadow-black/20 backdrop-blur supports-[backdrop-filter]:bg-card/90">
                 <span className="relative flex size-2.5">
-                  <span className="relative inline-flex size-2.5 rounded-full bg-lime-400 shadow-[0_0_7px_rgba(163,230,53,.7)]" />
+                  <span className="relative inline-flex size-2.5 rounded-full bg-amber-500 shadow-[0_0_7px_rgba(245,158,11,.6)]" />
                 </span>
-                <p className="relative text-sm font-extrabold text-zinc-100">
+                <p className="relative text-sm font-extrabold text-foreground">
                   لديك تغييرات غير محفوظة
                 </p>
                 <p
                   dir="ltr"
-                  className="relative hidden font-mono text-[9.5px] font-bold tracking-[0.28em] text-lime-300/60 sm:block"
+                  className="relative hidden font-mono text-[9.5px] font-bold tracking-[0.28em] text-amber-700/70 dark:text-amber-300/70 sm:block"
                 >
                   UNSAVED CONFIG
                 </p>
@@ -1101,7 +1014,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                     size="sm"
                     onClick={revert}
                     disabled={saving}
-                    className="border-zinc-700 bg-transparent text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
+                    className=""
                   >
                     التراجع
                   </Button>
@@ -1109,7 +1022,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                     size="sm"
                     onClick={save}
                     disabled={saving}
-                    className="bg-gradient-to-l from-lime-600 to-lime-400 font-extrabold text-zinc-950 hover:brightness-105"
+                    className="bg-gradient-to-l from-amber-600 to-amber-500 font-extrabold text-white hover:brightness-110"
                   >
                     {saving ? (
                       <Loader2 className="size-4 animate-spin" />
@@ -1133,22 +1046,22 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
           </p>
 
           {/* ─── سجل البث — تيرمينال داكن دائماً ─── */}
-          <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-lg shadow-zinc-950/20 dark:border-zinc-800">
-            <div className="flex flex-wrap items-center gap-2.5 border-b border-zinc-800 bg-zinc-950 px-3.5 py-2">
-              <Terminal className="size-4 shrink-0 text-lime-300" />
-              <p className="font-mono text-[11px] font-bold tracking-[0.18em] text-zinc-200">
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="flex flex-wrap items-center gap-2.5 border-b border-border bg-muted/40 px-3.5 py-2.5">
+              <Terminal className="size-4 shrink-0 text-amber-600 dark:text-amber-300" />
+              <p className="font-mono text-[11px] font-bold tracking-[0.18em] text-foreground">
                 سجل البث
               </p>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-lime-400/30 bg-lime-400/10 px-2 py-0.5 font-mono text-[9px] font-black tracking-[0.2em] text-lime-300">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[9px] font-black tracking-[0.2em] text-emerald-700 dark:text-emerald-300">
                 <span className="relative flex size-1.5">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-lime-400 opacity-60" />
-                  <span className="relative inline-flex size-1.5 rounded-full bg-lime-400" />
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                  <span className="relative inline-flex size-1.5 rounded-full bg-emerald-400" />
                 </span>
                 LIVE
               </span>
               <span
                 dir="ltr"
-                className="ms-auto font-mono text-[10px] tabular-nums text-zinc-500"
+                className="ms-auto font-mono text-[10px] tabular-nums text-muted-foreground"
               >
                 {data.events.length} EVT
               </span>
@@ -1157,7 +1070,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                 size="sm"
                 onClick={load}
                 disabled={loading}
-                className="h-8 border-zinc-700 bg-transparent text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
+                className="h-8 "
               >
                 <RefreshCw
                   className={cn("size-3.5", loading && "animate-spin")}
@@ -1167,55 +1080,41 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
             </div>
 
             {data.events.length === 0 ? (
-              <div className="relative overflow-hidden px-6 py-12 text-center">
-                <div
-                  aria-hidden
-                  className="absolute inset-0 opacity-30"
-                  style={{
-                    backgroundImage:
-                      "repeating-linear-gradient(0deg, rgba(163,230,53,.06) 0 1px, transparent 1px 4px)",
-                  }}
-                />
+              <div className="px-6 py-12 text-center">
                 <RadioTower
                   aria-hidden
                   strokeWidth={1.2}
-                  className="relative mx-auto size-12 text-lime-400/35"
+                  className="mx-auto size-12 text-muted-foreground/40"
                 />
-                <p className="relative mt-3 text-sm text-zinc-400">
+                <p className="mt-3 text-sm text-muted-foreground">
                   لا أحداث بعد — فعّل التتبع وأدخل معرفات المنصات ثم جرّب رحلة
                   تسجيل/دفع حقيقية.
-                </p>
-                <p
-                  dir="ltr"
-                  className="relative mt-2 font-mono text-[10px] font-bold tracking-[0.35em] text-lime-300/40"
-                >
-                  NO SIGNAL
                 </p>
               </div>
             ) : (
               <div className="max-h-[480px] overflow-auto" dir="rtl">
                 <Table>
-                  <TableHeader className="sticky top-0 z-10 bg-zinc-900">
-                    <TableRow className="border-zinc-800 hover:bg-transparent">
-                      <TableHead className="h-10 text-right text-[10.5px] font-bold text-zinc-400">
+                  <TableHeader className="sticky top-0 z-10 bg-muted">
+                    <TableRow className="border-border hover:bg-transparent">
+                      <TableHead className="h-10 text-right text-[10.5px] font-bold text-muted-foreground">
                         الحدث
                       </TableHead>
-                      <TableHead className="text-right text-[10.5px] font-bold text-zinc-400">
+                      <TableHead className="text-right text-[10.5px] font-bold text-muted-foreground">
                         المنصة
                       </TableHead>
-                      <TableHead className="text-right text-[10.5px] font-bold text-zinc-400">
+                      <TableHead className="text-right text-[10.5px] font-bold text-muted-foreground">
                         Event ID
                       </TableHead>
-                      <TableHead className="text-right text-[10.5px] font-bold text-zinc-400">
+                      <TableHead className="text-right text-[10.5px] font-bold text-muted-foreground">
                         المصدر
                       </TableHead>
-                      <TableHead className="text-right text-[10.5px] font-bold text-zinc-400">
+                      <TableHead className="text-right text-[10.5px] font-bold text-muted-foreground">
                         الحالة
                       </TableHead>
-                      <TableHead className="text-right text-[10.5px] font-bold text-zinc-400">
+                      <TableHead className="text-right text-[10.5px] font-bold text-muted-foreground">
                         الوقت
                       </TableHead>
-                      <TableHead className="text-right text-[10.5px] font-bold text-zinc-400">
+                      <TableHead className="text-right text-[10.5px] font-bold text-muted-foreground">
                         خطأ
                       </TableHead>
                     </TableRow>
@@ -1224,16 +1123,16 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                     {data.events.map((ev) => (
                       <TableRow
                         key={ev.id}
-                        className="border-zinc-800/60 hover:bg-zinc-800/60"
+                        className="border-border hover:bg-muted/50"
                       >
-                        <TableCell className="py-2.5 font-mono text-[12px] font-bold text-zinc-100">
+                        <TableCell className="py-2.5 font-mono text-[12px] font-bold text-foreground">
                           {ev.eventName}
                         </TableCell>
                         <TableCell>
                           <ProviderBadge provider={ev.provider} />
                         </TableCell>
                         <TableCell
-                          className="max-w-44 truncate font-mono text-[11px] text-zinc-400"
+                          className="max-w-44 truncate font-mono text-[11px] text-muted-foreground"
                           dir="ltr"
                           title={ev.eventId}
                         >
@@ -1242,7 +1141,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                         <TableCell>
                           <Badge
                             variant="outline"
-                            className="border-zinc-700 font-mono text-[10px] text-zinc-400"
+                            className="border-border font-mono text-[10px] text-muted-foreground"
                           >
                             {ev.source === "server" ? "Server" : "Browser"}
                           </Badge>
@@ -1250,11 +1149,11 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                         <TableCell>
                           <StatusBadge status={ev.status} />
                         </TableCell>
-                        <TableCell className="whitespace-nowrap font-mono text-[11px] text-zinc-400">
+                        <TableCell className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
                           {new Date(ev.createdAt).toLocaleTimeString("ar-EG")}
                         </TableCell>
                         <TableCell
-                          className="max-w-40 truncate font-mono text-[11px] text-red-400"
+                          className="max-w-40 truncate font-mono text-[11px] text-red-600 dark:text-red-400"
                           title={ev.error ?? undefined}
                         >
                           {ev.error ?? "—"}
@@ -1274,74 +1173,31 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
 
 /* ═════════════════════════ مكونات التوقيع ═════════════════════════ */
 
-/** ── الرادار الحي — مكنسة دوّارة + بقع المنصات ── */
-function RadarScope({ statuses }: { statuses: ProviderStatus[] }) {
-  const spots = [
-    { x: 27, y: 26 },
-    { x: 71, y: 31 },
-    { x: 33, y: 71 },
-    { x: 69, y: 68 },
-  ];
-  const labels: Record<string, string> = {
-    ga4: "GA4",
-    google_ads: "ADS",
-    meta: "META",
-    tiktok: "TT",
-  };
+/** ── مربع إحصاء صغير في الهيدر ── */
+function HeroStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "success" | "danger";
+}) {
   return (
-    <div
-      dir="ltr"
-      aria-hidden
-      className="relative mx-auto size-32 shrink-0 rounded-full border border-lime-400/20 bg-[#0a0d08] shadow-[inset_0_0_40px_rgba(0,0,0,.8),0_0_28px_rgba(163,230,53,.06)] sm:size-36"
-    >
-      {/* حلقات المدى */}
-      <div className="absolute inset-[6%] rounded-full border border-lime-400/[.12]" />
-      <div className="absolute inset-[25%] rounded-full border border-lime-400/[.15]" />
-      <div className="absolute inset-[44%] rounded-full border border-lime-400/[.2]" />
-      {/* خطوط التصويب */}
-      <div className="absolute bottom-[6%] top-[6%] left-1/2 w-px bg-lime-400/15" />
-      <div className="absolute right-[6%] left-[6%] top-1/2 h-px bg-lime-400/15" />
-      {/* المكنسة الدوّارة */}
-      <div className="absolute inset-[6%] overflow-hidden rounded-full">
-        <div
-          className="radar-sweep absolute inset-0"
-          style={{
-            background:
-              "conic-gradient(from 0deg, rgba(163,230,53,.34), rgba(163,230,53,.05) 55deg, transparent 70deg)",
-          }}
-        />
-      </div>
-      {/* بقع المنصات */}
-      {statuses.slice(0, 4).map((s, i) => {
-        const p = spots[i % 4];
-        const on = s.connected;
-        return (
-          <div
-            key={s.key}
-            className="absolute -translate-x-1/2 -translate-y-1/2"
-            style={{ left: `${p.x}%`, top: `${p.y}%` }}
-          >
-            {on ? (
-              <span className="relative flex size-2.5">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-lime-400 opacity-70" />
-                <span className="relative inline-flex size-2.5 rounded-full bg-lime-300 shadow-[0_0_7px_rgba(163,230,53,.8)]" />
-              </span>
-            ) : (
-              <span className="block size-2 rounded-full border border-zinc-600" />
-            )}
-            <span
-              className={cn(
-                "absolute top-1/2 left-[calc(50%+7px)] -translate-y-1/2 font-mono text-[8px] font-black tracking-[0.14em]",
-                on ? "text-lime-300/90" : "text-zinc-600",
-              )}
-            >
-              {labels[s.key] ?? s.key}
-            </span>
-          </div>
-        );
-      })}
-      {/* مركز المحطة */}
-      <span className="absolute top-1/2 left-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-lime-300 shadow-[0_0_6px_rgba(163,230,53,.8)]" />
+    <div className="min-w-[5.5rem] rounded-lg border border-border bg-muted/40 px-3 py-2 text-center">
+      <p
+        dir="ltr"
+        className={cn(
+          "font-mono text-xl font-black leading-none tabular-nums text-foreground",
+          tone === "success" && "text-emerald-600 dark:text-emerald-300",
+          tone === "danger" && "text-red-600 dark:text-red-400",
+        )}
+      >
+        {value}
+      </p>
+      <p className="mt-1.5 text-[10.5px] font-bold text-muted-foreground">
+        {label}
+      </p>
     </div>
   );
 }
@@ -1366,7 +1222,7 @@ function ChannelCard({ s, index }: { s: ProviderStatus; index: number }) {
     <div
       className={cn(
         "animate-in-up group relative overflow-hidden rounded-xl border bg-card p-3 shadow-sm transition-colors",
-        level === 4 && "border-lime-500/40 dark:border-lime-400/30",
+        level === 4 && "border-emerald-500/40 dark:border-emerald-400/30",
         level > 0 && level < 4 && "border-amber-500/40",
       )}
       style={{ animationDelay: `${(index + 2) * 50}ms` }}
@@ -1377,7 +1233,7 @@ function ChannelCard({ s, index }: { s: ProviderStatus; index: number }) {
         className={cn(
           "absolute inset-x-0 top-0 h-[3px]",
           level === 4
-            ? "bg-gradient-to-l from-lime-600 via-lime-400 to-lime-600"
+            ? "bg-gradient-to-l from-emerald-600 via-emerald-400 to-emerald-600"
             : level > 0
               ? "bg-amber-400/70"
               : "bg-zinc-300/60 dark:bg-zinc-700",
@@ -1397,7 +1253,7 @@ function ChannelCard({ s, index }: { s: ProviderStatus; index: number }) {
           className={cn(
             "grid size-8 shrink-0 place-items-center rounded-lg border transition-colors",
             level === 4
-              ? "border-lime-500/30 bg-lime-500/10 text-lime-600 dark:text-lime-300"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
               : "border-border bg-muted/50 text-muted-foreground",
           )}
         >
@@ -1416,7 +1272,7 @@ function ChannelCard({ s, index }: { s: ProviderStatus; index: number }) {
       </p>
       <div className="mt-2.5 flex items-center justify-between">
         {level === 4 ? (
-          <Badge className="gap-1 border-0 bg-lime-500/15 text-lime-700 hover:bg-lime-500/15 dark:text-lime-300">
+          <Badge className="gap-1 border-0 bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300">
             متصل
           </Badge>
         ) : level > 0 ? (
@@ -1445,7 +1301,7 @@ function Led({ on, warn }: { on?: boolean; warn?: boolean }) {
       aria-hidden
       className={cn(
         "size-2 shrink-0 rounded-full",
-        on && "bg-lime-400 shadow-[0_0_6px_1px_rgba(163,230,53,.4)]",
+        on && "bg-emerald-400 shadow-[0_0_6px_1px_rgba(16,185,129,.4)]",
         !on && warn && "bg-amber-400 shadow-[0_0_6px_1px_rgba(251,191,36,.35)]",
         !on && !warn && "bg-zinc-400/50 dark:bg-zinc-700",
       )}
@@ -1462,7 +1318,7 @@ function SignalBars({
   tone: "lime" | "amber" | "zinc";
 }) {
   const colors = {
-    lime: "bg-gradient-to-t from-lime-600 to-lime-400",
+    lime: "bg-gradient-to-t from-emerald-600 to-emerald-400",
     amber: "bg-gradient-to-t from-amber-500 to-amber-400",
     zinc: "bg-zinc-400/40 dark:bg-zinc-700",
   } as const;
@@ -1507,27 +1363,22 @@ function RackCard({
       className={cn(
         "animate-in-up overflow-hidden rounded-xl border bg-card shadow-sm transition-colors",
         enabled
-          ? "border-lime-500/35 dark:border-lime-400/25"
+          ? "border-emerald-500/35 dark:border-emerald-400/25"
           : "border-border",
       )}
       style={{ animationDelay: `${delay}ms` }}
     >
-      <header className="relative flex items-center gap-3 border-b border-zinc-800/80 bg-zinc-950 px-3.5 py-2.5">
-        <div
-          aria-hidden
-          className="absolute inset-0 opacity-70"
-          style={CIRCUIT_BG}
-        />
-        <div className="relative grid size-9 shrink-0 place-items-center rounded-lg border border-lime-400/30 bg-lime-400/10 text-lime-300">
+      <header className="relative flex items-center gap-3 border-b border-border bg-muted/40 px-3.5 py-2.5">
+        <div className="relative grid size-9 shrink-0 place-items-center rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-300">
           {icon}
         </div>
         <div className="relative min-w-0">
-          <h3 className="truncate text-sm font-extrabold text-zinc-50">
+          <h3 className="truncate text-sm font-extrabold text-foreground">
             {title}
           </h3>
           <p
             dir="ltr"
-            className="truncate font-mono text-[9px] font-black tracking-[0.22em] text-lime-300/60"
+            className="truncate font-mono text-[9px] font-black tracking-[0.22em] text-muted-foreground"
           >
             {channel} · {sublabel}
           </p>
@@ -1538,7 +1389,7 @@ function RackCard({
             checked={enabled}
             onCheckedChange={onToggle}
             aria-label={`تفعيل ${title}`}
-            className="data-[state=checked]:bg-lime-600"
+            className="data-[state=checked]:bg-emerald-600"
           />
         </div>
       </header>
@@ -1578,8 +1429,8 @@ function SwitchRow({
       className={cn(
         "flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors",
         master
-          ? "border-lime-500/50 bg-lime-500/[0.06] dark:border-lime-400/40 dark:bg-lime-400/[0.07]"
-          : "border-border bg-card hover:border-lime-500/25",
+          ? "border-amber-500/50 bg-amber-500/[0.06] dark:border-amber-400/40 dark:bg-amber-400/[0.07]"
+          : "border-border bg-card hover:border-amber-500/30",
       )}
     >
       <div className="min-w-0">
@@ -1589,7 +1440,7 @@ function SwitchRow({
               className={cn(
                 "grid size-5 shrink-0 place-items-center rounded",
                 checked
-                  ? "text-lime-600 dark:text-lime-300"
+                  ? "text-emerald-600 dark:text-emerald-300"
                   : "text-muted-foreground",
               )}
             >
@@ -1603,7 +1454,7 @@ function SwitchRow({
               className={cn(
                 "rounded px-1.5 py-0.5 font-mono text-[8.5px] font-black tracking-[0.22em]",
                 checked
-                  ? "bg-lime-500/15 text-lime-600 dark:bg-lime-400/15 dark:text-lime-300"
+                  ? "bg-amber-500/15 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300"
                   : "bg-muted text-muted-foreground",
               )}
             >
@@ -1623,7 +1474,7 @@ function SwitchRow({
           checked={checked}
           onCheckedChange={onChange}
           aria-label={label}
-          className="data-[state=checked]:bg-lime-600"
+          className="data-[state=checked]:bg-emerald-600"
         />
       </div>
     </div>
@@ -1643,7 +1494,7 @@ function Field({
   return (
     <div className="space-y-1.5">
       <Label className="flex items-center gap-1.5 text-xs font-bold">
-        <span aria-hidden className="size-1 rounded-[1px] bg-lime-500/70" />
+        <span aria-hidden className="size-1 rounded-[1px] bg-amber-500/70" />
         {label}
       </Label>
       {children}
@@ -1656,56 +1507,57 @@ function Field({
   );
 }
 
-/** ── شارة المنصة (داخل التيرمينال الداكن — ألوان مضيئة) ── */
+/** ── شارة المنصة ── */
 function ProviderBadge({ provider }: { provider: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     meta: {
       label: "Meta",
-      cls: "bg-blue-400/15 text-blue-300",
+      cls: "bg-blue-500/10 text-blue-700 dark:bg-blue-400/15 dark:text-blue-300",
     },
     tiktok: {
       label: "TikTok",
-      cls: "bg-rose-400/15 text-rose-300",
+      cls: "bg-rose-500/10 text-rose-700 dark:bg-rose-400/15 dark:text-rose-300",
     },
     ga4: {
       label: "GA4",
-      cls: "bg-amber-400/15 text-amber-300",
+      cls: "bg-amber-500/10 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300",
     },
     google_ads: {
       label: "Ads",
-      cls: "bg-emerald-400/15 text-emerald-300",
+      cls: "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-300",
     },
     internal: {
       label: "زيارة",
-      cls: "bg-zinc-400/15 text-zinc-300",
+      cls: "bg-muted text-muted-foreground",
     },
   };
   const it = map[provider] ?? {
     label: provider,
-    cls: "bg-zinc-400/10 text-zinc-300",
+    cls: "bg-muted text-muted-foreground",
   };
   return (
-    <Badge className={`border-0 text-[10px] ${it.cls}`}>{it.label}</Badge>
+    <Badge className={`border-0 text-[10px] hover:bg-transparent ${it.cls}`}>
+      {it.label}
+    </Badge>
   );
 }
 
-/** ── شارة الحالة (داخل التيرمينال الداكن) ── */
+/** ── شارة الحالة ── */
 function StatusBadge({ status }: { status: string }) {
   if (status === "sent")
     return (
-      <Badge className="border-0 bg-lime-500/12 text-lime-200/95">
+      <Badge className="border-0 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 dark:bg-emerald-400/15 dark:text-emerald-300">
         تم الإرسال
       </Badge>
     );
   if (status === "failed")
     return (
-      <Badge className="border-0 bg-red-500/20 text-red-400">فشل</Badge>
+      <Badge className="border-0 bg-red-500/10 text-red-600 hover:bg-red-500/10 dark:bg-red-400/15 dark:text-red-400">
+        فشل
+      </Badge>
     );
   return (
-    <Badge
-      variant="outline"
-      className="border-zinc-700 text-zinc-400"
-    >
+    <Badge variant="outline" className="text-muted-foreground">
       تجاهل
     </Badge>
   );
