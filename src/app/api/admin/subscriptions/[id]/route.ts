@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireSuperAdmin, authErrorResponse } from '@/lib/auth'
 import { computeEndDate, computeAmount } from '@/lib/admin-utils'
-import { logPlanChange } from '@/lib/plan-billing'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +10,7 @@ async function __PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    var adminSession = await requireSuperAdmin()
+    await requireSuperAdmin()
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
@@ -71,19 +70,6 @@ async function __PUT(
     await db.tenant.update({
       where: { id: existing.tenantId },
       data: { status: 'active' },
-    })
-
-    // 🛡️ 2026-10-10: سجّل التجديد/التمديد في سجل تغييرات الباقات
-    await logPlanChange(db, {
-      tenantId: existing.tenantId,
-      subscriptionId: existing.id,
-      toPlanId: existing.planId,
-      toPlanCode: existing.plan?.code ?? null,
-      changeType: 'renew',
-      period,
-      amountPaid,
-      note: `extend ${period}${body.paymentNote ? ` — ${String(body.paymentNote)}` : ''}`,
-      actor: adminSession.email,
     })
 
     return NextResponse.json({

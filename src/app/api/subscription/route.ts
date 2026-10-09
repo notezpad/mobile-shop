@@ -79,8 +79,6 @@ async function __GET() {
       businessType: 'electronics',
       enabledModules: [...ALL_MODULES],
       capabilities: [],
-      // 🛡️ 2026-10-10: فرق ترقية غير محصّل (proration) — يظهر للمحل
-      outstandingDue: 0,
     })
   }
 
@@ -95,14 +93,6 @@ async function __GET() {
   // (settings, users, finance, expenses, cash, reports) regardless of plan.
   const ctx = await getPlanContext(session.tenantId)
 
-  // 🛡️ 2026-10-10: مجموع فرق الترقيات (proration) غير المحصّلة —
-  // المحل يشوف المستحق عليه مباشرة في صفحة الإعدادات/الاشتراك.
-  const dueAgg = await db.planChangeLog.aggregate({
-    where: { tenantId: session.tenantId, dueSettled: false },
-    _sum: { amountDue: true },
-  })
-  const outstandingDue = Math.round((dueAgg._sum.amountDue ?? 0) * 100) / 100
-
   const res = NextResponse.json({
     ok: true,
     tenantStatus: tenant.status,
@@ -116,7 +106,6 @@ async function __GET() {
     businessType: ctx.businessType,
     enabledModules: ctx.enabledModules,
     capabilities: ctx.capabilities,
-    outstandingDue,
   })
   // ⚡ Cache for 5 seconds only — short enough that fixes (e.g. plan
   // module changes deployed by the developer) take effect quickly without

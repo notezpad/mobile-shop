@@ -97,7 +97,6 @@ import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { formatCurrency, formatShortDate, formatArabicDate } from '@/lib/format'
 import { toast } from 'sonner'
-import { PlanChangeLogPanel } from './plans/PlanChangeLogPanel'
 
 /* ───────────────────────── أنواع البيانات ───────────────────────── */
 
@@ -814,9 +813,6 @@ export function AdminSubscriptionsView() {
           </div>
         </div>
       </section>
-
-      {/* ═══ 1.٥ سجل تغييرات الباقات + المستحقات (2026-10-10 — Plan Control) ═══ */}
-      <PlanChangeLogPanel />
 
       {/* ═══ 2. شريط "الإيصال" — إحصاءات بحواف مثقّبة وفواصل متقطّعة ═══ */}
       <section className="animate-in-up stagger-1 relative">

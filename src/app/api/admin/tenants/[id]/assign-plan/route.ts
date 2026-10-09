@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireSuperAdmin, authErrorResponse } from '@/lib/auth'
-import { logPlanChange } from '@/lib/plan-billing'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,9 +27,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   return withDb(async () => {
-    let session
     try {
-      session = await requireSuperAdmin()
+      await requireSuperAdmin()
     } catch (e) {
       const err = authErrorResponse(e)
       return NextResponse.json(err?.body, { status: err?.status })
@@ -80,7 +78,6 @@ export async function POST(
     const activeSub = await db.subscription.findFirst({
       where: { tenantId, status: 'active' },
       orderBy: { endDate: 'desc' },
-      include: { plan: true },
     })
 
     if (!activeSub) {
@@ -101,18 +98,6 @@ export async function POST(
           paymentNote: 'assigned-by-super-admin',
         },
         include: { plan: true },
-      })
-
-      // 🛡️ 2026-10-10: سجّل العملية في سجل تغييرات الباقات
-      await logPlanChange(db, {
-        tenantId,
-        subscriptionId: newSub.id,
-        toPlanId: targetPlan.id,
-        toPlanCode: targetPlan.code,
-        changeType: 'assign',
-        period: newSub.period,
-        note: 'assigned-by-super-admin (no active sub → created)',
-        actor: session.email,
       })
 
       return NextResponse.json({
@@ -142,26 +127,6 @@ export async function POST(
       where: { id: activeSub.id },
       data: updateData,
       include: { plan: true },
-    })
-
-    // 🛡️ 2026-10-10: سجّل العملية في سجل تغييرات الباقات
-    // (التعيين من الأدمن قرار إداري — لا proration، لكنه بيتسجل للتدقيق)
-    const remainingDays = Math.max(
-      0,
-      Math.ceil((activeSub.endDate.getTime() - Date.now()) / 86_400_000)
-    )
-    await logPlanChange(db, {
-      tenantId,
-      subscriptionId: activeSub.id,
-      fromPlanId: activeSub.planId,
-      fromPlanCode: activeSub.plan?.code ?? null,
-      toPlanId: targetPlan.id,
-      toPlanCode: targetPlan.code,
-      changeType: 'assign',
-      period: updated.period,
-      remainingDays,
-      note: 'assigned-by-super-admin (active sub updated)',
-      actor: session.email,
     })
 
     return NextResponse.json({
