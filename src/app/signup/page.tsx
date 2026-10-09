@@ -201,7 +201,8 @@ function SignupContent() {
       cardSelected: fb?.cardSelected ?? 'ring-2 ring-primary border-primary',
       iconColor: fb?.iconColor ?? 'text-primary',
       badgeClass: fb?.badgeClass ?? 'bg-muted text-foreground',
-      desc: fb?.desc ?? api.description ?? '',
+      // 🛡️ 2026-10-10: وصف الداتابيز أولاً — الثابت احتياطي فقط لو فاضي
+      desc: api.description?.trim() ? api.description : (fb?.desc ?? ''),
       price: planPriceLabel(api),
     }
   }, [apiPlans, selectedPlan])
@@ -224,7 +225,8 @@ function SignupContent() {
           cardSelected: fb?.cardSelected ?? 'ring-2 ring-primary border-primary',
           iconColor: fb?.iconColor ?? 'text-primary',
           badgeClass: fb?.badgeClass ?? 'bg-muted text-foreground',
-          desc: fb?.desc ?? p.description ?? '',
+          // 🛡️ 2026-10-10: وصف الداتابيز أولاً — الثابت احتياطي فقط لو فاضي
+          desc: p.description?.trim() ? p.description : (fb?.desc ?? ''),
           price: planPriceLabel(p),
         },
       }

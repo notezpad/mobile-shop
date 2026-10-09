@@ -68,6 +68,7 @@ model Tenant {
   supplierPayments  SupplierPayment[]
   expenses          Expense[]
   notifications     Notification[]
+  planChangeLogs    PlanChangeLog[]
 
   // Notification preferences
   notifyLowStock            Boolean @default(true)
@@ -121,6 +122,46 @@ model Subscription {
   @@index([tenantId])
   @@index([status])
   @@index([endDate])
+}
+
+// ═════════════ سجل تغييرات الباقات (Billing History) ═════════════
+// 🛡️ 2026-10-10 (Plan Control): كل تغيير على مستوى الباقة بيتسجل هنا —
+// تبديل ذاتي (بالترقية النسبية)، تعيين من الأدمن، تجديد، إصدار يدوي،
+// تجربة. بيكسب صاحب المنصة سجل تدقيق كامل + تتبع المستحقات غير المحصّلة.
+model PlanChangeLog {
+  id             Int       @id @default(autoincrement())
+  tenantId       String
+  subscriptionId Int?
+  fromPlanId     Int?
+  fromPlanCode   String?
+  toPlanId       Int?
+  toPlanCode     String?
+  // switch | assign | renew | manual | trial
+  changeType     String
+  period         String?
+  // المبلغ المحصّل فعلياً مع العملية (إن وجد)
+  amountPaid     Float     @default(0)
+  // فرق ترقية محسوب بالتناسب (proration) ولم يُحصّل بعد
+  amountDue      Float     @default(0)
+  // هل تم تحصيل فرق الترقية؟
+  dueSettled     Boolean   @default(false)
+  settledAt      DateTime?
+  settledMethod  String?
+  // قيمة النسبة المرتجعة للمشترك (هبوط) — تحوّلت لأيام مجانية
+  creditValue    Float     @default(0)
+  creditDays     Int       @default(0)
+  remainingDays  Int       @default(0)
+  note           String?
+  // self | super-admin email | system
+  actor          String?
+  createdAt      DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([changeType])
+  @@index([dueSettled])
+  @@index([createdAt])
 }
 
 model ActivationCode {

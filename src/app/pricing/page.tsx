@@ -248,7 +248,22 @@ export default function PricingPage() {
       : `${yearly}  سنوياً · وفّر ${saving} `
   }
 
+  // 🛡️ 2026-10-10: مزايا الداتابيز أولاً — الأدمن لما يعدّل مزايا باقة
+  // من لوحة التحكم بتظهر للناس فعلاً بدل القوائم الثابتة في الكود.
+  // الصيغة: كل سطر ميزة موجبة (✓)، والسطر اللي يبدأ بـ "-" يعرض بعلامة ✕
+  // (ميزة مش متاحة) — كده الأدمن يقدر يكتب سلبيات كمان.
+  // القوائم الثابتة تحت تُستخدم فقط لو الداتابيز ناقصة (مزايا فاضية).
   const planFeaturesForCard = (plan: Plan): { ok: boolean; label: string }[] => {
+    if (Array.isArray(plan.features) && plan.features.length > 0) {
+      return plan.features
+        .map((raw) => raw.trim())
+        .filter(Boolean)
+        .map((raw) =>
+          raw.startsWith('-')
+            ? { ok: false, label: raw.slice(1).trim() || raw }
+            : { ok: true, label: raw }
+        )
+    }
     if (plan.code === 'trial') {
       return [
         { ok: true, label: `حتى ${plan.maxProducts || 50} منتج` },
@@ -266,7 +281,7 @@ export default function PricingPage() {
         { ok: true, label: `حتى ${plan.maxBranches} فرع` },
         { ok: true, label: 'كل ميزات نقطة البيع' },
         { ok: true, label: 'إدارة المخزون والعملاء' },
-        { ok: true, label: 'المعاملات المالية والالمعاملات المالية' },
+        { ok: true, label: 'المعاملات المالية والخزنة' },
         { ok: false, label: 'تقارير متقدمة' },
         { ok: false, label: 'بيع بالجملة' },
       ]

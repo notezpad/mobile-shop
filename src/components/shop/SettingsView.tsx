@@ -2,12 +2,11 @@
 
 import * as React from 'react'
 import {
-  ImagePlus, Loader2, Save, Sparkles, CalendarDays, CheckCircle2, Printer, Bell,
+  ImagePlus, Loader2, Save, Sparkles, CalendarDays, CheckCircle2, Printer, Bell, CircleAlert,
   SlidersHorizontal, LayoutGrid, Store, Receipt, BadgeCheck, Percent, Calculator, Undo2, Clock,
 } from 'lucide-react'
 import { PrinterSettingsDialog } from './PrinterSettingsDialog'
 import { RedeemCodeCard } from './RedeemCodeCard'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -46,6 +45,8 @@ interface SubInfo {
   daysLeft: number | null
   expired: boolean
   expiringSoon: boolean
+  /** 🛡️ 2026-10-10: فرق ترقية (proration) غير محصّل — من /api/subscription */
+  outstandingDue?: number
 }
 
 const TIMEZONE_OPTIONS = [
@@ -586,7 +587,13 @@ export function SettingsView() {
             {!sub ? (
               <Skeleton className="h-32 w-full rounded-xl" />
             ) : (
-              <SubscriptionBody sub={sub} />
+              <SubscriptionBody
+                sub={sub}
+                onSwitched={() => {
+                  setSubLoading(true)
+                  refreshSubscription().finally(() => setSubLoading(false))
+                }}
+              />
             )}
           </Panel>
         )}
@@ -782,7 +789,13 @@ export function SettingsView() {
 }
 
 // ─── الاشتراك: عدّاد دائري بالأيام المتبقية ───────────────────────────
-function SubscriptionBody({ sub }: { sub: SubInfo }) {
+function SubscriptionBody({
+  sub,
+  onSwitched,
+}: {
+  sub: SubInfo
+  onSwitched?: () => void
+}) {
   const enabledModules = useShopStore((s) => s.plan.enabledModules)
   const modules = enabledModules.filter((m) => MODULE_LABELS[m])
   const totalDays = sub.period === 'yearly' ? 365 : sub.period === 'trial' ? 14 : 30
@@ -799,6 +812,15 @@ function SubscriptionBody({ sub }: { sub: SubInfo }) {
 
   return (
     <div className="w-full space-y-4 sm:space-y-5">
+      {/* 2026-10-10: فرق ترقية (proration) غير محصّل — واضح للمحل مباشرة */}
+      {(sub.outstandingDue ?? 0) > 0 && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-[12px] font-semibold text-amber-800 dark:text-amber-200">
+          <CircleAlert className="mt-0.5 size-4 shrink-0" />
+          <span>
+            مستحق فرق ترقية غير محصّل: <b dir="ltr">{formatNumber(sub.outstandingDue ?? 0)}</b> جنيه — يُدفع للدعم، وبعد التحصيل يختفي هذا التنبيه.
+          </span>
+        </div>
+      )}
       <div className="flex w-full flex-col items-center gap-5 sm:flex-row sm:gap-6">
         <div className="relative size-28 shrink-0 sm:size-32">
           <svg viewBox="0 0 112 112" className="size-full -rotate-90" aria-hidden>
@@ -858,6 +880,11 @@ function SubscriptionBody({ sub }: { sub: SubInfo }) {
             ))}
           </div>
         </div>
+      )}
+
+      {/* 2026-10-10 (Plan Control v2): مبدّل الباقة — كان مكوّن ميت غير مستخدم */}
+      {onSwitched && (
+        <PlanSwitcher currentPlanCode={sub.planCode} onSwitched={onSwitched} />
       )}
     </div>
   )
@@ -936,6 +963,27 @@ function NotificationSettingsCard() {
 }
 
 // ─── PlanSwitcher ──────────────────────────────────
+// 2026-10-10 (Plan Control v2): المكوّن كان ميت (مكتوب وغير مستخدم في أي
+// مكان) — اتطلع تاني داخل بطاقة الاشتراك. بيقرأ الباقات من /api/plans/public
+// (نفس مصدر الموقع العام: المفعّلة والمدفوعة فقط بترتيب sortOrder — شاملة
+// أي باقات مخصصة)، وبيعرض رسالة الـ API اللي فيها فرق الترقية المحسوب
+// بالتناسب (proration) بدل رسالة عامة مكانها.
+interface ApiPlanRow {
+  code: string
+  name: string
+  description: string | null
+  priceMonthly: number
+  priceYearly: number
+}
+
+// احتياطي عند فشل الشبكة فقط — الأسعار بتظهر من الـ API لما يشتغل
+const FALLBACK_PLANS: ApiPlanRow[] = [
+  { code: 'electronics-basic', name: 'أساسية - موبايل وكمبيوتر', description: 'POS، مخزون، صيانة، معاملات مالية', priceMonthly: 0, priceYearly: 0 },
+  { code: 'electronics-pro', name: 'احترافية - موبايل وكمبيوتر', description: 'كل المزايا + تقارير متقدمة، فروع، جملة', priceMonthly: 0, priceYearly: 0 },
+  { code: 'fashion-basic', name: 'أساسية - ملابس وأحذية', description: 'POS، مخزون، مقاسات وألوان، مصروفات، خزنة (للتجزئة — بيع بالقطعة)', priceMonthly: 0, priceYearly: 0 },
+  { code: 'fashion-pro', name: 'احترافية - ملابس وأحذية', description: 'سلاسل المحلات وتجار الجملة — فروع، بيع بالكرتونة/الدستة + كوليكشن، والمقاسات والألوان متاحة برضه (البيع بالقطعة شغال).', priceMonthly: 0, priceYearly: 0 },
+]
+
 function PlanSwitcher({
   currentPlanCode,
   onSwitched,
@@ -945,51 +993,51 @@ function PlanSwitcher({
 }) {
   const role = useShopStore((s) => s.user?.role)
   const [switching, setSwitching] = React.useState<string | null>(null)
-  if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') return null
+  const [apiPlans, setApiPlans] = React.useState<ApiPlanRow[] | null>(null)
 
-  const PLANS: { code: string; name: string; desc: string; tone: string }[] = [
-    {
-      code: 'electronics-basic',
-      name: 'أساسية - موبايل وكمبيوتر',
-      desc: 'POS، مخزون، صيانة، معاملات مالية',
-      tone: 'border-sky-500/40',
-    },
-    {
-      code: 'electronics-pro',
-      name: 'احترافية - موبايل وكمبيوتر',
-      desc: 'كل المزايا + تقارير متقدمة، فروع، جملة',
-      tone: 'border-violet-500/40',
-    },
-    {
-      code: 'fashion-basic',
-      name: 'أساسية - ملابس وأحذية',
-      desc: 'POS، مخزون، مقاسات وألوان، مصروفات، خزنة (للتجزئة — بيع بالقطعة)',
-      tone: 'border-rose-400/50',
-    },
-    {
-      code: 'fashion-pro',
-      name: 'احترافية - ملابس وأحذية',
-      desc: 'سلاسل المحلات وتجار الجملة — فروع، بيع بالكرتونة/الدستة + كوليكشن، والمقاسات والألوان متاحة برضه (البيع بالقطعة شغال).',
-      tone: 'border-amber-400/50',
-    },
-  ]
+  // كل الـ hooks قبل أي early return (قواعد React)
+  React.useEffect(() => {
+    let dead = false
+    api<{ items: ApiPlanRow[] }>('/api/plans/public')
+      .then((d) => {
+        if (!dead && Array.isArray(d?.items) && d.items.length > 0) setApiPlans(d.items)
+      })
+      .catch(() => null)
+    return () => {
+      dead = true
+    }
+  }, [])
+
+  // الـ API بيسمح للأدمن فقط — SUPER_ADMIN مالوش اشتراك محل أصلاً
+  if (role !== 'ADMIN') return null
+
+  const PLANS: ApiPlanRow[] = apiPlans ?? FALLBACK_PLANS
 
   const handleSwitch = async (planCode: string) => {
     if (switching) return
     if (planCode === currentPlanCode) {
-      toast.info('إنت уже على الباقة دي')
+      toast.info('أنت بالفعل مشترك في هذه الباقة')
       return
     }
-    if (!confirm(`هل أنت متأكد إنك عاوز تبديل باقتك لـ "${PLANS.find((p) => p.code === planCode)?.name}"؟`)) {
+    if (
+      !confirm(
+        'تأكيد تبديل الباقة إلى "' + (PLANS.find((p) => p.code === planCode)?.name ?? planCode) + '"؟\n' +
+          '• ترقية: يُحسب فرق سعر بالتناسب عن الأيام المتبقية ويسجَّل مستحقًا للدعم.\n' +
+          '• هبوط: تُضاف أيام مجانية تلقائيًا كتعويض عن الفرق.'
+      )
+    ) {
       return
     }
     setSwitching(planCode)
     try {
-      const result = await api<{ ok: boolean; subscription: { planCode: string; planName: string } }>(
-        '/api/subscription/switch-plan',
-        { method: 'POST', body: { planCode } }
-      )
-      toast.success(`تم تبديل باقتك لـ "${result.subscription.planName}"`)
+      const result = await api<{
+        ok: boolean
+        message?: string
+        subscription: { planCode: string; planName: string }
+      }>('/api/subscription/switch-plan', { method: 'POST', body: { planCode } })
+      // رسالة الـ API بتوضّح نتيجة التبديل بالتفصيل (مستحق فرق الترقية /
+      // أيام التعويض المجانية) — نعرضها كما هي بدل نص عام
+      toast.success(result.message || 'تم تبديل باقتك لـ "' + result.subscription.planName + '"')
       onSwitched()
     } catch (e: any) {
       toast.error(e?.message || 'فشل تبديل الباقة')
@@ -999,62 +1047,69 @@ function PlanSwitcher({
   }
 
   return (
-    <Card>
-      <CardHeader className="p-4 sm:p-6">
-        <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
-          <Sparkles className="size-4 text-primary" />
-          تبديل الباقة
-        </CardTitle>
-        <p className="text-[11px] text-muted-foreground sm:text-xs">
-          لو إنت على الباقة التجريبية (trial) ولا enabledModules بتاعتها فاضية — اختار الباقة المناسبة لطب تجارتك. التبديل فوري وميجّيش فلوس.
-        </p>
-      </CardHeader>
-      <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {PLANS.map((p) => {
-            const isCurrent = p.code === currentPlanCode
-            const isSwitching = switching === p.code
-            return (
-              <div
-                key={p.code}
-                className={`flex flex-col gap-2 rounded-md border-t-4 ${p.tone} p-3 transition-colors ${
-                  isCurrent ? 'bg-success-subtle/40 border-success-subtle' : 'hover:bg-muted/50'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold leading-tight">{p.name}</p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">{p.desc}</p>
-                    <p className="mt-1 text-[10px] text-muted-foreground" dir="ltr">{p.code}</p>
-                  </div>
-                  {isCurrent && (
-                    <Badge variant="outline" className="shrink-0 border-success-subtle bg-success-subtle text-success-subtle-foreground">
-                      الحالية
-                    </Badge>
+    <div className="rounded-xl border border-dashed p-3 sm:p-4">
+      <div className="mb-1 flex items-center gap-2">
+        <Sparkles className="size-4 text-primary" />
+        <h3 className="text-sm font-extrabold">تبديل الباقة</h3>
+      </div>
+      <p className="mb-3 text-[11px] text-muted-foreground sm:text-xs">
+        اختار الباقة المناسبة لنشاطك — الترقية فورية والفرق بيتحسب بالتناسب عن الأيام المتبقية ويتسجّل مستحقًا للدعم، والهبوط بيتعوّض تلقائيًا بأيام مجانية إضافية.
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {PLANS.map((p) => {
+          const isCurrent = p.code === currentPlanCode
+          const isSwitching = switching === p.code
+          const monthlyEquiv =
+            p.priceMonthly > 0 ? p.priceMonthly : Math.round((p.priceYearly || 0) / 12)
+          return (
+            <div
+              key={p.code}
+              className={cn(
+                'flex flex-col gap-2 rounded-md border p-3 transition-colors',
+                isCurrent
+                  ? 'border-success-subtle bg-success-subtle/40'
+                  : 'hover:border-primary/50 hover:bg-muted/40'
+              )}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold leading-tight">{p.name}</p>
+                  {p.description && (
+                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{p.description}</p>
+                  )}
+                  {monthlyEquiv > 0 && (
+                    <p className="mt-1 text-[11px] font-extrabold text-primary" dir="ltr">
+                      {formatNumber(monthlyEquiv)} EGP / mo
+                    </p>
                   )}
                 </div>
-                <Button
-                  size="sm"
-                  variant={isCurrent ? 'outline' : 'default'}
-                  className="mt-auto gap-1.5"
-                  disabled={isCurrent || isSwitching || switching !== null}
-                  onClick={() => handleSwitch(p.code)}
-                >
-                  {isSwitching ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : isCurrent ? (
-                    <CheckCircle2 className="size-3.5" />
-                  ) : null}
-                  {isCurrent ? 'الباقة الحالية' : isSwitching ? 'جارٍ التبديل...' : 'تبديل لهذه الباقة'}
-                </Button>
+                {isCurrent && (
+                  <Badge variant="outline" className="shrink-0 border-success-subtle bg-success-subtle text-success-subtle-foreground">
+                    الحالية
+                  </Badge>
+                )}
               </div>
-            )
-          })}
-        </div>
-        <p className="mt-3 text-[11px] text-muted-foreground">
-          ملاحظة: التبديل بيغيّر الـ plan في الـ DB، فالـ sidebar هيتحدّث تلقائياً خلال 5 ثواني (بناءً على cache الـ subscription endpoint).
-        </p>
-      </CardContent>
-    </Card>
+              <Button
+                size="sm"
+                variant={isCurrent ? 'outline' : 'default'}
+                className="mt-auto gap-1.5"
+                disabled={isCurrent || isSwitching || switching !== null}
+                onClick={() => handleSwitch(p.code)}
+              >
+                {isSwitching ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : isCurrent ? (
+                  <CheckCircle2 className="size-3.5" />
+                ) : null}
+                {isCurrent ? 'الباقة الحالية' : isSwitching ? 'جارٍ التبديل...' : 'تبديل لهذه الباقة'}
+              </Button>
+            </div>
+          )
+        })}
+      </div>
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        ملاحظة: بعد التبديل الأقسام المتاحة في المحل هتتحدّث تلقائيًا خلال ثوانٍ، وفرق الترقية (إن وُجد) يظهر لصاحب المنصة في «سجل تغييرات الباقات» لتحصيله.
+      </p>
+    </div>
   )
 }
