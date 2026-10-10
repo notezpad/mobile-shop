@@ -39,21 +39,38 @@ async function __GET() {
   let tablesReady = true
   try {
     // آخر الأحداث — بدون أي بيانات حساسة (payload تقني فقط)
-    events = await db.trackingEvent.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-      select: {
-        id: true,
-        eventId: true,
-        eventName: true,
-        provider: true,
-        source: true,
-        status: true,
-        error: true,
-        subscriptionId: true,
-        createdAt: true,
-      },
-    })
+    const select = {
+      id: true,
+      eventId: true,
+      eventName: true,
+      provider: true,
+      source: true,
+      status: true,
+      error: true,
+      subscriptionId: true,
+      createdAt: true,
+    } as const
+
+    // أحداث المنصات (Meta/TikTok/Google) منفصلة عن زيارات PageView الداخلية
+    // حتى لا تدفن الزيارات أحداث الإعلانات خارج آخر 50 صف.
+    const [platformEvents, visitEvents] = await Promise.all([
+      db.trackingEvent.findMany({
+        where: { provider: { not: 'internal' } },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        select,
+      }),
+      db.trackingEvent.findMany({
+        where: { provider: 'internal' },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select,
+      }),
+    ])
+
+    events = [...platformEvents, ...visitEvents].sort(
+      (a, b) => +new Date(b.createdAt as any) - +new Date(a.createdAt as any)
+    )
 
     // إحصائيات سريعة
     const [sent, failed] = await Promise.all([
