@@ -25,6 +25,7 @@ import {
   Trash2,
   WifiOff,
   ArrowUpDown,
+  SlidersHorizontal,
   Smartphone,
   Shirt,
   Layers,
@@ -100,8 +101,8 @@ const PREF_KEY = 'admin-plans-prefs-v2'
 
 const INSIGHT_STYLE = {
   warn: { icon: TriangleAlert, box: 'border-amber-500/30 bg-amber-500/[0.08]', ic: 'bg-amber-500/15 text-amber-600 dark:text-amber-300' },
-  info: { icon: Info, box: 'border-sky-500/25 bg-sky-500/[0.07]', ic: 'bg-sky-500/15 text-sky-600 dark:text-sky-300' },
-  tip: { icon: Lightbulb, box: 'border-indigo-500/25 bg-indigo-500/[0.07]', ic: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300' },
+  info: { icon: Info, box: 'border-sky-500/25 bg-sky-500/[0.04]', ic: 'bg-sky-500/15 text-sky-600 dark:text-sky-300' },
+  tip: { icon: Lightbulb, box: 'border-indigo-500/25 bg-indigo-500/[0.04]', ic: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300' },
 } as const
 
 function exportCsv(rows: PlanRow[]) {
@@ -170,6 +171,14 @@ export function AdminPlansView() {
 
   const searchRef = React.useRef<HTMLInputElement>(null)
 
+  /* شريط الأدوات الثابت: ينكمش لصف واحد عند النزول */
+  const sentinelRef = React.useRef<HTMLDivElement>(null)
+  const barRef = React.useRef<HTMLDivElement>(null)
+  const [compact, setCompact] = React.useState(false)
+  const [filtersOpen, setFiltersOpen] = React.useState(false)
+  const [expandedH, setExpandedH] = React.useState(0)
+  const [extraMb, setExtraMb] = React.useState(0)
+
   /* ─── تفضيلات محفوظة ─── */
   React.useEffect(() => {
     try {
@@ -191,6 +200,32 @@ export function AdminPlansView() {
       /* ignore */
     }
   }, [view, billing, sort])
+
+  /* ─── مراقبة النزول لتصغير شريط الأدوات ─── */
+  React.useEffect(() => {
+    const el = sentinelRef.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(([e]) => setCompact(!e.isIntersecting))
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
+  React.useEffect(() => {
+    if (!compact) setFiltersOpen(false)
+  }, [compact])
+
+  // نحافظ على ارتفاع الصفحة ثابتاً عند الانكماش حتى لا يقفز المحتوى
+  React.useLayoutEffect(() => {
+    const el = barRef.current
+    if (!el) return
+    const h = el.offsetHeight
+    if (!compact) {
+      setExpandedH(h)
+      setExtraMb(0)
+    } else {
+      setExtraMb(Math.max(0, expandedH - h))
+    }
+  }, [compact, expandedH])
 
   /* ─── التحميل ─── */
   const load = React.useCallback(async (silent = false) => {
@@ -258,6 +293,9 @@ export function AdminPlansView() {
   /* ─── فلترة + ترتيب ─── */
   const hasFilters =
     search.trim() !== '' || typeFilter !== 'all' || statusFilter !== 'all' || quick !== 'none'
+
+  const activeFilterCount =
+    (typeFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (quick !== 'none' ? 1 : 0)
 
   const clearFilters = () => {
     setSearch('')
@@ -477,39 +515,45 @@ export function AdminPlansView() {
       }
     }
 
-    for (const p of manual) {
-      if (p.isActive && p.priceMonthly > 0 && p.priceYearly > 0 && p.priceYearly >= p.priceMonthly * 12) {
-        list.push({
-          id: `no-discount-${p.id}`,
-          tone: 'tip',
-          title: `«${p.name}»: السنوي بلا خصم`,
-          detail: 'السعر السنوي يساوي أو يزيد عن ١٢ × الشهري، فلا حافز للعميل للاشتراك السنوي.',
-          cta: 'تعديل التسعير',
-          action: () => openEdit(p, 'pricing'),
-        })
-      } else if (p.isActive && p.priceMonthly > 0 && p.priceYearly === 0) {
-        list.push({
-          id: `no-yearly-${p.id}`,
-          tone: 'info',
-          title: `«${p.name}» بلا سعر سنوي`,
-          detail: 'إضافة سعر سنوي بخصم تزيد الاشتراكات الطويلة وتحسّن الإيراد المتوقع.',
-          cta: 'إضافة سعر سنوي',
-          action: () => openEdit(p, 'pricing'),
-        })
-      }
+    const names = (arr: PlanRow[]) =>
+      arr.slice(0, 3).map((p) => `«${p.name}»`).join('، ') + (arr.length > 3 ? ` و${arr.length - 3} أخرى` : '')
+
+    const noDiscount = manual.filter(
+      (p) => p.isActive && p.priceMonthly > 0 && p.priceYearly > 0 && p.priceYearly >= p.priceMonthly * 12,
+    )
+    if (noDiscount.length > 0) {
+      list.push({
+        id: `no-discount-${noDiscount.map((p) => p.id).join('-')}`,
+        tone: 'tip',
+        title: noDiscount.length === 1 ? `«${noDiscount[0].name}»: السنوي بلا خصم` : `${noDiscount.length} باقات سعرها السنوي بلا خصم`,
+        detail: `${names(noDiscount)} — السنوي يساوي أو يزيد عن ١٢ × الشهري، فلا حافز للاشتراك السنوي.`,
+        cta: 'تعديل التسعير',
+        action: () => openEdit(noDiscount[0], 'pricing'),
+      })
     }
 
-    for (const p of manual) {
-      if (p.isActive && featureList(p.features).length === 0) {
-        list.push({
-          id: `no-features-${p.id}`,
-          tone: 'tip',
-          title: `«${p.name}» بلا قائمة مزايا`,
-          detail: 'المزايا تظهر في بطاقة الباقة وجدول المقارنة وتساعد العميل على الاختيار.',
-          cta: 'إضافة مزايا',
-          action: () => openEdit(p, 'features'),
-        })
-      }
+    const noYearly = manual.filter((p) => p.isActive && p.priceMonthly > 0 && p.priceYearly === 0)
+    if (noYearly.length > 0) {
+      list.push({
+        id: `no-yearly-${noYearly.map((p) => p.id).join('-')}`,
+        tone: 'info',
+        title: noYearly.length === 1 ? `«${noYearly[0].name}» بلا سعر سنوي` : `${noYearly.length} باقات بلا سعر سنوي`,
+        detail: `${names(noYearly)} — إضافة سعر سنوي بخصم تزيد الاشتراكات الطويلة.`,
+        cta: 'إضافة سعر سنوي',
+        action: () => openEdit(noYearly[0], 'pricing'),
+      })
+    }
+
+    const noFeatures = manual.filter((p) => p.isActive && featureList(p.features).length === 0)
+    if (noFeatures.length > 0) {
+      list.push({
+        id: `no-features-${noFeatures.map((p) => p.id).join('-')}`,
+        tone: 'tip',
+        title: noFeatures.length === 1 ? `«${noFeatures[0].name}» بلا قائمة مزايا` : `${noFeatures.length} باقات بلا قائمة مزايا`,
+        detail: `${names(noFeatures)} — المزايا تظهر في البطاقة وجدول المقارنة وتساعد العميل على الاختيار.`,
+        cta: noFeatures.length === 1 ? 'إضافة مزايا' : 'ابدأ بالأولى',
+        action: () => openEdit(noFeatures[0], 'features'),
+      })
     }
 
     if (stats.totalSubs > 0) {
@@ -545,12 +589,12 @@ export function AdminPlansView() {
   return (
     <div className="space-y-5 pb-10">
       {/* ═══ 1. البطل: العنوان + لوحة المؤشرات (Bento) ═══ */}
-      <section className="animate-in-up relative overflow-hidden rounded-[2rem] border bg-gradient-to-br from-indigo-500/[0.10] via-card to-violet-500/[0.09] p-4 shadow-sm sm:p-6">
-        <div aria-hidden className="pointer-events-none absolute -top-24 -start-16 size-72 rounded-full bg-indigo-500/25 blur-3xl" />
-        <div aria-hidden className="pointer-events-none absolute -bottom-28 end-0 size-80 rounded-full bg-fuchsia-500/15 blur-3xl" />
+      <section className="animate-in-up relative overflow-hidden rounded-[2rem] border border-foreground/15 bg-card p-4 shadow-sm sm:p-6">
+        <div aria-hidden className="pointer-events-none absolute -top-24 -start-16 size-72 rounded-full bg-indigo-500/10 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-28 end-0 size-80 rounded-full bg-fuchsia-500/8 blur-3xl" />
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-[0.35] [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)] dark:opacity-20"
+          className="pointer-events-none absolute inset-0 opacity-[0.15] [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)] dark:opacity-20"
           style={{
             backgroundImage:
               'radial-gradient(circle at 1px 1px, rgba(99,102,241,0.35) 1px, transparent 0)',
@@ -567,7 +611,7 @@ export function AdminPlansView() {
               </span>
               <div>
                 <h1 className="text-xl font-black leading-tight sm:text-2xl">خطط الاشتراك</h1>
-                <p className="text-[12px] font-medium text-muted-foreground">
+                <p className="text-[14.5px] font-medium text-foreground/70">
                   تحكّم كامل في الباقات والتسعير والمشتركين — مع تحليلات مباشرة
                 </p>
               </div>
@@ -581,7 +625,7 @@ export function AdminPlansView() {
                 title="تصدير الباقات (CSV)"
                 disabled={plans.length === 0}
                 onClick={() => exportCsv(filtered.length > 0 ? filtered : plans)}
-                className="size-10 rounded-xl bg-background/60 backdrop-blur"
+                className="size-10 rounded-xl bg-card"
               >
                 <Download className="size-4" />
               </Button>
@@ -592,7 +636,7 @@ export function AdminPlansView() {
                 title="تحديث"
                 onClick={() => load(true)}
                 disabled={refreshing || loading}
-                className="size-10 rounded-xl bg-background/60 backdrop-blur"
+                className="size-10 rounded-xl bg-card"
               >
                 <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
               </Button>
@@ -602,7 +646,7 @@ export function AdminPlansView() {
               >
                 <Plus className="size-4" strokeWidth={2.6} />
                 باقة جديدة
-                <kbd className="hidden rounded-md bg-white/20 px-1.5 py-0.5 font-mono text-[10px] font-bold sm:inline">N</kbd>
+                <kbd className="hidden rounded-md bg-white/20 px-1.5 py-0.5 font-mono text-[12.5px] font-bold sm:inline">N</kbd>
               </Button>
             </div>
           </div>
@@ -610,10 +654,10 @@ export function AdminPlansView() {
           {/* لوحة المؤشرات */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {/* MRR + توزيع الإيراد */}
-            <div className="col-span-2 rounded-3xl border bg-background/70 p-4 shadow-sm backdrop-blur sm:p-5">
+            <div className="col-span-2 rounded-3xl border border-foreground/15 bg-card p-4 shadow-md sm:p-5">
               <div className="flex items-start justify-between gap-2">
                 <p
-                  className="flex items-center gap-1.5 text-[12px] font-bold text-muted-foreground"
+                  className="flex items-center gap-1.5 text-[14.5px] font-bold text-foreground/70"
                   title="تقدير: (المشتركون الشهريون × السعر الشهري) + (السنويون × السعر السنوي ÷ 12) — بدون فترات التجربة"
                 >
                   <Wallet className="size-3.5 text-indigo-500" />
@@ -634,7 +678,7 @@ export function AdminPlansView() {
                     value={stats.mrr}
                     className="bg-gradient-to-l from-indigo-600 via-violet-600 to-fuchsia-600 bg-clip-text text-4xl font-black tracking-tight text-transparent sm:text-5xl dark:from-indigo-300 dark:via-violet-300 dark:to-fuchsia-300"
                   />
-                  <span className="text-sm font-bold text-muted-foreground">ج.م / شهر</span>
+                  <span className="text-[15.5px] font-bold text-foreground/70">ج.م / شهر</span>
                 </p>
               )}
 
@@ -677,10 +721,10 @@ export function AdminPlansView() {
                               setDetailsId(p.id)
                               setDetailsOpen(true)
                             }}
-                            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                            className="inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-foreground/70 transition-colors hover:text-foreground"
                           >
                             <span className={cn('size-2 rounded-full', themeFor(themeIndexById.get(p.id) ?? 0).dot)} />
-                            <span className="max-w-[120px] truncate">{p.name}</span>
+                            <span>{p.name}</span>
                             <span className="font-mono font-black tabular-nums text-foreground">
                               {Math.round((planMrr(p) / stats.mrr) * 100)}%
                             </span>
@@ -689,7 +733,7 @@ export function AdminPlansView() {
                     </div>
                   </>
                 ) : (
-                  <p className="rounded-2xl border border-dashed px-3 py-2.5 text-center text-[11.5px] text-muted-foreground">
+                  <p className="rounded-2xl border border-dashed px-3 py-2.5 text-center text-[14px] text-foreground/70">
                     {stats.totalSubs > 0
                       ? 'كل المشتركين الحاليين في فترة تجربة — لا يوجد إيراد متكرر بعد.'
                       : 'لا يوجد إيراد بعد — سيظهر توزيع الإيراد هنا مع أول اشتراك مدفوع.'}
@@ -699,8 +743,8 @@ export function AdminPlansView() {
             </div>
 
             {/* المشتركون */}
-            <div className="rounded-3xl border bg-background/70 p-4 shadow-sm backdrop-blur">
-              <p className="flex items-center gap-1.5 text-[12px] font-bold text-muted-foreground">
+            <div className="rounded-3xl border border-foreground/15 bg-card p-4 shadow-md">
+              <p className="flex items-center gap-1.5 text-[14.5px] font-bold text-foreground/70">
                 <Users className="size-3.5 text-violet-500" />
                 المشتركون النشطون
               </p>
@@ -720,7 +764,7 @@ export function AdminPlansView() {
                   ) : null,
                 )}
               </div>
-              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] font-semibold text-muted-foreground">
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[13px] font-semibold text-foreground/70">
                 <span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-indigo-500" />شهري {stats.monthly}</span>
                 <span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-violet-500" />سنوي {stats.yearly}</span>
                 <span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full bg-amber-400" />تجربة {stats.trials}</span>
@@ -736,10 +780,10 @@ export function AdminPlansView() {
                 'rounded-3xl border p-4 text-start shadow-sm backdrop-blur transition-all',
                 stats.expiring > 0
                   ? 'border-amber-500/30 bg-amber-500/[0.09] hover:-translate-y-0.5 hover:shadow-md'
-                  : 'cursor-default bg-background/70',
+                  : 'cursor-default bg-card',
               )}
             >
-              <p className="flex items-center gap-1.5 text-[12px] font-bold text-muted-foreground">
+              <p className="flex items-center gap-1.5 text-[14.5px] font-bold text-foreground/70">
                 <CalendarClock className={cn('size-3.5', stats.expiring > 0 ? 'text-amber-500' : 'text-emerald-500')} />
                 ينتهي خلال 14 يوماً
               </p>
@@ -751,7 +795,7 @@ export function AdminPlansView() {
                   className={cn('mt-2 block text-4xl font-black tracking-tight', stats.expiring > 0 && 'text-amber-600 dark:text-amber-400')}
                 />
               )}
-              <p className="mt-3 text-[10.5px] font-semibold text-muted-foreground">
+              <p className="mt-3 text-[13px] font-semibold text-foreground/70">
                 {stats.expiring > 0
                   ? quick === 'expiring'
                     ? 'الفلتر مفعّل — اضغط للإلغاء'
@@ -778,10 +822,10 @@ export function AdminPlansView() {
       {!loading && insights.length > 0 && (
         <section aria-label="تنبيهات ذكية" className="animate-in-up stagger-1 space-y-2.5">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="flex items-center gap-1.5 text-[13px] font-black">
+            <h2 className="flex items-center gap-1.5 text-[15.5px] font-black">
               <Lightbulb className="size-4 text-indigo-500" />
               تنبيهات ذكية
-              <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10.5px] font-black text-indigo-600 dark:text-indigo-300">
+              <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[13px] font-black text-indigo-600 dark:text-indigo-300">
                 {insights.length}
               </span>
             </h2>
@@ -789,7 +833,7 @@ export function AdminPlansView() {
               <button
                 type="button"
                 onClick={() => setShowAllInsights((v) => !v)}
-                className="text-[11.5px] font-bold text-indigo-600 hover:underline dark:text-indigo-300"
+                className="text-[14px] font-bold text-indigo-600 hover:underline dark:text-indigo-300"
               >
                 {showAllInsights ? 'عرض أقل' : `عرض الكل (${insights.length})`}
               </button>
@@ -804,13 +848,13 @@ export function AdminPlansView() {
                     <st.icon className="size-4" />
                   </span>
                   <div className="min-w-0">
-                    <p className="text-[12.5px] font-extrabold leading-snug">{ins.title}</p>
-                    <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">{ins.detail}</p>
+                    <p className="text-[15px] font-extrabold leading-snug">{ins.title}</p>
+                    <p className="mt-0.5 text-[14px] leading-relaxed text-foreground/90">{ins.detail}</p>
                     {ins.cta && ins.action && (
                       <button
                         type="button"
                         onClick={ins.action}
-                        className="mt-1.5 text-[11.5px] font-black text-indigo-600 hover:underline dark:text-indigo-300"
+                        className="mt-1.5 text-[14px] font-black text-indigo-600 hover:underline dark:text-indigo-300"
                       >
                         {ins.cta} ←
                       </button>
@@ -820,7 +864,7 @@ export function AdminPlansView() {
                     type="button"
                     aria-label="إخفاء التنبيه"
                     onClick={() => setDismissed((prev) => new Set(prev).add(ins.id))}
-                    className="absolute end-2.5 top-2.5 flex size-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
+                    className="absolute end-2.5 top-2.5 flex size-6 items-center justify-center rounded-full text-foreground/70 transition-colors hover:bg-background/80 hover:text-foreground"
                   >
                     <X className="size-3.5" />
                   </button>
@@ -833,10 +877,22 @@ export function AdminPlansView() {
 
       {/* ═══ 3. شريط الأدوات ═══ */}
       {!noData && !loadError && (
-        <section className="animate-in-up stagger-2 sticky top-2 z-20 space-y-2.5 rounded-3xl border bg-card/80 p-3 shadow-sm backdrop-blur-xl sm:p-3.5">
+        <>
+      <div ref={sentinelRef} aria-hidden className="-mb-px h-px" />
+      <div
+        ref={barRef}
+        style={{ marginBottom: compact ? extraMb : 0 }}
+        className="sticky -top-4 z-30 -mx-4 bg-background px-4 pb-2 pt-4 sm:-top-6 sm:-mx-6 sm:px-6 sm:pt-5"
+      >
+        <section
+          className={cn(
+            'animate-in-up stagger-2 relative rounded-3xl border border-foreground/15 bg-card p-3 shadow-md transition-[padding] sm:p-3.5',
+            !compact && 'space-y-2.5',
+          )}
+        >
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[200px] flex-1">
-              <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-foreground/70" />
               <Input
                 ref={searchRef}
                 value={search}
@@ -848,27 +904,27 @@ export function AdminPlansView() {
                   }
                 }}
                 placeholder="ابحث بالاسم أو الكود…"
-                className="h-10 rounded-full bg-muted/50 ps-10 pe-10"
+                className="h-10 rounded-full bg-muted ps-10 pe-10"
               />
               {search ? (
                 <button
                   type="button"
                   aria-label="مسح البحث"
                   onClick={() => setSearch('')}
-                  className="absolute end-3 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full bg-muted-foreground/20 text-muted-foreground hover:bg-muted-foreground/30"
+                  className="absolute end-3 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full bg-muted-foreground/20 text-foreground/70 hover:bg-muted-foreground/30"
                 >
                   <X className="size-3" />
                 </button>
               ) : (
-                <kbd className="pointer-events-none absolute end-3 top-1/2 hidden -translate-y-1/2 rounded-md border bg-background px-1.5 py-0.5 font-mono text-[10px] font-bold text-muted-foreground sm:block">
+                <kbd className="pointer-events-none absolute end-3 top-1/2 hidden -translate-y-1/2 rounded-md border bg-background px-1.5 py-0.5 font-mono text-[12.5px] font-bold text-foreground/70 sm:block">
                   /
                 </kbd>
               )}
             </div>
 
             <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
-              <SelectTrigger className="h-10 w-[170px] gap-1.5 rounded-full bg-muted/50" aria-label="ترتيب الباقات">
-                <ArrowUpDown className="size-3.5 text-muted-foreground" />
+              <SelectTrigger className="h-10 w-[170px] gap-1.5 rounded-full bg-muted" aria-label="ترتيب الباقات">
+                <ArrowUpDown className="size-3.5 text-foreground/70" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -902,9 +958,35 @@ export function AdminPlansView() {
                 { value: 'compare', label: 'مقارنة', icon: Table2 },
               ]}
             />
+
+            {compact && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setFiltersOpen((v) => !v)}
+                aria-expanded={filtersOpen}
+                className="h-10 gap-1.5 rounded-full"
+              >
+                <SlidersHorizontal className="size-4" />
+                الفلاتر
+                {activeFilterCount > 0 && (
+                  <span className="rounded-full bg-indigo-600 px-1.5 text-[12px] font-black text-white">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </Button>
+            )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div
+            className={cn(
+              'flex flex-wrap items-center gap-2',
+              compact &&
+                (filtersOpen
+                  ? 'absolute inset-x-0 top-full z-10 mt-2 rounded-3xl border border-foreground/15 bg-card p-3 shadow-xl'
+                  : 'hidden'),
+            )}
+          >
             <Segmented<TypeFilter>
               compact
               ariaLabel="فلتر نوع النشاط"
@@ -941,7 +1023,7 @@ export function AdminPlansView() {
             />
 
             {(hasFilters || filtered.length !== plans.length) && (
-              <span className="ms-auto inline-flex items-center gap-2 rounded-full bg-indigo-500/10 px-3 py-1 text-[11px] font-bold text-indigo-700 dark:text-indigo-300">
+              <span className="ms-auto inline-flex items-center gap-2 rounded-full bg-indigo-500/10 px-3 py-1 text-[13.5px] font-bold text-indigo-700 dark:text-indigo-300">
                 {filtered.length} / {plans.length} باقة
                 {hasFilters && (
                   <button
@@ -956,13 +1038,15 @@ export function AdminPlansView() {
             )}
           </div>
         </section>
+      </div>
+      </>
       )}
 
       {/* ═══ 4. المحتوى ═══ */}
       {loading ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="space-y-4 rounded-3xl border bg-card p-5 shadow-sm">
+            <div key={i} className="space-y-4 rounded-3xl border border-foreground/15 bg-card p-5 shadow-sm">
               <div className="flex items-center gap-3">
                 <Skeleton className="size-11 rounded-2xl" />
                 <div className="flex-1 space-y-2">
@@ -983,24 +1067,24 @@ export function AdminPlansView() {
           ))}
         </div>
       ) : loadError ? (
-        <div className="animate-in-up flex flex-col items-center justify-center rounded-3xl border border-dashed bg-card/60 px-6 py-16 text-center">
+        <div className="animate-in-up flex flex-col items-center justify-center rounded-3xl border border-dashed bg-card px-6 py-16 text-center">
           <span className="flex size-14 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500">
             <WifiOff className="size-7" />
           </span>
           <h3 className="mt-4 text-base font-black">تعذّر تحميل الباقات</h3>
-          <p className="mt-1 max-w-sm text-xs text-muted-foreground">{loadError}</p>
+          <p className="mt-1 max-w-sm text-[14px] text-foreground/70">{loadError}</p>
           <Button onClick={() => load()} className="mt-4 gap-1.5 rounded-xl">
             <RefreshCw className="size-4" />
             إعادة المحاولة
           </Button>
         </div>
       ) : noData ? (
-        <div className="animate-in-up flex flex-col items-center justify-center rounded-3xl border border-dashed bg-card/60 px-6 py-16 text-center">
+        <div className="animate-in-up flex flex-col items-center justify-center rounded-3xl border border-dashed bg-card px-6 py-16 text-center">
           <span className="flex size-16 items-center justify-center rounded-3xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-xl shadow-indigo-500/30">
             <Sparkles className="size-8" />
           </span>
           <h3 className="mt-5 text-lg font-black">لا توجد باقات بعد</h3>
-          <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted-foreground">
+          <p className="mt-1.5 max-w-sm text-[14px] leading-relaxed text-foreground/70">
             أنشئ أول باقة (سعر، حدود، مزايا، وحدات) وستظهر هنا مع تحليلات الإيراد والمشتركين مباشرة.
           </p>
           <Button
@@ -1012,10 +1096,10 @@ export function AdminPlansView() {
           </Button>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="animate-in-up flex flex-col items-center justify-center rounded-3xl border border-dashed bg-card/60 px-6 py-14 text-center">
-          <Search className="size-9 text-muted-foreground/50" strokeWidth={1.6} />
-          <h3 className="mt-3 text-sm font-black">لا توجد نتائج مطابقة</h3>
-          <p className="mt-1 text-xs text-muted-foreground">جرّب تعديل البحث أو الفلاتر</p>
+        <div className="animate-in-up flex flex-col items-center justify-center rounded-3xl border border-dashed bg-card px-6 py-14 text-center">
+          <Search className="size-9 text-foreground/70/50" strokeWidth={1.6} />
+          <h3 className="mt-3 text-[15.5px] font-black">لا توجد نتائج مطابقة</h3>
+          <p className="mt-1 text-[14px] text-foreground/70">جرّب تعديل البحث أو الفلاتر</p>
           <Button variant="outline" size="sm" onClick={clearFilters} className="mt-3 rounded-full">
             مسح الفلاتر
           </Button>
@@ -1040,12 +1124,12 @@ export function AdminPlansView() {
             <button
               type="button"
               onClick={() => openCreate()}
-              className="animate-in-up group flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed bg-card/40 p-6 text-muted-foreground transition-all hover:-translate-y-1 hover:border-indigo-500/50 hover:bg-indigo-500/[0.05] hover:text-indigo-600 dark:hover:text-indigo-300"
+              className="animate-in-up group flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed bg-card p-6 text-foreground/70 transition-all hover:-translate-y-1 hover:border-indigo-500/50 hover:bg-indigo-500/[0.05] hover:text-indigo-600 dark:hover:text-indigo-300"
             >
               <span className="flex size-12 items-center justify-center rounded-2xl border-2 border-dashed transition-colors group-hover:border-indigo-500/50">
                 <Plus className="size-6" />
               </span>
-              <span className="text-sm font-black">باقة جديدة</span>
+              <span className="text-[15.5px] font-black">باقة جديدة</span>
             </button>
           )}
         </div>
@@ -1070,7 +1154,7 @@ export function AdminPlansView() {
       )}
 
       {!loading && !noData && !loadError && (
-        <p className="text-center text-[10.5px] font-medium text-muted-foreground">
+        <p className="text-center text-[13px] font-medium text-foreground/70">
           اختصارات: <kbd className="rounded border bg-muted px-1 font-mono">/</kbd> بحث ·{' '}
           <kbd className="rounded border bg-muted px-1 font-mono">N</kbd> باقة جديدة · الإيراد المعروض تقدير من الاشتراكات
           النشطة
@@ -1121,7 +1205,7 @@ export function AdminPlansView() {
                   : 'سيتم تعطيل الباقة (لن تظهر للعملاء الجدد) وتستمر الاشتراكات الحالية حتى انتهائها. الباقات القياسية لا تُحذف نهائياً.'}
               </span>
               {removeTarget && removeTarget.subscribersCount > 0 && (
-                <span className="block rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] font-semibold text-amber-800 dark:text-amber-200">
+                <span className="block rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[14.5px] font-semibold text-amber-800 dark:text-amber-200">
                   ⚠️ لديها {removeTarget.subscribersCount} مشترك نشط.
                 </span>
               )}

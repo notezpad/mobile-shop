@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Target, Search, Download, RefreshCw, ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Users, CreditCard, Wallet, FlaskConical, Globe, Infinity as MetaIcon, Instagram, Music2, MessageCircle, Mail, Send, AlertCircle } from 'lucide-react'
+import { Search, Download, RefreshCw, ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Users, CreditCard, Wallet, FlaskConical, Globe, Infinity as MetaIcon, Instagram, Music2, MessageCircle, Mail, Send, AlertCircle } from 'lucide-react'
 import { FilterBar, type RangeFilterState, initialRange, rangeParams, fetchJson, fmtNum, fmtPct100, fmtMoney, DataIssueBanner } from './shared'
 import './attribution-report.css'
 
@@ -56,7 +56,7 @@ function BrandMark({ brand }: { brand: BrandKey }) {
 function SortHead({ column, sortBy, order, onSort, children, className = 'report-number-col' }: { column: SortKey; sortBy: SortKey; order: 'asc' | 'desc'; onSort: (key: SortKey) => void; children: React.ReactNode; className?: string }) {
   const active = column === sortBy
   const Icon = active ? (order === 'desc' ? ArrowDown : ArrowUp) : ArrowUpDown
-  return <TableHead scope="col" className={className} aria-sort={active ? (order === 'desc' ? 'descending' : 'ascending') : 'none'}><Button type="button" variant="ghost" className="report-sort" data-active={active} onClick={() => onSort(column)} aria-label={`ترتيب حسب ${SORT_LABELS[column]}`} title={SORT_LABELS[column]}>{children}<Icon /></Button></TableHead>
+  return <TableHead scope="col" className={className} aria-sort={active ? (order === 'desc' ? 'descending' : 'ascending') : 'none'}><Button type="button" variant="ghost" className="report-sort h-auto gap-1 whitespace-normal px-1.5 py-1 text-[12px] font-bold leading-tight hover:bg-transparent" data-active={active} onClick={() => onSort(column)} aria-label={`ترتيب حسب ${SORT_LABELS[column]}`} title={SORT_LABELS[column]}><span>{children}</span><Icon className="size-3 shrink-0" /></Button></TableHead>
 }
 
 export function TrackingAttribution() {
@@ -124,30 +124,36 @@ export function TrackingAttribution() {
   const stats = [
     { label: 'التسجيلات', value: fmtNum(totals.registrations), hint: 'حسابات جديدة', icon: Users },
     { label: 'التجارب المجانية', value: fmtNum(totals.trials), hint: 'تجارب بدأت خلال الفترة', icon: FlaskConical },
-    { label: 'الاشتراكات المدفوعة', value: fmtNum(totals.purchases), hint: 'عمليات شراء مؤكدة', icon: CreditCard, tone: 'positive' },
-    { label: 'إجمالي الإيرادات', value: fmtMoney(totals.revenue), hint: 'المبالغ المدفوعة فعليًا', icon: Wallet, tone: 'positive' },
+    { label: 'الاشتراكات المدفوعة', value: fmtNum(totals.purchases), hint: 'عمليات شراء مؤكدة', icon: CreditCard },
+    { label: 'إجمالي الإيرادات', value: fmtNum(totals.revenue), unit: 'ج.م', hint: 'المبالغ المدفوعة فعليًا', icon: Wallet, tone: 'positive' },
   ]
   return (
     <section className="source-report" dir="rtl" aria-label="تقارير المصادر">
-      <header className="report-header">
-        <div className="min-w-0"><div className="report-heading-mark"><Target /><h2>تقارير المصادر</h2></div><p>أداء قنوات الوصول والحملات الإعلانية</p></div>
+      <h2 className="sr-only">تقارير المصادر</h2>
+      <div className="report-top">
+        <div className="report-filter-band"><FilterBar value={filters} onChange={changeFilters} /></div>
         <div className="report-actions">
           <Button type="button" variant="outline" onClick={() => void load()} disabled={loading} aria-label="تحديث التقرير" title="تحديث التقرير"><RefreshCw className={loading ? 'report-loading' : ''} /><span className="report-action-label">تحديث</span></Button>
           <Button type="button" onClick={exportCsv} disabled={unavailable || !visibleRows.length} aria-label="تصدير التقرير CSV" title="تصدير التقرير CSV"><Download /><span className="report-action-label">تصدير CSV</span></Button>
         </div>
-      </header>
-      <div className="report-filter-band"><FilterBar value={filters} onChange={changeFilters} /></div>
+      </div>
       {issue?.dataReady === false && <DataIssueBanner {...(issue.errorDetail === undefined ? {} : { errorDetail: issue.errorDetail })} />}
-      <div className="report-kpis">{stats.map((stat) => <div key={stat.label} className="report-kpi" data-tone={stat.tone}><div className="report-kpi-label"><stat.icon /><span>{stat.label}</span></div><strong>{unavailable || rows === null ? '—' : stat.value}</strong><small>{stat.hint}</small></div>)}</div>
+      {!unavailable && rows !== null && rows.length > 0 && totals.purchases === 0 && totals.revenue === 0 && (
+        <p className="report-hint" role="status">
+          <span aria-hidden="true">✓</span>
+          التتبع يعمل — سُجّل {fmtNum(totals.registrations)} حساب و{fmtNum(totals.trials)} تجربة خلال الفترة، ولا توجد اشتراكات مدفوعة بعد، لذلك الإيرادات صفر.
+        </p>
+      )}
+      <div className="report-kpis">{stats.map((stat) => <div key={stat.label} className="report-kpi" data-tone={stat.tone}><div className="report-kpi-label"><stat.icon /><span>{stat.label}</span></div><strong>{unavailable || rows === null ? '—' : <>{stat.value}{'unit' in stat && stat.unit ? <span className="report-unit">{stat.unit}</span> : null}</>}</strong><small>{stat.hint}</small></div>)}</div>
       <div className="report-workspace" aria-busy={loading}>
         <div className="report-toolbar">
           <div className="min-w-0"><h3 className="text-sm font-bold">المصادر والحملات <span className="report-count">{rows && !unavailable ? `${fmtNum(visibleRows.length)} مصدر / حملة` : ''}</span></h3></div>
-          <div className="report-search"><Search aria-hidden="true" /><Input aria-label="بحث في المصادر والحملات" placeholder="ابحث عن مصدر أو حملة…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} /></div>
+          <div className="report-search"><Search aria-hidden="true" /><Input className="h-10 rounded-lg ps-10" aria-label="بحث في المصادر والحملات" placeholder="ابحث عن مصدر أو حملة…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} /></div>
         </div>
         {loading ? <div className="report-skeleton" role="status" aria-label="جارٍ تحميل التقرير">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-14 w-full" />)}</div> : error ? <div className="report-state" role="alert"><AlertCircle /><h3>تعذّر تحميل التقرير</h3><p>{error}</p><Button variant="outline" onClick={() => void load()}><RefreshCw />إعادة المحاولة</Button></div> : issue?.dataReady === false ? <div className="report-state"><AlertCircle /><h3>بيانات التقرير غير متاحة حاليًا</h3><Button variant="outline" onClick={() => void load()}><RefreshCw />إعادة المحاولة</Button></div> : !visibleRows.length ? <div className="report-state"><Search /><h3>{search ? 'لا توجد نتائج مطابقة' : 'لا توجد بيانات في هذه الفترة'}</h3><p>{search ? 'جرّب اسم مصدر أو حملة أخرى.' : 'لم تُسجّل تحويلات بالمصادر والفلاتر المحددة.'}</p>{search ? <Button variant="outline" onClick={() => { setSearch(''); setPage(1) }}>مسح البحث</Button> : <Button variant="outline" onClick={() => changeFilters({ ...initialRange })}>إعادة ضبط الفلاتر</Button>}</div> : <Table aria-label="أداء المصادر والحملات">
           <TableHeader><TableRow>
             <TableHead scope="col" className="report-source-col">المصدر</TableHead><TableHead scope="col" className="report-medium-col">قناة الوصول</TableHead><TableHead scope="col" className="report-campaign-col">الحملة</TableHead>
-            <SortHead column="registrations" {...{ sortBy, order }} onSort={changeSort}>التسجيلات</SortHead><SortHead column="trials" {...{ sortBy, order }} onSort={changeSort}>التجارب</SortHead><TableHead scope="col" className="report-number-col">بدء الدفع</TableHead><SortHead column="purchases" {...{ sortBy, order }} onSort={changeSort}>الاشتراكات</SortHead><SortHead column="conversion" {...{ sortBy, order }} onSort={changeSort}>تجربة ← اشتراك</SortHead><SortHead column="revenue" {...{ sortBy, order }} onSort={changeSort} className="report-revenue-col">الإيرادات</SortHead>
+            <SortHead column="registrations" {...{ sortBy, order }} onSort={changeSort}>التسجيلات</SortHead><SortHead column="trials" {...{ sortBy, order }} onSort={changeSort}>التجارب</SortHead><TableHead scope="col" className="report-number-col">بدء الدفع</TableHead><SortHead column="purchases" {...{ sortBy, order }} onSort={changeSort}>الاشتراكات</SortHead><SortHead column="conversion" {...{ sortBy, order }} onSort={changeSort} className="report-conv-col">تجربة ← اشتراك</SortHead><SortHead column="revenue" {...{ sortBy, order }} onSort={changeSort} className="report-revenue-col">الإيرادات</SortHead>
           </TableRow></TableHeader>
           <TableBody>{pageRows.map((r, i) => {
             const identity = sourceIdentity(r.source)
@@ -158,7 +164,7 @@ export function TrackingAttribution() {
               <TableCell><span className="report-channel" data-paid={PAID_MEDIA.has(r.medium.trim().toLowerCase())} title={r.medium}>{channel}</span></TableCell>
               <TableCell><div className="report-campaign" dir={campaignLabel(r.campaign) === 'بدون حملة' ? 'rtl' : 'ltr'} title={r.campaign}>{campaignLabel(r.campaign)}</div></TableCell>
               <TableCell className="report-number-col">{fmtNum(r.registrations)}</TableCell><TableCell className="report-number-col">{fmtNum(r.trials)}</TableCell><TableCell className="report-number-col">{fmtNum(r.checkouts)}</TableCell><TableCell className={`report-number-col ${r.purchases > 0 ? 'report-purchases' : ''}`}>{fmtNum(r.purchases)}</TableCell>
-              <TableCell className="report-number-col"><div className="report-conversion"><span dir="ltr">{fmtPct100(r.trialToPaid)}</span>{r.trialToPaid !== null && <progress max={100} value={Math.max(0, Math.min(100, r.trialToPaid))} aria-label={`التحويل من تجربة إلى اشتراك: ${fmtPct100(r.trialToPaid)}`} />}</div></TableCell><TableCell className="report-revenue-col font-bold">{fmtMoney(r.revenue)}</TableCell>
+              <TableCell className="report-conv-col"><div className="report-conversion"><span dir="ltr">{fmtPct100(r.trialToPaid)}</span>{r.trialToPaid !== null && <progress max={100} value={Math.max(0, Math.min(100, r.trialToPaid))} aria-label={`التحويل من تجربة إلى اشتراك: ${fmtPct100(r.trialToPaid)}`} />}</div></TableCell><TableCell className="report-revenue-col font-bold">{fmtMoney(r.revenue)}</TableCell>
             </TableRow>
           })}</TableBody>
         </Table>}

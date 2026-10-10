@@ -63,7 +63,7 @@ function Section({
   return (
     <section className="space-y-2.5">
       <div className="flex items-center justify-between gap-2">
-        <h4 className="flex items-center gap-1.5 text-[12px] font-black tracking-wide text-muted-foreground">
+        <h4 className="flex items-center gap-1.5 text-[13.5px] font-black text-foreground">
           <Icon className="size-3.5 text-indigo-500" />
           {title}
         </h4>
@@ -167,7 +167,7 @@ function Body({
         <div className="relative flex items-start gap-3">
           <PlanGlyph plan={p} theme={theme} size="lg" />
           <div className="min-w-0 flex-1 text-start">
-            <SheetTitle className="truncate text-lg font-black leading-tight">{p.name}</SheetTitle>
+            <SheetTitle className="truncate text-base font-black leading-tight">{p.name}</SheetTitle>
             <SheetDescription asChild>
               <button
                 type="button"
@@ -175,7 +175,7 @@ function Body({
                   const ok = await copyText(p.code)
                   toast[ok ? 'success' : 'error'](ok ? 'تم نسخ الكود' : 'تعذّر النسخ')
                 }}
-                className="mt-0.5 inline-flex items-center gap-1 font-mono text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                className="mt-0.5 inline-flex items-center gap-1 font-mono text-[12.5px] text-foreground/70 transition-colors hover:text-foreground"
                 dir="ltr"
               >
                 <Hash className="size-3" />
@@ -193,13 +193,13 @@ function Body({
             type="button"
             onClick={onClose}
             aria-label="إغلاق"
-            className="flex size-8 shrink-0 items-center justify-center rounded-full border bg-background/70 text-muted-foreground backdrop-blur transition-colors hover:bg-background hover:text-foreground"
+            className="flex size-8 shrink-0 items-center justify-center rounded-full border bg-card text-foreground/70 backdrop-blur transition-colors hover:bg-background hover:text-foreground"
           >
             <X className="size-4" />
           </button>
         </div>
         {p.description && (
-          <p className="relative mt-3 text-start text-[12px] leading-relaxed text-muted-foreground">
+          <p className="relative mt-3 text-start text-[13px] leading-relaxed text-foreground/70">
             {p.description}
           </p>
         )}
@@ -215,7 +215,7 @@ function Body({
             <button
               type="button"
               onClick={() => onEdit(p, 'pricing')}
-              className="text-[11px] font-bold text-indigo-600 hover:underline dark:text-indigo-300"
+              className="text-[12.5px] font-bold text-indigo-600 hover:underline dark:text-indigo-300"
             >
               تعديل
             </button>
@@ -223,19 +223,19 @@ function Body({
         >
           <div className="grid grid-cols-2 gap-2.5">
             <div className="rounded-2xl border bg-card p-3">
-              <p className="text-[10.5px] font-semibold text-muted-foreground">شهرياً</p>
-              <p className="mt-0.5 font-mono text-xl font-black tabular-nums">
+              <p className="text-[12px] font-semibold text-foreground/70">شهرياً</p>
+              <p className="mt-0.5 font-mono text-lg font-black tabular-nums">
                 {p.priceMonthly === 0 ? 'مجاناً' : num(p.priceMonthly)}
-                {p.priceMonthly > 0 && <span className="ms-1 font-sans text-[10px] font-bold text-muted-foreground">ج.م</span>}
+                {p.priceMonthly > 0 && <span className="ms-1 font-sans text-[12px] font-bold text-foreground/70">ج.م</span>}
               </p>
             </div>
             <div className="rounded-2xl border bg-card p-3">
-              <p className="flex items-center justify-between text-[10.5px] font-semibold text-muted-foreground">
+              <p className="flex items-center justify-between text-[12px] font-semibold text-foreground/70">
                 سنوياً {pct > 0 && <Pill tone="emerald">-{pct}%</Pill>}
               </p>
-              <p className="mt-0.5 font-mono text-xl font-black tabular-nums">
+              <p className="mt-0.5 font-mono text-lg font-black tabular-nums">
                 {p.priceYearly === 0 ? '—' : num(p.priceYearly)}
-                {p.priceYearly > 0 && <span className="ms-1 font-sans text-[10px] font-bold text-muted-foreground">ج.م</span>}
+                {p.priceYearly > 0 && <span className="ms-1 font-sans text-[12px] font-bold text-foreground/70">ج.م</span>}
               </p>
             </div>
           </div>
@@ -250,16 +250,16 @@ function Body({
         <Section icon={TrendingUp} title="الأداء">
           <div className="grid grid-cols-2 gap-2.5">
             <div className="rounded-2xl border bg-gradient-to-br from-indigo-500/[0.09] to-violet-500/[0.04] p-3">
-              <p className="text-[10.5px] font-semibold text-muted-foreground">إيراد شهري متكرر</p>
-              <p className="mt-0.5 font-mono text-xl font-black tabular-nums">
-                {num(mrr)} <span className="font-sans text-[10px] font-bold text-muted-foreground">ج.م</span>
+              <p className="text-[12px] font-semibold text-foreground/70">إيراد شهري متكرر</p>
+              <p className="mt-0.5 font-mono text-lg font-black tabular-nums">
+                {num(mrr)} <span className="font-sans text-[12px] font-bold text-foreground/70">ج.م</span>
               </p>
-              <p className="text-[10.5px] font-semibold text-muted-foreground">{share}% من إجمالي الإيراد</p>
+              <p className="text-[12px] font-semibold text-foreground/70">{share}% من إجمالي الإيراد</p>
             </div>
             <div className="rounded-2xl border bg-card p-3">
-              <p className="text-[10.5px] font-semibold text-muted-foreground">المشتركون النشطون</p>
-              <p className="mt-0.5 font-mono text-xl font-black tabular-nums">{num(p.subscribersCount)}</p>
-              <p className="text-[10.5px] font-semibold text-muted-foreground">
+              <p className="text-[12px] font-semibold text-foreground/70">المشتركون النشطون</p>
+              <p className="mt-0.5 font-mono text-lg font-black tabular-nums">{num(p.subscribersCount)}</p>
+              <p className="text-[12px] font-semibold text-foreground/70">
                 ≈ {num(mrr * 12)} ج.م سنوياً
               </p>
             </div>
@@ -281,7 +281,7 @@ function Body({
               </div>
               <div className="flex flex-wrap gap-x-4 gap-y-1">
                 {split.map((s) => (
-                  <span key={s.label} className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+                  <span key={s.label} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-foreground/70">
                     <span className={cn('size-2 rounded-full', s.cls)} />
                     {s.label}
                     <span className="font-mono font-black text-foreground tabular-nums">{s.v}</span>
@@ -290,7 +290,7 @@ function Body({
               </div>
             </div>
           ) : (
-            <p className="rounded-2xl border border-dashed px-4 py-4 text-center text-[11.5px] text-muted-foreground">
+            <p className="rounded-2xl border border-dashed px-4 py-4 text-center text-[13px] text-foreground/70">
               لا يوجد مشتركون نشطون في هذه الباقة بعد.
             </p>
           )}
@@ -307,17 +307,37 @@ function Body({
               ) : undefined
             }
           >
-            <ul className="divide-y overflow-hidden rounded-2xl border bg-card">
+            <ul className="space-y-2">
               {p.nextExpiring!.map((s) => {
                 const d = daysLeft(s.endDate)
+                const urgent = d <= 3
                 return (
-                  <li key={s.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-[12.5px] font-bold">{s.shopName}</p>
-                      <p className="text-[10.5px] text-muted-foreground">{periodLabel(s.period)}</p>
+                  <li
+                    key={s.id}
+                    className={cn(
+                      'flex items-center gap-3 rounded-2xl border bg-card px-3 py-2.5',
+                      urgent ? 'border-rose-500/30' : d <= 14 ? 'border-amber-500/30' : '',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'flex size-9 shrink-0 items-center justify-center rounded-xl text-[13px] font-black',
+                        urgent
+                          ? 'bg-rose-500/10 text-rose-600 dark:text-rose-300'
+                          : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-300',
+                      )}
+                    >
+                      {(s.shopName || '?').trim().charAt(0)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-bold leading-tight">{s.shopName}</p>
+                      <p className="mt-0.5 text-[11.5px] text-foreground/60">
+                        {periodLabel(s.period)} · ينتهي{' '}
+                        {new Date(s.endDate).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' })}
+                      </p>
                     </div>
-                    <Pill tone={d < 0 ? 'rose' : d <= 3 ? 'rose' : d <= 14 ? 'amber' : 'neutral'}>
-                      {d < 0 ? 'منتهٍ' : d === 0 ? 'ينتهي اليوم' : `${d} يوم`}
+                    <Pill tone={d < 0 || urgent ? 'rose' : d <= 14 ? 'amber' : 'neutral'} className="shrink-0">
+                      {d < 0 ? 'منتهٍ' : d === 0 ? 'اليوم' : `${d} يوم`}
                     </Pill>
                   </li>
                 )
@@ -336,8 +356,8 @@ function Body({
             ].map((l) => (
               <div key={l.label} className="rounded-2xl border bg-card p-3 text-center">
                 <l.icon className={cn('mx-auto size-4', theme.text)} />
-                <p className="mt-1.5 font-mono text-lg font-black tabular-nums">{fmtLimit(l.v)}</p>
-                <p className="text-[10.5px] font-semibold text-muted-foreground">{l.label}</p>
+                <p className="mt-1.5 font-mono text-base font-black tabular-nums">{fmtLimit(l.v)}</p>
+                <p className="text-[12px] font-semibold text-foreground/70">{l.label}</p>
               </div>
             ))}
           </div>
@@ -352,7 +372,7 @@ function Body({
               <button
                 type="button"
                 onClick={() => onEdit(p, 'features')}
-                className="text-[11px] font-bold text-indigo-600 hover:underline dark:text-indigo-300"
+                className="text-[12.5px] font-bold text-indigo-600 hover:underline dark:text-indigo-300"
               >
                 تعديل
               </button>
@@ -360,7 +380,7 @@ function Body({
           >
             <ul className="space-y-1.5">
               {features.map((f, i) => (
-                <li key={`${f}-${i}`} className="flex items-start gap-2 text-[12.5px] leading-snug">
+                <li key={`${f}-${i}`} className="flex items-start gap-2 text-[13.5px] leading-snug">
                   <span className={cn('mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full', theme.soft, theme.text)}>
                     <Check className="size-2.5" strokeWidth={3.5} />
                   </span>
@@ -379,14 +399,14 @@ function Body({
             <button
               type="button"
               onClick={() => onEdit(p, 'modules')}
-              className="text-[11px] font-bold text-indigo-600 hover:underline dark:text-indigo-300"
+              className="text-[12.5px] font-bold text-indigo-600 hover:underline dark:text-indigo-300"
             >
               تعديل
             </button>
           }
         >
           {isDefault && (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[12.5px] text-foreground/70">
               هذه باقة قديمة بدون قائمة وحدات محفوظة — تُعرض الوحدات الافتراضية لنوع النشاط.
             </p>
           )}
@@ -398,10 +418,10 @@ function Body({
                   key={mod.key}
                   title={mod.desc}
                   className={cn(
-                    'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold',
+                    'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12.5px] font-bold',
                     on
                       ? 'border-indigo-500/25 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
-                      : 'border-dashed text-muted-foreground/60 line-through decoration-muted-foreground/30',
+                      : 'border-dashed text-foreground/70/60 line-through decoration-muted-foreground/30',
                   )}
                 >
                   {on && <Check className="size-3" strokeWidth={3} />}
@@ -422,10 +442,10 @@ function Body({
                   key={c.key}
                   title={c.desc}
                   className={cn(
-                    'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold',
+                    'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12.5px] font-bold',
                     on
                       ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                      : 'border-dashed text-muted-foreground/60 line-through decoration-muted-foreground/30',
+                      : 'border-dashed text-foreground/70/60 line-through decoration-muted-foreground/30',
                   )}
                 >
                   {on && <Check className="size-3" strokeWidth={3} />}

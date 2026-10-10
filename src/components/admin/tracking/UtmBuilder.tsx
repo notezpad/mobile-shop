@@ -2,20 +2,15 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════════
- *  🔗 روابط الحملات — UTM Builder + مكتبة الحملات  (Design 2026)
+ *  🔗 روابط الحملات — UTM Builder + مكتبة الحملات  (Design 2026 v3)
  * ═══════════════════════════════════════════════════════════════════
- *  لغة التصميم: Bento Modern بنفس tokens التطبيق (Emerald Premium)
- *   • هيرو بتدرّج Aurora ناعم + شبكة نقاط مقنّعة
- *   • بطاقات KPI على شبكة Bento + شريط توزيع الإيراد حسب المنصة
- *   • الباني بخطوات مرقّمة + منتقي منصة بالبطاقات (radiogroup)
- *   • معاينة حيّة لاصقة (sticky) تُلوِّن أجزاء الرابط (Syntax-highlighted URL)
- *   • مكتبة الروابط كقائمة صفوف غنية بدل الجدول (تعمل بنفس التخطيط على الجوال)
- *   • كل الألوان من tokens (primary / chart-* / success / warning / destructive)
- *     → يدعم الوضع الداكن تلقائياً بلا أي ألوان ثابتة
+ *  تحسينات v3:
+ *   • KPI بألوان أقوى (tint 16%، ink 82%، حدود 2-4px، ظل بلون البطاقة)
+ *   • شريط توزيع المنصات أسمك مع ring واضح
+ *   • شيبس توزيع بخلفية + ring حول الأيقونة
+ *   • حالة المكتبة الفارغة بأيقونة متدرجة
  *
- *  🔒 كل عقود API ومنطق البناء محفوظ حرفياً:
- *   GET/POST /api/admin/tracking/utm · PUT/DELETE /api/admin/tracking/utm/:id
- *   buildUtmUrl · getSuggestions · getMacros · toCsv · منطق touchedSM والتعديل
+ *  🔒 عقود API ومنطق البناء محفوظة حرفياً.
  */
 
 import * as React from 'react'
@@ -28,14 +23,13 @@ import {
   Facebook, Chrome, Music2, Link2, Search, Download, Pencil, Trash2,
   Archive, ArchiveRestore, Copy, Check, Loader2, AlertTriangle, XCircle,
   Plus, ChevronDown, Sparkles, UserPlus, ShoppingBag, Wallet, Inbox,
+  Target, TrendingUp, Sparkle, Rocket, BarChart3, Zap, Globe,
 } from 'lucide-react'
 import {
   buildUtmUrl, getSuggestions, getMacros, toCsv, UtmPlatform,
 } from '@/lib/tracking/utm'
 import { fetchJson, fmtPct100 } from './shared'
 import { cn } from '@/lib/utils'
-
-// ─── الأنواع (توافق حرفي مع استجابة API) ─────────────────────────────
 
 interface CampaignRow {
   id: number
@@ -69,22 +63,20 @@ const PLATFORMS: { key: UtmPlatform; label: string }[] = [
   { key: 'custom', label: 'مخصص' },
 ]
 
-/* ─── هوية كل منصة — ألوان من chart tokens (كلاسات ثابتة ليلتقطها Tailwind) ─── */
 const PLATFORM_UI: Record<
   string,
-  { short: string; sub: string; full: string; icon: React.ComponentType<{ className?: string }>; tile: string; dot: string }
+  { short: string; sub: string; full: string; icon: React.ComponentType<{ className?: string }>; tile: string; dot: string; ring: string }
 > = {
-  meta: { short: 'Meta', sub: 'فيسبوك وإنستجرام', full: 'ميتا · فيسبوك وإنستجرام', icon: Facebook, tile: 'bg-chart-3/12 text-chart-3', dot: 'bg-chart-3' },
-  google: { short: 'Google', sub: 'Google Ads', full: 'جوجل — إعلانات', icon: Chrome, tile: 'bg-chart-2/15 text-chart-2', dot: 'bg-chart-2' },
-  tiktok: { short: 'TikTok', sub: 'TikTok Ads', full: 'تيك توك — إعلانات', icon: Music2, tile: 'bg-chart-4/15 text-chart-4', dot: 'bg-chart-4' },
-  custom: { short: 'مخصص', sub: 'قناة أخرى', full: 'قناة مخصصة', icon: Link2, tile: 'bg-chart-6/15 text-chart-6', dot: 'bg-chart-6' },
+  meta: { short: 'Meta', sub: 'فيسبوك وإنستجرام', full: 'ميتا · فيسبوك وإنستجرام', icon: Facebook, tile: 'bg-chart-3/12 text-chart-3', dot: 'bg-chart-3', ring: 'ring-chart-3/30' },
+  google: { short: 'Google', sub: 'Google Ads', full: 'جوجل — إعلانات', icon: Chrome, tile: 'bg-chart-2/15 text-chart-2', dot: 'bg-chart-2', ring: 'ring-chart-2/30' },
+  tiktok: { short: 'TikTok', sub: 'TikTok Ads', full: 'تيك توك — إعلانات', icon: Music2, tile: 'bg-chart-4/15 text-chart-4', dot: 'bg-chart-4', ring: 'ring-chart-4/30' },
+  custom: { short: 'مخصص', sub: 'قناة أخرى', full: 'قناة مخصصة', icon: Link2, tile: 'bg-chart-6/15 text-chart-6', dot: 'bg-chart-6', ring: 'ring-chart-6/30' },
 }
 
 const TARGET_LABEL: Record<MacroTarget, string> = {
   content: 'utm_content', term: 'utm_term', campaign: 'utm_campaign', utmId: 'utm_id', source: 'utm_source',
 }
 
-/** خط أحادي المسافة حقيقي للروابط (خط التطبيق الأساسي ليس mono) */
 const MONO = '[font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace]'
 
 const emptyForm = {
@@ -99,26 +91,22 @@ const hostOf = (url: string) => {
   try { return new URL(url).host } catch { return url }
 }
 
-/** أرقام لاتينية — الصفر العربي «٠» يظهر كنقطة في خط Cairo فيضيع المعنى */
 const nf = (n: number | null | undefined) =>
   n == null ? '—' : new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(n)
 
-/** مبلغ بعملة صغيرة منفصلة — ترتيب ثابت بغض النظر عن اتجاه النص */
 function Money({ value, className }: { value: number; className?: string }) {
   return (
     <span className={cn('inline-flex items-baseline gap-1', className)}>
       <span dir="ltr">{nf(value)}</span>
-      <span className="text-[0.62em] font-semibold text-muted-foreground">ج.م</span>
+      <span className="text-[0.62em] font-semibold opacity-70">ج.م</span>
     </span>
   )
 }
 
-/** حقل موحّد: حدّ واضح وخلفية ثابتة في الفاتح والداكن */
 const FIELD = 'h-10 rounded-xl border-border-strong bg-card dark:bg-input/30'
 
 /* ═════════════════════════ مكونات مساعدة ═════════════════════════ */
 
-/** نسخ إلى الحافظة (clipboard + fallback) — مشترك بين الأزرار وحفظ-ونسخ */
 async function copyText(text: string) {
   try {
     await navigator.clipboard.writeText(text)
@@ -132,7 +120,6 @@ async function copyText(text: string) {
   }
 }
 
-/** زر نسخ */
 function CopyAction({
   text, label = 'نسخ الرابط', compact, className,
 }: { text: string; label?: string; compact?: boolean; className?: string }) {
@@ -163,7 +150,6 @@ function CopyAction({
   )
 }
 
-/** تبديل مقطّع (Segmented control) — نفس روح شريط الفلاتر في صفحات التتبع الأخرى */
 function Segmented<T extends string>({
   value, onChange, options, label,
 }: {
@@ -197,9 +183,10 @@ function Segmented<T extends string>({
   )
 }
 
-/** بطاقة KPI على شبكة Bento */
+/* ═════════════════════════ KPI Card — v3 (محسّن) ═════════════════════════ */
+
 function Kpi({
-  icon: Icon, label, value, money, hint, loading, tone = 'default', index,
+  icon: Icon, label, value, money, hint, loading, tone = 'default', rank,
 }: {
   icon: React.ComponentType<{ className?: string }>
   label: string
@@ -207,43 +194,107 @@ function Kpi({
   money?: boolean
   hint?: string
   loading?: boolean
-  tone?: 'default' | 'primary'
-  index: number
+  tone?: 'default' | 'primary' | 'info' | 'success' | 'warning'
+  rank: string
 }) {
+  const toneMap = {
+    default: {
+      ink: 'var(--chart-6)',
+      inkStrong: 'color-mix(in oklab, var(--chart-6) 82%, var(--foreground))',
+      surface: 'color-mix(in oklab, var(--chart-6) 16%, var(--card))',
+      glow: 'color-mix(in oklab, var(--chart-6) 22%, transparent)',
+      icon: 'bg-chart-6/25 text-chart-6',
+    },
+    info: {
+      ink: 'var(--chart-3)',
+      inkStrong: 'color-mix(in oklab, var(--chart-3) 82%, var(--foreground))',
+      surface: 'color-mix(in oklab, var(--chart-3) 16%, var(--card))',
+      glow: 'color-mix(in oklab, var(--chart-3) 22%, transparent)',
+      icon: 'bg-chart-3/25 text-chart-3',
+    },
+    success: {
+      ink: 'var(--chart-1)',
+      inkStrong: 'color-mix(in oklab, var(--chart-1) 82%, var(--foreground))',
+      surface: 'color-mix(in oklab, var(--chart-1) 16%, var(--card))',
+      glow: 'color-mix(in oklab, var(--chart-1) 22%, transparent)',
+      icon: 'bg-chart-1/25 text-chart-1',
+    },
+    warning: {
+      ink: 'var(--chart-2)',
+      inkStrong: 'color-mix(in oklab, var(--chart-2) 82%, var(--foreground))',
+      surface: 'color-mix(in oklab, var(--chart-2) 16%, var(--card))',
+      glow: 'color-mix(in oklab, var(--chart-2) 22%, transparent)',
+      icon: 'bg-chart-2/25 text-chart-2',
+    },
+    primary: {
+      ink: 'var(--primary)',
+      inkStrong: 'var(--primary)',
+      surface: 'var(--primary-subtle)',
+      glow: 'color-mix(in oklab, var(--primary) 22%, transparent)',
+      icon: 'bg-primary/25 text-primary',
+    },
+  }
+  const t = toneMap[tone]
   return (
     <div
-      className={cn(
-        'group animate-in-up relative overflow-hidden rounded-[1.25rem] border p-3.5 transition-shadow hover:shadow-md',
-        tone === 'primary' ? 'border-primary/25 bg-primary-subtle/70' : 'bg-card',
-        index === 1 && 'stagger-1', index === 2 && 'stagger-2', index === 3 && 'stagger-3', index === 4 && 'stagger-4',
-      )}
+      className="group animate-in-up relative overflow-hidden rounded-2xl transition-all hover:-translate-y-0.5 hover:shadow-lg"
+      style={{
+        borderWidth: 1,
+        borderStyle: 'solid',
+        borderColor: `color-mix(in oklab, ${t.ink} 35%, var(--border))`,
+        borderTopWidth: 4,
+        borderTopColor: t.ink,
+        background: `
+          radial-gradient(220px 100px at 100% -10%, ${t.glow}, transparent 65%),
+          ${t.surface}
+        `,
+        boxShadow: `0 1px 3px -1px color-mix(in oklab, ${t.ink} 25%, transparent), 0 4px 12px -6px color-mix(in oklab, ${t.ink} 20%, transparent)`,
+        padding: '1rem',
+      }}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <span
-          className={cn(
-            'grid size-8 place-items-center rounded-xl transition-transform group-hover:scale-105',
-            tone === 'primary' ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
-          )}
-        >
-          <Icon className="size-4" aria-hidden />
-        </span>
-      </div>
-      <div className="mt-2 min-h-9">
+      <span
+        className="absolute top-3 end-4 font-mono text-[11px] font-black tabular-nums tracking-wider"
+        style={{ color: t.ink, opacity: 0.7 }}
+      >
+        {rank}
+      </span>
+      <span
+        className={cn(
+          'grid size-10 place-items-center rounded-xl ring-1 ring-inset transition-transform group-hover:scale-105',
+          t.icon,
+        )}
+      >
+        <Icon className="size-[18px]" aria-hidden />
+      </span>
+      <p className="mt-3 text-[11.5px] font-bold" style={{ color: t.inkStrong }}>
+        {label}
+      </p>
+      <div className="mt-1.5 min-h-10">
         {loading ? (
-          <Skeleton className="h-8 w-24 rounded-lg" />
+          <Skeleton className="h-9 w-24 rounded-lg" />
         ) : (
-          <p className="truncate text-2xl font-black tabular-nums tracking-tight">
+          <p
+            className="truncate font-mono text-[28px] font-black leading-none tabular-nums tracking-tight"
+            style={{
+              color: t.inkStrong,
+              fontVariantNumeric: 'lining-nums tabular-nums',
+            }}
+          >
             {money ? <Money value={value} /> : <span dir="ltr">{nf(value)}</span>}
           </p>
         )}
       </div>
-      {hint && <p className="mt-1 truncate text-[11px] text-muted-foreground">{hint}</p>}
+      {hint && (
+        <p className="mt-2 truncate text-[10.5px] font-medium text-muted-foreground">
+          {hint}
+        </p>
+      )}
     </div>
   )
 }
 
-/** الرابط النهائي مُلوَّن الأجزاء: الأساس / المفاتيح / القيم */
+/* ═════════════════════════ URL Highlight ═════════════════════════ */
+
 function UrlHighlight({ url }: { url: string }) {
   const parsed = React.useMemo(() => {
     try {
@@ -274,7 +325,8 @@ function UrlHighlight({ url }: { url: string }) {
   )
 }
 
-/** شرائح المتغيرات الديناميكية للمنصة — نفس سلوك الإضافة (تُطبَّق على target الخاص بها) */
+/* ═════════════════════════ Chips ═════════════════════════ */
+
 function MacroChips({
   platform, onApply,
 }: { platform: string; onApply: (target: MacroTarget, macro: string) => void }) {
@@ -282,7 +334,8 @@ function MacroChips({
   if (!items.length) return null
   return (
     <div className="space-y-2">
-      <p className="text-[11px] font-medium text-muted-foreground">
+      <p className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+        <Zap className="size-3 text-primary" aria-hidden />
         متغيرات المنصة الديناميكية — تستبدلها المنصة تلقائياً عند عرض الإعلان
       </p>
       <div className="flex flex-wrap gap-1.5">
@@ -304,7 +357,6 @@ function MacroChips({
   )
 }
 
-/** اقتراحات سريعة لقيم source / medium */
 function SuggestChips({ values, current, onPick }: { values: string[]; current: string; onPick: (v: string) => void }) {
   if (!values.length) return null
   return (
@@ -329,7 +381,8 @@ function SuggestChips({ values, current, onPick }: { values: string[]; current: 
   )
 }
 
-/** صف رابط في المكتبة */
+/* ═════════════════════════ Campaign Item ═════════════════════════ */
+
 function CampaignItem({
   c, perf, maxRev, onEdit, onToggleArchive, onRemove,
 }: {
@@ -347,13 +400,12 @@ function CampaignItem({
   return (
     <li
       className={cn(
-        'group grid gap-3 rounded-2xl border bg-card p-3.5 transition-all hover:border-border-strong hover:shadow-md md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-center md:gap-5',
+        'group grid gap-3 rounded-2xl border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-border-strong hover:shadow-lg md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-center md:gap-5',
         c.archived && 'opacity-65',
       )}
     >
-      {/* الهوية */}
       <div className="flex min-w-0 items-center gap-3">
-        <span className={cn('grid size-11 shrink-0 place-items-center rounded-xl', ui.tile)} title={ui.full}>
+        <span className={cn('grid size-11 shrink-0 place-items-center rounded-xl ring-1 ring-inset', ui.tile, ui.ring)} title={ui.full}>
           <Icon className="size-5" aria-hidden />
         </span>
         <div className="min-w-0">
@@ -366,7 +418,7 @@ function CampaignItem({
             )}
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <span dir="ltr" className={cn('max-w-full truncate rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-foreground/80', MONO)} title={c.fullUrl}>
+            <span dir="ltr" className={cn('max-w-full truncate rounded-md bg-primary/8 px-1.5 py-0.5 text-[11px] font-semibold text-primary', MONO)} title={c.fullUrl}>
               {c.utmCampaign}
             </span>
             <span dir="ltr" className={cn('text-[10.5px] text-muted-foreground', MONO)}>
@@ -377,29 +429,31 @@ function CampaignItem({
               {hostOf(c.destinationUrl)}
             </span>
           </div>
+          <p className="mt-1 text-[10.5px] text-muted-foreground/70">
+            أُنشئت {fmtDay(c.createdAt)}
+          </p>
         </div>
       </div>
 
-      {/* الأداء */}
       <div className="min-w-0">
         {perf ? (
           <>
             <dl className="grid grid-cols-3 gap-2">
               <div>
-                <dt className="text-[10px] text-muted-foreground">تسجيلات</dt>
-                <dd className="text-[13px] font-bold tabular-nums"><span dir="ltr">{nf(perf.registrations)}</span></dd>
+                <dt className="text-[10px] font-medium text-muted-foreground">تسجيلات</dt>
+                <dd className="font-mono text-[13px] font-bold tabular-nums"><span dir="ltr">{nf(perf.registrations)}</span></dd>
               </div>
               <div>
-                <dt className="text-[10px] text-muted-foreground">مدفوعات</dt>
-                <dd className="text-[13px] font-bold tabular-nums"><span dir="ltr">{nf(perf.purchases)}</span></dd>
+                <dt className="text-[10px] font-medium text-muted-foreground">مدفوعات</dt>
+                <dd className="font-mono text-[13px] font-bold tabular-nums"><span dir="ltr">{nf(perf.purchases)}</span></dd>
               </div>
               <div className="min-w-0">
-                <dt className="text-[10px] text-muted-foreground">إيراد</dt>
+                <dt className="text-[10px] font-medium text-muted-foreground">إيراد</dt>
                 <dd className="truncate text-[13px] font-bold tabular-nums text-primary"><Money value={perf.revenue} /></dd>
               </div>
             </dl>
             <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted" aria-hidden>
-              <div className="h-full rounded-full bg-primary/70 transition-[width] duration-slow ease-out" style={{ width: `${share}%` }} />
+              <div className="h-full rounded-full bg-gradient-to-l from-primary to-primary/70 transition-[width] duration-slow ease-out" style={{ width: `${share}%` }} />
             </div>
           </>
         ) : (
@@ -407,7 +461,6 @@ function CampaignItem({
         )}
       </div>
 
-      {/* الإجراءات */}
       <div className="flex items-center justify-end gap-1 border-t border-dashed pt-3 md:border-t-0 md:pt-0">
         <CopyAction text={c.fullUrl} compact />
         <Button variant="ghost" size="icon-sm" className="rounded-xl text-muted-foreground hover:text-foreground" onClick={onEdit} title="تعديل">
@@ -427,33 +480,29 @@ function CampaignItem({
   )
 }
 
-/* ═════════════════════════ المكون الرئيسي ═════════════════════════ */
+/* ═════════════════════════ Component ═════════════════════════ */
 
 export function UtmBuilder() {
-  // ─── الباني ───
   const [form, setForm] = React.useState(() => {
     const d = getSuggestions('meta')
     return { ...emptyForm, source: d.sources[0] ?? '', medium: d.mediums[0] ?? '' }
   })
-  const [touchedSM, setTouchedSM] = React.useState(false) // هل عدّل المستخدم source/medium يدوياً؟
+  const [touchedSM, setTouchedSM] = React.useState(false)
   const [editingId, setEditingId] = React.useState<number | null>(null)
   const [saving, setSaving] = React.useState(false)
-  const [adv, setAdv] = React.useState(false) // الخيارات المتقدمة
+  const [adv, setAdv] = React.useState(false)
   const urlRef = React.useRef<HTMLInputElement>(null)
   const campaignRef = React.useRef<HTMLInputElement>(null)
 
-  // ─── المكتبة ───
   const [lib, setLib] = React.useState<LibraryData | null>(null)
   const [loadingLib, setLoadingLib] = React.useState(true)
   const [q, setQ] = React.useState('')
   const [libPlatform, setLibPlatform] = React.useState('all')
   const [showArchived, setShowArchived] = React.useState(false)
-  /** عدد الروابط النشطة — يُحدَّث عند كل تحميل للتبويب النشط */
   const [activeCount, setActiveCount] = React.useState<number | null>(null)
 
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }))
 
-  // تغيير المنصة → اقتراح source/medium (إن لم يكتبهما المستخدم)
   const changePlatform = (p: UtmPlatform) => {
     const sug = getSuggestions(p)
     setForm((f) => ({
@@ -464,15 +513,13 @@ export function UtmBuilder() {
     }))
   }
 
-  // تذكّر آخر رابط وجهة — يوفّر الكتابة عند إنشاء عدة روابط لنفس الصفحة
   React.useEffect(() => {
     try {
       const last = localStorage.getItem('utm:lastDest')
       if (last) setForm((f) => (f.destinationUrl ? f : { ...f, destinationUrl: last }))
-    } catch { /* التخزين غير متاح */ }
+    } catch { /* ignore */ }
   }, [])
 
-  // معاينة حية
   const preview = React.useMemo(
     () => buildUtmUrl({
       destinationUrl: form.destinationUrl, platform: form.platform,
@@ -482,7 +529,6 @@ export function UtmBuilder() {
     [form]
   )
 
-  // ─── تحميل المكتبة ───
   const loadLib = React.useCallback(async () => {
     setLoadingLib(true)
     try {
@@ -505,7 +551,6 @@ export function UtmBuilder() {
     return () => clearTimeout(t)
   }, [loadLib])
 
-  // ─── حفظ (إنشاء/تعديل) — copy=true: حفظ ثم نسخ الرابط في خطوة واحدة ───
   const save = async (copy = false) => {
     if (!preview.ok) {
       toast.error(preview.errors[0])
@@ -535,11 +580,9 @@ export function UtmBuilder() {
       warnings.forEach((w) => toast.warning(w))
       try { localStorage.setItem('utm:lastDest', form.destinationUrl.trim()) } catch { /* ignore */ }
       if (wasEditing) {
-        // بعد التعديل: تصفير كامل
         setForm({ ...emptyForm, ...(() => { const d = getSuggestions('meta'); return { source: d.sources[0] ?? '', medium: d.mediums[0] ?? '' } })() })
         setTouchedSM(false)
       } else {
-        // بعد الإنشاء: نُبقي المنصة والوجهة والمصدر/الوسيلة لإنشاء الرابط التالي بسرعة
         setForm((f) => ({ ...emptyForm, platform: f.platform, destinationUrl: f.destinationUrl, source: f.source, medium: f.medium }))
         setTimeout(() => campaignRef.current?.focus(), 50)
       }
@@ -630,7 +673,6 @@ export function UtmBuilder() {
     setTimeout(() => (form.destinationUrl ? campaignRef : urlRef).current?.focus(), 350)
   }
 
-  /* Enter داخل أي حقل نصي = حفظ + نسخ */
   const onEnter = (e: React.KeyboardEvent) => {
     if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
     if ((e.target as HTMLElement).tagName !== 'INPUT') return
@@ -638,7 +680,6 @@ export function UtmBuilder() {
     if (preview.ok && !saving) void save(true)
   }
 
-  /* إجماليات الأداء للـ KPI */
   const perfTotals = React.useMemo(() => {
     const vals = Object.values(lib?.performance ?? {})
     return {
@@ -648,7 +689,6 @@ export function UtmBuilder() {
     }
   }, [lib])
 
-  /* توزيع المنصات (إيراد إن وُجد وإلا عدد الروابط) — كل مفتاح حملة يُحسب مرة واحدة */
   const mix = React.useMemo(() => {
     const rows = PLATFORMS.map((p) => ({ key: p.key as string, links: 0, rev: 0 }))
     const seen = new Set<string>()
@@ -687,19 +727,77 @@ export function UtmBuilder() {
 
   return (
     <div className="space-y-4" dir="rtl">
-      {/* ═══════════ شريط الأرقام ═══════════ */}
+      {/* ═══════════ الهيرو ═══════════ */}
+      <section className="animate-in-up relative overflow-hidden rounded-2xl border bg-card p-4 sm:p-6">
+        <div aria-hidden className="pointer-events-none absolute -top-20 -end-20 size-56 rounded-full bg-primary/10 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-24 -start-20 size-56 rounded-full bg-chart-3/10 blur-3xl" />
+        <span aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-primary/50 to-transparent" />
+
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-lg shadow-primary/25 ring-1 ring-inset ring-white/10">
+              <Link2 className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <h1 className="text-lg font-black sm:text-xl">روابط الحملات</h1>
+              <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
+                باني روابط <span dir="ltr" className={MONO}>UTM</span> مع معاينة حيّة ومكتبة كاملة لكل الحملات
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-[10.5px] font-semibold text-primary">
+                  <Sparkle className="size-3" aria-hidden />
+                  First / Last Touch
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-md bg-chart-3/10 px-2 py-0.5 text-[10.5px] font-semibold text-chart-3">
+                  <Target className="size-3" aria-hidden />
+                  4 منصات مدعومة
+                </span>
+                {activeCount != null && activeCount > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
+                    <Link2 className="size-3" aria-hidden />
+                    {nf(activeCount)} رابط نشط
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="gradient"
+              size="sm"
+              onClick={focusBuilder}
+              className="h-9 gap-1.5 rounded-xl text-xs"
+            >
+              <Plus className="size-3.5" aria-hidden />
+              رابط جديد
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void loadLib()}
+              disabled={loadingLib}
+              className="h-9 gap-1.5 rounded-xl text-xs"
+            >
+              <TrendingUp className={cn('size-3.5', loadingLib && 'animate-pulse')} aria-hidden />
+              تحديث
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════════ KPI ═══════════ */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi index={1} icon={Link2} label="روابط نشطة" value={activeCount ?? 0} hint="في المكتبة الآن" loading={!lib} />
-        <Kpi index={2} icon={UserPlus} label="تسجيلات 30 يوم" value={perfTotals.regs} hint="من روابط الحملات" loading={!lib} />
-        <Kpi index={3} icon={ShoppingBag} label="مدفوعات" value={perfTotals.purs} hint={`معدل التحويل ${conversion}`} loading={!lib} />
-        <Kpi index={4} icon={Wallet} label="إيراد مُسنَد" value={perfTotals.rev} money hint="آخر 30 يوماً" loading={!lib} tone="primary" />
+        <Kpi rank="01" icon={Link2} label="روابط نشطة" value={activeCount ?? 0} hint="في المكتبة الآن" loading={!lib} tone="info" />
+        <Kpi rank="02" icon={UserPlus} label="تسجيلات 30 يوم" value={perfTotals.regs} hint="من روابط الحملات" loading={!lib} tone="warning" />
+        <Kpi rank="03" icon={ShoppingBag} label="مدفوعات" value={perfTotals.purs} hint={`معدل التحويل ${conversion}`} loading={!lib} tone="success" />
+        <Kpi rank="04" icon={Wallet} label="إيراد مُسنَد" value={perfTotals.rev} money hint="آخر 30 يوماً" loading={!lib} tone="primary" />
       </div>
 
-      {/* ═══════════ الباني + المعاينة الحيّة ═══════════ */}
-      <div id="utm-builder" className="grid scroll-mt-24 items-start gap-3 lg:grid-cols-12">
-        {/* ── النموذج: حقلان إلزاميان فقط (الرابط + اسم الحملة) والباقي تلقائي ── */}
-        <section className="animate-in-up stagger-1 rounded-[1.5rem] border bg-card lg:col-span-7" onKeyDown={onEnter}>
-          <header className="flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3.5">
+      {/* ═══════════ الباني + المعاينة ═══════════ */}
+      <div id="utm-builder" className="grid scroll-mt-24 items-start gap-4 lg:grid-cols-12">
+        <section className="animate-in-up rounded-2xl border bg-card lg:col-span-7" onKeyDown={onEnter}>
+          <header className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-5 py-3.5">
             <div className="flex items-center gap-3">
               <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
                 {editingId ? <Pencil className="size-4" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
@@ -718,101 +816,116 @@ export function UtmBuilder() {
             )}
           </header>
 
-          <div className="space-y-4 p-5">
-            {/* المنصة — نقرة واحدة */}
-            <div role="radiogroup" aria-label="المنصة" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {PLATFORMS.map((p) => {
-                const ui = PLATFORM_UI[p.key]
-                const Icon = ui.icon
-                const active = form.platform === p.key
-                return (
-                  <button
-                    key={p.key}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    onClick={() => changePlatform(p.key)}
-                    title={ui.full}
-                    className={cn(
-                      'flex h-10 items-center gap-2 rounded-xl border px-2.5 text-start outline-none transition-all focus-visible:ring-[3px] focus-visible:ring-ring/50',
-                      active
-                        ? 'border-primary bg-primary/5 shadow-sm ring-2 ring-primary/15'
-                        : 'hover:border-border-strong hover:bg-muted/50',
-                    )}
-                  >
-                    <span className={cn('grid size-6 shrink-0 place-items-center rounded-md', ui.tile)}>
-                      <Icon className="size-3.5" aria-hidden />
-                    </span>
-                    <span className="truncate text-xs font-bold">{ui.short}</span>
-                    {active && <Check className="ms-auto size-3.5 shrink-0 text-primary" aria-hidden />}
-                  </button>
-                )
-              })}
+          <div className="space-y-5 p-5">
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid size-5 place-items-center rounded-md bg-primary/10 font-mono text-[10px] font-black text-primary">01</span>
+                <p className="text-[11.5px] font-bold text-foreground">اختر المنصة</p>
+              </div>
+              <div role="radiogroup" aria-label="المنصة" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {PLATFORMS.map((p) => {
+                  const ui = PLATFORM_UI[p.key]
+                  const Icon = ui.icon
+                  const active = form.platform === p.key
+                  return (
+                    <button
+                      key={p.key}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => changePlatform(p.key)}
+                      title={ui.full}
+                      className={cn(
+                        'group flex flex-col items-center gap-2 rounded-xl border p-3 text-center outline-none transition-all focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                        active
+                          ? 'border-primary bg-primary/5 shadow-sm ring-2 ring-primary/15'
+                          : 'hover:border-border-strong hover:bg-muted/40',
+                      )}
+                    >
+                      <span className={cn('grid size-9 place-items-center rounded-lg transition-transform group-hover:scale-110', ui.tile)}>
+                        <Icon className="size-4.5" aria-hidden />
+                      </span>
+                      <span className="truncate text-[11.5px] font-bold">{ui.short}</span>
+                      <span className="truncate text-[9.5px] text-muted-foreground">{ui.sub}</span>
+                      {active && <Check className="size-3 text-primary" aria-hidden />}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
-            {/* الرابط الأساسي */}
-            <div className="space-y-1.5">
-              <Label htmlFor="utm-dest" className="text-xs font-medium text-muted-foreground">
-                الرابط الأساسي <span className="text-destructive">*</span>
-                <span className="font-normal opacity-70">— صفحة الوصول، بدون UTM</span>
-              </Label>
-              <Input
-                id="utm-dest"
-                ref={urlRef}
-                className={cn(FIELD, 'text-[13px]', MONO)}
-                dir="ltr"
-                placeholder="https://nezampos.com/register"
-                value={form.destinationUrl}
-                onChange={(e) => set({ destinationUrl: e.target.value })}
-              />
-            </div>
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid size-5 place-items-center rounded-md bg-primary/10 font-mono text-[10px] font-black text-primary">02</span>
+                <p className="text-[11.5px] font-bold text-foreground">البيانات الأساسية</p>
+              </div>
 
-            {/* UTM: الحملة أولاً (المطلوب كتابته) ثم المصدر والوسيلة (جاهزان) */}
-            <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
-                <Label dir="ltr" htmlFor="utm-campaign" className={cn('text-xs font-medium text-muted-foreground', MONO)}>
-                  utm_campaign <span className="text-destructive">*</span>
+                <Label htmlFor="utm-dest" className="text-xs font-medium text-muted-foreground">
+                  الرابط الأساسي <span className="text-destructive">*</span>
+                  <span className="font-normal opacity-70"> — صفحة الوصول، بدون UTM</span>
                 </Label>
                 <Input
-                  id="utm-campaign"
-                  ref={campaignRef}
+                  id="utm-dest"
+                  ref={urlRef}
                   className={cn(FIELD, 'text-[13px]', MONO)}
                   dir="ltr"
-                  value={form.campaign}
-                  onChange={(e) => set({ campaign: e.target.value })}
-                  placeholder="spring_sale"
-                  autoFocus
+                  placeholder="https://nezampos.com/register"
+                  value={form.destinationUrl}
+                  onChange={(e) => set({ destinationUrl: e.target.value })}
                 />
-                <p className="text-[10.5px] leading-relaxed text-muted-foreground">حروف صغيرة وشرطات سفلية، بدون مسافات.</p>
               </div>
-              <div className="space-y-1.5">
-                <Label dir="ltr" htmlFor="utm-source" className={cn('text-xs font-medium text-muted-foreground', MONO)}>utm_source</Label>
-                <Input
-                  id="utm-source"
-                  className={cn(FIELD, 'text-[13px]', MONO)}
-                  dir="ltr"
-                  value={form.source}
-                  onChange={(e) => { set({ source: e.target.value }); setTouchedSM(true) }}
-                  placeholder={sug.sources[0]}
-                />
-                <SuggestChips values={sug.sources} current={form.source} onPick={(v) => { set({ source: v }); setTouchedSM(true) }} />
-              </div>
-              <div className="space-y-1.5">
-                <Label dir="ltr" htmlFor="utm-medium" className={cn('text-xs font-medium text-muted-foreground', MONO)}>utm_medium</Label>
-                <Input
-                  id="utm-medium"
-                  className={cn(FIELD, 'text-[13px]', MONO)}
-                  dir="ltr"
-                  value={form.medium}
-                  onChange={(e) => { set({ medium: e.target.value }); setTouchedSM(true) }}
-                  placeholder={sug.mediums[0]}
-                />
-                <SuggestChips values={sug.mediums.slice(0, 2)} current={form.medium} onPick={(v) => { set({ medium: v }); setTouchedSM(true) }} />
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label dir="ltr" htmlFor="utm-campaign" className={cn('text-xs font-medium text-muted-foreground', MONO)}>
+                    utm_campaign <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="utm-campaign"
+                    ref={campaignRef}
+                    className={cn(FIELD, 'text-[13px]', MONO)}
+                    dir="ltr"
+                    value={form.campaign}
+                    onChange={(e) => set({ campaign: e.target.value })}
+                    placeholder="spring_sale"
+                    autoFocus
+                  />
+                  <p className="text-[10.5px] leading-relaxed text-muted-foreground">حروف صغيرة وشرطات سفلية، بدون مسافات.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label dir="ltr" htmlFor="utm-source" className={cn('text-xs font-medium text-muted-foreground', MONO)}>utm_source</Label>
+                  <Input
+                    id="utm-source"
+                    className={cn(FIELD, 'text-[13px]', MONO)}
+                    dir="ltr"
+                    value={form.source}
+                    onChange={(e) => { set({ source: e.target.value }); setTouchedSM(true) }}
+                    placeholder={sug.sources[0]}
+                  />
+                  <SuggestChips values={sug.sources} current={form.source} onPick={(v) => { set({ source: v }); setTouchedSM(true) }} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label dir="ltr" htmlFor="utm-medium" className={cn('text-xs font-medium text-muted-foreground', MONO)}>utm_medium</Label>
+                  <Input
+                    id="utm-medium"
+                    className={cn(FIELD, 'text-[13px]', MONO)}
+                    dir="ltr"
+                    value={form.medium}
+                    onChange={(e) => { set({ medium: e.target.value }); setTouchedSM(true) }}
+                    placeholder={sug.mediums[0]}
+                  />
+                  <SuggestChips values={sug.mediums.slice(0, 2)} current={form.medium} onPick={(v) => { set({ medium: v }); setTouchedSM(true) }} />
+                </div>
               </div>
             </div>
 
-            {/* اختياري: الاسم الداخلي + content/term/id + المتغيرات */}
-            <div>
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid size-5 place-items-center rounded-md bg-muted font-mono text-[10px] font-black text-muted-foreground">03</span>
+                <p className="text-[11.5px] font-bold text-foreground">اختياري</p>
+              </div>
+
               <button
                 type="button"
                 onClick={() => setAdv((v) => !v)}
@@ -822,8 +935,7 @@ export function UtmBuilder() {
               >
                 <span className="flex items-center gap-2 text-xs font-semibold">
                   <Sparkles className="size-3.5 text-primary" aria-hidden />
-                  اختياري
-                  <span className="font-normal text-muted-foreground">الاسم الداخلي · content · term · id · متغيرات المنصة</span>
+                  الاسم الداخلي · content · term · id · متغيرات المنصة
                   {advFilled + (form.name.trim() ? 1 : 0) > 0 && (
                     <span className="grid size-4 place-items-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
                       {advFilled + (form.name.trim() ? 1 : 0)}
@@ -834,7 +946,7 @@ export function UtmBuilder() {
               </button>
 
               {adv && (
-                <div id="utm-advanced" className="animate-in-up mt-3 space-y-4 rounded-xl bg-muted/30 p-4">
+                <div id="utm-advanced" className="animate-in-up space-y-4 rounded-xl bg-muted/30 p-4">
                   <div className="space-y-1.5">
                     <Label htmlFor="utm-name" className="text-xs font-medium text-muted-foreground">
                       الاسم الداخلي <span className="font-normal opacity-70">— إن تركته فارغاً يُولَّد تلقائياً</span>
@@ -868,15 +980,19 @@ export function UtmBuilder() {
           </div>
         </section>
 
-        {/* ── المعاينة الحيّة + الإجراءات (لاصقة: الزر دائماً أمامك) ── */}
-        <aside className="animate-in-up stagger-2 lg:sticky lg:top-4 lg:col-span-5">
-          <div className="relative overflow-hidden rounded-[1.5rem] border bg-card shadow-sm">
-            <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-primary/60 to-transparent" />
+        <aside className="animate-in-up lg:sticky lg:top-4 lg:col-span-5">
+          <div className="relative overflow-hidden rounded-2xl border bg-card shadow-sm">
+            <span aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-primary/60 to-transparent" />
             <div aria-hidden className="pointer-events-none absolute -top-20 -start-10 size-56 rounded-full bg-primary/10 blur-3xl" />
 
             <div className="relative p-5">
               <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-black">المعاينة الحيّة</h2>
+                <div className="flex items-center gap-2">
+                  <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+                    <Sparkle className="size-4" aria-hidden />
+                  </span>
+                  <h2 className="text-sm font-black">المعاينة الحيّة</h2>
+                </div>
                 <span
                   aria-live="polite"
                   className={cn(
@@ -884,14 +1000,17 @@ export function UtmBuilder() {
                     preview.ok ? 'bg-success-subtle text-success-subtle-foreground' : 'bg-muted text-muted-foreground',
                   )}
                 >
-                  <span className={cn('size-1.5 rounded-full', preview.ok ? 'bg-success' : 'bg-muted-foreground/60')} />
+                  <span className={cn('size-1.5 rounded-full', preview.ok ? 'bg-success animate-pulse' : 'bg-muted-foreground/60')} />
                   {preview.ok ? 'جاهز للنشر' : pristine ? 'بانتظار البيانات' : 'غير مكتمل'}
                 </span>
               </div>
 
               {pristine ? (
-                <div className="mt-4 rounded-2xl border border-dashed px-4 py-5 text-center">
-                  <p className="text-sm font-bold">
+                <div className="mt-4 rounded-2xl border border-dashed px-4 py-6 text-center">
+                  <span className="mx-auto grid size-12 place-items-center rounded-xl bg-muted text-muted-foreground">
+                    <Rocket className="size-5" aria-hidden />
+                  </span>
+                  <p className="mt-3 text-sm font-bold">
                     {form.destinationUrl.trim() ? 'اكتب اسم الحملة ليكتمل الرابط' : 'ابدأ بالرابط الأساسي واسم الحملة'}
                   </p>
                   <p className="mt-1 text-xs leading-relaxed text-muted-foreground">سيظهر هنا الرابط النهائي ملوَّن الأجزاء.</p>
@@ -922,7 +1041,6 @@ export function UtmBuilder() {
                 </ul>
               )}
 
-              {/* الإجراءات */}
               <div className="mt-4 space-y-2">
                 <Button
                   variant="gradient"
@@ -974,16 +1092,21 @@ export function UtmBuilder() {
         </aside>
       </div>
 
-      {/* ═══════════ توزيع المنصات ═══════════ */}
+      {/* ═══════════ توزيع المنصات — v3 ═══════════ */}
       {lib && mix.rows.length > 0 && (
-        <section className="animate-in-up stagger-1 rounded-[1.25rem] border bg-card p-4">
+        <section className="animate-in-up rounded-2xl border bg-card p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-bold">توزيع المنصات</h2>
-            <span className="text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <span className="grid size-8 place-items-center rounded-lg bg-chart-3/15 text-chart-3 ring-1 ring-inset ring-chart-3/25">
+                <BarChart3 className="size-4" aria-hidden />
+              </span>
+              <h2 className="text-sm font-black">توزيع المنصات</h2>
+            </div>
+            <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10.5px] font-medium text-muted-foreground">
               {mix.byRevenue ? 'حسب الإيراد المُسنَد' : 'حسب عدد الروابط (لا إيراد بعد)'}
             </span>
           </div>
-          <div className="mt-3 flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-muted" role="img" aria-label="توزيع المنصات">
+          <div className="mt-4 flex h-4 gap-1 overflow-hidden rounded-full bg-muted ring-1 ring-inset ring-border" role="img" aria-label="توزيع المنصات">
             {mix.rows.map((r) => (
               <div
                 key={r.key}
@@ -992,27 +1115,30 @@ export function UtmBuilder() {
               />
             ))}
           </div>
-          <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5">
+          <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-2">
             {mix.rows.map((r) => (
-              <li key={r.key} className="flex items-center gap-2 text-xs">
-                <span className={cn('size-2 rounded-full', PLATFORM_UI[r.key].dot)} aria-hidden />
-                <span className="font-medium">{PLATFORM_UI[r.key].short}</span>
-                <span dir="ltr" className="font-bold tabular-nums">{Math.round(r.pct)}%</span>
+              <li key={r.key} className="flex items-center gap-2 rounded-lg bg-muted/50 px-2.5 py-1 text-xs ring-1 ring-inset ring-border/60">
+                <span className={cn('size-2.5 rounded-full ring-2 ring-background', PLATFORM_UI[r.key].dot)} aria-hidden />
+                <span className="font-bold">{PLATFORM_UI[r.key].short}</span>
+                <span dir="ltr" className="font-mono font-bold tabular-nums text-foreground">{Math.round(r.pct)}%</span>
                 <span aria-hidden className="text-muted-foreground/40">•</span>
-                <span className="text-muted-foreground"><span dir="ltr">{nf(r.links)}</span> رابط</span>
+                <span className="text-muted-foreground"><span dir="ltr" className="font-mono">{nf(r.links)}</span> رابط</span>
               </li>
             ))}
           </ul>
         </section>
       )}
 
-      {/* ═══════════ مكتبة الروابط ═══════════ */}
-      <section className="animate-in-up stagger-4 rounded-[1.5rem] border bg-card">
-        <header className="space-y-3 border-b p-4 sm:p-5">
+      {/* ═══════════ المكتبة ═══════════ */}
+      <section className="animate-in-up rounded-2xl border bg-card">
+        <header className="space-y-3 border-b bg-muted/30 p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2.5">
+              <span className="grid size-8 place-items-center rounded-lg bg-chart-6/15 text-chart-6 ring-1 ring-inset ring-chart-6/25">
+                <Globe className="size-4" aria-hidden />
+              </span>
               <h2 className="text-sm font-black">مكتبة الروابط</h2>
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
+              <span className="rounded-full bg-card px-2 py-0.5 font-mono text-[11px] font-bold tabular-nums text-muted-foreground ring-1 ring-inset ring-border">
                 {loadingLib && !lib ? '…' : nf(lib?.campaigns.length ?? 0)}
               </span>
             </div>
@@ -1077,9 +1203,9 @@ export function UtmBuilder() {
               ))}
             </div>
           ) : !lib || lib.campaigns.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-              <span className="grid size-14 place-items-center rounded-2xl bg-muted text-muted-foreground">
-                <Inbox className="size-6" aria-hidden />
+            <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+              <span className="grid size-16 place-items-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 text-primary ring-1 ring-inset ring-primary/20">
+                <Inbox className="size-7" aria-hidden />
               </span>
               <p className="text-sm font-black">
                 {hasFilters ? 'لا نتائج مطابقة' : showArchived ? 'لا توجد روابط مؤرشفة' : 'المكتبة فارغة'}

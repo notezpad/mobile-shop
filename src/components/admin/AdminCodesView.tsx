@@ -1,34 +1,5 @@
 'use client'
 
-/**
- * ═══════════════════════════════════════════════════════════════════════
- *  AdminCodesView — "دار إصدار الأكواد" (تصميم 2026-10-08)
- * ═══════════════════════════════════════════════════════════════════════
- *  هوية الصفحة: "دار الضرب / طباعة البانكنوت" — كل كود = عملة ورقية
- *  مسبقة الدفع: له فئة (الباقة + المدة)، رقم تسلسلي، ختم حالة، وصلاحية.
- *
- *  الهوية اللونية: زمردي بنكنوت عميق + رقائق ذهبية — مستقلة تماماً عن:
- *    المحلات (كهرماني دافئ) · الاشتراكات (تركواز الخزنة) · الباقات (فولاذ صناعي)
- *
- *  عناصر الهوية (لا توجد في أي صفحة تانية):
- *    1. لافتة "دار الإصدار" — زمردي عميق بنقش الحفر (intaglio hatch)
- *       بدل الجيوشيه المائل/الشبكة الهندسية/النقاط + رقم رقائقي ذهبي
- *       = القيمة الاسمية للأكواد المتاحة + شريط "مايكروبرنت" أمني.
- *    2. ميداليات الإحصاء — عملات معدنية بحافة مسنّنة (reeded coin edge)
- *       زي حافة الليرة/الجنيه المعدني.
- *    3. "دفتر الإصدار" — كل صف = شريط بانكنوت: حافة مسنّنة جانبية +
- *       كود بخط النقش الغائر + فئة المدة كعملة معدنية صغيرة.
- *    4. أختام الحالة — "متاح" بختم رقائقي ذهبي، "مُستخدم" بختم غائر محفور.
- *    5. رزم الإصدار (Batches) — أشرطة رزم الفلوس بعلامات الحزام البنكي.
- *    6. "المطبعة" — دايلوج التوليد بمعاينة حية للبانكنوت أثناء الطباعة،
- *       وشاشة النجاح = كروت كشط (scratch cards) يُكشف عنها الكود.
- *
- *  كل منطق البيانات (API endpoints + العقود + الحقول) زي ما هو بالظبط —
- *  تغيير العرض فقط + فلترة فورية على العميل (نفس نهج صفحة الاشتراكات):
- *    GET /api/admin/codes · POST /api/admin/codes · DELETE /api/admin/codes/:id
- *    GET /api/admin/plans · GET /api/admin/tenants
- */
-
 import * as React from 'react'
 import {
   Landmark,
@@ -41,18 +12,15 @@ import {
   Check,
   Trash2,
   Download,
-  Plus,
   Search,
   Loader2,
   UserCog,
   Calendar,
-  Tag,
   Sparkles,
   RefreshCw,
   TrendingUp,
   X,
   Banknote,
-  Layers,
   ArrowUpDown,
   KeyRound,
   type LucideIcon,
@@ -106,8 +74,6 @@ import { api } from '@/lib/api'
 import { formatCurrency, formatShortDate } from '@/lib/format'
 import { toast } from 'sonner'
 
-/* ───────────────────────── أنواع البيانات ───────────────────────── */
-
 interface CodeRow {
   id: number
   code: string
@@ -121,11 +87,9 @@ interface CodeRow {
   tenantId: string | null
   tenantName: string | null
   notes: string | null
-  // 🛡️ 2026-09-21: new fields
   durationDays: number | null
   expiresAt: string | null
   assignedTenantId: string | null
-  batchLabel: string | null
 }
 
 interface PlanLite {
@@ -141,8 +105,6 @@ interface TenantLite {
   shopName: string
 }
 
-/* ───────────────────────── ثوابت الهوية ───────────────────────── */
-
 const PERIOD_LABEL: Record<string, string> = {
   monthly: 'شهري',
   yearly: 'سنوي',
@@ -155,20 +117,17 @@ const PERIOD_DAYS: Record<string, number> = {
   trial: 14,
 }
 
-/** نقش الحفر (intaglio) — خطوط أفقية دقيقة زي البانكنوت المحفور. */
 const INTAGLIO: React.CSSProperties = {
   backgroundImage:
     'repeating-linear-gradient(180deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 5px),' +
     'repeating-linear-gradient(105deg, rgba(255,255,255,0.028) 0 1px, transparent 1px 9px)',
 }
 
-/** حافة مسنّنة عمودية — زي ضلع البانكنوت/حافة العملة. */
 const REED_EDGE: React.CSSProperties = {
   backgroundImage:
     'repeating-linear-gradient(180deg, rgba(16,185,129,0.4) 0 3px, transparent 3px 6px)',
 }
 
-/** حلقة مسنّنة ذهبية — حافة العملة المعدنية (coin reeding). */
 const REED_RING_GOLD: React.CSSProperties = {
   backgroundImage:
     'repeating-conic-gradient(from 0deg, #fbbf24 0deg 2.5deg, rgba(113,113,122,0.4) 2.5deg 6deg)',
@@ -179,11 +138,8 @@ const REED_RING_ROSE: React.CSSProperties = {
     'repeating-conic-gradient(from 0deg, #fb7185 0deg 2.5deg, rgba(113,113,122,0.4) 2.5deg 6deg)',
 }
 
-/** رقائق ذهبية — تدرّج الفويل للرقم الكبير والأزرار. */
 const GOLD_FOIL =
   'bg-gradient-to-l from-amber-300 via-yellow-400 to-amber-500 bg-clip-text text-transparent'
-
-/* ───────────────────────── دوال مساعدة ───────────────────────── */
 
 function isCodeExpired(r: CodeRow): boolean {
   return !!r.expiresAt && new Date(r.expiresAt) < new Date()
@@ -198,7 +154,6 @@ function durationLabel(r: CodeRow): string {
   return PERIOD_LABEL[r.period] ?? r.period
 }
 
-/** القيمة الاسمية للكود بالجنيه (شهري/سنوي/نسبي للمدة المخصصة). */
 function nominalValue(
   r: CodeRow,
   prices: { monthly: number | null; yearly: number | null },
@@ -209,12 +164,9 @@ function nominalValue(
   }
   if (r.period === 'monthly') return prices.monthly ?? 0
   if (r.period === 'yearly') return prices.yearly ?? 0
-  return 0 // تجريبي
+  return 0
 }
 
-/* ═══════════════════ عناصر الهوية البصرية ═══════════════════ */
-
-/** شريط "مايكروبرنت" الأمني — نص متناهي الصغر زي حافة البانكنوت. */
 function Microprint({ className }: { className?: string }) {
   const text = 'NEZAM POS • ACTIVATION CODE • قيمة اسمية مضمونة • '
   return (
@@ -223,7 +175,7 @@ function Microprint({ className }: { className?: string }) {
       aria-hidden
       className={cn(
         'pointer-events-none select-none overflow-hidden whitespace-nowrap font-mono uppercase',
-        'text-[7px] leading-4 tracking-[0.38em] text-amber-200/20',
+        'text-[7px] leading-4 tracking-[0.38em] text-amber-200/20 dark:text-amber-200/20',
         className,
       )}
     >
@@ -232,7 +184,6 @@ function Microprint({ className }: { className?: string }) {
   )
 }
 
-/** ميدالية إحصائية — عملة معدنية بحافة مسنّنة. */
 function CoinMedallion({
   icon: Icon,
   value,
@@ -291,7 +242,6 @@ function CoinMedallion({
   )
 }
 
-/** ختم الحالة — متاح: فويل ذهبي · مستخدم: محفور غائر · منتهي: وردية. */
 function StatusSeal({ r }: { r: CodeRow }) {
   if (r.status === 'available' && isCodeExpired(r)) {
     return (
@@ -317,7 +267,6 @@ function StatusSeal({ r }: { r: CodeRow }) {
   )
 }
 
-/** عملة الفئة — مدة الكود كعملة صغيرة داخل الصف. */
 function DurationCoin({ r }: { r: CodeRow }) {
   const custom = !!r.durationDays
   return (
@@ -352,21 +301,6 @@ function DurationCoin({ r }: { r: CodeRow }) {
   )
 }
 
-/** شريط رزمة الفلوس — علامة الدفعة (الباتش). */
-function StrapTag({ label }: { label: string }) {
-  return (
-    <span
-      dir="auto"
-      className="inline-flex max-w-[150px] items-center gap-1.5 rounded-md border border-emerald-600/25 bg-emerald-600/8 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
-      title={label}
-    >
-      <span aria-hidden className="-my-1 h-4 w-[3px] rounded-sm bg-emerald-600/50 dark:bg-emerald-400/50" />
-      <span className="truncate">{label}</span>
-    </span>
-  )
-}
-
-/** خانة الكود — شريط بانكنوت بحافة مسنّنة + نسخ. */
 function BanknoteCodeCell({
   code,
   copied,
@@ -417,8 +351,6 @@ function BanknoteCodeCell({
   )
 }
 
-/* ═══════════════════ الصفحة الرئيسية ═══════════════════ */
-
 type StatusTab = 'all' | 'available' | 'redeemed' | 'expired'
 type SortMode = 'newest' | 'oldest' | 'expiry' | 'value'
 
@@ -430,28 +362,23 @@ const STATUS_TABS: { key: StatusTab; label: string }[] = [
 ]
 
 export function AdminCodesView() {
-  /* ── البيانات ── */
   const [rows, setRows] = React.useState<CodeRow[]>([])
   const [loading, setLoading] = React.useState(true)
   const [refreshing, setRefreshing] = React.useState(false)
   const [plans, setPlans] = React.useState<PlanLite[]>([])
   const [tenants, setTenants] = React.useState<TenantLite[]>([])
 
-  /* ── الفلاتر (فورية على العميل — نفس نهج صفحة الاشتراكات) ── */
   const [statusTab, setStatusTab] = React.useState<StatusTab>('all')
   const [planFilter, setPlanFilter] = React.useState('all')
-  const [batchFilter, setBatchFilter] = React.useState<string>('__all')
   const [searchInput, setSearchInput] = React.useState('')
   const [search, setSearch] = React.useState('')
   const [sortMode, setSortMode] = React.useState<SortMode>('newest')
 
-  /* ── الحوارات ── */
   const [genOpen, setGenOpen] = React.useState(false)
   const [deleteId, setDeleteId] = React.useState<number | null>(null)
   const [generated, setGenerated] = React.useState<string[] | null>(null)
   const [copiedCode, setCopiedCode] = React.useState<string | null>(null)
 
-  /* ── تحميل الأكواد (نفس عقد الـ API) ── */
   const load = React.useCallback(async (silent = false) => {
     if (silent) setRefreshing(true)
     else setLoading(true)
@@ -494,13 +421,11 @@ export function AdminCodesView() {
     loadTenants()
   }, [loadTenants])
 
-  /* ── debounce للبحث ── */
   React.useEffect(() => {
     const t = window.setTimeout(() => setSearch(searchInput.trim()), 350)
     return () => window.clearTimeout(t)
   }, [searchInput])
 
-  /* ── خريطة أسعار الباقات ── */
   const pricesById = React.useMemo(() => {
     const m = new Map<number, { monthly: number | null; yearly: number | null }>()
     for (const p of plans)
@@ -513,18 +438,12 @@ export function AdminCodesView() {
     [pricesById],
   )
 
-  /* ── الإحصاءات العامة (من كل الصفوف — لا تتأثر بالفلاتر) ── */
   const stats = React.useMemo(() => {
     const available = rows.filter((r) => r.status === 'available')
     const redeemed = rows.filter((r) => r.status === 'redeemed')
     const expired = available.filter(isCodeExpired)
     const availableValue = available.reduce((s, r) => s + valueOf(r), 0)
     const rate = rows.length ? Math.round((redeemed.length / rows.length) * 100) : 0
-    const batches = new Map<string, CodeRow[]>()
-    for (const r of rows) {
-      const key = r.batchLabel ?? '__none'
-      batches.set(key, [...(batches.get(key) ?? []), r])
-    }
     return {
       total: rows.length,
       available: available.length,
@@ -532,12 +451,9 @@ export function AdminCodesView() {
       expired: expired.length,
       availableValue,
       rate,
-      batches,
-      batchCount: [...batches.keys()].filter((k) => k !== '__none').length,
     }
   }, [rows, valueOf])
 
-  /* ── الصفوف المعروضة (فلترة + ترتيب فوري) ── */
   const visible = React.useMemo(() => {
     let list = rows
     if (statusTab === 'available') list = list.filter((r) => r.status === 'available')
@@ -547,16 +463,12 @@ export function AdminCodesView() {
 
     if (planFilter !== 'all') list = list.filter((r) => r.planId === Number(planFilter))
 
-    if (batchFilter === '__none') list = list.filter((r) => !r.batchLabel)
-    else if (batchFilter !== '__all') list = list.filter((r) => r.batchLabel === batchFilter)
-
     if (search) {
       const q = search.toLowerCase()
       list = list.filter(
         (r) =>
           r.code.toLowerCase().includes(q) ||
-          (r.notes ?? '').toLowerCase().includes(q) ||
-          (r.batchLabel ?? '').toLowerCase().includes(q),
+          (r.notes ?? '').toLowerCase().includes(q),
       )
     }
 
@@ -577,24 +489,19 @@ export function AdminCodesView() {
       }
     })
     return sorted
-  }, [rows, statusTab, planFilter, batchFilter, search, sortMode, valueOf])
+  }, [rows, statusTab, planFilter, search, sortMode, valueOf])
 
   const hasActiveFilters =
-    statusTab !== 'all' ||
-    planFilter !== 'all' ||
-    batchFilter !== '__all' ||
-    search !== ''
+    statusTab !== 'all' || planFilter !== 'all' || search !== ''
 
   const clearFilters = () => {
     setStatusTab('all')
     setPlanFilter('all')
-    setBatchFilter('__all')
     setSearchInput('')
     setSearch('')
     setSortMode('newest')
   }
 
-  /* ── النسخ ── */
   const copyCode = (code: string) => {
     navigator.clipboard?.writeText(code).catch(() => {})
     setCopiedCode(code)
@@ -602,14 +509,13 @@ export function AdminCodesView() {
     window.setTimeout(() => setCopiedCode((c) => (c === code ? null : c)), 1600)
   }
 
-  /* ── تصدير المتاح (CSV — نفس أعمدة الأصل) ── */
   const exportCSV = () => {
     const available = visible.filter((r) => r.status === 'available')
     if (available.length === 0) {
       toast.error('لا توجد أكواد متاحة للتصدير')
       return
     }
-    const csv = ['Code,Plan,Period,DurationDays,ExpiresAt,AssignedTenant,Batch']
+    const csv = ['Code,Plan,Period,DurationDays,ExpiresAt,AssignedTenant']
     for (const r of available) {
       const escaped = (s: string | null) => (s ? `"${s.replace(/"/g, '""')}"` : '')
       csv.push(
@@ -620,7 +526,6 @@ export function AdminCodesView() {
           r.durationDays ?? '',
           r.expiresAt ? formatShortDate(r.expiresAt) : '',
           r.tenantName ? escaped(r.tenantName) : '',
-          escaped(r.batchLabel),
         ].join(','),
       )
     }
@@ -636,7 +541,6 @@ export function AdminCodesView() {
     toast.success(`تم تصدير ${available.length} كود`)
   }
 
-  /* ── الحذف ── */
   const deleteRow = rows.find((r) => r.id === deleteId) ?? null
 
   const handleDelete = async () => {
@@ -651,11 +555,9 @@ export function AdminCodesView() {
     }
   }
 
-  /* ═════════════════════════ العرض ═════════════════════════ */
-
   return (
     <div className="space-y-5">
-      {/* ─────────── لافتة دار الإصدار ─────────── */}
+      {/* ═══ الهيرو — الأخضر الأصلي (بنكنوت) ═══ */}
       <section className="animate-in-up relative overflow-hidden rounded-3xl border border-emerald-800/60 bg-gradient-to-br from-emerald-950 via-emerald-900 to-emerald-950 text-emerald-50 shadow-lg shadow-emerald-950/20 dark:border-emerald-700/40 dark:shadow-none">
         <div aria-hidden className="absolute inset-0" style={INTAGLIO} />
         <div
@@ -675,10 +577,6 @@ export function AdminCodesView() {
                 <Landmark className="size-3.5" />
                 دار إصدار الأكواد
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-emerald-100/80 backdrop-blur">
-                <Layers className="size-3.5" />
-                {stats.batchCount} دفعات إصدار
-              </span>
             </div>
 
             <div>
@@ -687,7 +585,7 @@ export function AdminCodesView() {
               </h1>
               <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-emerald-100/75">
                 كل كود عملة مسبقة الدفع — بفئة (باقة + مدة) ورقم تسلسلي وختم حالة.
-                تولّد، تصنّف بدفعات، وتصدّر الجاهز للتوزيع.
+                تولّد، تصدّر، وتتابع الاسترداد.
               </p>
             </div>
 
@@ -752,13 +650,12 @@ export function AdminCodesView() {
         <Microprint className="border-t border-white/8 bg-black/15 px-4" />
       </section>
 
-      {/* ─────────── ميداليات الإحصاء ─────────── */}
       <section className="animate-in-up stagger-1 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <CoinMedallion
           icon={Ticket}
           value={String(stats.total)}
           label="إجمالي الأكواد المصدرة"
-          sub={`منها ${stats.batchCount} دفعات منظّمة`}
+          sub="منذ بداية الدار"
           tone="emerald"
           delay={0}
         />
@@ -792,98 +689,8 @@ export function AdminCodesView() {
         />
       </section>
 
-      {/* ─────────── رزم الإصدار (الباتشات) ─────────── */}
-      {stats.batches.size > 1 && (
-        <section className="animate-in-up stagger-2 rounded-2xl border bg-card p-3 shadow-sm sm:p-4">
-          <div className="mb-2.5 flex items-center justify-between gap-2">
-            <p className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
-              <Layers className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-              رزم الإصدار — تصنيفات الدفعات
-            </p>
-            {batchFilter !== '__all' && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 gap-1 rounded-lg px-2 text-[11px] text-muted-foreground"
-                onClick={() => setBatchFilter('__all')}
-              >
-                <X className="size-3" />
-                إلغاء تصنيف الرزمة
-              </Button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setBatchFilter('__all')}
-              className={cn(
-                'inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-bold transition-all',
-                batchFilter === '__all'
-                  ? 'border-emerald-700 bg-emerald-700 text-white shadow-sm'
-                  : 'border-border bg-muted/40 text-muted-foreground hover:border-emerald-600/40 hover:bg-emerald-500/10',
-              )}
-            >
-              <Ticket className="size-3.5" />
-              كل الرزم
-              <span className="rounded-full bg-black/15 px-1.5 py-0.5 font-mono text-[10px] tabular-nums">
-                {stats.total}
-              </span>
-            </button>
-
-            {[...stats.batches.entries()]
-              .sort((a, b) => b[1].length - a[1].length)
-              .map(([key, codes]) => {
-                const isNone = key === '__none'
-                const label = isNone ? 'بدون تصنيف' : key
-                const active = batchFilter === key
-                const avail = codes.filter((c) => c.status === 'available').length
-                const val = codes
-                  .filter((c) => c.status === 'available')
-                  .reduce((s, c) => s + valueOf(c), 0)
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setBatchFilter(active ? '__all' : key)}
-                    className={cn(
-                      'group inline-flex h-9 max-w-full items-center gap-2 rounded-lg border px-3 text-xs font-bold transition-all',
-                      active
-                        ? 'border-emerald-700 bg-emerald-700 text-white shadow-sm'
-                        : 'border-border bg-muted/40 text-muted-foreground hover:border-emerald-600/40 hover:bg-emerald-500/10',
-                    )}
-                    title={isNone ? 'أكواد بدون تصنيف دفعة' : label}
-                  >
-                    <span
-                      aria-hidden
-                      className="-mx-1 h-4 w-[3px] rounded-sm bg-current opacity-40"
-                    />
-                    <span className="max-w-[160px] truncate">{label}</span>
-                    <span
-                      className={cn(
-                        'rounded-full px-1.5 py-0.5 font-mono text-[10px] font-black tabular-nums',
-                        active
-                          ? 'bg-black/15 text-white'
-                          : 'bg-emerald-600/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
-                      )}
-                    >
-                      {codes.length}
-                    </span>
-                    {avail > 0 && !active && (
-                      <span className="hidden font-mono text-[10px] font-bold tabular-nums text-amber-600 dark:text-amber-400 sm:inline">
-                        ≈ {formatCurrency(val)}
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-          </div>
-        </section>
-      )}
-
-      {/* ─────────── لوحة الأوامر ─────────── */}
       <section className="animate-in-up stagger-2 space-y-3 rounded-2xl border bg-card p-3 shadow-sm sm:p-4">
         <div className="flex flex-wrap items-center gap-2">
-          {/* تبويبات الحالة */}
           <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="فلتر الحالة">
             {STATUS_TABS.map((t) => {
               const count =
@@ -954,7 +761,7 @@ export function AdminCodesView() {
             <div className="relative">
               <Search className="absolute end-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="بحث بالكود/الملاحظات/الباتش..."
+                placeholder="بحث بالكود/الملاحظات..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 className="h-9 w-56 rounded-xl pe-9 text-xs"
@@ -993,11 +800,6 @@ export function AdminCodesView() {
                   {plans.find((p) => p.id === Number(planFilter))?.name}
                 </span>
               )}
-              {batchFilter !== '__all' && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/10 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-                  {batchFilter === '__none' ? 'بدون تصنيف' : batchFilter}
-                </span>
-              )}
               {search && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/10 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
                   {search}
@@ -1017,9 +819,7 @@ export function AdminCodesView() {
         </div>
       </section>
 
-      {/* ─────────── دفتر الإصدار (الجدول) ─────────── */}
       <section className="animate-in-up stagger-3 overflow-hidden rounded-2xl border bg-card shadow-sm">
-        {/* رأس الدفتر */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-gradient-to-l from-emerald-950 to-emerald-900 px-4 py-3">
           <div className="flex items-center gap-2.5">
             <span className="grid size-9 place-items-center rounded-full border border-amber-300/40 bg-amber-400/10">
@@ -1062,7 +862,6 @@ export function AdminCodesView() {
             ))}
           </div>
         ) : rows.length === 0 ? (
-          /* ── لا أكواد إطلاقاً ── */
           <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
             <div
               aria-hidden
@@ -1090,12 +889,11 @@ export function AdminCodesView() {
             </Button>
           </div>
         ) : visible.length === 0 ? (
-          /* ── فلاتر بلا نتائج ── */
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-card/60 px-6 py-12 text-center">
             <Search className="size-8 text-muted-foreground" strokeWidth={1.6} />
             <h3 className="mt-3 text-sm font-black">لا نتائج لهذا الفلتر</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              جرّب توسيع نطاق الحالة أو الباقة أو تصنيف الرزمة.
+              جرّب توسيع نطاق الحالة أو الباقة.
             </p>
             <Button
               size="sm"
@@ -1109,20 +907,19 @@ export function AdminCodesView() {
           </div>
         ) : (
           <div className="max-h-[68vh] overflow-auto">
-            <Table className="min-w-[980px]">
+            <Table className="min-w-[1020px]">
               <TableHeader className="sticky top-0 z-10">
                 <TableRow className="border-b-0 hover:bg-transparent">
                   {[
                     { t: '#', c: 'w-12 text-center' },
-                    { t: 'الكود', c: '' },
-                    { t: 'الباقة', c: 'w-44' },
+                    { t: 'الكود', c: 'w-52' },
+                    { t: 'الباقة', c: 'w-40' },
                     { t: 'الفئة', c: 'w-20 text-center' },
                     { t: 'الحالة', c: 'w-32 text-center' },
-                    { t: 'انتهاء الكود', c: 'w-28 text-center' },
-                    { t: 'مخصّص لـ', c: 'w-28 text-center hidden lg:table-cell' },
-                    { t: 'الرزمة', c: 'w-36 hidden xl:table-cell' },
+                    { t: 'انتهاء الكود', c: 'w-32 text-center' },
+                    { t: 'مخصّص لـ', c: 'w-32 text-center hidden lg:table-cell' },
                     { t: 'الإصدار', c: 'w-28 hidden md:table-cell' },
-                    { t: 'الاستخدام', c: 'w-36' },
+                    { t: 'الاستخدام', c: 'w-24' },
                     { t: '', c: 'w-16 text-center' },
                   ].map((h, i) => (
                     <TableHead
@@ -1159,7 +956,7 @@ export function AdminCodesView() {
                       </TableCell>
 
                       <TableCell>
-                        <p className="max-w-[170px] truncate text-xs font-bold" title={r.planName}>
+                        <p className="max-w-[150px] truncate text-xs font-bold" title={r.planName}>
                           {r.planName}
                         </p>
                         <p className="font-mono text-[10.5px] font-bold tabular-nums text-amber-600 dark:text-amber-400">
@@ -1219,33 +1016,31 @@ export function AdminCodesView() {
                         )}
                       </TableCell>
 
-                      <TableCell className="hidden xl:table-cell">
-                        {r.batchLabel ? (
-                          <StrapTag label={r.batchLabel} />
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-
                       <TableCell className="hidden text-xs md:table-cell">
                         {formatShortDate(r.createdAt)}
                       </TableCell>
 
-                      <TableCell className="text-xs">
+                      <TableCell className="w-24">
                         {r.redeemedAt ? (
-                          <div>
-                            <div className="font-semibold">
-                              {formatShortDate(r.redeemedAt)}
-                            </div>
-                            {r.tenantName && (
-                              <div
-                                className="max-w-[130px] truncate text-[10px] text-muted-foreground"
-                                title={r.tenantName}
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span
+                                tabIndex={0}
+                                className="inline-flex cursor-default items-center gap-1 text-[11px] font-semibold"
                               >
-                                {r.tenantName}
+                                <Coins className="size-3 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                                {formatShortDate(r.redeemedAt)}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              <div className="text-start">
+                                <p className="font-bold">{formatShortDate(r.redeemedAt)}</p>
+                                {r.tenantName && (
+                                  <p className="text-[11px] text-muted-foreground">{r.tenantName}</p>
+                                )}
                               </div>
-                            )}
-                          </div>
+                            </TooltipContent>
+                          </Tooltip>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
@@ -1277,13 +1072,11 @@ export function AdminCodesView() {
           </div>
         )}
 
-        {/* مايكروبرنت أسفل الدفتر */}
         <div className="border-t bg-muted/30">
           <Microprint className="px-4 py-0.5 text-emerald-900/10 dark:text-amber-200/10" />
         </div>
       </section>
 
-      {/* ─────────── دايلوج المطبعة ─────────── */}
       <GenerateCodesDialog
         plans={plans}
         tenants={tenants}
@@ -1294,7 +1087,6 @@ export function AdminCodesView() {
         onSaved={() => load(true)}
       />
 
-      {/* ─────────── تأكيد الإتلاف ─────────── */}
       <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
         <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
@@ -1341,8 +1133,6 @@ export function AdminCodesView() {
   )
 }
 
-/* ═══════════════════ دايلوج "المطبعة" — توليد الأكواد ═══════════════════ */
-
 function GenerateCodesDialog({
   plans,
   tenants,
@@ -1364,15 +1154,12 @@ function GenerateCodesDialog({
   const [period, setPeriod] = React.useState<'monthly' | 'yearly' | 'trial'>('monthly')
   const [quantity, setQuantity] = React.useState('5')
   const [notes, setNotes] = React.useState('')
-  // 🛡️ 2026-09-21: new fields
   const [useCustomDuration, setUseCustomDuration] = React.useState(false)
   const [durationDays, setDurationDays] = React.useState('')
   const [expiresAt, setExpiresAt] = React.useState('')
   const [assignedTenantId, setAssignedTenantId] = React.useState('none')
-  const [batchLabel, setBatchLabel] = React.useState('')
   const [saving, setSaving] = React.useState(false)
 
-  /* كشط كروت النجاح */
   const [revealed, setRevealed] = React.useState<Set<number>>(new Set())
 
   React.useEffect(() => {
@@ -1389,7 +1176,6 @@ function GenerateCodesDialog({
       setDurationDays('')
       setExpiresAt('')
       setAssignedTenantId('none')
-      setBatchLabel('')
       setRevealed(new Set())
     }
   }, [open, plans])
@@ -1397,7 +1183,6 @@ function GenerateCodesDialog({
   const selectedPlan = plans.find((p) => p.id.toString() === planId)
   const qty = Math.min(100, Math.max(1, Number(quantity) || 1))
 
-  /** المعاينة الحية: نفس منطق القيمة الاسمية في الصفحة. */
   const previewValue = React.useMemo(() => {
     if (!selectedPlan) return 0
     if (useCustomDuration && Number(durationDays) > 0) {
@@ -1437,7 +1222,6 @@ function GenerateCodesDialog({
       if (useCustomDuration) body.durationDays = Number(durationDays)
       if (expiresAt) body.expiresAt = new Date(expiresAt).toISOString()
       if (assignedTenantId !== 'none') body.assignedTenantId = assignedTenantId
-      if (batchLabel.trim()) body.batchLabel = batchLabel.trim()
 
       const data = await api<{ codes: string[] }>('/api/admin/codes', {
         method: 'POST',
@@ -1486,7 +1270,6 @@ function GenerateCodesDialog({
         mobileSheet
         className="max-h-[92dvh] gap-0 overflow-hidden p-0 sm:max-w-4xl"
       >
-        {/* رأس المطبعة */}
         <DialogHeader className="relative overflow-hidden border-b bg-gradient-to-l from-emerald-950 to-emerald-900 px-5 py-4 text-emerald-50 sm:px-6">
           <div aria-hidden className="absolute inset-0" style={INTAGLIO} />
           <div className="relative flex items-center gap-3">
@@ -1507,7 +1290,6 @@ function GenerateCodesDialog({
         </DialogHeader>
 
         {generated ? (
-          /* ═══ شاشة النجاح — كروت الكشط ═══ */
           <DialogBody className="space-y-4 p-5 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="flex items-center gap-2 text-sm font-black text-emerald-700 dark:text-emerald-400">
@@ -1575,9 +1357,7 @@ function GenerateCodesDialog({
             </Button>
           </DialogBody>
         ) : (
-          /* ═══ نموذج الطباعة + المعاينة الحية ═══ */
           <DialogBody className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[1fr_290px]">
-            {/* النموذج */}
             <div className="space-y-3.5">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -1614,7 +1394,6 @@ function GenerateCodesDialog({
                 </div>
               </div>
 
-              {/* 🛡️ مدة مخصصة */}
               <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
                 <label className="flex cursor-pointer items-center gap-2">
                   <input
@@ -1700,23 +1479,6 @@ function GenerateCodesDialog({
               </div>
 
               <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5 text-xs font-bold">
-                  <Tag className="size-3.5 text-muted-foreground" />
-                  تصنيف الرزمة/الباتش (اختياري)
-                </Label>
-                <Input
-                  value={batchLabel}
-                  onChange={(e) => setBatchLabel(e.target.value)}
-                  placeholder="مثال: حملة ديسمبر 2026"
-                  className="rounded-xl"
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  اسم يُميّز مجموعة الأكواد دي عن غيرها — تظهر كرزمة مستقلة في
-                  الدفتر.
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
                 <Label className="text-xs font-bold">ملاحظات داخلية</Label>
                 <Textarea
                   value={notes}
@@ -1728,7 +1490,6 @@ function GenerateCodesDialog({
               </div>
             </div>
 
-            {/* المعاينة الحية — البانكنوت تحت الطباعة */}
             <div className="space-y-2.5 lg:sticky lg:top-0 lg:self-start">
               <p className="flex items-center gap-1.5 text-[11px] font-black text-muted-foreground">
                 <Banknote className="size-3.5 text-amber-500" />
@@ -1746,7 +1507,6 @@ function GenerateCodesDialog({
                 quantity={qty}
                 assignedShop={assignedShop}
                 expiresAt={expiresAt || null}
-                batchLabel={batchLabel.trim() || null}
               />
               <p className="text-[10.5px] leading-relaxed text-muted-foreground">
                 كل كود سيحمل رقم تسلسلي فريد من 12 حرف — القيمة الاسمية
@@ -1784,8 +1544,6 @@ function GenerateCodesDialog({
   )
 }
 
-/* ═══════════════════ معاينة البانكنوت ═══════════════════ */
-
 function BanknotePreview({
   planName,
   periodLabel,
@@ -1794,7 +1552,6 @@ function BanknotePreview({
   quantity,
   assignedShop,
   expiresAt,
-  batchLabel,
 }: {
   planName: string
   periodLabel: string
@@ -1803,7 +1560,6 @@ function BanknotePreview({
   quantity: number
   assignedShop?: string
   expiresAt: string | null
-  batchLabel: string | null
 }) {
   return (
     <div
@@ -1811,13 +1567,11 @@ function BanknotePreview({
       className="relative aspect-[16/10] overflow-hidden rounded-xl border-2 border-amber-400/40 bg-gradient-to-br from-emerald-950 via-emerald-900 to-emerald-950 p-3.5 text-emerald-50 shadow-lg shadow-emerald-950/30"
     >
       <div aria-hidden className="absolute inset-0" style={INTAGLIO} />
-      {/* إطار داخلي متقطع */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-2 rounded-lg border border-dashed border-amber-200/25"
       />
 
-      {/* فئتا الزوايا */}
       <div className="absolute start-3.5 top-2.5 text-amber-300">
         <p className="font-mono text-2xl font-black leading-none tabular-nums">
           {duration || '—'}
@@ -1831,12 +1585,10 @@ function BanknotePreview({
         <p className="text-[8px] font-bold tracking-widest opacity-70">يوم</p>
       </div>
 
-      {/* ختم الكمية */}
       <span className="absolute end-3 top-3 -rotate-6 rounded-md border-2 border-amber-300/70 px-2 py-0.5 font-mono text-sm font-black tabular-nums text-amber-200">
         ×{quantity}
       </span>
 
-      {/* المنتصف */}
       <div className="relative flex h-full flex-col items-center justify-center text-center">
         <p className="text-[8.5px] font-black uppercase tracking-[0.3em] text-amber-200/80">
           نِظام POS
@@ -1857,7 +1609,6 @@ function BanknotePreview({
         )}
       </div>
 
-      {/* أختام التخصيص/الصلاحية */}
       <div className="absolute inset-x-3 bottom-2.5 flex flex-wrap items-center justify-center gap-1.5">
         {assignedShop && (
           <span className="max-w-[120px] truncate rounded-full border border-emerald-300/40 bg-emerald-400/15 px-2 py-0.5 text-[9px] font-bold text-emerald-100">
@@ -1869,19 +1620,12 @@ function BanknotePreview({
             صالح حتى {formatShortDate(expiresAt)}
           </span>
         )}
-        {batchLabel && (
-          <span className="max-w-[130px] truncate rounded-full border border-white/15 bg-white/8 px-2 py-0.5 text-[9px] font-bold text-emerald-50/90">
-            رزمة: {batchLabel}
-          </span>
-        )}
       </div>
 
       <Microprint className="absolute inset-x-0 bottom-0 py-0.5" />
     </div>
   )
 }
-
-/* ═══════════════════ كرت الكشط ═══════════════════ */
 
 function ScratchCard({
   code,

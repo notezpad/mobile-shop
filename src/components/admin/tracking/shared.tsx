@@ -44,7 +44,7 @@ export function presetRange(preset: Preset, fromStr?: string, toStr?: string): {
 }
 
 export const fmtNum = (n: number | null | undefined): string =>
-  n == null ? '—' : new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 0 }).format(n)
+  n == null ? '—' : new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n)
 
 export const fmtPct = (v: number | null | undefined, digits = 1): string =>
   v == null ? '—' : `${(v * 100).toFixed(digits)}%`
@@ -53,7 +53,7 @@ export const fmtPct100 = (v: number | null | undefined, digits = 1): string =>
   v == null ? '—' : `${v.toFixed(digits)}%`
 
 export const fmtMoney = (v: number | null | undefined): string =>
-  v == null ? '—' : `${new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 2 }).format(v)} ج.م`
+  v == null ? '—' : `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(v)} ج.م`
 
 // ─── شريط الفلاتر المشترك ─────────────────────────────────────────────
 

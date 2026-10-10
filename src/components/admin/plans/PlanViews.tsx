@@ -122,11 +122,11 @@ function QuickPriceEditor({
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent align="center" className="w-72 space-y-3 rounded-2xl p-4">
         <div>
-          <p className="flex items-center gap-1.5 text-[13px] font-black">
+          <p className="flex items-center gap-1.5 text-[15.5px] font-black">
             <PencilLine className="size-3.5 text-indigo-500" />
             تعديل سريع للسعر
           </p>
-          <p className="truncate text-[11px] text-muted-foreground">{plan.name}</p>
+          <p className="truncate text-[13.5px] text-foreground/70">{plan.name}</p>
         </div>
         <form
           className="space-y-3"
@@ -137,7 +137,7 @@ function QuickPriceEditor({
         >
           <div className="grid grid-cols-2 gap-2.5">
             <div className="space-y-1">
-              <Label className="text-[11px] font-bold">شهري</Label>
+              <Label className="text-[13.5px] font-bold">شهري</Label>
               <Input
                 autoFocus
                 type="number"
@@ -149,7 +149,7 @@ function QuickPriceEditor({
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-[11px] font-bold">سنوي</Label>
+              <Label className="text-[13.5px] font-bold">سنوي</Label>
               <Input
                 type="number"
                 min={0}
@@ -300,7 +300,7 @@ export function PlanCard({
   return (
     <article
       className={cn(
-        'group/card animate-in-up relative flex flex-col overflow-hidden rounded-3xl border bg-card/90 shadow-sm backdrop-blur transition-all duration-300',
+        'group/card animate-in-up relative flex flex-col overflow-hidden rounded-3xl border border-foreground/15 bg-card shadow-md transition-all duration-300',
         'hover:-translate-y-1 hover:shadow-xl hover:ring-1',
         theme.hoverRing,
         !p.isActive && 'opacity-75 saturate-[.7]',
@@ -311,7 +311,7 @@ export function PlanCard({
       <div
         aria-hidden
         className={cn(
-          'pointer-events-none absolute -top-20 -end-16 size-56 rounded-full opacity-[0.18] blur-3xl transition-opacity duration-500 group-hover/card:opacity-30',
+          'pointer-events-none absolute -top-20 -end-16 size-56 rounded-full opacity-[0.10] blur-3xl transition-opacity duration-500 group-hover/card:opacity-30',
           theme.glow,
         )}
       />
@@ -322,7 +322,7 @@ export function PlanCard({
         <header className="flex items-start gap-3">
           <PlanGlyph plan={p} theme={theme} />
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-base font-black leading-tight">{p.name}</h3>
+            <h3 className="line-clamp-2 text-base font-black leading-snug">{p.name}</h3>
             <button
               type="button"
               dir="ltr"
@@ -331,7 +331,7 @@ export function PlanCard({
                 const ok = await copyText(p.code)
                 toast[ok ? 'success' : 'error'](ok ? 'تم نسخ الكود' : 'تعذّر النسخ')
               }}
-              className="mt-0.5 inline-flex max-w-full items-center gap-1 truncate rounded-md font-mono text-[10.5px] text-muted-foreground transition-colors hover:text-foreground"
+              className="mt-0.5 inline-flex max-w-full items-center gap-1 truncate rounded-md font-mono text-[13px] text-foreground/70 transition-colors hover:text-foreground"
             >
               <span className="truncate">{p.code}</span>
               <Copy className="size-2.5 shrink-0 opacity-0 transition-opacity group-hover/card:opacity-70" />
@@ -344,7 +344,7 @@ export function PlanCard({
               aria-label={p.isActive ? 'تعطيل الباقة' : 'تفعيل الباقة'}
               title={p.isActive ? 'مفعّلة — اضغط للتعطيل' : 'معطّلة — اضغط للتفعيل'}
             />
-            <span className="text-[9.5px] font-bold text-muted-foreground">{p.isActive ? 'مفعّلة' : 'معطّلة'}</span>
+            <span className="text-[12px] font-bold text-foreground/70">{p.isActive ? 'مفعّلة' : 'معطّلة'}</span>
           </div>
         </header>
 
@@ -370,7 +370,7 @@ export function PlanCard({
         </div>
 
         {p.description && (
-          <p className="line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">{p.description}</p>
+          <p className="line-clamp-2 text-[14.5px] leading-relaxed text-foreground/70">{p.description}</p>
         )}
 
         {/* السعر */}
@@ -378,27 +378,27 @@ export function PlanCard({
           <button
             type="button"
             title="اضغط لتعديل السعر بسرعة"
-            className="group/price relative w-full rounded-2xl border border-transparent bg-muted/50 p-3.5 text-start outline-none transition-all hover:border-indigo-500/30 hover:bg-indigo-500/[0.06] focus-visible:ring-2 focus-visible:ring-indigo-500/50"
+            className="group/price relative w-full rounded-2xl border border-slate-200 bg-slate-50 p-3.5 text-start dark:border-white/10 dark:bg-white/[0.05] outline-none transition-all hover:border-indigo-500/30 hover:bg-indigo-500/[0.06] focus-visible:ring-2 focus-visible:ring-indigo-500/50"
           >
-            <span className="absolute end-3 top-3 flex size-6 items-center justify-center rounded-full bg-background text-muted-foreground opacity-0 shadow-sm transition-opacity group-hover/price:opacity-100 group-focus-visible/price:opacity-100">
+            <span className="absolute end-3 top-3 flex size-6 items-center justify-center rounded-full bg-background text-foreground/70 opacity-0 shadow-sm transition-opacity group-hover/price:opacity-100 group-focus-visible/price:opacity-100">
               <PencilLine className="size-3" />
             </span>
             {isFree ? (
               <span className={cn('text-3xl font-black', theme.text)}>مجاناً</span>
             ) : billing === 'yearly' && p.priceYearly === 0 ? (
               <>
-                <span className="block text-2xl font-black text-muted-foreground/60">—</span>
-                <span className="text-[11px] font-semibold text-muted-foreground">لا يوجد سعر سنوي</span>
+                <span className="block text-2xl font-black text-foreground/70/60">—</span>
+                <span className="text-[13.5px] font-semibold text-foreground/70">لا يوجد سعر سنوي</span>
               </>
             ) : (
               <>
                 <span className="flex items-baseline gap-1.5">
                   <span className="text-4xl font-black tracking-tight tabular-nums">{num(price)}</span>
-                  <span className="text-[11px] font-bold text-muted-foreground">
+                  <span className="text-[13.5px] font-bold text-foreground/70">
                     ج.م / {billing === 'monthly' ? 'شهر' : 'سنة'}
                   </span>
                 </span>
-                <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+                <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[13.5px] font-semibold text-foreground/70">
                   {billing === 'monthly' ? (
                     p.priceYearly > 0 ? (
                       <>
@@ -428,10 +428,10 @@ export function PlanCard({
         {/* الحدود */}
         <div className="grid grid-cols-3 gap-2">
           {limits.map((l) => (
-            <div key={l.label} className="rounded-2xl border bg-background/60 px-2 py-2.5 text-center">
+            <div key={l.label} className="rounded-2xl border bg-card px-2 py-2.5 text-center">
               <l.icon className={cn('mx-auto size-3.5', theme.text)} />
-              <p className="mt-1 font-mono text-[15px] font-black leading-none tabular-nums">{fmtLimit(l.v)}</p>
-              <p className="mt-1 text-[10px] font-semibold text-muted-foreground">{l.label}</p>
+              <p className="mt-1 font-mono text-[17px] font-black leading-none tabular-nums">{fmtLimit(l.v)}</p>
+              <p className="mt-1 text-[12.5px] font-semibold text-foreground/70">{l.label}</p>
             </div>
           ))}
         </div>
@@ -441,7 +441,7 @@ export function PlanCard({
           <div>
             <ul className="space-y-1.5">
               {shown.map((f, i) => (
-                <li key={`${f}-${i}`} className="flex items-start gap-2 text-[12px] leading-snug">
+                <li key={`${f}-${i}`} className="flex items-start gap-2 text-[14.5px] leading-snug">
                   <span className={cn('mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full', theme.soft, theme.text)}>
                     <Check className="size-2.5" strokeWidth={3.5} />
                   </span>
@@ -453,7 +453,7 @@ export function PlanCard({
               <button
                 type="button"
                 onClick={() => setExpanded((v) => !v)}
-                className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:underline dark:text-indigo-300"
+                className="mt-2 inline-flex items-center gap-1 text-[13.5px] font-bold text-indigo-600 hover:underline dark:text-indigo-300"
               >
                 {expanded ? (
                   <>
@@ -487,26 +487,26 @@ export function PlanCard({
         <footer className="mt-auto space-y-3 border-t pt-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-[10.5px] font-semibold text-muted-foreground">المشتركون</p>
+              <p className="text-[13px] font-semibold text-foreground/70">المشتركون</p>
               <p className="font-mono text-lg font-black leading-tight tabular-nums">
                 {num(p.subscribersCount)}
                 {(p.trialCount ?? 0) > 0 && (
-                  <span className="ms-1.5 font-sans text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                  <span className="ms-1.5 font-sans text-[12.5px] font-bold text-amber-600 dark:text-amber-400">
                     ({p.trialCount} تجربة)
                   </span>
                 )}
               </p>
             </div>
             <div>
-              <p className="text-[10.5px] font-semibold text-muted-foreground">إيراد شهري</p>
+              <p className="text-[13px] font-semibold text-foreground/70">إيراد شهري</p>
               <p className="font-mono text-lg font-black leading-tight tabular-nums">
-                {num(mrr)} <span className="font-sans text-[10px] font-bold text-muted-foreground">ج.م</span>
+                {num(mrr)} <span className="font-sans text-[12.5px] font-bold text-foreground/70">ج.م</span>
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <MiniBar pct={sharePct} barClassName={cn('bg-gradient-to-l', theme.grad)} />
-            <span className="w-9 shrink-0 text-end font-mono text-[10.5px] font-black tabular-nums text-muted-foreground">
+            <span className="w-9 shrink-0 text-end font-mono text-[13px] font-black tabular-nums text-foreground/70">
               {sharePct}%
             </span>
           </div>
@@ -560,8 +560,8 @@ function SortHeader({
         type="button"
         onClick={() => onSort(desc && sort === asc ? desc : asc)}
         className={cn(
-          'inline-flex items-center gap-1 text-[11px] font-black tracking-wide transition-colors hover:text-foreground',
-          active ? 'text-indigo-600 dark:text-indigo-300' : 'text-muted-foreground',
+          'inline-flex items-center gap-1 text-[13.5px] font-black tracking-wide transition-colors hover:text-foreground',
+          active ? 'text-indigo-600 dark:text-indigo-300' : 'text-foreground/70',
         )}
       >
         {label}
@@ -589,19 +589,19 @@ export function PlansList({
   actions: PlanActions
 }) {
   return (
-    <div className="animate-in-up overflow-hidden rounded-3xl border bg-card/90 shadow-sm backdrop-blur">
+    <div className="animate-in-up overflow-hidden rounded-3xl border border-foreground/15 bg-card shadow-md">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-sm">
+        <table className="w-full min-w-[900px] border-collapse text-[15.5px]">
           <thead>
             <tr className="border-b bg-muted/40">
               <SortHeader label="الباقة" asc="name" sort={sort} onSort={onSort} />
               <SortHeader label="السعر" asc="price-asc" desc="price-desc" sort={sort} onSort={onSort} />
-              <th scope="col" className="px-3 py-3 text-start text-[11px] font-black tracking-wide text-muted-foreground">
+              <th scope="col" className="px-3 py-3 text-start text-[13.5px] font-black tracking-wide text-foreground/70">
                 الحدود
               </th>
               <SortHeader label="المشتركون" asc="subs" sort={sort} onSort={onSort} />
               <SortHeader label="الإيراد الشهري" asc="revenue" sort={sort} onSort={onSort} />
-              <th scope="col" className="px-3 py-3 text-center text-[11px] font-black tracking-wide text-muted-foreground">
+              <th scope="col" className="px-3 py-3 text-center text-[13.5px] font-black tracking-wide text-foreground/70">
                 مفعّلة
               </th>
               <th scope="col" className="px-3 py-3" />
@@ -626,12 +626,12 @@ export function PlansList({
                     <div className="flex items-center gap-3">
                       <PlanGlyph plan={p} theme={theme} size="sm" />
                       <div className="min-w-0">
-                        <p className="truncate text-[13.5px] font-extrabold leading-tight">{p.name}</p>
+                        <p className="truncate text-[16px] font-extrabold leading-tight">{p.name}</p>
                         <div className="mt-0.5 flex items-center gap-1.5">
-                          <span className="font-mono text-[10.5px] text-muted-foreground" dir="ltr">
+                          <span className="font-mono text-[13px] text-foreground/70" dir="ltr">
                             {p.code}
                           </span>
-                          <Pill tone={p.isCanonical ? 'indigo' : 'amber'} className="px-1.5 py-0 text-[9.5px]">
+                          <Pill tone={p.isCanonical ? 'indigo' : 'amber'} className="px-1.5 py-0 text-[12px]">
                             {p.isCanonical ? 'قياسية' : 'مخصّصة'}
                           </Pill>
                         </div>
@@ -645,12 +645,12 @@ export function PlansList({
                         type="button"
                         className="group/price rounded-xl px-2 py-1 text-start outline-none transition-colors hover:bg-indigo-500/10 focus-visible:ring-2 focus-visible:ring-indigo-500/50"
                       >
-                        <span className="flex items-center gap-1 font-mono text-[13.5px] font-black tabular-nums">
+                        <span className="flex items-center gap-1 font-mono text-[16px] font-black tabular-nums">
                           {p.priceMonthly === 0 ? 'مجاناً' : num(p.priceMonthly)}
-                          {p.priceMonthly > 0 && <span className="font-sans text-[10px] font-bold text-muted-foreground">/شهر</span>}
-                          <PencilLine className="ms-1 size-3 text-muted-foreground opacity-0 transition-opacity group-hover/price:opacity-100" />
+                          {p.priceMonthly > 0 && <span className="font-sans text-[12.5px] font-bold text-foreground/70">/شهر</span>}
+                          <PencilLine className="ms-1 size-3 text-foreground/70 opacity-0 transition-opacity group-hover/price:opacity-100" />
                         </span>
-                        <span className="flex items-center gap-1.5 text-[10.5px] font-semibold text-muted-foreground">
+                        <span className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground/70">
                           {p.priceYearly > 0 ? `${num(p.priceYearly)} سنوياً` : '—'}
                           {pct > 0 && <span className="font-black text-emerald-600 dark:text-emerald-400">-{pct}%</span>}
                         </span>
@@ -659,33 +659,33 @@ export function PlansList({
                   </td>
 
                   <td className="px-3 py-3">
-                    <div className="flex items-center gap-3 font-mono text-[12px] font-bold tabular-nums">
+                    <div className="flex items-center gap-3 font-mono text-[14.5px] font-bold tabular-nums">
                       <span className="inline-flex items-center gap-1" title="مستخدمين">
-                        <Users className="size-3 text-muted-foreground" />
+                        <Users className="size-3 text-foreground/70" />
                         {fmtLimit(p.maxUsers)}
                       </span>
                       <span className="inline-flex items-center gap-1" title="منتجات">
-                        <Package className="size-3 text-muted-foreground" />
+                        <Package className="size-3 text-foreground/70" />
                         {fmtLimit(p.maxProducts)}
                       </span>
                       <span className="inline-flex items-center gap-1" title="فروع">
-                        <Building2 className="size-3 text-muted-foreground" />
+                        <Building2 className="size-3 text-foreground/70" />
                         {fmtLimit(p.maxBranches)}
                       </span>
                     </div>
                   </td>
 
                   <td className="px-3 py-3">
-                    <p className="font-mono text-[13.5px] font-black tabular-nums">
+                    <p className="font-mono text-[16px] font-black tabular-nums">
                       {num(p.subscribersCount)}
                       {(p.trialCount ?? 0) > 0 && (
-                        <span className="ms-1 font-sans text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                        <span className="ms-1 font-sans text-[12.5px] font-bold text-amber-600 dark:text-amber-400">
                           {p.trialCount} تجربة
                         </span>
                       )}
                     </p>
                     {(p.expiringSoonCount ?? 0) > 0 && (
-                      <p className="flex items-center gap-1 text-[10.5px] font-bold text-amber-600 dark:text-amber-400">
+                      <p className="flex items-center gap-1 text-[13px] font-bold text-amber-600 dark:text-amber-400">
                         <CalendarClock className="size-3" />
                         {p.expiringSoonCount} ينتهي قريباً
                       </p>
@@ -694,12 +694,12 @@ export function PlansList({
 
                   <td className="px-3 py-3">
                     <div className="w-36">
-                      <p className="font-mono text-[13px] font-black tabular-nums">
-                        {num(mrr)} <span className="font-sans text-[10px] font-bold text-muted-foreground">ج.م</span>
+                      <p className="font-mono text-[15.5px] font-black tabular-nums">
+                        {num(mrr)} <span className="font-sans text-[12.5px] font-bold text-foreground/70">ج.م</span>
                       </p>
                       <div className="mt-1 flex items-center gap-1.5">
                         <MiniBar pct={share} barClassName={cn('bg-gradient-to-l', theme.grad)} />
-                        <span className="w-8 shrink-0 text-end font-mono text-[10px] font-black tabular-nums text-muted-foreground">
+                        <span className="w-8 shrink-0 text-end font-mono text-[12.5px] font-black tabular-nums text-foreground/70">
                           {Math.round(share)}%
                         </span>
                       </div>
@@ -734,7 +734,7 @@ export function PlansList({
           </tbody>
         </table>
       </div>
-      <p className="border-t bg-muted/30 px-4 py-2.5 text-center text-[10.5px] font-medium text-muted-foreground">
+      <p className="border-t bg-muted/30 px-4 py-2.5 text-center text-[13px] font-medium text-foreground/70">
         اضغط على أي صف لعرض التفاصيل · اضغط على السعر لتعديله بسرعة · العناوين قابلة للترتيب
       </p>
     </div>
@@ -781,9 +781,9 @@ export function PlansCompare({
       render: (p) => {
         const v = billing === 'monthly' ? p.priceMonthly : p.priceYearly
         return v === 0 ? (
-          <span className="font-black text-muted-foreground">{billing === 'monthly' ? 'مجاناً' : '—'}</span>
+          <span className="font-black text-foreground/70">{billing === 'monthly' ? 'مجاناً' : '—'}</span>
         ) : (
-          <span className="font-mono text-[15px] font-black tabular-nums">{num(v)}</span>
+          <span className="font-mono text-[17px] font-black tabular-nums">{num(v)}</span>
         )
       },
     },
@@ -791,46 +791,46 @@ export function PlansCompare({
       label: billing === 'monthly' ? 'السعر السنوي' : 'السعر الشهري',
       render: (p) => {
         const v = billing === 'monthly' ? p.priceYearly : p.priceMonthly
-        return <span className="font-mono text-xs font-bold tabular-nums text-muted-foreground">{v === 0 ? '—' : num(v)}</span>
+        return <span className="font-mono text-[14px] font-bold tabular-nums text-foreground/70">{v === 0 ? '—' : num(v)}</span>
       },
     },
     {
       label: 'الخصم السنوي',
       render: (p) => {
         const { pct } = yearlySavings(p)
-        return pct > 0 ? <Pill tone="emerald">-{pct}%</Pill> : <span className="text-muted-foreground/50">—</span>
+        return pct > 0 ? <Pill tone="emerald">-{pct}%</Pill> : <span className="text-foreground/70/50">—</span>
       },
     },
     {
       label: 'أيام التجربة',
       render: (p) => (
-        <span className="inline-flex items-center gap-1 text-xs font-bold">
+        <span className="inline-flex items-center gap-1 text-[14px] font-bold">
           {p.trialDays > 0 ? (
             <>
               <Clock3 className="size-3 text-indigo-500" />
               {p.trialDays} يوم
             </>
           ) : (
-            <span className="text-muted-foreground/50">—</span>
+            <span className="text-foreground/70/50">—</span>
           )}
         </span>
       ),
     },
     group('الحدود'),
-    { label: 'المستخدمون', render: (p) => <span className="font-mono text-xs font-black tabular-nums">{fmtLimit(p.maxUsers)}</span> },
-    { label: 'المنتجات', render: (p) => <span className="font-mono text-xs font-black tabular-nums">{fmtLimit(p.maxProducts)}</span> },
-    { label: 'الفروع', render: (p) => <span className="font-mono text-xs font-black tabular-nums">{fmtLimit(p.maxBranches)}</span> },
+    { label: 'المستخدمون', render: (p) => <span className="font-mono text-[14px] font-black tabular-nums">{fmtLimit(p.maxUsers)}</span> },
+    { label: 'المنتجات', render: (p) => <span className="font-mono text-[14px] font-black tabular-nums">{fmtLimit(p.maxProducts)}</span> },
+    { label: 'الفروع', render: (p) => <span className="font-mono text-[14px] font-black tabular-nums">{fmtLimit(p.maxBranches)}</span> },
     group('الأداء'),
-    { label: 'المشتركون', render: (p) => <span className="font-mono text-xs font-black tabular-nums">{num(p.subscribersCount)}</span> },
+    { label: 'المشتركون', render: (p) => <span className="font-mono text-[14px] font-black tabular-nums">{num(p.subscribersCount)}</span> },
     {
       label: 'الإيراد الشهري',
-      render: (p) => <span className="font-mono text-xs font-black tabular-nums">{num(planMrr(p))}</span>,
+      render: (p) => <span className="font-mono text-[14px] font-black tabular-nums">{num(planMrr(p))}</span>,
     },
     group('النطاق'),
     {
       label: 'نوع النشاط',
       render: (p) => (
-        <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold">
+        <span className="inline-flex items-center gap-1 text-[14px] font-semibold">
           {isFashion(p) ? <Shirt className="size-3 text-fuchsia-500" /> : <Smartphone className="size-3 text-sky-500" />}
           {BUSINESS_TYPE_LABEL[p.businessType ?? 'electronics'] ?? p.businessType}
         </span>
@@ -841,10 +841,10 @@ export function PlansCompare({
       render: (p) => {
         const { list, isDefault } = modulesOf(p)
         return (
-          <span className="inline-flex items-center gap-1 text-xs font-black">
+          <span className="inline-flex items-center gap-1 text-[14px] font-black">
             <Layers className="size-3 text-indigo-500" />
             {list.length}
-            {isDefault && <Pill className="px-1.5 py-0 text-[9px]">افتراضي</Pill>}
+            {isDefault && <Pill className="px-1.5 py-0 text-[11.5px]">افتراضي</Pill>}
           </span>
         )
       },
@@ -856,12 +856,12 @@ export function PlansCompare({
   ]
 
   return (
-    <div className="animate-in-up overflow-hidden rounded-3xl border bg-card/90 shadow-sm backdrop-blur">
+    <div className="animate-in-up overflow-hidden rounded-3xl border border-foreground/15 bg-card shadow-md">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-collapse text-sm">
+        <table className="w-full min-w-[720px] border-collapse text-[15.5px]">
           <thead>
             <tr>
-              <th className="sticky start-0 z-20 w-40 bg-card px-4 py-4 text-start align-bottom text-[11px] font-black tracking-wide text-muted-foreground">
+              <th className="sticky start-0 z-20 w-40 bg-card px-4 py-4 text-start align-bottom text-[13.5px] font-black tracking-wide text-foreground/70">
                 وجه المقارنة
               </th>
               {plans.map((p) => {
@@ -878,8 +878,8 @@ export function PlansCompare({
                     <div className="flex flex-col items-center gap-2 text-center">
                       <PlanGlyph plan={p} theme={theme} />
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-black leading-tight">{p.name}</p>
-                        <p className="font-mono text-[10px] font-medium text-muted-foreground" dir="ltr">
+                        <p className="truncate text-[15.5px] font-black leading-tight">{p.name}</p>
+                        <p className="font-mono text-[12.5px] font-medium text-foreground/70" dir="ltr">
                           {p.code}
                         </p>
                       </div>
@@ -908,7 +908,7 @@ export function PlansCompare({
                 <tr key={row.label}>
                   <th
                     colSpan={plans.length + 1}
-                    className="bg-muted/40 px-4 py-2 text-start text-[10.5px] font-black tracking-widest text-muted-foreground"
+                    className="bg-muted/40 px-4 py-2 text-start text-[13px] font-black tracking-widest text-foreground/70"
                   >
                     {row.label.replace('__group__', '')}
                   </th>
@@ -917,7 +917,7 @@ export function PlansCompare({
                 <tr key={row.label} className="border-t transition-colors hover:bg-muted/20">
                   <th
                     scope="row"
-                    className="sticky start-0 z-10 bg-card px-4 py-3 text-start text-[12px] font-bold text-muted-foreground"
+                    className="sticky start-0 z-10 bg-card px-4 py-3 text-start text-[14.5px] font-bold text-foreground/70"
                   >
                     {row.label}
                   </th>
@@ -938,7 +938,7 @@ export function PlansCompare({
                 <tr>
                   <th
                     colSpan={plans.length + 1}
-                    className="bg-muted/40 px-4 py-2 text-start text-[10.5px] font-black tracking-widest text-muted-foreground"
+                    className="bg-muted/40 px-4 py-2 text-start text-[13px] font-black tracking-widest text-foreground/70"
                   >
                     المزايا
                   </th>
@@ -948,7 +948,7 @@ export function PlansCompare({
                     <th
                       scope="row"
                       title={f}
-                      className="sticky start-0 z-10 max-w-[170px] truncate bg-card px-4 py-2.5 text-start text-[11.5px] font-semibold text-muted-foreground"
+                      className="sticky start-0 z-10 max-w-[170px] truncate bg-card px-4 py-2.5 text-start text-[14px] font-semibold text-foreground/70"
                     >
                       {f}
                     </th>
@@ -979,7 +979,7 @@ export function PlansCompare({
           </tbody>
         </table>
       </div>
-      <p className="border-t bg-muted/30 px-4 py-2.5 text-center text-[10.5px] font-medium text-muted-foreground">
+      <p className="border-t bg-muted/30 px-4 py-2.5 text-center text-[13px] font-medium text-foreground/70">
         مقارنة {plans.length} باقة · الأسعار بالجنيه المصري · الوحدات الافتراضية محسوبة بحسب نوع النشاط
       </p>
     </div>
@@ -992,7 +992,7 @@ function Tick({ on }: { on: boolean }) {
       <Check className="size-3.5" strokeWidth={3} />
     </span>
   ) : (
-    <span className="mx-auto flex size-5.5 items-center justify-center text-muted-foreground/35">
+    <span className="mx-auto flex size-5.5 items-center justify-center text-foreground/70/35">
       <Minus className="size-3.5" strokeWidth={3} />
     </span>
   )

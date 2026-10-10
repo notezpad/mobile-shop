@@ -156,15 +156,15 @@ function Field({
 }) {
   return (
     <div className={cn('space-y-1.5', className)}>
-      <Label className="text-[12.5px] font-bold">{label}</Label>
+      <Label className="text-[15px] font-bold">{label}</Label>
       {children}
       {error ? (
-        <p className="flex items-center gap-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+        <p className="flex items-center gap-1 text-[13.5px] font-semibold text-rose-600 dark:text-rose-400">
           <TriangleAlert className="size-3" />
           {error}
         </p>
       ) : hint ? (
-        <p className="text-[11px] leading-relaxed text-muted-foreground">{hint}</p>
+        <p className="text-[13.5px] leading-relaxed text-foreground/70">{hint}</p>
       ) : null}
     </div>
   )
@@ -191,7 +191,7 @@ function MoneyInput({
         aria-invalid={invalid}
         className="h-11 rounded-xl pe-14 font-mono text-base font-bold tabular-nums"
       />
-      <span className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-muted-foreground">
+      <span className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-[13.5px] font-bold text-foreground/70">
         ج.م
       </span>
     </div>
@@ -217,7 +217,7 @@ function LimitField({
   return (
     <div className="rounded-2xl border bg-card p-3 shadow-sm">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-[12px] font-bold">
+        <span className="flex items-center gap-1.5 text-[14.5px] font-bold">
           <Icon className="size-3.5 text-indigo-500" />
           {label}
         </span>
@@ -227,10 +227,10 @@ function LimitField({
           title="بدون حدود"
           onClick={() => onChange(unlimited ? String(fallback) : String(UNLIMITED))}
           className={cn(
-            'inline-flex size-7 items-center justify-center rounded-lg border text-xs font-black transition-all',
+            'inline-flex size-7 items-center justify-center rounded-lg border text-[14px] font-black transition-all',
             unlimited
               ? 'border-indigo-500 bg-indigo-500 text-white shadow-sm shadow-indigo-500/30'
-              : 'bg-muted/50 text-muted-foreground hover:border-indigo-400 hover:text-indigo-600',
+              : 'bg-muted text-foreground/70 hover:border-indigo-400 hover:text-indigo-600',
           )}
         >
           <InfinityIcon className="size-4" strokeWidth={2.4} />
@@ -276,7 +276,7 @@ function ToggleCard({
       className={cn(
         'group flex items-start gap-2.5 rounded-2xl border p-3 text-start transition-all outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50',
         disabled
-          ? 'cursor-not-allowed border-border/60 bg-muted/40'
+          ? 'cursor-not-allowed border-border bg-muted/40'
           : checked
             ? 'cursor-pointer border-indigo-500/40 bg-indigo-500/[0.07] shadow-sm'
             : 'cursor-pointer border-border bg-card hover:border-indigo-400/50 hover:bg-muted/40',
@@ -298,15 +298,15 @@ function ToggleCard({
         )}
       </span>
       <span className="min-w-0">
-        <span className="flex flex-wrap items-center gap-1.5 text-[13px] font-bold leading-tight">
+        <span className="flex flex-wrap items-center gap-1.5 text-[15.5px] font-bold leading-tight">
           {title}
           {badge && (
-            <span className="rounded-full bg-muted px-1.5 py-px text-[9.5px] font-bold text-muted-foreground">
+            <span className="rounded-full bg-muted px-1.5 py-px text-[12px] font-bold text-foreground/70">
               {badge}
             </span>
           )}
         </span>
-        <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{desc}</span>
+        <span className="mt-0.5 block text-[13.5px] leading-snug text-foreground/70">{desc}</span>
       </span>
     </button>
   )
@@ -328,7 +328,7 @@ function PlanPreview({ form, theme }: { form: FormState; theme: PlanTheme }) {
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-3xl border bg-card p-4 shadow-lg ring-1',
+        'relative overflow-hidden rounded-3xl border border-foreground/15 bg-card p-4 shadow-lg ring-1',
         theme.ring,
         !form.isActive && 'opacity-70 saturate-50',
       )}
@@ -347,8 +347,8 @@ function PlanPreview({ form, theme }: { form: FormState; theme: PlanTheme }) {
           <Icon className="size-5" />
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[15px] font-extrabold leading-tight">{form.name || 'اسم الباقة'}</p>
-          <p className="truncate font-mono text-[10.5px] text-muted-foreground" dir="ltr">
+          <p className="truncate text-[17px] font-extrabold leading-tight">{form.name || 'اسم الباقة'}</p>
+          <p className="truncate font-mono text-[13px] text-foreground/70" dir="ltr">
             {form.code || 'plan-code'}
           </p>
         </div>
@@ -360,11 +360,11 @@ function PlanPreview({ form, theme }: { form: FormState; theme: PlanTheme }) {
         ) : (
           <p className="flex items-baseline gap-1.5">
             <span className="text-4xl font-black tracking-tight tabular-nums">{num(m)}</span>
-            <span className="text-xs font-bold text-muted-foreground">ج.م / شهر</span>
+            <span className="text-[14px] font-bold text-foreground/70">ج.م / شهر</span>
           </p>
         )}
         {y > 0 && (
-          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[13.5px] font-semibold text-foreground/70">
             أو <span className="font-mono font-extrabold text-foreground">{num(y)}</span> ج.م سنوياً
             {pct > 0 && <Pill tone="emerald">وفّر {pct}%</Pill>}
           </p>
@@ -378,10 +378,10 @@ function PlanPreview({ form, theme }: { form: FormState; theme: PlanTheme }) {
 
       <div className="relative mt-4 grid grid-cols-3 gap-1.5">
         {limits.map((l) => (
-          <div key={l.label} className="rounded-xl bg-muted/60 px-2 py-2 text-center">
+          <div key={l.label} className="rounded-xl bg-muted px-2 py-2 text-center">
             <l.icon className={cn('mx-auto size-3.5', theme.text)} />
-            <p className="mt-1 font-mono text-sm font-black tabular-nums">{fmtLimit(l.v)}</p>
-            <p className="text-[9.5px] font-semibold text-muted-foreground">{l.label}</p>
+            <p className="mt-1 font-mono text-[15.5px] font-black tabular-nums">{fmtLimit(l.v)}</p>
+            <p className="text-[12px] font-semibold text-foreground/70">{l.label}</p>
           </div>
         ))}
       </div>
@@ -389,7 +389,7 @@ function PlanPreview({ form, theme }: { form: FormState; theme: PlanTheme }) {
       {form.features.length > 0 && (
         <ul className="relative mt-4 space-y-1.5">
           {form.features.slice(0, 5).map((f, i) => (
-            <li key={`${f}-${i}`} className="flex items-start gap-1.5 text-[11.5px] leading-snug">
+            <li key={`${f}-${i}`} className="flex items-start gap-1.5 text-[14px] leading-snug">
               <span className={cn('mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full', theme.soft, theme.text)}>
                 <Check className="size-2.5" strokeWidth={3.5} />
               </span>
@@ -397,7 +397,7 @@ function PlanPreview({ form, theme }: { form: FormState; theme: PlanTheme }) {
             </li>
           ))}
           {form.features.length > 5 && (
-            <li className="ps-5 text-[10.5px] font-bold text-muted-foreground">
+            <li className="ps-5 text-[13px] font-bold text-foreground/70">
               +{form.features.length - 5} مميزات أخرى
             </li>
           )}
@@ -639,7 +639,7 @@ export function PlanDialog({
                       </Pill>
                     )}
                   </DialogTitle>
-                  <DialogDescription className="truncate text-[12px]">
+                  <DialogDescription className="truncate text-[14.5px]">
                     {isEdit
                       ? `${plan?.name} · ${plan?.subscribersCount ?? 0} مشترك نشط`
                       : 'حدّد التسعير والحدود والمزايا والوحدات — والمعاينة الحيّة بجانب النموذج'}
@@ -649,7 +649,7 @@ export function PlanDialog({
                   type="button"
                   onClick={() => requestClose(false)}
                   aria-label="إغلاق"
-                  className="flex size-9 shrink-0 items-center justify-center rounded-full border bg-background/60 text-muted-foreground backdrop-blur transition-colors hover:bg-background hover:text-foreground"
+                  className="flex size-9 shrink-0 items-center justify-center rounded-full border bg-card text-foreground/70 backdrop-blur transition-colors hover:bg-background hover:text-foreground"
                 >
                   <X className="size-4" />
                 </button>
@@ -657,7 +657,7 @@ export function PlanDialog({
             </DialogHeader>
 
             {isEdit && (plan?.subscribersCount ?? 0) > 0 && (
-              <p className="relative mt-3 flex items-start gap-1.5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11.5px] font-medium leading-relaxed text-amber-800 dark:text-amber-200">
+              <p className="relative mt-3 flex items-start gap-1.5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[14px] font-medium leading-relaxed text-amber-800 dark:text-amber-200">
                 <Info className="mt-0.5 size-3.5 shrink-0" />
                 هذه الباقة مرتبطة بـ {plan?.subscribersCount} اشتراك نشط — تغيير الوحدات والحدود يؤثّر عليهم مباشرة.
               </p>
@@ -672,12 +672,12 @@ export function PlanDialog({
               className="flex min-h-0 min-w-0 flex-col gap-0"
             >
               <div className="shrink-0 border-b px-4 py-2.5">
-                <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto rounded-2xl bg-muted/50 p-1">
+                <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto rounded-2xl bg-muted p-1">
                   {tabs.map((t) => (
                     <TabsTrigger
                       key={t.v}
                       value={t.v}
-                      className="relative gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold data-[state=active]:bg-background data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm dark:data-[state=active]:text-indigo-300"
+                      className="relative gap-1.5 rounded-xl px-3 py-1.5 text-[14px] font-bold data-[state=active]:bg-background data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm dark:data-[state=active]:text-indigo-300"
                     >
                       <t.icon className="size-3.5" />
                       {t.label}
@@ -719,12 +719,12 @@ export function PlanDialog({
                                 'flex size-10 items-center justify-center rounded-xl transition-colors',
                                 active
                                   ? 'bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/30'
-                                  : 'bg-muted text-muted-foreground',
+                                  : 'bg-muted text-foreground/70',
                               )}
                             >
                               <o.icon className="size-5" />
                             </span>
-                            <span className="text-[13px] font-extrabold">{o.label}</span>
+                            <span className="text-[15.5px] font-extrabold">{o.label}</span>
                           </button>
                         )
                       })}
@@ -749,7 +749,7 @@ export function PlanDialog({
                             <button
                               type="button"
                               onClick={() => setCodeUnlocked((v) => !v)}
-                              className="inline-flex items-center gap-1 text-[10.5px] font-bold text-muted-foreground hover:text-foreground"
+                              className="inline-flex items-center gap-1 text-[13px] font-bold text-foreground/70 hover:text-foreground"
                             >
                               {codeLocked ? <Lock className="size-3" /> : <LockOpen className="size-3" />}
                               {codeLocked ? 'فتح التعديل' : 'قفل'}
@@ -771,7 +771,7 @@ export function PlanDialog({
                         dir="ltr"
                         readOnly={codeLocked}
                         aria-invalid={!!showErr('code')}
-                        className={cn('h-11 rounded-xl font-mono', codeLocked && 'bg-muted/60 text-muted-foreground')}
+                        className={cn('h-11 rounded-xl font-mono', codeLocked && 'bg-muted text-foreground/70')}
                       />
                     </Field>
                   </div>
@@ -799,8 +799,8 @@ export function PlanDialog({
                         <Power className="size-4.5" />
                       </span>
                       <span>
-                        <span className="block text-sm font-extrabold">الباقة مفعّلة</span>
-                        <span className="block text-[11px] text-muted-foreground">
+                        <span className="block text-[15.5px] font-extrabold">الباقة مفعّلة</span>
+                        <span className="block text-[13.5px] text-foreground/70">
                           الباقات المعطّلة لا تظهر للعملاء الجدد، وتستمر الاشتراكات الحالية.
                         </span>
                       </span>
@@ -827,7 +827,7 @@ export function PlanDialog({
                   {/* مساعد الخصم السنوي */}
                   {m > 0 && (
                     <div className="rounded-2xl border border-dashed border-indigo-500/30 bg-indigo-500/[0.04] p-3">
-                      <p className="mb-2 flex items-center gap-1.5 text-[11.5px] font-bold text-indigo-700 dark:text-indigo-300">
+                      <p className="mb-2 flex items-center gap-1.5 text-[14px] font-bold text-indigo-700 dark:text-indigo-300">
                         <Wand2 className="size-3.5" />
                         احسب السعر السنوي تلقائياً
                       </p>
@@ -847,7 +847,7 @@ export function PlanDialog({
                               type="button"
                               onClick={() => set('priceYearly', String(target))}
                               className={cn(
-                                'rounded-full border px-3 py-1 text-[11px] font-bold transition-all',
+                                'rounded-full border px-3 py-1 text-[13.5px] font-bold transition-all',
                                 active
                                   ? 'border-indigo-500 bg-indigo-500 text-white shadow-sm shadow-indigo-500/30'
                                   : 'bg-background hover:border-indigo-400 hover:text-indigo-600',
@@ -870,12 +870,12 @@ export function PlanDialog({
                           : 'border-amber-500/30 bg-amber-500/10',
                       )}
                     >
-                      <span className="text-[12px] font-bold">
+                      <span className="text-[14.5px] font-bold">
                         {savings > 0 ? 'يوفّر العميل سنوياً' : 'السنوي أغلى من أو يساوي ١٢ × الشهري'}
                       </span>
-                      <span className="font-mono text-sm font-black tabular-nums">
+                      <span className="font-mono text-[15.5px] font-black tabular-nums">
                         {savings > 0 ? `${num(savings)} ج.م (${pct}%)` : `+${num(-savings)} ج.م`}
-                        <span className="ms-2 font-sans text-[11px] font-semibold text-muted-foreground">
+                        <span className="ms-2 font-sans text-[13.5px] font-semibold text-foreground/70">
                           ≈ {num(Math.round(y / 12))} ج.م/شهر
                         </span>
                       </span>
@@ -883,7 +883,7 @@ export function PlanDialog({
                   )}
 
                   <div>
-                    <p className="mb-2 text-[12.5px] font-bold">الحدود</p>
+                    <p className="mb-2 text-[15px] font-bold">الحدود</p>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <LimitField icon={Users} label="المستخدمون" value={form.maxUsers} onChange={(v) => set('maxUsers', v)} min={1} fallback={5} />
                       <LimitField icon={Package} label="المنتجات" value={form.maxProducts} onChange={(v) => set('maxProducts', v)} min={0} fallback={500} />
@@ -908,10 +908,10 @@ export function PlanDialog({
                             type="button"
                             onClick={() => set('trialDays', String(d))}
                             className={cn(
-                              'rounded-full border px-2.5 py-0.5 text-[10.5px] font-bold transition-colors',
+                              'rounded-full border px-2.5 py-0.5 text-[13px] font-bold transition-colors',
                               Number(form.trialDays) === d
                                 ? 'border-indigo-500 bg-indigo-500 text-white'
-                                : 'bg-background text-muted-foreground hover:border-indigo-400 hover:text-indigo-600',
+                                : 'bg-background text-foreground/70 hover:border-indigo-400 hover:text-indigo-600',
                             )}
                           >
                             {d === 0 ? 'بدون' : `${d} يوم`}
@@ -935,16 +935,16 @@ export function PlanDialog({
                 <TabsContent value="features" className="mt-0 space-y-6">
                   <div className="space-y-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <Label className="text-[12.5px] font-bold">
-                        المزايا <span className="text-muted-foreground">({form.features.length})</span>
+                      <Label className="text-[15px] font-bold">
+                        المزايا <span className="text-foreground/70">({form.features.length})</span>
                       </Label>
                       <div className="flex items-center gap-1.5">
-                        <Button type="button" variant="outline" size="sm" onClick={generateFromLimits} className="h-7 gap-1.5 rounded-full text-[11px]">
+                        <Button type="button" variant="outline" size="sm" onClick={generateFromLimits} className="h-7 gap-1.5 rounded-full text-[13.5px]">
                           <Wand2 className="size-3" />
                           من الحدود
                         </Button>
                         {form.features.length > 0 && (
-                          <Button type="button" variant="ghost" size="sm" onClick={() => set('features', [])} className="h-7 gap-1 rounded-full text-[11px] text-rose-600 hover:text-rose-600">
+                          <Button type="button" variant="ghost" size="sm" onClick={() => set('features', [])} className="h-7 gap-1 rounded-full text-[13.5px] text-rose-600 hover:text-rose-600">
                             <Trash2 className="size-3" />
                             مسح الكل
                           </Button>
@@ -988,7 +988,7 @@ export function PlanDialog({
                     </div>
 
                     {form.features.length === 0 ? (
-                      <p className="rounded-2xl border border-dashed px-4 py-6 text-center text-xs text-muted-foreground">
+                      <p className="rounded-2xl border border-dashed px-4 py-6 text-center text-[14px] text-foreground/70">
                         لا توجد مزايا بعد — ستظهر كقائمة ✓ في بطاقة الباقة وجدول المقارنة.
                       </p>
                     ) : (
@@ -996,14 +996,14 @@ export function PlanDialog({
                         {form.features.map((f, i) => (
                           <li
                             key={`${f}-${i}`}
-                            className="group inline-flex max-w-full items-center gap-1.5 rounded-full border bg-card py-1 ps-3 pe-1 text-[12px] font-medium shadow-sm"
+                            className="group inline-flex max-w-full items-center gap-1.5 rounded-full border bg-card py-1 ps-3 pe-1 text-[14.5px] font-medium shadow-sm"
                           >
                             <span className="truncate">{f}</span>
                             <button
                               type="button"
                               aria-label={`حذف ${f}`}
                               onClick={() => set('features', form.features.filter((_, j) => j !== i))}
-                              className="flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-rose-500/15 hover:text-rose-600"
+                              className="flex size-5 shrink-0 items-center justify-center rounded-full text-foreground/70 transition-colors hover:bg-rose-500/15 hover:text-rose-600"
                             >
                               <X className="size-3" />
                             </button>
@@ -1014,9 +1014,9 @@ export function PlanDialog({
                   </div>
 
                   <div className="space-y-2.5">
-                    <Label className="text-[12.5px] font-bold">
+                    <Label className="text-[15px] font-bold">
                       الصلاحيات المتاحة (Capabilities){' '}
-                      <span className="text-muted-foreground">({form.capabilities.length}/{CAPABILITIES_META.length})</span>
+                      <span className="text-foreground/70">({form.capabilities.length}/{CAPABILITIES_META.length})</span>
                     </Label>
                     <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                       {CAPABILITIES_META.map((cap) => {
@@ -1046,8 +1046,8 @@ export function PlanDialog({
                 <TabsContent value="modules" className="mt-0 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <Label className="text-[13px] font-bold">الصفحات المتاحة في القائمة الجانبية</Label>
-                      <p className="text-[11px] text-muted-foreground">
+                      <Label className="text-[15.5px] font-bold">الصفحات المتاحة في القائمة الجانبية</Label>
+                      <p className="text-[13.5px] text-foreground/70">
                         {enabledCount} من {availableModules.length} مفعّلة · الإعدادات والمستخدمين مفعّلان دائماً.
                       </p>
                     </div>
@@ -1057,7 +1057,7 @@ export function PlanDialog({
                         variant="outline"
                         size="sm"
                         onClick={() => set('enabledModules', defaultsFor(form.businessType))}
-                        className="h-8 gap-1.5 rounded-full text-[11px]"
+                        className="h-8 gap-1.5 rounded-full text-[13.5px]"
                       >
                         <RefreshCw className="size-3" />
                         الافتراضي لـ{form.businessType === 'fashion' ? 'ملابس' : 'موبايل'}
@@ -1067,7 +1067,7 @@ export function PlanDialog({
                         variant="outline"
                         size="sm"
                         onClick={() => set('enabledModules', availableModules.map((x) => x.key))}
-                        className="h-8 rounded-full text-[11px]"
+                        className="h-8 rounded-full text-[13.5px]"
                       >
                         تفعيل الكل
                       </Button>
@@ -1076,14 +1076,14 @@ export function PlanDialog({
                         variant="outline"
                         size="sm"
                         onClick={() => set('enabledModules', [...CRITICAL_MODULES])}
-                        className="h-8 rounded-full text-[11px]"
+                        className="h-8 rounded-full text-[13.5px]"
                       >
                         الأساسيات فقط
                       </Button>
                     </div>
                   </div>
                   {form.businessType === 'fashion' && (
-                    <p className="flex items-center gap-1.5 rounded-xl bg-muted/60 px-3 py-2 text-[11px] text-muted-foreground">
+                    <p className="flex items-center gap-1.5 rounded-xl bg-muted px-3 py-2 text-[13.5px] text-foreground/70">
                       <Info className="size-3.5 shrink-0" />
                       عناصر موبايل/كمبيوتر (الصيانة، المعاملات المالية) غير متاحة لباقات الملابس.
                     </p>
@@ -1113,12 +1113,12 @@ export function PlanDialog({
 
             {/* المعاينة الحيّة */}
             <aside className="hidden min-h-0 overflow-y-auto border-s bg-muted/30 p-4 lg:block">
-              <p className="mb-3 flex items-center gap-1.5 text-[11px] font-black tracking-wide text-muted-foreground">
+              <p className="mb-3 flex items-center gap-1.5 text-[13.5px] font-black tracking-wide text-foreground/70">
                 <Sparkles className="size-3.5 text-indigo-500" />
                 معاينة حيّة
               </p>
               <PlanPreview form={form} theme={theme} />
-              <p className="mt-3 text-center text-[10.5px] leading-relaxed text-muted-foreground">
+              <p className="mt-3 text-center text-[13px] leading-relaxed text-foreground/70">
                 هكذا ستظهر الباقة في لوحة التحكم — تتحدّث أثناء الكتابة.
               </p>
             </aside>
@@ -1126,10 +1126,10 @@ export function PlanDialog({
 
           {/* ═══ التذييل ═══ */}
           <DialogFooter className="shrink-0 flex-row items-center justify-between gap-2 border-t bg-background/80 px-5 py-3 backdrop-blur sm:justify-between">
-            <span className="hidden items-center gap-1.5 text-[11px] text-muted-foreground sm:flex">
-              <kbd className="rounded-md border bg-muted px-1.5 py-0.5 font-mono text-[10px] font-bold">Ctrl</kbd>
+            <span className="hidden items-center gap-1.5 text-[13.5px] text-foreground/70 sm:flex">
+              <kbd className="rounded-md border bg-muted px-1.5 py-0.5 font-mono text-[12.5px] font-bold">Ctrl</kbd>
               +
-              <kbd className="rounded-md border bg-muted px-1.5 py-0.5 font-mono text-[10px] font-bold">S</kbd>
+              <kbd className="rounded-md border bg-muted px-1.5 py-0.5 font-mono text-[12.5px] font-bold">S</kbd>
               للحفظ السريع
             </span>
             <div className="flex w-full items-center justify-end gap-2 sm:w-auto">

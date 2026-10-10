@@ -267,7 +267,7 @@ export function CountUp({ value, className }: { value: number; className?: strin
 }
 
 const PILL_TONES = {
-  neutral: 'border-border/60 bg-muted/60 text-muted-foreground',
+  neutral: 'border-border bg-muted text-foreground/70',
   indigo: 'border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300',
   emerald: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   amber: 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300',
@@ -292,12 +292,12 @@ export function Pill({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[10.5px] font-bold leading-4',
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[13px] font-bold leading-4',
         PILL_TONES[tone],
         className,
       )}
     >
-      {Icon ? <Icon className="size-3 shrink-0" /> : null}
+      {Icon ? <Icon className="size-3.5 shrink-0" /> : null}
       {children}
     </span>
   )
@@ -365,7 +365,7 @@ export function Segmented<T extends string>({
       role="group"
       aria-label={ariaLabel}
       className={cn(
-        'inline-flex items-center rounded-full border border-border/60 bg-muted/50 p-0.5 backdrop-blur',
+        'inline-flex items-center rounded-full border border-border bg-muted p-0.5 backdrop-blur',
         className,
       )}
     >
@@ -379,8 +379,8 @@ export function Segmented<T extends string>({
             onClick={() => onChange(o.value)}
             className={cn(
               'relative inline-flex items-center rounded-full font-bold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500/50',
-              compact ? 'px-2.5 py-1 text-[11px]' : 'px-3.5 py-1.5 text-xs',
-              active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+              compact ? 'px-2.5 py-1 text-[13.5px]' : 'px-3.5 py-1.5 text-[14px]',
+              active ? 'text-foreground' : 'text-foreground/70 hover:text-foreground',
             )}
           >
             {active && (
@@ -396,8 +396,8 @@ export function Segmented<T extends string>({
               {o.badge !== undefined && (
                 <span
                   className={cn(
-                    'rounded-full px-1.5 text-[9.5px] font-black tabular-nums',
-                    active ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300' : 'bg-muted text-muted-foreground',
+                    'rounded-full px-1.5 text-[12px] font-black tabular-nums',
+                    active ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300' : 'bg-muted text-foreground/70',
                   )}
                 >
                   {o.badge}
