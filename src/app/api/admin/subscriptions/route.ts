@@ -20,8 +20,9 @@ async function __GET(req: NextRequest) {
   const toStr = url.searchParams.get('to') ?? ''
 
   const where: any = { tenant: { id: { not: PLATFORM_TENANT_ID } } }
-  // محاولات الدفع غير المكتملة (pending/failed) بتتراكم — لو دخلت في الـ take
-  // بتزق اشتراكات حقيقية أقدم بره الحد. فبتتجاب بطلب منفصل: ?status=unfinished
+  // محاولات الدفع غير المكتملة (pending/failed) مش اشتراكات: كل ما حد يفتح صفحة Paymob
+  // ويخرج من غير دفع بيتسجّل صف هنا. فبنخفيها من القائمة الافتراضية،
+  // وتفضل متاحة بـ ?status=unfinished (مثلاً لو عميل قال «دفعت ومتفعّلش»).
   const UNFINISHED = ['pending', 'failed']
   if (status === 'unfinished') where.status = { in: UNFINISHED }
   else if (status) where.status = status
@@ -37,7 +38,7 @@ async function __GET(req: NextRequest) {
     where,
     orderBy: { createdAt: 'desc' },
     include: { tenant: true, plan: true },
-    take: status === 'unfinished' ? 200 : 500,
+    take: 500,
   })
 
   const rows = items.map((s) => ({

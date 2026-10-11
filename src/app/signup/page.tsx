@@ -12,7 +12,6 @@ import {
   Mail,
   Store,
   User,
-  Phone,
   ShieldCheck,
   CheckCircle2,
   Loader2,
@@ -22,14 +21,12 @@ import {
   Smartphone,
   Shirt,
   Crown,
-  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Field } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -141,6 +138,280 @@ function getPasswordStrength(pwd: string): { score: 0 | 1 | 2 | 3; label: string
   return { score: finalScore, label: labels[finalScore], color: colors[finalScore], bg: bgs[finalScore] }
 }
 
+/* ═══════════ اختيار الباقة: نشاط المحل (كبير وواضح) ثم المستوى ═══════════
+ * المشكلة: اللي بيبيع ملابس كان بيدخل يلاقي "موبايل أساسية" مختارة ومفيش
+ * حاجة بتلفت نظره إن فيه باقة ملابس (كلمة "تغيير" صغيرة بتعدّي من غير ما
+ * حد ياخد باله). الحل: السؤال "إيه نوع نشاطك؟" بقى أول حاجة في الفورم بمربعين
+ * كبار جنب بعض (موبايلات وكمبيوتر / ملابس وأحذية) — الاتنين ظاهرين دايماً
+ * وملوّنين (مش واحد "شغّال" وواحد "مطفي")، وتحتهم المستوى (أساسي / احترافي)
+ * بالسعر والمميزات. بيتبني من الباقات المفعّلة في الداتابيز، فأي باقة تتعطل
+ * أو تتضاف بتظهر/تختفي لوحدها. */
+type PlanEntry = { code: string; meta: PlanMetaEntry; type: string }
+
+const PLAN_TYPE_META: Record<
+  string,
+  {
+    label: string
+    sub: string
+    icon: React.ElementType
+    grad: string
+    glow: string
+    tint: string
+    soft: string
+    text: string
+  }
+> = {
+  electronics: {
+    label: 'موبايلات وكمبيوتر',
+    sub: 'محلات الموبايل والإلكترونيات',
+    icon: Smartphone,
+    grad: 'from-sky-500 via-blue-600 to-indigo-600',
+    glow: 'shadow-[0_10px_28px_-8px_rgba(37,99,235,0.65)]',
+    tint: 'border-sky-200 bg-gradient-to-br from-sky-50 to-indigo-50 dark:border-sky-900 dark:from-sky-950/50 dark:to-indigo-950/30',
+    soft: 'bg-sky-50 dark:bg-sky-950/30',
+    text: 'text-sky-600 dark:text-sky-400',
+  },
+  fashion: {
+    label: 'ملابس وأحذية',
+    sub: 'محلات الملابس والأحذية',
+    icon: Shirt,
+    grad: 'from-red-600 to-red-700',
+    glow: 'shadow-[0_10px_28px_-8px_rgba(220,38,38,0.6)]',
+    tint: 'border-orange-200 bg-gradient-to-br from-orange-50 to-red-50 dark:border-orange-900 dark:from-orange-950/50 dark:to-red-950/30',
+    soft: 'bg-red-50 dark:bg-red-950/30',
+    text: 'text-red-700 dark:text-red-400',
+  },
+  other: {
+    label: 'باقات أخرى',
+    sub: 'باقات إضافية',
+    icon: Sparkles,
+    grad: 'from-emerald-500 via-emerald-600 to-teal-600',
+    glow: 'shadow-[0_10px_28px_-8px_rgba(5,150,105,0.65)]',
+    tint: 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 dark:border-emerald-900 dark:from-emerald-950/50 dark:to-teal-950/30',
+    soft: 'bg-emerald-50 dark:bg-emerald-950/30',
+    text: 'text-emerald-700 dark:text-emerald-400',
+  },
+}
+
+function planType(code: string, businessType?: string): string {
+  const t = (businessType || code.split('-')[0] || '').toLowerCase()
+  if (t.includes('fashion')) return 'fashion'
+  if (t.includes('electronic')) return 'electronics'
+  return 'other'
+}
+
+function planLevel(e: PlanEntry): string {
+  if (/pro/i.test(e.code)) return 'احترافي'
+  if (/basic/i.test(e.code)) return 'أساسي'
+  return e.meta.shortName
+}
+
+/** يقسّم وصف الباقة ("POS، مخزون + تقارير") لنقاط قصيرة تتعرض كشارات */
+function planFeatures(desc: string): string[] {
+  return desc
+    .split(/[،,+]/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 4)
+}
+
+function PlanChooser({
+  entries,
+  selected,
+  onSelect,
+  loading,
+  error,
+}: {
+  entries: PlanEntry[]
+  selected: string
+  onSelect: (code: string) => void
+  loading?: boolean
+  error?: string
+}) {
+  if (loading) {
+    return (
+      <div className="space-y-2" aria-busy="true">
+        <div className="h-4 w-28 animate-pulse rounded bg-muted" />
+        <div className="grid grid-cols-2 gap-2.5">
+          <div className="h-[96px] animate-pulse rounded-2xl bg-muted" />
+          <div className="h-[96px] animate-pulse rounded-2xl bg-muted" />
+        </div>
+      </div>
+    )
+  }
+  if (entries.length === 0) {
+    return (
+      <p className="rounded-xl border bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
+        لا توجد باقات متاحة حالياً — تواصل معنا.
+      </p>
+    )
+  }
+
+  const order = ['electronics', 'fashion', 'other']
+  const types = order.filter((t) => entries.some((e) => e.type === t))
+  const current = entries.find((e) => e.code === selected) ?? entries[0]
+  const curType = current.type
+  const levels = entries.filter((e) => e.type === curType)
+  const tm = PLAN_TYPE_META[curType]
+
+  // لما المستخدم يغيّر النشاط نحاول نحافظ على نفس المستوى (أساسي/احترافي)
+  const pickType = (t: string) => {
+    if (t === curType) return
+    const group = entries.filter((e) => e.type === t)
+    const sameLevel = group.find((e) => planLevel(e) === planLevel(current))
+    onSelect((sameLevel ?? group[0]).code)
+  }
+
+  return (
+    <div className="space-y-3.5">
+      {/* ١) نوع النشاط */}
+      {types.length > 1 && (
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2">
+            <span className="grid size-6 place-items-center rounded-full bg-primary text-[11px] font-black text-primary-foreground">1</span>
+            <p className="text-sm font-extrabold leading-tight text-foreground">إيه نوع نشاطك؟</p>
+          </div>
+          <div
+            className={cn('grid gap-2.5', types.length > 2 ? 'grid-cols-3' : 'grid-cols-2')}
+            role="radiogroup"
+            aria-label="نوع النشاط"
+          >
+            {types.map((t) => {
+              const m = PLAN_TYPE_META[t]
+              const Icon = m.icon
+              const sel = t === curType
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  role="radio"
+                  aria-checked={sel}
+                  onClick={() => pickType(t)}
+                  className={cn(
+                    'relative flex min-h-[100px] flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl border-2 px-2 py-3 text-center transition-all duration-300 active:scale-[0.97]',
+                    sel
+                      ? cn('scale-[1.02] border-transparent bg-gradient-to-br text-white', m.grad, m.glow)
+                      : cn('text-foreground hover:-translate-y-0.5', m.tint),
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'absolute end-2 top-2 grid size-5 place-items-center rounded-full transition-all',
+                      sel ? 'scale-100 bg-white text-emerald-600 shadow' : 'scale-90 border-2 border-current/25 opacity-40',
+                    )}
+                  >
+                    {sel && <Check className="size-3" strokeWidth={3.5} />}
+                  </span>
+                  <span
+                    className={cn(
+                      'relative grid size-12 place-items-center rounded-2xl',
+                      sel ? 'bg-black/15' : cn('bg-white/70 dark:bg-white/10', m.text),
+                    )}
+                  >
+                    <Icon className="size-6" strokeWidth={1.9} />
+                  </span>
+                  <span className="relative text-[13px] font-extrabold leading-tight">{m.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ٢) المستوى (أساسي / احترافي) */}
+      {levels.length > 0 && (
+        <div className="space-y-2.5">
+          {types.length > 1 && (
+            <div className="flex items-center gap-2">
+              <span className="grid size-6 place-items-center rounded-full bg-primary text-[11px] font-black text-primary-foreground">2</span>
+              <p className="text-sm font-extrabold text-foreground">اختار المستوى</p>
+            </div>
+          )}
+          <div
+            className={cn('grid gap-2.5', levels.length === 1 ? 'grid-cols-1' : 'grid-cols-2')}
+            role="radiogroup"
+            aria-label="مستوى الباقة"
+          >
+            {levels.map((e) => {
+              const sel = e.code === current.code
+              const feats = planFeatures(e.meta.desc || '')
+              return (
+                <button
+                  key={e.code}
+                  type="button"
+                  role="radio"
+                  aria-checked={sel}
+                  onClick={() => onSelect(e.code)}
+                  className={cn(
+                    'relative flex flex-col gap-1.5 overflow-hidden rounded-2xl border-2 p-3 text-right transition-all duration-300 active:scale-[0.97]',
+                    sel
+                      ? cn('scale-[1.02] border-transparent bg-gradient-to-br text-white', tm.grad, tm.glow)
+                      : 'border-border bg-card hover:border-foreground/30',
+                  )}
+                >
+                  <span className="relative flex items-center justify-between gap-2">
+                    <span className={cn('text-sm font-extrabold', sel ? 'text-white' : 'text-foreground')}>{planLevel(e)}</span>
+                    <span
+                      className={cn(
+                        'grid size-5 shrink-0 place-items-center rounded-full border-2 transition-all',
+                        sel ? 'border-transparent bg-white text-emerald-600' : 'border-border',
+                      )}
+                    >
+                      {sel && <Check className="size-3" strokeWidth={3.5} />}
+                    </span>
+                  </span>
+                  <span className="relative flex items-baseline gap-1">
+                    <span className={cn('text-lg font-black leading-none tabular-nums', sel ? 'text-white' : tm.text)}>
+                      {e.meta.price.replace(/\s*EGP\s*/i, '')}
+                    </span>
+                    <span className={cn('text-[10px] font-bold', sel ? 'text-white' : 'text-muted-foreground')}>جنيه</span>
+                  </span>
+                  {feats.length > 0 && (
+                    <span className="relative flex flex-wrap gap-1">
+                      {feats.map((f) => (
+                        <span
+                          key={f}
+                          className={cn(
+                            'rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-none',
+                            sel ? 'bg-black/25 text-white' : cn('text-foreground/70', tm.soft),
+                          )}
+                        >
+                          {f}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ٣) تأكيد صريح بالاسم الكامل */}
+      <p
+        className={cn(
+          'flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[11px] font-bold',
+          tm.soft,
+          tm.text,
+        )}
+      >
+        <Check className="size-3.5 shrink-0" strokeWidth={3} />
+        <span className="min-w-0 truncate whitespace-nowrap">
+          {tm.label} — {planLevel(current)} · 14 يوم مجاناً ثم {current.meta.price.replace(/\s*EGP\s*/i, '')} جنيه/شهر
+        </span>
+      </p>
+
+      {error && (
+        <p className="flex items-center gap-1 text-xs text-destructive">
+          <AlertCircle className="size-3 shrink-0" />
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
+
 type SignupError = { field: string; message: string }
 
 /**
@@ -240,8 +511,7 @@ function SignupContent() {
   // 📱 إزالة احتكاك: المستخدم مش مطلوب منه "يختار باقة" قبل ما يسجّل.
   // التجربة مجانية على أي حال، فبنختار تلقائياً الباقة الأساسية (أو أول باقة
   // مفعّلة) — ولو الباقة اللي في الرابط (?plan=...) مش مفعّلة نرجع للافتراضية.
-  // "تغيير" بيفتح قائمة الباقات (changingPlan) بدل ما يمسح الاختيار.
-  const [changingPlan, setChangingPlan] = React.useState(false)
+  // الاختيار بيتغيّر من PlanChooser (نشاط + مستوى) — مش بيتمسح.
   React.useEffect(() => {
     if (apiPlans === null) return
     if (selectedPlan && apiPlans.some((p) => p.code === selectedPlan)) return
@@ -254,28 +524,6 @@ function SignupContent() {
   }, [plansFailed, selectedPlan])
 
   const plansLoading = apiPlans === null && !plansFailed
-
-  // بانر الباقة المختارة — بيرجع null لو الباقة مش ضمن المفعّلة
-  const planMeta = React.useMemo<PlanMetaEntry | null>(() => {
-    const api = apiPlans?.find((p) => p.code === selectedPlan)
-    const fb = PLAN_META[selectedPlan]
-    // الرابط فيه باقة معطّلة/مش موجودة → مفيش بانر (الـ effect بيمسح الاختيار)
-    if (apiPlans !== null && !api) return null
-    // لسه بنحمّل أو فشل الشبكة → نعرض الشكل الثابت مؤقتاً
-    if (!api) return fb ?? null
-    return {
-      name: api.name || fb?.name || api.code,
-      shortName: fb?.shortName ?? (api.name || api.code),
-      icon: fb?.icon ?? Sparkles,
-      cardBg: fb?.cardBg ?? 'bg-muted/60 dark:bg-muted/30',
-      cardBorder: fb?.cardBorder ?? 'border-border',
-      cardSelected: fb?.cardSelected ?? 'ring-2 ring-primary border-primary',
-      iconColor: fb?.iconColor ?? 'text-primary',
-      badgeClass: fb?.badgeClass ?? 'bg-muted text-foreground',
-      desc: fb?.desc ?? api.description ?? '',
-      price: planPriceLabel(api),
-    }
-  }, [apiPlans, selectedPlan])
 
   // قائمة اختيار الباقات — من الداتابيز (المفعّلة فقط) أو الثابتة عند فشل الشبكة
   const pickerEntries = React.useMemo<{ code: string; meta: PlanMetaEntry }[]>(() => {
@@ -427,43 +675,17 @@ function SignupContent() {
 
             {/* Form */}
             <form onSubmit={handleSubmit} noValidate className="space-y-4">
-              {/* الباقة — سطر واحد مضغوط (مختارة تلقائياً). الفتح بالضغط فقط */}
-              <div className="rounded-xl border border-border bg-muted/30">
-                {getFieldError('plan') && (
-                  <p className="m-2 flex items-center gap-1 rounded-lg border border-destructive/20 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive">
-                    <AlertCircle className="size-3 shrink-0" />{getFieldError('plan')}
-                  </p>
-                )}
-                {plansLoading && !planMeta ? (
-                  <div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
-                    <Loader2 className="size-3.5 animate-spin" /> جاري تحميل الباقات...
-                  </div>
-                ) : pickerEntries.length === 0 ? (
-                  <p className="px-3 py-3 text-xs text-muted-foreground">لا توجد باقات متاحة حالياً — تواصل معنا.</p>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setChangingPlan(true)}
-                      aria-haspopup="dialog"
-                      className="flex min-h-12 w-full items-center gap-2.5 px-3 py-2 text-right"
-                    >
-                      {planMeta && (() => { const Icon = planMeta.icon; return <Icon className={cn('size-4 shrink-0', planMeta.iconColor)} /> })()}
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[10.5px] text-muted-foreground">الباقة (التجربة مجانية)</span>
-                        <span className="block truncate text-xs font-bold text-foreground">
-                          {planMeta ? `${planMeta.shortName} · ${planMeta.price}` : 'اختر الباقة'}
-                        </span>
-                      </span>
-                      <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-semibold text-primary">
-                        تغيير
-                        <ChevronDown className="size-3.5" />
-                      </span>
-                    </button>
-                  </>
-                )}
-              </div>
-
+              {/* اختيار النشاط + المستوى — ظاهر دايماً وأول حاجة في الفورم (مفيش "تغيير" مخفي) */}
+              <PlanChooser
+                loading={plansLoading && pickerEntries.length === 0}
+                entries={pickerEntries.map((e) => ({
+                  ...e,
+                  type: planType(e.code, apiPlans?.find((p) => p.code === e.code)?.businessType),
+                }))}
+                selected={selectedPlan}
+                onSelect={(code) => { setSelectedPlan(code); clearFieldError('plan') }}
+                error={getFieldError('plan')}
+              />
 
               {/* Row 1: اسم المحل + اسم المسؤول */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3">
@@ -487,7 +709,7 @@ function SignupContent() {
                     dir="ltr" className="text-left h-11 lg:h-10" disabled={loading} required autoComplete="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next" />
                 </Field>
                 <Field className="space-y-2.5" label="رقم الهاتف">
-                  <Input type="tel" placeholder="01012345678" icon={<Phone className="size-4" />}
+                  <Input type="tel" placeholder="01012345678" icon={<Smartphone className="size-4" />}
                     value={phone} onChange={(e: any) => setPhone(e.target.value)}
                     dir="ltr" className="text-left h-11 lg:h-10" disabled={loading} autoComplete="tel" inputMode="tel" enterKeyHint="next" />
                 </Field>
@@ -554,46 +776,6 @@ function SignupContent() {
             </form>
 
             <p className="text-center text-[10px] text-muted-foreground/50">© 2026 نظام المحل</p>
-
-            {/* اختيار الباقة: Bottom Sheet على الموبايل / دايلوج في النص على الشاشات الكبيرة */}
-            <Dialog open={changingPlan} onOpenChange={setChangingPlan}>
-              <DialogContent mobileSheet className="gap-3 p-4 pt-6 sm:max-w-md sm:p-6">
-                <DialogHeader>
-                  <DialogTitle className="text-base">اختر باقتك</DialogTitle>
-                  <DialogDescription className="text-xs">
-                    التجربة 14 يوم مجانية في كل الباقات — تقدر تغيّرها بعدين.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-2">
-                  {pickerEntries.map(({ code, meta }) => {
-                    const Icon = meta.icon
-                    const isSelected = selectedPlan === code
-                    return (
-                      <button
-                        key={code}
-                        type="button"
-                        onClick={() => { setSelectedPlan(code); setChangingPlan(false); clearFieldError('plan') }}
-                        className={cn(
-                          'flex min-h-14 items-center gap-3 rounded-xl border-2 px-3.5 py-2.5 text-right transition-all active:scale-[0.99]',
-                          isSelected ? meta.cardSelected : cn(meta.cardBg, meta.cardBorder)
-                        )}
-                      >
-                        <Icon className={cn('size-5 shrink-0', meta.iconColor)} />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-bold leading-tight text-foreground">{meta.shortName}</span>
-                          {meta.desc && <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{meta.desc}</span>}
-                        </span>
-                        <span className={cn('shrink-0 text-xs font-extrabold', meta.iconColor)}>{meta.price}</span>
-                        {isSelected && <Check className={cn('size-4 shrink-0', meta.iconColor)} />}
-                      </button>
-                    )
-                  })}
-                </div>
-                <Link href="/pricing" className="block pb-1 text-center text-[11px] text-primary hover:underline">
-                  قارن الباقات بالتفصيل ←
-                </Link>
-              </DialogContent>
-            </Dialog>
 
           </div>
         </motion.div>
