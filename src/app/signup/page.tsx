@@ -263,7 +263,7 @@ function PlanChooser({
   }
 
   return (
-    <div className="space-y-3.5">
+    <div className="min-w-0 max-w-full space-y-3.5">
       {/* ١) نوع النشاط */}
       {types.length > 1 && (
         <div className="space-y-2.5">
@@ -388,19 +388,41 @@ function PlanChooser({
         </div>
       )}
 
-      {/* ٣) تأكيد صريح بالاسم الكامل */}
-      <p
+      {/* ٣) تأكيد صريح — سطرين: الاختيار + التجربة والسعر */}
+      <div
         className={cn(
-          'flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[11px] font-bold',
-          tm.soft,
-          tm.text,
+          'flex w-full min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2.5',
+          tm.tint,
         )}
       >
-        <Check className="size-3.5 shrink-0" strokeWidth={3} />
-        <span className="min-w-0 truncate whitespace-nowrap">
-          {tm.label} — {planLevel(current)} · 14 يوم مجاناً ثم {current.meta.price.replace(/\s*EGP\s*/i, '')} جنيه/شهر
+        <span
+          className={cn(
+            'grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-br text-white shadow-sm',
+            tm.grad,
+          )}
+        >
+          <Check className="size-4" strokeWidth={3.5} />
         </span>
-      </p>
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="truncate text-[13px] font-extrabold leading-tight text-foreground">
+            {tm.label} — {planLevel(current)}
+          </p>
+          <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] font-bold leading-tight">
+            <span
+              className={cn(
+                'rounded-full bg-gradient-to-br px-2 py-[3px] text-[10.5px] font-extrabold text-white',
+                tm.grad,
+              )}
+            >
+              14 يوم مجاناً
+            </span>
+            <span className="text-foreground/60">ثم</span>
+            <span className={cn('font-black tabular-nums', tm.text)}>
+              {current.meta.price.replace(/\s*EGP\s*/i, '')} جنيه/شهر
+            </span>
+          </p>
+        </div>
+      </div>
 
       {error && (
         <p className="flex items-center gap-1 text-xs text-destructive">
@@ -674,7 +696,7 @@ function SignupContent() {
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} noValidate className="space-y-4">
+            <form onSubmit={handleSubmit} noValidate className="min-w-0 space-y-4">
               {/* اختيار النشاط + المستوى — ظاهر دايماً وأول حاجة في الفورم (مفيش "تغيير" مخفي) */}
               <PlanChooser
                 loading={plansLoading && pickerEntries.length === 0}
