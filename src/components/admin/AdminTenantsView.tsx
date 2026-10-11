@@ -35,7 +35,6 @@ import {
   Loader2,
   User,
   Mail,
-  Phone,
   MapPin,
   Save,
   Copy,
@@ -108,6 +107,32 @@ import { api } from '@/lib/api'
 import { formatCurrency, formatShortDate } from '@/lib/format'
 import { toast } from 'sonner'
 import { useShopStore } from '@/lib/store'
+
+/**
+ * أيقونة موبايل حديث (smartphone) مرسومة يدويًا — جسم بزوايا مدوّرة، فتحة سماعة
+ * علوية، وشريط الهوم السفلي. متناسقة تمامًا يمين/شمال، فمفيش أي اعتماد على
+ * اتجاه الصفحة (rtl/ltr)، ومش بتتعكس أبدًا.
+ */
+function Phone({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      className={cn('shrink-0', className)}
+      style={{ transform: 'none' }}
+    >
+      <rect x="6" y="2.5" width="12" height="19" rx="3.2" fill="currentColor" fillOpacity="0.14" />
+      <path d="M10.2 5.4h3.6" />
+      <path d="M10.6 18.6h2.8" />
+    </svg>
+  )
+}
 
 /* ───────────────────────── أنواع البيانات ───────────────────────── */
 
@@ -235,13 +260,34 @@ function PlanPill({ code, name }: { code: string; name: string }) {
   const color = planColor(code)
   return (
     <span
-      className="inline-flex max-w-[150px] items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold"
+      className="inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold"
       style={{ backgroundColor: `${color}14`, color, borderColor: `${color}30` }}
       title={name}
     >
       <i className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
       <span className="truncate">{name}</span>
     </span>
+  )
+}
+
+/**
+ * رمز واجهة محل (مظلّة + باب + نافذة) — بديل الحرفين الأولين اللي كانوا بيطلعوا
+ * بلا معنى في العربي (حرفين مقطوعين من الاسم). لون كل محل مميز من التدرّج.
+ */
+function StoreGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className={cn('relative shrink-0 drop-shadow-sm', className)}>
+      {/* المظلّة */}
+      <path d="M5.2 3.2h13.6l2.2 5.3H3z" fill="#fff" />
+      <path d="M3 8.5a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0z" fill="#fff" fillOpacity=".78" />
+      {/* جسم المحل */}
+      <path d="M4.6 12.2V20.6h14.8V12.2" fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      {/* الباب */}
+      <rect x="10" y="14.2" width="4" height="6.4" rx="1" fill="#fff" />
+      {/* نافذتان */}
+      <rect x="6.3" y="14.4" width="2.4" height="2.6" rx=".6" fill="#fff" fillOpacity=".85" />
+      <rect x="15.3" y="14.4" width="2.4" height="2.6" rx=".6" fill="#fff" fillOpacity=".85" />
+    </svg>
   )
 }
 
@@ -271,7 +317,7 @@ function TenantAvatar({
         aria-hidden
       >
         <span className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/25" />
-        <span className="relative">{initialsOf(name)}</span>
+        <StoreGlyph className={size === 'xl' ? 'size-9' : size === 'lg' ? 'size-7' : 'size-[22px]'} />
       </span>
       {status && (
         <span
@@ -387,6 +433,52 @@ function KpiTile({
   )
 }
 
+/** بلاطة تنبيه قوية — تدرّج لوني مصمت + رقم كبير + أيقونة مائية + توهّج */
+function AlertTile({
+  icon: Icon,
+  value,
+  label,
+  gradient,
+  glow,
+  pulse,
+  onClick,
+}: {
+  icon: LucideIcon
+  value: string
+  label: string
+  gradient: string
+  glow: string
+  pulse?: boolean
+  onClick?: () => void
+}) {
+  const Comp = onClick ? 'button' : 'div'
+  return (
+    <Comp
+      {...(onClick ? { type: 'button' as const, onClick } : {})}
+      className={cn(
+        'relative flex min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br px-2 py-2.5 text-center text-white ring-1 ring-inset ring-white/20 transition-transform',
+        gradient,
+        onClick && 'active:scale-95 hover:brightness-110',
+      )}
+      style={{ boxShadow: `0 6px 16px -6px ${glow}` }}
+    >
+      {/* لمعة علوية + أيقونة مائية كبيرة */}
+      <span aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/25 via-transparent to-black/10" />
+      <Icon aria-hidden strokeWidth={1.5} className="pointer-events-none absolute -bottom-3 -start-2 size-14 opacity-20" />
+      <span className="relative flex items-center gap-1.5">
+        {pulse && (
+          <span className="relative flex size-2">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-white/80" />
+            <span className="relative inline-flex size-2 rounded-full bg-white" />
+          </span>
+        )}
+        <span className="text-xl font-black leading-none tabular-nums drop-shadow-sm">{value}</span>
+      </span>
+      <span className="relative mt-1.5 text-[10.5px] font-bold leading-tight text-white/95">{label}</span>
+    </Comp>
+  )
+}
+
 /** قرص فلتر بعدّاد — نفس عائلة أقراص لوحة المستخدم */
 function FilterPill({
   active,
@@ -488,6 +580,23 @@ function ActionButton({
 }
 
 /* ═══════════════════════════ العرض الرئيسي ═══════════════════════════ */
+
+const STATUS_TILES: [StatusFilter, string][] = [
+  ['all', 'الكل'],
+  ['active', 'نشط'],
+  ['trial', 'تجريبي'],
+  ['suspended', 'موقوف'],
+  ['expired', 'منتهي'],
+  ['cancelled', 'ملغي'],
+]
+
+const SORT_OPTIONS: [SortKey, string][] = [
+  ['newest', 'الأحدث تسجيلاً'],
+  ['oldest', 'الأقدم'],
+  ['name', 'الاسم (أ – ي)'],
+  ['lastLogin', 'الأحدث دخولاً'],
+  ['expiring', 'الأقرب انتهاءً'],
+]
 
 type StatusFilter = 'all' | 'active' | 'trial' | 'suspended' | 'expired' | 'cancelled'
 type SortKey = 'newest' | 'oldest' | 'name' | 'lastLogin' | 'expiring'
@@ -780,8 +889,8 @@ export function AdminTenantsView() {
                 )}
               </div>
 
-              {/* مفتاح الرموز */}
-              <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+              {/* مفتاح الرموز — شبكة ٥ أعمدة متساوية: الرقم فوق والاسم تحته (من غير التفاف عشوائي) */}
+              <div className="mt-3 grid grid-cols-5 gap-1">
                 {(
                   [
                     ['active', 'نشط'],
@@ -791,44 +900,57 @@ export function AdminTenantsView() {
                     ['cancelled', 'ملغي'],
                   ] as const
                 ).map(([k, l]) => (
-                  <span key={k} className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground">
-                    <i
-                      className="size-1.5 rounded-full"
-                      style={{ backgroundColor: statusMeta(k).color }}
-                    />
-                    {l}
-                    <span className="tabular-nums text-foreground/80">{noData ? '—' : counts[k]}</span>
-                  </span>
+                  <div key={k} className="flex min-w-0 flex-col items-center rounded-lg bg-muted/40 px-0.5 py-1.5 text-center">
+                    <span className="text-[13px] font-extrabold leading-none tabular-nums text-foreground/90">
+                      {noData ? '—' : counts[k]}
+                    </span>
+                    <span className="mt-1.5 flex max-w-full items-center gap-1 text-[10px] font-semibold leading-none text-muted-foreground">
+                      <i className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: statusMeta(k).color }} />
+                      <span className="truncate">{l}</span>
+                    </span>
+                  </div>
                 ))}
               </div>
 
-              {/* تنبيهان: انتهاء قريب + تجارب */}
-              <div className="mt-3 flex flex-wrap gap-1.5">
+              {/* تنبيهات — بلاطات جنب بعض (٢-٣ في الصف) بدل سطر لكل تنبيه */}
+              <div
+                className="mt-2.5 grid gap-1.5"
+                style={{
+                  gridTemplateColumns: `repeat(${Math.max(
+                    1,
+                    [stats.expiringSoon, stats.trial, stats.newThisMonth].filter((n) => n > 0).length,
+                  )}, minmax(0, 1fr))`,
+                }}
+              >
                 {stats.expiringSoon > 0 && (
-                  <button
-                    type="button"
+                  <AlertTile
+                    icon={AlertTriangle}
+                    value={num(stats.expiringSoon)}
+                    label="ينتهي خلال ٧ أيام"
+                    gradient="from-rose-500 to-red-600"
+                    glow="rgba(244,63,94,0.45)"
+                    pulse
                     onClick={() => setSortKey('expiring')}
-                    className="inline-flex items-center gap-1 rounded-full border border-rose-500/25 bg-rose-500/10 px-2.5 py-1 text-[10.5px] font-bold text-rose-600 transition-colors hover:bg-rose-500/15 dark:text-rose-400"
-                  >
-                    <AlertTriangle className="size-3" />
-                    {num(stats.expiringSoon)} اشتراك ينتهي خلال ٧ أيام
-                  </button>
+                  />
                 )}
                 {stats.trial > 0 && (
-                  <button
-                    type="button"
+                  <AlertTile
+                    icon={FlaskConical}
+                    value={num(stats.trial)}
+                    label="تجربة جارية"
+                    gradient="from-sky-500 to-indigo-600"
+                    glow="rgba(14,165,233,0.45)"
                     onClick={() => setStatusFilter('trial')}
-                    className="inline-flex items-center gap-1 rounded-full border border-sky-500/25 bg-sky-500/10 px-2.5 py-1 text-[10.5px] font-bold text-sky-600 transition-colors hover:bg-sky-500/15 dark:text-sky-400"
-                  >
-                    <FlaskConical className="size-3" />
-                    {num(stats.trial)} تجربة جارية
-                  </button>
+                  />
                 )}
                 {stats.newThisMonth > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400">
-                    <TrendingUp className="size-3" />
-                    {num(stats.newThisMonth)} محل جديد هذا الشهر
-                  </span>
+                  <AlertTile
+                    icon={TrendingUp}
+                    value={num(stats.newThisMonth)}
+                    label="محل جديد هذا الشهر"
+                    gradient="from-emerald-500 to-teal-600"
+                    glow="rgba(16,185,129,0.45)"
+                  />
                 )}
               </div>
             </div>
@@ -908,12 +1030,12 @@ export function AdminTenantsView() {
         {/* البحث + العدّاد */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-0 flex-1 sm:min-w-[220px]">
-            <Search className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground sm:right-3.5" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث بالاسم أو البريد أو الهاتف..."
-              className="h-10 rounded-xl pr-10 pl-9"
+              placeholder="بحث بالاسم أو البريد أو الهاتف"
+              className="h-10 rounded-xl pr-9 pl-8 text-[13px] placeholder:text-[12px] sm:pr-10 sm:pl-9 sm:text-sm sm:placeholder:text-sm"
             />
             {search && (
               <button
@@ -926,7 +1048,7 @@ export function AdminTenantsView() {
               </button>
             )}
           </div>
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-background px-3 py-2 text-xs font-semibold text-muted-foreground">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border bg-background px-2.5 py-2 text-[11px] font-semibold text-muted-foreground sm:gap-1.5 sm:px-3 sm:text-xs">
             <Store className="size-3.5" />
             <span className="tabular-nums text-foreground">{num(shown.length)}</span>
             من {noData ? '—' : num(rows.length)}
@@ -938,7 +1060,32 @@ export function AdminTenantsView() {
           <span className="block text-[11px] font-semibold text-muted-foreground sm:me-1 sm:shrink-0">
             الحالة
           </span>
-          <div className="flex flex-wrap items-center gap-1.5">
+          {/* موبايل: شبكة ٣×٢ بدون أي سكرول أفقي */}
+          <div className="grid grid-cols-3 gap-1.5 sm:hidden">
+            {STATUS_TILES.map(([k, l]) => {
+              const active = statusFilter === k
+              const c = k === 'all' ? '#f59e0b' : statusMeta(k).color
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setStatusFilter(k === 'all' || statusFilter === k ? 'all' : k)}
+                  className={cn(
+                    'flex h-11 flex-col items-center justify-center rounded-xl border text-center transition-all active:scale-95',
+                    active ? 'border-transparent text-white shadow-sm' : 'bg-background text-muted-foreground',
+                  )}
+                  style={active ? { backgroundColor: c } : undefined}
+                >
+                  <span className="text-[13px] font-extrabold leading-none tabular-nums" style={active ? undefined : { color: c }}>
+                    {counts[k]}
+                  </span>
+                  <span className="mt-1 text-[10.5px] font-semibold leading-none">{l}</span>
+                </button>
+              )
+            })}
+          </div>
+          <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
             <FilterPill active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} count={counts.all}>
               الكل
             </FilterPill>
@@ -985,12 +1132,28 @@ export function AdminTenantsView() {
           </div>
         </div>
 
+        <div className="grid grid-cols-2 gap-2 sm:block sm:space-y-3">
         {/* الباقة — أقراص ملونة بأسماء الباقات */}
-        <div className="space-y-1.5 sm:flex sm:items-center sm:gap-1.5 sm:space-y-0">
+        <div className="min-w-0 space-y-1.5 sm:flex sm:items-center sm:gap-1.5 sm:space-y-0">
           <span className="block text-[11px] font-semibold text-muted-foreground sm:me-1 sm:shrink-0">
             الباقة
           </span>
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="sm:hidden">
+            <Select value={planFilter} onValueChange={setPlanFilter}>
+              <SelectTrigger className="h-10 w-full rounded-xl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل الباقات</SelectItem>
+                {plans.map((p) => (
+                  <SelectItem key={p.code} value={p.code}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
             <FilterPill active={planFilter === 'all'} onClick={() => setPlanFilter('all')}>
               كل الباقات
             </FilterPill>
@@ -1008,26 +1171,34 @@ export function AdminTenantsView() {
         </div>
 
         {/* الترتيب */}
-        <div className="space-y-1.5 sm:flex sm:items-center sm:gap-1.5 sm:space-y-0">
+        <div className="min-w-0 space-y-1.5 sm:flex sm:items-center sm:gap-1.5 sm:space-y-0">
           <span className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground sm:me-1 sm:shrink-0">
             <ArrowUpDown className="size-3" />
             ترتيب
           </span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {(
-              [
-                ['newest', 'الأحدث تسجيلاً'],
-                ['oldest', 'الأقدم'],
-                ['name', 'الاسم (أ – ي)'],
-                ['lastLogin', 'الأحدث دخولاً'],
-                ['expiring', 'الأقرب انتهاءً'],
-              ] as [SortKey, string][]
-            ).map(([k, l]) => (
+          {/* موبايل: قائمة منسدلة (أوفر مساحة) — sm+: أقراص */}
+          <div className="sm:hidden">
+            <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+              <SelectTrigger className="h-10 w-full rounded-xl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORT_OPTIONS.map(([k, l]) => (
+                  <SelectItem key={k} value={k}>
+                    {l}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
+            {SORT_OPTIONS.map(([k, l]) => (
               <FilterPill key={k} active={sortKey === k} onClick={() => setSortKey(k)} color="#f59e0b">
                 {l}
               </FilterPill>
             ))}
           </div>
+        </div>
         </div>
 
         {hasFilters && (
@@ -1087,19 +1258,18 @@ export function AdminTenantsView() {
       ) : (
         <>
           {/* ── جدول سطح المكتب (lg+) ── */}
-          <div className="animate-in-up stagger-3 hidden overflow-hidden rounded-2xl border bg-card shadow-sm lg:block">
+          <div className="animate-in-up stagger-3 hidden overflow-hidden rounded-2xl border bg-card shadow-sm xl:block">
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/40 hover:bg-muted/40">
-                    <TableHead className="w-[290px]">المحل</TableHead>
-                    <TableHead className="w-[150px]">التواصل</TableHead>
-                    <TableHead className="w-[170px]">الباقة</TableHead>
-                    <TableHead className="w-[110px]">الحالة</TableHead>
-                    <TableHead className="w-[130px]">الاشتراك</TableHead>
-                    <TableHead className="w-[90px] text-center">الفريق</TableHead>
-                    <TableHead className="w-[130px]">آخر دخول</TableHead>
-                    <TableHead className="w-[190px] text-center">إجراءات</TableHead>
+                    <TableHead>المحل</TableHead>
+                    <TableHead className="w-[150px]">الباقة</TableHead>
+                    <TableHead className="w-[104px]">الحالة</TableHead>
+                    <TableHead className="w-[128px]">الاشتراك</TableHead>
+                    <TableHead className="hidden w-[84px] text-center 2xl:table-cell">الفريق</TableHead>
+                    <TableHead className="hidden w-[120px] 2xl:table-cell">آخر دخول</TableHead>
+                    <TableHead className="w-[176px] text-center">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1119,24 +1289,29 @@ export function AdminTenantsView() {
                             <p className="mt-0.5 truncate text-[11px] text-muted-foreground" dir="ltr">
                               {r.ownerEmail ?? '—'}
                             </p>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                              {(r.ownerPhone ?? r.phone) && (
+                                <a
+                                  href={`tel:${r.ownerPhone ?? r.phone}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 py-0.5 pe-2.5 ps-0.5 text-amber-700 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
+                                >
+                                  <span className="grid size-5 shrink-0 place-items-center rounded-full bg-amber-500/20">
+                                    <Phone className="size-3" />
+                                  </span>
+                                  <bdi className="font-mono text-[11px] font-bold tabular-nums tracking-wide">
+                                    {r.ownerPhone ?? r.phone}
+                                  </bdi>
+                                </a>
+                              )}
+                              {/* في xl فقط (عمودا الفريق/آخر دخول مخفيّان) */}
+                              <span className="inline-flex items-center gap-1 text-[10.5px] text-muted-foreground 2xl:hidden">
+                                <Users className="size-3" />
+                                {num(r.usersCount)} · {relativeLastLogin(r.lastLoginAt)}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </TableCell>
-                      {/* التواصل: تليفون */}
-                      <TableCell>
-                        {(r.ownerPhone ?? r.phone) ? (
-                          <a
-                            href={`tel:${r.ownerPhone ?? r.phone}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 font-mono text-xs text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
-                            dir="ltr"
-                          >
-                            <Phone className="size-3 text-amber-600 dark:text-amber-400" />
-                            {r.ownerPhone ?? r.phone}
-                          </a>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
                       </TableCell>
                       {/* الباقة */}
                       <TableCell>
@@ -1151,14 +1326,14 @@ export function AdminTenantsView() {
                         <SubCountdown row={r} />
                       </TableCell>
                       {/* الفريق */}
-                      <TableCell className="text-center">
+                      <TableCell className="hidden text-center 2xl:table-cell">
                         <span className="inline-flex items-center justify-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-bold tabular-nums">
                           <Users className="size-3 text-muted-foreground" />
                           {num(r.usersCount)}
                         </span>
                       </TableCell>
                       {/* آخر دخول */}
-                      <TableCell>
+                      <TableCell className="hidden 2xl:table-cell">
                         <p className="text-[11px] font-semibold text-foreground/80">
                           {relativeLastLogin(r.lastLoginAt)}
                         </p>
@@ -1199,7 +1374,7 @@ export function AdminTenantsView() {
               </Table>
             </div>
             {/* تذييل الجدول */}
-            <div className="flex items-center justify-between gap-2 border-t bg-muted/30 px-4 py-2.5 text-[11px] text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-4 py-2.5 text-[11px] text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <Sparkles className="size-3 text-amber-500" />
                 اضغط على أي صف لعرض التفاصيل الكاملة
@@ -1211,7 +1386,7 @@ export function AdminTenantsView() {
           </div>
 
           {/* ── بطاقات الموبايل/التابلت (< lg) ── */}
-          <div className="animate-in-up stagger-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:hidden">
+          <div className="animate-in-up stagger-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:hidden">
             {shown.map((r, i) => (
               <div
                 key={r.id}
@@ -1219,21 +1394,21 @@ export function AdminTenantsView() {
                 tabIndex={0}
                 onClick={() => openDetail(r)}
                 onKeyDown={(e) => e.key === 'Enter' && openDetail(r)}
-                className="animate-in-up group rounded-2xl border bg-card p-3.5 shadow-sm transition-all hover:shadow-md active:scale-[0.99]"
+                className="animate-in-up group min-w-0 rounded-2xl border bg-card p-3.5 shadow-sm transition-all hover:shadow-md active:scale-[0.99]"
                 style={{ animationDelay: `${Math.min(i, 10) * 40}ms` }}
               >
                 {/* رأس البطاقة: أفاتار + اسم + حالة */}
                 <div className="flex items-start justify-between gap-2.5">
-                  <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
                     <TenantAvatar name={r.shopName} status={r.status} />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-bold leading-tight">{r.shopName}</p>
-                      <div className="mt-1 flex items-center gap-1.5">
+                      <div className="mt-1 flex min-w-0 items-center gap-1.5">
                         <PlanPill code={r.planCode} name={r.planName} />
                       </div>
                     </div>
                   </div>
-                  <StatusPill status={r.status} size="xs" />
+                  <div className="shrink-0"><StatusPill status={r.status} size="xs" /></div>
                 </div>
 
                 {/* الاشتراك */}
@@ -1241,31 +1416,33 @@ export function AdminTenantsView() {
                   <SubCountdown row={r} wide />
                 </div>
 
-                {/* التواصل — صفوف كاملة العرض وقابلة للّمس */}
+                {/* التواصل — بلاطات متمركزة (لا تعتمد على اتجاه الصفحة): أيقونة + قيمة في المنتصف */}
                 {(r.ownerEmail || r.ownerPhone || r.phone) && (
                   <div className="mt-2.5 grid gap-1.5">
-                    {r.ownerEmail && (
-                      <a
-                        href={`mailto:${r.ownerEmail}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex min-h-10 items-center gap-2.5 rounded-xl bg-muted/50 px-3 text-[12.5px] font-medium transition-colors active:bg-muted"
-                      >
-                        <Mail className="size-4 shrink-0 text-muted-foreground" />
-                        <span dir="ltr" className="min-w-0 flex-1 truncate text-right">
-                          {r.ownerEmail}
-                        </span>
-                      </a>
-                    )}
                     {(r.ownerPhone ?? r.phone) && (
                       <a
                         href={`tel:${r.ownerPhone ?? r.phone}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="flex min-h-10 items-center gap-2.5 rounded-xl bg-amber-500/10 px-3 text-[13px] font-semibold text-amber-700 transition-colors active:bg-amber-500/20 dark:text-amber-400"
+                        className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 text-amber-700 transition-colors active:bg-amber-500/20 dark:text-amber-400"
                       >
-                        <Phone className="size-4 shrink-0" />
-                        <span dir="ltr" className="min-w-0 flex-1 truncate text-right font-mono tabular-nums">
-                          {r.ownerPhone ?? r.phone}
+                        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-amber-500/20">
+                          <Phone className="size-3.5" />
                         </span>
+                        <bdi className="min-w-0 truncate font-mono text-[13px] font-bold tabular-nums tracking-wide">
+                          {r.ownerPhone ?? r.phone}
+                        </bdi>
+                      </a>
+                    )}
+                    {r.ownerEmail && (
+                      <a
+                        href={`mailto:${r.ownerEmail}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex min-h-11 items-center justify-center gap-2 rounded-xl border bg-muted/40 px-3 text-foreground/85 transition-colors active:bg-muted"
+                      >
+                        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-muted">
+                          <Mail className="size-3.5 text-muted-foreground" />
+                        </span>
+                        <bdi className="min-w-0 truncate text-[12.5px] font-medium">{r.ownerEmail}</bdi>
                       </a>
                     )}
                   </div>
@@ -1381,6 +1558,10 @@ export function AdminTenantsView() {
   )
 }
 
+/** تذييل الدايلوج ثابت أسفل الشيت + مساحة آمنة للآيفون */
+const STICKY_FOOTER =
+  'shrink-0 border-t bg-card px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6 [&>button]:max-sm:w-full'
+
 /* ═══════════════════════════ دايلوج التفاصيل ═══════════════════════════ */
 
 function TenantDetailDialog({
@@ -1442,7 +1623,7 @@ function TenantDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent mobileSheet className="sm:max-w-3xl max-h-[92dvh] gap-0 p-0">
+      <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
         {/* عنوان مخفي لقارئات الشاشة (الرأس المرئي مخصص بالكامل) */}
         <DialogTitle className="sr-only">تفاصيل المحل</DialogTitle>
         <DialogDescription className="sr-only">
@@ -1462,7 +1643,7 @@ function TenantDetailDialog({
           <>
             {/* شريط الرأس — أفاتار + هوية المحل */}
             <div
-              className="relative overflow-hidden border-b px-5 pb-4 pt-5 sm:px-6"
+              className="relative shrink-0 overflow-hidden border-b px-4 pb-4 pt-6 sm:px-6 sm:pt-5"
               style={{
                 background:
                   'radial-gradient(420px 160px at 100% 0%, rgba(245,158,11,0.15), transparent), radial-gradient(320px 140px at 0% 100%, rgba(249,115,22,0.10), transparent)',
@@ -1479,7 +1660,7 @@ function TenantDetailDialog({
                 }}
               />
               <div className="relative flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3.5">
+                <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-3.5">
                   <TenantAvatar name={data.shopName} status={data.status} size="xl" />
                   <div className="min-w-0">
                     <h2 className="truncate text-lg font-extrabold leading-tight">{data.shopName}</h2>
@@ -1496,20 +1677,20 @@ function TenantDetailDialog({
                     </div>
                   </div>
                 </div>
-                <span className="shrink-0 rounded-lg border bg-background/70 px-2 py-1 font-mono text-[10px] text-muted-foreground" dir="ltr">
+                <span className="hidden shrink-0 rounded-lg border bg-background/70 px-2 py-1 font-mono text-[10px] text-muted-foreground sm:inline" dir="ltr">
                   {data.invoicePrefix}-•••
                 </span>
               </div>
             </div>
 
-            <DialogBody className="space-y-5 px-5 py-4 sm:px-6">
+            <DialogBody className="space-y-5 px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:px-6">
               {/* أرقام المحل */}
               <section>
                 <h3 className="mb-2.5 flex items-center gap-1.5 text-sm font-extrabold">
                   <Activity className="size-4 text-amber-600 dark:text-amber-400" />
                   أرقام المحل
                 </h3>
-                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5">
                   {detailStats.map((s) => (
                     <div
                       key={s.label}
@@ -1550,33 +1731,41 @@ function TenantDetailDialog({
                   <ReceiptText className="size-4 text-amber-600 dark:text-amber-400" />
                   سجل الاشتراكات ({data.subscriptions.length})
                 </h3>
-                {/* 📱 الجوال: كروت الاشتراكات */}
-                <div className="max-h-64 overflow-y-auto rounded-xl border sm:hidden">
+                {/* موبايل: بطاقات صغيرة بدل جدول مضغوط */}
+                <div className="space-y-2 md:hidden">
                   {data.subscriptions.length === 0 ? (
-                    <p className="py-5 text-center text-xs text-muted-foreground">لا توجد اشتراكات</p>
+                    <p className="rounded-xl border py-5 text-center text-xs text-muted-foreground">
+                      لا توجد اشتراكات
+                    </p>
                   ) : (
-                    <ul className="divide-y">
-                      {data.subscriptions.map((s: any) => (
-                        <li key={s.id} className="space-y-1.5 p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="min-w-0 flex-1 truncate text-sm font-bold">{s.plan.name}</p>
-                            <StatusPill status={s.status} size="xs" />
-                          </div>
-                          <div className="flex items-center justify-between gap-2 text-xs">
-                            <span className="text-muted-foreground">
+                    data.subscriptions.map((s: any) => (
+                      <div key={s.id} className="rounded-xl border bg-card p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate text-xs font-bold">{s.plan.name}</span>
+                          <StatusPill status={s.status} size="xs" />
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+                          <span className="text-muted-foreground">
+                            الفترة:{' '}
+                            <b className="text-foreground">
                               {s.period === 'monthly' ? 'شهري' : s.period === 'yearly' ? 'سنوي' : 'تجريبي'}
-                              {' · '}
-                              {formatShortDate(s.startDate)} ← {formatShortDate(s.endDate)}
-                            </span>
-                            <span className="shrink-0 font-bold tabular-nums">{formatCurrency(s.amountPaid)}</span>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
+                            </b>
+                          </span>
+                          <span className="text-muted-foreground">
+                            المبلغ: <b className="tabular-nums text-foreground">{formatCurrency(s.amountPaid)}</b>
+                          </span>
+                          <span className="text-muted-foreground">
+                            من: <b className="text-foreground">{formatShortDate(s.startDate)}</b>
+                          </span>
+                          <span className="text-muted-foreground">
+                            إلى: <b className="text-foreground">{formatShortDate(s.endDate)}</b>
+                          </span>
+                        </div>
+                      </div>
+                    ))
                   )}
                 </div>
-
-                <div className="hidden max-h-56 overflow-y-auto rounded-xl border sm:block">
+                <div className="hidden max-h-64 overflow-y-auto rounded-xl border md:block">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/40">
@@ -1624,7 +1813,7 @@ function TenantDetailDialog({
                   <Users className="size-4 text-amber-600 dark:text-amber-400" />
                   الفريق ({data.users.length})
                 </h3>
-                <div className="max-h-40 space-y-1.5 overflow-y-auto pr-1">
+                <div className="space-y-1.5 sm:max-h-48 sm:overflow-y-auto sm:pe-1">
                   {data.users.map((u: any) => (
                     <div
                       key={u.id}
@@ -1632,7 +1821,7 @@ function TenantDetailDialog({
                     >
                       <span
                         className={cn(
-                          'grid size-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br text-xs font-bold text-white',
+                          'relative grid size-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br text-xs font-bold text-white',
                           AVATAR_GRADIENTS[gradientIndexOf(u.name)],
                         )}
                       >
@@ -1646,6 +1835,7 @@ function TenantDetailDialog({
                         </p>
                       </div>
                       <Badge
+                        className="shrink-0"
                         variant={u.role === 'SUPER_ADMIN' ? 'gradient' : u.role === 'ADMIN' ? 'warning' : 'secondary'}
                         size="sm"
                       >
@@ -1694,7 +1884,7 @@ function InfoTile({
   dir,
   className,
 }: {
-  icon: LucideIcon
+  icon: React.ComponentType<{ className?: string }>
   label: string
   value: string
   dir?: 'ltr' | 'rtl'
@@ -1707,8 +1897,9 @@ function InfoTile({
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-[10px] font-medium text-muted-foreground">{label}</p>
-        <p className="truncate text-xs font-semibold" dir={dir}>
-          {value}
+        <p className="truncate text-xs font-semibold" title={value}>
+          {/* bdi: القيمة (رقم/إيميل) تتعرض صح من غير ما تغيّر محاذاة السطر */}
+          <bdi dir={dir}>{value}</bdi>
         </p>
       </div>
     </div>
@@ -1779,9 +1970,9 @@ function EditTenantDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent mobileSheet className="sm:max-w-lg">
+      <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
         {/* رأس بسيط بأفاتار */}
-        <DialogHeader>
+        <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
           <DialogTitle className="flex items-center gap-2.5">
             <TenantAvatar name={row.shopName} size="lg" />
             <span>
@@ -1790,7 +1981,7 @@ function EditTenantDialog({
             </span>
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-3.5">
+        <DialogBody className="space-y-3.5 py-4">
           <div className="space-y-1.5">
             <Label className="flex items-center gap-1.5">
               <Store className="size-3.5 text-muted-foreground" />
@@ -1854,8 +2045,8 @@ function EditTenantDialog({
               className="rounded-xl"
             />
           </div>
-        </div>
-        <DialogFooter>
+        </DialogBody>
+        <DialogFooter className={STICKY_FOOTER}>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             إلغاء
           </Button>
@@ -1956,10 +2147,10 @@ function AddTenantDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent mobileSheet className="sm:max-w-lg">
+      <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
         {result ? (
           /* ── نجاح الإنشاء: بطاقة بيانات الدخول ── */
-          <div className="space-y-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 pb-4 pt-6 sm:px-6 sm:pt-5">
             <DialogTitle className="sr-only">تم إنشاء المحل بنجاح</DialogTitle>
             <div className="flex flex-col items-center pt-2 text-center">
               <span className="relative grid size-16 place-items-center rounded-3xl bg-gradient-to-br from-emerald-400 to-teal-600 text-white shadow-lg shadow-emerald-500/30">
@@ -1974,21 +2165,21 @@ function AddTenantDialog({
 
             <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4">
               <div className="space-y-2.5">
-                <div className="flex items-center justify-between gap-2 rounded-xl border bg-card px-3.5 py-2.5">
+                <div className="flex flex-col gap-1 rounded-xl border bg-card px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                   <span className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
                     <Mail className="size-4" />
                     البريد
                   </span>
-                  <span dir="ltr" className="font-mono text-sm font-bold">
+                  <span dir="ltr" className="min-w-0 break-all font-mono text-sm font-bold">
                     {result.email}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-2 rounded-xl border bg-card px-3.5 py-2.5">
+                <div className="flex flex-col gap-1 rounded-xl border bg-card px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                   <span className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
                     <User className="size-4" />
                     كلمة المرور
                   </span>
-                  <span dir="ltr" className="font-mono text-sm font-extrabold tracking-wider">
+                  <span dir="ltr" className="min-w-0 break-all font-mono text-sm font-extrabold tracking-wider">
                     {result.password}
                   </span>
                 </div>
@@ -2026,7 +2217,7 @@ function AddTenantDialog({
         ) : (
           /* ── نموذج الإنشاء ── */
           <>
-            <DialogHeader>
+            <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
               <DialogTitle className="flex items-center gap-2.5">
                 <span className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 text-white shadow-md shadow-amber-500/25">
                   <Plus className="size-5" strokeWidth={2.4} />
@@ -2037,7 +2228,7 @@ function AddTenantDialog({
                 سيتم إنشاء المحل + حساب مالك + اشتراك مبدئي. كلمة المرور ستظهر مرة واحدة بعد الإنشاء.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-3.5">
+            <DialogBody className="space-y-3.5 py-4">
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5">
                   <Store className="size-3.5 text-muted-foreground" />
@@ -2137,8 +2328,8 @@ function AddTenantDialog({
                   </span>
                 </div>
               )}
-            </div>
-            <DialogFooter>
+            </DialogBody>
+            <DialogFooter className={STICKY_FOOTER}>
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 إلغاء
               </Button>
