@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { CANONICAL_PLAN_CODES } from '@/lib/plan-constants'
+import { countableSubWhere } from '@/lib/subscription-status'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,8 +24,17 @@ export const dynamic = 'force-dynamic'
  *   - Target planCode must be one of the 4 canonical codes.
  *   - The target plan must be active (isActive = true) in DB.
  *   - The change keeps the existing endDate (no extension).
- *   - If the user has no active subscription (none at all), one is created
- *     with a 14-day trial of the target plan.
+ *   - If the user has NEVER had any subscription, one is created with a
+ *     14-day trial of the target plan (legacy edge case).
+ *
+ * 🛡️ 2026-10-12 — closed two free-upgrade / free-trial holes:
+ *   1. A tenant with a PAID live subscription could call this endpoint and
+ *      move to a more expensive plan for free (same endDate, no payment).
+ *      Now: switching is allowed ONLY while the live subscription is a
+ *      trial. Paid tenants must upgrade through checkout.
+ *   2. A tenant whose subscription had expired got a brand-new free 14-day
+ *      trial here, bypassing the one-trial-per-tenant rule in start-trial.
+ *      Now: anyone who ever had a subscription must pay to come back.
  */
 export async function POST(req: NextRequest) {
   return withDb(async () => {
@@ -79,14 +89,44 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Find the tenant's most-recent active subscription
-    const activeSub = await db.subscription.findFirst({
-      where: { tenantId: session.tenantId, status: 'active' },
+    // Live (active + not yet expired) subscriptions, newest first.
+    const now = new Date()
+    const liveSubs = await db.subscription.findMany({
+      where: { tenantId: session.tenantId, status: 'active', endDate: { gt: now } },
       orderBy: { endDate: 'desc' },
     })
 
-    // If no active subscription, create one with 14-day trial
+    // 🛡️ Paid subscription → no free self-service switching.
+    if (liveSubs.some((s) => s.period !== 'trial')) {
+      return NextResponse.json(
+        {
+          error: 'اشتراكك مدفوع — تغيير الباقة أو الترقية بيتم من صفحة الأسعار والدفع',
+          code: 'PAID_SUB_SWITCH_BLOCKED',
+        },
+        { status: 403 }
+      )
+    }
+
+    const activeSub = liveSubs[0]
+
+    // No live subscription.
     if (!activeSub) {
+      // 🛡️ Ever had a subscription (expired trial / expired paid)? Must pay.
+      const everHad = await db.subscription.findFirst({
+        where: { tenantId: session.tenantId, ...countableSubWhere },
+        select: { id: true },
+      })
+      if (everHad) {
+        return NextResponse.json(
+          {
+            error: 'اشتراكك منتهي — اشترك من صفحة الأسعار والدفع للمتابعة',
+            code: 'SUBSCRIPTION_EXPIRED',
+          },
+          { status: 402 }
+        )
+      }
+
+      // Brand-new tenant with no subscription row at all → 14-day trial.
       const endDate = new Date()
       endDate.setDate(endDate.getDate() + (targetPlan.trialDays || 14))
 

@@ -25,10 +25,10 @@ export const dynamic = 'force-dynamic'
  *   3. The tenant must NOT currently have an active subscription that
  *      hasn't expired yet. If they do, they must either wait for it
  *      to expire or upgrade via /checkout (Paymob).
- *   4. If the tenant's most recent subscription is in the past (expired),
- *      we allow starting a new trial of a DIFFERENT plan (so they can
- *      try Pro if they tried Basic before, etc.). Re-trialing the SAME
- *      plan is rejected — they must pay for it.
+ *   4. 🛡️ 2026-10-12: ONE trial per tenant, EVER — on ANY plan. Previously only
+ *      re-trialing the SAME plan was blocked, so a shop could chain a trial
+ *      on each of the 4 plans (~56 free days). Switching plans *during* an
+ *      active trial is still allowed via /api/subscription/switch-plan.
  *
  * Response:
  *   { ok: true, planCode, planName, endDate, trialDays }
@@ -98,12 +98,18 @@ async function __POST(req: NextRequest) {
     )
   }
 
-  // 🛡️ If user already used a trial of the SAME plan, reject — they must pay.
-  if (latestSub && latestSub.period === 'trial' && latestSub.planId === plan.id) {
+  // 🛡️ 2026-10-12: تجربة واحدة فقط لكل محل مدى الحياة (أي باقة).
+  // كان الفحص بيقارن بآخر اشتراك ونفس الباقة بس، فكان ممكن تجربة على كل باقة
+  // ورا بعض. دلوقتي: لو في أي اشتراك سابق من نوع trial → لازم دفع.
+  const priorTrial = await db.subscription.findFirst({
+    where: { tenantId: session.tenantId, period: 'trial', ...countableSubWhere },
+    select: { id: true },
+  })
+  if (priorTrial) {
     return NextResponse.json(
       {
         error:
-          'لقد استخدمت تجربة 14 يوم لهذه الباقة من قبل. يجب الاشتراك المدفوع للمتابعة.',
+          'لقد استخدمت تجربة الـ 14 يوم من قبل. يجب الاشتراك المدفوع للمتابعة.',
         code: 'TRIAL_ALREADY_USED',
       },
       { status: 409 },

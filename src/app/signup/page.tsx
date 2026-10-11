@@ -221,13 +221,17 @@ function PlanChooser({
   onSelect,
   loading,
   error,
+  startCollapsed,
 }: {
   entries: PlanEntry[]
   selected: string
   onSelect: (code: string) => void
   loading?: boolean
   error?: string
+  /** الباقة جاية من الرابط (?plan=…) → على الموبايل نطوي الاختيار في سطر واحد + «تغيير» */
+  startCollapsed?: boolean
 }) {
+  const [open, setOpen] = React.useState(false)
   if (loading) {
     return (
       <div className="space-y-2" aria-busy="true">
@@ -262,11 +266,40 @@ function PlanChooser({
     onSelect((sameLevel ?? group[0]).code)
   }
 
+  // موبايل فقط: مطوي لو الباقة جاية من الرابط ولسه المستخدم ما ضغطش «تغيير».
+  // الديسكتوب بيفضل زي ما هو (العمودين ظاهرين).
+  const collapsed = !!startCollapsed && !open
+  const hideOnMobile = collapsed ? 'max-lg:hidden' : ''
+
   return (
-    <div className="min-w-0 max-w-full space-y-3.5">
+    <div className="su-plan su-span min-w-0 max-w-full space-y-3.5">
+      {/* موبايل: ملخص في سطر واحد بدل الخطوتين — الخانات تبدأ من أول الشاشة تقريباً */}
+      {collapsed && (
+        <div className={cn('flex w-full min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2.5 lg:hidden', tm.tint)}>
+          <span className={cn('grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-br text-white shadow-sm', tm.grad)}>
+            <Check className="size-4" strokeWidth={3.5} />
+          </span>
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <p className="truncate text-[13px] font-extrabold leading-tight text-foreground">
+              {tm.label} — {planLevel(current)}
+            </p>
+            <p className="text-[11px] font-bold leading-tight text-foreground/70">
+              <span className={cn('font-black tabular-nums', tm.text)}>
+                {current.meta.price.replace(/\s*EGP\s*/i, '')} جنيه/شهر
+              </span>
+              {' '}بعد 14 يوم مجاناً
+            </p>
+          </div>
+          <button type="button" onClick={() => setOpen(true)}
+            className="-my-1 shrink-0 rounded-lg px-3 py-2 text-sm font-bold text-primary hover:bg-primary/10">
+            تغيير
+          </button>
+        </div>
+      )}
+
       {/* ١) نوع النشاط */}
       {types.length > 1 && (
-        <div className="space-y-2.5">
+        <div className={cn('space-y-2.5', hideOnMobile)}>
           <div className="flex items-center gap-2">
             <span className="grid size-6 place-items-center rounded-full bg-primary text-[11px] font-black text-primary-foreground">1</span>
             <p className="text-sm font-extrabold leading-tight text-foreground">إيه نوع نشاطك؟</p>
@@ -288,7 +321,7 @@ function PlanChooser({
                   aria-checked={sel}
                   onClick={() => pickType(t)}
                   className={cn(
-                    'relative flex min-h-[100px] flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl border-2 px-2 py-3 text-center transition-all duration-300 active:scale-[0.97]',
+                    'su-act relative flex min-h-[100px] flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl border-2 px-2 py-3 text-center transition-all duration-300 active:scale-[0.97]',
                     sel
                       ? cn('scale-[1.02] border-transparent bg-gradient-to-br text-white', m.grad, m.glow)
                       : cn('text-foreground hover:-translate-y-0.5', m.tint),
@@ -304,7 +337,7 @@ function PlanChooser({
                   </span>
                   <span
                     className={cn(
-                      'relative grid size-12 place-items-center rounded-2xl',
+                      'su-act-ic relative grid size-12 place-items-center rounded-2xl',
                       sel ? 'bg-black/15' : cn('bg-white/70 dark:bg-white/10', m.text),
                     )}
                   >
@@ -320,7 +353,7 @@ function PlanChooser({
 
       {/* ٢) المستوى (أساسي / احترافي) */}
       {levels.length > 0 && (
-        <div className="space-y-2.5">
+        <div className={cn('space-y-2.5', hideOnMobile)}>
           {types.length > 1 && (
             <div className="flex items-center gap-2">
               <span className="grid size-6 place-items-center rounded-full bg-primary text-[11px] font-black text-primary-foreground">2</span>
@@ -343,7 +376,7 @@ function PlanChooser({
                   aria-checked={sel}
                   onClick={() => onSelect(e.code)}
                   className={cn(
-                    'relative flex flex-col gap-1.5 overflow-hidden rounded-2xl border-2 p-3 text-right transition-all duration-300 active:scale-[0.97]',
+                    'su-lvl relative flex flex-col gap-1.5 overflow-hidden rounded-2xl border-2 p-3 text-right transition-all duration-300 active:scale-[0.97]',
                     sel
                       ? cn('scale-[1.02] border-transparent bg-gradient-to-br text-white', tm.grad, tm.glow)
                       : 'border-border bg-card hover:border-foreground/30',
@@ -391,7 +424,7 @@ function PlanChooser({
       {/* ٣) تأكيد صريح — سطرين: الاختيار + التجربة والسعر */}
       <div
         className={cn(
-          'flex w-full min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2.5',
+          'su-strip flex w-full min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2.5 max-lg:hidden',
           tm.tint,
         )}
       >
@@ -424,6 +457,14 @@ function PlanChooser({
         </div>
       </div>
 
+      {startCollapsed && open && (
+        <button type="button" onClick={() => setOpen(false)}
+          className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-primary/40 bg-primary/5 text-sm font-bold text-primary lg:hidden">
+          <Check className="size-4" strokeWidth={3} />
+          تم
+        </button>
+      )}
+
       {error && (
         <p className="flex items-center gap-1 text-xs text-destructive">
           <AlertCircle className="size-3 shrink-0" />
@@ -433,6 +474,47 @@ function PlanChooser({
     </div>
   )
 }
+
+
+const SIGNUP_CSS = `
+.su-invite-d{display:none}
+@media (min-width:1024px){
+  /* ScaleWrapper بيصغّر الصفحة على الشاشات ≤1536px وبيظبط --app-h على الارتفاع المعدّل،
+     بس lg:h-screen ما بتتأثرش بيه → كانت الصفحة بتقف قبل آخر الشاشة (الهيرو مقصوص من تحت) */
+  main{height:var(--app-h,100vh)}
+  main .su-side{height:var(--app-h,100vh)}
+  main .su-side{align-items:flex-start;padding:16px 24px}
+  main .su-wrap{max-width:580px;margin-block:auto}
+  main .su-card{display:flex;flex-direction:column;gap:12px;padding:20px}
+  main .su-card>*{margin:0}
+  main .su-title{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  main .su-chips{margin-top:0}
+  main .su-form{display:grid;grid-template-columns:1fr 1fr;gap:24px 12px;align-items:start}
+  main .su-form>*{margin:0}
+  main .su-form>.su-span{grid-column:1/-1}
+  main .su-fld{display:flex;flex-direction:column;gap:16px;min-width:0}
+  main .su-fld>*{margin:0}
+  main .su-form input[data-slot="input"]{height:40px}
+  main .su-invite-btn{display:none}
+  main .su-invite-d{display:flex}
+  /* اختيار الباقة: عمودين (النشاط | المستوى) */
+  main .su-plan{display:grid;grid-template-columns:1fr 1fr;column-gap:16px;row-gap:0;align-items:start}
+  main .su-plan>*{margin:0}
+  main .su-act{min-height:104px;padding-block:8px;gap:6px}
+  main .su-act-ic{width:40px;height:40px}
+  main .su-lvl{padding:10px;gap:4px}
+  main .su-strip{grid-column:1/-1;margin-top:12px;padding-block:8px}
+  /* زر الإنشاء: عادي (مش ثابت أسفل الشاشة) */
+  main .su-cta{position:static;margin:0;padding:0;border:0;background:transparent;backdrop-filter:none;border-radius:0}
+}
+@media (min-width:1024px) and (max-height:760px){
+  main .su-side{padding-block:8px}
+  main .su-card{padding:14px;gap:10px}
+  main .su-form{gap:16px 8px}
+  main .su-fld{gap:12px}
+  main .su-copy{display:none}
+}
+`
 
 type SignupError = { field: string; message: string }
 
@@ -447,6 +529,55 @@ type SignupError = { field: string; message: string }
  * نجحت فعلاً والرد ضاع، الإعادة هترجع "البريد مسجّل" — فنجرّب نسجّل دخول
  * بنفس البيانات ونعتبرها نجاح.
  */
+// ─── 🛡️ 2026-10-12: إيميل جاهز (gmail/yahoo) + موبايل مصري إجباري ───
+/** الدومينات اللي بنقترحها أثناء الكتابة (بالترتيب) */
+const EMAIL_SUGGEST_DOMAINS = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com']
+
+/** مسافة Damerau–Levenshtein (التبديل بين حرفين = 1) — لاكتشاف أخطاء زي gmial / gmail.con */
+function editDistance(a: string, b: string): number {
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)])
+  for (let j = 0; j <= b.length; j++) d[0][j] = j
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost)
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1)
+      }
+    }
+  }
+  return d[a.length][b.length]
+}
+
+/**
+ * لو الدومين المكتوب شبه دومين معروف بحرف واحد غلط (gmial.com / gmail.con / yaho.com)
+ * بنرجّع الدومين الصحيح. لو الدومين نفسه معروف أو مختلف تماماً → null.
+ * `typing`: المستخدم لسه بيكتب → ما نقترحش على دومين ناقص (gmail.co وهو في طريقه لـ gmail.com).
+ */
+function suggestDomainFix(domain: string, typing: boolean): string | null {
+  if (!domain || !/^[a-z0-9\-]+\.[a-z]{2,}$/.test(domain)) return null
+  if (EMAIL_SUGGEST_DOMAINS.includes(domain)) return null
+  if (typing && EMAIL_SUGGEST_DOMAINS.some((k) => k.startsWith(domain))) return null
+  let best: string | null = null
+  for (const k of EMAIL_SUGGEST_DOMAINS) {
+    if (editDistance(domain, k) === 1) { best = k; break }
+  }
+  return best
+}
+
+/** نفس منطق السيرفر (src/lib/signup-guard.ts → normalizeEgyptPhone). */
+function normalizeEgyptPhoneClient(raw: string): string | null {
+  let v = (raw || '')
+    .replace(/[٠-٩]/g, (c) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(c)))
+    .replace(/[۰-۹]/g, (c) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(c)))
+    .replace(/[\s\-().]/g, '')
+  if (v.startsWith('+')) v = v.slice(1)
+  if (v.startsWith('0020')) v = v.slice(4)
+  else if (v.startsWith('20') && v.length === 12) v = v.slice(2)
+  if (v.length === 10 && v.startsWith('1')) v = '0' + v
+  return /^01[0125]\d{8}$/.test(v) ? v : null
+}
+
 async function postSignup(body: Record<string, any>): Promise<any> {
   const RETRYABLE = new Set([500, 502, 503, 504])
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -501,6 +632,7 @@ async function postSignup(body: Record<string, any>): Promise<any> {
 function SignupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const planFromUrl = searchParams.get('plan') ?? ''
   const [selectedPlan, setSelectedPlan] = React.useState<string>(
     searchParams.get('plan') ?? ''
   )
@@ -575,6 +707,8 @@ function SignupContent() {
   const [shopName, setShopName] = React.useState('')
   const [name, setName] = React.useState('')
   const [email, setEmail] = React.useState('')
+  const [emailFocused, setEmailFocused] = React.useState(false)
+  const [emailActiveIdx, setEmailActiveIdx] = React.useState(-1)
   const [phone, setPhone] = React.useState('')
   const [password, setPassword] = React.useState('')
   const [inviteCode, setInviteCode] = React.useState('')
@@ -582,6 +716,24 @@ function SignupContent() {
   const [showInvite, setShowInvite] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [errors, setErrors] = React.useState<SignupError[]>([])
+
+  // ─── إيميل: اقتراح الدومين أثناء الكتابة + تصحيح الأخطاء الشائعة ───
+  const emailLower = email.trim().toLowerCase()
+  const emailAt = emailLower.indexOf('@')
+  const emailLocal = emailAt === -1 ? emailLower : emailLower.slice(0, emailAt)
+  const emailDomainTyped = emailAt === -1 ? '' : emailLower.slice(emailAt + 1)
+  const emailSuggestions: string[] =
+    !emailFocused || !emailLocal
+      ? []
+      : EMAIL_SUGGEST_DOMAINS
+          .filter((d) => d.startsWith(emailDomainTyped) && d !== emailDomainTyped)
+          .map((d) => `${emailLocal}@${d}`)
+  const emailTypoFix = emailAt === -1 ? null : suggestDomainFix(emailDomainTyped, emailFocused)
+  const emailTypoFixFull = emailTypoFix ? `${emailLocal}@${emailTypoFix}` : null
+
+  const pickEmail = (full: string) => {
+    setEmail(full); setEmailActiveIdx(-1); clearFieldError('email')
+  }
 
   const passStrength = getPasswordStrength(password)
 
@@ -597,7 +749,9 @@ function SignupContent() {
     if (!shopName.trim()) newErrors.push({ field: 'shopName', message: 'اسم المحل مطلوب' })
     if (!name.trim()) newErrors.push({ field: 'name', message: 'اسم المسؤول مطلوب' })
     if (!email.trim()) newErrors.push({ field: 'email', message: 'البريد مطلوب' })
-    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) newErrors.push({ field: 'email', message: 'صيغة البريد غير صحيحة' })
+    else if (!/^[a-z0-9._%+\-]+@[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]{2,}$/i.test(email.trim())) newErrors.push({ field: 'email', message: 'صيغة البريد غير صحيحة' })
+    if (!phone.trim()) newErrors.push({ field: 'phone', message: 'رقم الموبايل مطلوب' })
+    else if (!normalizeEgyptPhoneClient(phone)) newErrors.push({ field: 'phone', message: 'اكتب رقم موبايل مصري صحيح (مثال: 01012345678)' })
     if (!password) newErrors.push({ field: 'password', message: 'كلمة المرور مطلوبة' })
     else if (password.length < 6) newErrors.push({ field: 'password', message: 'الحد الأدنى 6 أحرف' })
     setErrors(newErrors)
@@ -620,7 +774,7 @@ function SignupContent() {
       // 📊 التقاط مصدر الاكتساب (utm_* + click ids) من طبقة التتبع
       const attribution = getAttributionForServer()
       const data: { ok: boolean; user?: any; error?: string; tracking?: { registrationEventId: string; trialEventId: string; planName?: string } } = await postSignup({
-        shopName: shopName.trim(), name: name.trim(), email: email.trim().toLowerCase(), phone: phone.trim(), password,
+        shopName: shopName.trim(), name: name.trim(), email: email.trim().toLowerCase(), phone: normalizeEgyptPhoneClient(phone) ?? phone.trim(), password,
         inviteCode: inviteCode.trim() || undefined, agree: true, planCode: selectedPlan || undefined, attribution: attribution ?? undefined,
       })
       if (data?.ok && data.user) {
@@ -644,30 +798,32 @@ function SignupContent() {
           }
         } catch { /* التتبع لا يوقف التسجيل أبداً */ }
         toast.success(`تم إنشاء محلك «${shopName.trim()}» — تجربة 14 يوم 🎉`)
-        try { sessionStorage.setItem('welcome_contact', JSON.stringify({ phone: phone.trim(), email: email.trim().toLowerCase() })) } catch { /* ignore */ }
+        try { sessionStorage.setItem('welcome_contact', JSON.stringify({ phone: normalizeEgyptPhoneClient(phone) ?? phone.trim(), email: email.trim().toLowerCase() })) } catch { /* ignore */ }
         router.push('/welcome')
         router.refresh()
       } else { toast.error(data?.error ?? 'فشل إنشاء الحساب') }
     } catch (err: any) {
       const msg = err?.message ?? 'تعذّر الاتصال'
       toast.error(msg)
-      if (msg.includes('مسجّل') || msg.includes('موجود')) setFieldError('email', msg)
+      if (msg.includes('الموبايل')) setFieldError('phone', msg)
+      else if (msg.includes('مسجّل') || msg.includes('موجود') || msg.includes('البريد')) setFieldError('email', msg)
     } finally { setLoading(false) }
   }
 
   return (
     <main className="min-h-dvh grid lg:h-screen lg:grid-cols-2 bg-background lg:overflow-hidden">
+      <style dangerouslySetInnerHTML={{ __html: SIGNUP_CSS }} />
 
       {/* ─── Form side ─── */}
-      <div className="min-h-dvh lg:h-screen lg:overflow-y-auto flex items-start justify-center py-4 px-3 sm:px-4 sm:py-5 bg-muted/30">
+      <div className="su-side min-h-dvh lg:h-screen lg:overflow-y-auto flex items-start justify-center py-4 px-3 sm:px-4 sm:py-5 bg-muted/30">
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
-          className="w-full max-w-md"
+          className="su-wrap w-full max-w-md"
         >
           {/* Card wrapper */}
-          <div className="bg-card rounded-2xl border border-border shadow-lg shadow-black/5 p-4 sm:p-5 space-y-4">
+          <div className="su-card bg-card rounded-2xl border border-border shadow-lg shadow-black/5 p-4 sm:p-5 space-y-4">
 
             {/* شريط علوي مضغوط: الشعار + رابط الدخول */}
             <div className="flex items-center justify-between">
@@ -677,16 +833,16 @@ function SignupContent() {
                 </div>
                 <span className="text-sm font-bold text-foreground">نظام المحل</span>
               </Link>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm sm:text-base text-muted-foreground">
                 لديك حساب؟{' '}
-                <Link href="/login" className="-m-1 p-1 font-bold text-primary hover:underline">دخول</Link>
+                <Link href="/login" className="-m-1 p-1 text-base sm:text-lg font-bold text-primary hover:underline">دخول</Link>
               </p>
             </div>
 
             {/* العنوان + ٣ نقاط ثقة في سطر واحد — الفورم يبدأ فوراً بعدها */}
-            <div>
+            <div className="su-title">
               <h1 className="text-xl font-extrabold leading-tight tracking-tight text-foreground">أنشئ حسابك 🚀</h1>
-              <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] font-medium text-muted-foreground">
+              <ul className="su-chips mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] font-medium text-muted-foreground">
                 {['14 يوم مجاناً', 'بدون بطاقة', 'جاهز في دقيقتين'].map((t) => (
                   <li key={t} className="inline-flex items-center gap-1">
                     <Check className="size-3 text-emerald-500" strokeWidth={3} />
@@ -697,7 +853,7 @@ function SignupContent() {
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} noValidate className="min-w-0 space-y-4">
+            <form onSubmit={handleSubmit} noValidate className="su-form min-w-0 space-y-4">
               {/* اختيار النشاط + المستوى — ظاهر دايماً وأول حاجة في الفورم (مفيش "تغيير" مخفي) */}
               <PlanChooser
                 loading={plansLoading && pickerEntries.length === 0}
@@ -708,16 +864,17 @@ function SignupContent() {
                 selected={selectedPlan}
                 onSelect={(code) => { setSelectedPlan(code); clearFieldError('plan') }}
                 error={getFieldError('plan')}
+                startCollapsed={!!planFromUrl && pickerEntries.some((e) => e.code === planFromUrl)}
               />
 
               {/* Row 1: اسم المحل + اسم المسؤول */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3">
-                <Field className="space-y-2.5" label="اسم المحل" required error={getFieldError('shopName')}>
+              <div className="su-span grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3">
+                <Field className="su-fld space-y-2.5" label="اسم المحل" required error={getFieldError('shopName')}>
                   <Input type="text" placeholder="مثال: النور للموبايلات" icon={<Store className="size-4" />}
                     value={shopName} onChange={(e: any) => { setShopName(e.target.value); clearFieldError('shopName') }}
                     disabled={loading} required autoComplete="organization" enterKeyHint="next" className="h-11 lg:h-10" />
                 </Field>
-                <Field className="space-y-2.5" label="اسم المسؤول" required error={getFieldError('name')}>
+                <Field className="su-fld space-y-2.5" label="اسم المسؤول" required error={getFieldError('name')}>
                   <Input type="text" placeholder="مثال: أحمد محمد" icon={<User className="size-4" />}
                     value={name} onChange={(e: any) => { setName(e.target.value); clearFieldError('name') }}
                     disabled={loading} required autoComplete="name" enterKeyHint="next" className="h-11 lg:h-10" />
@@ -725,21 +882,62 @@ function SignupContent() {
               </div>
 
               {/* Row 2: البريد + الهاتف */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3">
-                <Field className="space-y-2.5" label="البريد الإلكتروني" required error={getFieldError('email')}>
-                  <Input type="email" placeholder="example@gmail.com" icon={<Mail className="size-4" />}
-                    value={email} onChange={(e: any) => { setEmail(e.target.value); clearFieldError('email') }}
-                    dir="ltr" className="text-left h-11 lg:h-10" disabled={loading} required autoComplete="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next" />
+              <div className="su-span grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3">
+                <Field className="su-fld space-y-2.5" label="البريد الإلكتروني" required error={getFieldError('email')}>
+                  <div className="relative">
+                    <Input type="text" placeholder="example@gmail.com" icon={<Mail className="size-4" />}
+                      value={email}
+                      onChange={(e: any) => { setEmail(e.target.value.replace(/\s/g, '')); setEmailActiveIdx(-1); clearFieldError('email') }}
+                      onFocus={() => setEmailFocused(true)}
+                      onBlur={() => { setEmailFocused(false); setEmailActiveIdx(-1) }}
+                      onKeyDown={(e: React.KeyboardEvent) => {
+                        if (!emailSuggestions.length) return
+                        if (e.key === 'ArrowDown') { e.preventDefault(); setEmailActiveIdx((i) => (i + 1) % emailSuggestions.length) }
+                        else if (e.key === 'ArrowUp') { e.preventDefault(); setEmailActiveIdx((i) => (i <= 0 ? emailSuggestions.length - 1 : i - 1)) }
+                        else if (e.key === 'Enter' && emailActiveIdx >= 0) { e.preventDefault(); pickEmail(emailSuggestions[emailActiveIdx]) }
+                        else if (e.key === 'Escape') { setEmailActiveIdx(-1); (e.target as HTMLElement).blur() }
+                      }}
+                      dir="ltr" className="text-left h-11 lg:h-10" disabled={loading} required autoComplete="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next"
+                      role="combobox" aria-expanded={emailSuggestions.length > 0} aria-autocomplete="list" />
+                    {/* قائمة الاقتراحات: عائمة فوق المحتوى (absolute) → ما بتطوّلش الفورم */}
+                    {emailSuggestions.length > 0 && (
+                      <ul role="listbox" dir="ltr"
+                        className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg">
+                        {emailSuggestions.map((full, i) => {
+                          const at = full.indexOf('@')
+                          return (
+                            <li key={full} role="option" aria-selected={i === emailActiveIdx}
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => pickEmail(full)}
+                              onMouseEnter={() => setEmailActiveIdx(i)}
+                              className={cn('cursor-pointer px-3 py-2 text-left text-sm', i === emailActiveIdx ? 'bg-primary/10' : 'hover:bg-muted')}>
+                              <span className="text-muted-foreground">{full.slice(0, at)}</span>
+                              <span className="font-semibold">{full.slice(at)}</span>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                  {/* تنبيه «قصدك…؟» — بيظهر بس لو في غلطة إملائية في الدومين (gmial.com / gmail.con) */}
+                  {emailTypoFixFull && (
+                    <button type="button" disabled={loading} dir="ltr"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => pickEmail(emailTypoFixFull)}
+                      className="h-9 w-full truncate rounded-md border border-amber-400 bg-amber-50 px-3 text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-500/60 dark:bg-amber-500/10 dark:text-amber-200">
+                      قصدك <span className="font-semibold">{emailTypoFixFull}</span> ؟ اضغط للتصحيح
+                    </button>
+                  )}
                 </Field>
-                <Field className="space-y-2.5" label="رقم الهاتف">
+                <Field className="su-fld space-y-2.5" label="رقم الموبايل" required error={getFieldError('phone')}>
                   <Input type="tel" placeholder="01012345678" icon={<Smartphone className="size-4" />}
-                    value={phone} onChange={(e: any) => setPhone(e.target.value)}
-                    dir="ltr" className="text-left h-11 lg:h-10" disabled={loading} autoComplete="tel" inputMode="tel" enterKeyHint="next" />
+                    value={phone} onChange={(e: any) => { setPhone(e.target.value); clearFieldError('phone') }}
+                    dir="ltr" className="text-left h-11 lg:h-10" disabled={loading} required autoComplete="tel" inputMode="tel" enterKeyHint="next" />
                 </Field>
               </div>
 
               {/* كلمة المرور */}
-              <Field className="space-y-2.5" label="كلمة المرور" required error={getFieldError('password')} hint="الحد الأدنى 6 أحرف">
+              <Field className="su-fld space-y-2.5" label="كلمة المرور" required error={getFieldError('password')} hint="الحد الأدنى 6 أحرف">
                 <div className="relative">
                   <Input type={showPass ? 'text' : 'password'} placeholder="••••••"
                     icon={<Lock className="size-4" />} value={password}
@@ -765,19 +963,26 @@ function SignupContent() {
 
               {/* كود الدعوة — collapsible */}
               {!showInvite ? (
+                <>
                 <button type="button" onClick={() => setShowInvite(true)}
-                  className="text-[11px] text-muted-foreground hover:text-primary transition-colors underline-offset-2 hover:underline">
+                  className="su-invite-btn text-[11px] text-muted-foreground hover:text-primary transition-colors underline-offset-2 hover:underline">
                   + عندك كود دعوة؟
                 </button>
+                {/* ديسكتوب فقط (CSS): كود الدعوة ظاهر دايماً جنب كلمة المرور */}
+                <Field className="su-invite-d su-fld" label="كود الدعوة (اختياري)">
+                  <Input type="text" placeholder="اكتب كود الدعوة" value={inviteCode}
+                    onChange={(e: any) => setInviteCode(e.target.value)} disabled={loading} />
+                </Field>
+                </>
               ) : (
-                <Field className="space-y-2.5" label="كود الدعوة (اختياري)">
+                <Field className="su-fld space-y-2.5" label="كود الدعوة (اختياري)">
                   <Input type="text" placeholder="اكتب كود الدعوة" value={inviteCode}
                     onChange={(e: any) => setInviteCode(e.target.value)} disabled={loading} autoFocus />
                 </Field>
               )}
 
               {/* الموافقة ضمنية عند الضغط — بدل Checkbox إجباري كان بيوقف ناس كتير */}
-              <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+              <p className="su-span text-center text-[11px] leading-relaxed text-muted-foreground">
                 بالضغط على «إنشاء الحساب» أنت توافق على{' '}
                 <Link href="/terms-and-conditions" className="font-semibold text-primary hover:underline">الشروط</Link>
                 {' '}و{' '}
@@ -786,7 +991,7 @@ function SignupContent() {
               </p>
 
               {/* موبايل: الزر ثابت أسفل الشاشة (فوق الكيبورد) عشان محدّش يضيعه بالسكرول */}
-              <div className="sticky bottom-0 z-10 -mx-4 border-t bg-card/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur max-lg:rounded-b-2xl sm:-mx-5 sm:px-5 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
+              <div className="su-cta su-span sticky bottom-0 z-10 -mx-4 border-t bg-card/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur max-lg:rounded-b-2xl sm:-mx-5 sm:px-5 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
               <Button type="submit" variant="gradient" size="lg"
                 className="w-full gap-2 shadow-lg shadow-brand-500/20 h-12 lg:h-10 text-sm font-semibold"
                 disabled={loading}>
@@ -798,7 +1003,7 @@ function SignupContent() {
               </div>
             </form>
 
-            <p className="text-center text-[10px] text-muted-foreground/50">© 2026 نظام المحل</p>
+            <p className="su-copy text-center text-[10px] text-muted-foreground/50">© 2026 نظام المحل</p>
 
           </div>
         </motion.div>

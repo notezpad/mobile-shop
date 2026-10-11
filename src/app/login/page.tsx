@@ -114,10 +114,13 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-dvh grid lg:h-screen lg:grid-cols-2 bg-background lg:overflow-hidden">
+    <main className="lgn-main min-h-dvh grid lg:h-screen lg:grid-cols-2 bg-background lg:overflow-hidden">
+      {/* ScaleWrapper بيصغّر الصفحة على الشاشات ≤1536px وبيظبط --app-h، بس lg:h-screen
+          ما بتتأثرش بيه → الهيرو كان بيتقص من تحت. نخلي الارتفاع يتبع --app-h على الديسكتوب. */}
+      <style dangerouslySetInnerHTML={{ __html: '@media (min-width:1024px){.lgn-main,.lgn-side{height:var(--app-h,100vh)}}' }} />
 
       {/* ─── Form side ─── */}
-      <div className="min-h-dvh lg:h-screen lg:overflow-y-auto flex items-center justify-center py-6 px-4 bg-muted/30">
+      <div className="lgn-side min-h-dvh lg:h-screen lg:overflow-y-auto flex items-center justify-center py-6 px-4 bg-muted/30">
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}

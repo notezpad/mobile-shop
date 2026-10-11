@@ -170,7 +170,7 @@ export default function PricingPage() {
         const msg = e?.message || 'فشل بدء التجربة'
         // If trial already used for this plan, fall through to checkout to pay
         if (msg.includes('TRIAL_ALREADY_USED')) {
-          toast.info('لقد استخدمت تجربة لهذه الباقة من قبل — سيتم تحويلك للدفع')
+          toast.info('لقد استخدمت تجربة الـ 14 يوم من قبل — سيتم تحويلك للدفع')
           // fall through to checkout below
         } else if (msg.includes('ACTIVE_SUB_EXISTS')) {
           toast.info('لديك اشتراك نشط — سيتم تحويلك لصفحة الترقية')

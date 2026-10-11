@@ -1006,7 +1006,7 @@ function PlanSwitcher({
           تبديل الباقة
         </CardTitle>
         <p className="text-[11px] text-muted-foreground sm:text-xs">
-          لو إنت على الباقة التجريبية (trial) ولا enabledModules بتاعتها فاضية — اختار الباقة المناسبة لطب تجارتك. التبديل فوري وميجّيش فلوس.
+          طول فترة التجربة المجانية تقدر تبدّل لأي باقة تناسب نشاطك والتبديل فوري ومن غير فلوس. بعد ما تشترك، الترقية بتتم من صفحة الأسعار والدفع.
         </p>
       </CardHeader>
       <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">

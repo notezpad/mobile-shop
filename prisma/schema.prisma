@@ -920,3 +920,13 @@ model UtmCampaign {
   @@index([utmCampaign])
   @@index([archived, createdAt])
 }
+
+// 🛡️ 2026-10-12 — حد التسجيل لكل IP (مكافحة تكرار التجارب المجانية).
+// بنخزّن SHA-256 للـ IP فقط. الكود في src/lib/signup-guard.ts.
+model SignupAttempt {
+  id        Int      @id @default(autoincrement())
+  ipHash    String
+  createdAt DateTime @default(now())
+
+  @@index([ipHash, createdAt])
+}

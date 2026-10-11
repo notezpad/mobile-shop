@@ -3,6 +3,11 @@ import { db, withDb } from '@/lib/db'
 import { hashPassword, createSession } from '@/lib/auth'
 import { runNonBlocking, trackServerEvent, extractRequestContext } from '@/lib/tracking/server'
 import { TRACKING_EVENTS } from '@/lib/tracking/types'
+import {
+  normalizeEgyptPhone, parseEmail, isDisposableDomain, domainAcceptsMail,
+  gmailAliasExists, phoneAlreadyRegistered, hashIp, signupsFromIpLast24h,
+  recordSignupFromIp, SIGNUP_LIMIT_PER_IP_24H,
+} from '@/lib/signup-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,8 +34,8 @@ async function __POST(req: NextRequest) {
     }
     const shopName = String(body.shopName ?? '').trim()
     const name = String(body.name ?? '').trim()
-    const email = String(body.email ?? '').trim().toLowerCase()
-    const phone = String(body.phone ?? '').trim()
+    const rawEmail = String(body.email ?? '').trim().toLowerCase()
+    const rawPhone = String(body.phone ?? '').trim()
     const password = String(body.password ?? '')
     const agree = body.agree === true || body.agree === 'true'
     // 🆕 Optional: user can pre-select a plan code from the pricing page.
@@ -49,8 +54,24 @@ async function __POST(req: NextRequest) {
     if (!name) {
       return NextResponse.json({ error: 'الاسم مطلوب' }, { status: 400 })
     }
-    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    const parsedEmail = parseEmail(rawEmail)
+    if (!parsedEmail) {
       return NextResponse.json({ error: 'بريد إلكتروني غير صالح' }, { status: 400 })
+    }
+    const email = parsedEmail.email
+    if (isDisposableDomain(parsedEmail.domain)) {
+      return NextResponse.json(
+        { error: 'استخدم بريداً إلكترونياً حقيقياً (البريد المؤقت غير مقبول)' },
+        { status: 400 },
+      )
+    }
+    // 📱 الموبايل إجباري (رقم مصري صالح) — أقوى وسيلة هوية عندنا ووسيلة متابعة بالواتساب
+    const phone = normalizeEgyptPhone(rawPhone)
+    if (!phone) {
+      return NextResponse.json(
+        { error: 'رقم الموبايل مطلوب — اكتب رقم مصري صحيح (مثال: 01012345678)' },
+        { status: 400 },
+      )
     }
     if (password.length < 6) {
       return NextResponse.json(
@@ -70,6 +91,38 @@ async function __POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'هذا البريد الإلكتروني مسجّل بالفعل' },
         { status: 400 }
+      )
+    }
+
+    // 🛡️ 2026-10-12: حماية من تكرار التجارب المجانية ───────────────────
+    // (أ) نفس الموبايل = نفس المحل. رقم مسجّل قبل كده → ما نديش تجربة تانية.
+    if (await phoneAlreadyRegistered(phone)) {
+      return NextResponse.json(
+        { error: 'رقم الموبايل ده مسجّل بالفعل — سجّل دخول بحسابك الحالي أو تواصل مع الدعم' },
+        { status: 400 },
+      )
+    }
+    // (ب) جيميل: النقط و +alias نفس الصندوق (a.b@gmail = ab@gmail = ab+1@gmail)
+    if (await gmailAliasExists(parsedEmail)) {
+      return NextResponse.json(
+        { error: 'هذا البريد الإلكتروني مسجّل بالفعل' },
+        { status: 400 },
+      )
+    }
+    // (ج) حد التسجيل لكل IP (سخي عمداً — شبكات الموبايل بتشارك IP واحد)
+    const reqCtxEarly = extractRequestContext(req.headers)
+    const ipHash = await hashIp(reqCtxEarly.clientIp)
+    if (ipHash && (await signupsFromIpLast24h(ipHash)) >= SIGNUP_LIMIT_PER_IP_24H) {
+      return NextResponse.json(
+        { error: 'عدد محاولات التسجيل من شبكتك تعدّى الحد المسموح — حاول لاحقاً أو تواصل مع الدعم' },
+        { status: 429 },
+      )
+    }
+    // (د) الدومين لازم يكون موجود فعلاً ويستقبل إيميل (بيمنع dd@gf.hh) — fail-open
+    if (!(await domainAcceptsMail(parsedEmail.domain))) {
+      return NextResponse.json(
+        { error: 'البريد الإلكتروني ده مش صحيح (الدومين غير موجود) — راجع كتابته' },
+        { status: 400 },
       )
     }
 
@@ -149,9 +202,9 @@ async function __POST(req: NextRequest) {
     const tenant = await db.tenant.create({
       data: {
         shopName,
-        phone: phone || null,
+        phone,
         ownerEmail: email,
-        ownerPhone: phone || null,
+        ownerPhone: phone,
         status: 'active',
         users: {
           create: {
@@ -177,6 +230,9 @@ async function __POST(req: NextRequest) {
       include: { users: true, subscriptions: true },
     })
 
+    // سجّل الـ IP (hash) لحد التسجيل — بعد نجاح الإنشاء فقط
+    if (ipHash) await recordSignupFromIp(ipHash)
+
     const user = tenant.users[0]
     await createSession({
       id: user.id,
@@ -196,11 +252,11 @@ async function __POST(req: NextRequest) {
     const regEventId = `signup-${user.id}`
     const trialEventId = `trial-sub-${trialSub?.id ?? 'unknown'}`
     // يشمل gaClientId/gaSessionId/ttp من كوكيز المتصفح
-    const reqCtx = extractRequestContext(req.headers)
+    const reqCtx = reqCtxEarly
     const trackingCtx = {
       ...reqCtx,
       email: user.email,
-      phone: phone || undefined,
+      phone,
       firstName: name.split(' ')[0] || undefined,
       lastName: name.split(' ').slice(1).join(' ') || undefined,
       externalId: user.id,
