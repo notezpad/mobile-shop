@@ -424,10 +424,10 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
     return (
       <div className="w-full space-y-4">
         <Skeleton className="h-16 w-full rounded-xl" />
-        <div className="grid gap-3 md:grid-cols-3">
-          <Skeleton className="h-32 rounded-xl" />
-          <Skeleton className="h-32 rounded-xl" />
-          <Skeleton className="h-32 rounded-xl" />
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+          <Skeleton className="h-24 rounded-xl sm:h-32" />
+          <Skeleton className="h-24 rounded-xl sm:h-32" />
+          <Skeleton className="col-span-2 h-24 rounded-xl sm:h-32 md:col-span-1" />
         </div>
         <Skeleton className="h-72 w-full rounded-xl" />
       </div>
@@ -489,7 +489,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
     const hasValue = secrets[key] !== "" && !cleared;
     return (
       <div className="flex gap-1.5">
-        <div className="relative flex-1">
+        <div className="relative min-w-0 flex-1">
           {/* 🛠️ كان type="password" فيعتبره Chrome حقل «كلمة سر» ويملأ الحقل النصي
               السابق (GA4 Measurement ID) بالإيميل المحفوظ. الحل: حقل نصي عادي
               مُقنَّع بـ CSS — لا يوجد password field فلا يعمل الـ autofill. */}
@@ -521,12 +521,13 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
             onChange={(e) =>
               setSecrets((s) => ({ ...s, [key]: e.target.value }))
             }
-            className="pl-9"
+            className="pl-10 text-base sm:text-sm"
           />
           <button
             type="button"
             tabIndex={-1}
-            className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            aria-label={visible ? "إخفاء" : "إظهار"}
+            className="absolute left-0.5 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-md text-muted-foreground hover:text-foreground active:bg-muted"
             onClick={() => setShowSecret((v) => ({ ...v, [key]: !v[key] }))}
             title={visible ? "إخفاء" : "إظهار"}
           >
@@ -598,7 +599,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(sanitizeId(e.target.value))}
-      className="font-mono text-sm"
+      className="font-mono text-base sm:text-sm"
     />
   );
 
@@ -650,24 +651,29 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
     return (
       <div className="space-y-4">
         {/* الترويسة */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-lg font-bold tracking-tight sm:text-xl">
               إعدادات <span className="text-primary">الشبكات الإعلانية</span>
             </h1>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
               اربط شبكات الإعلانات وأرسل أحداث التحويل من المتصفح والسيرفر
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => load()}>
+          <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:items-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => load()}
+              className="h-10 w-full sm:h-8 sm:w-auto"
+            >
               <RefreshCw className="size-4" /> إعادة تحميل
             </Button>
             <Button
               size="sm"
               onClick={save}
               disabled={saving}
-              className="min-w-32"
+              className="h-10 w-full sm:h-8 sm:w-auto sm:min-w-32"
             >
               {saving ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -680,7 +686,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
         </div>
 
         {/* لوحة التحكم العامة */}
-        <section className="rounded-xl border bg-card p-4 shadow-sm">
+        <section className="rounded-xl border bg-card p-3 shadow-sm sm:p-4">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-bold">
             <Power className="size-4 text-primary" />
             التحكم العام
@@ -719,7 +725,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
         </section>
 
         {/* بطاقات الشبكات */}
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2 md:gap-3">
           {nets.map((n) => {
             const s = netStatus(n.id);
             const isActive = n.id === active.id;
@@ -746,24 +752,42 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                   type="button"
                   aria-pressed={isActive}
                   onClick={() => setActiveNet(n.id)}
-                  className="flex w-full items-center gap-3 p-4 pe-16 text-start"
+                  className="flex w-full flex-col items-center gap-2 px-1.5 pb-2 pt-3 text-center md:flex-row md:gap-3 md:p-4 md:pe-16 md:text-start"
                 >
-                  <BrandMark brand={n.brand} size="lg" />
-                  <div className="min-w-0">
-                    <p className="text-base font-extrabold">{n.title}</p>
-                    <p className="truncate text-xs text-muted-foreground">
+                  <span className="md:hidden">
+                    <BrandMark brand={n.brand} size="md" />
+                  </span>
+                  <span className="hidden md:inline-flex">
+                    <BrandMark brand={n.brand} size="lg" />
+                  </span>
+                  <div className="flex min-w-0 max-w-full flex-col items-center md:items-start">
+                    <p className="truncate text-sm font-extrabold md:text-base">
+                      {n.title}
+                    </p>
+                    <p className="hidden truncate text-xs text-muted-foreground md:block">
                       {n.subtitle}
                     </p>
-                    <div className="mt-1.5">
+                    <div className="mt-1.5 max-w-full [&>span]:max-w-full [&>span]:px-1.5 [&>span]:text-[10px] md:[&>span]:px-2 md:[&>span]:text-[11px]">
                       <ConnPill connected={s.connected} enabled={n.enabled} />
                     </div>
                   </div>
                 </button>
-                <div className="absolute end-4 top-6">
-                  <Switch checked={n.enabled} onCheckedChange={n.toggle} />
+                <div className="flex justify-center pb-3 md:hidden">
+                  <Switch
+                    checked={n.enabled}
+                    onCheckedChange={n.toggle}
+                    aria-label={`تفعيل ${n.title}`}
+                  />
+                </div>
+                <div className="absolute end-4 top-6 hidden md:block">
+                  <Switch
+                    checked={n.enabled}
+                    onCheckedChange={n.toggle}
+                    aria-label={`تفعيل ${n.title}`}
+                  />
                 </div>
                 <p
-                  className="truncate border-t px-4 py-2 font-mono text-[11px] text-muted-foreground"
+                  className="hidden truncate border-t px-4 py-2 font-mono text-[11px] text-muted-foreground md:block"
                   dir="ltr"
                   title={s.detail}
                 >
@@ -777,7 +801,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
         {/* لوحة إعدادات الشبكة المختارة */}
         <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
           <div className="h-1" style={{ background: active.brand.strip }} />
-          <header className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
+          <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-3 py-3 sm:px-4">
             <BrandMark brand={active.brand} size="sm" />
             <div className="min-w-0 flex-1">
               <h2 className="text-sm font-extrabold">
@@ -790,9 +814,9 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
             <ConnPill connected={st.connected} enabled={active.enabled} />
           </header>
 
-          <div className="p-4">
+          <div className="p-3 sm:p-4">
             {!active.enabled ? (
-              <div className="flex flex-col items-center gap-3 py-10 text-center">
+              <div className="flex flex-col items-center gap-3 py-8 text-center sm:py-10">
                 <BrandMark brand={active.brand} size="lg" />
                 <p className="text-sm font-semibold">
                   قناة {active.title} متوقفة
@@ -801,7 +825,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                   فعّل القناة لإظهار حقول الربط وبدء إرسال الأحداث إلى{" "}
                   {active.title}.
                 </p>
-                <Button size="sm" onClick={() => active.toggle(true)}>
+                <Button size="sm" className="h-10 w-full max-w-xs sm:h-8 sm:w-auto" onClick={() => active.toggle(true)}>
                   <Zap className="size-4" /> تفعيل {active.title}
                 </Button>
               </div>
@@ -847,7 +871,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                             "AW-123456789",
                           )}
                         </Field>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-3 min-[420px]:gap-2">
                           <Field label="تسمية التسجيل" hint="Signup">
                             <Input
                               dir="ltr"
@@ -855,7 +879,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                               data-lpignore="true"
                               data-1p-ignore
                               placeholder="abc123"
-                              className="font-mono text-sm"
+                              className="font-mono text-base sm:text-sm"
                               value={cfg.google.adsLabels.registration}
                               onChange={(e) =>
                                 setGoogle({
@@ -874,7 +898,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                               data-lpignore="true"
                               data-1p-ignore
                               placeholder="def456"
-                              className="font-mono text-sm"
+                              className="font-mono text-base sm:text-sm"
                               value={cfg.google.adsLabels.trial}
                               onChange={(e) =>
                                 setGoogle({
@@ -893,7 +917,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                               data-lpignore="true"
                               data-1p-ignore
                               placeholder="ghi789"
-                              className="font-mono text-sm"
+                              className="font-mono text-base sm:text-sm"
                               value={cfg.google.adsLabels.purchase}
                               onChange={(e) =>
                                 setGoogle({
@@ -1070,7 +1094,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
         </section>
 
         {/* تنبيه: لا إيميل/كلمة مرور */}
-        <div className="flex items-start gap-3 rounded-xl border bg-card p-4 shadow-sm">
+        <div className="flex items-start gap-3 rounded-xl border bg-card p-3 shadow-sm sm:p-4">
           <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-sky-500/15 text-sky-600 dark:text-sky-300">
             <ShieldCheck className="size-5" />
           </span>
@@ -1089,16 +1113,16 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
 
         {/* كبسولة الحفظ العائمة — تظهر فقط عند وجود تعديلات، ولا تحجب ما تحتها */}
         {dirty && (
-          <div className="pointer-events-none sticky bottom-4 z-20 flex justify-center">
-            <div className="pointer-events-auto flex items-center gap-3 rounded-full border bg-card/95 py-1.5 pe-1.5 ps-4 shadow-lg backdrop-blur">
-              <span className="flex items-center gap-2 text-xs font-medium">
+          <div className="pointer-events-none sticky bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-20 flex justify-center sm:bottom-4">
+            <div className="pointer-events-auto flex w-full max-w-md items-center justify-between gap-2 rounded-full border bg-card/95 py-1.5 pe-1.5 ps-4 shadow-lg backdrop-blur sm:w-auto sm:max-w-full sm:justify-start sm:gap-3">
+              <span className="flex min-w-0 items-center gap-2 text-xs font-medium">
                 <span className="size-2 animate-pulse rounded-full bg-amber-500" />
                 تعديلات غير محفوظة
               </span>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 rounded-full px-3 text-xs"
+                className="h-9 rounded-full px-3 text-xs sm:h-8"
                 onClick={() => load()}
                 disabled={saving}
               >
@@ -1106,7 +1130,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
               </Button>
               <Button
                 size="sm"
-                className="h-8 rounded-full px-4"
+                className="h-9 rounded-full px-4 sm:h-8"
                 onClick={save}
                 disabled={saving}
               >
@@ -1142,22 +1166,22 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
     return (
       <div className="space-y-4">
         {/* الترويسة */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-lg font-bold tracking-tight sm:text-xl">
               سجل <span className="text-primary">الأحداث</span>
             </h1>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
               آخر 50 حدثاً من السيرفر لكل منصة — بدون بيانات عملاء حساسة
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:items-center">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setLive((v) => !v)}
               className={cn(
-                "gap-1.5",
+                "h-10 w-full gap-1.5 sm:h-8 sm:w-auto",
                 live &&
                   "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
               )}
@@ -1170,6 +1194,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
               size="sm"
               onClick={() => load(true)}
               disabled={refreshing}
+              className="h-10 w-full sm:h-8 sm:w-auto"
             >
               <RefreshCw
                 className={cn("size-4", refreshing && "animate-spin")}
@@ -1180,7 +1205,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
         </div>
 
         {/* مؤشرات */}
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
           <StatTile
             icon={CheckCircle2}
             tone="success"
@@ -1211,7 +1236,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
         </div>
 
         {/* صحة القنوات */}
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
           {data.statuses.map((s) => {
             const brand = brandFor(s.key);
             const pk =
@@ -1225,7 +1250,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                 disabled={n === 0}
                 onClick={() => setEvProvider(evProvider === pk ? "all" : pk)}
                 className={cn(
-                  "relative overflow-hidden rounded-xl border bg-card p-3.5 text-start transition-all",
+                  "relative min-w-0 overflow-hidden rounded-xl border bg-card p-2.5 text-start transition-all active:scale-[0.99] disabled:cursor-default sm:p-3.5 [&:last-child:nth-child(odd)]:col-span-2 sm:[&:last-child:nth-child(odd)]:col-span-1",
                   n > 0 && "hover:shadow-md",
                   evProvider === pk && "shadow-md",
                 )}
@@ -1240,11 +1265,18 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                   className="absolute inset-y-0 start-0 w-1"
                   style={{ background: brand.strip }}
                 />
-                <div className="flex items-center gap-3 ps-1.5">
-                  <BrandMark brand={brand} size="md" />
+                <div className="flex items-center gap-2.5 ps-1.5 sm:gap-3">
+                  <span className="sm:hidden">
+                    <BrandMark brand={brand} size="sm" />
+                  </span>
+                  <span className="hidden sm:inline-flex">
+                    <BrandMark brand={brand} size="md" />
+                  </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold">{s.label}</p>
-                    <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <p className="line-clamp-2 text-[13px] font-bold leading-tight sm:truncate sm:text-sm">
+                      {s.label}
+                    </p>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
                       <span
                         className={cn(
                           "size-1.5 rounded-full",
@@ -1265,7 +1297,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
 
         {/* الفلاتر + التغذية */}
         <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
-          <div className="space-y-3 border-b p-4">
+          <div className="space-y-3 border-b p-3 sm:p-4">
             {/* توزيع المنصات */}
             {evs.length > 0 && (
               <div className="flex h-1.5 overflow-hidden rounded-full bg-muted">
@@ -1282,14 +1314,16 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
               </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-48 flex-1">
+            <div className="flex flex-col gap-2.5 md:flex-row md:items-center">
+              <div className="relative w-full min-w-0 md:min-w-48 md:flex-1">
                 <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={evQuery}
                   onChange={(e) => setEvQuery(e.target.value)}
                   placeholder="ابحث باسم الحدث أو Event ID…"
-                  className="ps-9"
+                  className="h-10 ps-9 text-base sm:h-9 sm:text-sm"
+                  inputMode="search"
+                  enterKeyHint="search"
                 />
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -1298,6 +1332,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                     key={k}
                     active={evStatus === k}
                     onClick={() => setEvStatus(k)}
+                    className="grow justify-center sm:grow-0"
                   >
                     {l}
                   </FilterChip>
@@ -1332,7 +1367,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                     setEvStatus("all");
                     setEvQuery("");
                   }}
-                  className="ms-auto text-xs font-semibold text-primary hover:underline"
+                  className="ms-auto shrink-0 whitespace-nowrap px-1 py-1.5 text-xs font-semibold text-primary hover:underline"
                 >
                   مسح الفلاتر
                 </button>
@@ -1341,7 +1376,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
           </div>
 
           {evs.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
+            <div className="flex flex-col items-center gap-2 px-5 py-10 text-center sm:px-6 sm:py-14">
               <Radio className="size-9 text-muted-foreground/40" />
               <p className="text-sm font-semibold text-muted-foreground">
                 لا أحداث بعد
@@ -1360,10 +1395,23 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
             </div>
           ) : (
             <>
-            <div className="overflow-x-auto">
+            {/* 📱 الجوال والتابلت الصغير: كروت قابلة للتوسيع */}
+            <ul className="divide-y md:hidden">
+              {filtered.slice(0, evLimit).map((ev) => (
+                <EventCard
+                  key={ev.id}
+                  ev={ev}
+                  open={openId === ev.id}
+                  onToggle={() => setOpenId(openId === ev.id ? null : ev.id)}
+                />
+              ))}
+            </ul>
+
+            {/* 🖥️ الشاشات الأكبر: الجدول */}
+            <div className="hidden overflow-x-auto md:block">
               <table
                 className="w-full table-fixed text-sm"
-                style={{ minWidth: "760px" }}
+                style={{ minWidth: "700px" }}
               >
                 <colgroup>
                   <col style={{ width: "34%" }} />
@@ -1402,6 +1450,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                 <Button
                   variant="outline"
                   size="sm"
+                  className="h-10 w-full sm:h-8 sm:w-auto"
                   onClick={() => setEvLimit((l) => l + 20)}
                 >
                   عرض المزيد ({filtered.length - evLimit})
@@ -1412,7 +1461,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
           )}
 
           {filtered.length > 0 && (
-            <p className="border-t bg-muted/30 px-4 py-2 text-[11px] text-muted-foreground">
+            <p className="border-t bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground sm:px-4">
               يعرض {Math.min(evLimit, filtered.length)} من {filtered.length} حدثاً
               {live && " · تحديث تلقائي كل 15 ثانية"}
             </p>
@@ -1427,7 +1476,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
       {/* ─── 🛡️ تنبيه: جداول التتبع غير مُهيّأة (قبل الترحيل) ─── */}
       {(page === "settings" || page === "events") &&
         data.tablesReady === false && (
-          <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
+          <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-3 text-sm sm:p-4">
             <p className="flex items-center gap-2 font-semibold text-amber-600 dark:text-amber-400">
               <AlertTriangle className="size-4" />
               جداول التتبع غير موجودة في قاعدة البيانات — خطوة تهيئة مطلوبة
@@ -1442,7 +1491,7 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
                 <b className="text-foreground">Supabase → SQL Editor</b> وشغّل
                 ملف{" "}
                 <code
-                  className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]"
+                  className="break-all rounded bg-muted px-1 py-0.5 font-mono text-[10px]"
                   dir="ltr"
                 >
                   prisma/migrations/20261008_add_tracking_tables/migration.sql
@@ -1451,14 +1500,14 @@ export function AdminTrackingView({ page }: { page: TrackingPage }) {
               <p>
                 <b className="text-foreground">2) أو:</b> من جهازك مع{" "}
                 <code
-                  className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]"
+                  className="break-all rounded bg-muted px-1 py-0.5 font-mono text-[10px]"
                   dir="ltr"
                 >
                   DATABASE_URL
                 </code>{" "}
                 الخاص بالإنتاج شغّل{" "}
                 <code
-                  className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]"
+                  className="break-all rounded bg-muted px-1 py-0.5 font-mono text-[10px]"
                   dir="ltr"
                 >
                   npx prisma migrate deploy
@@ -1497,7 +1546,7 @@ function ToggleTile({
   return (
     <div
       className={cn(
-        "flex items-start gap-3 rounded-xl border p-3.5 transition-colors",
+        "flex min-w-0 items-start gap-2.5 rounded-xl border p-3 transition-colors sm:gap-3 sm:p-3.5",
         checked
           ? highlight
             ? "border-primary/50 bg-primary/10"
@@ -1514,14 +1563,19 @@ function ToggleTile({
         <Icon className="size-4" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold">{label}</p>
+        <p className="break-words text-sm font-bold">{label}</p>
         {desc && (
-          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
             {desc}
           </p>
         )}
       </div>
-      <Switch checked={checked} onCheckedChange={onChange} />
+      <Switch
+        checked={checked}
+        onCheckedChange={onChange}
+        className="mt-0.5 shrink-0"
+        aria-label={label}
+      />
     </div>
   );
 }
@@ -1536,11 +1590,11 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label className="text-xs font-semibold">{label}</Label>
+    <div className="min-w-0 space-y-1.5">
+      <Label className="text-xs font-semibold leading-snug">{label}</Label>
       {children}
       {hint && (
-        <p className="text-[10px] leading-relaxed text-muted-foreground">
+        <p className="text-[11px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere] sm:text-[10px]">
           {hint}
         </p>
       )}
@@ -1558,7 +1612,7 @@ function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border bg-muted/20 p-4">
+    <div className="rounded-xl border bg-muted/20 p-3 sm:p-4">
       <h3 className="mb-3 flex items-center gap-2 text-xs font-bold text-muted-foreground">
         <span
           className="h-3.5 w-1 rounded-full"
@@ -1603,12 +1657,14 @@ function StatTile({
   value,
   sub,
   tone,
+  className,
 }: {
   icon: React.ElementType;
   label: string;
   value: string;
   sub?: string;
   tone: "success" | "danger" | "primary" | "muted";
+  className?: string;
 }) {
   const t = {
     success: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
@@ -1617,21 +1673,30 @@ function StatTile({
     muted: "bg-muted text-muted-foreground",
   }[tone];
   return (
-    <div className="flex items-center gap-3 rounded-xl border bg-card p-3.5 shadow-sm">
-      <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", t)}>
-        <Icon className="size-5" />
+    <div
+      className={cn(
+        "flex min-w-0 items-center gap-2.5 rounded-xl border bg-card p-3 shadow-sm sm:gap-3 sm:p-3.5",
+        className,
+      )}
+    >
+      <span
+        className={cn(
+          "grid size-9 shrink-0 place-items-center rounded-xl sm:size-10",
+          t,
+        )}
+      >
+        <Icon className="size-[18px] sm:size-5" />
       </span>
-      <div className="min-w-0">
-        <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
-        <p className="truncate text-xl font-extrabold leading-tight tabular-nums">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[11px] font-medium text-muted-foreground">
+          {label}
+        </p>
+        <p className="truncate text-lg font-extrabold leading-tight tabular-nums sm:text-xl">
           {value}
         </p>
         {sub && (
-          <p
-            className="truncate font-mono text-[10px] text-muted-foreground"
-            dir="ltr"
-          >
-            {sub}
+          <p className="truncate font-mono text-[10px] text-muted-foreground">
+            <bdi dir="ltr">{sub}</bdi>
           </p>
         )}
       </div>
@@ -1643,11 +1708,13 @@ function FilterChip({
   active,
   onClick,
   dot,
+  className,
   children,
 }: {
   active: boolean;
   onClick: () => void;
   dot?: string;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -1655,10 +1722,11 @@ function FilterChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors active:scale-95 sm:px-3 sm:py-1",
         active
           ? "border-primary/50 bg-primary/10 text-foreground"
           : "bg-card text-muted-foreground hover:text-foreground",
+        className,
       )}
     >
       {dot && (
@@ -1689,6 +1757,153 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+/** لوحة تفاصيل الحدث — مشتركة بين الجدول والكروت */
+function EventDetails({ ev }: { ev: TrackingEventRow }) {
+  const brand = brandFor(ev.provider);
+  const isServer = ev.source === "server";
+  const copy = (text: string) => {
+    void navigator.clipboard?.writeText(text).then(
+      () => toast.success("تم النسخ"),
+      () => toast.error("تعذّر النسخ"),
+    );
+  };
+  return (
+    <div className="space-y-3 rounded-lg border bg-card p-3 sm:p-3.5">
+      <div className="flex items-center gap-2 text-xs">
+        <span className="shrink-0 text-muted-foreground">Event ID</span>
+        <code
+          className="min-w-0 flex-1 break-all rounded bg-muted px-1.5 py-1 font-mono text-[11px] leading-snug"
+          dir="ltr"
+        >
+          {ev.eventId}
+        </code>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            copy(ev.eventId);
+          }}
+          className="grid size-9 shrink-0 place-items-center rounded-lg border text-muted-foreground hover:text-foreground active:scale-95"
+          title="نسخ"
+          aria-label="نسخ Event ID"
+        >
+          <Copy className="size-3.5" />
+        </button>
+      </div>
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-xs md:grid-cols-4">
+        <div className="min-w-0">
+          <dt className="text-muted-foreground">المنصة</dt>
+          <dd className="mt-0.5 break-words font-semibold">{brand.name}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-muted-foreground">المصدر</dt>
+          <dd className="mt-0.5 break-words font-semibold">
+            {isServer ? "Server (API)" : "Browser (Pixel)"}
+          </dd>
+        </div>
+        <div className="col-span-2 min-w-0 md:col-span-1">
+          <dt className="text-muted-foreground">الوقت الكامل</dt>
+          <dd className="mt-0.5 font-semibold">
+            {new Date(ev.createdAt).toLocaleString("ar-EG")}
+          </dd>
+        </div>
+        {ev.subscriptionId != null && (
+          <div className="min-w-0">
+            <dt className="text-muted-foreground">الاشتراك</dt>
+            <dd className="mt-0.5 font-mono font-semibold" dir="ltr">
+              #{ev.subscriptionId}
+            </dd>
+          </div>
+        )}
+      </dl>
+      {ev.error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3">
+          <p className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-destructive">
+            <AlertTriangle className="size-3.5" /> سبب الفشل
+          </p>
+          <p
+            className="break-words font-mono text-[11px] leading-relaxed text-destructive [overflow-wrap:anywhere]"
+            dir="ltr"
+          >
+            {ev.error}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** كارت الحدث للجوال */
+function EventCard({
+  ev,
+  open,
+  onToggle,
+}: {
+  ev: TrackingEventRow;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const brand = brandFor(ev.provider);
+  const isServer = ev.source === "server";
+  const bar =
+    ev.status === "sent"
+      ? "border-s-emerald-500"
+      : ev.status === "failed"
+        ? "border-s-destructive"
+        : "border-s-muted-foreground/30";
+  return (
+    <li className={cn("border-s-4 transition-colors", bar, open && "bg-muted/30")}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-start gap-3 p-3 text-start active:bg-muted/50"
+      >
+        <BrandMark brand={brand} size="sm" />
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="min-w-0 flex-1 break-words text-sm font-bold leading-snug">
+              {ev.eventName}
+            </p>
+            <ChevronDown
+              className={cn(
+                "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform",
+                open && "rotate-180",
+              )}
+            />
+          </div>
+          <p
+            className="truncate font-mono text-[11px] text-muted-foreground"
+            dir="ltr"
+          >
+            {ev.eventId}
+          </p>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <StatusPill status={ev.status} />
+            <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {isServer ? (
+                <Server className="size-3" />
+              ) : (
+                <Monitor className="size-3" />
+              )}
+              {isServer ? "Server" : "Browser"}
+            </span>
+            <span className="text-[11px] font-semibold">{brand.short}</span>
+            <span className="ms-auto whitespace-nowrap text-[11px] text-muted-foreground">
+              {ago(ev.createdAt)}
+            </span>
+          </div>
+        </div>
+      </button>
+      {open && (
+        <div className="px-3 pb-3">
+          <EventDetails ev={ev} />
+        </div>
+      )}
+    </li>
+  );
+}
+
 function EventRow({
   ev,
   open,
@@ -1706,12 +1921,6 @@ function EventRow({
       : ev.status === "failed"
         ? "border-s-destructive"
         : "border-s-transparent";
-  const copy = (text: string) => {
-    void navigator.clipboard?.writeText(text).then(
-      () => toast.success("تم النسخ"),
-      () => toast.error("تعذّر النسخ"),
-    );
-  };
   return (
     <>
       <tr
@@ -1773,64 +1982,7 @@ function EventRow({
       {open && (
         <tr className="border-b bg-muted/20">
           <td colSpan={6} className="px-4 py-3">
-            <div className="space-y-3 rounded-lg border bg-card p-3.5">
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-muted-foreground">Event ID</span>
-                <code
-                  className="break-all rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]"
-                  dir="ltr"
-                >
-                  {ev.eventId}
-                </code>
-                <button
-                  type="button"
-                  onClick={() => copy(ev.eventId)}
-                  className="text-muted-foreground hover:text-foreground"
-                  title="نسخ"
-                >
-                  <Copy className="size-3.5" />
-                </button>
-              </div>
-              <dl className="grid grid-cols-2 gap-3 text-xs md:grid-cols-4">
-                <div>
-                  <dt className="text-muted-foreground">المنصة</dt>
-                  <dd className="mt-0.5 font-semibold">{brand.name}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">المصدر</dt>
-                  <dd className="mt-0.5 font-semibold">
-                    {isServer ? "Server (API)" : "Browser (Pixel)"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">الوقت الكامل</dt>
-                  <dd className="mt-0.5 font-semibold">
-                    {new Date(ev.createdAt).toLocaleString("ar-EG")}
-                  </dd>
-                </div>
-                {ev.subscriptionId != null && (
-                  <div>
-                    <dt className="text-muted-foreground">الاشتراك</dt>
-                    <dd className="mt-0.5 font-mono font-semibold" dir="ltr">
-                      #{ev.subscriptionId}
-                    </dd>
-                  </div>
-                )}
-              </dl>
-              {ev.error && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3">
-                  <p className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-destructive">
-                    <AlertTriangle className="size-3.5" /> سبب الفشل
-                  </p>
-                  <p
-                    className="break-words font-mono text-[11px] leading-relaxed text-destructive"
-                    dir="ltr"
-                  >
-                    {ev.error}
-                  </p>
-                </div>
-              )}
-            </div>
+            <EventDetails ev={ev} />
           </td>
         </tr>
       )}

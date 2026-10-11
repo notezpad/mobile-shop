@@ -333,8 +333,87 @@ function FunnelTable({ steps, prevMap, bottleneckKey }: {
   const overall = first > 0 ? last / first : null
   const th = 'px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground'
   return (
-    // -m-4 يلغي بادينج اللوح فيمتد الجدول لحواف البطاقة
-    <div className="-m-4 overflow-x-auto">
+    <>
+    {/* 📱 الجوال: كارت لكل مرحلة */}
+    <div className="-m-4 md:hidden">
+      <ul className="divide-y divide-border">
+        {steps.map((s, i) => {
+          const meta = stageOf(s.key)
+          const Icon = meta.icon
+          const isBn = bottleneckKey === s.key
+          const lost = i > 0 ? Math.max(steps[i - 1].count - s.count, 0) : 0
+          const share = first > 0 ? Math.min(s.count / first, 1) : null
+          const r = s.fromPrev
+          const rateTone: Tone = r == null ? 'neutral' : r < 0.2 ? 'danger' : r < 0.5 ? 'warning' : 'success'
+          const prevCount = prevMap[s.key]
+          return (
+            <li key={s.key} className={cn('space-y-2.5 p-3.5', isBn && 'bg-destructive-subtle/30')}>
+              <div className="flex items-center gap-2.5">
+                <span className={cn('grid size-8 shrink-0 place-items-center rounded-lg bg-muted', meta.text)}>
+                  <Icon className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold">{s.label}</p>
+                  {isBn && (
+                    <span className={cn('mt-0.5 inline-block rounded-md px-1.5 py-0.5 text-[10px] font-bold', TONE.danger.chip)}>أكبر تسرّب</span>
+                  )}
+                </div>
+                <p className="text-xl font-extrabold leading-none tabular-nums">{num(s.count)}</p>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>من الزوار</span>
+                  <span className="font-semibold tabular-nums text-foreground">{fmtPct(share)}</span>
+                </div>
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${share != null && share > 0 ? Math.max(share * 100, 3) : 0}%` }} />
+                </div>
+              </div>
+
+              <dl className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                <div className="rounded-lg bg-muted/50 px-1.5 py-2">
+                  <dt className="text-muted-foreground">من السابقة</dt>
+                  <dd className="mt-1">
+                    {i === 0 || r == null ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <span className={cn('inline-block rounded-md px-1.5 py-0.5 text-xs font-bold tabular-nums', TONE[rateTone].chip)}>
+                        {fmtPct(r)}
+                      </span>
+                    )}
+                  </dd>
+                </div>
+                <div className="rounded-lg bg-muted/50 px-1.5 py-2">
+                  <dt className="text-muted-foreground">الفقد</dt>
+                  <dd className="mt-1 text-xs tabular-nums">
+                    {i === 0 || lost === 0 ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <span className="font-bold text-destructive">−{num(lost)}</span>
+                    )}
+                  </dd>
+                </div>
+                <div className="rounded-lg bg-muted/50 px-1.5 py-2">
+                  <dt className="text-muted-foreground">الفترة السابقة</dt>
+                  <dd className="mt-1 flex flex-wrap items-center justify-center gap-1 text-xs">
+                    <span className="tabular-nums text-muted-foreground">{prevCount != null ? num(prevCount) : '—'}</span>
+                    <Delta value={relChange(s.count, prevCount)} />
+                  </dd>
+                </div>
+              </dl>
+            </li>
+          )
+        })}
+      </ul>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/50 px-4 py-3 text-xs">
+        <span className="font-medium text-muted-foreground">التحويل الكلي (زائر ← عميل مدفوع)</span>
+        <span className="text-sm font-extrabold tabular-nums text-primary">{fmtPct(overall)}</span>
+      </div>
+    </div>
+
+    {/* 🖥️ الشاشات الأكبر: الجدول — -m-4 يلغي بادينج اللوح فيمتد الجدول لحواف البطاقة */}
+    <div className="-m-4 hidden overflow-x-auto md:block">
       <table className="w-full min-w-[680px] border-collapse text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/50">
@@ -427,6 +506,7 @@ function FunnelTable({ steps, prevMap, bottleneckKey }: {
         </tfoot>
       </table>
     </div>
+    </>
   )
 }
 /* ───────── الملاحظات التحليلية ───────── */

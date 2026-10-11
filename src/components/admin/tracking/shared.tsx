@@ -131,16 +131,16 @@ export function FilterBar({
 
   return (
     <div className="space-y-3" dir="rtl">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap">
         {/* الفترة */}
-        <div role="group" aria-label="الفترة الزمنية" className="flex rounded-xl border bg-muted/40 p-1">
+        <div role="group" aria-label="الفترة الزمنية" className="col-span-2 flex rounded-xl border bg-muted/40 p-1 sm:col-auto">
           {PRESETS.map((p) => (
             <button
               key={p.key}
               type="button"
               aria-pressed={value.preset === p.key}
               onClick={() => set({ preset: p.key })}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all focus-visible:outline-2 focus-visible:outline-primary ${
+              className={`flex-1 whitespace-nowrap rounded-lg px-1.5 py-2 text-xs font-medium transition-all sm:flex-none sm:px-3 sm:py-1.5 focus-visible:outline-2 focus-visible:outline-primary ${
                 value.preset === p.key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -151,9 +151,9 @@ export function FilterBar({
 
         {/* المنصة */}
         <Select value={value.platform} onValueChange={(v) => set({ platform: v })}>
-          <SelectTrigger className="h-9 w-auto min-w-[140px] gap-2 rounded-xl text-xs" dir="rtl">
-            <span className="text-muted-foreground">المنصة:</span>
-            <SelectValue>{PLATFORM_LABELS[value.platform] ?? value.platform}</SelectValue>
+          <SelectTrigger className={`h-10 w-full min-w-0 gap-2 rounded-xl text-xs sm:h-9 sm:w-auto sm:min-w-[140px] ${showModel ? '' : 'col-span-2 sm:col-auto'}`} dir="rtl">
+            <span className="shrink-0 text-muted-foreground">المنصة:</span>
+            <SelectValue className="min-w-0 truncate">{PLATFORM_LABELS[value.platform] ?? value.platform}</SelectValue>
           </SelectTrigger>
           <SelectContent dir="rtl">
             {Object.entries(PLATFORM_LABELS).map(([k, l]) => (
@@ -165,9 +165,9 @@ export function FilterBar({
         {/* نموذج الإسناد */}
         {showModel && (
           <Select value={value.model} onValueChange={(v) => set({ model: v as 'first' | 'last' })}>
-            <SelectTrigger className="h-9 w-auto min-w-[140px] gap-2 rounded-xl text-xs" dir="rtl">
-              <span className="text-muted-foreground">الإسناد:</span>
-              <SelectValue>{MODEL_LABELS[value.model].label}</SelectValue>
+            <SelectTrigger className="h-10 w-full min-w-0 gap-2 rounded-xl text-xs sm:h-9 sm:w-auto sm:min-w-[140px]" dir="rtl">
+              <span className="shrink-0 text-muted-foreground">الإسناد:</span>
+              <SelectValue className="min-w-0 truncate">{MODEL_LABELS[value.model].label}</SelectValue>
             </SelectTrigger>
             <SelectContent dir="rtl">
               {(Object.keys(MODEL_LABELS) as ('first' | 'last')[]).map((k) => (
@@ -186,7 +186,7 @@ export function FilterBar({
         <button
           type="button"
           onClick={() => setAdvanced((v) => !v)}
-          className={`flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-colors ${
+          className={`col-span-2 flex h-10 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-colors sm:col-auto sm:h-9 sm:justify-start ${
             advanced || activeUtm.length ? 'border-primary/40 bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
           }`}
         >
@@ -197,16 +197,20 @@ export function FilterBar({
           )}
         </button>
 
-        {trailing && <div className="ms-auto flex flex-wrap items-center gap-2">{trailing}</div>}
+        {trailing && <div className="col-span-2 flex flex-wrap items-center gap-2 sm:col-auto sm:ms-auto">{trailing}</div>}
       </div>
 
       {/* تاريخ مخصص */}
       {value.preset === 'custom' && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed bg-muted/20 p-2.5 text-xs animate-in fade-in slide-in-from-top-1">
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-xl border border-dashed bg-muted/20 p-2.5 text-xs animate-in fade-in slide-in-from-top-1 sm:flex sm:flex-wrap">
           <span className="text-muted-foreground">من</span>
-          <Input type="date" className="h-8 w-[150px] rounded-lg" value={value.fromStr} onChange={(e) => set({ fromStr: e.target.value })} />
+          <div className="min-w-0 sm:w-[150px]">
+            <Input type="date" dir="ltr" className="h-10 rounded-lg text-base sm:h-8 sm:text-sm" value={value.fromStr} onChange={(e) => set({ fromStr: e.target.value })} />
+          </div>
           <span className="text-muted-foreground">إلى</span>
-          <Input type="date" className="h-8 w-[150px] rounded-lg" value={value.toStr} onChange={(e) => set({ toStr: e.target.value })} />
+          <div className="min-w-0 sm:w-[150px]">
+            <Input type="date" dir="ltr" className="h-10 rounded-lg text-base sm:h-8 sm:text-sm" value={value.toStr} onChange={(e) => set({ toStr: e.target.value })} />
+          </div>
         </div>
       )}
 
@@ -217,7 +221,7 @@ export function FilterBar({
             <label key={f.key} className="space-y-1">
               <span className="text-[11px] font-medium text-muted-foreground">{f.label}</span>
               <Input
-                className="h-8 rounded-lg text-xs"
+                className="h-10 rounded-lg text-base sm:h-8 sm:text-xs"
                 placeholder={f.placeholder}
                 value={value[f.key]}
                 onChange={(e) => set({ [f.key]: e.target.value } as Partial<RangeFilterState>)}
@@ -233,12 +237,12 @@ export function FilterBar({
         <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
           <span className="text-muted-foreground">فلاتر مفعّلة:</span>
           {value.platform !== 'all' && (
-            <button type="button" onClick={() => set({ platform: 'all' })} className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-primary hover:bg-primary/20">
+            <button type="button" onClick={() => set({ platform: 'all' })} className="flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-primary hover:bg-primary/20 sm:px-2 sm:py-0.5">
               {PLATFORM_LABELS[value.platform] ?? value.platform} ✕
             </button>
           )}
           {activeUtm.map((f) => (
-            <button key={f.key} type="button" onClick={() => set({ [f.key]: '' } as Partial<RangeFilterState>)} className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-primary hover:bg-primary/20">
+            <button key={f.key} type="button" onClick={() => set({ [f.key]: '' } as Partial<RangeFilterState>)} className="flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-primary hover:bg-primary/20 sm:px-2 sm:py-0.5">
               {f.label}: <span dir="ltr">{value[f.key]}</span> ✕
             </button>
           ))}

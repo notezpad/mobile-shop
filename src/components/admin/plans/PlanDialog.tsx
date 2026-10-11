@@ -227,7 +227,7 @@ function LimitField({
           title="بدون حدود"
           onClick={() => onChange(unlimited ? String(fallback) : String(UNLIMITED))}
           className={cn(
-            'inline-flex size-7 items-center justify-center rounded-lg border text-[14px] font-black transition-all',
+            'inline-flex size-9 items-center justify-center rounded-lg border text-[14px] font-black transition-all sm:size-7',
             unlimited
               ? 'border-indigo-500 bg-indigo-500 text-white shadow-sm shadow-indigo-500/30'
               : 'bg-muted text-foreground/70 hover:border-indigo-400 hover:text-indigo-600',
@@ -448,6 +448,8 @@ export function PlanDialog({
   const [touched, setTouched] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [confirmClose, setConfirmClose] = React.useState(false)
+  /** معاينة حيّة قابلة للطي — تظهر على الجوال/التابلت فقط (على lg+ لها عمود جانبي) */
+  const [previewOpen, setPreviewOpen] = React.useState(false)
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }))
@@ -614,7 +616,7 @@ export function PlanDialog({
           }}
         >
           {/* ═══ الترويسة ═══ */}
-          <div className="relative shrink-0 overflow-hidden border-b px-5 pb-4 pt-5">
+          <div className="relative shrink-0 overflow-hidden border-b px-4 pb-3.5 pt-6 sm:px-5 sm:pb-4 sm:pt-5">
             <div
               aria-hidden
               className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-500/[0.12] via-violet-500/[0.07] to-transparent"
@@ -672,12 +674,12 @@ export function PlanDialog({
               className="flex min-h-0 min-w-0 flex-col gap-0"
             >
               <div className="shrink-0 border-b px-4 py-2.5">
-                <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto rounded-2xl bg-muted p-1">
+                <TabsList className="scrollbar-none h-auto w-full justify-start gap-1 overflow-x-auto rounded-2xl bg-muted p-1">
                   {tabs.map((t) => (
                     <TabsTrigger
                       key={t.v}
                       value={t.v}
-                      className="relative gap-1.5 rounded-xl px-3 py-1.5 text-[14px] font-bold data-[state=active]:bg-background data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm dark:data-[state=active]:text-indigo-300"
+                      className="relative shrink-0 flex-none gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 text-[14px] font-bold sm:px-3 sm:py-1.5 data-[state=active]:bg-background data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm dark:data-[state=active]:text-indigo-300"
                     >
                       <t.icon className="size-3.5" />
                       {t.label}
@@ -689,11 +691,11 @@ export function PlanDialog({
                 </TabsList>
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 sm:py-5">
                 {/* ── الأساسيات ── */}
                 <TabsContent value="basic" className="mt-0 space-y-5">
                   <Field label="نوع النشاط التجاري" hint="يحدّد الوحدات الافتراضية المتاحة للباقة (الصيانة والمعاملات المالية للإلكترونيات فقط).">
-                    <div className="grid grid-cols-2 gap-2.5">
+                    <div className="grid grid-cols-1 gap-2.5 min-[420px]:grid-cols-2">
                       {(
                         [
                           { v: 'electronics', label: 'موبايل وكمبيوتر', icon: Smartphone },
@@ -939,12 +941,12 @@ export function PlanDialog({
                         المزايا <span className="text-foreground/70">({form.features.length})</span>
                       </Label>
                       <div className="flex items-center gap-1.5">
-                        <Button type="button" variant="outline" size="sm" onClick={generateFromLimits} className="h-7 gap-1.5 rounded-full text-[13.5px]">
+                        <Button type="button" variant="outline" size="sm" onClick={generateFromLimits} className="h-9 gap-1.5 rounded-full text-[13.5px] sm:h-7">
                           <Wand2 className="size-3" />
                           من الحدود
                         </Button>
                         {form.features.length > 0 && (
-                          <Button type="button" variant="ghost" size="sm" onClick={() => set('features', [])} className="h-7 gap-1 rounded-full text-[13.5px] text-rose-600 hover:text-rose-600">
+                          <Button type="button" variant="ghost" size="sm" onClick={() => set('features', [])} className="h-9 gap-1 rounded-full text-[13.5px] text-rose-600 hover:text-rose-600 sm:h-7">
                             <Trash2 className="size-3" />
                             مسح الكل
                           </Button>
@@ -1057,7 +1059,7 @@ export function PlanDialog({
                         variant="outline"
                         size="sm"
                         onClick={() => set('enabledModules', defaultsFor(form.businessType))}
-                        className="h-8 gap-1.5 rounded-full text-[13.5px]"
+                        className="h-10 gap-1.5 rounded-full text-[13.5px] sm:h-8"
                       >
                         <RefreshCw className="size-3" />
                         الافتراضي لـ{form.businessType === 'fashion' ? 'ملابس' : 'موبايل'}
@@ -1067,7 +1069,7 @@ export function PlanDialog({
                         variant="outline"
                         size="sm"
                         onClick={() => set('enabledModules', availableModules.map((x) => x.key))}
-                        className="h-8 rounded-full text-[13.5px]"
+                        className="h-10 rounded-full text-[13.5px] sm:h-8"
                       >
                         تفعيل الكل
                       </Button>
@@ -1076,7 +1078,7 @@ export function PlanDialog({
                         variant="outline"
                         size="sm"
                         onClick={() => set('enabledModules', [...CRITICAL_MODULES])}
-                        className="h-8 rounded-full text-[13.5px]"
+                        className="h-10 rounded-full text-[13.5px] sm:h-8"
                       >
                         الأساسيات فقط
                       </Button>
@@ -1108,6 +1110,29 @@ export function PlanDialog({
                     })}
                   </div>
                 </TabsContent>
+
+                {/* معاينة حيّة قابلة للطي — جوال/تابلت */}
+                <div className="mt-6 border-t pt-4 lg:hidden">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewOpen((v) => !v)}
+                    aria-expanded={previewOpen}
+                    className="flex h-11 w-full items-center justify-between gap-2 rounded-2xl border bg-muted/40 px-3.5 text-[14.5px] font-black outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-indigo-500/50"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="size-4 text-indigo-500" />
+                      معاينة حيّة للباقة
+                    </span>
+                    <span className="text-[13px] font-bold text-indigo-600 dark:text-indigo-300">
+                      {previewOpen ? 'إخفاء' : 'عرض'}
+                    </span>
+                  </button>
+                  {previewOpen && (
+                    <div className="mt-3 rounded-2xl bg-muted/30 p-3">
+                      <PlanPreview form={form} theme={theme} />
+                    </div>
+                  )}
+                </div>
               </div>
             </Tabs>
 
@@ -1125,7 +1150,7 @@ export function PlanDialog({
           </div>
 
           {/* ═══ التذييل ═══ */}
-          <DialogFooter className="shrink-0 flex-row items-center justify-between gap-2 border-t bg-background/80 px-5 py-3 backdrop-blur sm:justify-between">
+          <DialogFooter className="shrink-0 flex-row items-center justify-between gap-2 border-t bg-background/80 px-4 py-3 backdrop-blur sm:justify-between sm:px-5">
             <span className="hidden items-center gap-1.5 text-[13.5px] text-foreground/70 sm:flex">
               <kbd className="rounded-md border bg-muted px-1.5 py-0.5 font-mono text-[12.5px] font-bold">Ctrl</kbd>
               +
@@ -1133,13 +1158,13 @@ export function PlanDialog({
               للحفظ السريع
             </span>
             <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
-              <Button variant="outline" onClick={() => requestClose(false)} className="rounded-xl">
+              <Button variant="outline" onClick={() => requestClose(false)} className="h-11 rounded-xl max-sm:flex-1 sm:h-9">
                 إلغاء
               </Button>
               <Button
                 onClick={save}
                 disabled={saving || (isEdit && !dirty)}
-                className="gap-1.5 rounded-xl bg-gradient-to-l from-indigo-600 to-violet-600 px-5 text-white shadow-lg shadow-indigo-600/25 hover:from-indigo-500 hover:to-violet-500"
+                className="h-11 gap-1.5 rounded-xl bg-gradient-to-l from-indigo-600 to-violet-600 px-5 text-white shadow-lg shadow-indigo-600/25 hover:from-indigo-500 hover:to-violet-500 max-sm:flex-[2] sm:h-9"
               >
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                 {isEdit ? 'حفظ التغييرات' : 'إنشاء الباقة'}

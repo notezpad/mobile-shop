@@ -159,7 +159,7 @@ function Body({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* ترويسة */}
-      <SheetHeader className="relative shrink-0 overflow-hidden border-b p-5">
+      <SheetHeader className="relative shrink-0 overflow-hidden border-b p-4 sm:p-5">
         <div
           aria-hidden
           className={cn('pointer-events-none absolute -top-16 -start-10 size-52 rounded-full opacity-25 blur-3xl', theme.glow)}
@@ -193,7 +193,7 @@ function Body({
             type="button"
             onClick={onClose}
             aria-label="إغلاق"
-            className="flex size-8 shrink-0 items-center justify-center rounded-full border bg-card text-foreground/70 backdrop-blur transition-colors hover:bg-background hover:text-foreground"
+            className="flex size-10 shrink-0 items-center justify-center rounded-full border bg-card text-foreground/70 backdrop-blur transition-colors hover:bg-background hover:text-foreground sm:size-8"
           >
             <X className="size-4" />
           </button>
@@ -206,7 +206,7 @@ function Body({
       </SheetHeader>
 
       {/* محتوى قابل للتمرير */}
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5">
+      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-4 sm:p-5">
         {/* الأسعار */}
         <Section
           icon={Wallet}
@@ -458,15 +458,15 @@ function Body({
       </div>
 
       {/* شريط الإجراءات */}
-      <div className="grid shrink-0 grid-cols-[1fr_auto_auto] items-center gap-2 border-t bg-background/80 p-3 backdrop-blur">
+      <div className="grid shrink-0 grid-cols-[1fr_auto_auto] items-center gap-2 border-t bg-background/80 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
         <Button
           onClick={() => onEdit(p)}
-          className="gap-1.5 rounded-xl bg-gradient-to-l from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/25 hover:from-indigo-500 hover:to-violet-500"
+          className="h-11 gap-1.5 rounded-xl bg-gradient-to-l from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/25 hover:from-indigo-500 hover:to-violet-500"
         >
           <Pencil className="size-4" />
           تعديل الباقة
         </Button>
-        <Button variant="outline" size="icon" onClick={() => onDuplicate(p)} aria-label="نسخ الباقة" title="نسخ الباقة" className="rounded-xl">
+        <Button variant="outline" size="icon" onClick={() => onDuplicate(p)} aria-label="نسخ الباقة" title="نسخ الباقة" className="size-11 rounded-xl">
           <Copy className="size-4" />
         </Button>
         <Button
@@ -475,7 +475,7 @@ function Body({
           onClick={() => onToggleActive(p)}
           aria-label={p.isActive ? 'تعطيل' : 'تفعيل'}
           title={p.isActive ? 'تعطيل الباقة' : 'تفعيل الباقة'}
-          className={cn('rounded-xl', !p.isActive && 'border-emerald-500/40 text-emerald-600')}
+          className={cn('size-11 rounded-xl', !p.isActive && 'border-emerald-500/40 text-emerald-600')}
         >
           <Power className="size-4" />
         </Button>

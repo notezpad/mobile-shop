@@ -205,7 +205,9 @@ export function AdminPlansView() {
   React.useEffect(() => {
     const el = sentinelRef.current
     if (!el || typeof IntersectionObserver === 'undefined') return
-    const io = new IntersectionObserver(([e]) => setCompact(!e.isIntersecting))
+    // على الجوال (< md) الشريط مش لازق، فمفيش داعي للوضع المضغوط
+    const mq = window.matchMedia('(min-width: 768px)')
+    const io = new IntersectionObserver(([e]) => setCompact(!e.isIntersecting && mq.matches))
     io.observe(el)
     return () => io.disconnect()
   }, [])
@@ -587,9 +589,9 @@ export function AdminPlansView() {
 
   /* ══════════════ العرض ══════════════ */
   return (
-    <div className="space-y-5 pb-10">
+    <div className="w-full min-w-0 max-w-full space-y-4 pb-10 sm:space-y-5">
       {/* ═══ 1. البطل: العنوان + لوحة المؤشرات (Bento) ═══ */}
-      <section className="animate-in-up relative overflow-hidden rounded-[2rem] border border-foreground/15 bg-card p-4 shadow-sm sm:p-6">
+      <section className="animate-in-up relative overflow-hidden rounded-3xl border border-foreground/15 bg-card p-3.5 shadow-sm sm:rounded-[2rem] sm:p-6">
         <div aria-hidden className="pointer-events-none absolute -top-24 -start-16 size-72 rounded-full bg-indigo-500/10 blur-3xl" />
         <div aria-hidden className="pointer-events-none absolute -bottom-28 end-0 size-80 rounded-full bg-fuchsia-500/8 blur-3xl" />
         <div
@@ -605,19 +607,19 @@ export function AdminPlansView() {
         <div className="relative space-y-5">
           {/* العنوان + الأزرار */}
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/30 ring-1 ring-inset ring-white/30">
-                <Sparkles className="size-6" strokeWidth={2.2} />
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/30 ring-1 ring-inset ring-white/30 sm:size-12">
+                <Sparkles className="size-5 sm:size-6" strokeWidth={2.2} />
               </span>
-              <div>
+              <div className="min-w-0">
                 <h1 className="text-xl font-black leading-tight sm:text-2xl">خطط الاشتراك</h1>
-                <p className="text-[14.5px] font-medium text-foreground/70">
+                <p className="text-[13.5px] font-medium leading-snug text-foreground/70 sm:text-[14.5px]">
                   تحكّم كامل في الباقات والتسعير والمشتركين — مع تحليلات مباشرة
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex w-full items-center gap-2 sm:w-auto">
               <Button
                 variant="outline"
                 size="icon"
@@ -625,7 +627,7 @@ export function AdminPlansView() {
                 title="تصدير الباقات (CSV)"
                 disabled={plans.length === 0}
                 onClick={() => exportCsv(filtered.length > 0 ? filtered : plans)}
-                className="size-10 rounded-xl bg-card"
+                className="size-11 rounded-xl bg-card sm:size-10"
               >
                 <Download className="size-4" />
               </Button>
@@ -636,13 +638,13 @@ export function AdminPlansView() {
                 title="تحديث"
                 onClick={() => load(true)}
                 disabled={refreshing || loading}
-                className="size-10 rounded-xl bg-card"
+                className="size-11 rounded-xl bg-card sm:size-10"
               >
                 <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
               </Button>
               <Button
                 onClick={() => openCreate()}
-                className="h-10 gap-2 rounded-xl bg-gradient-to-l from-indigo-600 to-violet-600 px-4 text-white shadow-lg shadow-indigo-600/30 hover:from-indigo-500 hover:to-violet-500"
+                className="h-11 flex-1 gap-2 rounded-xl bg-gradient-to-l from-indigo-600 to-violet-600 px-4 text-white shadow-lg shadow-indigo-600/30 hover:from-indigo-500 hover:to-violet-500 sm:h-10 sm:flex-none"
               >
                 <Plus className="size-4" strokeWidth={2.6} />
                 باقة جديدة
@@ -654,8 +656,8 @@ export function AdminPlansView() {
           {/* لوحة المؤشرات */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {/* MRR + توزيع الإيراد */}
-            <div className="col-span-2 rounded-3xl border border-foreground/15 bg-card p-4 shadow-md sm:p-5">
-              <div className="flex items-start justify-between gap-2">
+            <div className="col-span-2 min-w-0 rounded-3xl border border-foreground/15 bg-card p-3.5 shadow-md sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-2">
                 <p
                   className="flex items-center gap-1.5 text-[14.5px] font-bold text-foreground/70"
                   title="تقدير: (المشتركون الشهريون × السعر الشهري) + (السنويون × السعر السنوي ÷ 12) — بدون فترات التجربة"
@@ -743,9 +745,9 @@ export function AdminPlansView() {
             </div>
 
             {/* المشتركون */}
-            <div className="rounded-3xl border border-foreground/15 bg-card p-4 shadow-md">
-              <p className="flex items-center gap-1.5 text-[14.5px] font-bold text-foreground/70">
-                <Users className="size-3.5 text-violet-500" />
+            <div className="min-w-0 rounded-3xl border border-foreground/15 bg-card p-3.5 shadow-md sm:p-4">
+              <p className="flex items-center gap-1.5 text-[13.5px] font-bold leading-tight text-foreground/70 sm:text-[14.5px]">
+                <Users className="size-3.5 shrink-0 text-violet-500" />
                 المشتركون النشطون
               </p>
               {loading ? (
@@ -777,14 +779,14 @@ export function AdminPlansView() {
               onClick={() => stats.expiring > 0 && setQuick(quick === 'expiring' ? 'none' : 'expiring')}
               disabled={stats.expiring === 0}
               className={cn(
-                'rounded-3xl border p-4 text-start shadow-sm backdrop-blur transition-all',
+                'min-w-0 rounded-3xl border p-3.5 text-start shadow-sm backdrop-blur transition-all sm:p-4',
                 stats.expiring > 0
                   ? 'border-amber-500/30 bg-amber-500/[0.09] hover:-translate-y-0.5 hover:shadow-md'
                   : 'cursor-default bg-card',
               )}
             >
-              <p className="flex items-center gap-1.5 text-[14.5px] font-bold text-foreground/70">
-                <CalendarClock className={cn('size-3.5', stats.expiring > 0 ? 'text-amber-500' : 'text-emerald-500')} />
+              <p className="flex items-center gap-1.5 text-[13.5px] font-bold leading-tight text-foreground/70 sm:text-[14.5px]">
+                <CalendarClock className={cn('size-3.5 shrink-0', stats.expiring > 0 ? 'text-amber-500' : 'text-emerald-500')} />
                 ينتهي خلال 14 يوماً
               </p>
               {loading ? (
@@ -879,10 +881,17 @@ export function AdminPlansView() {
       {!noData && !loadError && (
         <>
       <div ref={sentinelRef} aria-hidden className="-mb-px h-px" />
+      {/*
+        شريط الأدوات:
+        • < md (جوال): عادي (مش لازق) — بحث بعرض كامل، وتحته صف قابل للسحب أفقياً (ترتيب/سعر/عرض/فلاتر)،
+          والفلاتر مطويّة داخل زر «الفلاتر».
+        • ≥ md: لازق وينكمش عند النزول (السلوك الأصلي). الهوامش السالبة كانت -mx-4 فوق padding 12px
+          على الجوال، فكانت بتعمل سكرول أفقي — اتصلّحت بحصرها في md+.
+      */}
       <div
         ref={barRef}
         style={{ marginBottom: compact ? extraMb : 0 }}
-        className="sticky -top-4 z-30 -mx-4 bg-background px-4 pb-2 pt-4 sm:-top-6 sm:-mx-6 sm:px-6 sm:pt-5"
+        className="md:sticky md:-top-6 md:z-30 md:-mx-6 md:bg-background md:px-6 md:pb-2 md:pt-5"
       >
         <section
           className={cn(
@@ -891,7 +900,7 @@ export function AdminPlansView() {
           )}
         >
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[200px] flex-1">
+            <div className="relative min-w-0 basis-full sm:min-w-[200px] sm:flex-1 sm:basis-auto">
               <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-foreground/70" />
               <Input
                 ref={searchRef}
@@ -904,14 +913,14 @@ export function AdminPlansView() {
                   }
                 }}
                 placeholder="ابحث بالاسم أو الكود…"
-                className="h-10 rounded-full bg-muted ps-10 pe-10"
+                className="h-11 rounded-full bg-muted ps-10 pe-10 sm:h-10"
               />
               {search ? (
                 <button
                   type="button"
                   aria-label="مسح البحث"
                   onClick={() => setSearch('')}
-                  className="absolute end-3 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full bg-muted-foreground/20 text-foreground/70 hover:bg-muted-foreground/30"
+                  className="absolute end-3 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full bg-muted-foreground/20 text-foreground/70 hover:bg-muted-foreground/30 sm:size-5"
                 >
                   <X className="size-3" />
                 </button>
@@ -922,50 +931,55 @@ export function AdminPlansView() {
               )}
             </div>
 
-            <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
-              <SelectTrigger className="h-10 w-[170px] gap-1.5 rounded-full bg-muted" aria-label="ترتيب الباقات">
-                <ArrowUpDown className="size-3.5 text-foreground/70" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
-                  <SelectItem key={k} value={k}>
-                    {SORT_LABEL[k]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* جوال: صف قابل للسحب أفقياً — sm+: العناصر تنضم لنفس صف البحث (contents) */}
+            <div className="scrollbar-none flex w-full min-w-0 items-center gap-2 overflow-x-auto sm:contents">
+              <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
+                <SelectTrigger
+                  className="h-11 w-[160px] shrink-0 gap-1.5 rounded-full bg-muted data-[size=default]:h-11 sm:h-10 sm:w-[170px] sm:data-[size=default]:h-10"
+                  aria-label="ترتيب الباقات"
+                >
+                  <ArrowUpDown className="size-3.5 text-foreground/70" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {SORT_LABEL[k]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-            {view !== 'list' && (
-              <Segmented<Billing>
-                ariaLabel="وضع عرض الأسعار"
-                value={billing}
-                onChange={setBilling}
+              {view !== 'list' && (
+                <Segmented<Billing>
+                  ariaLabel="وضع عرض الأسعار"
+                  value={billing}
+                  onChange={setBilling}
+                  options={[
+                    { value: 'monthly', label: 'شهري', icon: CalendarDays },
+                    { value: 'yearly', label: 'سنوي', icon: CalendarRange },
+                  ]}
+                />
+              )}
+
+              <Segmented<ViewMode>
+                ariaLabel="طريقة العرض"
+                value={view}
+                onChange={setView}
                 options={[
-                  { value: 'monthly', label: 'شهري', icon: CalendarDays },
-                  { value: 'yearly', label: 'سنوي', icon: CalendarRange },
+                  { value: 'cards', label: 'بطاقات', icon: LayoutGrid },
+                  { value: 'list', label: 'قائمة', icon: Rows3 },
+                  { value: 'compare', label: 'مقارنة', icon: Table2 },
                 ]}
               />
-            )}
 
-            <Segmented<ViewMode>
-              ariaLabel="طريقة العرض"
-              value={view}
-              onChange={setView}
-              options={[
-                { value: 'cards', label: 'بطاقات', icon: LayoutGrid },
-                { value: 'list', label: 'قائمة', icon: Rows3 },
-                { value: 'compare', label: 'مقارنة', icon: Table2 },
-              ]}
-            />
-
-            {compact && (
+              {/* زر الفلاتر: دايماً على الجوال، وعلى md+ فقط في الوضع المضغوط */}
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setFiltersOpen((v) => !v)}
                 aria-expanded={filtersOpen}
-                className="h-10 gap-1.5 rounded-full"
+                className={cn('h-11 shrink-0 gap-1.5 rounded-full sm:h-10', !compact && 'md:hidden')}
               >
                 <SlidersHorizontal className="size-4" />
                 الفلاتر
@@ -975,21 +989,25 @@ export function AdminPlansView() {
                   </span>
                 )}
               </Button>
-            )}
+            </div>
           </div>
 
           <div
             className={cn(
-              'flex flex-wrap items-center gap-2',
-              compact &&
-                (filtersOpen
-                  ? 'absolute inset-x-0 top-full z-10 mt-2 rounded-3xl border border-foreground/15 bg-card p-3 shadow-xl'
-                  : 'hidden'),
+              'flex-wrap items-center gap-2',
+              compact
+                ? filtersOpen
+                  ? 'flex absolute inset-x-0 top-full z-10 mt-2 rounded-3xl border border-foreground/15 bg-card p-3 shadow-xl'
+                  : 'hidden'
+                : filtersOpen
+                  ? 'flex max-md:border-t max-md:border-border max-md:pt-2.5'
+                  : 'max-md:hidden md:flex',
             )}
           >
             <Segmented<TypeFilter>
               compact
               ariaLabel="فلتر نوع النشاط"
+              className="max-md:w-full max-md:[&>button]:flex-1 max-md:[&>button]:justify-center"
               value={typeFilter}
               onChange={setTypeFilter}
               options={[
@@ -1001,6 +1019,7 @@ export function AdminPlansView() {
             <Segmented<StatusFilter>
               compact
               ariaLabel="فلتر الحالة"
+              className="max-md:w-full max-md:[&>button]:flex-1 max-md:[&>button]:justify-center"
               value={statusFilter}
               onChange={setStatusFilter}
               options={[
@@ -1012,6 +1031,7 @@ export function AdminPlansView() {
             <Segmented<QuickFilter>
               compact
               ariaLabel="فلاتر سريعة"
+              className="max-md:w-full max-md:[&>button]:flex-1 max-md:[&>button]:justify-center"
               value={quick}
               onChange={(v) => setQuick(v === quick ? 'none' : v)}
               options={[
@@ -1023,13 +1043,13 @@ export function AdminPlansView() {
             />
 
             {(hasFilters || filtered.length !== plans.length) && (
-              <span className="ms-auto inline-flex items-center gap-2 rounded-full bg-indigo-500/10 px-3 py-1 text-[13.5px] font-bold text-indigo-700 dark:text-indigo-300">
+              <span className="inline-flex items-center gap-2 rounded-full bg-indigo-500/10 px-3 py-1 text-[13.5px] font-bold text-indigo-700 max-md:w-full max-md:justify-between md:ms-auto dark:text-indigo-300">
                 {filtered.length} / {plans.length} باقة
                 {hasFilters && (
                   <button
                     type="button"
                     onClick={clearFilters}
-                    className="rounded-full bg-indigo-500/15 px-2 font-black hover:bg-indigo-500/25"
+                    className="rounded-full bg-indigo-500/15 px-2.5 py-1 font-black hover:bg-indigo-500/25 sm:px-2 sm:py-0"
                   >
                     مسح الفلاتر
                   </button>
@@ -1155,9 +1175,11 @@ export function AdminPlansView() {
 
       {!loading && !noData && !loadError && (
         <p className="text-center text-[13px] font-medium text-foreground/70">
-          اختصارات: <kbd className="rounded border bg-muted px-1 font-mono">/</kbd> بحث ·{' '}
-          <kbd className="rounded border bg-muted px-1 font-mono">N</kbd> باقة جديدة · الإيراد المعروض تقدير من الاشتراكات
-          النشطة
+          <span className="max-sm:hidden">
+            اختصارات: <kbd className="rounded border bg-muted px-1 font-mono">/</kbd> بحث ·{' '}
+            <kbd className="rounded border bg-muted px-1 font-mono">N</kbd> باقة جديدة ·{' '}
+          </span>
+          الإيراد المعروض تقدير من الاشتراكات النشطة
         </p>
       )}
 
@@ -1212,14 +1234,14 @@ export function AdminPlansView() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-xl">تراجع</AlertDialogCancel>
+            <AlertDialogCancel className="h-11 rounded-xl sm:h-9">تراجع</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault()
                 confirmRemove()
               }}
               disabled={removing}
-              className="gap-1.5 rounded-xl bg-rose-600 text-white hover:bg-rose-700"
+              className="h-11 gap-1.5 rounded-xl bg-rose-600 text-white hover:bg-rose-700 sm:h-9"
             >
               {removing && <Loader2 className="size-4 animate-spin" />}
               نعم، أكمل

@@ -20,7 +20,12 @@ async function __GET(req: NextRequest) {
   const toStr = url.searchParams.get('to') ?? ''
 
   const where: any = { tenant: { id: { not: PLATFORM_TENANT_ID } } }
-  if (status) where.status = status
+  // محاولات الدفع غير المكتملة (pending/failed) بتتراكم — لو دخلت في الـ take
+  // بتزق اشتراكات حقيقية أقدم بره الحد. فبتتجاب بطلب منفصل: ?status=unfinished
+  const UNFINISHED = ['pending', 'failed']
+  if (status === 'unfinished') where.status = { in: UNFINISHED }
+  else if (status) where.status = status
+  else where.status = { notIn: UNFINISHED }
   if (planIdStr) where.planId = Number(planIdStr)
   if (fromStr || toStr) {
     where.createdAt = {}
@@ -32,7 +37,7 @@ async function __GET(req: NextRequest) {
     where,
     orderBy: { createdAt: 'desc' },
     include: { tenant: true, plan: true },
-    take: 500,
+    take: status === 'unfinished' ? 200 : 500,
   })
 
   const rows = items.map((s) => ({

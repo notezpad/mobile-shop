@@ -907,71 +907,102 @@ export function AdminCodesView() {
           </div>
         ) : (
           <>
-          {/* موبايل (< md): بطاقات بدل جدول بعرض 1020px */}
+          {/* 📱 الجوال: كروت الأكواد */}
           <ul className="divide-y divide-border/60 md:hidden">
             {visible.map((r) => {
               const codeExpired = isCodeExpired(r)
               return (
-                <li key={r.id} className="space-y-2.5 p-3">
-                  <BanknoteCodeCell
-                    code={r.code}
-                    copied={copiedCode === r.code}
-                    onCopy={() => copyCode(r.code)}
-                  />
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-bold" title={r.planName}>
+                <li key={r.id} className="space-y-3 p-3.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <BanknoteCodeCell
+                        code={r.code}
+                        copied={copiedCode === r.code}
+                        onCopy={() => copyCode(r.code)}
+                      />
+                    </div>
+                    <StatusSeal r={r} />
+                  </div>
+
+                  <div className="flex items-center gap-3 rounded-xl bg-muted/40 p-2.5">
+                    <DurationCoin r={r} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold" title={r.planName}>
                         {r.planName}
                       </p>
-                      <p className="font-mono text-[10.5px] font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                      <p className="font-mono text-[11px] font-bold tabular-nums text-amber-600 dark:text-amber-400">
                         ≈ {formatCurrency(valueOf(r))}
                       </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <DurationCoin r={r} />
-                      <StatusSeal r={r} />
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                    <span>
-                      الإصدار: <b className="text-foreground">{formatShortDate(r.createdAt)}</b>
-                    </span>
-                    <span className={cn(codeExpired && 'font-bold text-rose-600 dark:text-rose-400')}>
-                      الانتهاء: <b>{r.expiresAt ? formatShortDate(r.expiresAt) : '—'}</b>
-                      {codeExpired && ' (فقدت)'}
-                    </span>
-                    <span>
-                      {r.assignedTenantId ? (
-                        <span className="inline-flex items-center gap-1 font-bold text-amber-700 dark:text-amber-300">
-                          <UserCog className="size-3" />
-                          {r.tenantName ?? 'مخصّص'}
-                        </span>
-                      ) : (
-                        'كود عام'
-                      )}
-                    </span>
-                    {r.redeemedAt && (
-                      <span className="inline-flex items-center gap-1">
-                        <Coins className="size-3 text-emerald-600 dark:text-emerald-400" aria-hidden />
-                        استُخدم {formatShortDate(r.redeemedAt)}
-                      </span>
+                    {r.status === 'available' && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`حذف الكود ${r.code}`}
+                        className="size-10 shrink-0 rounded-xl text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => setDeleteId(r.id)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
                     )}
                   </div>
-                  {r.status === 'available' && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-10 w-full gap-1.5 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => setDeleteId(r.id)}
-                    >
-                      <Trash2 className="size-4" />
-                      إتلاف الكود
-                    </Button>
-                  )}
+
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                    <div className="min-w-0">
+                      <dt className="text-[11px] text-muted-foreground">الإصدار</dt>
+                      <dd className="mt-0.5 font-semibold">{formatShortDate(r.createdAt)}</dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-[11px] text-muted-foreground">انتهاء الكود</dt>
+                      <dd
+                        className={cn(
+                          'mt-0.5 font-semibold',
+                          codeExpired && 'text-rose-600 dark:text-rose-400',
+                        )}
+                      >
+                        {r.expiresAt ? (
+                          <>
+                            {formatShortDate(r.expiresAt)}
+                            {codeExpired && ' (فقدت)'}
+                          </>
+                        ) : (
+                          '—'
+                        )}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-[11px] text-muted-foreground">مخصّص لـ</dt>
+                      <dd className="mt-0.5 truncate font-semibold">
+                        {r.assignedTenantId ? (
+                          <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                            <UserCog className="size-3 shrink-0" />
+                            <span className="truncate">{r.tenantName ?? 'محل محدد'}</span>
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">عام</span>
+                        )}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-[11px] text-muted-foreground">الاستخدام</dt>
+                      <dd className="mt-0.5 font-semibold">
+                        {r.redeemedAt ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Coins className="size-3 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                            {formatShortDate(r.redeemedAt)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
                 </li>
               )
             })}
           </ul>
+
+          {/* 🖥️ الشاشات الأكبر: الجدول */}
           <div className="hidden max-h-[68vh] overflow-auto md:block">
             <Table className="min-w-[1020px]">
               <TableHeader className="sticky top-0 z-10">

@@ -590,7 +590,121 @@ export function PlansList({
 }) {
   return (
     <div className="animate-in-up overflow-hidden rounded-3xl border border-foreground/15 bg-card shadow-md">
-      <div className="overflow-x-auto">
+      {/* 📱 الجوال: كروت الباقات */}
+      <ul className="divide-y md:hidden">
+        {plans.map((p) => {
+          const theme = themeFor(themeIndexById.get(p.id) ?? 0)
+          const mrr = planMrr(p)
+          const share = totalMrr > 0 ? (mrr / totalMrr) * 100 : totalSubs > 0 ? (p.subscribersCount / totalSubs) * 100 : 0
+          const { pct } = yearlySavings(p)
+          return (
+            <li
+              key={p.id}
+              onClick={() => actions.onDetails(p)}
+              className={cn('cursor-pointer space-y-3 p-3.5 active:bg-muted/40', !p.isActive && 'opacity-65')}
+            >
+              <div className="flex items-center gap-3">
+                <PlanGlyph plan={p} theme={theme} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[16px] font-extrabold leading-tight">{p.name}</p>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                    <span className="font-mono text-[12.5px] text-foreground/70" dir="ltr">
+                      {p.code}
+                    </span>
+                    <Pill tone={p.isCanonical ? 'indigo' : 'amber'} className="px-1.5 py-0 text-[12px]">
+                      {p.isCanonical ? 'قياسية' : 'مخصّصة'}
+                    </Pill>
+                  </div>
+                </div>
+                <div onClick={(e) => e.stopPropagation()} className="flex flex-col items-center gap-1">
+                  <Switch
+                    checked={p.isActive}
+                    onCheckedChange={() => actions.onToggleActive(p)}
+                    aria-label={p.isActive ? 'تعطيل الباقة' : 'تفعيل الباقة'}
+                  />
+                  <span className="text-[10.5px] font-bold text-foreground/70">{p.isActive ? 'مفعّلة' : 'معطّلة'}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-muted/40 p-2.5" onClick={(e) => e.stopPropagation()}>
+                  <p className="text-[11px] font-semibold text-foreground/70">السعر</p>
+                  <QuickPriceEditor plan={p} onSave={actions.onQuickPrice}>
+                    <button type="button" className="mt-0.5 block w-full text-start outline-none">
+                      <span className="flex items-center gap-1 font-mono text-[16px] font-black tabular-nums">
+                        {p.priceMonthly === 0 ? 'مجاناً' : num(p.priceMonthly)}
+                        {p.priceMonthly > 0 && <span className="font-sans text-[12px] font-bold text-foreground/70">/شهر</span>}
+                        <PencilLine className="ms-auto size-3 text-foreground/60" />
+                      </span>
+                      <span className="flex flex-wrap items-center gap-x-1.5 text-[12px] font-semibold text-foreground/70">
+                        {p.priceYearly > 0 ? `${num(p.priceYearly)} سنوياً` : '—'}
+                        {pct > 0 && <span className="font-black text-emerald-600 dark:text-emerald-400">-{pct}%</span>}
+                      </span>
+                    </button>
+                  </QuickPriceEditor>
+                </div>
+                <div className="rounded-xl bg-muted/40 p-2.5">
+                  <p className="text-[11px] font-semibold text-foreground/70">المشتركون</p>
+                  <p className="mt-0.5 font-mono text-[16px] font-black tabular-nums">
+                    {num(p.subscribersCount)}
+                    {(p.trialCount ?? 0) > 0 && (
+                      <span className="ms-1 font-sans text-[12px] font-bold text-amber-600 dark:text-amber-400">
+                        {p.trialCount} تجربة
+                      </span>
+                    )}
+                  </p>
+                  {(p.expiringSoonCount ?? 0) > 0 && (
+                    <p className="flex items-center gap-1 text-[12px] font-bold text-amber-600 dark:text-amber-400">
+                      <CalendarClock className="size-3" />
+                      {p.expiringSoonCount} ينتهي قريباً
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[11px] font-semibold text-foreground/70">الإيراد الشهري</span>
+                  <span className="font-mono text-[14.5px] font-black tabular-nums">
+                    {num(mrr)} <span className="font-sans text-[12px] font-bold text-foreground/70">ج.م</span>
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <MiniBar pct={share} barClassName={cn('bg-gradient-to-l', theme.grad)} />
+                  <span className="w-9 shrink-0 text-end font-mono text-[12px] font-black tabular-nums text-foreground/70">
+                    {Math.round(share)}%
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <div className="flex min-w-0 flex-1 items-center gap-3 font-mono text-[13.5px] font-bold tabular-nums">
+                  <span className="inline-flex items-center gap-1" title="مستخدمين">
+                    <Users className="size-3.5 text-foreground/70" />
+                    {fmtLimit(p.maxUsers)}
+                  </span>
+                  <span className="inline-flex items-center gap-1" title="منتجات">
+                    <Package className="size-3.5 text-foreground/70" />
+                    {fmtLimit(p.maxProducts)}
+                  </span>
+                  <span className="inline-flex items-center gap-1" title="فروع">
+                    <Building2 className="size-3.5 text-foreground/70" />
+                    {fmtLimit(p.maxBranches)}
+                  </span>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => actions.onEdit(p)} className="h-10 gap-1.5 rounded-xl">
+                  <Pencil className="size-3.5" />
+                  تعديل
+                </Button>
+                <PlanMenu plan={p} actions={actions} />
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+
+      {/* 🖥️ الشاشات الأكبر: الجدول */}
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[900px] border-collapse text-[15.5px]">
           <thead>
             <tr className="border-b bg-muted/40">
@@ -735,7 +849,8 @@ export function PlansList({
         </table>
       </div>
       <p className="border-t bg-muted/30 px-4 py-2.5 text-center text-[13px] font-medium text-foreground/70">
-        اضغط على أي صف لعرض التفاصيل · اضغط على السعر لتعديله بسرعة · العناوين قابلة للترتيب
+        <span className="md:hidden">اضغط على أي باقة لعرض التفاصيل · اضغط على السعر لتعديله</span>
+        <span className="hidden md:inline">اضغط على أي صف لعرض التفاصيل · اضغط على السعر لتعديله بسرعة · العناوين قابلة للترتيب</span>
       </p>
     </div>
   )
@@ -857,11 +972,11 @@ export function PlansCompare({
 
   return (
     <div className="animate-in-up overflow-hidden rounded-3xl border border-foreground/15 bg-card shadow-md">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-collapse text-[15.5px]">
+      <div className="overflow-x-auto overscroll-x-contain">
+        <table className="w-full min-w-[560px] border-collapse text-[15.5px] sm:min-w-[720px]">
           <thead>
             <tr>
-              <th className="sticky start-0 z-20 w-40 bg-card px-4 py-4 text-start align-bottom text-[13.5px] font-black tracking-wide text-foreground/70">
+              <th className="sticky start-0 z-20 w-28 bg-card px-2.5 py-4 text-start align-bottom text-[12.5px] font-black tracking-wide text-foreground/70 shadow-[-1px_0_0_0_var(--border)_inset] sm:w-40 sm:px-4 sm:text-[13.5px]">
                 وجه المقارنة
               </th>
               {plans.map((p) => {
@@ -870,7 +985,7 @@ export function PlansCompare({
                   <th
                     key={p.id}
                     className={cn(
-                      'relative min-w-[170px] px-3 pb-4 pt-5 align-top',
+                      'relative min-w-[140px] px-2 pb-4 pt-5 align-top sm:min-w-[170px] sm:px-3',
                       topId === p.id && 'bg-indigo-500/[0.05]',
                     )}
                   >
@@ -917,7 +1032,7 @@ export function PlansCompare({
                 <tr key={row.label} className="border-t transition-colors hover:bg-muted/20">
                   <th
                     scope="row"
-                    className="sticky start-0 z-10 bg-card px-4 py-3 text-start text-[14.5px] font-bold text-foreground/70"
+                    className="sticky start-0 z-10 bg-card px-2.5 py-3 text-start text-[13px] font-bold text-foreground/70 sm:px-4 sm:text-[14.5px]"
                   >
                     {row.label}
                   </th>
@@ -948,7 +1063,7 @@ export function PlansCompare({
                     <th
                       scope="row"
                       title={f}
-                      className="sticky start-0 z-10 max-w-[170px] truncate bg-card px-4 py-2.5 text-start text-[14px] font-semibold text-foreground/70"
+                      className="sticky start-0 z-10 max-w-[112px] truncate bg-card px-2.5 py-2.5 text-start text-[13px] font-semibold text-foreground/70 sm:max-w-[170px] sm:px-4 sm:text-[14px]"
                     >
                       {f}
                     </th>
@@ -981,6 +1096,7 @@ export function PlansCompare({
       </div>
       <p className="border-t bg-muted/30 px-4 py-2.5 text-center text-[13px] font-medium text-foreground/70">
         مقارنة {plans.length} باقة · الأسعار بالجنيه المصري · الوحدات الافتراضية محسوبة بحسب نوع النشاط
+        <span className="mt-0.5 block text-[12px] text-foreground/60 md:hidden">← اسحب الجدول يميناً ويساراً لمشاهدة كل الباقات</span>
       </p>
     </div>
   )

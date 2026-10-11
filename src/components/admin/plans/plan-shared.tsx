@@ -365,7 +365,8 @@ export function Segmented<T extends string>({
       role="group"
       aria-label={ariaLabel}
       className={cn(
-        'inline-flex items-center rounded-full border border-border bg-muted p-0.5 backdrop-blur',
+        // max-w-full + overflow-x-auto: على الجوال لو الخيارات أعرض من الشاشة تتسكرول داخلياً بدل ما تكسر الصفحة
+        'scrollbar-none inline-flex max-w-full shrink-0 items-center overflow-x-auto rounded-full border border-border bg-muted p-0.5 backdrop-blur',
         className,
       )}
     >
@@ -378,8 +379,9 @@ export function Segmented<T extends string>({
             aria-pressed={active}
             onClick={() => onChange(o.value)}
             className={cn(
-              'relative inline-flex items-center rounded-full font-bold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500/50',
-              compact ? 'px-2.5 py-1 text-[13.5px]' : 'px-3.5 py-1.5 text-[14px]',
+              'relative inline-flex shrink-0 items-center whitespace-nowrap rounded-full font-bold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500/50',
+              // حجم لمس مريح على الجوال (≈40px) وأصغر على الديسكتوب
+              compact ? 'px-3 py-2 text-[13.5px] sm:px-2.5 sm:py-1' : 'px-3.5 py-2 text-[14px] sm:py-1.5',
               active ? 'text-foreground' : 'text-foreground/70 hover:text-foreground',
             )}
           >
