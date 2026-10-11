@@ -34,7 +34,7 @@ export function ComparisonSection({ onOpenAuth }: ComparisonSectionProps) {
   const rows = ROWS_BY_VERTICAL[vertical]
 
   return (
-    <section className="landing-dark relative py-20 sm:py-24">
+    <section className="landing-dark relative py-12 sm:py-24">
       <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-14">
           <motion.span

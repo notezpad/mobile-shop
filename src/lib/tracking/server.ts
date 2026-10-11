@@ -216,7 +216,8 @@ export async function trackServerEvent(input: ServerTrackInput): Promise<ServerT
     eventName === TRACKING_EVENTS.CompleteRegistration ||
     eventName === TRACKING_EVENTS.StartTrial ||
     eventName === TRACKING_EVENTS.InitiateCheckout ||
-    eventName === TRACKING_EVENTS.Purchase
+    eventName === TRACKING_EVENTS.Purchase ||
+    eventName === TRACKING_EVENTS.AddedFirstProduct
 
   // ── Meta Conversions API ─────────────────────────────────────────
   if (cfg.meta.enabled && cfg.meta.pixelId) {
@@ -515,6 +516,7 @@ function ga4EventName(name: string): string {
     case TRACKING_EVENTS.StartTrial: return 'trial_started'
     case TRACKING_EVENTS.InitiateCheckout: return 'begin_checkout'
     case TRACKING_EVENTS.Purchase: return 'purchase'
+    case TRACKING_EVENTS.AddedFirstProduct: return 'first_product_added'
     default: return name.toLowerCase()
   }
 }

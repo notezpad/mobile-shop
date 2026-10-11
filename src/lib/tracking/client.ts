@@ -470,6 +470,7 @@ function ga4EventName(name: string): string {
     case TRACKING_EVENTS.StartTrial: return 'trial_started'
     case TRACKING_EVENTS.InitiateCheckout: return 'begin_checkout'
     case TRACKING_EVENTS.Purchase: return 'purchase'
+    case TRACKING_EVENTS.AddedFirstProduct: return 'first_product_added'
     default: return name.toLowerCase()
   }
 }
@@ -513,7 +514,7 @@ export function trackEvent(
 
   // منع التكرار للعمليات المهمة (Refresh / إعادة فتح صفحة النجاح)
   if (eventId && !options.force) {
-    const important = [TRACKING_EVENTS.CompleteRegistration, TRACKING_EVENTS.StartTrial, TRACKING_EVENTS.InitiateCheckout, TRACKING_EVENTS.Purchase]
+    const important = [TRACKING_EVENTS.CompleteRegistration, TRACKING_EVENTS.StartTrial, TRACKING_EVENTS.InitiateCheckout, TRACKING_EVENTS.Purchase, TRACKING_EVENTS.AddedFirstProduct]
     if (important.includes(eventName as any)) {
       if (!markClientSent(`${eventName}:${eventId}`)) {
         debugLog('skipped (already sent in this session)')

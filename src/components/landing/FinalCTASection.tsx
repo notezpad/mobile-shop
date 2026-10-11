@@ -12,7 +12,7 @@ interface FinalCTASectionProps {
 
 export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
   return (
-    <section className="landing-dark relative overflow-hidden py-20 sm:py-24">
+    <section className="landing-dark relative overflow-hidden py-12 sm:py-24">
       <div className="lg-aurora" aria-hidden />
       <div className="lg-grid-mask" aria-hidden />
 

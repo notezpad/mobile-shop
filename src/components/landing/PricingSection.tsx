@@ -92,7 +92,7 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
   const allVisiblePlans = [...activeVerticalPlans, ...otherVerticalPlans]
 
   return (
-    <section id="pricing" className="landing-dark relative scroll-mt-24 border-y border-white/5 py-20 sm:py-24">
+    <section id="pricing" className="landing-dark relative scroll-mt-24 border-y border-white/5 py-12 sm:py-24">
       <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">

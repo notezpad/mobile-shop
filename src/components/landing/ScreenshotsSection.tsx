@@ -56,7 +56,7 @@ export function ScreenshotsSection() {
   return (
     <section
       id="screenshots"
-      className="landing-dark relative scroll-mt-24 border-y border-white/5 py-20 sm:py-24"
+      className="landing-dark relative scroll-mt-24 border-y border-white/5 py-12 sm:py-24"
     >
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Header */}

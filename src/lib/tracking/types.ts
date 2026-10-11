@@ -25,6 +25,8 @@ export const TRACKING_EVENTS = {
   StartTrial: 'StartTrial',
   InitiateCheckout: 'InitiateCheckout',
   Purchase: 'Purchase',
+  /** أول منتج يضيفه المحل — إشارة "مستخدم جاد" لتحسين الإعلانات */
+  AddedFirstProduct: 'AddedFirstProduct',
 } as const
 
 export type TrackableEventName =

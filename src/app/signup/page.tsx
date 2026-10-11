@@ -644,7 +644,8 @@ function SignupContent() {
           }
         } catch { /* التتبع لا يوقف التسجيل أبداً */ }
         toast.success(`تم إنشاء محلك «${shopName.trim()}» — تجربة 14 يوم 🎉`)
-        router.push('/dashboard')
+        try { sessionStorage.setItem('welcome_contact', JSON.stringify({ phone: phone.trim(), email: email.trim().toLowerCase() })) } catch { /* ignore */ }
+        router.push('/welcome')
         router.refresh()
       } else { toast.error(data?.error ?? 'فشل إنشاء الحساب') }
     } catch (err: any) {

@@ -25,6 +25,17 @@ const Ctx = React.createContext<VerticalCtx | null>(null)
 
 export function VerticalProvider({ children }: { children: React.ReactNode }) {
   const [vertical, setVertical] = React.useState<Vertical>('electronics')
+
+  // 🎯 رابط الإعلان بيحدد النشاط: /?v=fashion أو /?v=electronics
+  // (بنقراه بعد الـ mount عشان ما يحصلش hydration mismatch)
+  React.useEffect(() => {
+    try {
+      const v = (new URLSearchParams(window.location.search).get('v') || '').toLowerCase()
+      if (v === 'fashion' || v === 'clothes' || v === 'clothing') setVertical('fashion')
+      else if (v === 'electronics' || v === 'mobile') setVertical('electronics')
+    } catch { /* ignore */ }
+  }, [])
+
   const value = React.useMemo(() => ({ vertical, setVertical }), [vertical])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

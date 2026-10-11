@@ -10,13 +10,21 @@ import { FeaturesSection } from './FeaturesSection'
 import { WhoForSection } from './WhoForSection'
 import { ComparisonSection } from './ComparisonSection'
 import { HowItWorksSection } from './HowItWorksSection'
-import { ScreenshotsSection } from './ScreenshotsSection'
+import dynamic from 'next/dynamic'
+import { LazyOnVisible } from './LazyOnVisible'
+
+// ⚡ قسم الصور تقيل (464 سطر + صور) — ما بيتحمّلش غير لما الزائر يقرّب منه
+const ScreenshotsSection = dynamic(
+  () => import('./ScreenshotsSection').then((m) => m.ScreenshotsSection),
+  { ssr: false },
+)
 import { PricingSection } from './PricingSection'
 import { TrustSection } from './TrustSection'
 import { FAQSection } from './FAQSection'
 import { FinalCTASection } from './FinalCTASection'
 import { LandingFooter } from './LandingFooter'
-import { VerticalProvider } from './vertical-context'
+import { VerticalProvider, useVertical } from './vertical-context'
+import { StickyMobileCTA } from './StickyMobileCTA'
 import type { AuthUser } from '@/lib/auth-client'
 
 /**
@@ -56,16 +64,26 @@ const STATS = [
 ]
 
 export function LandingPage({ onAuthed: _onAuthed }: LandingPageProps) {
+  return (
+    <VerticalProvider>
+      <LandingInner />
+    </VerticalProvider>
+  )
+}
+
+function LandingInner() {
   const router = useRouter()
+  const { vertical } = useVertical()
 
   // 🛡️ 2026-09-17 (v3): Navigate to separate routes instead of using local state.
   // This way the URL changes to /login or /signup, and refresh preserves the page.
+  // النشاط المختار في الصفحة بيتنقل للتسجيل (باقة الملابس أو الموبايلات مختارة جاهزة)
   const openAuth = React.useCallback((mode: 'login' | 'signup') => {
-    router.push(`/${mode}`)
-  }, [router])
+    router.push(mode === 'signup' ? `/signup?plan=${vertical}-basic` : `/${mode}`)
+  }, [router, vertical])
 
   return (
-    <VerticalProvider>
+    <>
       <div className="landing-dark flex min-h-screen flex-col">
         <LandingHeader onOpenAuth={openAuth} />
 
@@ -98,19 +116,28 @@ export function LandingPage({ onAuthed: _onAuthed }: LandingPageProps) {
             </div>
           </section>
 
-          <FeaturesSection />
-          <WhoForSection />
+          {/* ترتيب مبني على زائر الموبايل: خطوات بسيطة ← مزايا ← أسعار ← باقي الإثباتات */}
           <HowItWorksSection />
-          <ScreenshotsSection />
-          <ComparisonSection onOpenAuth={openAuth} />
+          <FeaturesSection />
           <PricingSection onOpenAuth={openAuth} />
+          <LazyOnVisible id="screenshots" minHeight={640}>
+            <ScreenshotsSection />
+          </LazyOnVisible>
+          <WhoForSection />
+          {/* المقارنة مخفية على الموبايل لتقصير الصفحة (ظاهرة من الشاشات المتوسطة) */}
+          <div className="hidden md:block">
+            <ComparisonSection onOpenAuth={openAuth} />
+          </div>
           <TrustSection />
           <FAQSection />
           <FinalCTASection onOpenAuth={openAuth} />
         </main>
 
         <LandingFooter />
+        {/* مسافة تحت عشان الزر الثابت ما يغطيش آخر الصفحة على الموبايل */}
+        <div className="h-20 md:hidden" aria-hidden />
       </div>
-    </VerticalProvider>
+      <StickyMobileCTA onClick={() => openAuth('signup')} />
+    </>
   )
 }

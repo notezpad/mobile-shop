@@ -69,7 +69,7 @@ export function FAQSection() {
   const faqs = [...VERTICAL_FAQS[vertical], ...COMMON_FAQS]
 
   return (
-    <section id="faq" className="landing-dark relative scroll-mt-24 border-t border-white/5 py-20 sm:py-24">
+    <section id="faq" className="landing-dark relative scroll-mt-24 border-t border-white/5 py-12 sm:py-24">
       <div className="relative mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">

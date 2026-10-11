@@ -49,7 +49,7 @@ export function TestimonialsSection() {
   const list = TESTIMONIALS[vertical]
 
   return (
-    <section id="testimonials" className="landing-dark relative scroll-mt-24 py-20 sm:py-24">
+    <section id="testimonials" className="landing-dark relative scroll-mt-24 py-12 sm:py-24">
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-16">

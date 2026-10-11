@@ -23,7 +23,7 @@ export function FeaturesSection() {
   const meta = VERTICAL_META[vertical]
 
   return (
-    <section id="features" className="landing-dark relative scroll-mt-24 overflow-hidden py-20 sm:py-28">
+    <section id="features" className="landing-dark relative scroll-mt-24 overflow-hidden py-12 sm:py-28">
       <div
         className="pointer-events-none absolute inset-x-0 top-0 mx-auto h-[400px] w-[800px] max-w-full"
         style={{ background: 'radial-gradient(ellipse, oklch(0.65 0.17 162 / 0.08) 0%, transparent 70%)' }}

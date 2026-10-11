@@ -5,6 +5,8 @@ import { buildDefaultUnitsData } from '@/lib/default-units'
 import { getPlanContext, assertWithinPlanLimit, featureErrorResponse } from '@/lib/features'
 import { computeDynamicRetailPrice } from '@/lib/retail-pricing'
 import { matchEdgeCache, putEdgeCache, purgeCatalogCaches } from '@/lib/edgeCache'
+import { runNonBlocking, trackServerEvent, extractRequestContext } from '@/lib/tracking/server'
+import { TRACKING_EVENTS } from '@/lib/tracking/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -373,6 +375,32 @@ export async function POST(req: NextRequest) {
     }
     // ⚡ v9: مسح كاش الكتالوج فوراً بعد إضافة منتج (القائمة + كميات الفرع)
     await purgeCatalogCaches(session.tenantId, session.branchId)
+
+    // 📊 أول منتج للمحل → حدث AddedFirstProduct (Meta CAPI / TikTok / GA4).
+    // - eventId ثابت لكل محل (first-product-<tenantId>) → مفيش تكرار حتى لو
+    //   اتحذف المنتج واتضاف تاني (trackServerEvent عنده alreadySent).
+    // - لا يعمل لحساب السوبر أدمن (impersonation) ولا يوقف إضافة المنتج أبداً.
+    if (session.role !== 'SUPER_ADMIN') {
+      try {
+        const total = await db.product.count({ where: { tenantId: session.tenantId } })
+        if (total === 1) {
+          const reqCtx = extractRequestContext(req.headers)
+          const parts = (session.name || '').trim().split(/\s+/)
+          runNonBlocking(() => trackServerEvent({
+            eventName: TRACKING_EVENTS.AddedFirstProduct,
+            eventId: `first-product-${session.tenantId}`,
+            params: { contentType: 'product' },
+            context: {
+              ...reqCtx,
+              email: session.email,
+              firstName: parts[0] || undefined,
+              lastName: parts.slice(1).join(' ') || undefined,
+              externalId: session.userId,
+            },
+          }))
+        }
+      } catch { /* التتبع لا يوقف إضافة المنتج أبداً */ }
+    }
     return NextResponse.json(created, { status: 201 })
   })
 }

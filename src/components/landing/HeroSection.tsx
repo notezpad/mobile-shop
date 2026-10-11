@@ -36,22 +36,23 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
   }
 
   return (
-    <section id="top" className="landing-dark relative overflow-hidden pb-20 pt-10 sm:pb-28 sm:pt-14 lg:pt-16">
+    <section id="top" className="landing-dark relative overflow-hidden pb-12 pt-6 sm:pb-28 sm:pt-14 lg:pt-16">
       <div className="lg-aurora" aria-hidden />
       <div className="lg-grid-mask" aria-hidden />
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Top badge + vertical switcher */}
-        <div className="mb-10 flex flex-col items-center gap-4 text-center sm:mb-14">
+        <div className="mb-6 flex flex-col items-center gap-3 text-center sm:mb-14 sm:gap-4">
           <motion.div
             custom={0}
             initial="hidden"
             animate="visible"
             variants={fadeUp}
-            className="glass-pill inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-bold text-brand-300"
+            className="glass-pill inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold text-brand-300 sm:px-4 sm:py-1.5 sm:text-sm"
           >
             <span className="lg-dot" />
-            منصة SaaS واحدة لإدارة محلات التجزئة والجملة في الدول العربية
+            <span className="sm:hidden">نظام إدارة محلات التجزئة والجملة</span>
+            <span className="hidden sm:inline">منصة SaaS واحدة لإدارة محلات التجزئة والجملة في الدول العربية</span>
           </motion.div>
 
           <motion.div custom={1} initial="hidden" animate="visible" variants={fadeUp}>
@@ -61,7 +62,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
 
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-8">
           {/* Right column (text) — appears first in RTL */}
-          <div className="flex flex-col items-start gap-5 text-right">
+          <div className="flex flex-col items-start gap-4 text-right sm:gap-5">
             <AnimatePresence mode="wait">
               <motion.div
                 key={vertical + '-title'}
@@ -73,47 +74,28 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
               >
                 <h1
                   className="font-black leading-[1.15] tracking-tight text-white"
-                  style={{ fontSize: 'clamp(2.1rem, 4.6vw, 4.2rem)', letterSpacing: '-0.5px' }}
+                  style={{ fontSize: 'clamp(1.9rem, 4.6vw, 4.2rem)', letterSpacing: '-0.5px' }}
                 >
                   {meta.heroTitle}
                 </h1>
-                <p className="mt-5 max-w-xl text-lg lg-muted sm:text-xl">
+                <p className="mt-3 max-w-xl text-base lg-muted sm:mt-5 sm:text-xl">
                   {meta.heroSubtitle}
                 </p>
               </motion.div>
             </AnimatePresence>
 
-            <AnimatePresence mode="wait">
-              <motion.ul
-                key={vertical + '-bullets'}
-                initial={false}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.35, delay: 0.05 }}
-                className="space-y-2.5"
-              >
-                {meta.heroBullets.map((t) => (
-                  <li key={t} className="flex items-center gap-2 text-sm sm:text-base">
-                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-500/20 text-brand-300">
-                      <Check className="size-3.5" />
-                    </span>
-                    <span className="text-white/90">{t}</span>
-                  </li>
-                ))}
-              </motion.ul>
-            </AnimatePresence>
 
             <motion.div
               custom={4}
               initial="hidden"
               animate="visible"
               variants={fadeUp}
-              className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center"
+              className="flex w-full flex-col gap-3 pt-1 sm:w-auto sm:flex-row sm:items-center sm:pt-2"
             >
               <Button
                 size="lg"
                 onClick={() => onOpenAuth('signup')}
-                className="h-14 gap-2 rounded-xl bg-gradient-to-l from-brand-500 to-brand-700 px-8 text-lg font-extrabold text-white shadow-lg shadow-brand-600/30 transition-transform hover:-translate-y-0.5 hover:from-brand-400 hover:to-brand-600"
+                className="h-14 w-full gap-2 rounded-xl bg-gradient-to-l from-brand-500 to-brand-700 px-8 sm:w-auto text-lg font-extrabold text-white shadow-lg shadow-brand-600/30 transition-transform hover:-translate-y-0.5 hover:from-brand-400 hover:to-brand-600"
               >
                 <Rocket className="size-5" />
                 ابدأ تجربتك المجانية
@@ -149,6 +131,26 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                 إعداد في دقيقتين
               </span>
             </motion.div>
+
+            <AnimatePresence mode="wait">
+              <motion.ul
+                key={vertical + '-bullets'}
+                initial={false}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.35, delay: 0.05 }}
+                className="space-y-2.5"
+              >
+                {meta.heroBullets.map((t) => (
+                  <li key={t} className="flex items-center gap-2 text-sm sm:text-base">
+                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-500/20 text-brand-300">
+                      <Check className="size-3.5" />
+                    </span>
+                    <span className="text-white/90">{t}</span>
+                  </li>
+                ))}
+              </motion.ul>
+            </AnimatePresence>
           </div>
 
           {/* Left column (visual) — glass dashboard mockup, swaps per vertical */}
@@ -156,7 +158,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
             initial={false}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="relative"
+            className="relative hidden lg:block"
           >
             <AnimatePresence mode="wait">
               <motion.div

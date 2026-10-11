@@ -275,6 +275,20 @@ export function ProductsView() {
     setInitial(null)
     setDialogOpen(true)
   }
+
+  // 👋 جاي من شاشة الترحيب (/products?new=1) → افتح نافذة إضافة منتج مرة واحدة
+  React.useEffect(() => {
+    try {
+      const url = new URL(window.location.href)
+      if (url.searchParams.get('new') === '1') {
+        url.searchParams.delete('new')
+        window.history.replaceState(null, '', url.pathname + url.search)
+        setInitial(null)
+        setDialogOpen(true)
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const openEdit = (p: Product) => {
     setInitial({
       id: p.id,
