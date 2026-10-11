@@ -114,10 +114,10 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="h-screen grid lg:grid-cols-2 bg-background overflow-hidden">
+    <main className="min-h-dvh grid lg:h-screen lg:grid-cols-2 bg-background lg:overflow-hidden">
 
       {/* ─── Form side ─── */}
-      <div className="h-screen overflow-y-auto flex items-center justify-center py-6 px-4 bg-muted/30">
+      <div className="min-h-dvh lg:h-screen lg:overflow-y-auto flex items-center justify-center py-6 px-4 bg-muted/30">
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -209,14 +209,14 @@ export default function LoginPage() {
             </AnimatePresence>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-3">
+            <form onSubmit={handleSubmit} noValidate className="space-y-3">
               <Field label="البريد الإلكتروني" required>
                 <Input
                   type="email" placeholder="name@example.com"
                   icon={<Mail className="size-4" />}
                   value={email} onChange={(e: any) => { setEmail(e.target.value); setError(null) }}
                   autoComplete="email" dir="ltr" className="text-left"
-                  disabled={loading} required autoFocus
+                  disabled={loading} required inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false}
                 />
               </Field>
 

@@ -22,6 +22,7 @@ import {
   Settings as SettingsIcon,
   Power,
   Menu,
+  ChevronRight,
   Shield,
   Crown,
   ChevronLeft,
@@ -38,7 +39,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -938,6 +939,25 @@ function AdminDesktopTopbar({
   );
 }
 
+/** إغلاق الدرج بزر Escape (بدون Radix) — نفس سلوك لوحة المستخدم */
+function EscapeCloser({
+  onEscape,
+  enabled,
+}: {
+  onEscape: () => void;
+  enabled: boolean;
+}) {
+  React.useEffect(() => {
+    if (!enabled) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onEscape();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onEscape, enabled]);
+  return null;
+}
+
 /** Mobile / tablet topbar (< lg) */
 function AdminMobileTopbar({
   active,
@@ -954,8 +974,8 @@ function AdminMobileTopbar({
   return (
     <header
       className={cn(
-        "sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 lg:hidden",
-        "border-b border-border bg-card/80 px-3 backdrop-blur-xl",
+        "z-30 flex h-14 shrink-0 items-center justify-between gap-2 lg:hidden",
+        "border-b border-border bg-card/90 px-3 backdrop-blur-xl",
         "pt-[env(safe-area-inset-top)] shadow-sm",
       )}
     >
@@ -964,16 +984,16 @@ function AdminMobileTopbar({
           type="button"
           onClick={onMenuOpen}
           aria-label="فتح القائمة"
-          className="grid size-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95 md:hidden"
+          className="shell-icon-btn md:hidden"
         >
           <Menu className="size-5" />
         </button>
-        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-1 ring-amber-300/40">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-1 ring-amber-300/40">
           <item.icon className="size-[18px]" strokeWidth={2.1} />
         </span>
-        <span className="truncate text-sm font-bold">{item.label}</span>
+        <span className="hidden min-w-0 truncate text-sm font-bold md:block">{item.label}</span>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-1 min-[380px]:gap-1.5">
         <ThemeToggle />
         <Divider />
         <ExpiringBell
@@ -1068,10 +1088,11 @@ export function SuperAdminApp() {
   void user;
 
   return (
-    <div className="flex h-screen flex-col bg-background overflow-hidden">
+    // الشل ثابت (fixed inset-0): الهيدر والسايدبار لا يتحركان مع سكرول الجوال
+    <div className="fixed inset-0 flex flex-col overflow-hidden overscroll-none bg-background">
       {/*
         ───────────── Responsive sidebar strategy (matches shop app) ─────────────
-        < md (< 768px):  Hamburger menu + Sheet drawer (full Sidebar).
+        < md (< 768px):  Hamburger menu + drawer مع مقبض قفل (full Sidebar).
         md–lg (768–1023px): Icon rail — 68px collapsed sidebar.
         ≥ lg (≥ 1024px):  Full 260px sidebar.
 
@@ -1087,24 +1108,56 @@ export function SuperAdminApp() {
         onChange={setActive}
       />
 
-      {/* Mobile sidebar (drawer) — below md only */}
-      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent
-          side="right"
-          className="w-[280px] border-0 bg-sidebar p-0"
+      {/* Mobile sidebar (drawer) — below md only.
+          درج بسيط بدون Radix (نفس لوحة المستخدم): div ثابت بيتحرك بـ translate-x،
+          مقفول = بره الشاشة + inert، ومقبض قفل جانبي في منتصف الحافة. */}
+      <div
+        aria-hidden="true"
+        onClick={() => setMobileOpen(false)}
+        className={cn(
+          "fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 md:hidden",
+          mobileOpen ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="قائمة الأدمن"
+        data-state={mobileOpen ? "open" : "closed"}
+        inert={!mobileOpen}
+        className={cn(
+          "fixed inset-y-0 right-0 z-50 flex h-dvh w-[280px] max-w-[88vw] flex-col bg-sidebar shadow-lg md:hidden",
+          "transition-transform duration-300 ease-in-out",
+          mobileOpen ? "translate-x-0" : "translate-x-full",
+        )}
+      >
+        {/* مقبض جانبي في منتصف الحافة — نفس مقبض لوحة المستخدم */}
+        <Button
+          type="button"
+          variant="sidebar-handle"
+          size="sidebar-handle"
+          aria-label="إغلاق القائمة"
+          title="إغلاق القائمة"
+          onClick={() => setMobileOpen(false)}
         >
-          <SheetTitle className="sr-only">قائمة الأدمن</SheetTitle>
-          <AdminSidebar
-            active={active}
-            onChange={setActive}
-            expiringCount={expiringCount}
-            onNavigate={() => setMobileOpen(false)}
-          />
-        </SheetContent>
-      </Sheet>
+          <span className="sidebar-close-handle-grip" aria-hidden="true">
+            <span />
+            <span />
+          </span>
+          <ChevronRight className="size-4" aria-hidden="true" strokeWidth={2.2} />
+        </Button>
+        <AdminSidebar
+          className="w-full border-l-0"
+          active={active}
+          onChange={setActive}
+          expiringCount={expiringCount}
+          onNavigate={() => setMobileOpen(false)}
+        />
+      </div>
+      <EscapeCloser onEscape={() => setMobileOpen(false)} enabled={mobileOpen} />
 
       {/* Icon rail sidebar — md to lg only (68px collapsed) */}
-      <div className="fixed right-0 top-0 z-40 hidden h-screen md:max-lg:block">
+      <div className="fixed inset-y-0 right-0 z-40 hidden md:max-lg:block">
         <AdminSidebar
           active={active}
           onChange={setActive}
@@ -1114,7 +1167,7 @@ export function SuperAdminApp() {
       </div>
 
       {/* Desktop sidebar — lg and up (260px full) */}
-      <div className="fixed right-0 top-0 z-40 hidden h-screen lg:block">
+      <div className="fixed inset-y-0 right-0 z-40 hidden lg:block">
         <AdminSidebar
           active={active}
           onChange={setActive}
@@ -1134,7 +1187,7 @@ export function SuperAdminApp() {
           onChange={setActive}
         />
 
-        <div className="flex-1 overflow-y-auto min-h-0 p-4 sm:p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-6">
           <AnimatePresence mode="wait">
             <motion.div
               key={active}
@@ -1148,7 +1201,7 @@ export function SuperAdminApp() {
           </AnimatePresence>
         </div>
 
-        <footer className="mt-auto border-t border-border bg-background px-4 py-3 text-center text-xs text-muted-foreground dark:border-sidebar-border dark:bg-sidebar lg:px-6">
+        <footer className="mt-auto border-t border-border bg-background px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-center text-xs text-muted-foreground dark:border-sidebar-border dark:bg-sidebar lg:px-6">
           © {new Date().getFullYear()} منصة إدارة المحلات — لوحة الأدمن الأعلى
         </footer>
       </main>

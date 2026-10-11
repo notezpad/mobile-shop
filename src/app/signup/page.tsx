@@ -22,13 +22,14 @@ import {
   Smartphone,
   Shirt,
   Crown,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Field } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -142,6 +143,68 @@ function getPasswordStrength(pwd: string): { score: 0 | 1 | 2 | 3; label: string
 
 type SignupError = { field: string; message: string }
 
+/**
+ * 📱 طلب التسجيل — fetch مباشر (مش api() بتاعة الأوفلاين).
+ *
+ * ليه؟ api() لما الشبكة تقطع بتحط الطلب في outbox على الجهاز وترجّع "نجاح
+ * وهمي" — يعني على موبايل بشبكة ضعيفة (متصفح فيسبوك مثلاً) المستخدم كان بيشوف
+ * "فشل إنشاء الحساب" وبياناته (وكلمة المرور!) متخزنة محلياً وبتتبعت لاحقاً.
+ * هنا: مهلة 25 ثانية + إعادة محاولة تلقائية (حتى مرتين) لو 500/502/503/504
+ * أو انقطاع شبكة (cold-start للـ DB زي PERF_FIX_503). ولو المحاولة الأولى
+ * نجحت فعلاً والرد ضاع، الإعادة هترجع "البريد مسجّل" — فنجرّب نسجّل دخول
+ * بنفس البيانات ونعتبرها نجاح.
+ */
+async function postSignup(body: Record<string, any>): Promise<any> {
+  const RETRYABLE = new Set([500, 502, 503, 504])
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+  let ambiguous = false // حصل فشل ممكن يكون السيرفر نفّذ فيه الطلب
+  let lastErr: Error = new Error('فشل إنشاء الحساب')
+  for (let attempt = 0; attempt <= 2; attempt++) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 25000)
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      })
+      const data = await res.json().catch(() => null)
+      if (res.ok && data?.ok) return data
+      const msg: string = data?.error || `فشل إنشاء الحساب (${res.status})`
+      if (RETRYABLE.has(res.status) && attempt < 2) {
+        ambiguous = true
+        lastErr = new Error(msg)
+        await sleep(500 * (attempt + 1))
+        continue
+      }
+      // الإعادة لقت الحساب موجود = غالباً المحاولة السابقة نجحت → سجّل دخول
+      if (ambiguous && (msg.includes('مسجّل') || msg.includes('موجود'))) {
+        const lr = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: body.email, password: body.password }),
+        })
+        const ld = await lr.json().catch(() => null)
+        if (lr.ok && ld?.ok) return { ok: true, user: ld.user, tracking: undefined }
+      }
+      throw new Error(msg)
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || err instanceof TypeError) {
+        // انقطاع/بطء شبكة
+        ambiguous = true
+        lastErr = new Error('الاتصال ضعيف — اتأكد من الإنترنت وجرّب تاني')
+        if (attempt < 2) { await sleep(600 * (attempt + 1)); continue }
+        throw lastErr
+      }
+      throw err
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  throw lastErr
+}
+
 function SignupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -174,13 +237,21 @@ function SignupContent() {
     return () => { alive = false }
   }, [])
 
-  // لو الباقة المختارة من الرابط (?plan=...) مش ضمن المفعّلة → نمسح الاختيار
+  // 📱 إزالة احتكاك: المستخدم مش مطلوب منه "يختار باقة" قبل ما يسجّل.
+  // التجربة مجانية على أي حال، فبنختار تلقائياً الباقة الأساسية (أو أول باقة
+  // مفعّلة) — ولو الباقة اللي في الرابط (?plan=...) مش مفعّلة نرجع للافتراضية.
+  // "تغيير" بيفتح قائمة الباقات (changingPlan) بدل ما يمسح الاختيار.
+  const [changingPlan, setChangingPlan] = React.useState(false)
   React.useEffect(() => {
     if (apiPlans === null) return
-    if (selectedPlan && !apiPlans.some((p) => p.code === selectedPlan)) {
-      setSelectedPlan('')
-    }
+    if (selectedPlan && apiPlans.some((p) => p.code === selectedPlan)) return
+    const def = apiPlans.find((p) => p.code === 'electronics-basic') ?? apiPlans[0]
+    setSelectedPlan(def?.code ?? '')
   }, [apiPlans, selectedPlan])
+  // فشل تحميل الباقات (شبكة ضعيفة): نكمل بالباقة الافتراضية والسيرفر هيتحقق منها
+  React.useEffect(() => {
+    if (plansFailed && !selectedPlan) setSelectedPlan('electronics-basic')
+  }, [plansFailed, selectedPlan])
 
   const plansLoading = apiPlans === null && !plansFailed
 
@@ -239,7 +310,6 @@ function SignupContent() {
   const [inviteCode, setInviteCode] = React.useState('')
   const [showPass, setShowPass] = React.useState(false)
   const [showInvite, setShowInvite] = React.useState(false)
-  const [agree, setAgree] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [errors, setErrors] = React.useState<SignupError[]>([])
 
@@ -260,7 +330,6 @@ function SignupContent() {
     else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) newErrors.push({ field: 'email', message: 'صيغة البريد غير صحيحة' })
     if (!password) newErrors.push({ field: 'password', message: 'كلمة المرور مطلوبة' })
     else if (password.length < 6) newErrors.push({ field: 'password', message: 'الحد الأدنى 6 أحرف' })
-    if (!agree) newErrors.push({ field: 'agree', message: 'يجب الموافقة على الشروط' })
     setErrors(newErrors)
     return newErrors.length === 0
   }
@@ -268,14 +337,21 @@ function SignupContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (loading) return
-    if (!validate()) { toast.error('من فضلك صحّح الأخطاء'); return }
+    if (!validate()) {
+      toast.error('من فضلك صحّح الأخطاء')
+      // على الموبايل الخطأ ممكن يكون فوق الشاشة — نوصّل المستخدم له
+      requestAnimationFrame(() =>
+        document.querySelector('form p.text-destructive')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      )
+      return
+    }
     setLoading(true)
     try {
       // 📊 التقاط مصدر الاكتساب (utm_* + click ids) من طبقة التتبع
       const attribution = getAttributionForServer()
-      const data = await api<{ ok: boolean; user?: any; error?: string; tracking?: { registrationEventId: string; trialEventId: string; planName?: string } }>('/api/auth/signup', {
-        method: 'POST',
-        body: { shopName: shopName.trim(), name: name.trim(), email: email.trim().toLowerCase(), phone: phone.trim(), password, inviteCode: inviteCode.trim() || undefined, agree, planCode: selectedPlan || undefined, attribution: attribution ?? undefined },
+      const data: { ok: boolean; user?: any; error?: string; tracking?: { registrationEventId: string; trialEventId: string; planName?: string } } = await postSignup({
+        shopName: shopName.trim(), name: name.trim(), email: email.trim().toLowerCase(), phone: phone.trim(), password,
+        inviteCode: inviteCode.trim() || undefined, agree: true, planCode: selectedPlan || undefined, attribution: attribution ?? undefined,
       })
       if (data?.ok && data.user) {
         // ═══ 📊 Tracking Browser-side ═══
@@ -309,10 +385,10 @@ function SignupContent() {
   }
 
   return (
-    <main className="h-screen grid lg:grid-cols-2 bg-background overflow-hidden">
+    <main className="min-h-dvh grid lg:h-screen lg:grid-cols-2 bg-background lg:overflow-hidden">
 
       {/* ─── Form side ─── */}
-      <div className="h-screen overflow-y-auto flex items-start justify-center py-5 px-4 bg-muted/30">
+      <div className="min-h-dvh lg:h-screen lg:overflow-y-auto flex items-start justify-center py-4 px-3 sm:px-4 sm:py-5 bg-muted/30">
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -320,9 +396,9 @@ function SignupContent() {
           className="w-full max-w-md"
         >
           {/* Card wrapper */}
-          <div className="bg-card rounded-2xl border border-border shadow-lg shadow-black/5 p-5 space-y-4">
+          <div className="bg-card rounded-2xl border border-border shadow-lg shadow-black/5 p-4 sm:p-5 space-y-4">
 
-            {/* Brand + header row */}
+            {/* شريط علوي مضغوط: الشعار + رابط الدخول */}
             <div className="flex items-center justify-between">
               <Link href="/" className="inline-flex items-center gap-2 group">
                 <div className="size-8 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center shadow-sm shadow-brand-500/25 group-hover:scale-105 transition-transform">
@@ -330,124 +406,102 @@ function SignupContent() {
                 </div>
                 <span className="text-sm font-bold text-foreground">نظام المحل</span>
               </Link>
-              <div className="text-left">
-                <h1 className="text-base font-bold tracking-tight text-foreground leading-tight">
-                  {planMeta ? 'أنشئ حسابك 🚀' : 'اختر باقتك وابدأ 🚀'}
-                </h1>
-                <p className="text-[11px] text-muted-foreground">
-                  {planMeta ? `${planMeta.shortName} · 14 يوم مجاناً` : 'تجربة 14 يوم — بدون بطاقة ائتمان'}
-                </p>
-              </div>
+              <p className="text-xs text-muted-foreground">
+                لديك حساب؟{' '}
+                <Link href="/login" className="-m-1 p-1 font-bold text-primary hover:underline">دخول</Link>
+              </p>
             </div>
 
-            {/* Plan banner (if selected) */}
-            {planMeta && (
-              <div className={cn('flex items-center gap-2.5 rounded-xl border-2 p-2.5', planMeta.cardSelected)}>
-                {(() => { const Icon = planMeta.icon; return <Icon className={cn('size-5 shrink-0', planMeta.iconColor)} /> })()}
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold truncate text-foreground">{planMeta.name}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">{planMeta.desc} · <span className="font-semibold">{planMeta.price}</span></p>
-                </div>
-                <button type="button" onClick={() => setSelectedPlan('')}
-                  className="text-[11px] text-muted-foreground hover:text-foreground underline shrink-0 transition-colors">
-                  تغيير
-                </button>
-              </div>
-            )}
+            {/* العنوان + ٣ نقاط ثقة في سطر واحد — الفورم يبدأ فوراً بعدها */}
+            <div>
+              <h1 className="text-xl font-extrabold leading-tight tracking-tight text-foreground">أنشئ حسابك 🚀</h1>
+              <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] font-medium text-muted-foreground">
+                {['14 يوم مجاناً', 'بدون بطاقة', 'جاهز في دقيقتين'].map((t) => (
+                  <li key={t} className="inline-flex items-center gap-1">
+                    <Check className="size-3 text-emerald-500" strokeWidth={3} />
+                    {t}
+                  </li>
+                ))}
+              </ul>
+            </div>
 
-            {/* Plan picker */}
-            {!planMeta && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-foreground">اختر الباقة</p>
-                  <Link href="/pricing" className="text-[11px] text-primary hover:underline">قارن الباقات ←</Link>
-                </div>
+            {/* Form */}
+            <form onSubmit={handleSubmit} noValidate className="space-y-4">
+              {/* الباقة — سطر واحد مضغوط (مختارة تلقائياً). الفتح بالضغط فقط */}
+              <div className="rounded-xl border border-border bg-muted/30">
                 {getFieldError('plan') && (
-                  <p className="text-xs text-destructive flex items-center gap-1 bg-destructive/5 border border-destructive/20 rounded-lg px-2.5 py-1.5">
+                  <p className="m-2 flex items-center gap-1 rounded-lg border border-destructive/20 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive">
                     <AlertCircle className="size-3 shrink-0" />{getFieldError('plan')}
                   </p>
                 )}
-                {plansLoading ? (
-                  <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-muted/30 py-6">
-                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">جاري تحميل الباقات...</span>
+                {plansLoading && !planMeta ? (
+                  <div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin" /> جاري تحميل الباقات...
                   </div>
                 ) : pickerEntries.length === 0 ? (
-                  <div className="rounded-xl border border-border bg-muted/30 px-4 py-6 text-center">
-                    <p className="text-xs font-bold text-foreground">لا توجد باقات متاحة حالياً</p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">يرجى التواصل معنا لمعرفة تفاصيل الاشتراك المتاح.</p>
-                  </div>
+                  <p className="px-3 py-3 text-xs text-muted-foreground">لا توجد باقات متاحة حالياً — تواصل معنا.</p>
                 ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  {pickerEntries.map(({ code, meta }) => {
-                    const Icon = meta.icon
-                    const isSelected = selectedPlan === code
-                    return (
-                      <button
-                        key={code}
-                        type="button"
-                        onClick={() => { setSelectedPlan(code); clearFieldError('plan') }}
-                        className={cn(
-                          'flex items-center gap-2.5 rounded-xl border-2 px-3 py-2.5 text-right transition-all duration-200',
-                          isSelected
-                            ? meta.cardSelected
-                            : cn(meta.cardBg, meta.cardBorder, 'hover:shadow-sm')
-                        )}
-                      >
-                        <Icon className={cn('size-4 shrink-0', meta.iconColor)} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold leading-tight text-foreground truncate">{meta.shortName}</p>
-                          <p className={cn('text-[11px] font-semibold', meta.iconColor)}>{meta.price}</p>
-                        </div>
-                        {isSelected && <Check className={cn('size-3.5 shrink-0', meta.iconColor)} />}
-                      </button>
-                    )
-                  })}
-                </div>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setChangingPlan(true)}
+                      aria-haspopup="dialog"
+                      className="flex min-h-12 w-full items-center gap-2.5 px-3 py-2 text-right"
+                    >
+                      {planMeta && (() => { const Icon = planMeta.icon; return <Icon className={cn('size-4 shrink-0', planMeta.iconColor)} /> })()}
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[10.5px] text-muted-foreground">الباقة (التجربة مجانية)</span>
+                        <span className="block truncate text-xs font-bold text-foreground">
+                          {planMeta ? `${planMeta.shortName} · ${planMeta.price}` : 'اختر الباقة'}
+                        </span>
+                      </span>
+                      <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-semibold text-primary">
+                        تغيير
+                        <ChevronDown className="size-3.5" />
+                      </span>
+                    </button>
+                  </>
                 )}
               </div>
-            )}
 
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-3">
 
               {/* Row 1: اسم المحل + اسم المسؤول */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <Field label="اسم المحل" required error={getFieldError('shopName')}>
-                  <Input type="text" placeholder="محل الاتصالات" icon={<Store className="size-4" />}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3">
+                <Field className="space-y-2.5" label="اسم المحل" required error={getFieldError('shopName')}>
+                  <Input type="text" placeholder="مثال: النور للموبايلات" icon={<Store className="size-4" />}
                     value={shopName} onChange={(e: any) => { setShopName(e.target.value); clearFieldError('shopName') }}
-                    disabled={loading} autoFocus required />
+                    disabled={loading} required autoComplete="organization" enterKeyHint="next" className="h-11 lg:h-10" />
                 </Field>
-                <Field label="اسم المسؤول" required error={getFieldError('name')}>
-                  <Input type="text" placeholder="الاسم الكامل" icon={<User className="size-4" />}
+                <Field className="space-y-2.5" label="اسم المسؤول" required error={getFieldError('name')}>
+                  <Input type="text" placeholder="مثال: أحمد محمد" icon={<User className="size-4" />}
                     value={name} onChange={(e: any) => { setName(e.target.value); clearFieldError('name') }}
-                    disabled={loading} required />
+                    disabled={loading} required autoComplete="name" enterKeyHint="next" className="h-11 lg:h-10" />
                 </Field>
               </div>
 
               {/* Row 2: البريد + الهاتف */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <Field label="البريد الإلكتروني" required error={getFieldError('email')}>
-                  <Input type="email" placeholder="name@example.com" icon={<Mail className="size-4" />}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3">
+                <Field className="space-y-2.5" label="البريد الإلكتروني" required error={getFieldError('email')}>
+                  <Input type="email" placeholder="example@gmail.com" icon={<Mail className="size-4" />}
                     value={email} onChange={(e: any) => { setEmail(e.target.value); clearFieldError('email') }}
-                    dir="ltr" className="text-left" disabled={loading} required />
+                    dir="ltr" className="text-left h-11 lg:h-10" disabled={loading} required autoComplete="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next" />
                 </Field>
-                <Field label="رقم الهاتف">
-                  <Input type="tel" placeholder="+20 1X XXXX" icon={<Phone className="size-4" />}
+                <Field className="space-y-2.5" label="رقم الهاتف">
+                  <Input type="tel" placeholder="01012345678" icon={<Phone className="size-4" />}
                     value={phone} onChange={(e: any) => setPhone(e.target.value)}
-                    dir="ltr" className="text-left" disabled={loading} />
+                    dir="ltr" className="text-left h-11 lg:h-10" disabled={loading} autoComplete="tel" inputMode="tel" enterKeyHint="next" />
                 </Field>
               </div>
 
               {/* كلمة المرور */}
-              <Field label="كلمة المرور" required error={getFieldError('password')} hint="الحد الأدنى 6 أحرف">
+              <Field className="space-y-2.5" label="كلمة المرور" required error={getFieldError('password')} hint="الحد الأدنى 6 أحرف">
                 <div className="relative">
-                  <Input type={showPass ? 'text' : 'password'} placeholder="••••••••"
+                  <Input type={showPass ? 'text' : 'password'} placeholder="••••••"
                     icon={<Lock className="size-4" />} value={password}
                     onChange={(e: any) => { setPassword(e.target.value); clearFieldError('password') }}
-                    dir="ltr" className="text-left pl-10" disabled={loading} required minLength={6} />
+                    dir="ltr" className="text-left pl-10 h-11 lg:h-10" disabled={loading} required minLength={6} autoComplete="new-password" autoCapitalize="none" enterKeyHint="done" />
                   <button type="button" onClick={() => setShowPass(!showPass)}
-                    className="absolute inset-y-0 left-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                    className="absolute inset-y-0 left-0 flex w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
                     tabIndex={-1} aria-label={showPass ? 'إخفاء' : 'إظهار'}>
                     {showPass ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                   </button>
@@ -471,52 +525,76 @@ function SignupContent() {
                   + عندك كود دعوة؟
                 </button>
               ) : (
-                <Field label="كود الدعوة (اختياري)">
-                  <Input type="text" placeholder="أدخل الكود" value={inviteCode}
+                <Field className="space-y-2.5" label="كود الدعوة (اختياري)">
+                  <Input type="text" placeholder="اكتب كود الدعوة" value={inviteCode}
                     onChange={(e: any) => setInviteCode(e.target.value)} disabled={loading} autoFocus />
                 </Field>
               )}
 
-              {/* Terms */}
-              <div className={cn(
-                'flex items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-colors',
-                getFieldError('agree') ? 'border-destructive/50 bg-destructive/5' : 'border-border bg-muted/30'
-              )}>
-                <Checkbox id="agree" checked={agree}
-                  onCheckedChange={(v: any) => { setAgree(v === true); clearFieldError('agree') }}
-                  className="mt-0.5 shrink-0" disabled={loading} />
-                <Label htmlFor="agree" className="cursor-pointer text-[11px] leading-relaxed text-muted-foreground">
-                  أوافق على{' '}
-                  <Link href="/terms-and-conditions" className="font-semibold text-primary hover:underline">الشروط</Link>
-                  {' '}و{' '}
-                  <Link href="/privacy-policy" className="font-semibold text-primary hover:underline">الخصوصية</Link>
-                  {' '}— تجربة 14 يوم مجانية.
-                </Label>
-              </div>
-              {getFieldError('agree') && (
-                <p className="text-xs text-destructive flex items-center gap-1">
-                  <AlertCircle className="size-3" />{getFieldError('agree')}
-                </p>
-              )}
+              {/* الموافقة ضمنية عند الضغط — بدل Checkbox إجباري كان بيوقف ناس كتير */}
+              <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+                بالضغط على «إنشاء الحساب» أنت توافق على{' '}
+                <Link href="/terms-and-conditions" className="font-semibold text-primary hover:underline">الشروط</Link>
+                {' '}و{' '}
+                <Link href="/privacy-policy" className="font-semibold text-primary hover:underline">الخصوصية</Link>
+                {' '}— تجربة 14 يوم مجانية بدون بطاقة.
+              </p>
 
+              {/* موبايل: الزر ثابت أسفل الشاشة (فوق الكيبورد) عشان محدّش يضيعه بالسكرول */}
+              <div className="sticky bottom-0 z-10 -mx-4 border-t bg-card/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur max-lg:rounded-b-2xl sm:-mx-5 sm:px-5 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
               <Button type="submit" variant="gradient" size="lg"
-                className="w-full gap-2 shadow-lg shadow-brand-500/20 h-10 text-sm font-semibold"
+                className="w-full gap-2 shadow-lg shadow-brand-500/20 h-12 lg:h-10 text-sm font-semibold"
                 disabled={loading}>
                 {loading
                   ? <><Loader2 className="size-4 animate-spin" />جاري الإنشاء...</>
                   : <><ShieldCheck className="size-4" />إنشاء الحساب وبدء التجربة<ArrowRight className="size-4 rtl:rotate-180" /></>
                 }
               </Button>
+              </div>
             </form>
 
-            {/* Footer */}
-            <div className="flex items-center justify-between pt-1">
-              <p className="text-[11px] text-muted-foreground">
-                لديك حساب؟{' '}
-                <Link href="/login" className="font-semibold text-primary hover:underline">سجل دخولك</Link>
-              </p>
-              <p className="text-[10px] text-muted-foreground/40">© 2026 نظام المحل</p>
-            </div>
+            <p className="text-center text-[10px] text-muted-foreground/50">© 2026 نظام المحل</p>
+
+            {/* اختيار الباقة: Bottom Sheet على الموبايل / دايلوج في النص على الشاشات الكبيرة */}
+            <Dialog open={changingPlan} onOpenChange={setChangingPlan}>
+              <DialogContent mobileSheet className="gap-3 p-4 pt-6 sm:max-w-md sm:p-6">
+                <DialogHeader>
+                  <DialogTitle className="text-base">اختر باقتك</DialogTitle>
+                  <DialogDescription className="text-xs">
+                    التجربة 14 يوم مجانية في كل الباقات — تقدر تغيّرها بعدين.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-2">
+                  {pickerEntries.map(({ code, meta }) => {
+                    const Icon = meta.icon
+                    const isSelected = selectedPlan === code
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => { setSelectedPlan(code); setChangingPlan(false); clearFieldError('plan') }}
+                        className={cn(
+                          'flex min-h-14 items-center gap-3 rounded-xl border-2 px-3.5 py-2.5 text-right transition-all active:scale-[0.99]',
+                          isSelected ? meta.cardSelected : cn(meta.cardBg, meta.cardBorder)
+                        )}
+                      >
+                        <Icon className={cn('size-5 shrink-0', meta.iconColor)} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-bold leading-tight text-foreground">{meta.shortName}</span>
+                          {meta.desc && <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{meta.desc}</span>}
+                        </span>
+                        <span className={cn('shrink-0 text-xs font-extrabold', meta.iconColor)}>{meta.price}</span>
+                        {isSelected && <Check className={cn('size-4 shrink-0', meta.iconColor)} />}
+                      </button>
+                    )
+                  })}
+                </div>
+                <Link href="/pricing" className="block pb-1 text-center text-[11px] text-primary hover:underline">
+                  قارن الباقات بالتفصيل ←
+                </Link>
+              </DialogContent>
+            </Dialog>
+
           </div>
         </motion.div>
       </div>

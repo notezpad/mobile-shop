@@ -26,6 +26,13 @@
  *       بشرائح ملوّنة لكل طريقة دفع.
  *    5. سجل التحصيل — رأس أزرق داكن ثابت (sticky) وصفوف بنك مونو.
  *
+ *  التجاوب (2026-10-10):
+ *    · الجوال: لافتة مضغوطة، كروت إحصائيات 2×2، مخطط بتسميات كل شهر تاني،
+ *      فلاتر شبكة عمودين + حبوب قنوات قابلة للسحب، سجل ككروت مجمّعة بالشهر
+ *      مع "عرض المزيد".
+ *    · sm/md/lg: كروت عمودين، والمخطط والدونات بعرض كامل.
+ *    · xl (≥1280): جدول كامل + 3 أعمدة للمخطط والقنوات.
+ *
  *  كل منطق البيانات (API endpoint + العقد + الحقول) زي ما هو بالظبط —
  *  تغيير العرض فقط + فلترة فورية على العميل:
  *    GET /api/admin/finance (مرة واحدة) · تصدير CSV كما هو حرفياً
@@ -55,6 +62,9 @@ import {
   Sigma,
   Activity,
   Coins,
+  ArrowRight,
+  ChevronDown,
+  Clock,
   type LucideIcon,
 } from 'lucide-react'
 import {
@@ -89,7 +99,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
-import { formatCurrency, formatShortDate } from '@/lib/format'
+import { formatArabicDateTime, formatCurrency, formatShortDate } from '@/lib/format'
 import { toast } from 'sonner'
 
 /* ───────────────────────── أنواع البيانات ───────────────────────── */
@@ -225,6 +235,65 @@ function shopInitials(name: string): string {
   return picked.map((w) => w[0]).join('')
 }
 
+/** ── مراقب media query — يُستخدم لاختيار عرض واحد فقط (جدول/كروت) بدل رسم الاثنين ── */
+function useMediaQuery(query: string): boolean {
+  return React.useSyncExternalStore(
+    (cb) => {
+      const m = window.matchMedia(query)
+      m.addEventListener('change', cb)
+      return () => m.removeEventListener('change', cb)
+    },
+    () => window.matchMedia(query).matches,
+    () => false,
+  )
+}
+
+/** مبلغ بدون وحدة: 6638.5 → "6,638.5" (الوحدة "جنيه" تُعرض منفصلة بحجم أصغر) */
+function moneyNum(n: number): string {
+  return Number(n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+/** مبلغ مختصر للخلايا الضيقة: <100 ألف رقم كامل، وفوقها "123.4 ألف" */
+function shortMoney(n: number): string {
+  return Math.abs(n) >= 100000 ? compactNum(n) : monoShort(n)
+}
+
+function monthKey(date: string): string {
+  const d = new Date(date)
+  return Number.isNaN(d.getTime()) ? 'na' : `${d.getFullYear()}-${d.getMonth()}`
+}
+
+function monthTitle(date: string): string {
+  const d = new Date(date)
+  return Number.isNaN(d.getTime()) ? 'تاريخ غير محدد' : `${ARABIC_MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}`
+}
+
+/** ── خلية إحصائية صغيرة داخل لافتة الهيرو — شبكة 3 أعمدة على الجوال ── */
+function HeroStat({
+  icon: Icon,
+  label,
+  value,
+  sub,
+}: {
+  icon: LucideIcon
+  label: string
+  value: React.ReactNode
+  sub: string
+}) {
+  return (
+    <div className="min-w-0 rounded-xl border border-white/10 bg-white/5 px-2 py-2 backdrop-blur sm:px-3.5 sm:py-2.5">
+      <p className="flex items-center gap-1 text-[10px] font-bold text-sky-200/75 sm:text-[11px]">
+        <Icon aria-hidden className="hidden size-3 shrink-0 text-sky-300 sm:block" />
+        <span className="truncate">{label}</span>
+      </p>
+      <p dir="rtl" className="mt-1 truncate font-mono text-[13px] font-black tabular-nums text-white sm:text-sm">
+        {value}
+      </p>
+      <p className="mt-0.5 truncate text-[10px] text-blue-200/55">{sub}</p>
+    </div>
+  )
+}
+
 /* ═══════════════════ مكوّنات الهوية ═══════════════════ */
 
 /** ── شريط التداول — معاملات تتدفق كشريط بورصة لا نهائي ── */
@@ -259,7 +328,9 @@ function TickerTape({ items }: { items: Tx[] }) {
   )
 }
 
-/** ── أبراج الأفق — 12 برجاً بارتفاع ∝ إيراد الشهر ── */
+/** ── أبراج الأفق — 12 برجاً بارتفاع ∝ إيراد الشهر ──
+ *  الزر نفسه بطول العمود كاملاً (منطقة لمس عالية على الجوال)
+ *  والبرج المرئي بداخله. */
 function SkylineTowers({
   monthly,
   yearOf,
@@ -273,8 +344,8 @@ function SkylineTowers({
 }) {
   const max = Math.max(...monthly.map((m) => m.revenue), 1)
   return (
-    <div className="mt-3">
-      <div dir="ltr" className="flex h-32 items-end gap-[3px] sm:h-36 sm:gap-1.5">
+    <div className="mt-3 flex flex-1 flex-col">
+      <div dir="ltr" className="flex h-28 items-end gap-[3px] sm:h-36 sm:gap-1.5 xl:h-auto xl:min-h-36 xl:flex-1">
         {monthly.map((m, i) => {
           const pct = Math.max((m.revenue / max) * 100, 2.5)
           const isNow = i === monthly.length - 1
@@ -290,36 +361,40 @@ function SkylineTowers({
               aria-label={`برج ${label}${isNow ? ' — الشهر الحالي' : ''}`}
               aria-pressed={isSelected}
               onClick={() => onPick(i)}
-              className={cn(
-                'group relative flex-1 cursor-pointer rounded-t-[3px] outline-none transition-[filter,transform] focus-visible:ring-2 focus-visible:ring-sky-300',
-                !isZero && 'hover:brightness-125 focus-visible:brightness-125',
-                isNow && 'hover:-translate-y-0.5',
-              )}
-              style={{
-                height: `${pct}%`,
-                background: isZero
-                  ? 'rgba(30,58,138,0.35)'
-                  : isNow
-                    ? 'linear-gradient(180deg, rgba(224,242,254,0.95) 0%, rgba(2,132,199,0.92) 100%)'
-                    : 'linear-gradient(180deg, rgba(125,211,252,0.8) 0%, rgba(30,58,138,0.9) 100%)',
-                opacity: isZero ? 0.5 : 1,
-              }}
+              className="group relative flex h-full min-w-0 flex-1 cursor-pointer items-end rounded-t-[3px] outline-none [-webkit-tap-highlight-color:transparent] focus-visible:ring-2 focus-visible:ring-sky-300"
             >
-              {!isZero && (
-                <span aria-hidden className="absolute inset-0 rounded-t-[3px]" style={TOWER_WINDOWS} />
-              )}
-              {isNow && (
-                <span
-                  aria-hidden
-                  className="absolute -top-2 left-1/2 size-[7px] -translate-x-1/2 rounded-full bg-sky-100 shadow-[0_0_10px_2px_rgba(125,211,252,0.9)] animate-pulse"
-                />
-              )}
-              {isSelected && (
-                <span
-                  aria-hidden
-                  className="absolute inset-0 rounded-t-[3px] ring-2 ring-inset ring-sky-300"
-                />
-              )}
+              <span
+                className={cn(
+                  'relative block w-full rounded-t-[3px] transition-[filter,transform] group-active:brightness-125',
+                  !isZero && 'group-hover:brightness-125 group-focus-visible:brightness-125',
+                  isNow && 'group-hover:-translate-y-0.5',
+                )}
+                style={{
+                  height: `${pct}%`,
+                  background: isZero
+                    ? 'rgba(30,58,138,0.35)'
+                    : isNow
+                      ? 'linear-gradient(180deg, rgba(224,242,254,0.95) 0%, rgba(2,132,199,0.92) 100%)'
+                      : 'linear-gradient(180deg, rgba(125,211,252,0.8) 0%, rgba(30,58,138,0.9) 100%)',
+                  opacity: isZero ? 0.5 : 1,
+                }}
+              >
+                {!isZero && (
+                  <span aria-hidden className="absolute inset-0 rounded-t-[3px]" style={TOWER_WINDOWS} />
+                )}
+                {isNow && (
+                  <span
+                    aria-hidden
+                    className="absolute -top-2 left-1/2 size-[7px] -translate-x-1/2 animate-pulse rounded-full bg-sky-100 shadow-[0_0_10px_2px_rgba(125,211,252,0.9)]"
+                  />
+                )}
+                {isSelected && (
+                  <span
+                    aria-hidden
+                    className="absolute inset-0 rounded-t-[3px] ring-2 ring-inset ring-sky-300"
+                  />
+                )}
+              </span>
             </button>
           )
         })}
@@ -331,13 +406,16 @@ function SkylineTowers({
       />
       <div
         dir="ltr"
-        className="mt-1.5 flex items-center justify-between font-mono text-[10px] text-blue-200/60"
+        className="mt-1.5 flex items-center justify-between gap-2 font-mono text-[10px] text-blue-200/60"
       >
-        <span>
+        <span className="truncate">
           {monthly[0]?.month} {yearOf(0)}
         </span>
-        <span className="text-sky-300/80">الأحدث ←</span>
-        <span>
+        <span className="inline-flex shrink-0 items-center gap-1 font-sans text-sky-300/80">
+          الأحدث
+          <ArrowRight aria-hidden className="size-3" />
+        </span>
+        <span className="truncate">
           {monthly[monthly.length - 1]?.month} {yearOf(monthly.length - 1)}
         </span>
       </div>
@@ -373,12 +451,14 @@ function DeltaChip({ pct, label }: { pct: number | null; label: string }) {
   )
 }
 
-/** ── لوح الأسعار — إحصائية كلوح تداول برمز تِكِر ── */
+/** ── لوح الأسعار — إحصائية كلوح تداول برمز تِكِر ──
+ *  على الجوال: كرت مضغوط (2×2) — الأيقونة والتسمية فوق، الرقم الكبير والوحدة
+ *  بحجم أصغر جنبه، ورمز التِكِر مخفي. من sm فوق: التصميم الكامل. */
 function QuoteTile({
   symbol,
   label,
   icon: Icon,
-  value,
+  amount,
   tone,
   sub,
   delay,
@@ -386,40 +466,41 @@ function QuoteTile({
   symbol: string
   label: string
   icon: LucideIcon
-  value: string
+  amount: number
   tone: string
   sub?: React.ReactNode
   delay: number
 }) {
   return (
     <div
-      className="animate-in-up group relative overflow-hidden rounded-2xl border bg-card p-4 shadow-sm"
+      className="animate-in-up group relative min-w-0 overflow-hidden rounded-2xl border bg-card p-3 shadow-sm sm:p-4"
       style={{ animationDelay: `${delay}ms` }}
     >
       <div aria-hidden className="absolute inset-x-0 top-0 h-[3px]" style={{ background: tone }} />
       <Icon
         aria-hidden
-        className="absolute -bottom-4 -end-3 size-20 -rotate-12 opacity-[0.06] transition-opacity group-hover:opacity-[0.1]"
+        className="absolute -bottom-4 -end-3 hidden size-20 -rotate-12 opacity-[0.06] transition-opacity group-hover:opacity-[0.1] sm:block"
         style={{ color: tone }}
         strokeWidth={1.4}
       />
-      <div className="relative flex items-center justify-between gap-2">
-        <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-bold text-muted-foreground">
-          <Icon className="size-4 shrink-0" style={{ color: tone }} />
-          <span className="truncate">{label}</span>
+      <div className="relative flex items-start justify-between gap-2">
+        <span className="inline-flex min-w-0 items-start gap-1.5 text-[11px] font-bold leading-snug text-muted-foreground sm:items-center sm:text-xs">
+          <Icon className="mt-px size-3.5 shrink-0 sm:mt-0 sm:size-4" style={{ color: tone }} />
+          <span className="sm:truncate">{label}</span>
         </span>
         <span
           dir="ltr"
-          className="shrink-0 rounded bg-blue-950 px-1.5 py-0.5 font-mono text-[9.5px] font-bold tracking-[0.18em] text-sky-300"
+          className="hidden shrink-0 rounded bg-blue-950 px-1.5 py-0.5 font-mono text-[9.5px] font-bold tracking-[0.18em] text-sky-300 sm:block"
         >
           {symbol}
         </span>
       </div>
       <p
         dir="rtl"
-        className="relative mt-2.5 font-mono text-xl font-black tabular-nums text-blue-950 dark:text-blue-50 sm:text-2xl"
+        className="relative mt-2 flex flex-wrap items-baseline gap-x-1 font-mono text-[19px] font-black leading-tight tabular-nums text-blue-950 sm:mt-2.5 sm:text-2xl dark:text-blue-50"
       >
-        {value}
+        <span>{moneyNum(amount)}</span>
+        <span className="font-sans text-[10px] font-bold text-muted-foreground sm:text-xs">جنيه</span>
       </p>
       <div className="relative mt-1.5 flex min-h-6 flex-wrap items-center gap-1.5">{sub}</div>
     </div>
@@ -460,8 +541,8 @@ function MethodChip({ method }: { method: string }) {
 /** ── شريحة الباقة + الفترة ── */
 function PlanTag({ tx }: { tx: Tx }) {
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="inline-flex max-w-[150px] items-center truncate rounded-md border border-blue-700/25 bg-blue-700/5 px-1.5 py-0.5 text-[10.5px] font-bold text-blue-800 dark:border-blue-300/20 dark:bg-blue-400/10 dark:text-blue-200">
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      <span className="inline-flex min-w-0 max-w-[170px] items-center truncate rounded-md border border-blue-700/25 bg-blue-700/5 px-1.5 py-0.5 text-[10.5px] font-bold text-blue-800 dark:border-blue-300/20 dark:bg-blue-400/10 dark:text-blue-200">
         {tx.planName}
       </span>
       {tx.period && (
@@ -489,7 +570,9 @@ function ShopGlyph({ name }: { name: string }) {
   )
 }
 
-/** ── قنوات التحصيل — دونات conic مخصصة + وسائل إيضاح ── */
+/** ── قنوات التحصيل — دونات conic مخصصة + وسائل إيضاح ──
+ *  التخطيط: عمودي على الجوال، أفقي في المتوسط (بطاقة بعرض كامل)،
+ *  وعمودي تاني في xl (البطاقة بتبقى ثلث الصف). */
 function MethodDonut({
   methods,
   total,
@@ -514,9 +597,9 @@ function MethodDonut({
     .join(', ')
 
   return (
-    <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
+    <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-8 xl:flex-col xl:items-center xl:gap-5">
       <div
-        className="relative size-40 shrink-0 rounded-full shadow-[0_0_0_6px rgba(14,165,233,0.06)]"
+        className="relative size-36 shrink-0 rounded-full shadow-[0_0_0_6px_rgba(14,165,233,0.06)] sm:size-40"
         style={{ background: `conic-gradient(${conic})` }}
         role="img"
         aria-label={`توزيع ${formatCurrency(total)} على ${methods.length} قنوات تحصيل`}
@@ -532,7 +615,7 @@ function MethodDonut({
         </div>
       </div>
 
-      <ul className="w-full min-w-0 space-y-3">
+      <ul className="w-full min-w-0 flex-1 space-y-3 xl:flex-none">
         {segs.map((s) => {
           const meta = METHOD_META[s.method] ?? { label: s.method, icon: Minus }
           const Icon = meta.icon
@@ -567,7 +650,7 @@ function MethodDonut({
                 <span className="w-9 shrink-0 text-end font-mono text-[10px] font-bold tabular-nums text-muted-foreground">
                   {sharePct}%
                 </span>
-                <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/70">
+                <span className="w-14 shrink-0 text-end font-mono text-[10px] tabular-nums text-muted-foreground/70">
                   {s.count} عملية
                 </span>
               </div>
@@ -720,7 +803,10 @@ export function AdminFinanceView() {
         return d.getMonth() === target.getMonth() && d.getFullYear() === target.getFullYear()
       })
     }
-    if (sort === 'oldest') list.reverse()
+    // الأحدث/الأقدم بالتاريخ صراحةً (مش بترتيب الـ API) — التجميع بالشهر في الكروت بيعتمد عليه
+    const ts = (t: Tx) => new Date(t.date).getTime() || 0
+    if (sort === 'newest') list.sort((a, b) => ts(b) - ts(a))
+    else if (sort === 'oldest') list.sort((a, b) => ts(a) - ts(b))
     else if (sort === 'highest') list.sort((a, b) => b.amount - a.amount)
     else if (sort === 'lowest') list.sort((a, b) => a.amount - b.amount)
     return list
@@ -742,18 +828,56 @@ export function AdminFinanceView() {
 
   const monthLabel = (i: number) => `${data?.monthly[i]?.month ?? ''} ${yearOf(i)}`
 
+  /* ── استجابة: نفس نقاط Tailwind (sm=640 · xl=1280) ──
+     xl+ → جدول كامل · أقل → كروت (عرض واحد فقط يُرسم في الـ DOM) */
+  const isSm = useMediaQuery('(min-width: 640px)')
+  const isXl = useMediaQuery('(min-width: 1280px)')
+  const pageSize = isXl ? 50 : 12
+  const [limit, setLimit] = React.useState(pageSize)
+  React.useEffect(() => {
+    setLimit(pageSize)
+  }, [pageSize, search, methodFilter, statusFilter, monthIdx, sort])
+
+  const shown = React.useMemo(() => filtered.slice(0, limit), [filtered, limit])
+  const remaining = filtered.length - shown.length
+
+  /* تجميع الكروت بالشهر (مع إجمالي كل شهر من القائمة المصفّاة كاملة) */
+  const groupByMonth = sort === 'newest' || sort === 'oldest'
+  const monthTotals = React.useMemo(() => {
+    const map = new Map<string, { count: number; sum: number }>()
+    for (const t of filtered) {
+      const k = monthKey(t.date)
+      const g = map.get(k) ?? { count: 0, sum: 0 }
+      g.count += 1
+      g.sum += t.amount
+      map.set(k, g)
+    }
+    return map
+  }, [filtered])
+  const groups = React.useMemo(() => {
+    if (!groupByMonth) return [{ key: 'all', label: '', items: shown }]
+    const out: Array<{ key: string; label: string; items: Tx[] }> = []
+    for (const t of shown) {
+      const k = monthKey(t.date)
+      const last = out[out.length - 1]
+      if (last && last.key === k) last.items.push(t)
+      else out.push({ key: k, label: monthTitle(t.date), items: [t] })
+    }
+    return out
+  }, [shown, groupByMonth])
+
   /* ═══════════ تحميل أولي — هياكل عظمية ═══════════ */
   if (loading && !data) {
     return (
-      <div className="space-y-5">
-        <Skeleton className="h-[420px] w-full rounded-3xl sm:h-[380px]" />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="space-y-4 sm:space-y-5">
+        <Skeleton className="h-[470px] w-full rounded-3xl sm:h-[380px]" />
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-32 rounded-2xl" />
+            <Skeleton key={i} className="h-28 rounded-2xl sm:h-32" />
           ))}
         </div>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <Skeleton className="h-80 rounded-2xl lg:col-span-2" />
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <Skeleton className="h-72 rounded-2xl sm:h-80 xl:col-span-2" />
           <Skeleton className="h-80 rounded-2xl" />
         </div>
         <Skeleton className="h-96 rounded-2xl" />
@@ -765,12 +889,19 @@ export function AdminFinanceView() {
 
   const tickerItems = data.transactions.slice(0, 14)
   const total = data.transactions.length
+  const chipBase =
+    'inline-flex items-center gap-1 rounded-md border border-blue-700/25 bg-blue-700/10 px-2 py-1 text-[10.5px] font-semibold text-blue-800 dark:border-blue-300/20 dark:bg-blue-400/10 dark:text-blue-200'
+  const pillBase =
+    'inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[11px] font-bold transition-all sm:h-8 sm:px-2.5'
+  const pillOn = 'border-blue-800 bg-blue-950 text-sky-200 shadow-sm dark:border-blue-300/40 dark:bg-blue-900'
+  const pillOff =
+    'border-border bg-muted/40 text-muted-foreground hover:border-blue-700/40 hover:bg-blue-700/5'
 
   /* ═══════════ الصفحة ═══════════ */
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {/* ─────────── لافتة أفق الإيرادات ─────────── */}
-      <section className="animate-in-up relative overflow-hidden rounded-3xl border border-blue-800/60 bg-gradient-to-b from-blue-950 via-blue-900 to-blue-950 text-blue-50 shadow-lg shadow-blue-950/25 dark:border-blue-800/40 dark:shadow-none">
+      <section className="animate-in-up relative overflow-hidden rounded-2xl border border-blue-800/60 bg-gradient-to-b from-blue-950 via-blue-900 to-blue-950 text-blue-50 shadow-lg shadow-blue-950/25 sm:rounded-3xl dark:border-blue-800/40 dark:shadow-none">
         <div aria-hidden className="absolute inset-0" style={STARS} />
         <div
           aria-hidden
@@ -782,9 +913,9 @@ export function AdminFinanceView() {
           strokeWidth={1.2}
         />
 
-        <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.1fr_1fr] lg:items-stretch">
+        <div className="relative grid gap-4 p-4 sm:gap-6 sm:p-7 xl:grid-cols-[1.1fr_1fr] xl:items-stretch">
           {/* النص والأرقام */}
-          <div className="min-w-0 space-y-4">
+          <div className="min-w-0 space-y-3.5 sm:space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-300/30 bg-sky-400/10 px-3 py-1 text-[11px] font-bold text-sky-200 backdrop-blur">
                 <Landmark className="size-3.5" />
@@ -792,28 +923,28 @@ export function AdminFinanceView() {
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-blue-100/80 backdrop-blur">
                 <Activity className="size-3.5" />
-                آخر 12 شهراً · {data.count} معاملة
+                12 شهراً · {data.count} معاملة
               </span>
             </div>
 
             <div>
               <h1 className="text-2xl font-black tracking-tight text-white sm:text-3xl">الإيرادات</h1>
-              <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-blue-100/75">
+              <p className="mt-1.5 hidden max-w-xl text-sm leading-relaxed text-blue-100/75 sm:block">
                 كل جنيه يدخل المنصة — أبراج الشهور، قنوات التحصيل، وسجل كل معاملة،
                 في أفق واحد.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
+            <div className="flex flex-wrap items-end gap-x-5 gap-y-2.5">
               <div className="min-w-0">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-sky-300/80">
                   إجمالي إيرادات 12 شهراً
                 </p>
-                <p
-                  dir="rtl"
-                  className="bg-gradient-to-l from-white via-sky-200 to-sky-400 bg-clip-text font-mono text-4xl font-black tabular-nums text-transparent sm:text-5xl"
-                >
-                  {formatCurrency(data.totalRevenue)}
+                <p dir="rtl" className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="bg-gradient-to-l from-white via-sky-200 to-sky-400 bg-clip-text font-mono text-[clamp(2rem,10.5vw,3rem)] font-black leading-tight tabular-nums text-transparent">
+                    {moneyNum(data.totalRevenue)}
+                  </span>
+                  <span className="text-sm font-bold text-sky-300/80 sm:text-base">جنيه</span>
                 </p>
               </div>
               <DeltaChip
@@ -822,22 +953,28 @@ export function AdminFinanceView() {
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 text-xs font-bold text-blue-100/85 backdrop-blur">
-                <Building2 className="size-3.5 text-sky-300" />
-                أفضل شهر: {stats.best.month} · {monoShort(stats.best.revenue)} ج
-              </span>
-              <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 text-xs font-bold text-blue-100/85 backdrop-blur">
-                <Sigma className="size-3.5 text-sky-300" />
-                متوسط شهري {monoShort(data.avgMonthly)} ج
-              </span>
-              <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 text-xs font-bold text-blue-100/85 backdrop-blur">
-                <Coins className="size-3.5 text-sky-300" />
-                {total} معاملة مسجّلة
-              </span>
+            <div className="grid grid-cols-3 gap-2 sm:max-w-xl">
+              <HeroStat
+                icon={Building2}
+                label="أفضل شهر"
+                value={`${shortMoney(stats.best.revenue)} ج`}
+                sub={`${stats.best.month} ${stats.bestYear}`}
+              />
+              <HeroStat
+                icon={Sigma}
+                label="متوسط شهري"
+                value={`${shortMoney(data.avgMonthly)} ج`}
+                sub="آخر 12 شهراً"
+              />
+              <HeroStat
+                icon={Coins}
+                label="المعاملات"
+                value={String(total)}
+                sub="معاملة مسجّلة"
+              />
             </div>
 
-            <div className="flex flex-wrap gap-2 pt-1">
+            <div className="grid grid-cols-[1fr_auto] gap-2 pt-0.5 sm:flex sm:flex-wrap sm:pt-1">
               <Button
                 onClick={exportCSV}
                 className="h-11 gap-2 rounded-xl border border-sky-200/50 bg-gradient-to-l from-sky-300 to-blue-500 px-5 font-black text-blue-950 shadow-[0_10px_26px_-10px_rgba(56,189,248,0.75)] transition-all hover:from-sky-200 hover:to-blue-400 hover:shadow-[0_14px_30px_-10px_rgba(56,189,248,0.85)] active:scale-[0.97]"
@@ -849,22 +986,23 @@ export function AdminFinanceView() {
                 variant="outline"
                 onClick={load}
                 disabled={refreshing}
-                className="h-11 gap-2 rounded-xl border-white/20 bg-white/5 px-4 font-bold text-sky-100 backdrop-blur hover:border-sky-300/50 hover:bg-sky-400/10 hover:text-white"
+                aria-label="تحديث البيانات"
+                className="h-11 gap-2 rounded-xl border-white/20 bg-white/5 px-3.5 font-bold text-sky-100 backdrop-blur hover:border-sky-300/50 hover:bg-sky-400/10 hover:text-white sm:px-4"
               >
                 <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
-                تحديث
+                <span className="hidden sm:inline">تحديث</span>
               </Button>
             </div>
           </div>
 
           {/* لوحة الأفق — أبراج الشهور */}
-          <div className="relative flex min-w-0 flex-col rounded-2xl border border-white/10 bg-blue-950/50 p-4 backdrop-blur">
-            <div className="flex items-center justify-between gap-2">
+          <div className="relative flex min-w-0 flex-col rounded-2xl border border-white/10 bg-blue-950/50 p-3 backdrop-blur sm:p-4 xl:min-h-[300px]">
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
               <p className="flex items-center gap-1.5 text-[11px] font-bold text-sky-200/85">
                 <Building2 className="size-3.5" />
                 أفق الإيرادات — برج لكل شهر
               </p>
-              <span className="hidden text-[10px] text-blue-200/50 sm:block">اضغط برجاً لتصفية السجل</span>
+              <span className="text-[10px] text-blue-200/50">اضغط برجاً لتصفية السجل</span>
             </div>
             <SkylineTowers
               monthly={data.monthly}
@@ -880,7 +1018,7 @@ export function AdminFinanceView() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-7 gap-1 rounded-lg px-2 text-[11px] text-blue-200/70 hover:bg-white/10 hover:text-white"
+                  className="h-8 gap-1 rounded-lg px-2 text-[11px] text-blue-200/70 hover:bg-white/10 hover:text-white"
                   onClick={() => setMonthIdx(null)}
                 >
                   <X className="size-3" />
@@ -894,13 +1032,14 @@ export function AdminFinanceView() {
         {/* شريط التداول — آخر المعاملات تتدفق */}
         {tickerItems.length > 0 && (
           <div className="relative border-t border-white/10 bg-black/30 px-3 py-2 backdrop-blur">
-            <div className="flex items-center gap-3">
-              <span className="hidden shrink-0 items-center gap-1.5 rounded-full border border-rose-300/30 bg-rose-500/15 px-2.5 py-1 text-[10px] font-black text-rose-200 sm:inline-flex">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-rose-300/30 bg-rose-500/15 px-2 py-1 text-[10px] font-black text-rose-200 sm:px-2.5">
                 <span aria-hidden className="relative flex size-1.5">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-300 opacity-75" />
                   <span className="relative inline-flex size-1.5 rounded-full bg-rose-300" />
                 </span>
-                مباشر
+                <span className="hidden sm:inline">مباشر</span>
+                <span className="sr-only sm:hidden">مباشر</span>
               </span>
               <TickerTape items={tickerItems} />
             </div>
@@ -908,13 +1047,13 @@ export function AdminFinanceView() {
         )}
       </section>
 
-      {/* ─────────── لوحات الأسعار ─────────── */}
-      <section className="animate-in-up stagger-1 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {/* ─────────── لوحات الأسعار — 2×2 على الجوال ─────────── */}
+      <section className="animate-in-up stagger-1 grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
         <QuoteTile
           symbol="REV·D"
           label="إيرادات اليوم"
           icon={Calendar}
-          value={formatCurrency(data.dailyRevenue)}
+          amount={data.dailyRevenue}
           tone="#38bdf8"
           delay={0}
           sub={
@@ -929,11 +1068,11 @@ export function AdminFinanceView() {
           symbol="REV·M"
           label="إيرادات الشهر الحالي"
           icon={CalendarDays}
-          value={formatCurrency(data.monthlyRevenue)}
+          amount={data.monthlyRevenue}
           tone="#fbbf24"
           delay={70}
           sub={
-            <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex flex-wrap items-center gap-1.5">
               <span
                 className={cn(
                   'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10.5px] font-black tabular-nums',
@@ -956,7 +1095,7 @@ export function AdminFinanceView() {
           symbol="REV·Y"
           label="إيرادات السنة"
           icon={CalendarRange}
-          value={formatCurrency(data.yearlyRevenue)}
+          amount={data.yearlyRevenue}
           tone="#1d4ed8"
           delay={140}
           sub={
@@ -969,11 +1108,11 @@ export function AdminFinanceView() {
           symbol="AVG·12"
           label="المتوسط الشهري"
           icon={Sigma}
-          value={formatCurrency(data.avgMonthly)}
+          amount={data.avgMonthly}
           tone="#7dd3fc"
           delay={210}
           sub={
-            <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex flex-wrap items-center gap-1.5">
               <span
                 className={cn(
                   'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10.5px] font-black tabular-nums',
@@ -987,24 +1126,25 @@ export function AdminFinanceView() {
                 {(stats.avgPct ?? 0).toLocaleString('en-US')}%
               </span>
               <span className="text-[11px] font-semibold text-muted-foreground">
-                الشهر الحالي مقابل المتوسط
+                <span className="sm:hidden">مقابل المتوسط</span>
+                <span className="hidden sm:inline">الشهر الحالي مقابل المتوسط</span>
               </span>
             </span>
           }
         />
       </section>
 
-      {/* ─────────── المخطط + قنوات التحصيل ─────────── */}
-      <section className="animate-in-up stagger-2 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      {/* ─────────── المخطط + قنوات التحصيل (ثلاثة أعمدة من xl فقط) ─────────── */}
+      <section className="animate-in-up stagger-2 grid grid-cols-1 gap-4 xl:grid-cols-3">
         {/* مخطط الأداء الشهري */}
-        <Card className="border-blue-900/15 shadow-sm dark:border-blue-300/10 lg:col-span-2">
-          <CardContent className="p-4 sm:p-5">
+        <Card className="min-w-0 gap-0 border-blue-900/15 py-1.5 shadow-sm sm:gap-6 sm:py-6 xl:col-span-2 dark:border-blue-300/10">
+          <CardContent className="p-3.5 sm:p-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="grid size-8 place-items-center rounded-lg bg-blue-950 text-sky-300">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-blue-950 text-sky-300">
                   <Activity className="size-4" />
                 </span>
-                <div>
+                <div className="min-w-0">
                   <h2 className="text-sm font-black text-foreground">أداء الإيرادات الشهري</h2>
                   <p className="text-[10.5px] text-muted-foreground">
                     اضغط أي عمود لتصفية سجل التحصيل بشهره
@@ -1015,7 +1155,7 @@ export function AdminFinanceView() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 gap-1 rounded-lg border-blue-700/30 bg-blue-700/5 px-2 text-[11px] font-bold text-blue-800 hover:bg-blue-700/10 dark:border-blue-300/20 dark:bg-blue-400/10 dark:text-blue-200"
+                  className="h-8 gap-1 rounded-lg border-blue-700/30 bg-blue-700/5 px-2 text-[11px] font-bold text-blue-800 hover:bg-blue-700/10 dark:border-blue-300/20 dark:bg-blue-400/10 dark:text-blue-200"
                   onClick={() => setMonthIdx(null)}
                 >
                   <X className="size-3" />
@@ -1024,9 +1164,13 @@ export function AdminFinanceView() {
               )}
             </div>
 
-            <div role="img" aria-label="مخطط أعمدة الإيرادات لآخر 12 شهراً">
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={chartData} barCategoryGap="26%" margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
+            <div role="img" aria-label="مخطط أعمدة الإيرادات لآخر 12 شهراً" dir="ltr">
+              <ResponsiveContainer width="100%" height={isSm ? 280 : 220}>
+                <BarChart
+                  data={chartData}
+                  barCategoryGap={isSm ? '26%' : '18%'}
+                  margin={{ top: 8, right: 2, left: 0, bottom: 0 }}
+                >
                   <defs>
                     <linearGradient id="fxTower" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#38bdf8" />
@@ -1045,15 +1189,19 @@ export function AdminFinanceView() {
                   <XAxis
                     dataKey="month"
                     interval={0}
-                    tickFormatter={(m: string) => m.slice(0, 3)}
-                    tick={{ fontSize: 11, className: 'fill-muted-foreground' }}
+                    /* الجوال: كل شهر تاني (والشهر الحالي دايماً ظاهر) عشان التسميات متتداخلش */
+                    tickFormatter={(m: string, i: number) =>
+                      isSm || (chartData.length - 1 - i) % 2 === 0 ? m.slice(0, 3) : ''
+                    }
+                    tick={{ fontSize: isSm ? 11 : 10, className: 'fill-muted-foreground' }}
                     axisLine={{ stroke: 'rgba(100,116,139,0.3)' }}
                     tickLine={false}
                   />
                   <YAxis
+                    orientation="left"
                     tickFormatter={(v: number) => compactNum(v)}
-                    tick={{ fontSize: 10.5, className: 'fill-muted-foreground' }}
-                    width={46}
+                    tick={{ fontSize: isSm ? 10.5 : 9.5, className: 'fill-muted-foreground' }}
+                    width={isSm ? 46 : 40}
                     axisLine={false}
                     tickLine={false}
                   />
@@ -1066,12 +1214,6 @@ export function AdminFinanceView() {
                     stroke="#0ea5e9"
                     strokeOpacity={0.55}
                     strokeDasharray="5 5"
-                    label={{
-                      value: 'المتوسط',
-                      position: 'insideTopRight',
-                      fill: '#0ea5e9',
-                      fontSize: 10,
-                    }}
                   />
                   <Bar
                     dataKey="revenue"
@@ -1104,17 +1246,32 @@ export function AdminFinanceView() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+
+            {/* وسيلة إيضاح — بدل تسمية "المتوسط" اللي كانت بتتقص على الجوال */}
+            <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10.5px] font-semibold text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden className="w-4 border-t-2 border-dashed border-sky-500/70" />
+                المتوسط الشهري{' '}
+                <span dir="rtl" className="font-mono tabular-nums">
+                  {monoShort(data.avgMonthly)} ج
+                </span>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden className="size-2 rounded-sm bg-gradient-to-b from-sky-100 to-sky-600" />
+                الشهر الحالي
+              </span>
+            </div>
           </CardContent>
         </Card>
 
         {/* قنوات التحصيل */}
-        <Card className="border-blue-900/15 shadow-sm dark:border-blue-300/10">
-          <CardContent className="p-4 sm:p-5">
+        <Card className="min-w-0 gap-0 border-blue-900/15 py-1.5 shadow-sm sm:gap-6 sm:py-6 dark:border-blue-300/10">
+          <CardContent className="p-3.5 sm:p-5">
             <div className="mb-4 flex items-center gap-2">
-              <span className="grid size-8 place-items-center rounded-lg bg-blue-950 text-sky-300">
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-blue-950 text-sky-300">
                 <Wallet className="size-4" />
               </span>
-              <div>
+              <div className="min-w-0">
                 <h2 className="text-sm font-black text-foreground">قنوات التحصيل</h2>
                 <p className="text-[10.5px] text-muted-foreground">
                   توزيع {formatCurrency(data.totalRevenue)} على طرق الدفع
@@ -1128,29 +1285,33 @@ export function AdminFinanceView() {
 
       {/* ─────────── شريط الأوامر ─────────── */}
       <section className="animate-in-up stagger-3 rounded-2xl border bg-card p-3 shadow-sm sm:p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-44 flex-1">
-            <Search className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        {/* شبكة عمودين على الجوال: البحث بعرض كامل، الشهر|الحالة، ثم الترتيب بعرض كامل */}
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <div className="relative col-span-2 min-w-0 sm:min-w-44 sm:flex-1">
+            <Search className="pointer-events-none absolute start-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              type="search"
+              inputMode="search"
+              enterKeyHint="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ابحث في السجل — محل، باقة، مبلغ…"
-              className="h-10 rounded-xl border-blue-900/15 bg-background ps-9 text-sm shadow-none dark:border-blue-300/10"
+              placeholder="ابحث: محل، باقة، مبلغ…"
+              className="h-11 rounded-xl border-blue-900/15 bg-background ps-9 pe-9 text-base shadow-none sm:h-10 sm:text-sm dark:border-blue-300/10 [&::-webkit-search-cancel-button]:hidden"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch('')}
                 aria-label="مسح البحث"
-                className="absolute end-2 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="absolute end-1.5 top-1/2 z-10 grid size-8 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
-                <X className="size-3.5" />
+                <X className="size-4" />
               </button>
             )}
           </div>
 
           <Select value={monthIdx === null ? '__all' : String(monthIdx)} onValueChange={(v) => setMonthIdx(v === '__all' ? null : Number(v))}>
-            <SelectTrigger className="h-10 w-full rounded-xl text-xs font-bold sm:w-44" aria-label="تصفية بالشهر">
+            <SelectTrigger className="h-11 w-full min-w-0 rounded-xl text-xs font-bold sm:h-10 sm:w-44" aria-label="تصفية بالشهر">
               <SelectValue placeholder="الشهر" />
             </SelectTrigger>
             <SelectContent>
@@ -1164,7 +1325,7 @@ export function AdminFinanceView() {
           </Select>
 
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-10 w-full rounded-xl text-xs font-bold sm:w-36" aria-label="تصفية بالحالة">
+            <SelectTrigger className="h-11 w-full min-w-0 rounded-xl text-xs font-bold sm:h-10 sm:w-36" aria-label="تصفية بالحالة">
               <SelectValue placeholder="الحالة" />
             </SelectTrigger>
             <SelectContent>
@@ -1176,7 +1337,7 @@ export function AdminFinanceView() {
           </Select>
 
           <Select value={sort} onValueChange={(v) => setSort(v as SortMode)}>
-            <SelectTrigger className="h-10 w-full rounded-xl text-xs font-bold sm:w-40" aria-label="الترتيب">
+            <SelectTrigger className="col-span-2 h-11 w-full min-w-0 rounded-xl text-xs font-bold sm:col-span-1 sm:h-10 sm:w-40" aria-label="الترتيب">
               <ArrowUpDown className="size-3.5" />
               <SelectValue placeholder="الترتيب" />
             </SelectTrigger>
@@ -1189,49 +1350,49 @@ export function AdminFinanceView() {
           </Select>
         </div>
 
-        {/* حبوب طرق الدفع */}
-        <div className="mt-2.5 flex flex-wrap items-center gap-2">
-          <span className="text-[10.5px] font-semibold text-muted-foreground">القناة:</span>
-          <button
-            type="button"
-            onClick={() => setMethodFilter('__all')}
+        {/* حبوب طرق الدفع — صف واحد قابل للسحب على الجوال، يلتف من sm */}
+        <div className="mt-2.5 flex items-center gap-2">
+          <span className="shrink-0 text-[10.5px] font-semibold text-muted-foreground">القناة:</span>
+          <div
             className={cn(
-              'inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-bold transition-all',
-              methodFilter === '__all'
-                ? 'border-blue-800 bg-blue-950 text-sky-200 shadow-sm dark:border-blue-300/40 dark:bg-blue-900'
-                : 'border-border bg-muted/40 text-muted-foreground hover:border-blue-700/40 hover:bg-blue-700/5',
+              'flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-0.5',
+              '-me-3 pe-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+              'sm:me-0 sm:flex-wrap sm:overflow-visible sm:pe-0',
             )}
           >
-            الكل
-            <span className="rounded-full bg-black/15 px-1.5 py-0.5 font-mono text-[10px] tabular-nums dark:bg-white/10">
-              {total}
-            </span>
-          </button>
-          {data.methodBreakdown.map((m) => {
-            const meta = METHOD_META[m.method] ?? { label: m.method, icon: Minus }
-            const active = methodFilter === m.method
-            const color = methodColor(m.method)
-            const Icon = meta.icon
-            return (
-              <button
-                key={m.method}
-                type="button"
-                onClick={() => setMethodFilter(active ? '__all' : m.method)}
-                className={cn(
-                  'inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-bold transition-all',
-                  active
-                    ? 'border-blue-800 bg-blue-950 text-sky-200 shadow-sm dark:border-blue-300/40 dark:bg-blue-900'
-                    : 'border-border bg-muted/40 text-muted-foreground hover:border-blue-700/40 hover:bg-blue-700/5',
-                )}
-              >
-                <Icon className="size-3.5" style={{ color: active ? undefined : color }} />
-                {meta.label}
-                <span className="rounded-full bg-black/15 px-1.5 py-0.5 font-mono text-[10px] tabular-nums dark:bg-white/10">
-                  {m.count}
-                </span>
-              </button>
-            )
-          })}
+            <button
+              type="button"
+              onClick={() => setMethodFilter('__all')}
+              aria-pressed={methodFilter === '__all'}
+              className={cn(pillBase, methodFilter === '__all' ? pillOn : pillOff)}
+            >
+              الكل
+              <span className="rounded-full bg-black/15 px-1.5 py-0.5 font-mono text-[10px] tabular-nums dark:bg-white/10">
+                {total}
+              </span>
+            </button>
+            {data.methodBreakdown.map((m) => {
+              const meta = METHOD_META[m.method] ?? { label: m.method, icon: Minus }
+              const active = methodFilter === m.method
+              const color = methodColor(m.method)
+              const Icon = meta.icon
+              return (
+                <button
+                  key={m.method}
+                  type="button"
+                  onClick={() => setMethodFilter(active ? '__all' : m.method)}
+                  aria-pressed={active}
+                  className={cn(pillBase, active ? pillOn : pillOff)}
+                >
+                  <Icon className="size-3.5" style={{ color: active ? undefined : color }} />
+                  {meta.label}
+                  <span className="rounded-full bg-black/15 px-1.5 py-0.5 font-mono text-[10px] tabular-nums dark:bg-white/10">
+                    {m.count}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* ملخص الفلاتر النشطة */}
@@ -1239,41 +1400,25 @@ export function AdminFinanceView() {
           <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-dashed pt-2.5">
             <span className="text-[10.5px] font-semibold text-muted-foreground">مطبّق الآن:</span>
             {search.trim() && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="inline-flex items-center gap-1 rounded-md border border-blue-700/25 bg-blue-700/10 px-2 py-0.5 font-mono text-[10.5px] font-semibold text-blue-800 dark:border-blue-300/20 dark:bg-blue-400/10 dark:text-blue-200"
-              >
-                بحث: {search.trim()}
-                <X className="size-3" />
+              <button type="button" onClick={() => setSearch('')} className={cn(chipBase, 'max-w-full font-mono')}>
+                <span className="truncate">بحث: {search.trim()}</span>
+                <X className="size-3 shrink-0" />
               </button>
             )}
             {methodFilter !== '__all' && (
-              <button
-                type="button"
-                onClick={() => setMethodFilter('__all')}
-                className="inline-flex items-center gap-1 rounded-md border border-blue-700/25 bg-blue-700/10 px-2 py-0.5 text-[10.5px] font-semibold text-blue-800 dark:border-blue-300/20 dark:bg-blue-400/10 dark:text-blue-200"
-              >
+              <button type="button" onClick={() => setMethodFilter('__all')} className={chipBase}>
                 القناة: {methodLabel(methodFilter)}
                 <X className="size-3" />
               </button>
             )}
             {statusFilter !== '__all' && (
-              <button
-                type="button"
-                onClick={() => setStatusFilter('__all')}
-                className="inline-flex items-center gap-1 rounded-md border border-blue-700/25 bg-blue-700/10 px-2 py-0.5 text-[10.5px] font-semibold text-blue-800 dark:border-blue-300/20 dark:bg-blue-400/10 dark:text-blue-200"
-              >
+              <button type="button" onClick={() => setStatusFilter('__all')} className={chipBase}>
                 الحالة: {statusMeta(statusFilter).label}
                 <X className="size-3" />
               </button>
             )}
             {monthIdx !== null && (
-              <button
-                type="button"
-                onClick={() => setMonthIdx(null)}
-                className="inline-flex items-center gap-1 rounded-md border border-blue-700/25 bg-blue-700/10 px-2 py-0.5 text-[10.5px] font-semibold text-blue-800 dark:border-blue-300/20 dark:bg-blue-400/10 dark:text-blue-200"
-              >
+              <button type="button" onClick={() => setMonthIdx(null)} className={chipBase}>
                 الشهر: {monthLabel(monthIdx)}
                 <X className="size-3" />
               </button>
@@ -1281,7 +1426,7 @@ export function AdminFinanceView() {
             <Button
               size="sm"
               variant="ghost"
-              className="ms-auto h-7 gap-1 rounded-lg px-2 text-[11px] text-muted-foreground"
+              className="ms-auto h-8 gap-1 rounded-lg px-2 text-[11px] text-muted-foreground"
               onClick={clearFilters}
             >
               <X className="size-3" />
@@ -1294,12 +1439,12 @@ export function AdminFinanceView() {
       {/* ─────────── سجل التحصيل ─────────── */}
       <section className="animate-in-up stagger-4 overflow-hidden rounded-2xl border bg-card shadow-sm">
         {/* رأس السجل — شريط أزرق داكن في الوضعين */}
-        <div className="relative flex flex-wrap items-center justify-between gap-2 bg-gradient-to-l from-blue-950 to-blue-900 px-4 py-3 text-blue-50">
-          <div className="flex items-center gap-2.5">
-            <span className="grid size-9 place-items-center rounded-lg border border-white/15 bg-white/10 backdrop-blur">
+        <div className="relative flex flex-wrap items-center justify-between gap-2 bg-gradient-to-l from-blue-950 to-blue-900 px-3.5 py-3 text-blue-50 sm:px-4">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-white/15 bg-white/10 backdrop-blur">
               <Building2 className="size-4.5 text-sky-300" />
             </span>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-sm font-black">سجل التحصيل</h2>
               <p className="text-[10.5px] text-blue-200/70">
                 آخر {total} معاملة داخل مدى الـ 12 شهراً
@@ -1313,6 +1458,7 @@ export function AdminFinanceView() {
             <Button
               size="sm"
               variant="outline"
+              aria-label="تصدير CSV"
               className="h-8 gap-1.5 rounded-lg border-sky-300/40 bg-transparent px-3 font-bold text-sky-200 hover:border-sky-300 hover:bg-sky-400/10 hover:text-white"
               onClick={exportCSV}
             >
@@ -1350,7 +1496,7 @@ export function AdminFinanceView() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8 gap-1.5 rounded-lg border-blue-700/30 px-3 text-xs font-bold text-blue-800 hover:bg-blue-700/5 dark:border-blue-300/25 dark:text-blue-200 dark:hover:bg-blue-400/10"
+                  className="h-9 gap-1.5 rounded-lg border-blue-700/30 px-3 text-xs font-bold text-blue-800 hover:bg-blue-700/5 dark:border-blue-300/25 dark:text-blue-200 dark:hover:bg-blue-400/10"
                   onClick={clearFilters}
                 >
                   <X className="size-3.5" />
@@ -1361,114 +1507,163 @@ export function AdminFinanceView() {
           </div>
         ) : (
           <>
-            {/* جدول — شاشات lg فأكبر */}
-            <div className="hidden max-h-[62vh] overflow-y-auto lg:block">
-              <Table>
-                <TableHeader className="sticky top-0 z-10">
-                  <TableRow className="border-transparent hover:bg-transparent">
-                    <TableHead className="w-12 bg-blue-950 text-center font-mono text-[10.5px] font-bold tracking-wider text-blue-200/80">
-                      #
-                    </TableHead>
-                    <TableHead className="w-32 bg-blue-950 text-[10.5px] font-bold text-blue-200/80">
-                      التاريخ
-                    </TableHead>
-                    <TableHead className="bg-blue-950 text-[10.5px] font-bold text-blue-200/80">
-                      المحل
-                    </TableHead>
-                    <TableHead className="w-56 bg-blue-950 text-[10.5px] font-bold text-blue-200/80">
-                      الباقة
-                    </TableHead>
-                    <TableHead className="w-36 bg-blue-950 text-[10.5px] font-bold text-blue-200/80">
-                      قناة الدفع
-                    </TableHead>
-                    <TableHead className="w-32 bg-blue-950 text-center text-[10.5px] font-bold text-blue-200/80">
-                      المبلغ
-                    </TableHead>
-                    <TableHead className="w-28 bg-blue-950 bg-blue-950 text-center text-[10.5px] font-bold text-blue-200/80">
-                      الحالة
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((t, i) => (
-                    <TableRow
-                      key={t.id}
-                      className="animate-in-up border-border/60 transition-colors hover:bg-sky-500/[0.045] dark:hover:bg-sky-400/[0.06]"
-                      style={{ animationDelay: `${Math.min(i, 12) * 28}ms` }}
-                    >
-                      <TableCell className="py-2.5 text-center font-mono text-[11px] tabular-nums text-muted-foreground/70">
-                        {String(i + 1).padStart(2, '0')}
-                      </TableCell>
-                      <TableCell className="py-2.5 font-mono text-[11px] tabular-nums text-muted-foreground">
-                        {formatShortDate(t.date)}
-                      </TableCell>
-                      <TableCell className="max-w-[220px] py-2.5">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <ShopGlyph name={t.shopName} />
-                          <span className="truncate text-[13px] font-bold text-foreground">{t.shopName}</span>
-                        </span>
-                      </TableCell>
-                      <TableCell className="py-2.5">
-                        <PlanTag tx={t} />
-                      </TableCell>
-                      <TableCell className="py-2.5">
-                        <MethodChip method={t.method || 'manual'} />
-                      </TableCell>
-                      <TableCell className="py-2.5 text-center">
-                        <span
-                          dir="rtl"
-                          className="font-mono text-[13px] font-black tabular-nums text-blue-800 dark:text-sky-300"
-                        >
-                          {formatCurrency(t.amount)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="py-2.5 text-center">
-                        <StatusSeal tx={t} />
-                      </TableCell>
+            {isXl ? (
+              /* ═══ جدول — xl فأكبر (عرض المحتوى ≥ 970px بعد السايدبار) ═══ */
+              <div className="max-h-[62vh] overflow-y-auto">
+                <Table className="min-w-[860px]">
+                  <TableHeader className="sticky top-0 z-10">
+                    <TableRow className="border-transparent hover:bg-transparent">
+                      <TableHead className="w-10 bg-blue-950 text-center font-mono text-[10.5px] font-bold tracking-wider text-blue-200/80">
+                        #
+                      </TableHead>
+                      <TableHead className="w-28 bg-blue-950 text-[10.5px] font-bold text-blue-200/80">
+                        التاريخ
+                      </TableHead>
+                      <TableHead className="bg-blue-950 text-[10.5px] font-bold text-blue-200/80">
+                        المحل
+                      </TableHead>
+                      <TableHead className="w-52 bg-blue-950 text-[10.5px] font-bold text-blue-200/80">
+                        الباقة
+                      </TableHead>
+                      <TableHead className="w-32 bg-blue-950 text-[10.5px] font-bold text-blue-200/80">
+                        قناة الدفع
+                      </TableHead>
+                      <TableHead className="w-32 bg-blue-950 text-center text-[10.5px] font-bold text-blue-200/80">
+                        المبلغ
+                      </TableHead>
+                      <TableHead className="w-24 bg-blue-950 text-center text-[10.5px] font-bold text-blue-200/80">
+                        الحالة
+                      </TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            {/* بطاقات — الجوال */}
-            <div className="space-y-2.5 p-3 lg:hidden">
-              {filtered.map((t, i) => (
-                <article
-                  key={t.id}
-                  className="animate-in-up rounded-xl border bg-background/60 p-3"
-                  style={{ animationDelay: `${Math.min(i, 10) * 32}ms` }}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <ShopGlyph name={t.shopName} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-black text-foreground">{t.shopName}</p>
-                      <p className="font-mono text-[10.5px] tabular-nums text-muted-foreground">
-                        {formatShortDate(t.date)}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end">
-                      <span
-                        dir="rtl"
-                        className="font-mono text-sm font-black tabular-nums text-blue-800 dark:text-sky-300"
+                  </TableHeader>
+                  <TableBody>
+                    {shown.map((t, i) => (
+                      <TableRow
+                        key={t.id}
+                        className="animate-in-up border-border/60 transition-colors hover:bg-sky-500/[0.045] dark:hover:bg-sky-400/[0.06]"
+                        style={{ animationDelay: `${Math.min(i, 12) * 28}ms` }}
                       >
-                        {formatCurrency(t.amount)}
-                      </span>
-                      <StatusSeal tx={t} />
+                        <TableCell className="py-2.5 text-center font-mono text-[11px] tabular-nums text-muted-foreground/70">
+                          {String(i + 1).padStart(2, '0')}
+                        </TableCell>
+                        <TableCell className="py-2.5 font-mono text-[11px] tabular-nums text-muted-foreground">
+                          {formatShortDate(t.date)}
+                        </TableCell>
+                        <TableCell className="overflow-hidden py-2.5">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <ShopGlyph name={t.shopName} />
+                            <span className="truncate text-[13px] font-bold text-foreground" title={t.shopName}>
+                              {t.shopName}
+                            </span>
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-2.5">
+                          <PlanTag tx={t} />
+                        </TableCell>
+                        <TableCell className="py-2.5">
+                          <MethodChip method={t.method || 'manual'} />
+                        </TableCell>
+                        <TableCell className="py-2.5 text-center">
+                          <span
+                            dir="rtl"
+                            className="font-mono text-[13px] font-black tabular-nums text-blue-800 dark:text-sky-300"
+                          >
+                            {formatCurrency(t.amount)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-2.5 text-center">
+                          <StatusSeal tx={t} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              /* ═══ كروت — جوال وتابلت: عمود واحد، وعمودين من sm، مجمّعة بالشهر ═══ */
+              <div className="space-y-4 p-3">
+                {groups.map((g, gi) => {
+                  const mt = monthTotals.get(g.key)
+                  return (
+                    <div key={`${g.key}-${gi}`} className="space-y-2.5">
+                      {groupByMonth && (
+                        <div className="flex items-center justify-between gap-2 px-0.5">
+                          <span className="inline-flex items-center gap-1.5 text-[11.5px] font-black text-blue-900 dark:text-sky-200">
+                            <CalendarDays aria-hidden className="size-3.5" />
+                            {g.label}
+                          </span>
+                          {mt && (
+                            <span dir="rtl" className="font-mono text-[10.5px] font-semibold tabular-nums text-muted-foreground">
+                              {mt.count} معاملة · {monoShort(mt.sum)} ج
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <div className="grid gap-2.5 sm:grid-cols-2">
+                        {g.items.map((t, i) => {
+                          const isTrial = t.status === 'active' && t.period === 'trial'
+                          const accent = isTrial ? '#fbbf24' : statusMeta(t.status).color
+                          return (
+                            <article
+                              key={t.id}
+                              className="animate-in-up relative min-w-0 overflow-hidden rounded-xl border bg-background/60"
+                              style={{ animationDelay: `${Math.min(i, 8) * 32}ms` }}
+                            >
+                              <span aria-hidden className="absolute inset-y-0 start-0 w-1" style={{ background: accent }} />
+                              <div className="p-3 ps-4">
+                                <div className="flex items-start gap-2.5">
+                                  <ShopGlyph name={t.shopName} />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-black text-foreground">{t.shopName}</p>
+                                    <p className="mt-0.5 flex items-center gap-1 text-[10.5px] text-muted-foreground">
+                                      <Clock aria-hidden className="size-3 shrink-0" />
+                                      <span className="truncate tabular-nums">{formatArabicDateTime(t.date)}</span>
+                                    </p>
+                                  </div>
+                                  <div className="flex shrink-0 flex-col items-end gap-1">
+                                    <span dir="rtl" className="flex items-baseline gap-1 font-mono text-base font-black leading-none tabular-nums text-blue-800 dark:text-sky-300">
+                                      {moneyNum(t.amount)}
+                                      <span className="font-sans text-[10px] font-bold text-muted-foreground">جنيه</span>
+                                    </span>
+                                    <StatusSeal tx={t} />
+                                  </div>
+                                </div>
+                                <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-dashed pt-2.5">
+                                  <PlanTag tx={t} />
+                                  <MethodChip method={t.method || 'manual'} />
+                                </div>
+                              </div>
+                            </article>
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
-                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-dashed pt-2.5">
-                    <PlanTag tx={t} />
-                    <MethodChip method={t.method || 'manual'} />
-                  </div>
-                </article>
-              ))}
-            </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* عرض المزيد */}
+            {remaining > 0 && (
+              <div className="border-t px-3 py-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setLimit((l) => l + pageSize)}
+                  className="h-11 w-full gap-2 rounded-xl border-blue-700/25 text-xs font-bold text-blue-800 hover:bg-blue-700/5 dark:border-blue-300/20 dark:text-sky-200 dark:hover:bg-blue-400/10"
+                >
+                  <ChevronDown className="size-4" />
+                  عرض {Math.min(pageSize, remaining)} معاملة إضافية
+                  <span className="font-mono text-[10.5px] font-semibold tabular-nums text-muted-foreground">
+                    ({remaining} متبقية)
+                  </span>
+                </Button>
+              </div>
+            )}
 
             {/* تذييل السجل */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-4 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t bg-muted/30 px-4 py-2.5">
               <p className="text-[11px] font-semibold text-muted-foreground">
-                عرض {filtered.length} من {total} معاملة
+                عرض {shown.length} من {total} معاملة
                 {filtered.length !== total && ' (مصفّى)'}
               </p>
               <p dir="rtl" className="font-mono text-[11px] font-bold tabular-nums text-blue-800 dark:text-sky-300">

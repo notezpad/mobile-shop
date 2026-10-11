@@ -906,7 +906,73 @@ export function AdminCodesView() {
             </Button>
           </div>
         ) : (
-          <div className="max-h-[68vh] overflow-auto">
+          <>
+          {/* موبايل (< md): بطاقات بدل جدول بعرض 1020px */}
+          <ul className="divide-y divide-border/60 md:hidden">
+            {visible.map((r) => {
+              const codeExpired = isCodeExpired(r)
+              return (
+                <li key={r.id} className="space-y-2.5 p-3">
+                  <BanknoteCodeCell
+                    code={r.code}
+                    copied={copiedCode === r.code}
+                    onCopy={() => copyCode(r.code)}
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-bold" title={r.planName}>
+                        {r.planName}
+                      </p>
+                      <p className="font-mono text-[10.5px] font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                        ≈ {formatCurrency(valueOf(r))}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <DurationCoin r={r} />
+                      <StatusSeal r={r} />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                    <span>
+                      الإصدار: <b className="text-foreground">{formatShortDate(r.createdAt)}</b>
+                    </span>
+                    <span className={cn(codeExpired && 'font-bold text-rose-600 dark:text-rose-400')}>
+                      الانتهاء: <b>{r.expiresAt ? formatShortDate(r.expiresAt) : '—'}</b>
+                      {codeExpired && ' (فقدت)'}
+                    </span>
+                    <span>
+                      {r.assignedTenantId ? (
+                        <span className="inline-flex items-center gap-1 font-bold text-amber-700 dark:text-amber-300">
+                          <UserCog className="size-3" />
+                          {r.tenantName ?? 'مخصّص'}
+                        </span>
+                      ) : (
+                        'كود عام'
+                      )}
+                    </span>
+                    {r.redeemedAt && (
+                      <span className="inline-flex items-center gap-1">
+                        <Coins className="size-3 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                        استُخدم {formatShortDate(r.redeemedAt)}
+                      </span>
+                    )}
+                  </div>
+                  {r.status === 'available' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-10 w-full gap-1.5 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setDeleteId(r.id)}
+                    >
+                      <Trash2 className="size-4" />
+                      إتلاف الكود
+                    </Button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+          <div className="hidden max-h-[68vh] overflow-auto md:block">
             <Table className="min-w-[1020px]">
               <TableHeader className="sticky top-0 z-10">
                 <TableRow className="border-b-0 hover:bg-transparent">
@@ -1070,6 +1136,7 @@ export function AdminCodesView() {
               </TableBody>
             </Table>
           </div>
+          </>
         )}
 
         <div className="border-t bg-muted/30">

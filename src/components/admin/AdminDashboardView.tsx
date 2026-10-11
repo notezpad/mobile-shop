@@ -140,8 +140,8 @@ function TopBar({ stats, loading, onRefresh, refreshing }: {
       />
 
       <div className="relative p-4 sm:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <span className="relative grid size-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-lg shadow-primary/20">
               <Activity className="size-5" aria-hidden />
               <span className="absolute -top-1 -end-1 flex size-3">
@@ -149,15 +149,15 @@ function TopBar({ stats, loading, onRefresh, refreshing }: {
                 <span className="relative inline-flex size-3 rounded-full bg-success ring-2 ring-card" />
               </span>
             </span>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-black sm:text-lg">مركز التحكم</h1>
+                <h1 className="truncate text-base font-black sm:text-lg">مركز التحكم</h1>
                 <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success-subtle px-2 py-0.5 text-[10px] font-bold text-success-subtle-foreground">
                   <span className="size-1.5 rounded-full bg-success" aria-hidden />
                   live
                 </span>
               </div>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
+              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                 {loading ? 'جارٍ التحميل…' : stats ? `مراقبة ${nf(stats.totalTenants)} محل · ${nf(stats.activeSubscriptions)} اشتراك نشط` : '—'}
               </p>
             </div>
@@ -168,25 +168,26 @@ function TopBar({ stats, loading, onRefresh, refreshing }: {
             size="sm"
             onClick={onRefresh}
             disabled={refreshing}
-            className="h-8 gap-1.5 rounded-lg text-[11px]"
+            aria-label="تحديث"
+            className="h-9 w-9 shrink-0 gap-1.5 rounded-lg px-0 text-[11px] sm:h-8 sm:w-auto sm:px-3"
           >
-            <RefreshCw className={cn('size-3', refreshing && 'animate-spin')} aria-hidden />
-            تحديث
+            <RefreshCw className={cn('size-3.5 sm:size-3', refreshing && 'animate-spin')} aria-hidden />
+            <span className="hidden sm:inline">تحديث</span>
           </Button>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] via-transparent to-transparent p-3">
+          <div className="relative min-w-0 overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] via-transparent to-transparent p-3">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">MRR</span>
               <CircleDollarSign className="size-3.5 text-primary" aria-hidden />
             </div>
-            <div className="mt-2 flex items-baseline gap-1.5">
+            <div className="mt-2 flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
               {loading ? (
                 <Skeleton className="h-7 w-20" />
               ) : (
                 <>
-                  <span className="font-mono text-xl font-black leading-none tabular-nums text-foreground">{nf(stats?.mrr ?? 0)}</span>
+                  <span className="font-mono text-lg font-black leading-none tabular-nums sm:text-xl text-foreground">{nf(stats?.mrr ?? 0)}</span>
                   <span className="text-[10px] font-semibold text-muted-foreground">ج.م</span>
                 </>
               )}
@@ -196,16 +197,16 @@ function TopBar({ stats, loading, onRefresh, refreshing }: {
             )}
           </div>
 
-          <div className="relative overflow-hidden rounded-xl border border-chart-3/20 bg-gradient-to-br from-chart-3/[0.06] via-transparent to-transparent p-3">
+          <div className="relative min-w-0 overflow-hidden rounded-xl border border-chart-3/20 bg-gradient-to-br from-chart-3/[0.06] via-transparent to-transparent p-3">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-chart-3">اشتراكات</span>
               <Users className="size-3.5 text-chart-3" aria-hidden />
             </div>
-            <div className="mt-2 flex items-baseline gap-1.5">
+            <div className="mt-2 flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
               {loading ? (
                 <Skeleton className="h-7 w-14" />
               ) : (
-                <span className="font-mono text-xl font-black leading-none tabular-nums text-foreground">{nf(stats?.activeSubscriptions ?? 0)}</span>
+                <span className="font-mono text-lg font-black leading-none tabular-nums sm:text-xl text-foreground">{nf(stats?.activeSubscriptions ?? 0)}</span>
               )}
             </div>
             {!loading && lastMonth && (
@@ -216,16 +217,16 @@ function TopBar({ stats, loading, onRefresh, refreshing }: {
             )}
           </div>
 
-          <div className="relative overflow-hidden rounded-xl border border-chart-6/20 bg-gradient-to-br from-chart-6/[0.06] via-transparent to-transparent p-3">
+          <div className="relative min-w-0 overflow-hidden rounded-xl border border-chart-6/20 bg-gradient-to-br from-chart-6/[0.06] via-transparent to-transparent p-3">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-chart-6">محلات</span>
               <Building2 className="size-3.5 text-chart-6" aria-hidden />
             </div>
-            <div className="mt-2 flex items-baseline gap-1.5">
+            <div className="mt-2 flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
               {loading ? (
                 <Skeleton className="h-7 w-14" />
               ) : (
-                <span className="font-mono text-xl font-black leading-none tabular-nums text-foreground">{nf(stats?.totalTenants ?? 0)}</span>
+                <span className="font-mono text-lg font-black leading-none tabular-nums sm:text-xl text-foreground">{nf(stats?.totalTenants ?? 0)}</span>
               )}
             </div>
             {!loading && stats && (
@@ -236,7 +237,7 @@ function TopBar({ stats, loading, onRefresh, refreshing }: {
           </div>
 
           <div className={cn(
-            'relative overflow-hidden rounded-xl border p-3',
+            'relative min-w-0 overflow-hidden rounded-xl border p-3',
             hasAlerts
               ? 'border-warning/35 bg-gradient-to-br from-warning/[0.12] via-transparent to-transparent'
               : 'border-success/25 bg-gradient-to-br from-success/[0.06] via-transparent to-transparent',
@@ -252,12 +253,12 @@ function TopBar({ stats, loading, onRefresh, refreshing }: {
                 ? <CircleAlert className="size-3.5 text-warning" aria-hidden />
                 : <CheckCircle2 className="size-3.5 text-success" aria-hidden />}
             </div>
-            <div className="mt-2 flex items-baseline gap-1.5">
+            <div className="mt-2 flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
               {loading ? (
                 <Skeleton className="h-7 w-14" />
               ) : (
                 <span className={cn(
-                  'font-mono text-xl font-black leading-none tabular-nums',
+                  'font-mono text-lg font-black leading-none tabular-nums sm:text-xl',
                   hasAlerts ? 'text-warning' : 'text-foreground',
                 )}>
                   {nf(alertCount)}
@@ -570,7 +571,59 @@ export function AdminDashboardView() {
                 <p className="text-[12px] text-muted-foreground">لا توجد اشتراكات قريبة من الانتهاء</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              {/* موبايل: كروت بدل الجدول عشان مفيش سكرول أفقي */}
+              <ul className="divide-y divide-border/60 md:hidden">
+                {expiringSoon.slice(0, 5).map((s, i) => {
+                  const urgent = s.daysLeft <= 3
+                  return (
+                    <li key={s.subscriptionId} className="flex items-center gap-3 px-3 py-3">
+                      <span className="shrink-0 font-mono text-[11px] font-semibold tabular-nums text-muted-foreground">
+                        {String(i + 1).padStart(2, '0')}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-bold" title={s.shopName}>{s.shopName}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="inline-flex max-w-[120px] truncate rounded bg-muted px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground">
+                            {s.planName}
+                          </span>
+                          <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">
+                            {formatShortDate(s.endDate)}
+                          </span>
+                          <span className={cn(
+                            'inline-flex items-center rounded-md px-1.5 py-0.5 font-mono text-[10.5px] font-bold tabular-nums',
+                            urgent
+                              ? 'bg-destructive-subtle text-destructive-subtle-foreground'
+                              : 'bg-warning-subtle text-warning-subtle-foreground',
+                          )}>
+                            {s.daysLeft} ي
+                          </span>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 shrink-0 gap-1 rounded-lg px-2.5 text-[11px]"
+                        disabled={extending === s.subscriptionId}
+                        onClick={() => handleQuickExtend(s.subscriptionId)}
+                      >
+                        {extending === s.subscriptionId
+                          ? <Loader2 className="size-3 animate-spin" aria-hidden />
+                          : <Zap className="size-3" aria-hidden />}
+                        تمديد
+                      </Button>
+                    </li>
+                  )
+                })}
+                {expiringSoon.length > 5 && (
+                  <li className="py-2 text-center text-[11px] text-muted-foreground">
+                    + {expiringSoon.length - 5} اشتراك آخر
+                  </li>
+                )}
+              </ul>
+
+              {/* تابلت/ديسكتوب: الجدول */}
+              <div className="hidden overflow-x-auto md:block">
                 <Table>
                   <TableHeader>
                     <TableRow className="border-b bg-muted/30 hover:bg-muted/30">
@@ -650,6 +703,7 @@ export function AdminDashboardView() {
                   </TableBody>
                 </Table>
               </div>
+              </>
             )}
           </CardContent>
         </Card>
