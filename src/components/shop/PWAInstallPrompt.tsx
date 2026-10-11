@@ -73,15 +73,22 @@ export function PWAInstallPrompt() {
 
     // 4) switch الأدمن + فحص "هل مثبّت" (Chrome Android) قبل أي عرض
     ;(async () => {
+      // ⚠️ الأدمن هو اللي بيقرر: البانر ما يظهرش إلا لو السيرفر قال "مفعّل" صراحةً.
+      // لو الطلب فشل نستخدم آخر قيمة معروفة؛ ولو مفيش قيمة نخفيه (أأمن من إظهاره غلط).
+      let enabled = false
       try {
-        const res = await fetch('/api/pwa/config', { cache: 'no-store' })
+        const res = await fetch('/api/pwa/config?t=' + Date.now(), { cache: 'no-store' })
         if (res.ok) {
           const cfg = await res.json()
-          if (cfg?.installBannerEnabled === false) return // الأدمن قافله
+          enabled = cfg?.installBannerEnabled === true
+          try { localStorage.setItem('pwa-banner-enabled', enabled ? '1' : '0') } catch {}
+        } else {
+          throw new Error('bad status')
         }
       } catch {
-        /* أوفلاين/فشل → نكمل بالافتراضي (مفعّل) */
+        try { enabled = localStorage.getItem('pwa-banner-enabled') === '1' } catch {}
       }
+      if (!enabled || cancelled) return
       if (cancelled) return
 
       try {
