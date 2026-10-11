@@ -236,6 +236,15 @@ export default async function RootLayout({
             Next.js 16 warns about <script> tags inside <head> of a Server Component
             because they're not executed during client-side navigation. Moving it
             to the end of <body> ensures it runs after hydration. */}
+        {/* 📲 PWA: نلتقط beforeinstallprompt على مستوى التطبيق كله (مش بس جوه النظام)
+            ونمنع شريط/بانر التثبيت الأصلي بتاع كروم من الظهور في أي صفحة
+            (دخول/تسجيل/لاندنج). مكوّن PWAInstallPrompt هو الوحيد اللي بيقرر
+            يظهر البانر ولا لأ حسب سويتش الأدمن. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__pwaDeferred=e;window.dispatchEvent(new Event('pwa-prompt-ready'))});`,
+          }}
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `

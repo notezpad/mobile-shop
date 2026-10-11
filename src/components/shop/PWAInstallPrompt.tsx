@@ -108,18 +108,27 @@ export function PWAInstallPrompt() {
         return
       }
 
-      handler = (e: Event) => {
-        e.preventDefault()
+      const arm = (e: any) => {
         setDeferredPrompt(e)
         timer = setTimeout(() => setShowBanner(true), 5000)
       }
-      window.addEventListener('beforeinstallprompt', handler)
+      // الحدث ممكن يكون اتلقط بالفعل من السكريبت العام في layout.tsx
+      const early = (window as any).__pwaDeferred
+      if (early) {
+        arm(early)
+      } else {
+        handler = () => {
+          const ev = (window as any).__pwaDeferred
+          if (ev) arm(ev)
+        }
+        window.addEventListener('pwa-prompt-ready', handler)
+      }
     })()
 
     return () => {
       cancelled = true
       if (timer) clearTimeout(timer)
-      if (handler) window.removeEventListener('beforeinstallprompt', handler)
+      if (handler) window.removeEventListener('pwa-prompt-ready', handler)
       window.removeEventListener('appinstalled', onInstalled)
     }
   }, [])
