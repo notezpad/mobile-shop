@@ -19,6 +19,8 @@ const DEFAULTS: Record<string, string> = {
   twitterUrl: '',
   instagramUrl: '',
   whatsappUrl: '',
+  // بانر تثبيت التطبيق (PWA) — 'true' = ظاهر لغير المثبّتين، 'false' = مخفي
+  pwaInstallBannerEnabled: 'true',
 }
 
 async function __GET() {

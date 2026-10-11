@@ -16,6 +16,17 @@ import { Download, X, Smartphone, Share } from 'lucide-react'
  *  ✅ Install success tracking
  */
 
+const INSTALLED_KEY = 'pwa-installed'
+
+function isStandaloneMode() {
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.matchMedia('(display-mode: window-controls-overlay)').matches ||
+    window.matchMedia('(display-mode: minimal-ui)').matches ||
+    (window.navigator as any).standalone === true
+  )
+}
+
 export function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null)
   const [showBanner, setShowBanner] = React.useState(false)
@@ -23,51 +34,85 @@ export function PWAInstallPrompt() {
   const [installed, setInstalled] = React.useState(false)
 
   React.useEffect(() => {
-    // Check if already installed
-    const isStandalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as any).standalone === true
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let handler: ((e: Event) => void) | undefined
 
-    if (isStandalone) {
-      setInstalled(true)
-      return
-    }
-
-    // Check dismissal cooldown (30 days)
-    const dismissedAt = localStorage.getItem('pwa-install-dismissed-at')
-    if (dismissedAt) {
-      const daysSince = (Date.now() - parseInt(dismissedAt)) / (1000 * 60 * 60 * 24)
-      if (daysSince < 30) return // Still in cooldown
-    }
-
-    // Detect iOS
-    const ua = navigator.userAgent
-    const isiOS = /iPad|iPhone|iPod/.test(ua) || (ua.includes('Mac') && 'ontouchend' in document)
-    if (isiOS) {
-      setIsIOS(true)
-      const timer = setTimeout(() => setShowBanner(true), 5000)
-      return () => clearTimeout(timer)
-    }
-
-    // Android/Chrome/Edge: capture beforeinstallprompt
-    const handler = (e: Event) => {
-      e.preventDefault()
-      setDeferredPrompt(e)
-      // Show after 5 seconds (don't be too aggressive)
-      setTimeout(() => setShowBanner(true), 5000)
-    }
-    window.addEventListener('beforeinstallprompt', handler)
-
-    // Listen for install success
-    const onInstalled = () => {
+    const markInstalled = () => {
+      try { localStorage.setItem(INSTALLED_KEY, '1') } catch {}
       setInstalled(true)
       setShowBanner(false)
-      localStorage.removeItem('pwa-install-dismissed-at')
     }
+    const onInstalled = () => markInstalled()
     window.addEventListener('appinstalled', onInstalled)
 
+    // 1) مثبّت ومفتوح كتطبيق → افتكر ده على الجهاز (عشان لو فتحه من المتصفح بعدين)
+    if (isStandaloneMode()) {
+      markInstalled()
+      return () => window.removeEventListener('appinstalled', onInstalled)
+    }
+
+    // 2) سبق وتأكدنا إنه مثبّت على الجهاز ده → ما نظهرش البانر
+    try {
+      if (localStorage.getItem(INSTALLED_KEY) === '1') {
+        setInstalled(true)
+        return () => window.removeEventListener('appinstalled', onInstalled)
+      }
+    } catch {}
+
+    // 3) فترة الإخفاء بعد الإغلاق (30 يوم)
+    try {
+      const dismissedAt = localStorage.getItem('pwa-install-dismissed-at')
+      if (dismissedAt) {
+        const daysSince = (Date.now() - parseInt(dismissedAt)) / (1000 * 60 * 60 * 24)
+        if (daysSince < 30) {
+          return () => window.removeEventListener('appinstalled', onInstalled)
+        }
+      }
+    } catch {}
+
+    // 4) switch الأدمن + فحص "هل مثبّت" (Chrome Android) قبل أي عرض
+    ;(async () => {
+      try {
+        const res = await fetch('/api/pwa/config', { cache: 'no-store' })
+        if (res.ok) {
+          const cfg = await res.json()
+          if (cfg?.installBannerEnabled === false) return // الأدمن قافله
+        }
+      } catch {
+        /* أوفلاين/فشل → نكمل بالافتراضي (مفعّل) */
+      }
+      if (cancelled) return
+
+      try {
+        const related = await (navigator as any).getInstalledRelatedApps?.()
+        if (Array.isArray(related) && related.length > 0) {
+          markInstalled()
+          return
+        }
+      } catch {}
+      if (cancelled) return
+
+      const ua = navigator.userAgent
+      const isiOS = /iPad|iPhone|iPod/.test(ua) || (ua.includes('Mac') && 'ontouchend' in document)
+      if (isiOS) {
+        setIsIOS(true)
+        timer = setTimeout(() => setShowBanner(true), 5000)
+        return
+      }
+
+      handler = (e: Event) => {
+        e.preventDefault()
+        setDeferredPrompt(e)
+        timer = setTimeout(() => setShowBanner(true), 5000)
+      }
+      window.addEventListener('beforeinstallprompt', handler)
+    })()
+
     return () => {
-      window.removeEventListener('beforeinstallprompt', handler)
+      cancelled = true
+      if (timer) clearTimeout(timer)
+      if (handler) window.removeEventListener('beforeinstallprompt', handler)
       window.removeEventListener('appinstalled', onInstalled)
     }
   }, [])

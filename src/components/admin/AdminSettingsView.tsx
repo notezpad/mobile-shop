@@ -12,6 +12,7 @@ import {
   Twitter,
   Instagram,
   MessageCircle,
+  Smartphone,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -19,6 +20,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 
@@ -32,6 +34,7 @@ interface Settings {
   twitterUrl: string
   instagramUrl: string
   whatsappUrl: string
+  pwaInstallBannerEnabled: string
 }
 
 export function AdminSettingsView() {
@@ -226,6 +229,34 @@ export function AdminSettingsView() {
                 placeholder="https://wa.me/..."
               />
             </div>
+          </div>
+          <Button onClick={save} disabled={saving} className="gap-1.5">
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+            حفظ الإعدادات
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* PWA install banner */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Smartphone className="size-4 text-primary" />
+            بانر تثبيت التطبيق (PWA)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label>إظهار بانر "تثبيت التطبيق" للمستخدمين</Label>
+              <p className="text-[11px] text-muted-foreground">
+                يظهر فقط لمن لم يثبّت التطبيق بعد. من ثبّته لا يراه أبداً، سواء كان مفعّلاً أو لا.
+              </p>
+            </div>
+            <Switch
+              checked={data.pwaInstallBannerEnabled !== 'false'}
+              onCheckedChange={(v) => update('pwaInstallBannerEnabled', v ? 'true' : 'false')}
+            />
           </div>
           <Button onClick={save} disabled={saving} className="gap-1.5">
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
