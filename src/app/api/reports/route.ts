@@ -100,8 +100,8 @@ async function __GET(req: NextRequest) {
              COALESCE(SUM(p."price" * p."quantity"), 0)::float8 AS vprice,
              COUNT(*) FILTER (WHERE p."quantity" <= p."minQuantity")::int AS low
       FROM "Product" p WHERE p."tenantId" = ${tid} AND (${bid}::int IS NULL OR p."branchId" = ${bid}::int)`,
-    db.$queryRaw<{ name: string; quantity: number; minQuantity: number }[]>`
-      SELECT p."name", p."quantity", p."minQuantity" FROM "Product" p
+    db.$queryRaw<{ name: string; quantity: number; minQuantity: number; unitLabel: string | null }[]>`
+      SELECT p."name", p."quantity", p."minQuantity", p."unitLabel" FROM "Product" p
       WHERE p."tenantId" = ${tid} AND (${bid}::int IS NULL OR p."branchId" = ${bid}::int) AND p."quantity" <= p."minQuantity"
       ORDER BY p."quantity" ASC LIMIT 10`,
     db.expense.aggregate({ where: { tenantId: tid, ...branchWhere, createdAt: dateRange }, _sum: { amount: true } }),
@@ -130,8 +130,8 @@ async function __GET(req: NextRequest) {
       ) ip ON ip."saleId" = s."id"
       WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND s."status" = 'مكتملة' AND s."createdAt" >= ${from} AND s."createdAt" < ${to}
       GROUP BY 1 ORDER BY 1`,
-    db.$queryRaw<{ name: string; qty: number; total: number; profit: number }[]>`
-      SELECT MIN(i."name") AS name, SUM(i."quantity")::float8 AS qty,
+    db.$queryRaw<{ name: string; qty: number; total: number; profit: number; pieceLabel: string | null }[]>`
+      SELECT MIN(i."name") AS name, MAX(i."pieceLabel") AS "pieceLabel", SUM(i."quantity")::float8 AS qty,
              SUM(i."price" * i."quantity")::float8 AS total,
              SUM((i."price" - i."cost") * i."quantity")::float8 AS profit
       FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
@@ -191,7 +191,7 @@ async function __GET(req: NextRequest) {
   const customersReceivable = n(custAgg._sum.balance)
   const suppliersPayable = n(suppAgg._sum.balance)
 
-  const salesTrend = trendRows.map((r) => ({ date: r.date, total: n(r.total), profit: n(r.profit) }))
+  const salesTrend = trendRows.map((r) => ({ date: r.date, total: n(r.total), profit: n(r.profit), unitLabel: r.pieceLabel ?? null }))
   const topProducts = topProductRows.map((r) => ({ name: r.name, qty: n(r.qty), total: n(r.total), profit: n(r.profit) }))
   const categoryBreakdown = categoryRows.map((r) => ({ category: r.category, total: n(r.total) }))
   const topCustomers = topCustomerRows.map((r) => ({ name: r.name, total: n(r.total), salesCount: n(r.salesCount) }))
@@ -247,7 +247,7 @@ async function __GET(req: NextRequest) {
     stockValueCost,
     stockValuePrice,
     lowStockCount,
-    lowStockProducts: lowStockRows.map((p) => ({ name: p.name, quantity: n(p.quantity), minQuantity: n(p.minQuantity) })),
+    lowStockProducts: lowStockRows.map((p) => ({ name: p.name, quantity: n(p.quantity), minQuantity: n(p.minQuantity), unitLabel: p.unitLabel ?? null })),
 
     totalPurchases,
     purchasesCount,

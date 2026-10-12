@@ -237,6 +237,11 @@ model Product {
   //   - المخزون/المشتريات/الجرد/المرتجعات كلها بالكيلو
   // بتتسجل فقط للمحلات الـ businessType بتاعها 'food' (تتقص في الـ API).
   soldByWeight Boolean @default(false)
+  // 🥬 2026-10-12 (food vertical): اسم وحدة المنتج بالمفرد — علبة / كيس / برطمان /
+  // زجاجة / كرتونة ... بيظهر في نقطة البيع والسلة والمبيعات والمخزون بدل «قطعة».
+  // null = «قطعة» (الافتراضي — المنتجات القديمة وباقات الأزياء/الإلكترونيات مش بتتأثر).
+  // بيتسجل فقط للمحلات الـ businessType بتاعها 'food' (بيتقص في الـ API).
+  unitLabel   String?
   // Unit-Based Dynamic Pricing: per-product override of the tenant's default
   // retail margin %. null = fall back to Tenant.defaultRetailMarginPercent.
   retailMarginPercent Float?
@@ -566,6 +571,10 @@ model SaleItem {
   unitLabel    String?
   // 🥬 2026-10-12: Float (توافق مع الكميات العشرية)
   unitQuantity Float?
+  // 🥬 2026-10-12 (food vertical): لقطة من Product.unitLabel وقت البيع (علبة/كيس/...)
+  // عشان الفاتورة القديمة تفضل تعرض الوحدة صح حتى لو المنتج اتعدّل بعدين.
+  // null = «قطعة». (unitLabel فوق = وحدة الجملة، دي = وحدة المنتج نفسه.)
+  pieceLabel   String?
 
   // Optional link to the specific size/color variant sold
   variantId Int?

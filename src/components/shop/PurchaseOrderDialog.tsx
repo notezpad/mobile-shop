@@ -8,6 +8,7 @@
  */
 
 import * as React from 'react'
+import { commonUnit, formatQtyUnit } from '@/lib/unit-label'
 import { Check, ChevronDown, Info, Loader2, PackagePlus, Plus, Search, Trash2, Truck, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,8 @@ interface ProductLite {
   quantity: number
   // 🥬 2026-10-12: بيع بالوزن — الشراء بيبقى بالكيلو بكسور
   soldByWeight?: boolean
+  // 🥬 وحدة المنتج (علبة/كيس/...) — null = قطعة
+  unitLabel?: string | null
 }
 
 interface SupplierLite {
@@ -140,6 +143,7 @@ export function PurchaseOrderDialog({
 
   const total = cart.reduce((s, i) => s + i.cost * i.quantity, 0)
   const totalQty = cart.reduce((s, i) => s + i.quantity, 0)
+  const qtyUnit = commonUnit(cart.map((i) => (i.product.soldByWeight ? 'كجم' : i.product.unitLabel)))
   const manyItems = cart.length > 8
   const cartNeedle = cartQ.trim().toLowerCase()
   const shownCart = cartNeedle
@@ -442,7 +446,7 @@ export function PurchaseOrderDialog({
                   aside={
                     cart.length > 0 && (
                       <span className="text-xs font-semibold tabular-nums text-foreground/65">
-                        {cart.length} صنف · {totalQty} قطعة
+                        {cart.length} صنف · {formatQtyUnit(totalQty, qtyUnit)}
                       </span>
                     )
                   }
@@ -694,7 +698,7 @@ export function PurchaseOrderDialog({
                 <span className="ms-2 text-sm font-semibold text-cyan-200/70">جنيه</span>
               </p>
               <p className="mt-2 text-xs text-cyan-200/70 tabular-nums">
-                {cart.length} صنف · {totalQty} قطعة
+                {cart.length} صنف · {formatQtyUnit(totalQty, qtyUnit)}
               </p>
 
               <div className="my-4 border-t border-dashed border-cyan-700/70" />

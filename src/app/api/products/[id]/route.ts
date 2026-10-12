@@ -1,3 +1,4 @@
+import { cleanUnitLabel } from '@/lib/unit-label'
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
@@ -134,6 +135,15 @@ export async function PUT(
           soldByWeight: canSetWeight
             ? body.soldByWeight === true || body.soldByWeight === 'true'
             : false,
+          // 🥬 2026-10-12: وحدة المنتج — غذائية فقط، والمنتج بالوزن مالوش وحدة
+          // (بيتباع بالكيلو). لو الحقل ماتبعتش نسيب القيمة الحالية.
+          unitLabel: canSetWeight
+            ? body.soldByWeight === true || body.soldByWeight === 'true'
+              ? null
+              : body.unitLabel !== undefined
+                ? cleanUnitLabel(body.unitLabel)
+                : existing.unitLabel
+            : null,
           imagePath:
             body.imagePath !== undefined
               ? body.imagePath

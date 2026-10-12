@@ -55,7 +55,6 @@ import {
   Clock,
   Sparkles,
   Crown,
-  Repeat,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -160,8 +159,6 @@ interface Plan {
   priceMonthly: number
   priceYearly: number
   trialDays: number
-  businessType?: string
-  isActive?: boolean
 }
 
 /* ───────────────────────── أدوات مساعدة ───────────────────────── */
@@ -624,7 +621,6 @@ export function AdminTenantsView() {
   const [editRow, setEditRow] = React.useState<TenantRow | null>(null)
   const [addOpen, setAddOpen] = React.useState(false)
   const [deleteRow, setDeleteRow] = React.useState<TenantRow | null>(null)
-  const [planRow, setPlanRow] = React.useState<TenantRow | null>(null)
   const [busyId, setBusyId] = React.useState<string | null>(null)
 
   const setUser = useShopStore((s) => s.setUser)
@@ -1350,7 +1346,6 @@ export function AdminTenantsView() {
                         <div className="flex items-center justify-center gap-0.5">
                           <ActionButton icon={Eye} title="عرض التفاصيل" onClick={() => openDetail(r)} />
                           <ActionButton icon={Pencil} title="تعديل البيانات" onClick={() => openEdit(r)} />
-                          <ActionButton icon={Repeat} title="تغيير الباقة" tone="amber" onClick={() => setPlanRow(r)} />
                           <ActionButton
                             icon={LogIn}
                             title="دخول كمالك المحل"
@@ -1471,7 +1466,6 @@ export function AdminTenantsView() {
                 <div className="mt-2.5 flex items-center justify-between gap-0.5 border-t border-border/60 pt-2.5">
                   <ActionButton icon={Eye} title="التفاصيل" onClick={() => openDetail(r)} size="sm" />
                   <ActionButton icon={Pencil} title="تعديل" onClick={() => openEdit(r)} size="sm" />
-                  <ActionButton icon={Repeat} title="تغيير الباقة" tone="amber" onClick={() => setPlanRow(r)} size="sm" />
                   <ActionButton
                     icon={LogIn}
                     title="دخول كمالك"
@@ -1532,16 +1526,6 @@ export function AdminTenantsView() {
         onOpenChange={setAddOpen}
         onSaved={() => load(true)}
       />
-
-      {planRow && (
-        <ChangePlanDialog
-          row={planRow}
-          plans={plans}
-          open={!!planRow}
-          onOpenChange={(o) => !o && setPlanRow(null)}
-          onSaved={() => load(true)}
-        />
-      )}
 
       {/* تأكيد الحذف */}
       <AlertDialog open={!!deleteRow} onOpenChange={(o) => !o && setDeleteRow(null)}>
@@ -2361,119 +2345,6 @@ function AddTenantDialog({
             </DialogFooter>
           </>
         )}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/* ───────────────────────── تغيير الباقة ─────────────────────────
- * بيغيّر الباقة على الاشتراك النشط فقط (planId) عن طريق
- * /api/admin/tenants/[id]/assign-plan — المنتجات والمخزون والفواتير
- * وكل بيانات المحل مبتتلمسش خالص.
- */
-function ChangePlanDialog({
-  row,
-  plans,
-  open,
-  onOpenChange,
-  onSaved,
-}: {
-  row: TenantRow
-  plans: Plan[]
-  open: boolean
-  onOpenChange: (o: boolean) => void
-  onSaved: () => void
-}) {
-  const current = plans.find((p) => p.code === row.planCode)
-  const [planId, setPlanId] = React.useState<string>(current?.id?.toString() ?? '')
-  const [period, setPeriod] = React.useState<string>('keep')
-  const [saving, setSaving] = React.useState(false)
-
-  const available = plans.filter((p) => p.isActive !== false || p.code === row.planCode)
-  const selected = plans.find((p) => p.id.toString() === planId)
-  const unchanged = !selected || selected.code === row.planCode
-
-  const save = async () => {
-    if (!selected) return
-    setSaving(true)
-    try {
-      await api(`/api/admin/tenants/${row.id}/assign-plan`, {
-        method: 'POST',
-        body: { planId: selected.id, ...(period !== 'keep' ? { period } : {}) },
-      })
-      toast.success(`تم تغيير الباقة إلى "${selected.name}" — المنتجات زي ما هي`)
-      onOpenChange(false)
-      onSaved()
-    } catch (e: any) {
-      toast.error(e?.message || 'فشل تغيير الباقة')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
-        <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
-          <DialogTitle className="flex items-center gap-2.5">
-            <TenantAvatar name={row.shopName} size="lg" />
-            <span>
-              تغيير الباقة
-              <span className="block text-xs font-normal text-muted-foreground">{row.shopName}</span>
-            </span>
-          </DialogTitle>
-          <DialogDescription className="sr-only">اختيار باقة جديدة للمحل</DialogDescription>
-        </DialogHeader>
-        <DialogBody className="space-y-4 py-4">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">الباقة الحالية:</span>
-            <PlanPill code={row.planCode || '-'} name={row.planName || 'بدون باقة'} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>الباقة الجديدة</Label>
-            <Select value={planId} onValueChange={setPlanId}>
-              <SelectTrigger className="rounded-xl">
-                <SelectValue placeholder="اختر الباقة" />
-              </SelectTrigger>
-              <SelectContent>
-                {available.map((p) => (
-                  <SelectItem key={p.id} value={p.id.toString()}>
-                    {p.name} — {formatCurrency(p.priceMonthly)} / شهر
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>مدة الاشتراك</Label>
-            <Select value={period} onValueChange={setPeriod}>
-              <SelectTrigger className="rounded-xl">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="keep">بدون تغيير (نفس تاريخ الانتهاء)</SelectItem>
-                <SelectItem value="monthly">شهري</SelectItem>
-                <SelectItem value="yearly">سنوي</SelectItem>
-                <SelectItem value="trial">تجريبي</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/8 p-3 text-xs text-emerald-700 dark:text-emerald-300">
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-            <span>
-              تغيير الباقة بيعدّل الاشتراك بس. كل المنتجات والمخزون والفواتير والعملاء بتفضل زي ما هي بالظبط.
-            </span>
-          </div>
-        </DialogBody>
-        <DialogFooter className="shrink-0 border-t px-4 py-3 sm:px-6">
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-xl">
-            إلغاء
-          </Button>
-          <Button onClick={save} disabled={saving || unchanged} className="rounded-xl">
-            {saving ? <Loader2 className="size-4 animate-spin" /> : <Repeat className="size-4" />}
-            تغيير الباقة
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { unitWord } from '@/lib/unit-label'
 import { AlertTriangle, ArrowDown, ArrowDownRight, ArrowUp, ArrowUpRight, CalendarDays, CheckCircle2, ChevronDown, FileText, Inbox, Sparkles } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Button } from '@/components/ui/button'
@@ -40,7 +41,7 @@ interface Report {
     netProfit: number | null
   }
   salesTrend: { date: string; total: number; profit: number }[]
-  topProducts: { name: string; qty: number; total: number; profit: number }[]
+  topProducts: { name: string; qty: number; total: number; profit: number; unitLabel?: string | null }[]
   categoryBreakdown: { category: string; total: number }[]
   topCustomers: { name: string; total: number; salesCount: number }[]
   paymentMethods: { method: string; amount: number }[]
@@ -283,7 +284,7 @@ export function ReportsView() {
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-baseline justify-between gap-2 text-xs">
                                   <span className="truncate font-semibold">{p.name}</span>
-                                  <span className="shrink-0 tabular-nums text-muted-foreground">{num(p.qty)} قطعة · <b className="text-foreground">{formatCurrency(p.total)}</b></span>
+                                  <span className="shrink-0 tabular-nums text-muted-foreground">{num(p.qty)} {unitWord(p.qty, p.unitLabel)} · <b className="text-foreground">{formatCurrency(p.total)}</b></span>
                                 </div>
                                 <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
                                   <div className="relative h-full rounded-full" style={{ width: `${Math.max(4, (p.total / maxP) * 100)}%`, background: `${V}33` }}>

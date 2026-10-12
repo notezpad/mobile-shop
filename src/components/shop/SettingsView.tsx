@@ -607,7 +607,7 @@ export function SettingsView() {
         </div>
 
         {/* ═════════ التسعير التلقائي ═════════ */}
-        {hasWholesale && !pricingLocked && (
+        {hasWholesale && (
           <Panel
             tag="06 / Pricing"
             title="تسعير القطعة التلقائي"

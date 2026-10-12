@@ -71,15 +71,15 @@ export async function GET(req: Request) {
                COALESCE(SUM(p."price" * p."quantity"), 0)::float8 AS vprice,
                COUNT(*) FILTER (WHERE p."quantity" <= p."minQuantity")::int AS low
         FROM "Product" p WHERE p."tenantId" = ${tid}`,
-      db.$queryRaw<{ id: number; name: string; quantity: number; minQuantity: number }[]>`
-        SELECT p."id", p."name", p."quantity", p."minQuantity" FROM "Product" p
+      db.$queryRaw<{ id: number; name: string; quantity: number; minQuantity: number; unitLabel: string | null }[]>`
+        SELECT p."id", p."name", p."quantity", p."minQuantity", p."unitLabel" FROM "Product" p
         WHERE p."tenantId" = ${tid} AND p."quantity" <= p."minQuantity"
         ORDER BY p."quantity" ASC LIMIT 50`,
       db.maintenanceOrder.count({ where: { ...tenantFilter, status: { in: ['مستلم', 'قيد العمل', 'مكتمل'] } } }),
       db.maintenanceOrder.findMany({ where: { ...tenantFilter, status: { in: ['مستلم', 'قيد العمل', 'مكتمل'] } }, orderBy: { id: 'desc' }, take: 10 }),
       db.sale.findMany({ where: tenantFilter, orderBy: { id: 'desc' }, take: 10, select: { id: true, invoiceNo: true, createdAt: true, total: true, paid: true, status: true, customer: { select: { name: true } } } }),
-      db.$queryRaw<{ name: string; quantity: number; total: number }[]>`
-        SELECT MIN(i."name") AS name, SUM(i."quantity")::float8 AS quantity, SUM(i."price" * i."quantity")::float8 AS total
+      db.$queryRaw<{ name: string; quantity: number; total: number; pieceLabel: string | null }[]>`
+        SELECT MIN(i."name") AS name, MAX(i."pieceLabel") AS "pieceLabel", SUM(i."quantity")::float8 AS quantity, SUM(i."price" * i."quantity")::float8 AS total
         FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
         WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${last30Start}
         GROUP BY COALESCE(i."productId", 0) ORDER BY quantity DESC LIMIT 5`,
@@ -138,8 +138,8 @@ export async function GET(req: Request) {
     }
     const last7DaysSales = Array.from(dayMap.entries()).map(([date, v]) => ({ date, ...v }))
 
-    const topProducts = topProductRows.map((r) => ({ name: r.name, quantity: n(r.quantity), total: n(r.total) }))
-    const lowStockAlerts = lowStockRows.map((p) => ({ id: n(p.id), name: p.name, quantity: n(p.quantity), minQuantity: n(p.minQuantity) }))
+    const topProducts = topProductRows.map((r) => ({ name: r.name, quantity: n(r.quantity), total: n(r.total), unitLabel: r.pieceLabel ?? null }))
+    const lowStockAlerts = lowStockRows.map((p) => ({ id: n(p.id), name: p.name, quantity: n(p.quantity), minQuantity: n(p.minQuantity), unitLabel: p.unitLabel ?? null }))
 
     // last 10 sales (lightweight payload)
     const last10Sales = last10SalesRaw.map((s) => ({

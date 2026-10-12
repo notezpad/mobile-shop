@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { formatQtyUnit } from '@/lib/unit-label'
 import {
   Wallet,
   TrendingUp,
@@ -64,7 +65,7 @@ interface DashboardData {
   totalOutstandingDebt: number
   totalSupplierDebt: number
   last7DaysSales: { date: string; total: number; profit: number }[]
-  topProducts: { name: string; quantity: number; total: number }[]
+  topProducts: { name: string; quantity: number; total: number; unitLabel?: string | null }[]
   last10Sales: Array<{
     id: number
     invoiceNo: string | null
@@ -844,7 +845,7 @@ export function DashboardView() {
                             />
                           </div>
                           <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
-                            {p.quantity} قطعة
+                            {formatQtyUnit(p.quantity, p.unitLabel)}
                           </span>
                         </div>
                       </div>

@@ -15,6 +15,7 @@
  */
 
 import * as React from 'react'
+import { commonUnit, formatQtyUnit } from '@/lib/unit-label'
 import { Info, Loader2, RotateCcw, Search, Users, Wallet, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -33,6 +34,8 @@ export interface SaleReturnItem {
   returnedQty?: number
   unitLabel?: string | null
   unitQuantity?: number | null
+  // 🥬 وحدة المنتج وقت البيع (علبة/كيس/...) — null = قطعة
+  pieceLabel?: string | null
 }
 
 export interface SaleReturnSaleInfo {
@@ -126,6 +129,7 @@ function ReturnForm({
 
   const returnValue = round2(lines.reduce((s, l) => s + l.it.price * l.q, 0))
   const totalQty = lines.reduce((s, l) => s + l.q, 0)
+  const qtyUnit = commonUnit(lines.map((l) => (l.it.unitQuantity ? null : l.it.pieceLabel)))
 
   // 🛡️ الرد الكاش مبيتأكدش أبداً: الافتراضي 0 → القيمة بتخصم من حساب العميل
   // والخزنة متلمسهاش. لو العميل هياخد فلوس فعلاً المستخدم يكتبها (أو يدوس
@@ -381,7 +385,7 @@ function ReturnForm({
                     <div className="min-w-[9rem] flex-1">
                       <p className="truncate text-sm font-extrabold">{it.name}</p>
                       <p className="mt-0.5 text-xs font-medium tabular-nums text-foreground/65">
-                        {formatCurrency(it.price)} للقطعة · اتباع {it.quantity}
+                        {formatCurrency(it.price)} {it.pieceLabel && !it.unitQuantity ? `لل${it.pieceLabel}` : 'للقطعة'} · اتباع {it.quantity}
                       </p>
                     </div>
 
@@ -472,7 +476,7 @@ function ReturnForm({
                   </p>
                 </div>
                 <p className="text-xs font-semibold tabular-nums text-foreground/65">
-                  {totalQty} قطعة من {lines.length} صنف
+                  {formatQtyUnit(totalQty, qtyUnit)} من {lines.length} صنف
                 </p>
               </div>
 

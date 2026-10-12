@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { unitWord } from '@/lib/unit-label'
 import {
   Search,
   Plus,
@@ -408,6 +409,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                             <div className="flex items-center gap-3">
                               <span className={cn('min-w-9 text-xl font-black leading-none tabular-nums', ui.text)}>
                                 {num(Math.max(0, p.quantity))}
+                                {p.unitLabel && <span className="ms-1 text-[10px] font-semibold text-muted-foreground">{unitWord(p.quantity, p.unitLabel)}</span>}
                               </span>
                               <div className="min-w-0 flex-1 space-y-1.5">
                                 <StockMeter p={p} />
@@ -606,7 +608,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                               : 'text-emerald-700 dark:text-emerald-400',
                           )}
                         >
-                          {out ? 'نفدت' : num(p.quantity)}
+                          {out ? 'نفدت' : p.unitLabel ? `${num(p.quantity)} ${unitWord(p.quantity, p.unitLabel)}` : num(p.quantity)}
                         </p>
                         {low && !out && (
                           <p className="mt-0.5 text-[10px] font-medium leading-snug text-amber-700/80 dark:text-amber-400/80">

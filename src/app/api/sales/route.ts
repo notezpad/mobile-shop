@@ -272,6 +272,8 @@ export async function POST(req: NextRequest) {
       unitId: number | null
       unitLabel: string | null
       unitQuantity: number | null
+      // 🥬 لقطة وحدة المنتج (علبة/كيس..) وقت البيع — null = قطعة
+      pieceLabel: string | null
       variantId: number | null
     }> = []
 
@@ -353,6 +355,7 @@ export async function POST(req: NextRequest) {
         unitId,
         unitLabel,
         unitQuantity,
+        pieceLabel: (p as any).unitLabel ?? null,
         variantId,
       })
     }
@@ -450,6 +453,7 @@ export async function POST(req: NextRequest) {
                 quantity: i.quantity,
                 unitId: i.unitId,
                 unitLabel: i.unitLabel,
+                pieceLabel: i.pieceLabel,
                 unitQuantity: i.unitQuantity,
                 variantId: i.variantId,
               })),

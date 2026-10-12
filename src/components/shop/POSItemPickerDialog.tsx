@@ -11,6 +11,7 @@ import { DialogHero } from './sale-dialog-ui'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
+import { unitOf } from '@/lib/unit-label'
 
 export interface PickerVariant {
   id: number
@@ -28,6 +29,7 @@ export interface PickerUnit {
 }
 
 interface ProductForPicker {
+  unitLabel?: string | null
   id: number
   name: string
   price: number
@@ -198,7 +200,7 @@ export function POSItemPickerDialog({ open, onOpenChange, product, onConfirm }: 
                   <SectionTitle>وحدة البيع</SectionTitle>
                   <div className="flex flex-wrap gap-2">
                     <Pill active={selectedUnit === PIECE_UNIT} onClick={() => handleUnitChange(PIECE_UNIT)}>
-                      قطعة
+                      {unitOf(product.unitLabel)}
                     </Pill>
                     {units.map((u) => (
                       <Pill key={u.id} active={selectedUnit === String(u.id)} onClick={() => handleUnitChange(String(u.id))}>
@@ -208,7 +210,7 @@ export function POSItemPickerDialog({ open, onOpenChange, product, onConfirm }: 
                   </div>
                   {!isAssortment && unit && (
                     <p className="mt-2 text-xs font-medium text-foreground/65">
-                      كل {unit.name} = {factor} قطعة — إجمالي: {totalPieces} قطعة
+                      كل {unit.name} = {factor} {unitOf(product.unitLabel)} — إجمالي: {totalPieces} {unitOf(product.unitLabel)}
                     </p>
                   )}
                 </section>

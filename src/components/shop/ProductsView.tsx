@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { unitWord } from '@/lib/unit-label'
 import { ProductAvatar } from './ProductAvatar'
 import {
   AlertTriangle,
@@ -67,6 +68,9 @@ import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { useDataRefresh } from '@/lib/offline/data-events'
 
 interface Product {
+  // 🥬 وحدة المنتج (علبة/كيس/...) — null = قطعة
+  unitLabel?: string | null
+  soldByWeight?: boolean
   id: number
   name: string
   category: string | null
@@ -301,6 +305,9 @@ export function ProductsView() {
       minQuantity: p.minQuantity,
       imagePath: p.imagePath,
       retailMarginPercent: p.retailMarginPercent ?? null,
+      // 🥬 لازم يتمرروا، وإلا تعديل أي منتج بالوزن كان هيرجّعه «قطعة» ويمسح وحدته
+      soldByWeight: p.soldByWeight === true,
+      unitLabel: p.unitLabel ?? null,
     })
     setDialogOpen(true)
   }
@@ -1007,7 +1014,7 @@ export function ProductsView() {
                         )}
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <span className={cn('w-10 text-lg font-extrabold tabular-nums', ui.text)}>{p.quantity}</span>
+                            <span className={cn('min-w-10 text-lg font-extrabold tabular-nums', ui.text)}>{p.quantity}{p.unitLabel && <span className="ms-1 text-[10px] font-semibold text-muted-foreground">{unitWord(p.quantity, p.unitLabel)}</span>}</span>
                             <div className="min-w-0 flex-1">
                               <StockMeter p={p} compact />
                               <p className="mt-1 text-[10px] text-muted-foreground">
@@ -1426,7 +1433,7 @@ function ProductTag({
           <div className="flex items-end justify-between gap-2">
             <div>
               <p className="text-[10px] font-medium text-muted-foreground">المخزون</p>
-              <p className={cn('text-2xl font-extrabold leading-none tabular-nums', ui.text)}>{p.quantity}</p>
+              <p className={cn('text-2xl font-extrabold leading-none tabular-nums', ui.text)}>{p.quantity}{p.unitLabel && <span className="ms-1 text-[10px] font-semibold text-muted-foreground">{unitWord(p.quantity, p.unitLabel)}</span>}</p>
             </div>
             <div className="text-end">
               <span className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-extrabold', ui.chip)}>{ui.label}</span>

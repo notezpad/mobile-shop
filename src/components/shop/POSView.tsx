@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { commonUnit, formatQtyUnit, unitOf, unitWord } from '@/lib/unit-label'
 import {
   AlertTriangle,
   Banknote,
@@ -61,6 +62,8 @@ interface ProductLite {
   dynamicRetailPrice?: number | null
   // 🥬 2026-10-12: منتج بيع بالوزن — الكمية بالكيلو وتقبل كسور (1.65)
   soldByWeight?: boolean
+  // 🥬 2026-10-12: وحدة المنتج (علبة/كيس/برطمان...) — null = قطعة
+  unitLabel?: string | null
 }
 
 function piecePrice(product: ProductLite): number {
@@ -350,11 +353,11 @@ function ProductThumb({
   )
 }
 
-function StockBadge({ quantity, weight }: { quantity: number; weight?: boolean }) {
+function StockBadge({ quantity, weight, unit }: { quantity: number; weight?: boolean; unit?: string | null }) {
   // 🥬 2026-10-12: منتجات البيع بالوزن — الكمية بالكيلو بتتعرض نظيفة
   // (45.5 بدل 45.500000001) مع وحدة الكيلو.
   const fmt = (n: number) =>
-    weight ? `${Math.round(n * 100) / 100} كجم` : String(n)
+    weight ? `${Math.round(n * 100) / 100} كجم` : unit ? formatQtyUnit(n, unit) : String(n)
   if (quantity <= 0)
     return (
       <span className="whitespace-nowrap rounded-full bg-danger-subtle px-2 py-0.5 text-[length:var(--fs-2xs,0.6875rem)] font-medium text-danger-subtle-foreground">
@@ -1020,6 +1023,8 @@ export function POSView() {
 
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0)
   const totalPieces = cart.reduce((s, i) => s + i.quantity, 0)
+  // 🥬 لو كل الأصناف ليها نفس الوحدة (كلها علب مثلاً) نعرضها في الإجمالي، غير كده «قطعة»
+  const cartUnit = commonUnit(cart.map((i) => (i.unitId ? null : i.product.unitLabel)))
   const effectivePaid = paidFull ? total : paidAmount
   const remaining = Math.max(0, total - effectivePaid)
   const creditNeedsCustomer = !paidFull && remaining > 0 && !resolvedCustomer
@@ -2067,7 +2072,7 @@ export function POSView() {
                       </p>
                       {viewMode === 'compact' && (
                         <div className="mt-1 flex items-center gap-1.5">
-                          <StockBadge quantity={p.quantity} weight={p.soldByWeight} />
+                          <StockBadge quantity={p.quantity} weight={p.soldByWeight} unit={p.unitLabel} />
                           {p.soldByWeight && (
                             <span className="shrink-0 rounded-full bg-brand-600/15 px-1.5 py-0.5 text-[length:var(--fs-2xs,0.6875rem)] font-bold text-brand-700 dark:text-brand-300">
                               بالكيلو
@@ -2096,7 +2101,7 @@ export function POSView() {
                             <span className="text-[11px] font-bold text-muted-foreground"> / كيلو</span>
                           )}
                         </span>
-                        <StockBadge quantity={p.quantity} weight={p.soldByWeight} />
+                        <StockBadge quantity={p.quantity} weight={p.soldByWeight} unit={p.unitLabel} />
                       </div>
                     )}
                   </button>
@@ -2272,7 +2277,7 @@ export function POSView() {
                   >
                     {it.variantLabel ? `${it.variantLabel} · ` : ''}
                     {formatCurrency(it.price)}
-                    {it.unitLabel ? ` / ${it.unitLabel}` : isWeight ? ' / كيلو' : ''}
+                    {it.unitLabel ? ` / ${it.unitLabel}` : isWeight ? ' / كيلو' : it.product.unitLabel ? ` / ${it.product.unitLabel}` : ''}
                     {atMax ? ' · آخر كمية' : ''}
                   </span>
                 </button>
@@ -2313,7 +2318,7 @@ export function POSView() {
                       className={cn(selectCls, 'h-10 min-w-0 flex-1 rounded-xl text-base')}
                       aria-label="الوحدة"
                     >
-                      <option value="">قطعة</option>
+                      <option value="">{unitOf(it.product.unitLabel)}</option>
                       {it.availableUnits.map((u) => (
                         <option key={u.id} value={u.id}>
                           {u.name}
@@ -2378,9 +2383,11 @@ export function POSView() {
                   >
                     {atMax && <AlertTriangle className="size-3" />}
                     {formatCurrency(it.price)} × {it.quantity}
-                    {isWeight ? ' كيلو' : ''}
+                    {isWeight ? ' كيلو' : !it.unitId && it.product.unitLabel ? ` ${unitWord(it.quantity, it.product.unitLabel)}` : ''}
                     <span aria-hidden>·</span>
-                    {atMax ? 'آخر كمية متاحة' : `متاح ${isWeight ? `${Math.round(cap * 100) / 100} كيلو` : cap}`}
+                    {atMax
+                      ? 'آخر كمية متاحة'
+                      : `متاح ${isWeight ? `${Math.round(cap * 100) / 100} كيلو` : !it.unitId && it.product.unitLabel ? formatQtyUnit(cap, it.product.unitLabel) : cap}`}
                   </p>
                 </div>
                 <span className="text-base font-extrabold tabular-nums">
@@ -2466,7 +2473,7 @@ export function POSView() {
                     className={cn(selectCls, 'h-9 min-w-0 flex-1 rounded-xl text-sm')}
                     aria-label="الوحدة"
                   >
-                    <option value="">قطعة</option>
+                    <option value="">{unitOf(it.product.unitLabel)}</option>
                     {it.availableUnits.map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.name}
@@ -2570,8 +2577,8 @@ export function POSView() {
       {cart.length > 0 && (
         <footer className="space-y-1.5 border-t-2 border-dashed border-foreground/25 bg-muted/40 px-3.5 py-3 text-sm">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span>عدد القطع</span>
-            <b className="tabular-nums text-foreground">{totalPieces}</b>
+            <span>{cartUnit ? 'الكمية' : 'عدد القطع'}</span>
+            <b className="tabular-nums text-foreground">{cartUnit ? formatQtyUnit(totalPieces, cartUnit) : totalPieces}</b>
           </div>
           <div className="flex items-baseline justify-between border-t border-dashed border-foreground/20 pt-2">
             <span className="font-bold">إجمالي السلة</span>
@@ -2642,7 +2649,7 @@ export function POSView() {
             <div className={cn('flex items-center justify-between gap-2 font-semibold text-stone-300', compact ? 'text-xs' : 'text-sm')}>
               <span>الإجمالي المستحق</span>
               <span className="tabular-nums">
-                {cart.length} صنف · {totalPieces} قطعة
+                {cart.length} صنف · {formatQtyUnit(totalPieces, cartUnit)}
               </span>
             </div>
             <p className={cn('flex items-baseline gap-2 leading-none tabular-nums text-emerald-300', compact ? 'mt-1' : 'mt-2')}>

@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { commonUnit, formatQtyUnit, unitWord } from '@/lib/unit-label'
 import {
   ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, FileDown, FileSpreadsheet,
   Filter, Layers, PackageCheck, Printer, ReceiptText, RotateCcw, Search, User, Users, Wallet, X,
@@ -34,6 +35,8 @@ interface SaleItem {
   cost: number
   unitLabel?: string | null
   unitQuantity?: number | null
+  // 🥬 وحدة المنتج وقت البيع (علبة/كيس/...) — null = قطعة
+  pieceLabel?: string | null
   returnedQty?: number
 }
 interface Sale {
@@ -54,6 +57,9 @@ const PAGE_SIZE = 50
 const isReturned = (s: Sale) => s.status === 'مرتجعة'
 const invNo = (s: Sale) => s.invoiceNo ?? `#${s.id}`
 const qtyOf = (s: Sale) => s.items.reduce((n, it) => n + it.quantity, 0)
+/** 🥬 «5 علب» لو كل الأصناف نفس الوحدة (ومش وحدات جملة)، وإلا «5 قطعة» */
+const qtyText = (s: Sale) =>
+  formatQtyUnit(qtyOf(s), commonUnit(s.items.map((it) => (it.unitQuantity ? null : it.pieceLabel))))
 /** رقم بدون كلمة «جنيه» — الوحدة بتتعرض صغيرة وخفيفة جنبه */
 const money = (n: number) => formatCurrency(n).replace(/\s*جنيه$/, '')
 /** INV-2026-00011 → السيريال الكبير (00011) + البادئة الصغيرة (INV-2026) زي دفاتر الفواتير */
@@ -77,7 +83,7 @@ function displayLine(it: SaleItem) {
   const hasUnit = it.unitQuantity != null && it.unitQuantity > 0
   const qty = hasUnit ? it.unitQuantity! : it.quantity
   const price = hasUnit ? (it.price * it.quantity) / it.unitQuantity! : it.price
-  return { qty, price, unit: it.unitLabel ?? null }
+  return { qty, price, unit: it.unitLabel ?? (it.pieceLabel ? unitWord(qty, it.pieceLabel) : null) }
 }
 
 /* ───────────── للفلاتر: أنواع + ثوابت + حساب التسوية (متوافق مع sale-return.ts) ───────────── */
@@ -758,7 +764,7 @@ export function SalesHistoryView() {
 
                               {/* سطر سفلي: الكمية + البائع + طريقة الدفع */}
                               <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10.5px] text-muted-foreground">
-                                <span className="shrink-0 tabular-nums">{qtyOf(s)} قطعة</span>
+                                <span className="shrink-0 tabular-nums">{qtyText(s)}</span>
 
                                 {s.userName && (
                                   <span className="flex min-w-0 items-center gap-1">
@@ -808,7 +814,7 @@ export function SalesHistoryView() {
                               </span>
                               <span className="truncate text-[12.5px] text-foreground/70">{preview(s)}</span>
                               <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                                <span>{qtyOf(s)} قطعة</span>
+                                <span>{qtyText(s)}</span>
                                 {s.userName && (<><span className="size-[3px] rounded-full bg-current opacity-50" /><span>{s.userName}</span></>)}
                                 <span className="ms-auto @xl:hidden"><StatusChip sale={s} /></span>
                               </span>
@@ -916,6 +922,8 @@ export function SalesHistoryView() {
           items={partialReturnSale.items.map((it) => ({
             id: it.id,
             productId: (it as any).productId ?? null,
+            pieceLabel: it.pieceLabel ?? null,
+            unitQuantity: it.unitQuantity ?? null,
             name: it.name + (it.unitLabel ? ` (${it.unitQuantity}× ${it.unitLabel})` : ''),
             price: it.price,
             quantity: it.quantity,
@@ -1034,7 +1042,7 @@ function Receipt({
 
         <div className="mt-3 flex items-center justify-between text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
           <span>{s.items.length} صنف</span>
-          <span className="tabular-nums">{qtyOf(s)} قطعة</span>
+          <span className="tabular-nums">{qtyText(s)}</span>
         </div>
         {bigInvoice && (
           <label className="relative mt-2 flex h-8 items-center rounded-lg border border-zinc-300 bg-white/70 focus-within:border-yellow-500 focus-within:ring-[3px] focus-within:ring-yellow-300/40 dark:border-zinc-700 dark:bg-zinc-800/60">

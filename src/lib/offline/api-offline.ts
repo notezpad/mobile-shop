@@ -887,10 +887,12 @@ async function buildLocalSale(body: any) {
     const price = round2(it?.price)
     const p = await productNameOf(it?.productId, it?.name)
     let cost = 0
+    let pieceLabel: string | null = null
     const pid = Number(it?.productId)
     if (Number.isFinite(pid) && pid > 0) {
       const prod = await idb.getProductById(pid).catch(() => null)
       cost = round2(prod?.cost)
+      pieceLabel = ((prod as any)?.unitLabel as string | null | undefined) ?? null
     }
     total += qty * price
     // تقدير الربح أوفلاين (تكلفة القطعة × الكمية) — المزامنة بترجّع الرقم النهائي
@@ -902,6 +904,7 @@ async function buildLocalSale(body: any) {
       quantity: qty,
       cost,
       unitLabel: null,
+      pieceLabel,
       unitQuantity: null,
       returnedQty: 0,
     })

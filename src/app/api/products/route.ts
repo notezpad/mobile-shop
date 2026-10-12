@@ -1,3 +1,4 @@
+import { cleanUnitLabel, guessUnitLabel } from '@/lib/unit-label'
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
@@ -104,7 +105,7 @@ export async function GET(req: NextRequest) {
       !lowOnly
     const invQuery = `branch=${session.branchId ?? 0}&inv=1&page=${page}`
     if (invCacheable) {
-      const invHit = await matchEdgeCache('/api/products', invQuery, session.tenantId, '3')
+      const invHit = await matchEdgeCache('/api/products', invQuery, session.tenantId, '4')
       if (invHit) return invHit
     }
 
@@ -125,7 +126,7 @@ export async function GET(req: NextRequest) {
       !searchParams.has('stock')
     const cacheQuery = `branch=${session.branchId ?? 0}`
     if (cacheable) {
-      const hit = await matchEdgeCache('/api/products', cacheQuery, session.tenantId, '3')
+      const hit = await matchEdgeCache('/api/products', cacheQuery, session.tenantId, '4')
       if (hit) return hit
     }
 
@@ -257,9 +258,9 @@ export async function GET(req: NextRequest) {
       totalPages: Math.ceil(total / limit),
     })
     if (invCacheable) {
-      await putEdgeCache(listRes.clone(), '/api/products', invQuery, session.tenantId, 20, '3')
+      await putEdgeCache(listRes.clone(), '/api/products', invQuery, session.tenantId, 20, '4')
     } else if (cacheable) {
-      await putEdgeCache(listRes.clone(), '/api/products', cacheQuery, session.tenantId, 20, '3')
+      await putEdgeCache(listRes.clone(), '/api/products', cacheQuery, session.tenantId, 20, '4')
     }
     return listRes
   })
@@ -333,6 +334,16 @@ export async function POST(req: NextRequest) {
         soldByWeight:
           planCtx.businessType === 'food' &&
           (body.soldByWeight === true || body.soldByWeight === 'true'),
+        // 🥬 2026-10-12: وحدة المنتج (علبة/كيس/برطمان...) — غذائية فقط.
+        // لو العميل ماحددش وحدة (undefined) بنخمّنها من الاسم (رز → كيس).
+        // null/'' = «قطعة» صريحة. منتجات الوزن بتتباع بالكيلو فمالهاش وحدة.
+        unitLabel:
+          planCtx.businessType === 'food' &&
+          !(body.soldByWeight === true || body.soldByWeight === 'true')
+            ? body.unitLabel === undefined
+              ? guessUnitLabel(name)
+              : cleanUnitLabel(body.unitLabel)
+            : null,
         imagePath: body.imagePath ? String(body.imagePath) : null,
         branchId: session.branchId ?? (body.branchId ? parseInt(body.branchId, 10) : null),
         collection: body.collection ? String(body.collection).trim() || null : null,

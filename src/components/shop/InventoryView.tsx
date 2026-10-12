@@ -45,6 +45,8 @@ export interface InventoryProduct {
   imagePath?: string | null
   // 🥬 2026-10-12: بيع بالوزن (غذائية) — الجرد/التحويلات بتعرض بالكيلو
   soldByWeight?: boolean
+  // 🥬 وحدة المنتج (علبة/كيس/...) — null = قطعة
+  unitLabel?: string | null
 }
 export interface Movement {
   id: number

@@ -13,6 +13,7 @@ import { generateEan13 } from '@/lib/barcode'
 import { DialogHero, Field, InkInput, SectionTitle } from './product-dialog-ui'
 import { INK_BTN, INK_BTN_OUTLINE } from './settings-ui'
 import { cn } from '@/lib/utils'
+import { UNIT_PRESETS, DEFAULT_UNIT_LABEL, cleanUnitLabel, guessUnitLabel, unitOf } from '@/lib/unit-label'
 import {
   Select,
   SelectContent,
@@ -36,6 +37,8 @@ export interface ProductFormValues {
   retailMarginPercent?: number | null
   // 🥬 2026-10-12: بيع بالوزن (غذائية فقط) — السعر = سعر الكيلو والكمية بكسور
   soldByWeight?: boolean
+  // 🥬 2026-10-12: وحدة المنتج (علبة/كيس/برطمان...) — null = قطعة
+  unitLabel?: string | null
 }
 
 interface Props {
@@ -68,6 +71,9 @@ export function ProductDialog({
   const [collection, setCollection] = React.useState<string>('')
   // 🥬 2026-10-12: بيع بالوزن — متاح للمحلات الغذائية فقط (كيلو بكسور)
   const [soldByWeight, setSoldByWeight] = React.useState(false)
+  // 🥬 2026-10-12: وحدة المنتج — '' = قطعة. unitAuto = لسه بنخمّنها من الاسم (المستخدم ماغيّرهاش بإيده)
+  const [unitLabel, setUnitLabel] = React.useState('')
+  const [unitAuto, setUnitAuto] = React.useState(true)
   // Unit-Based Dynamic Pricing: per-product override of the tenant's default
   // retail margin %. Empty string = "use the tenant default".
   const [retailMarginPercent, setRetailMarginPercent] = React.useState<string>('')
@@ -100,6 +106,9 @@ export function ProductDialog({
       setCollection((initial as any)?.collection ?? '')
       // 🥬 2026-10-12: بيع بالوزن
       setSoldByWeight((initial as any)?.soldByWeight === true)
+      // منتج جديد → التخمين من الاسم شغال. منتج قديم → مانغيّرش وحدته من نفسنا (نقترح بس).
+      setUnitLabel(initial?.unitLabel ?? '')
+      setUnitAuto(!initial?.id)
       setRetailMarginPercent(
         initial?.retailMarginPercent != null ? String(initial.retailMarginPercent) : ''
       )
@@ -150,6 +159,8 @@ export function ProductDialog({
         collection: collection.trim() || null,
         // 🥬 2026-10-12: بيع بالوزن (غذائية فقط — السيرفر بيتحقق برضه)
         ...(isFoodVertical ? { soldByWeight } : {}),
+        // 🥬 2026-10-12: وحدة المنتج (علبة/كيس/...) — '' يعني قطعة. المنتج بالوزن بالكيلو مالوش وحدة.
+        ...(isFoodVertical ? { unitLabel: soldByWeight ? null : cleanUnitLabel(unitLabel) } : {}),
         // 🛡️ 2026-10-03: باقة احترافية فقط — لو مش pro نسيب الحقل خارج الطلب
         ...(capabilities.includes('dynamic_retail_pricing')
           ? { retailMarginPercent: retailMarginPercent.trim() !== '' ? parseFloat(retailMarginPercent) : null }
@@ -223,7 +234,11 @@ export function ProductDialog({
                 <InkInput
                   id="p-name"
                   value={name}
-                  onChange={(e) => edit(setName)(e.target.value)}
+                  onChange={(e) => {
+                    edit(setName)(e.target.value)
+                    // 🥬 فهم الاسم: رز → كيس، زبادي → علبة، مربى → برطمان (طول ما المستخدم ماغيّرش الوحدة بإيده)
+                    if (isFoodVertical && unitAuto) setUnitLabel(guessUnitLabel(e.target.value) ?? '')
+                  }}
                   placeholder="اسم المنتج"
                 />
               </Field>
@@ -383,6 +398,66 @@ export function ProductDialog({
                     />
                   </span>
                 </label>
+              )}
+
+              {/* 🥬 2026-10-12: وحدة المنتج (علبة/كيس/برطمان...) — غذائية، لغير منتجات الوزن */}
+              {isFoodVertical && !soldByWeight && (
+                <div className="col-span-2 space-y-2 rounded-xl border bg-muted/40 p-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[15px] font-extrabold">وحدة المنتج</span>
+                    <span className="text-[12px] font-semibold text-foreground/65">
+                      {unitAuto && unitLabel ? 'اتحددت تلقائي من الاسم — غيّرها لو عايز' : 'بتظهر في البيع والمخزون: «3 علب» بدل «3 قطعة»'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {UNIT_PRESETS.map((u) => {
+                      const active = unitOf(unitLabel) === u
+                      return (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => {
+                            setUnitAuto(false)
+                            setUnitLabel(u === DEFAULT_UNIT_LABEL ? '' : u)
+                            setDirty(true)
+                          }}
+                          className={cn(
+                            'h-9 touch-manipulation rounded-full border px-3.5 text-sm font-bold transition-colors',
+                            active
+                              ? 'border-emerald-600 bg-emerald-600 text-white'
+                              : 'bg-card text-foreground/80 hover:bg-muted',
+                          )}
+                        >
+                          {u}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <InkInput
+                    id="p-unit"
+                    value={UNIT_PRESETS.includes(unitOf(unitLabel) as (typeof UNIT_PRESETS)[number]) ? '' : unitLabel}
+                    onChange={(e) => {
+                      setUnitAuto(false)
+                      setUnitLabel(e.target.value)
+                      setDirty(true)
+                    }}
+                    maxLength={20}
+                    placeholder="أو اكتب وحدة تانية (مثال: دستة، شيكارة)"
+                  />
+                  {/* منتج قديم وحدته «قطعة» والاسم واضح؟ نقترح من غير ما نغيّر من نفسنا */}
+                  {!unitAuto && !unitLabel && name.trim() && guessUnitLabel(name) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUnitLabel(guessUnitLabel(name) ?? '')
+                        setDirty(true)
+                      }}
+                      className="text-[12.5px] font-bold text-emerald-700 underline underline-offset-2 dark:text-emerald-400"
+                    >
+                      اقتراح من الاسم: {guessUnitLabel(name)} — اضغط للتطبيق
+                    </button>
+                  )}
+                </div>
               )}
 
               {showMargin && (
