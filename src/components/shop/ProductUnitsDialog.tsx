@@ -36,18 +36,6 @@ const DOSE_PRESETS = [
   { name: 'دستة و نص', factor: 18 },
 ]
 
-// 🥬 2026-10-12: وحدات المواد الغذائية — للمحلات الغذائية (عطارة/مجمدات/
-// بقالة/منظفات). كيس/طبق/برطمان/علبة = بيعة واحدة بسعر خاص (factor=1)،
-// والكرتونة للجملة. البيع بالكيلو بكسور مبيعتمدش هنا — ده توoggle «يُباع
-// بالوزن» في بطاقة المنتج نفسه.
-const FOOD_PRESETS = [
-  { name: 'كيس',    factor: 1  },
-  { name: 'طبق',    factor: 1  },
-  { name: 'برطمان', factor: 1  },
-  { name: 'علبة',   factor: 1  },
-  { name: 'كرتونة', factor: 12 },
-]
-
 export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: Props) {
   const confirm = useConfirm()
   const [units, setUnits] = React.useState<ProductUnit[]>([])
@@ -58,11 +46,11 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
   const enabled = capabilities.includes('multi_unit')
   // 🥬 2026-10-12: وحدات غذائية للمحلات الغذائية، وحدات دستة للباقي
   const isFoodVertical = useShopStore((s) => s.plan.businessType) === 'food'
-  const presets = isFoodVertical ? FOOD_PRESETS : DOSE_PRESETS
-  const presetsLabel = isFoodVertical ? 'وحدات غذائية تلقائيًا' : 'وحدات الدستة تلقائيًا'
-  const presetsHint = isFoodVertical
-    ? 'الوحدات التلقائية: كيس · طبق · برطمان · علبة (بيعة واحدة بسعر خاص) + كرتونة (12) — عدّل السعر لكل وحدة. البيع بالكيلو بكسور بيتفعّل من «يُباع بالوزن» في بطاقة المنتج.'
-    : 'الوحدات التلقائية: ربع دستة (3) · نص دستة (6) · دستة (12) · دستة ونص (18) — بسعر القطعة × العدد.'
+  // 🥬 المواد الغذائية: كل الوحدات يدوية (مفيش وحدات تلقائية)
+  const presets = DOSE_PRESETS
+  const presetsLabel = 'وحدات الدستة تلقائيًا'
+  const presetsHint = 'الوحدات التلقائية: ربع دستة (3) · نص دستة (6) · دستة (12) · دستة ونص (18) — بسعر القطعة × العدد.'
+  const foodHint = 'ضيف الوحدات يدويًا: الاسم (مثلاً كيس كيلو / علبة) + عدد القطع + السعر.'
 
   const load = React.useCallback(async () => {
     if (!product) return
@@ -95,7 +83,7 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
       const existingNames = new Set(units.map((u) => u.name))
       const toAdd = presets.filter((p) => !existingNames.has(p.name))
       if (toAdd.length === 0) {
-        toast.info(isFoodVertical ? 'الوحدات الغذائية موجودة بالفعل' : 'وحدات الدستة موجودة بالفعل')
+        toast.info('وحدات الدستة موجودة بالفعل')
         return
       }
       for (const preset of toAdd) {
@@ -205,7 +193,7 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
                     <Field label="الاسم" htmlFor="u-name" className="col-span-2 sm:col-span-2">
                       <InkInput
                         id="u-name"
-                        placeholder="دستة / نص دستة / كرتونة"
+                        placeholder={isFoodVertical ? 'كيس كيلو / علبة / كرتونة' : 'دستة / نص دستة / كرتونة'}
                         value={form.name}
                         onChange={(e) => setForm({ ...form, name: e.target.value })}
                       />
@@ -246,18 +234,20 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
                       {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
                       إضافة الوحدة
                     </Button>
-                    <Button
-                      variant="outline"
-                      onClick={addPresets}
-                      disabled={saving || bulkSaving}
-                      className={cn('h-11 rounded-xl px-4', INK_BTN_OUTLINE)}
-                      title={presetsHint}
-                    >
-                      {bulkSaving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                      {presetsLabel}
-                    </Button>
+                    {!isFoodVertical && (
+                      <Button
+                        variant="outline"
+                        onClick={addPresets}
+                        disabled={saving || bulkSaving}
+                        className={cn('h-11 rounded-xl px-4', INK_BTN_OUTLINE)}
+                        title={presetsHint}
+                      >
+                        {bulkSaving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                        {presetsLabel}
+                      </Button>
+                    )}
                   </div>
-                  <p className="text-[11px] font-medium text-foreground/60">{presetsHint}</p>
+                  <p className="text-[11px] font-medium text-foreground/60">{isFoodVertical ? foodHint : presetsHint}</p>
                 </div>
               </section>
 
@@ -281,7 +271,7 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
                   <div className="rounded-2xl border border-dashed bg-card/60 px-4 py-8 text-center">
                     <Boxes className="mx-auto size-6 text-foreground/40" aria-hidden />
                     <p className="mt-2 text-sm font-bold">لا توجد وحدات بعد</p>
-                    <p className="mt-0.5 text-xs font-medium text-foreground/65">ضيف وحدة من فوق أو استخدم وحدات الدستة التلقائية.</p>
+                    <p className="mt-0.5 text-xs font-medium text-foreground/65">{isFoodVertical ? 'ضيف وحدة من فوق.' : 'ضيف وحدة من فوق أو استخدم وحدات الدستة التلقائية.'}</p>
                   </div>
                 ) : (
                   <ul className="max-h-[18rem] space-y-1.5 overflow-y-auto overscroll-contain rounded-2xl border bg-card p-1.5">

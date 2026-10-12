@@ -991,7 +991,7 @@ export function ProductsView() {
                         <TableCell className="text-center font-extrabold tabular-nums">
                           {formatCurrency(p.price)}
                         </TableCell>
-                        {isWholesale && (
+                        {capabilities.includes('dynamic_retail_pricing') && (
                           <TableCell className="text-center tabular-nums">
                             {p.dynamicRetailPrice != null ? (
                               <div className="flex flex-col items-center gap-0.5">
