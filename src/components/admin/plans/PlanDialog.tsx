@@ -12,6 +12,8 @@ import {
   Building2,
   Smartphone,
   Shirt,
+  ShoppingBasket,
+  EyeOff,
   Sparkles,
   Gauge,
   Layers,
@@ -26,6 +28,7 @@ import {
   CircleDot,
   Wand2,
   Trash2,
+  Eye,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -79,7 +82,11 @@ interface FormState {
   code: string
   name: string
   description: string
-  businessType: 'electronics' | 'fashion'
+  // 🥬 2026-10-12: أضفنا 'food' (المواد الغذائية: عطارة/مجمدات/بقالة/منظفات)
+  businessType: 'electronics' | 'fashion' | 'food'
+  // 🥬 2026-10-12: ظهور الباقة — 'hidden' = للأدمن فقط (ما بتظهرش في
+  // اللاندينج/الأسعار/التسجيل، بتتسند يدوياً أو بأكواد تفعيل)
+  visibility: 'public' | 'hidden'
   priceMonthly: string
   priceYearly: string
   maxUsers: string
@@ -99,6 +106,7 @@ function blankForm(sortOrder: number): FormState {
     name: '',
     description: '',
     businessType: 'electronics',
+    visibility: 'public',
     priceMonthly: '0',
     priceYearly: '0',
     maxUsers: '1',
@@ -114,13 +122,16 @@ function blankForm(sortOrder: number): FormState {
 }
 
 function formFromPlan(p: Partial<PlanRow>, sortOrder: number): FormState {
-  const bt: 'electronics' | 'fashion' = p.businessType === 'fashion' ? 'fashion' : 'electronics'
+  // 🥬 2026-10-12: أضفنا 'food' + visibility
+  const bt: 'electronics' | 'fashion' | 'food' =
+    p.businessType === 'fashion' ? 'fashion' : p.businessType === 'food' ? 'food' : 'electronics'
   const mods = parseCaps(p.enabledModules)
   return {
     code: p.code ?? '',
     name: p.name ?? '',
     description: p.description ?? '',
     businessType: bt,
+    visibility: p.visibility === 'hidden' ? 'hidden' : 'public',
     priceMonthly: String(p.priceMonthly ?? 0),
     priceYearly: String(p.priceYearly ?? 0),
     maxUsers: String(p.maxUsers ?? 1),
@@ -319,7 +330,8 @@ function PlanPreview({ form, theme }: { form: FormState; theme: PlanTheme }) {
   const y = Number(form.priceYearly) || 0
   const { pct } = yearlySavings({ priceMonthly: m, priceYearly: y })
   const isFree = m === 0 && y === 0
-  const Icon = form.businessType === 'fashion' ? Shirt : Smartphone
+  // 🥬 2026-10-12: أيقونة النشاط + شارة المخفية في المعاينة
+  const Icon = form.businessType === 'food' ? ShoppingBasket : form.businessType === 'fashion' ? Shirt : Smartphone
   const limits = [
     { icon: Users, label: 'مستخدمين', v: Number(form.maxUsers) || 0 },
     { icon: Package, label: 'منتجات', v: Number(form.maxProducts) || 0 },
@@ -408,6 +420,11 @@ function PlanPreview({ form, theme }: { form: FormState; theme: PlanTheme }) {
         <Pill icon={Layers}>{form.enabledModules.length} وحدة</Pill>
         <Pill>{form.capabilities.length} صلاحية</Pill>
         <Pill tone={form.isActive ? 'emerald' : 'neutral'}>{form.isActive ? 'مفعّلة' : 'معطّلة'}</Pill>
+        {form.visibility === 'hidden' && (
+          <Pill tone="amber" icon={EyeOff}>
+            مخفية — للأدمن فقط
+          </Pill>
+        )}
       </div>
     </div>
   )
@@ -535,7 +552,7 @@ export function PlanDialog({
     }))
 
   const availableModules = MODULES_META.filter(
-    (mod) => !(form.businessType === 'fashion' && mod.electronicsOnly),
+    (mod) => !((form.businessType === 'fashion' || form.businessType === 'food') && mod.electronicsOnly),
   )
   const enabledCount = new Set([...form.enabledModules, ...CRITICAL_MODULES]).size
 
@@ -551,12 +568,26 @@ export function PlanDialog({
     try {
       // 🛡️ الوحدات الحرجة (الإعدادات/المستخدمين) تُضاف دائماً
       const finalModules = Array.from(new Set([...form.enabledModules, ...CRITICAL_MODULES]))
+      // 🥬 2026-10-12: قواعد المواد الغذائية — نظمّف الصلاحيات قبل الحفظ:
+      //   - نضمن multi_unit (وحدات الكيلو/الكيس/الطبق — جوهر الباقة)
+      //   - نشيل variants + collections (ميزات الملابس اللي الغذائية متلزمهوش)
+      // ده توثيق البيانات نفسها — الـ runtime كمان بيفرض نفس القواعد.
+      const finalCapabilities =
+        form.businessType === 'food'
+          ? Array.from(
+              new Set([
+                ...form.capabilities.filter((c) => c !== 'variants' && c !== 'collections'),
+                'multi_unit',
+              ]),
+            )
+          : form.capabilities
       const payload = {
         code: codeNorm,
         name: form.name.trim(),
         description: form.description,
         businessType: form.businessType,
-        capabilities: form.capabilities,
+        visibility: form.visibility,
+        capabilities: finalCapabilities,
         enabledModules: finalModules,
         priceMonthly: m,
         priceYearly: y,
@@ -694,12 +725,14 @@ export function PlanDialog({
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 sm:py-5">
                 {/* ── الأساسيات ── */}
                 <TabsContent value="basic" className="mt-0 space-y-5">
-                  <Field label="نوع النشاط التجاري" hint="يحدّد الوحدات الافتراضية المتاحة للباقة (الصيانة والمعاملات المالية للإلكترونيات فقط).">
+                  <Field label="نوع النشاط التجاري" hint="يحدّد الوحدات الافتراضية المتاحة للباقة (الصيانة والمعاملات المالية للإلكترونيات فقط — والمواد الغذائية بدون ميزات الملابس).">
                     <div className="grid grid-cols-1 gap-2.5 min-[420px]:grid-cols-2">
                       {(
                         [
                           { v: 'electronics', label: 'موبايل وكمبيوتر', icon: Smartphone },
                           { v: 'fashion', label: 'ملابس وأحذية', icon: Shirt },
+                          // 🥬 2026-10-12: المواد الغذائية (عطارة/مجمدات/بقالة/منظفات)
+                          { v: 'food', label: 'مواد غذائية', icon: ShoppingBasket },
                         ] as const
                       ).map((o) => {
                         const active = form.businessType === o.v
@@ -733,8 +766,80 @@ export function PlanDialog({
                     </div>
                   </Field>
 
+                  {form.businessType === 'food' && (
+                    <p className="flex items-start gap-2 rounded-xl bg-emerald-500/10 px-3 py-2.5 text-[13.5px] leading-relaxed text-emerald-700 dark:text-emerald-300">
+                      <ShoppingBasket className="mt-0.5 size-3.5 shrink-0" />
+                      <span>
+                        <b>باقة المواد الغذائية:</b> وحدات البيع (كيلو/كيس/طبق/برطمان) مفعّلة تلقائياً، والبيع بالوزن
+                        بكسور (مثال: لحمة 1.65 كيلو) متاح من بطاقة المنتج. ميزات الملابس (مقاسات/ألوان/كوليكشن)
+                        والصيانة والمعاملات المالية <b>مخفية تماماً</b> عن عملاء الباقة دي.
+                      </span>
+                    </p>
+                  )}
+
+                  {/* 🥬 2026-10-12: ظهور الباقة — عامة أو مخفية */}
+                  <Field
+                    label="ظهور الباقة"
+                    hint={
+                      form.visibility === 'hidden'
+                        ? 'الباقة المخفية مش بتظهر في صفحة الأسعار ولا اللاندينج ولا التسجيل الذاتي — بتسندها للمحلات بنفسك من لوحة المحلات أو بأكواد تفعيل. لو الطلب زاد حوّلها «عامة» وهتظهر فوراً.'
+                        : 'عامة = تظهر في صفحة الأسعار والتسجيل الذاتي. للأنشطة الخاصة (زي المواد الغذائية) حوّلها مخفية وتحكم فيها بنفسك.'
+                    }
+                  >
+                    <div className="grid grid-cols-1 gap-2.5 min-[420px]:grid-cols-2">
+                      {(
+                        [
+                          {
+                            v: 'public',
+                            label: 'عامة — تظهر للجميع',
+                            desc: 'اللاندينج + الأسعار + التسجيل',
+                            icon: Eye,
+                          },
+                          {
+                            v: 'hidden',
+                            label: 'مخفية — للأدمن فقط',
+                            desc: 'إسناد يدوي / أكواد تفعيل',
+                            icon: EyeOff,
+                          },
+                        ] as const
+                      ).map((o) => {
+                        const active = form.visibility === o.v
+                        return (
+                          <button
+                            key={o.v}
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => set('visibility', o.v)}
+                            className={cn(
+                              'flex items-center gap-3 rounded-2xl border p-3 text-start transition-all outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50',
+                              active
+                                ? 'border-amber-500/50 bg-amber-500/[0.07] shadow-sm ring-1 ring-amber-500/20'
+                                : 'bg-card hover:border-amber-400/40 hover:bg-muted/40',
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                'flex size-10 items-center justify-center rounded-xl transition-colors',
+                                active
+                                  ? 'bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-md shadow-amber-500/30'
+                                  : 'bg-muted text-foreground/70',
+                              )}
+                            >
+                              <o.icon className="size-5" />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-[15px] font-bold leading-tight">{o.label}</span>
+                              <span className="mt-0.5 block text-[12.5px] leading-snug text-foreground/70">{o.desc}</span>
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </Field>
+
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="اسم الباقة *" error={showErr('name')}>
+                    <Field label="اسم الباقة *" error={showErr('name')}
+                    >
                       <Input
                         value={form.name}
                         onChange={(e) => set('name', e.target.value)}
@@ -1023,12 +1128,22 @@ export function PlanDialog({
                     <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                       {CAPABILITIES_META.map((cap) => {
                         const checked = form.capabilities.includes(cap.key)
+                        // 🥬 2026-10-12: قواعد المواد الغذائية في الصلاحيات:
+                        //   - multi_unit مقفولة ON (وحدات الكيلو/الكيس/الطبق = جوهر الباقة)
+                        //   - variants / collections معطلة (ميزات الملابس)
+                        const foodLockedOn = form.businessType === 'food' && cap.key === 'multi_unit'
+                        const foodLockedOff =
+                          form.businessType === 'food' &&
+                          (cap.key === 'variants' || cap.key === 'collections')
                         return (
                           <ToggleCard
                             key={cap.key}
-                            checked={checked}
+                            checked={foodLockedOn || (foodLockedOff ? false : checked)}
+                            disabled={foodLockedOn || foodLockedOff}
+                            locked={foodLockedOn}
                             title={cap.label}
                             desc={cap.desc}
+                            badge={foodLockedOn ? 'أساسية للغذائية' : foodLockedOff ? 'غير متاح للغذائية' : undefined}
                             onClick={() =>
                               set(
                                 'capabilities',
@@ -1062,7 +1177,7 @@ export function PlanDialog({
                         className="h-10 gap-1.5 rounded-full text-[13.5px] sm:h-8"
                       >
                         <RefreshCw className="size-3" />
-                        الافتراضي لـ{form.businessType === 'fashion' ? 'ملابس' : 'موبايل'}
+                        الافتراضي لـ{form.businessType === 'food' ? 'غذائية' : form.businessType === 'fashion' ? 'ملابس' : 'موبايل'}
                       </Button>
                       <Button
                         type="button"
@@ -1084,17 +1199,20 @@ export function PlanDialog({
                       </Button>
                     </div>
                   </div>
-                  {form.businessType === 'fashion' && (
+                  {(form.businessType === 'fashion' || form.businessType === 'food') && (
                     <p className="flex items-center gap-1.5 rounded-xl bg-muted px-3 py-2 text-[13.5px] text-foreground/70">
                       <Info className="size-3.5 shrink-0" />
-                      عناصر موبايل/كمبيوتر (الصيانة، المعاملات المالية) غير متاحة لباقات الملابس.
+                      {form.businessType === 'food'
+                        ? 'الصيانة والمعاملات المالية غير متاحة للمواد الغذائية — دي عناصر موبايل/كمبيوتر.'
+                        : 'عناصر موبايل/كمبيوتر (الصيانة، المعاملات المالية) غير متاحة لباقات الملابس.'}
                     </p>
                   )}
                   <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                     {MODULES_META.map((mod) => {
                       const isCritical = CRITICAL_MODULES.includes(mod.key)
                       const checked = isCritical || form.enabledModules.includes(mod.key)
-                      const disabledForType = form.businessType === 'fashion' && !!mod.electronicsOnly
+                      const disabledForType =
+                        (form.businessType === 'fashion' || form.businessType === 'food') && !!mod.electronicsOnly
                       return (
                         <ToggleCard
                           key={mod.key}
@@ -1103,7 +1221,7 @@ export function PlanDialog({
                           locked={isCritical}
                           title={mod.label}
                           desc={mod.desc}
-                          badge={isCritical ? 'إجباري' : disabledForType ? 'غير متاح للملابس' : undefined}
+                          badge={isCritical ? 'إجباري' : disabledForType ? (form.businessType === 'food' ? 'غير متاح للغذائية' : 'غير متاح للملابس') : undefined}
                           onClick={() => toggleModule(mod.key)}
                         />
                       )

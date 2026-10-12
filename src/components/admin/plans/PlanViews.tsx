@@ -30,6 +30,8 @@ import {
   PencilLine,
   Smartphone,
   Shirt,
+  ShoppingBasket,
+  EyeOff,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -58,6 +60,8 @@ import {
   featureList,
   fmtLimit,
   isFashion,
+  isFood,
+  isHiddenPlan,
   modulesOf,
   num,
   parseCaps,
@@ -350,7 +354,15 @@ export function PlanCard({
 
         {/* الشارات */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <Pill icon={fashion ? Shirt : Smartphone}>{BUSINESS_TYPE_LABEL[p.businessType ?? 'electronics'] ?? 'باقة'}</Pill>
+          <Pill icon={isFood(p) ? ShoppingBasket : fashion ? Shirt : Smartphone}>
+            {BUSINESS_TYPE_LABEL[p.businessType ?? 'electronics'] ?? 'باقة'}
+          </Pill>
+          {/* 🥬 2026-10-12: شارة الباقة المخفية */}
+          {isHiddenPlan(p) && (
+            <Pill tone="amber" icon={EyeOff}>
+              مخفية — للأدمن فقط
+            </Pill>
+          )}
           <Pill tone={p.isCanonical ? 'indigo' : 'amber'}>{p.isCanonical ? 'قياسية' : 'مخصّصة'}</Pill>
           {isTop && (
             <Pill tone="fuchsia" icon={Flame}>
@@ -946,10 +958,30 @@ export function PlansCompare({
       label: 'نوع النشاط',
       render: (p) => (
         <span className="inline-flex items-center gap-1 text-[14px] font-semibold">
-          {isFashion(p) ? <Shirt className="size-3 text-fuchsia-500" /> : <Smartphone className="size-3 text-sky-500" />}
+          {isFood(p) ? (
+            <ShoppingBasket className="size-3 text-emerald-500" />
+          ) : isFashion(p) ? (
+            <Shirt className="size-3 text-fuchsia-500" />
+          ) : (
+            <Smartphone className="size-3 text-sky-500" />
+          )}
           {BUSINESS_TYPE_LABEL[p.businessType ?? 'electronics'] ?? p.businessType}
         </span>
       ),
+    },
+    // 🥬 2026-10-12: صف ظهور الباقة في جدول المقارنة
+    {
+      label: 'الظهور',
+      render: (p) =>
+        isHiddenPlan(p) ? (
+          <Pill tone="amber" className="px-2 py-0 text-[12px]">
+            مخفية
+          </Pill>
+        ) : (
+          <Pill tone="emerald" className="px-2 py-0 text-[12px]">
+            عامة
+          </Pill>
+        ),
     },
     {
       label: 'الوحدات المفعّلة',

@@ -141,11 +141,13 @@ export async function performSaleReturn(
   } else {
     for (const l of input.lines) {
       const itemId = Number(l?.saleItemId)
-      const qty = Number(l?.quantity)
+      // 🥬 2026-10-12: كمية المرتجع Float — مرتجع بالوزن (0.5 كيلو لحمة).
+      // بنسمح لحد 3 خانات عشرية ونشيل ضوضاء العوامات.
+      const qty = Math.round((Number(l?.quantity) || 0) * 1000) / 1000
       if (!Number.isInteger(itemId) || !itemById.has(itemId)) {
         throw new SaleReturnError('صنف غير موجود في الفاتورة', 400)
       }
-      if (!Number.isInteger(qty) || qty < 0) {
+      if (!Number.isFinite(qty) || qty < 0) {
         throw new SaleReturnError('كمية المرتجع غير صالحة', 400)
       }
       if (qty === 0) continue
@@ -187,8 +189,9 @@ export async function performSaleReturn(
   if (input.exchange && input.exchange.length > 0) {
     for (const ex of input.exchange) {
       const pid = Number(ex?.productId)
-      const qty = Number(ex?.quantity)
-      if (!Number.isInteger(pid) || !Number.isInteger(qty) || qty <= 0) {
+      // 🥬 2026-10-12: كمية الاستبدال Float — استبدال بالوزن
+      const qty = Math.round((Number(ex?.quantity) || 0) * 1000) / 1000
+      if (!Number.isInteger(pid) || !Number.isFinite(qty) || qty <= 0) {
         throw new SaleReturnError('بيانات الاستبدال غير صالحة', 400)
       }
       const p = await tx.product.findFirst({ where: { id: pid, tenantId } })

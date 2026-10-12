@@ -280,7 +280,10 @@ export async function POST(req: NextRequest) {
       if (!p) {
         return NextResponse.json({ error: 'منتج غير موجود في السلة' }, { status: 400 })
       }
-      const qty = parseInt(it.quantity, 10)
+      // 🥬 2026-10-12: الكمية بقيت Float — منتجات البيع بالوزن بتتباع بكسور
+      // (لحمة 1.65 كيلو). منتجات القطع/الوحدات بتفضل أعداد صحيحة زي ما هي.
+      // بنسمح لحد 3 خانات عشرية (جرام) ونشيل أي ضوضاء عائمة.
+      const qty = Math.round((Number(it.quantity) || 0) * 1000) / 1000
       if (!qty || qty <= 0) {
         return NextResponse.json({ error: `كمية غير صالحة للمنتج ${p.name}` }, { status: 400 })
       }
@@ -325,9 +328,9 @@ export async function POST(req: NextRequest) {
       }
 
       const stockCeiling = variantId != null ? (variantMap.get(variantId)!.quantity) : p.quantity
-      if (totalPieces > stockCeiling) {
+      if (totalPieces > stockCeiling + 1e-9) {
         return NextResponse.json(
-          { error: `الكمية المطلوبة من ${p.name} غير متوفرة (المتاح: ${stockCeiling})` },
+          { error: `الكمية المطلوبة من ${p.name} غير متوفرة (المتاح: ${Math.round(stockCeiling * 1000) / 1000})` },
           { status: 400 }
         )
       }

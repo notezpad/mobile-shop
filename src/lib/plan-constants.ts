@@ -81,6 +81,8 @@ export const CANONICAL_PLAN_CODES = [
   'electronics-pro',
   'fashion-basic',
   'fashion-pro',
+  // 🥬 2026-10-12: الباقة الغذائية المخفية (تُسند من الأدمن — مش عامة)
+  'food-basic',
 ] as const
 
 /**
@@ -145,34 +147,45 @@ export const ELECTRONICS_ONLY_MODULES = [
 export const FASHION_MANDATORY_CAPABILITIES = ['variants'] as const
 
 /**
+ * 🥬 2026-10-12 (food vertical): Capabilities اللي بتتشد من أي باقة غذائية —
+ * دي ميزات الملابس والأحذية اللي محلات المواد الغذائية (عطارة/مجمدات/
+ * بقالة/منظفات) متلزمهوش أصلاً، فبنشيلها حتى لو الداتابيز قالت غير كده:
+ *   - variants     (مقاسات وألوان + المساعد الذكي) — دي جوهر بيع الملابس
+ *   - collections  (كوليكشنات موسمية بخصم موحد) — دي ميزة الأزياء
+ *   - dynamic_retail_pricing — التسعير الديناميكي مخصوص لباقات pro العامة
+ */
+export const FOOD_EXCLUDED_CAPABILITIES = [
+  'variants',
+  'collections',
+  'dynamic_retail_pricing',
+] as const
+
+/**
+ * 🥬 2026-10-12: وحدات البيع هي جوهر المواد الغذائية (كيلو/كيس/طبق/برطمان)
+ * — لازم تكون متاحة في أي باقة غذائية حتى لو الداتابيز نست تضيفها.
+ */
+export const FOOD_MANDATORY_CAPABILITIES = ['multi_unit'] as const
+
+/**
  * 🛡️ 2026-09-15 (v3 → v4): Vertical rules enforcement.
  *
- * Takes (planCode, businessType, modules, capabilities) and returns the
- * "correct" values per the canonical plan rules. This is a PURE function —
- * it doesn't touch the DB, it just enforces the rules at runtime.
+ * 🥬 2026-10-12: أضفنا النشاط الثالث "food" (المواد الغذائية).
  *
- * Used by getPlanContext (server) as a safety layer on top of whatever the
- * DB says. This way, even if the user hasn't applied the SQL migration yet
- * (so the DB still has the old broken config), the runtime will silently
- * fix the values for:
- *   - The 4 canonical plans (electronics-basic, electronics-pro,
- *     fashion-basic, fashion-pro)
- *   - Legacy plans ('trial', 'free') — when businessType is 'fashion',
- *     rules are enforced. This handles existing tenants who signed up
- *     before the new canonical-plan flow and are still on the `trial`
- *     plan with empty enabledModules.
+ * قاعدة الـ food مختلفة عن الملابس/الموبايلات في نقطة واحدة مهمة:
+ * القواعد بتتطبق على أي باقة businessType='food' — حتى لو الباقة
+ * custom صنعها الأدمن بنفسه من لوحة تحكم الباقات. السبب: الأدمن
+ * لما يعمل "باقة غذائية" هو متوقع إن ميزات الملابس (مقاسات/ألوان/
+ * كوليكشن) مخفية خالص عن زبونه — أي تسريب ليها تجربة سيئة.
+ * فعشان كده ما بنستناش كود باقة معين.
  *
- *   - electronics-basic/pro/trial(fashion=false) → keep maintenance,
- *     finance, expenses, cash
- *   - fashion-basic/pro/trial(fashion=true) → STRIP maintenance, finance,
- *     expenses, cash; ENSURE 'variants' is in capabilities
- *
- * For custom admin-created plans (not canonical, not legacy), this
- * function is a no-op — we trust whatever the admin configured in the DB.
+ * ملخص القواعد:
+ *   - food (أي باقة): شيل maintenance + finance (دي للموبايلات)،
+ *     شيل variants + collections + dynamic_retail_pricing (دي للملابس/pro)،
+ *     وضمّن multi_unit (وحدات الكيلو/الكيس/الطبق).
  */
 export function enforceVerticalRules(
   planCode: string | null | undefined,
-  businessType: 'electronics' | 'fashion',
+  businessType: 'electronics' | 'fashion' | 'food',
   modules: string[],
   capabilities: string[],
 ): { modules: string[]; capabilities: string[] } {
@@ -181,9 +194,12 @@ export function enforceVerticalRules(
   // - legacy plans ('trial', 'free') → enforce IF businessType is fashion
   //   (electronics legacy plans keep everything; this is the safest
   //   fallback for users who haven't been migrated yet)
-  // - custom plans → no enforcement
+  // - 🥬 food plans → ALWAYS enforce (canonical or custom) — see note above
+  // - custom fashion/electronics plans → no enforcement
   let shouldEnforce = false
-  if (planCode && CANONICAL_PLAN_CODES.includes(planCode as any)) {
+  if (businessType === 'food') {
+    shouldEnforce = true
+  } else if (planCode && CANONICAL_PLAN_CODES.includes(planCode as any)) {
     shouldEnforce = true
   } else if (
     planCode &&
@@ -223,6 +239,26 @@ export function enforceVerticalRules(
     //   to ADDING variants (the safer option — retail is more common).
     //   The user can switch to fashion-pro via /settings → PlanSwitcher.
     for (const c of FASHION_MANDATORY_CAPABILITIES) {
+      capSet.add(c)
+    }
+  }
+
+  // 🥬 2026-10-12 (food vertical): قواعد المواد الغذائية.
+  // الهدف: باقة نظيفة مخصوصة — من غير أي حاجة تخص الملابس (مقاسات/ألوان/
+  // كوليكشن) ومن غير الصيانة والمعاملات المالية (دي لمحلات الموبايلات).
+  // ووحدات البيع (multi_unit) مضمونة موجودة لأنها جوهر الغذائية:
+  // كيلو / كيس / طبق / برطمان.
+  if (businessType === 'food') {
+    // شيل موديولات الموبايلات (الصيانة + المعاملات المالية)
+    for (const m of ELECTRONICS_ONLY_MODULES) {
+      moduleSet.delete(m)
+    }
+    // شيل ميزات الملابس + التسعير الديناميكي (bypass protection)
+    for (const c of FOOD_EXCLUDED_CAPABILITIES) {
+      capSet.delete(c)
+    }
+    // وحدات البيع الغذائية = جوهر الباقة — مضمونة
+    for (const c of FOOD_MANDATORY_CAPABILITIES) {
       capSet.add(c)
     }
   }

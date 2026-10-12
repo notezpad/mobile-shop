@@ -157,7 +157,8 @@ async function __POST(req: NextRequest) {
         { status: 400 }
       )
     }
-    const qty = parseInt(it.quantity, 10)
+    // 🥬 2026-10-12: الكمية Float — شراء بالوزن بكسور (45.5 كيلو من المورد)
+    const qty = Math.round((Number(it.quantity) || 0) * 1000) / 1000
     if (!qty || qty <= 0) {
       return NextResponse.json(
         { error: `كمية غير صالحة للمنتج ${p.name}` },

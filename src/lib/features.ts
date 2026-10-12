@@ -39,7 +39,8 @@ function safeParseArray(raw: string | null | undefined): string[] | null {
 }
 
 export type PlanContext = {
-  businessType: 'electronics' | 'fashion'
+  // 🥬 2026-10-12: أضفنا 'food' (المواد الغذائية: عطارة/مجمدات/بقالة/منظفات)
+  businessType: 'electronics' | 'fashion' | 'food'
   enabledModules: string[]
   capabilities: string[]
   /** 🛡️ 2026-10-10: حدود الباقة — بتتقرا من نفس Plan المحفوظ.
@@ -115,9 +116,11 @@ async function loadPlanContext(tenantId: string): Promise<PlanContext> {
   const moduleSet = new Set<string>(parsedModules ?? [...ALL_MODULES_LOCAL])
   for (const m of CRITICAL_MODULES) moduleSet.add(m)
   const caps = safeParseArray(plan?.capabilities ?? null) ?? []
-  const businessType = (plan?.businessType === 'fashion' ? 'fashion' : 'electronics') as
-    | 'electronics'
-    | 'fashion'
+  // 🥬 2026-10-12: النشاط الغذائي 'food' — بيتقرا زي ما هو، وأي قيمة
+  // تانية غير معروفة بترجع 'electronics' (نفس السلوك القديم).
+  const businessType = (
+    plan?.businessType === 'fashion' ? 'fashion' : plan?.businessType === 'food' ? 'food' : 'electronics'
+  ) as 'electronics' | 'fashion' | 'food'
 
   // 🛡️ 2026-09-15 (v3): Apply vertical rules at runtime — fixes the
   // user's "still seeing maintenance + finance in fashion plan" bug

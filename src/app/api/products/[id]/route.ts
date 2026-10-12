@@ -46,10 +46,17 @@ export async function PUT(
     // يقدر يعمله وبصمت — التكلفة بتغير ربح كل الفواتير الجاية، والكمية
     // كانت بتتغير من غير أي حركة مخزون (دفتر الحركات ميغطيهاش).
     // دلوقتي: الاتنين أدمن بس، وأي تغيير كمية بيتوثق كحركة 'adjust'.
+    // 🥬 2026-10-12: الكمية بقيت Float (منتجات البيع بالوزن بالكيلو بكسور)
+    // — المقارنة بقت بتفاوت عشري آمن (1e-9) بدل === الصارم.
     const newCost = body.cost !== undefined ? Number(body.cost) || 0 : existing.cost
-    const newQty = body.quantity !== undefined ? parseInt(body.quantity, 10) || 0 : existing.quantity
-    const costChanged = newCost !== existing.cost
-    const qtyChanged = newQty !== existing.quantity
+    const newQty =
+      body.quantity !== undefined
+        ? Number.isFinite(Number(body.quantity))
+          ? Math.round((Number(body.quantity) || 0) * 1000) / 1000
+          : existing.quantity
+        : existing.quantity
+    const costChanged = Math.abs(newCost - existing.cost) > 1e-9
+    const qtyChanged = Math.abs(newQty - existing.quantity) > 1e-9
     if (costChanged || qtyChanged) {
       try {
         await requireAdmin()
@@ -100,6 +107,9 @@ export async function PUT(
     // 🛡️ 2026-10-03: التسعير الديناميكي — باقة احترافية فقط.
     const planCtxPatch = await getPlanContext(session.tenantId)
     const hasDynamicRetail = planCtxPatch.capabilities.includes('dynamic_retail_pricing')
+    // 🥬 2026-10-12: بيع بالوزن — للمحلات الغذائية فقط. أي tenant تاني
+    // بيبعت الحقل ده بنفسه؟ بنتجاهله (حماية السيرفر).
+    const canSetWeight = planCtxPatch.businessType === 'food'
 
     const updated = await db.$transaction(async (tx) => {
       const row = await tx.product.update({
@@ -111,14 +121,19 @@ export async function PUT(
           price,
           cost:
             body.cost !== undefined ? Number(body.cost) || 0 : existing.cost,
+          // 🥬 2026-10-12: الكمية Float — الكسور المسموحة لحد 3 خانات (جرام)
           quantity:
             body.quantity !== undefined
-              ? parseInt(body.quantity, 10) || 0
+              ? Math.round((Number(body.quantity) || 0) * 1000) / 1000
               : existing.quantity,
           minQuantity:
             body.minQuantity !== undefined
-              ? parseInt(body.minQuantity, 10) || 1
+              ? Math.round((Number(body.minQuantity) || 0) * 100) / 100 || 1
               : existing.minQuantity,
+          // 🥬 2026-10-12: بيع بالوزن (كيلو بكسور) — غذائية فقط
+          soldByWeight: canSetWeight
+            ? body.soldByWeight === true || body.soldByWeight === 'true'
+            : false,
           imagePath:
             body.imagePath !== undefined
               ? body.imagePath

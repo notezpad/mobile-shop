@@ -28,6 +28,8 @@ import {
   SlidersHorizontal,
   Smartphone,
   Shirt,
+  ShoppingBasket,
+  EyeOff,
   Layers,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -107,7 +109,7 @@ const INSIGHT_STYLE = {
 
 function exportCsv(rows: PlanRow[]) {
   const head = [
-    'الكود', 'الاسم', 'النشاط', 'النوع', 'الحالة', 'السعر الشهري', 'السعر السنوي', 'أيام التجربة',
+    'الكود', 'الاسم', 'النشاط', 'النوع', 'الظهور', 'الحالة', 'السعر الشهري', 'السعر السنوي', 'أيام التجربة',
     'المستخدمون', 'المنتجات', 'الفروع', 'المشتركون', 'الإيراد الشهري',
   ]
   const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`
@@ -115,8 +117,13 @@ function exportCsv(rows: PlanRow[]) {
     [
       p.code,
       p.name,
-      (p.businessType ?? 'electronics') === 'fashion' ? 'ملابس وأحذية' : 'موبايل وكمبيوتر',
+      (p.businessType ?? 'electronics') === 'fashion'
+        ? 'ملابس وأحذية'
+        : (p.businessType ?? '') === 'food'
+          ? 'مواد غذائية'
+          : 'موبايل وكمبيوتر',
       p.isCanonical ? 'قياسية' : 'مخصّصة',
+      p.visibility === 'hidden' ? 'مخفية' : 'ظاهرة',
       p.isActive ? 'مفعّلة' : 'معطّلة',
       p.priceMonthly,
       p.priceYearly,
@@ -289,6 +296,9 @@ export function AdminPlansView() {
       active: plans.filter((p) => p.isActive).length,
       electronics: plans.filter((p) => (p.businessType ?? 'electronics') === 'electronics').length,
       fashion: plans.filter((p) => p.businessType === 'fashion').length,
+      // 🥬 2026-10-12
+      food: plans.filter((p) => p.businessType === 'food').length,
+      hidden: plans.filter((p) => p.visibility === 'hidden').length,
     }
   }, [plans])
 
@@ -316,6 +326,9 @@ export function AdminPlansView() {
       if (quick === 'expiring' && (p.expiringSoonCount ?? 0) === 0) return false
       if (quick === 'no-subs' && p.subscribersCount > 0) return false
       if (quick === 'trials' && (p.trialCount ?? 0) === 0) return false
+      // 🥬 2026-10-12: فلتر الباقات المخفية
+      if (quick === 'hidden' && p.visibility !== 'hidden') return false
+      if (quick === 'public' && p.visibility === 'hidden') return false
       return true
     })
     const arr = [...base]
@@ -1014,6 +1027,8 @@ export function AdminPlansView() {
                 { value: 'all', label: 'كل الأنشطة', badge: plans.length },
                 { value: 'electronics', label: 'موبايل', icon: Smartphone, badge: stats.electronics },
                 { value: 'fashion', label: 'ملابس', icon: Shirt, badge: stats.fashion },
+                // 🥬 2026-10-12: المواد الغذائية
+                { value: 'food', label: 'غذائية', icon: ShoppingBasket, badge: stats.food },
               ]}
             />
             <Segmented<StatusFilter>
@@ -1039,6 +1054,8 @@ export function AdminPlansView() {
                 { value: 'expiring', label: 'ينتهي قريباً' },
                 { value: 'trials', label: 'فيها تجارب' },
                 { value: 'no-subs', label: 'بلا مشتركين' },
+                // 🥬 2026-10-12: الباقات المخفية (زي المواد الغذائية)
+                { value: 'hidden', label: 'مخفية', icon: EyeOff, badge: stats.hidden },
               ]}
             />
 

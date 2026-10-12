@@ -325,8 +325,14 @@ export async function POST(req: NextRequest) {
         barcode,
         price,
         cost: Number(body.cost ?? 0) || 0,
-        quantity: parseInt(body.quantity ?? 0, 10) || 0,
-        minQuantity: parseInt(body.minQuantity ?? 1, 10) || 1,
+        // 🥬 2026-10-12: الكمية Float — منتجات البيع بالوزن بالكيلو بكسور
+        quantity: Math.round((Number(body.quantity ?? 0) || 0) * 1000) / 1000,
+        minQuantity: Math.round((Number(body.minQuantity ?? 1) || 0) * 100) / 100 || 1,
+        // 🥬 2026-10-12: بيع بالوزن — للمحلات الغذائية فقط (حماية السيرفر:
+        // أي tenant تاني بيبعت الحقل ده بنفسه بيتجاهل)
+        soldByWeight:
+          planCtx.businessType === 'food' &&
+          (body.soldByWeight === true || body.soldByWeight === 'true'),
         imagePath: body.imagePath ? String(body.imagePath) : null,
         branchId: session.branchId ?? (body.branchId ? parseInt(body.branchId, 10) : null),
         collection: body.collection ? String(body.collection).trim() || null : null,
@@ -347,8 +353,11 @@ export async function POST(req: NextRequest) {
     // أو fashion-pro). قبل الإصلاح ده كانت الوحدات بتتعمل لكل منتج في أي باقة
     // (حتى الأساسية)، وده كان بيسيب وحدات جملة جاهزة بالسعر الصح في الداتابيز
     // لعملاء ملهومش الحق فيها أصلاً حسب باقتهم.
-    // سعر كل وحدة = سعر البيع × factor. بدون تدخل يدوي.
-    if (planCtx.capabilities.includes('multi_unit')) {
+    // 🥬 2026-10-12: المحلات الغذائية مابيتعملهاليش وحدات دستة تلقائية —
+    // منتجات الغذائية أذواقها مختلفة جذرياً (كيلو/كيس/طبق/برطمان) وده
+    // بيتظبط من "وحدات البيع" لكل منتج لوحده (أو عن طريق توoggle البيع
+    // بالوزن). الافتراض العام (دستة) هيكون ضوضاء على 2000 منتج بقالة.
+    if (planCtx.capabilities.includes('multi_unit') && planCtx.businessType !== 'food') {
       try {
         await db.productUnit.createMany({
           data: buildDefaultUnitsData(created.id, price),
@@ -358,7 +367,8 @@ export async function POST(req: NextRequest) {
       }
     }
     // stock in movement on initial quantity
-    const initialQty = parseInt(body.quantity ?? 0, 10) || 0
+    // 🥬 2026-10-12: الكمية الافتتاحية بالوزن بتتقبل كسور (45.5 كيلو)
+    const initialQty = Math.round((Number(body.quantity ?? 0) || 0) * 1000) / 1000
     if (initialQty > 0) {
       await db.stockMovement.create({
         data: {

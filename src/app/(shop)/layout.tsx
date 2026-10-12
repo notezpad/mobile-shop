@@ -258,7 +258,13 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           })
           if (Array.isArray(d?.enabledModules)) {
             setPlan({
-              businessType: d.businessType === 'fashion' ? 'fashion' : 'electronics',
+              // 🥬 2026-10-12: أضفنا النشاط الغذائي 'food' (عطارة/مجمدات/بقالة/منظفات)
+              businessType:
+                d.businessType === 'fashion'
+                  ? 'fashion'
+                  : d.businessType === 'food'
+                    ? 'food'
+                    : 'electronics',
               enabledModules: d.enabledModules,
               capabilities: Array.isArray(d.capabilities) ? d.capabilities : [],
             })

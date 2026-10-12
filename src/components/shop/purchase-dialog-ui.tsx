@@ -119,6 +119,8 @@ export function Stepper({
   onChange,
   label,
   size = 'md',
+  decimal,
+  step,
 }: {
   value: number
   min?: number
@@ -126,10 +128,16 @@ export function Stepper({
   onChange: (n: number) => void
   label: string
   size?: 'md' | 'sm'
+  /** 🥬 2026-10-12: قبول كسور — للشراء بالوزن (45.5 كيلو) */
+  decimal?: boolean
+  /** 🥬 2026-10-12: خطوة الأزرار — 0.5 للوزن */
+  step?: number
 }) {
   const [focus, setFocus] = React.useState(false)
   const [text, setText] = React.useState('')
+  const st = step ?? 1
   const clamp = (n: number) => Math.min(max ?? Number.POSITIVE_INFINITY, Math.max(min, n))
+  const clean = (n: number) => (decimal ? Math.round(n * 1000) / 1000 : n)
   const h = size === 'sm' ? 'h-9' : 'h-10'
   const btn = cn(
     'flex shrink-0 items-center justify-center rounded-xl border bg-background text-foreground/80 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-cyan-600/40 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background',
@@ -141,14 +149,14 @@ export function Stepper({
       <button
         type="button"
         className={btn}
-        onClick={() => onChange(clamp(value - 1))}
+        onClick={() => onChange(clamp(clean(value - st)))}
         disabled={value <= min}
         aria-label="تقليل الكمية"
       >
         <Minus className="size-4" />
       </button>
       <input
-        inputMode="numeric"
+        inputMode={decimal ? 'decimal' : 'numeric'}
         aria-label={label}
         value={focus ? text : String(value)}
         onFocus={(e) => {
@@ -158,24 +166,28 @@ export function Stepper({
         }}
         onBlur={() => setFocus(false)}
         onChange={(e) => {
-          const raw = normalizeDigits(e.target.value).replace(/[^0-9]/g, '')
-          if (raw === '') {
-            setText('')
+          // 🥬 2026-10-12: وضع الكسور — بنسمح بالنقطة (واحدة) للوزن بالكيلو
+          const raw = decimal
+            ? normalizeDigits(e.target.value).replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1')
+            : normalizeDigits(e.target.value).replace(/[^0-9]/g, '')
+          if (raw === '' || raw === '.') {
+            setText(raw)
             return
           }
-          const n = clamp(parseInt(raw, 10))
+          const n = clamp(decimal ? Math.round((parseFloat(raw) || min) * 1000) / 1000 : parseInt(raw, 10))
           setText(String(n))
           onChange(n)
         }}
         className={cn(
           'w-14 rounded-xl border bg-background text-center text-base font-extrabold tabular-nums outline-none transition-shadow focus:border-cyan-600 focus:ring-[3px] focus:ring-cyan-600/25',
+          decimal && 'w-20',
           h
         )}
       />
       <button
         type="button"
         className={btn}
-        onClick={() => onChange(clamp(value + 1))}
+        onClick={() => onChange(clamp(clean(value + st)))}
         disabled={max !== undefined && value >= max}
         aria-label="زيادة الكمية"
       >

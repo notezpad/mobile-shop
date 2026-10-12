@@ -309,6 +309,8 @@ export function QtyStepper({
   max,
   size = 'md',
   accent,
+  step,
+  decimal,
 }: {
   value: number
   onChange: (v: number) => void
@@ -316,16 +318,23 @@ export function QtyStepper({
   max?: number
   size?: 'md' | 'lg'
   accent?: string
+  /** 🥬 2026-10-12: خطوة الأزرار — 0.5 لمنتجات البيع بالوزن (كيلو بكسور) */
+  step?: number
+  /** 🥬 2026-10-12: قبول كسور في الحقل (الجرد/التحويل بالكيلو) */
+  decimal?: boolean
 }) {
   const box = size === 'lg' ? 'size-11' : 'size-9'
   const input = size === 'lg' ? 'h-11 w-20 text-xl' : 'h-9 w-16 text-base'
+  const st = step ?? 1
   const clamp = (v: number) => Math.min(max ?? Infinity, Math.max(min, v))
+  const clean = (v: number) =>
+    decimal ? Math.round(Math.max(0, v) * 1000) / 1000 : v
   return (
     <div className="inline-flex items-center overflow-hidden rounded-xl border bg-background" dir="ltr">
       <button
         type="button"
         aria-label="إنقاص"
-        onClick={() => onChange(clamp(value - 1))}
+        onClick={() => onChange(clamp(clean(value - st)))}
         disabled={value <= min}
         className={cn(box, 'flex items-center justify-center text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30')}
       >
@@ -333,11 +342,20 @@ export function QtyStepper({
       </button>
       <input
         type="number"
-        inputMode="numeric"
+        inputMode={decimal ? 'decimal' : 'numeric'}
         min={min}
         max={max}
+        step={decimal ? (step ?? 0.5) : undefined}
         value={value}
-        onChange={(e) => onChange(clamp(parseInt(e.target.value, 10) || min))}
+        onChange={(e) =>
+          onChange(
+            clamp(
+              decimal
+                ? Math.round((Number(e.target.value) || min) * 1000) / 1000
+                : parseInt(e.target.value, 10) || min,
+            ),
+          )
+        }
         className={cn(
           input,
           'border-x bg-transparent text-center font-extrabold tabular-nums outline-none focus:bg-muted/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
@@ -347,7 +365,7 @@ export function QtyStepper({
       <button
         type="button"
         aria-label="زيادة"
-        onClick={() => onChange(clamp(value + 1))}
+        onClick={() => onChange(clamp(clean(value + st)))}
         disabled={max !== undefined && value >= max}
         className={cn(box, 'flex items-center justify-center text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30')}
       >

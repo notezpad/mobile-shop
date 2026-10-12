@@ -137,7 +137,15 @@ async function __POST(req: NextRequest) {
     // الأدمن يعطّل الباقة فتختفي من كل الصفحات، لكن طلب مباشر للـ API
     // كان لسه بيقدر يسجّل بيها. الآن نفس فلاتر /api/plans/public بالظبط:
     // لازم الباقة مفعّلة ومدفوعة، وإلا نتعامل معها كأنها مش موجودة.
-    if (trialPlan && (!trialPlan.isActive || (trialPlan.priceMonthly === 0 && trialPlan.priceYearly === 0))) {
+    // 🥬 2026-10-12: الباقات المخفية (visibility='hidden' — زي المواد الغذائية)
+    // ممنوعة من التسجيل الذاتي خالص — دي باقات الأدمن بتتسند يدوياً أو
+    // بأكواد تفعيل. حتى لو حد بعت planCode=food-basic مباشرة للـ API.
+    if (
+      trialPlan &&
+      (!trialPlan.isActive ||
+        (trialPlan as any).visibility === 'hidden' ||
+        (trialPlan.priceMonthly === 0 && trialPlan.priceYearly === 0))
+    ) {
       trialPlan = null
     }
     // If the requested plan doesn't exist OR is inactive OR is a zero-price plan

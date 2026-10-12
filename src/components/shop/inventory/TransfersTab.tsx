@@ -222,7 +222,11 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
     setItems((prev) => {
       const exists = prev.find((i) => i.productId === p.id)
       if (exists) return prev
-      return [...prev, { productId: p.id, name: p.name, quantity: 1, available: p.quantity }]
+      // 🥬 2026-10-12: منتج الوزن — التحويل بيبقى بالكيلو (نبدأ بنص كيلو)
+      return [
+        ...prev,
+        { productId: p.id, name: p.name, quantity: p.soldByWeight ? 0.5 : 1, available: p.quantity, soldByWeight: p.soldByWeight === true },
+      ]
     })
     setPick('')
   }
@@ -233,7 +237,9 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
         if (i !== idx) return x
         const item = eligibleProducts.find((p) => p.id === x.productId)
         const max = item?.quantity ?? x.available
-        return { ...x, quantity: Math.min(Math.max(1, q), max) }
+        // 🥬 منتج الوزن: أقل كمية 0.05 كيلو
+        const minQty = x.soldByWeight ? 0.05 : 1
+        return { ...x, quantity: Math.min(Math.max(minQty, Math.round(q * 1000) / 1000), max) }
       }),
     )
   }
@@ -251,7 +257,7 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
     if (items.length === 0) { toast.error('أضف منتجات للتحويل'); return }
     for (const it of items) {
       if (it.quantity <= 0) { toast.error('كمية غير صالحة'); return }
-      if (mode === 'completed' && it.quantity > it.available) {
+      if (mode === 'completed' && it.quantity > it.available + 1e-9) {
         toast.error(`الكمية أكبر من المتاح (${it.name})`)
         return
       }
@@ -425,7 +431,7 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
             ) : (
               <ul className="max-h-[22rem] divide-y divide-dashed overflow-auto">
                 {items.map((it, idx) => {
-                  const over = it.quantity > it.available
+                  const over = it.quantity > it.available + 1e-9
                   return (
                     <li key={it.productId} className="flex items-center gap-2 py-2.5">
                       <span className="w-5 shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
@@ -434,10 +440,18 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-bold leading-snug [overflow-wrap:anywhere]">{it.name}</p>
                         <p className={cn('text-xs', over ? 'font-bold text-destructive' : 'text-muted-foreground')}>
-                          المتاح {num(it.available)}
+                          المتاح {num(it.available)}{it.soldByWeight ? ' كجم' : ''}
                         </p>
                       </div>
-                      <QtyStepper value={it.quantity} min={1} max={it.available} onChange={(v) => updateQty(idx, v)} accent={AMBER} />
+                      <QtyStepper
+                        value={it.quantity}
+                        min={it.soldByWeight ? 0.05 : 1}
+                        max={it.available}
+                        onChange={(v) => updateQty(idx, v)}
+                        accent={AMBER}
+                        decimal={it.soldByWeight}
+                        step={it.soldByWeight ? 0.5 : 1}
+                      />
                       <button
                         type="button"
                         onClick={() => removeItem(idx)}

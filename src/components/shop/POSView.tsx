@@ -59,6 +59,8 @@ interface ProductLite {
   matchedVariantId?: number | null
   matchedVariantLabel?: string | null
   dynamicRetailPrice?: number | null
+  // 🥬 2026-10-12: منتج بيع بالوزن — الكمية بالكيلو وتقبل كسور (1.65)
+  soldByWeight?: boolean
 }
 
 function piecePrice(product: ProductLite): number {
@@ -348,7 +350,11 @@ function ProductThumb({
   )
 }
 
-function StockBadge({ quantity }: { quantity: number }) {
+function StockBadge({ quantity, weight }: { quantity: number; weight?: boolean }) {
+  // 🥬 2026-10-12: منتجات البيع بالوزن — الكمية بالكيلو بتتعرض نظيفة
+  // (45.5 بدل 45.500000001) مع وحدة الكيلو.
+  const fmt = (n: number) =>
+    weight ? `${Math.round(n * 100) / 100} كجم` : String(n)
   if (quantity <= 0)
     return (
       <span className="whitespace-nowrap rounded-full bg-danger-subtle px-2 py-0.5 text-[length:var(--fs-2xs,0.6875rem)] font-medium text-danger-subtle-foreground">
@@ -358,12 +364,12 @@ function StockBadge({ quantity }: { quantity: number }) {
   if (quantity <= LOW_STOCK_THRESHOLD)
     return (
       <span className="whitespace-nowrap rounded-full bg-warning-subtle px-2 py-0.5 text-[length:var(--fs-2xs,0.75rem)] font-medium text-warning-subtle-foreground">
-        باقي {quantity}
+        باقي {fmt(quantity)}
       </span>
     )
   return (
     <span className="whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-[length:var(--fs-2xs,0.75rem)] font-medium text-muted-foreground tabular-nums">
-      متاح {quantity}
+      متاح {fmt(quantity)}
     </span>
   )
 }
@@ -1267,6 +1273,15 @@ export function POSView() {
       prev.map((i) => {
         if (i.cartKey !== cartKey) return i
         const factor = i.unitFactor ?? 1
+        // 🥬 2026-10-12: منتجات البيع بالوزن — الكمية بالكيلو بكسور:
+        //   - مفيش تقريب لأعداد صحيحة (1.65 كيلو تفضل 1.65)
+        //   - أقل كمية 0.05 كيلو (50 جرام) بدل 1
+        //   - بننضف الكسر لخانتين عشرية عشان مايحصلش ضوضاء عائمة (1.6500000001)
+        if (i.product.soldByWeight && !i.unitId) {
+          const cap = lineCap(i, prev)
+          const w = Math.round(Math.max(0.05, Math.min(q, cap)) * 100) / 100
+          return { ...i, quantity: w }
+        }
         const cap = lineCap(i, prev)
         if (cap < factor) return i // المخزون كله مستخدم في سطور تانية — منغيّرش
         const rounded = factor > 1 ? Math.round(q / factor) * factor : q
@@ -1367,7 +1382,8 @@ export function POSView() {
               (it.variant
                 ? ` ${[it.variant.color, it.variant.size].filter(Boolean).join('/')}`
                 : ''),
-            qty: it.unitQuantity ?? it.quantity,
+            // 🥬 2026-10-12: منتجات الوزن — الكمية بتتنضف من ضوضاء العوامات (1.65 مش 1.6500000001)
+            qty: Math.round((it.unitQuantity ?? it.quantity) * 1000) / 1000,
             price: it.unitQuantity ? (it.price * it.quantity) / it.unitQuantity : it.price,
             total: it.price * it.quantity,
           })),
@@ -1389,7 +1405,7 @@ export function POSView() {
           createdAt: sale.createdAt,
           items: sale.items.map((it: any) => {
             const hasUnit = it.unitQuantity != null && it.unitQuantity > 0
-            const displayQty = hasUnit ? it.unitQuantity : it.quantity
+            const displayQty = Math.round((hasUnit ? it.unitQuantity : it.quantity) * 1000) / 1000
             const displayPrice = hasUnit ? (it.price * it.quantity) / it.unitQuantity : it.price
             const unitSuffix = it.unitLabel ? ` (${displayQty} ${it.unitLabel})` : ''
             const variantSuffix = it.variant
@@ -2051,7 +2067,12 @@ export function POSView() {
                       </p>
                       {viewMode === 'compact' && (
                         <div className="mt-1 flex items-center gap-1.5">
-                          <StockBadge quantity={p.quantity} />
+                          <StockBadge quantity={p.quantity} weight={p.soldByWeight} />
+                          {p.soldByWeight && (
+                            <span className="shrink-0 rounded-full bg-brand-600/15 px-1.5 py-0.5 text-[length:var(--fs-2xs,0.6875rem)] font-bold text-brand-700 dark:text-brand-300">
+                              بالكيلو
+                            </span>
+                          )}
                           {p.matchedVariantLabel && (
                             <span className="min-w-0 truncate text-[length:var(--fs-2xs,0.75rem)] font-medium text-brand-700 dark:text-brand-300">
                               {p.matchedVariantLabel}
@@ -2063,13 +2084,19 @@ export function POSView() {
                     {viewMode === 'compact' ? (
                       <span className="shrink-0 text-base font-extrabold tabular-nums text-brand-700 dark:text-brand-300">
                         {formatCurrency(piecePrice(p))}
+                        {p.soldByWeight && (
+                          <span className="text-[11px] font-bold text-muted-foreground"> / كيلو</span>
+                        )}
                       </span>
                     ) : (
                       <div className="flex flex-wrap items-center justify-between gap-x-1 gap-y-1">
                         <span className="whitespace-nowrap text-base font-extrabold tabular-nums text-brand-700 dark:text-brand-300">
                           {formatCurrency(piecePrice(p))}
+                          {p.soldByWeight && (
+                            <span className="text-[11px] font-bold text-muted-foreground"> / كيلو</span>
+                          )}
                         </span>
-                        <StockBadge quantity={p.quantity} />
+                        <StockBadge quantity={p.quantity} weight={p.soldByWeight} />
                       </div>
                     )}
                   </button>
@@ -2181,11 +2208,13 @@ export function POSView() {
       <ul className="divide-y divide-border">
         {cart.map((it) => {
           const cap = lineCap(it, cart)
-          const atMax = it.quantity >= cap
-          const step = it.unitFactor || 1
+          // 🥬 2026-10-12: منتج بيع بالوزن — الخطوة 0.5 كيلو والكمية قبل الكسور
+          const isWeight = !!it.product.soldByWeight && !it.unitId
+          const atMax = it.quantity >= cap - 1e-9
+          const step = isWeight ? 0.5 : it.unitFactor || 1
           const needsVariant = it.availableVariants.length > 0 && it.variantId == null
           const open = expandedKey === it.cartKey || needsVariant
-          const atMin = it.quantity <= step
+          const atMin = isWeight ? it.quantity - step < 0.05 : it.quantity <= step
           return (
             <li
               key={it.cartKey}
@@ -2209,10 +2238,10 @@ export function POSView() {
                     {atMin ? <Trash2 className="size-4" /> : <Minus className="size-4" />}
                   </button>
                   <NumField
-                    integer
+                    integer={!isWeight}
                     value={it.quantity}
-                    onChange={(n) => n !== '' && updateQty(it.cartKey, Math.round(n))}
-                    ariaLabel="الكمية"
+                    onChange={(n) => n !== '' && updateQty(it.cartKey, isWeight ? n : Math.round(n))}
+                    ariaLabel={isWeight ? 'الوزن بالكيلو' : 'الكمية'}
                     className="h-10 w-10 bg-transparent text-center text-base font-extrabold tabular-nums outline-none"
                   />
                   <button
@@ -2243,7 +2272,7 @@ export function POSView() {
                   >
                     {it.variantLabel ? `${it.variantLabel} · ` : ''}
                     {formatCurrency(it.price)}
-                    {it.unitLabel ? ` / ${it.unitLabel}` : ''}
+                    {it.unitLabel ? ` / ${it.unitLabel}` : isWeight ? ' / كيلو' : ''}
                     {atMax ? ' · آخر كمية' : ''}
                   </span>
                 </button>
@@ -2320,8 +2349,10 @@ export function POSView() {
       <ul className="divide-y divide-border">
         {cart.map((it) => {
           const cap = lineCap(it, cart)
-          const atMax = it.quantity >= cap
-          const step = it.unitFactor || 1
+          // 🥬 2026-10-12: منتج بيع بالوزن — الخطوة 0.5 كيلو والكسور مسموحة
+          const isWeight = !!it.product.soldByWeight && !it.unitId
+          const atMax = it.quantity >= cap - 1e-9
+          const step = isWeight ? 0.5 : it.unitFactor || 1
           return (
             <li
               key={it.cartKey}
@@ -2347,8 +2378,9 @@ export function POSView() {
                   >
                     {atMax && <AlertTriangle className="size-3" />}
                     {formatCurrency(it.price)} × {it.quantity}
+                    {isWeight ? ' كيلو' : ''}
                     <span aria-hidden>·</span>
-                    {atMax ? 'آخر كمية متاحة' : `متاح ${cap}`}
+                    {atMax ? 'آخر كمية متاحة' : `متاح ${isWeight ? `${Math.round(cap * 100) / 100} كيلو` : cap}`}
                   </p>
                 </div>
                 <span className="text-base font-extrabold tabular-nums">
@@ -2397,17 +2429,17 @@ export function POSView() {
                   <button
                     type="button"
                     onClick={() => updateQty(it.cartKey, it.quantity - step)}
-                    disabled={it.quantity <= step}
+                    disabled={isWeight ? it.quantity - step < 0.05 : it.quantity <= step}
                     className="flex size-9 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
                     aria-label="تقليل الكمية"
                   >
                     <Minus className="size-4" />
                   </button>
                   <NumField
-                    integer
+                    integer={!isWeight}
                     value={it.quantity}
-                    onChange={(n) => n !== '' && updateQty(it.cartKey, Math.round(n))}
-                    ariaLabel="الكمية"
+                    onChange={(n) => n !== '' && updateQty(it.cartKey, isWeight ? n : Math.round(n))}
+                    ariaLabel={isWeight ? 'الوزن بالكيلو' : 'الكمية'}
                     className="h-9 w-11 bg-transparent text-center text-base font-extrabold tabular-nums outline-none"
                   />
                   <button

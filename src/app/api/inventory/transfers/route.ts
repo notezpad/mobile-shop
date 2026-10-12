@@ -75,11 +75,12 @@ async function __POST(req: NextRequest) {
   if (mode === 'completed') {
     for (const it of items) {
       const pid = parseInt(it.productId, 10)
-      const qty = parseInt(it.quantity, 10)
+      // 🥬 2026-10-12: الكمية Float — تحويل بالوزن (12.5 كيلو بين الفروع)
+      const qty = Math.round((Number(it.quantity) || 0) * 1000) / 1000
       if (!pid || !qty || qty <= 0) return NextResponse.json({ error: 'بيانات أصناف غير صالحة' }, { status: 400 })
       const p = await db.product.findUnique({ where: { id: pid } })
       if (!p || p.tenantId !== s.tenantId) return NextResponse.json({ error: 'منتج غير صالح' }, { status: 400 })
-      if (p.quantity < qty) return NextResponse.json({ error: `الكمية غير متوفرة (${p.name} — متاح: ${p.quantity})` }, { status: 400 })
+      if (p.quantity + 1e-9 < qty) return NextResponse.json({ error: `الكمية غير متوفرة (${p.name} — متاح: ${Math.round(p.quantity * 1000) / 1000})` }, { status: 400 })
     }
   }
 
@@ -92,7 +93,7 @@ async function __POST(req: NextRequest) {
         note: b?.note ? String(b.note) : null,
         createdBy: s.userId,
         completedAt: mode === 'completed' ? new Date() : null,
-        items: { create: items.map((it: any) => ({ productId: parseInt(it.productId,10), quantity: parseInt(it.quantity,10) })) },
+        items: { create: items.map((it: any) => ({ productId: parseInt(it.productId,10), quantity: Math.round((Number(it.quantity) || 0) * 1000) / 1000 })) },
       },
       include: { items: true },
     })

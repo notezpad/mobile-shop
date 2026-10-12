@@ -92,11 +92,21 @@ model Plan {
   createdAt      DateTime @default(now())
 
   // Vertical axis: "electronics" (mobile/computer) | "fashion" (clothing/shoes)
+  // | "food" (grocery / butcher / عطارة / منظفات — المواد الغذائية)
   businessType   String   @default("electronics")
   // JSON string[] of ViewKey values — null means all modules (legacy plans)
   enabledModules String?
   // JSON string[] of fine-grained capabilities (e.g. "multi_unit","collections")
   capabilities   String?
+
+  // 🥬 2026-10-12 (food vertical): ظهور الباقة —
+  //   'public'  = تظهر في اللاندينج/الأسعار/التسجيل الذاتي (زي الـ 4 باقات الأساسية)
+  //   'hidden'  = باقة مخفية للأدمن فقط: مش بتظهر في أي مكان عام، بتتسند
+  //               للمحلات من لوحة الأدمن أو عبر أكواد التفعيل. مناسبة
+  //               للأنشطة اللي الطلب عليها قليل (مواد غذائية/عطارة/مجمدات...)
+  //               حيث صاحب المنصة عايز يدير المتابعة يدوياً من غير ما
+  //               يعقّد صفحة الأسعار للزوار.
+  visibility     String   @default("public") // public | hidden
 
   subscriptions   Subscription[]
   activationCodes ActivationCode[]
@@ -214,8 +224,19 @@ model Product {
   barcode     String?  @unique
   price       Float    @default(0)
   cost        Float    @default(0)
-  quantity    Int      @default(0)
-  minQuantity Int      @default(1)
+  // 🥬 2026-10-12 (food vertical): الكمية بقى Float عشان منتجات البيع بالوزن
+  // (لحمة/فراخ/بهارات/أجبان...) تتحسب بالكيلو بكسور — 45.5 كيلو مخزون،
+  // بيعة 1.65 كيلو. منتجات القطع العادية بتفضل أعداد صحيحة (45.0) فمفيش
+  // أي تغيير في سلوكها.
+  quantity    Float    @default(0)
+  // 🥬 2026-10-12: حد التنبيه بقى Float كمان (مثلاً التنبيه عند 0.5 كيلو).
+  minQuantity Float    @default(1)
+  // 🥬 2026-10-12 (food vertical): بيع بالوزن — لما true:
+  //   - السعر = سعر الكيلو
+  //   - الكمية في الـ POS بتتقبل كسور (1.65) بأزرار +0.5 سريعة
+  //   - المخزون/المشتريات/الجرد/المرتجعات كلها بالكيلو
+  // بتتسجل فقط للمحلات الـ businessType بتاعها 'food' (تتقص في الـ API).
+  soldByWeight Boolean @default(false)
   // Unit-Based Dynamic Pricing: per-product override of the tenant's default
   // retail margin %. null = fall back to Tenant.defaultRetailMarginPercent.
   retailMarginPercent Float?
@@ -423,11 +444,12 @@ model PurchaseOrderItem {
   productId       Int?
   name            String
   cost            Float
-  quantity        Int
+  // 🥬 2026-10-12: Float — شراء لحمة 45.5 كيلو من المورد
+  quantity        Float
   // 🛡️ 2026-09-29: how many pieces of THIS line were already returned to the
   // supplier. Invariant: 0 <= returnedQty <= quantity (enforced atomically in
   // src/lib/purchase-return.ts).
-  returnedQty     Int    @default(0)
+  returnedQty     Float    @default(0)
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   product       Product?      @relation(fields: [productId], references: [id])
@@ -468,7 +490,8 @@ model PurchaseReturnItem {
   productId           Int?
   name                String
   cost                Float
-  quantity            Int
+  // 🥬 2026-10-12: Float — مرتجع مورد بالوزن (3.5 كيلو)
+  quantity            Float
 
   purchaseReturn PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
 
@@ -530,16 +553,19 @@ model SaleItem {
   productId Int?
   name      String
   price     Float
-  quantity  Int         // total pieces (kept for legacy reports)
+  // 🥬 2026-10-12: Float — منتجات البيع بالوزن بتتباع بكسور (1.65 كيلو)
+  // والوحدات بتتبقى أعداد صحيحة برضه متوافقة.
+  quantity  Float        // total pieces (kept for legacy reports)
   // 🛡️ 2026-09-30: كام قطعة من هذا السطر رجعت بالفعل عبر مرتجع البيع.
   // Invariant: 0 <= returnedQty <= quantity (مطالبة ذرية في src/lib/sale-return.ts).
-  returnedQty Int    @default(0)
+  returnedQty Float  @default(0)
   cost      Float  @default(0)
 
   // Optional wholesale-unit metadata — for invoice display
   unitId       Int?
   unitLabel    String?
-  unitQuantity Int?
+  // 🥬 2026-10-12: Float (توافق مع الكميات العشرية)
+  unitQuantity Float?
 
   // Optional link to the specific size/color variant sold
   variantId Int?
@@ -612,7 +638,8 @@ model SaleReturnItem {
   name         String
   price        Float
   cost         Float  @default(0)
-  quantity     Int
+  // 🥬 2026-10-12: Float — مرتجع بيع بالوزن (0.5 كيلو لحمة)
+  quantity     Float
 
   saleReturn SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
 
@@ -728,7 +755,8 @@ model StockMovement {
   // losing stock-movement history (audit trail stays intact).
   productId Int?
   type      String // in | out | adjust | sale | return | transfer_in | transfer_out | stocktake
-  quantity  Int // signed: + increases, - decreases
+  // 🥬 2026-10-12: Float — حركات بالوزن (بيع 1.65 كيلو / جرد -0.5)
+  quantity  Float // signed: + increases, - decreases
   refType   String? // sale | transfer | stocktake | manual
   refId     Int?
   note      String?
@@ -771,7 +799,8 @@ model TransferItem {
   // 🛡️ 2026-09-15 (v3): nullable so a product can be hard-deleted without
   // losing transfer history.
   productId  Int?
-  quantity   Int
+  // 🥬 2026-10-12: Float — تحويل 12.5 كيلو بين فروع
+  quantity   Float
 
   transfer Transfer  @relation(fields: [transferId], references: [id], onDelete: Cascade)
   product  Product?  @relation(fields: [productId], references: [id])
@@ -802,9 +831,10 @@ model StocktakeItem {
   // 🛡️ 2026-09-15 (v3): nullable so a product can be hard-deleted without
   // losing stocktake history (the systemQty/countedQty/diff stay intact).
   productId   Int?
-  systemQty   Int
-  countedQty  Int
-  diff        Int @default(0)
+  // 🥬 2026-10-12: Float — جرد بالكيلو (نظامي 45.5 / مُحصى 44.25 / فرق -1.25)
+  systemQty   Float
+  countedQty  Float
+  diff        Float @default(0)
 
   stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
   product   Product?  @relation(fields: [productId], references: [id])

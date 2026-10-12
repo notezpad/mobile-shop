@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { Smartphone, Shirt, type LucideIcon } from 'lucide-react'
+import { Smartphone, Shirt, ShoppingBasket, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /* ══════════════════════════════════════════════════════════════════
@@ -35,6 +35,10 @@ export interface PlanRow {
   capabilities?: string | null
   enabledModules?: string | null
   isCanonical?: boolean
+  // 🥬 2026-10-12: ظهور الباقة — 'public' | 'hidden' (الباقات المخفية للأدمن
+  // فقط: مش بتظهر في اللاندينج/الأسعار/التسجيل، بتتسند يدوياً أو بأكواد).
+  // undefined/null = 'public' (توافق مع الردود القديمة).
+  visibility?: string | null
   // ── تحليلات إضافية من الـ API (اختيارية للتوافق مع النسخ القديمة) ──
   trialCount?: number
   monthlyCount?: number
@@ -47,9 +51,11 @@ export interface PlanRow {
 export type Billing = 'monthly' | 'yearly'
 export type ViewMode = 'cards' | 'list' | 'compare'
 export type SortKey = 'manual' | 'price-asc' | 'price-desc' | 'subs' | 'revenue' | 'name'
-export type TypeFilter = 'all' | 'electronics' | 'fashion'
+export type TypeFilter = 'all' | 'electronics' | 'fashion' | 'food'
 export type StatusFilter = 'all' | 'active' | 'inactive'
-export type QuickFilter = 'none' | 'expiring' | 'no-subs' | 'trials'
+// 🥬 2026-10-12: 'hidden' = عرض الباقات المخفية فقط (باقات الأدمن الخاصة
+// زي المواد الغذائية — مش بتظهر للعامة).
+export type QuickFilter = 'none' | 'expiring' | 'no-subs' | 'trials' | 'hidden' | 'public'
 
 export const UNLIMITED = 999999
 
@@ -58,8 +64,8 @@ export const UNLIMITED = 999999
 export const CAPABILITIES_META: { key: string; label: string; desc: string }[] = [
   {
     key: 'multi_unit',
-    label: 'وحدات الجملة (دستة)',
-    desc: 'بيع بالجملة — نص دستة / دستة / كرتونة. لو حاب تبيع بلقطعة، ضيف وحدة factor=1.',
+    label: 'وحدات البيع (multi_unit)',
+    desc: 'وحدات بيع مرنة — للجملة: نص دستة/دستة/كرتونة. وللمواد الغذائية: كيلو/كيس/طبق/برطمان. لو حاب تبيع بالقطعة، ضيف وحدة factor=1.',
   },
   { key: 'collections', label: 'الكوليكشن', desc: 'تجميع المنتجات في كوليكشنات وخصم جماعي' },
   {
@@ -106,9 +112,18 @@ export const FASHION_DEFAULTS = [
   'purchases', 'inventory', 'expenses', 'cash', 'reports', 'settings', 'users', 'branches',
 ]
 
+// 🥬 2026-10-12 (food vertical): نفس موديولات الملابس — من غير صيانة وبدون
+// معاملات مالية (محلات المواد الغذائية مبتصلحش أجهزة ومش بتشغل محافظ
+// بعمولات). المصروفات والخزنة أساسيين زي أي نشاط تجاري.
+export const FOOD_DEFAULTS = [
+  'dashboard', 'pos', 'products', 'sales', 'customers', 'suppliers',
+  'purchases', 'inventory', 'expenses', 'cash', 'reports', 'settings', 'users', 'branches',
+]
+
 export const BUSINESS_TYPE_LABEL: Record<string, string> = {
   electronics: 'موبايل وكمبيوتر',
   fashion: 'ملابس وأحذية',
+  food: 'مواد غذائية',
 }
 
 export const SORT_LABEL: Record<SortKey, string> = {
@@ -185,8 +200,16 @@ export function parseCaps(raw: string | null | undefined): string[] {
 
 export const isFashion = (p: Pick<PlanRow, 'businessType'>) => (p.businessType ?? 'electronics') === 'fashion'
 
+/** 🥬 2026-10-12: باقة مواد غذائية؟ (عطارة/مجمدات/بقالة/منظفات) */
+export const isFood = (p: Pick<PlanRow, 'businessType'>) => (p.businessType ?? '') === 'food'
+
+/** 🥬 2026-10-12: باقة مخفية؟ (مش بتظهر في اللاندينج/الأسعار/التسجيل) */
+export const isHiddenPlan = (p: Pick<PlanRow, 'visibility'>) => p.visibility === 'hidden'
+
 export function defaultsFor(businessType: string | null | undefined): string[] {
-  return businessType === 'fashion' ? [...FASHION_DEFAULTS] : [...ELECTRONICS_DEFAULTS]
+  if (businessType === 'fashion') return [...FASHION_DEFAULTS]
+  if (businessType === 'food') return [...FOOD_DEFAULTS]
+  return [...ELECTRONICS_DEFAULTS]
 }
 
 /** الوحدات الفعلية للباقة: المحفوظة، أو الافتراضية حسب نوع النشاط (للباقات القديمة) */
@@ -310,12 +333,12 @@ export function PlanGlyph({
   size = 'md',
   className,
 }: {
-  plan: Pick<PlanRow, 'businessType' | 'isActive'>
+  plan: Pick<PlanRow, 'businessType' | 'isActive' | 'visibility'>
   theme: PlanTheme
   size?: 'sm' | 'md' | 'lg'
   className?: string
 }) {
-  const Icon = isFashion(plan) ? Shirt : Smartphone
+  const Icon = isFood(plan) ? ShoppingBasket : isFashion(plan) ? Shirt : Smartphone
   const box = size === 'lg' ? 'size-14 rounded-2xl' : size === 'sm' ? 'size-8 rounded-xl' : 'size-11 rounded-2xl'
   const ic = size === 'lg' ? 'size-6' : size === 'sm' ? 'size-4' : 'size-5'
   return (

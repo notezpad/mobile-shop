@@ -182,15 +182,17 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
       return
     }
     const existing = items.find((i) => i.productId === p!.id)
-    const newQty = existing ? existing.countedQty + 1 : 1
+    // 🥬 2026-10-12: منتج الوزن — الخطوة 0.5 كيلو (القيمة المكتوبة بتقبل كسور)
+    const inc = p!.soldByWeight ? 0.5 : 1
+    const newQty = existing ? Math.round((existing.countedQty + inc) * 1000) / 1000 : inc
     setItems((prev) => {
       const exists = prev.find((i) => i.productId === p!.id)
       if (exists) {
-        return prev.map((i) => (i.productId === p!.id ? { ...i, countedQty: i.countedQty + 1 } : i))
+        return prev.map((i) => (i.productId === p!.id ? { ...i, countedQty: Math.round((i.countedQty + inc) * 1000) / 1000 } : i))
       }
       return [
         ...prev,
-        { productId: p!.id, name: p!.name, barcode: p!.barcode, systemQty: p!.quantity, countedQty: 1 },
+        { productId: p!.id, name: p!.name, barcode: p!.barcode, systemQty: p!.quantity, countedQty: inc, soldByWeight: p!.soldByWeight === true },
       ]
     })
     setLast((l) => ({ name: p!.name, qty: newQty, n: (l?.n ?? 0) + 1 }))
@@ -444,12 +446,12 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                    <div className="p-4">
                      <div className="grid grid-cols-[1fr_auto] items-center gap-3">
                      <div className="rounded-xl border border-border bg-card-muted p-3">
-                       <p className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground"><Scale className="size-3.5" /> رصيد النظام</p>
+                       <p className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground"><Scale className="size-3.5" /> رصيد النظام {it.soldByWeight ? '(كجم)' : ''}</p>
                        <p className="mt-1 font-mono text-2xl font-black tabular-nums text-foreground">{num(it.systemQty)}</p>
                     </div>
                      <div className="text-center">
-                       <p className="mb-1.5 text-xs font-black text-stocktake">العدد الفعلي</p>
-                       <QtyStepper value={it.countedQty} min={0} onChange={(v) => setCounted(it.productId, v)} accent={c} />
+                       <p className="mb-1.5 text-xs font-black text-stocktake">{it.soldByWeight ? 'الوزن الفعلي (كجم)' : 'العدد الفعلي'}</p>
+                       <QtyStepper value={it.countedQty} min={0} onChange={(v) => setCounted(it.productId, v)} accent={c} decimal={it.soldByWeight} step={it.soldByWeight ? 0.5 : 1} />
                      </div>
                   </div>
 

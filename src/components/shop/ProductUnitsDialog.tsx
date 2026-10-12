@@ -36,6 +36,18 @@ const DOSE_PRESETS = [
   { name: 'دستة و نص', factor: 18 },
 ]
 
+// 🥬 2026-10-12: وحدات المواد الغذائية — للمحلات الغذائية (عطارة/مجمدات/
+// بقالة/منظفات). كيس/طبق/برطمان/علبة = بيعة واحدة بسعر خاص (factor=1)،
+// والكرتونة للجملة. البيع بالكيلو بكسور مبيعتمدش هنا — ده توoggle «يُباع
+// بالوزن» في بطاقة المنتج نفسه.
+const FOOD_PRESETS = [
+  { name: 'كيس',    factor: 1  },
+  { name: 'طبق',    factor: 1  },
+  { name: 'برطمان', factor: 1  },
+  { name: 'علبة',   factor: 1  },
+  { name: 'كرتونة', factor: 12 },
+]
+
 export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: Props) {
   const confirm = useConfirm()
   const [units, setUnits] = React.useState<ProductUnit[]>([])
@@ -44,6 +56,13 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
   const [form, setForm] = React.useState({ name: '', price: '', barcode: '', factor: '' })
   const capabilities = useShopStore((s) => s.plan.capabilities)
   const enabled = capabilities.includes('multi_unit')
+  // 🥬 2026-10-12: وحدات غذائية للمحلات الغذائية، وحدات دستة للباقي
+  const isFoodVertical = useShopStore((s) => s.plan.businessType) === 'food'
+  const presets = isFoodVertical ? FOOD_PRESETS : DOSE_PRESETS
+  const presetsLabel = isFoodVertical ? 'وحدات غذائية تلقائيًا' : 'وحدات الدستة تلقائيًا'
+  const presetsHint = isFoodVertical
+    ? 'الوحدات التلقائية: كيس · طبق · برطمان · علبة (بيعة واحدة بسعر خاص) + كرتونة (12) — عدّل السعر لكل وحدة. البيع بالكيلو بكسور بيتفعّل من «يُباع بالوزن» في بطاقة المنتج.'
+    : 'الوحدات التلقائية: ربع دستة (3) · نص دستة (6) · دستة (12) · دستة ونص (18) — بسعر القطعة × العدد.'
 
   const load = React.useCallback(async () => {
     if (!product) return
@@ -74,9 +93,9 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
     setBulkSaving(true)
     try {
       const existingNames = new Set(units.map((u) => u.name))
-      const toAdd = DOSE_PRESETS.filter((p) => !existingNames.has(p.name))
+      const toAdd = presets.filter((p) => !existingNames.has(p.name))
       if (toAdd.length === 0) {
-        toast.info('وحدات الدستة موجودة بالفعل')
+        toast.info(isFoodVertical ? 'الوحدات الغذائية موجودة بالفعل' : 'وحدات الدستة موجودة بالفعل')
         return
       }
       for (const preset of toAdd) {
@@ -165,13 +184,17 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
       <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
         <DialogHero
           icon={Boxes}
-          title="وحدات البيع بالجملة"
+          title={isFoodVertical ? 'وحدات البيع' : 'وحدات البيع بالجملة'}
           subtitle={product?.name}
         />
 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain bg-muted/20 p-4 sm:p-6">
           {!enabled ? (
-            <LockedNote>ميزة البيع بالجملة (كرتونة/دستة/نص دستة) متاحة في الباقات الاحترافية فقط.</LockedNote>
+            <LockedNote>
+              {isFoodVertical
+                ? 'ميزة وحدات البيع (كيلو/كيس/طبق/برطمان) متاحة في باقات المواد الغذائية.'
+                : 'ميزة البيع بالجملة (كرتونة/دستة/نص دستة) متاحة في الباقات الاحترافية فقط.'}
+            </LockedNote>
           ) : (
             <>
               {/* ═════════ 1) إضافة وحدة ═════════ */}
@@ -228,15 +251,13 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
                       onClick={addPresets}
                       disabled={saving || bulkSaving}
                       className={cn('h-11 rounded-xl px-4', INK_BTN_OUTLINE)}
-                      title="يضيف: ربع دستة (3) • نص دستة (6) • دستة (12) • دستة و نص (18)"
+                      title={presetsHint}
                     >
                       {bulkSaving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                      وحدات الدستة تلقائيًا
+                      {presetsLabel}
                     </Button>
                   </div>
-                  <p className="text-[11px] font-medium text-foreground/60">
-                    الوحدات التلقائية: ربع دستة (3) · نص دستة (6) · دستة (12) · دستة ونص (18) — بسعر القطعة × العدد.
-                  </p>
+                  <p className="text-[11px] font-medium text-foreground/60">{presetsHint}</p>
                 </div>
               </section>
 

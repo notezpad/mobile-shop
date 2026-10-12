@@ -58,6 +58,10 @@ async function __PUT(
   if (body.isActive !== undefined) data.isActive = !!body.isActive
   if (body.sortOrder !== undefined) data.sortOrder = Number(body.sortOrder) || 0
   if (body.businessType !== undefined) data.businessType = String(body.businessType)
+  // 🥬 2026-10-12: تحديث ظهور الباقة (public | hidden)
+  if (body.visibility === 'hidden' || body.visibility === 'public') {
+    data.visibility = body.visibility
+  }
   if (body.capabilities !== undefined) {
     data.capabilities =
       typeof body.capabilities === 'string'
@@ -121,7 +125,7 @@ async function __DELETE(
   // 🛡️ 2026-09-17 (v3): Canonical plans can only be soft-deleted
   // (deactivated). Custom plans can be hard-deleted IF no subscriptions
   // reference them.
-  const CANONICAL_CODES = ['electronics-basic', 'electronics-pro', 'fashion-basic', 'fashion-pro']
+  const CANONICAL_CODES = ['electronics-basic', 'electronics-pro', 'fashion-basic', 'fashion-pro', 'food-basic']
   const isCanonical = CANONICAL_CODES.includes(existing.code)
 
   if (isCanonical) {

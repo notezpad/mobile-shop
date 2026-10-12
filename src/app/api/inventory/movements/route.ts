@@ -159,7 +159,8 @@ async function __POST(req: NextRequest) {
   // بنحدّه بالأدمن زي باقي المصروفات (الصرف/الإضافة العادي متاح للجميع).
   const b = await req.json().catch(() => null)
   const productId = parseInt(b?.productId, 10)
-  const qty = parseInt(b?.quantity, 10)
+  // 🥬 2026-10-12: الكمية Float — حركة وارد/صرف بالوزن (0.5 كيلو)
+  const qty = Math.round((Number(b?.quantity) || 0) * 1000) / 1000
   const type = String(b?.type ?? 'adjust') // in | out | adjust | damage
   if (!['in', 'out', 'adjust', 'damage'].includes(type)) {
     return NextResponse.json({ error: 'نوع الحركة غير صالح' }, { status: 400 })

@@ -43,6 +43,8 @@ export interface InventoryProduct {
   branchId: number | null
   category: string | null
   imagePath?: string | null
+  // 🥬 2026-10-12: بيع بالوزن (غذائية) — الجرد/التحويلات بتعرض بالكيلو
+  soldByWeight?: boolean
 }
 export interface Movement {
   id: number

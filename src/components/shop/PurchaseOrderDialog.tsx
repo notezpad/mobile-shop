@@ -24,6 +24,8 @@ interface ProductLite {
   barcode: string | null
   cost: number
   quantity: number
+  // 🥬 2026-10-12: بيع بالوزن — الشراء بيبقى بالكيلو بكسور
+  soldByWeight?: boolean
 }
 
 interface SupplierLite {
@@ -203,7 +205,17 @@ export function PurchaseOrderDialog({
 
   const updateQty = (id: number, q: number) => {
     setCart((prev) =>
-      prev.map((i) => (i.product.id === id ? { ...i, quantity: Math.max(1, q) } : i))
+      prev.map((i) =>
+        // 🥬 2026-10-12: منتج الوزن — أقل 0.05 كيلو، ومننضف الكسر
+        i.product.id === id
+          ? {
+              ...i,
+              quantity: i.product.soldByWeight
+                ? Math.round(Math.max(0.05, q) * 1000) / 1000
+                : Math.max(1, q),
+            }
+          : i,
+      ),
     )
   }
   const updateCost = (id: number, c: number) => {
@@ -596,7 +608,7 @@ export function PurchaseOrderDialog({
                                     <p className="mt-0.5 text-xs font-medium tabular-nums text-foreground/65">
                                       {i.product.barcode ? <bdi dir="ltr">{i.product.barcode}</bdi> : null}
                                       {i.product.barcode ? ' · ' : ''}
-                                      مخزون {i.product.quantity}
+                                      مخزون {i.product.quantity}{i.product.soldByWeight ? ' كجم' : ''}
                                     </p>
                                     {costChanged && (
                                       <p className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-amber-800 dark:text-amber-200">
@@ -616,18 +628,24 @@ export function PurchaseOrderDialog({
 
                                 {/* الكمية */}
                                 <div className="md:flex md:justify-center">
-                                  <span className="mb-1 block text-[11px] font-semibold text-foreground/60 md:hidden">الكمية</span>
+                                  <span className="mb-1 block text-[11px] font-semibold text-foreground/60 md:hidden">
+                                    {i.product.soldByWeight ? 'الكمية (كيلو)' : 'الكمية'}
+                                  </span>
                                   <Stepper
                                     value={i.quantity}
-                                    min={1}
+                                    min={i.product.soldByWeight ? 0.05 : 1}
                                     onChange={(n) => updateQty(i.product.id, n)}
-                                    label={`كمية ${i.product.name}`}
+                                    label={`${i.product.soldByWeight ? 'وزن' : 'كمية'} ${i.product.name}`}
+                                    decimal={i.product.soldByWeight}
+                                    step={i.product.soldByWeight ? 0.5 : 1}
                                   />
                                 </div>
 
                                 {/* التكلفة */}
                                 <div>
-                                  <span className="mb-1 block text-[11px] font-semibold text-foreground/60 md:hidden">تكلفة الوحدة</span>
+                                  <span className="mb-1 block text-[11px] font-semibold text-foreground/60 md:hidden">
+                                    {i.product.soldByWeight ? 'تكلفة الكيلو' : 'تكلفة الوحدة'}
+                                  </span>
                                   <DecimalInput
                                     size="sm"
                                     value={i.cost}

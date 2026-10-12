@@ -92,7 +92,8 @@ async function __POST(req: NextRequest) {
         items: {
           create: items.map((it: any) => {
             const pid = parseInt(it.productId, 10)
-            const counted = parseInt(it.countedQty, 10) || 0
+            // 🥬 2026-10-12: الجرد بالكيلو بكسور (محصى 44.25)
+            const counted = Math.round((Number(it.countedQty) || 0) * 1000) / 1000
             // 🛡️ 2026-09-30 (X8): الكمية المعدودة سالب → مرفوضة. كانت بتتحفظ
             // كقيمة مطلقة في المخزن وبتكسر أرضية الصفر اللي باقي النظام بيحافظ عليها.
             if (counted < 0) {

@@ -34,6 +34,8 @@ export interface ProductFormValues {
   branchId?: number | null
   collection?: string | null
   retailMarginPercent?: number | null
+  // 🥬 2026-10-12: بيع بالوزن (غذائية فقط) — السعر = سعر الكيلو والكمية بكسور
+  soldByWeight?: boolean
 }
 
 interface Props {
@@ -64,12 +66,16 @@ export function ProductDialog({
   const [branchId, setBranchId] = React.useState<string>('')
   const [branches, setBranches] = React.useState<{ id: number; name: string }[]>([])
   const [collection, setCollection] = React.useState<string>('')
+  // 🥬 2026-10-12: بيع بالوزن — متاح للمحلات الغذائية فقط (كيلو بكسور)
+  const [soldByWeight, setSoldByWeight] = React.useState(false)
   // Unit-Based Dynamic Pricing: per-product override of the tenant's default
   // retail margin %. Empty string = "use the tenant default".
   const [retailMarginPercent, setRetailMarginPercent] = React.useState<string>('')
   const [dirty, setDirty] = React.useState(false)
   const fileRef = React.useRef<HTMLInputElement>(null)
   const capabilities = useShopStore((s) => s.plan.capabilities)
+  // 🥬 2026-10-12: توoggle البيع بالوزن بيظهر للمحلات الغذائية بس
+  const isFoodVertical = useShopStore((s) => s.plan.businessType) === 'food'
   const { onOpenChange: handleOpenChange } = useUnsavedConfirm({
     dirty,
     onClose: () => onOpenChange(false),
@@ -92,6 +98,8 @@ export function ProductDialog({
       setImagePath(initial?.imagePath ?? null)
       setBranchId(initial?.branchId != null ? String(initial.branchId) : '')
       setCollection((initial as any)?.collection ?? '')
+      // 🥬 2026-10-12: بيع بالوزن
+      setSoldByWeight((initial as any)?.soldByWeight === true)
       setRetailMarginPercent(
         initial?.retailMarginPercent != null ? String(initial.retailMarginPercent) : ''
       )
@@ -134,11 +142,14 @@ export function ProductDialog({
         barcode: barcode?.trim() || null,
         price: priceNum,
         cost: parseFloat(cost) || 0,
-        quantity: parseInt(quantity, 10) || 0,
-        minQuantity: parseInt(minQuantity, 10) || 1,
+        // 🥬 2026-10-12: الكمية Float — بيع بالوزن بكسور (45.5 كيلو)
+        quantity: Math.round((parseFloat(quantity) || 0) * 1000) / 1000,
+        minQuantity: Math.round((parseFloat(minQuantity) || 0) * 100) / 100 || 1,
         imagePath,
         branchId: branchId ? parseInt(branchId, 10) : null,
         collection: collection.trim() || null,
+        // 🥬 2026-10-12: بيع بالوزن (غذائية فقط — السيرفر بيتحقق برضه)
+        ...(isFoodVertical ? { soldByWeight } : {}),
         // 🛡️ 2026-10-03: باقة احترافية فقط — لو مش pro نسيب الحقل خارج الطلب
         ...(capabilities.includes('dynamic_retail_pricing')
           ? { retailMarginPercent: retailMarginPercent.trim() !== '' ? parseFloat(retailMarginPercent) : null }
@@ -306,7 +317,11 @@ export function ProductDialog({
           <section>
             <SectionTitle n={2}>الأسعار والمخزون</SectionTitle>
             <div className="grid grid-cols-2 gap-4 rounded-2xl border bg-card p-4">
-              <Field label="سعر البيع" htmlFor="p-price" required>
+              <Field
+                label={soldByWeight ? 'سعر الكيلو' : 'سعر البيع'}
+                htmlFor="p-price"
+                required
+              >
                 <InkInput
                   id="p-price"
                   num
@@ -328,6 +343,47 @@ export function ProductDialog({
                   onChange={(e) => edit(setCost)(e.target.value)}
                 />
               </Field>
+
+              {/* 🥬 2026-10-12: بيع بالوزن — للمحلات الغذائية بس (كيلو بكسور) */}
+              {isFoodVertical && (
+                <label
+                  htmlFor="p-weight"
+                  className="col-span-2 flex cursor-pointer items-center justify-between gap-3 rounded-xl border bg-muted/40 p-3.5 transition-colors hover:bg-muted"
+                >
+                  <span className="flex items-start gap-3">
+                    <span className="mt-0.5 flex size-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/25">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="size-4.5"><path d="M12 3v3.5"/><path d="m16.5 7.5 2-2"/><path d="m7.5 7.5-2-2"/><path d="M6 14h12l-1.2-6H7.2L6 14Z"/><path d="m6 14-2 4c6 2 12 2 16 0l-2-4"/></svg>
+                    </span>
+                    <span>
+                      <span className="block text-[15px] font-extrabold">يُباع بالوزن (بالكيلو)</span>
+                      <span className="block text-[12.5px] leading-snug text-foreground/70">
+                        الكمية بيتكتب كيلو بكسور (مثال: لحمة 1.65) — السعر اللي فوق يبقى سعر الكيلو، والكمية تحت كيلو في المخزن.
+                      </span>
+                    </span>
+                  </span>
+                  <input
+                    id="p-weight"
+                    type="checkbox"
+                    className="peer sr-only"
+                    checked={soldByWeight}
+                    onChange={(e) => edit(setSoldByWeight)(e.target.checked)}
+                  />
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'flex h-7 w-12 shrink-0 items-center rounded-full px-1 transition-colors',
+                      soldByWeight ? 'bg-emerald-600' : 'bg-foreground/25',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'flex size-5 items-center justify-center rounded-full bg-white shadow transition-transform',
+                        soldByWeight ? 'translate-x-5' : 'translate-x-0',
+                      )}
+                    />
+                  </span>
+                </label>
+              )}
 
               {showMargin && (
                 <p
@@ -365,22 +421,32 @@ export function ProductDialog({
                 </Field>
               )}
 
-              <Field label="الكمية" htmlFor="p-qty">
+              <Field
+                label={soldByWeight ? 'الكمية (كيلو في المخزن)' : 'الكمية'}
+                htmlFor="p-qty"
+                hint={soldByWeight ? 'تقبل كسور — مثال: 45.5 يعني 45 كيلو ونص' : undefined}
+              >
                 <InkInput
                   id="p-qty"
                   num
                   type="number"
                   min={0}
+                  step={soldByWeight ? 0.05 : undefined}
                   value={quantity}
                   onChange={(e) => edit(setQuantity)(e.target.value)}
                 />
               </Field>
-              <Field label="حد التنبيه" htmlFor="p-min" hint="أقل كمية قبل ما يظهر «منخفض»">
+              <Field
+                label={soldByWeight ? 'حد التنبيه (كيلو)' : 'حد التنبيه'}
+                htmlFor="p-min"
+                hint={soldByWeight ? 'أقل وزن قبل ما يظهر «منخفض» — مثال: 2.5' : 'أقل كمية قبل ما يظهر «منخفض»'}
+              >
                 <InkInput
                   id="p-min"
                   num
                   type="number"
                   min={0}
+                  step={soldByWeight ? 0.5 : undefined}
                   value={minQuantity}
                   onChange={(e) => edit(setMinQuantity)(e.target.value)}
                 />

@@ -73,7 +73,9 @@ export const ALL_MODULES = [
 ] as const
 
 export interface PlanContext {
-  businessType: 'electronics' | 'fashion'
+  // 🥬 2026-10-12: أضفنا 'food' (المواد الغذائية) — للواجهة عشان تعرف
+  // تعرض/تخفي ميزات النشاط (زي توoggle البيع بالوزن في بطاقة المنتج).
+  businessType: 'electronics' | 'fashion' | 'food'
   enabledModules: string[]
   capabilities: string[]
 }
@@ -105,6 +107,8 @@ export interface StocktakeDraftItem {
   barcode: string | null
   systemQty: number
   countedQty: number
+  /** 🥬 2026-10-12: منتج بيع بالوزن — العد بيبقى بالكيلو بكسور */
+  soldByWeight?: boolean
 }
 
 export interface StocktakeDraft {
@@ -120,6 +124,8 @@ export interface TransfersDraftItem {
   name: string
   quantity: number
   available: number
+  /** 🥬 2026-10-12: منتج بيع بالوزن — التحويل بالكيلو بكسور */
+  soldByWeight?: boolean
 }
 
 export interface TransfersDraft {

@@ -118,11 +118,12 @@ export async function performPurchaseReturn(
   } else {
     for (const l of input.lines) {
       const itemId = Number(l?.itemId)
-      const qty = Number(l?.quantity)
+      // 🥬 2026-10-12: كمية المرتجع Float — مرتجع مورد بالوزن (3.5 كيلو)
+      const qty = Math.round((Number(l?.quantity) || 0) * 1000) / 1000
       if (!Number.isInteger(itemId) || !itemById.has(itemId)) {
         throw new PurchaseReturnError('صنف غير موجود في أمر الشراء', 400)
       }
-      if (!Number.isInteger(qty) || qty < 0) {
+      if (!Number.isFinite(qty) || qty < 0) {
         throw new PurchaseReturnError('كمية المرتجع غير صالحة', 400)
       }
       if (qty === 0) continue

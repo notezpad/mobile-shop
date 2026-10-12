@@ -22,6 +22,9 @@ async function __GET() {
     'electronics-pro',
     'fashion-basic',
     'fashion-pro',
+    // 🥬 2026-10-12: الباقة الغذائية المخفية — canonical (protected from
+    // hard-delete) زي الباقية الأربعة.
+    'food-basic',
   ]
 
   // 🎨 2026-10-09 (plans redesign): richer per-plan analytics for the admin
@@ -81,6 +84,9 @@ async function __GET() {
       businessType: (p as any).businessType ?? null,
       enabledModules: (p as any).enabledModules ?? null,
       capabilities: (p as any).capabilities ?? null,
+      // 🥬 2026-10-12: ظهور الباقة — 'public' | 'hidden' (الافتراضي public
+      // للباقات القديمة اللي مالهاش القيمة دي في الداتابيز).
+      visibility: (p as any).visibility === 'hidden' ? 'hidden' : 'public',
       // 🛡️ 2026-09-17 (v3): flag to distinguish canonical vs custom plans
       isCanonical: CANONICAL_PLAN_CODES.includes(p.code),
       // ── new analytics fields ──
@@ -151,6 +157,12 @@ async function __POST(req: NextRequest) {
       isActive: body.isActive !== false,
       sortOrder: Number(body.sortOrder ?? 0) || 0,
       ...(body.businessType ? { businessType: String(body.businessType) } : {}),
+      // 🥬 2026-10-12: باقة مخفية؟ (public | hidden) — الافتراضي public.
+      // الباقة المخفية مش بتظهر في اللاندينج/الأسعار/التسجيل، وبتتسند
+      // للمحلات من لوحة الأدمن أو بأكواد التفعيل.
+      ...(body.visibility === 'hidden' || body.visibility === 'public'
+        ? { visibility: body.visibility }
+        : {}),
       ...(body.capabilities !== undefined ? {
         capabilities: typeof body.capabilities === 'string'
           ? body.capabilities

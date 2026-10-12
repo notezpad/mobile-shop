@@ -14,12 +14,20 @@ export const dynamic = 'force-dynamic'
  *     because the new flow auto-grants a 14-day trial of the chosen paid
  *     plan on signup, so a generic "trial" plan card is redundant.
  *   - Inactive plans are also hidden (isActive = false).
+ *
+ * 🥬 2026-10-12 (hidden plans): الباقات اللي visibility='hidden' مش بتظهر
+ *   هنا أبداً — دي باقات الأدمن الخاصة (زي المواد الغذائية) بتتسند
+ *   يدوياً من لوحة الأدمن أو بأكواد التفعيل. الحماية دي على مستوى الـ API
+ *   نفسه، فصفحات اللاندينج/الأسعار/التسجيل كلها مطمّنة من غير أي تعديل
+ *   فيها — حتى لو حاول حد يضيف ?plan=food-basic في الرابط.
  */
 async function __GET() {
   try {
     const plans = await db.plan.findMany({
       where: {
         isActive: true,
+        // 🥬 الباقات المخفية = للأدمن فقط (مش عامة)
+        visibility: 'public',
         // ⚡ Hide zero-price plans (trial / free / etc.) from public listing
         OR: [
           { priceMonthly: { gt: 0 } },

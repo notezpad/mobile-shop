@@ -56,8 +56,12 @@ export async function POST(req: NextRequest) {
   const parseLines = (raw: any): ExchangeLine[] => {
     if (!Array.isArray(raw)) return []
     return raw
-      .map((l: any) => ({ productId: parseInt(l?.productId, 10), quantity: parseInt(l?.quantity, 10) }))
-      .filter((l: ExchangeLine) => Number.isInteger(l.productId) && Number.isInteger(l.quantity) && l.quantity > 0)
+      // 🥬 2026-10-12: الكمية Float — استبدال بالوزن (مرتجع 1.5 كيلو وبديل 1.2)
+      .map((l: any) => ({
+        productId: parseInt(l?.productId, 10),
+        quantity: Math.round((Number(l?.quantity) || 0) * 1000) / 1000,
+      }))
+      .filter((l: ExchangeLine) => Number.isInteger(l.productId) && l.quantity > 0)
   }
   const outLines = parseLines(b?.lines) // البضاعة الراجعة للمورد
   const inLines = parseLines(b?.replacements) // البضاعة البديلة
