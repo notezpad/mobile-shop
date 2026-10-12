@@ -151,12 +151,19 @@ export function InkInput({ num, suffix, size = 'md', className, wrapperClassName
           INK_INPUT,
           size === 'sm' && 'h-9 rounded-lg px-2.5 text-sm',
           num && 'text-left font-bold tabular-nums',
-          suffix && 'pe-14',
+          // الأرقام (dir=ltr): الرقم أقصى الشمال و«جنيه» أقصى اليمين — بمسافات فيزيائية
+          // (pr/right) لأن الحقل LTR فالـ pe/end كانوا بيرموا اللاحقة على نفس جهة الرقم.
+          suffix && (num ? 'pr-14' : 'pe-14'),
           className
         )}
       />
       {suffix && (
-        <span className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-foreground/55">
+        <span
+          className={cn(
+            'pointer-events-none absolute top-1/2 -translate-y-1/2 text-xs font-semibold text-foreground/55',
+            num ? 'right-3' : 'end-3'
+          )}
+        >
           {suffix}
         </span>
       )}

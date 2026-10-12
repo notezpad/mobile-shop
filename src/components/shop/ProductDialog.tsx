@@ -393,7 +393,7 @@ export function ProductDialog({
                     <span
                       className={cn(
                         'flex size-5 items-center justify-center rounded-full bg-white shadow transition-transform',
-                        soldByWeight ? 'translate-x-5' : 'translate-x-0',
+                        soldByWeight ? 'translate-x-5 rtl:-translate-x-5' : 'translate-x-0',
                       )}
                     />
                   </span>
