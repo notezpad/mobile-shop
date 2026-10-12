@@ -91,8 +91,17 @@ const LIMIT_KIND_LABEL: Record<LimitKind, string> = {
  * is still recommended (it cleans up the DB rows for hygiene) but it's
  * no longer strictly required for the runtime to behave correctly.
  */
-const PLAN_CTX_TTL_MS = 60_000
+// 🛡️ 2026-10-12: كان 60 ثانية — قصّرناه لـ 10 ثواني عشان تغيير الباقة من
+// لوحة الأدمن يظهر بسرعة (الكاش في ذاكرة كل instance لوحده، فمفيش طريقة
+// نمسحه من instance تانية — التقصير هو الحل المضمون).
+const PLAN_CTX_TTL_MS = 10_000
 const planCtxCache = new Map<string, { at: number; value: PlanContext }>()
+
+/** امسح كاش سياق الباقة (لتينانت معيّن أو للكل) — بيتنادى بعد تغيير الباقة. */
+export function invalidatePlanContext(tenantId?: string) {
+  if (tenantId) planCtxCache.delete(tenantId)
+  else planCtxCache.clear()
+}
 
 export async function getPlanContext(tenantId: string): Promise<PlanContext> {
   const hit = planCtxCache.get(tenantId)
