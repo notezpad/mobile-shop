@@ -284,52 +284,6 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
     return () => { alive = false }
   }, [setUser, setShopName, setBranding, setPlan, setSubscription, router])
 
-  // 🛡️ 2026-10-12: تحديث الباقة/الموديولات تلقائياً.
-  // قبل كده /api/subscription كان بيتقرا مرة واحدة وقت فتح التطبيق، فلو الأدمن
-  // غيّر باقة المحل والمستخدم فاتح (أو PWA متثبّت) الواجهة كانت بتفضل على
-  // الباقة القديمة لحد ما يقفل ويفتح. دلوقتي بنعيد القراءة لما التاب يرجع
-  // للواجهة / الشبكة ترجع / كل دقيقة.
-  React.useEffect(() => {
-    if (bootState !== 'authed') return
-    let busy = false
-    const refresh = async () => {
-      if (busy || document.visibilityState === 'hidden' || !navigator.onLine) return
-      busy = true
-      try {
-        const d = await api<any>('/api/subscription')
-        setSubscription({
-          expired: Boolean(d?.expired),
-          expiringSoon: Boolean(d?.expiringSoon),
-          daysLeft: typeof d?.daysLeft === 'number' ? d.daysLeft : null,
-          endDate: d?.endDate ?? null,
-          planCode: d?.planCode ?? null,
-          planName: d?.planName ?? null,
-          period: d?.period ?? null,
-        })
-        if (Array.isArray(d?.enabledModules)) {
-          setPlan({
-            businessType:
-              d.businessType === 'fashion' ? 'fashion' : d.businessType === 'food' ? 'food' : 'electronics',
-            enabledModules: d.enabledModules,
-            capabilities: Array.isArray(d.capabilities) ? d.capabilities : [],
-          })
-        }
-      } catch { /* تجاهل — هنحاول تاني في المرة الجاية */ }
-      finally { busy = false }
-    }
-    const onVisible = () => { if (document.visibilityState === 'visible') void refresh() }
-    document.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('focus', refresh)
-    window.addEventListener('online', refresh)
-    const timer = window.setInterval(refresh, 60_000)
-    return () => {
-      document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('focus', refresh)
-      window.removeEventListener('online', refresh)
-      window.clearInterval(timer)
-    }
-  }, [bootState, setPlan, setSubscription])
-
   React.useEffect(() => {
     if (!user && bootState === 'authed') {
       setBootState('guest')

@@ -3,7 +3,6 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { CANONICAL_PLAN_CODES } from '@/lib/plan-constants'
 import { countableSubWhere } from '@/lib/subscription-status'
-import { invalidatePlanContext } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -145,7 +144,6 @@ export async function POST(req: NextRequest) {
         },
         include: { plan: true },
       })
-      invalidatePlanContext(session.tenantId)
 
       return NextResponse.json({
         ok: true,
@@ -170,7 +168,6 @@ export async function POST(req: NextRequest) {
       },
       include: { plan: true },
     })
-    invalidatePlanContext(session.tenantId)
 
     return NextResponse.json({
       ok: true,

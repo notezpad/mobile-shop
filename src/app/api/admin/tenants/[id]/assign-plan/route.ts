@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireSuperAdmin, authErrorResponse } from '@/lib/auth'
-import { invalidatePlanContext } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -100,7 +99,6 @@ export async function POST(
         },
         include: { plan: true },
       })
-      invalidatePlanContext(tenantId)
 
       return NextResponse.json({
         ok: true,
@@ -130,7 +128,6 @@ export async function POST(
       data: updateData,
       include: { plan: true },
     })
-    invalidatePlanContext(tenantId)
 
     return NextResponse.json({
       ok: true,
