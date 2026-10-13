@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { hardDeleteTenant } from '@/lib/admin-fake-tenants'
 import { db, withDb } from '@/lib/db'
-import { requireSuperAdmin, authErrorResponse } from '@/lib/auth'
+import { requireSuperAdmin, authErrorResponse, PLATFORM_TENANT_ID } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -161,7 +162,7 @@ async function __PUT(
 }
 
 async function __DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -175,6 +176,36 @@ async function __DELETE(
   const existing = await db.tenant.findUnique({ where: { id } })
   if (!existing) {
     return NextResponse.json({ error: 'المحل غير موجود' }, { status: 404 })
+  }
+
+  // 🗑️ حذف نهائي (?permanent=1): مسموح بس لو المحل مالوش مبيعات ومفيش دفع حقيقي —
+  // حماية من مسح محل شغّال بالغلط. المحلات الشغّالة بتفضل بالإلغاء الناعم.
+  if (new URL(req.url).searchParams.get('permanent') === '1') {
+    if (id === PLATFORM_TENANT_ID) {
+      return NextResponse.json({ error: 'لا يمكن حذف حساب المنصة' }, { status: 400 })
+    }
+    const [salesCount, paidCount, owner] = await Promise.all([
+      db.sale.count({ where: { tenantId: id } }),
+      db.subscription.count({ where: { tenantId: id, amountPaid: { gt: 0 } } }),
+      db.user.findMany({ where: { tenantId: id }, select: { id: true, email: true }, take: 5 }),
+    ])
+    if (salesCount > 0 || paidCount > 0) {
+      return NextResponse.json(
+        { error: 'المحل ده عليه مبيعات أو مدفوعات — الحذف النهائي غير مسموح. استخدم الإلغاء العادي.' },
+        { status: 409 },
+      )
+    }
+    const r = await hardDeleteTenant({
+      id,
+      email: (existing.ownerEmail || owner[0]?.email || '').trim().toLowerCase(),
+      phone: (existing.ownerPhone || existing.phone || '').trim(),
+      userIds: owner.map((u) => u.id),
+    })
+    return NextResponse.json({
+      ok: true,
+      mode: r.mode,
+      audienceCsv: r.csvLine ? `email,phone\n${r.csvLine}` : null,
+    })
   }
 
   // Soft delete: mark as cancelled

@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useVocab, foodTerm } from '@/lib/vocab'
 import { formatQtyUnit } from '@/lib/unit-label'
 import {
   Wallet,
@@ -312,6 +313,7 @@ export function DashboardView() {
   const [loading, setLoading] = React.useState(true)
   const [chartDays, setChartDays] = React.useState<7 | 14 | 30>(7)
   const isMobile = useIsMobile()
+  const t = useVocab()
   const user = useShopStore((s) => s.user)
   const enabledModules = useShopStore((s) => s.plan.enabledModules)
   const hasMaintenance = enabledModules.includes('maintenance')
@@ -679,7 +681,7 @@ export function DashboardView() {
                   label="تنبيهات المخزون"
                   value={String(low)}
                   dot={low > 0 ? 'bg-amber-500' : 'bg-emerald-500'}
-                  sub={low > 0 ? 'مراجعة المخزون' : 'كل المنتجات فوق الحد الأدنى'}
+                  sub={low > 0 ? 'مراجعة المخزون' : t('كل المنتجات فوق الحد الأدنى')}
                   href={low > 0 ? '/inventory' : undefined}
                   loading={loadingFirst}
                 />
@@ -736,7 +738,7 @@ export function DashboardView() {
                   مراجعة المخزون <ArrowUpLeft className="size-3" />
                 </Link>
               ) : (
-                <span>كل المنتجات فوق الحد الأدنى</span>
+                <span>{t('كل المنتجات فوق الحد الأدنى')}</span>
               )
             }
           />
@@ -808,7 +810,7 @@ export function DashboardView() {
         {/* أكثر المنتجات مبيعاً */}
         <Card className="min-w-0 gap-4 rounded-3xl py-5 shadow-sm">
           <CardHeader className="px-5">
-            <PanelTitle icon={Trophy} title="أكثر المنتجات مبيعاً" tone="text-amber-500" />
+            <PanelTitle icon={Trophy} title={t('أكثر المنتجات مبيعاً')} tone="text-amber-500" />
             <p className="text-xs text-muted-foreground">آخر 30 يوم</p>
           </CardHeader>
           <CardContent className="px-5">
@@ -880,7 +882,7 @@ export function DashboardView() {
                 ) : undefined
               }
             />
-            <p className="text-xs text-muted-foreground">المنتجات تحت الحد الأدنى</p>
+            <p className="text-xs text-muted-foreground">{t('المنتجات تحت الحد الأدنى')}</p>
           </CardHeader>
           <CardContent className="px-5">
             {loading && !data ? (

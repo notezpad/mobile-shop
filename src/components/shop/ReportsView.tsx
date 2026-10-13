@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useVocab } from '@/lib/vocab'
 import { unitWord } from '@/lib/unit-label'
 import { AlertTriangle, ArrowDown, ArrowDownRight, ArrowUp, ArrowUpRight, CalendarDays, CheckCircle2, ChevronDown, FileText, Inbox, Sparkles } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -99,6 +100,7 @@ const compact = (n: number) => {
 }
 
 export function ReportsView() {
+  const tv = useVocab()
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
   const enabledModules = useShopStore((s) => s.plan.enabledModules)
@@ -270,9 +272,9 @@ export function ReportsView() {
               </Chapter>
 
               {/* ───── ٠٢ الأبطال ───── */}
-              <Chapter id="ch-leaders" n="02" title="الأبطال" hint="المنتجات والعملاء اللي شايلين الفترة">
+              <Chapter id="ch-leaders" n="02" title="الأبطال" hint={tv('المنتجات والعملاء اللي شايلين الفترة')}>
                 <div className="grid gap-4 lg:grid-cols-5">
-                  <Panel title="أفضل المنتجات" hint="الشريط = الإيراد · الجزء الملوّن = الربح · النسبة = الهامش" className="lg:col-span-3">
+                  <Panel title={tv('أفضل المنتجات')} hint="الشريط = الإيراد · الجزء الملوّن = الربح · النسبة = الهامش" className="lg:col-span-3">
                     {r.topProducts.length > 0 ? (
                       <ul className="space-y-3.5">
                         {r.topProducts.map((p, i) => {
@@ -386,7 +388,7 @@ export function ReportsView() {
                         ))}
                       </ul>
                     ) : (
-                      <Empty ok t="كل المنتجات فوق الحد الأدنى" />
+                      <Empty ok t={tv('كل المنتجات فوق الحد الأدنى')} />
                     )}
                   </Panel>
                 </div>

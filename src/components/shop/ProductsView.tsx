@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useVocab, foodTerm } from '@/lib/vocab'
 import { unitWord } from '@/lib/unit-label'
 import { ProductAvatar } from './ProductAvatar'
 import {
@@ -160,6 +161,7 @@ export function ProductsView() {
   const [unitsFor, setUnitsFor] = React.useState<{id:number;name:string;price:number}|null>(null)
   const [variantsFor, setVariantsFor] = React.useState<{id:number;name:string}|null>(null)
   const [collectionDlg, setCollectionDlg] = React.useState(false)
+  const t = useVocab()
   const capabilities = useShopStore((st) => st.plan.capabilities)
   const [singlePrintProduct, setSinglePrintProduct] = React.useState<Product | null>(null)
   const quickAdd = useShopStore((s) => s.quickAddProduct)
@@ -237,7 +239,7 @@ export function ProductsView() {
       if (e?.message?.includes('لا توجد بيانات محفوظة')) {
         toast.info('أنت غير متصل — افتح المنتجات مرة واحدة وأنت متصل لحفظها')
       } else {
-        toast.error(e?.message || 'فشل تحميل المنتجات')
+        toast.error(e?.message || t('فشل تحميل المنتجات'))
       }
     } finally {
       setLoading(false)
@@ -567,15 +569,15 @@ export function ProductsView() {
   const exportExcel = () => {
     if (products.length === 0) return
     exportSimpleExcel({
-      fileName: excelFileName('قائمة-المنتجات'),
+      fileName: excelFileName(t('قائمة-المنتجات')),
       shop: {
         name: shopName,
         phone: shopBranding.phone || undefined,
         address: shopBranding.address || undefined,
       },
-      documentTitle: 'قائمة المنتجات',
+      documentTitle: t('قائمة المنتجات'),
       periodLabel: category !== 'all' ? `التصنيف: ${category}` : undefined,
-      sheetName: 'المنتجات',
+      sheetName: t('المنتجات'),
       columns: [
         { header: 'المنتج', key: 'name', format: 'text' },
         { header: 'التصنيف', key: 'category', format: 'text' },
@@ -658,7 +660,7 @@ export function ProductsView() {
             <span className="absolute end-2 top-2 size-1.5 rounded-full bg-background/80" />
           </span>
           <div>
-            <h1 className="text-2xl font-extrabold leading-tight tracking-tight">المنتجات</h1>
+            <h1 className="text-2xl font-extrabold leading-tight tracking-tight">{t('المنتجات')}</h1>
             <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
               <span className="tabular-nums">
                 <b className="font-extrabold text-foreground">{total}</b> صنف
@@ -735,7 +737,7 @@ export function ProductsView() {
               <Plus className="size-4 sm:size-3.5" strokeWidth={3} />
             </span>
             <span className="relative text-base font-extrabold sm:text-sm sm:font-bold">
-              منتج جديد
+              {t('منتج جديد')}
             </span>
           </Button>
         </div>
@@ -910,7 +912,7 @@ export function ProductsView() {
           ) : (
             <Button onClick={openAdd}>
               <Plus className="size-4" />
-              منتج جديد
+              {t('منتج جديد')}
             </Button>
           )}
         </div>
@@ -1129,7 +1131,7 @@ export function ProductsView() {
       {bulkConfirmOpen && (
         <ConfirmDialog
           title={`حذف ${selectedIds.size} منتج`}
-          message="المنتجات التي ليس لها بيانات مرتبطة ستُحذف نهائياً. المنتجات التي لها مبيعات أو مخزون ستُحذف محاسبياً مع الحفاظ على السجل المالي."
+          message={t('المنتجات التي ليس لها بيانات مرتبطة ستُحذف نهائياً. المنتجات التي لها مبيعات أو مخزون ستُحذف محاسبياً مع الحفاظ على السجل المالي.')}
           onConfirm={async () => {
             setBulkConfirmOpen(false)
             const ids = Array.from(selectedIds)

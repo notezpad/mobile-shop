@@ -783,9 +783,10 @@ function SignupContent() {
         // الحساب فعلياً — وليس عند فتح الصفحة أو الضغط أو وجود خطأ.
         // نفس event_id الذي أرسله السيرفر → Deduplication مثالي.
         try {
-          trackEvent(TRACKING_EVENTS.CompleteRegistration, {
-            eventId: data.tracking?.registrationEventId,
-            contentName: data.tracking?.planName,
+          // 🛡️ السيرفر بيرجّع tracking فقط للتسجيل الحقيقي؛ المشكوك فيه (بريد مؤقت/test) مفيش حدث.
+          if (data.tracking) trackEvent(TRACKING_EVENTS.CompleteRegistration, {
+            eventId: data.tracking.registrationEventId,
+            contentName: data.tracking.planName,
             contentType: 'subscription_plan',
           })
           if (data.tracking?.trialEventId) {

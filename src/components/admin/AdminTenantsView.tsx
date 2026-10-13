@@ -107,6 +107,7 @@ import { api } from '@/lib/api'
 import { formatCurrency, formatShortDate } from '@/lib/format'
 import { toast } from 'sonner'
 import { useShopStore } from '@/lib/store'
+import { FakeSignupsDialog } from './FakeSignupsDialog'
 
 /**
  * أيقونة موبايل حديث (smartphone) مرسومة يدويًا — جسم بزوايا مدوّرة، فتحة سماعة
@@ -620,6 +621,7 @@ export function AdminTenantsView() {
   const [editOpen, setEditOpen] = React.useState(false)
   const [editRow, setEditRow] = React.useState<TenantRow | null>(null)
   const [addOpen, setAddOpen] = React.useState(false)
+  const [fakeOpen, setFakeOpen] = React.useState(false)
   const [deleteRow, setDeleteRow] = React.useState<TenantRow | null>(null)
   const [busyId, setBusyId] = React.useState<string | null>(null)
 
@@ -683,6 +685,38 @@ export function AdminTenantsView() {
       load(true)
     } catch (e: any) {
       toast.error(e?.message || 'فشل التحديث')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  // 🗑️ حذف نهائي (للتجارب الوهمية): بيمسح المحل وبياناته فعلاً وينزّل ملف جمهور استبعاد لفيسبوك
+  const handlePermanentDelete = async () => {
+    if (!deleteRow) return
+    const row = deleteRow
+    if (!window.confirm(`حذف «${row.shopName}» نهائياً بكل بياناته؟ مفيش رجوع.`)) return
+    setBusyId(row.id)
+    try {
+      const r = await api<{ mode: 'deleted' | 'cancelled'; audienceCsv: string | null }>(
+        `/api/admin/tenants/${row.id}?permanent=1`,
+        { method: 'DELETE' },
+      )
+      if (r.audienceCsv) {
+        const blob = new Blob([r.audienceCsv], { type: 'text/csv;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `meta-exclusion-${row.id.slice(0, 6)}.csv`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        setTimeout(() => URL.revokeObjectURL(url), 2000)
+      }
+      toast.success(r.mode === 'deleted' ? 'تم الحذف النهائي' : 'اتلغى المحل (مش قابل للحذف النهائي)')
+      setDeleteRow(null)
+      load(true)
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل الحذف النهائي')
     } finally {
       setBusyId(null)
     }
@@ -965,6 +999,10 @@ export function AdminTenantsView() {
             >
               <Plus className="size-4" />
               إضافة محل
+            </Button>
+            <Button variant="outline" onClick={() => setFakeOpen(true)} className="gap-1.5">
+              <Trash2 className="size-4" />
+              تنضيف الوهمي
             </Button>
             <Button
               variant="outline"
@@ -1520,6 +1558,8 @@ export function AdminTenantsView() {
         />
       )}
 
+      <FakeSignupsDialog open={fakeOpen} onOpenChange={setFakeOpen} onDone={() => load(true)} />
+
       <AddTenantDialog
         plans={plans}
         open={addOpen}
@@ -1538,8 +1578,9 @@ export function AdminTenantsView() {
               تأكيد حذف المحل
             </AlertDialogTitle>
             <AlertDialogDescription>
-              سيتم إلغاء «{deleteRow?.shopName}» وتعطيل جميع اشتراكاته. لن يتم حذف البيانات فعلياً —
-              هذا الإجراء قابل للتراجع بتفعيل المحل يدوياً.
+              «إلغاء فقط»: بيعطّل «{deleteRow?.shopName}» واشتراكاته وبياناته تفضل موجودة (قابل للتراجع).
+              «حذف نهائي»: بيمسح المحل وكل بياناته فعلياً وينزّل ملف جمهور استبعاد لفيسبوك — مسموح بس للمحلات
+              اللي مالهاش مبيعات ولا مدفوعات.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1549,8 +1590,16 @@ export function AdminTenantsView() {
               className="gap-1.5 bg-rose-600 text-white hover:bg-rose-600/90"
             >
               <Trash2 className="size-4" />
-              نعم، احذف
+              إلغاء فقط
             </AlertDialogAction>
+            <Button
+              variant="destructive"
+              onClick={handlePermanentDelete}
+              className="gap-1.5"
+            >
+              <Trash2 className="size-4" />
+              حذف نهائي
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

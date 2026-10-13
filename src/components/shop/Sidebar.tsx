@@ -20,6 +20,7 @@
  */
 
 import * as React from 'react'
+import { useVocab, foodTerm } from '@/lib/vocab'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -105,6 +106,7 @@ function NavButton({
   collapsed?: boolean
   onNavigate?: () => void
 }) {
+  const t = useVocab()
   const Icon = item.icon
 
   // ⚡ PERF FIX: التنزيل يبدأ من لحظة اللمس/الهوفر بدل الانتظار بعد الكليك.
@@ -159,7 +161,7 @@ function NavButton({
       </span>
 
       {!collapsed && (
-        <span className="flex-1 truncate">{item.label}</span>
+        <span className="flex-1 truncate">{t(item.label)}</span>
       )}
     </Link>
   )
@@ -169,7 +171,7 @@ function NavButton({
       <Tooltip>
         <TooltipTrigger asChild>{linkEl}</TooltipTrigger>
         <TooltipContent side="left" sideOffset={8}>
-          {item.label}
+          {t(item.label)}
         </TooltipContent>
       </Tooltip>
     )

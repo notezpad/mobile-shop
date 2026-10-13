@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useVocab, foodTerm } from '@/lib/vocab'
 import { commonUnit, formatQtyUnit, unitOf, unitWord } from '@/lib/unit-label'
 import {
   AlertTriangle,
@@ -685,6 +686,7 @@ function useMediaQuery(query: string) {
    ──────────────────────────────────────────────────────────────── */
 
 export function POSView() {
+  const t = useVocab()
   const user = useShopStore((s) => s.user)
   const draftKey = draftKeyFor(user)
   // Read once, on mount — before any state below is created.
@@ -1835,7 +1837,7 @@ export function POSView() {
         <PanelHead
           n={1}
           tag="Catalog"
-          title="اختر المنتجات"
+          title={t('اختر المنتجات')}
           aside={
             <div className="flex items-center gap-2.5">
               {!isDesktop && (
@@ -1857,7 +1859,7 @@ export function POSView() {
               </span>
               <div
                 role="group"
-                aria-label="طريقة عرض المنتجات"
+                aria-label={t('طريقة عرض المنتجات')}
                 className="flex overflow-hidden rounded-lg border border-border"
               >
                 {(
@@ -1930,12 +1932,12 @@ export function POSView() {
         <button
           type="button"
           onClick={() => openQuickAddProduct()}
-          title="إضافة منتج جديد"
-          aria-label="إضافة منتج جديد"
+          title={t('إضافة منتج جديد')}
+          aria-label={t('إضافة منتج جديد')}
           className="flex h-12 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-foreground/25 bg-card px-3.5 text-sm font-bold shadow-sm transition-colors hover:border-brand-600/60 hover:bg-brand-600/[0.06]"
         >
           <Plus className="size-5" />
-          <span className="hidden 2xl:inline">منتج جديد</span>
+          <span className="hidden 2xl:inline">{t('منتج جديد')}</span>
         </button>
         </div>
 
@@ -1988,7 +1990,7 @@ export function POSView() {
         {searchError ? (
           <div className="flex flex-col items-center gap-2 py-16 text-center">
             <AlertTriangle className="size-8 text-destructive" />
-            <p className="text-sm text-destructive">تعذّر تحميل المنتجات — تأكد من الاتصال وجرّب تاني.</p>
+            <p className="text-sm text-destructive">{t('تعذّر تحميل المنتجات — تأكد من الاتصال وجرّب تاني.')}</p>
             <Button size="sm" variant="outline" onClick={() => setRefreshTick((t) => t + 1)}>
               إعادة المحاولة
             </Button>
@@ -2113,7 +2115,7 @@ export function POSView() {
       </div>
 
       {simplePaged && pageCount > 1 && (
-        <nav aria-label="صفحات المنتجات" className="flex items-center gap-2 border-t border-border bg-muted/40 px-3 py-2.5">
+        <nav aria-label={t('صفحات المنتجات')} className="flex items-center gap-2 border-t border-border bg-muted/40 px-3 py-2.5">
           <button
             type="button"
             onClick={() => setPage(Math.max(0, safePage - 1))}
@@ -2163,7 +2165,7 @@ export function POSView() {
           ))}
         </div>
         {paged && pageCount > 1 && (
-          <nav aria-label="صفحات المنتجات" className="flex items-center gap-1">
+          <nav aria-label={t('صفحات المنتجات')} className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => setPage(Math.max(0, safePage - 1))}
@@ -3040,7 +3042,7 @@ export function POSView() {
                   className="flex h-10 touch-manipulation items-center gap-1 rounded-xl px-3 text-sm font-bold active:bg-muted"
                 >
                   <ChevronRight className="size-5" />
-                  {mobileStep === 'pay' ? 'السلة' : 'المنتجات'}
+                  {mobileStep === 'pay' ? 'السلة' : t('المنتجات')}
                 </button>
                 <div role="tablist" aria-label="خطوات الفاتورة" className="mx-auto flex items-center gap-1 rounded-full bg-muted p-1">
                   {(

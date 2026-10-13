@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useVocab } from '@/lib/vocab'
 import { useUnsavedConfirm } from '@/hooks/use-dirty-confirm'
 import { Dices, ImagePlus, Loader2, Tag, Trash2, Upload } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -82,6 +83,7 @@ export function ProductDialog({
   const capabilities = useShopStore((s) => s.plan.capabilities)
   // 🥬 2026-10-12: توoggle البيع بالوزن بيظهر للمحلات الغذائية بس
   const isFoodVertical = useShopStore((s) => s.plan.businessType) === 'food'
+  const t = useVocab()
   const { onOpenChange: handleOpenChange } = useUnsavedConfirm({
     dirty,
     onClose: () => onOpenChange(false),
@@ -168,7 +170,7 @@ export function ProductDialog({
       }
       if (initial?.id) {
         await api(`/api/products/${initial.id}`, { method: 'PUT', body: payload })
-        toast.success('تم تحديث المنتج')
+        toast.success(t('تم تحديث المنتج'))
         onSaved({ ...payload, id: initial.id })
       } else {
         const created = await api<ProductFormValues>('/api/products', {
@@ -179,10 +181,10 @@ export function ProductDialog({
         // المحلي — بنرجّعه مع الـ payload عشان إضافة المنتج الجديد للسلة
         // (أمر الشراء/البيع) تشتغل أوفلاين والمزامنة تظبط الـ id بعدين.
         if ((created as any)?.offline) {
-          toast.success('تم حفظ المنتج محلياً — سيتم المزامنة عند عودة الاتصال')
+          toast.success(t('تم حفظ المنتج محلياً — سيتم المزامنة عند عودة الاتصال'))
           onSaved({ ...payload, id: (created as any).id } as ProductFormValues)
         } else {
-          toast.success('تمت إضافة المنتج')
+          toast.success(t('تمت إضافة المنتج'))
           onSaved(created)
         }
       }
@@ -220,9 +222,9 @@ export function ProductDialog({
       >
         <DialogHero
           icon={Tag}
-          title={initial?.id ? 'تعديل منتج' : 'إضافة منتج جديد'}
+          title={t(initial?.id ? 'تعديل منتج' : 'إضافة منتج جديد')}
           chip={initial?.id && initial?.name ? initial.name : undefined}
-          subtitle={initial?.id ? 'عدّل بيانات المنتج وسعره ومخزونه.' : 'سجّل المنتج مرة واحدة — وبعدها يظهر في البيع والمشتريات والمخزون.'}
+          subtitle={t(initial?.id ? 'عدّل بيانات المنتج وسعره ومخزونه.' : 'سجّل المنتج مرة واحدة — وبعدها يظهر في البيع والمشتريات والمخزون.')}
         />
 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain bg-muted/20 p-4 sm:p-6">
@@ -239,7 +241,7 @@ export function ProductDialog({
                     // 🥬 فهم الاسم: رز → كيس، زبادي → علبة، مربى → برطمان (طول ما المستخدم ماغيّرش الوحدة بإيده)
                     if (isFoodVertical && unitAuto) setUnitLabel(guessUnitLabel(e.target.value) ?? '')
                   }}
-                  placeholder="اسم المنتج"
+                  placeholder={t('اسم المنتج')}
                 />
               </Field>
 
@@ -260,7 +262,7 @@ export function ProductDialog({
                   label="الكوليكشن"
                   htmlFor="p-collection"
                   className="col-span-2 sm:col-span-1"
-                  hint="لتجميع المنتجات وتطبيق خصم جماعي عليها"
+                  hint={t('لتجميع المنتجات وتطبيق خصم جماعي عليها')}
                 >
                   <InkInput
                     id="p-collection"
@@ -282,7 +284,7 @@ export function ProductDialog({
                     className="text-start"
                     value={barcode ?? ''}
                     onChange={(e) => edit(setBarcode)(e.target.value ? e.target.value : null)}
-                    placeholder="باركود المنتج"
+                    placeholder={t('باركود المنتج')}
                   />
                   <Button
                     type="button"
@@ -404,7 +406,7 @@ export function ProductDialog({
               {isFoodVertical && !soldByWeight && (
                 <div className="col-span-2 space-y-2 rounded-xl border bg-muted/40 p-3.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-[15px] font-extrabold">وحدة المنتج</span>
+                    <span className="text-[15px] font-extrabold">{t('وحدة المنتج')}</span>
                     <span className="text-[12px] font-semibold text-foreground/65">
                       {unitAuto && unitLabel ? 'اتحددت تلقائي من الاسم — غيّرها لو عايز' : 'بتظهر في البيع والمخزون: «3 علب» بدل «3 قطعة»'}
                     </span>

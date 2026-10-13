@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { hashPassword, createSession } from '@/lib/auth'
 import { runNonBlocking, trackServerEvent, extractRequestContext } from '@/lib/tracking/server'
 import { TRACKING_EVENTS } from '@/lib/tracking/types'
+import { suspiciousSignupReason } from '@/lib/tracking/fake-signup'
 import {
   normalizeEgyptPhone, parseEmail, isDisposableDomain, domainAcceptsMail,
   gmailAliasExists, phoneAlreadyRegistered, hashIp, signupsFromIpLast24h,
@@ -296,7 +297,15 @@ async function __POST(req: NextRequest) {
       }).catch(() => {}) // فشل الإسناد لا يوقف التسجيل
     }
 
-    runNonBlocking(() => trackServerEvent({
+    // 🛡️ تسجيل وهمي واضح (بريد مؤقت / test@ / أرقام متكررة) → الحساب بيتعمل عادي
+    // لكن ما بنبعتش CompleteRegistration/StartTrial لأي منصة إعلانات (سيرفر ولا متصفح)
+    // عشان ما نبوّظش تحسين الإعلانات. السبب بيتسجل في اللوج بس.
+    const fakeReason = suspiciousSignupReason({ name, email: user.email, phone, shopName })
+    if (fakeReason) {
+      console.info('[signup] tracking suppressed:', fakeReason)
+    }
+
+    if (!fakeReason) runNonBlocking(() => trackServerEvent({
       eventName: TRACKING_EVENTS.CompleteRegistration,
       eventId: regEventId,
       params: { contentName: trialPlan.name, contentType: 'subscription_plan', contentId: String(trialPlan.id) },
@@ -304,7 +313,7 @@ async function __POST(req: NextRequest) {
       subscriptionId: trialSub?.id,
     }))
     // بدء التجربة فعلياً (14 يوم) حدث منفصل عن التسجيل
-    runNonBlocking(() => trackServerEvent({
+    if (!fakeReason) runNonBlocking(() => trackServerEvent({
       eventName: TRACKING_EVENTS.StartTrial,
       eventId: trialEventId,
       params: {
@@ -327,11 +336,14 @@ async function __POST(req: NextRequest) {
         branchId: null,
       },
       // 📊 معرفات الأحداث — المتصفح يُطلق نفس الأحداث بنفس event_id
-      tracking: {
-        registrationEventId: regEventId,
-        trialEventId,
-        planName: trialPlan.name,
-      },
+      // undefined لو التسجيل مشكوك فيه → المتصفح مش هيطلق أي حدث إعلانات
+      tracking: fakeReason
+        ? undefined
+        : {
+            registrationEventId: regEventId,
+            trialEventId,
+            planName: trialPlan.name,
+          },
     })
   } catch (e: any) {
     console.error('[signup] Unexpected error:', e)
