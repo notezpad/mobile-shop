@@ -270,7 +270,7 @@ export function ReportsView() {
                     )}
                   </Panel>
                 </div>
-              </Chapter>}
+              </Chapter>
 
               {/* ───── ٠٢ الأبطال ───── */}
               <Chapter id="ch-leaders" n="02" title="الأبطال" hint={tv('المنتجات والعملاء اللي شايلين الفترة')}>
@@ -396,8 +396,8 @@ export function ReportsView() {
               </Chapter>
 
               {/* ───── ٠٤ المالية ───── */}
-              {hasFinance && (
-                {r.canViewProfits !== false && <Chapter id="ch-finance" n="04" title="المالية" hint="من هامش البيع لحد الصافي، وإيه اللي ليك وعليك">
+              {hasFinance && r.canViewProfits !== false && (
+                <Chapter id="ch-finance" n="04" title="المالية" hint="من هامش البيع لحد الصافي، وإيه اللي ليك وعليك">
                   <div className="grid gap-4 lg:grid-cols-2">
                     <Panel title="جسر الأرباح" hint={`هامش المبيعات + الصيانة (${num(r.maintenanceCount)} أمر) − المصروفات`} className="lg:col-span-2">
                       <Waterfall

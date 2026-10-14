@@ -86,7 +86,7 @@ async function __GET(req: NextRequest) {
     cur, prev, maintenanceCount, maintAgg, prevMaintAgg, finIn, finOut, cashAgg,
     stockRows, lowStockRows, expAgg, prevExpAgg, expByCat, purchAgg, custAgg, suppAgg,
     branches,
-    canViewProfits, // للفرونت عشان يخفي قسم الأرباح trendRows, topProductRows, categoryRows, topCustomerRows, methodRows, commissionAgg,
+    trendRows, topProductRows, categoryRows, topCustomerRows, methodRows, commissionAgg,
   ] = await Promise.all([
     saleAgg(from, to),
     hasBoundedRange ? saleAgg(prevFrom, prevTo) : Promise.resolve([{ total: 0, profit: 0, cnt: 0 }]),
