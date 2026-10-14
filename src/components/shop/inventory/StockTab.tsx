@@ -502,7 +502,10 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                         {num(summary.qty)} <span className="text-xs font-medium text-muted-foreground">قطعة</span>
                       </td>
                       <td colSpan={2} />
-                      <td className="px-3 py-2.5 text-center tabular-nums">{formatCurrency(summary.value)}</td>
+                      <td className="px-3 py-2.5 text-center tabular-nums">
+                        {/* 🔒 RBAC: إجمالي قيمة التكلفة مخفي لو التكلفة مخفية */}
+                        {filtered.some((p) => p.cost == null) ? '—' : formatCurrency(summary.value)}
+                      </td>
                       <td />
                     </tr>
                   </tfoot>

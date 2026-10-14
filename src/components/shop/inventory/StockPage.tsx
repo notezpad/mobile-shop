@@ -53,9 +53,10 @@ export function StockPage() {
         { header: 'الفرع', key: 'branch', format: 'text' },
         { header: 'الكمية', key: 'quantity', format: 'int' },
         { header: 'الحد الأدنى', key: 'minQuantity', format: 'int' },
-        { header: 'التكلفة', key: 'cost', format: 'currency' },
+        // 🔒 RBAC: أعمدة التكلفة تختفي لمن لا يملك صلاحية رؤية الأرباح
+        ...(stats.canSeeCost ? [{ header: 'التكلفة', key: 'cost', format: 'currency' as const }] : []),
         { header: 'سعر البيع', key: 'price', format: 'currency' },
-        { header: 'قيمة المخزون (تكلفة)', key: 'stockValue', format: 'currency' },
+        ...(stats.canSeeCost ? [{ header: 'قيمة المخزون (تكلفة)', key: 'stockValue', format: 'currency' as const }] : []),
       ],
       rows: products.map((p) => ({
         name: p.name,
@@ -71,7 +72,7 @@ export function StockPage() {
       totals: {
         name: 'الإجمالي',
         quantity: products.reduce((s, p) => s + p.quantity, 0),
-        stockValue: products.reduce((s, p) => s + p.quantity * p.cost, 0),
+        ...(stats.canSeeCost ? { stockValue: products.reduce((s, p) => s + p.quantity * p.cost, 0) } : {}),
       },
     })
   }
@@ -155,31 +156,37 @@ export function StockPage() {
             </div>
 
             <div>
-              <p className="text-sm font-semibold text-muted-foreground">قيمة البضاعة بسعر التكلفة</p>
+              {/* 🔒 RBAC: لو التكلفة مخفية نعرض قيمة البضاعة بسعر البيع بدل التكلفة (مش سرّية) */}
+              <p className="text-sm font-semibold text-muted-foreground">
+                {stats.canSeeCost ? 'قيمة البضاعة بسعر التكلفة' : 'قيمة البضاعة بسعر البيع'}
+              </p>
               {/* 📱 2026-10-07: [overflow-wrap:anywhere] + خط أصغر على الجوال
                   عشان المبالغ المليونية والصفرية تتفضى من غير كسر التصميم */}
               <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <span className="min-w-0 text-4xl font-black tracking-tight tabular-nums [overflow-wrap:anywhere] min-[420px]:text-5xl sm:text-6xl">
-                  {noData ? '—' : num(Math.round(stats.totalValueCost))}
+                  {noData ? '—' : num(Math.round(stats.canSeeCost ? (stats.totalValueCost ?? 0) : stats.totalValuePrice))}
                 </span>
                 <span className="text-lg font-bold text-muted-foreground">جنيه</span>
               </div>
             </div>
 
-            <dl className="flex flex-wrap gap-x-8 gap-y-2">
-              <div>
-                <dt className="text-xs text-muted-foreground">لو اتباعت كلها</dt>
-                <dd className="text-[15px] font-bold tabular-nums">
-                  {noData ? '—' : num(Math.round(stats.totalValuePrice))} جنيه
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">الربح المتوقع</dt>
-                <dd className="text-[15px] font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-                  {noData ? '—' : `+${num(Math.round(stats.expectedProfit))}`} جنيه
-                </dd>
-              </div>
-            </dl>
+            {/* 🔒 RBAC: «لو اتباعت كلها» و«الربح المتوقع» يكشفوا هامش الربح — الاتنين مخفيين بدون الصلاحية */}
+            {stats.canSeeCost && (
+              <dl className="flex flex-wrap gap-x-8 gap-y-2">
+                <div>
+                  <dt className="text-xs text-muted-foreground">لو اتباعت كلها</dt>
+                  <dd className="text-[15px] font-bold tabular-nums">
+                    {noData ? '—' : num(Math.round(stats.totalValuePrice))} جنيه
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">الربح المتوقع</dt>
+                  <dd className="text-[15px] font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    {noData ? '—' : `+${num(Math.round(stats.expectedProfit ?? 0))}`} جنيه
+                  </dd>
+                </div>
+              </dl>
+            )}
           </div>
 
           {/* الأرفف */}

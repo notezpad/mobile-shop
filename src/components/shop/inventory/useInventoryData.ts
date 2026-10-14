@@ -22,9 +22,13 @@ export interface InventoryStats {
   totalItems: number
   lowStock: number
   outOfStock: number
-  totalValueCost: number
+  /** null = المستخدم معندوش صلاحية رؤية التكاليف (الـ API بيرجّع cost: null) */
+  totalValueCost: number | null
   totalValuePrice: number
-  expectedProfit: number
+  /** null = مخفي بسبب الصلاحية — مش صفر ومش قيمة البيع كاملة */
+  expectedProfit: number | null
+  /** false لو التكلفة مخفية عن المستخدم (RBAC: canViewProfits) */
+  canSeeCost: boolean
   healthyCount: number
   lowOnly: number
   pendingTransfers: number
@@ -191,7 +195,12 @@ export function useInventoryData(): InventoryData {
     const totalItems = products.length
     const lowStock = products.filter((p) => p.quantity <= p.minQuantity).length
     const outOfStock = products.filter((p) => p.quantity <= 0).length
-    const totalValueCost = products.reduce((s, p) => s + p.quantity * p.cost, 0)
+    // 🔒 RBAC: الـ API بيبدّل cost بـ null لمن لا يملك canViewProfits. قبل الإصلاح
+    // quantity * null = 0 فكانت «قيمة البضاعة» صفر و«الربح المتوقع» = كامل سعر البيع.
+    const canSeeCost = products.every((p) => p.cost != null)
+    const totalValueCost = canSeeCost
+      ? products.reduce((s, p) => s + p.quantity * p.cost, 0)
+      : null
     const totalValuePrice = products.reduce((s, p) => s + p.quantity * p.price, 0)
     const pendingTransfers = transfers.filter((t) => t.status === 'pending').length
     const draftStocktakes = stocktakes.filter((s) => s.status === 'draft').length
@@ -201,7 +210,8 @@ export function useInventoryData(): InventoryData {
       outOfStock,
       totalValueCost,
       totalValuePrice,
-      expectedProfit: totalValuePrice - totalValueCost,
+      expectedProfit: totalValueCost === null ? null : totalValuePrice - totalValueCost,
+      canSeeCost,
       healthyCount: Math.max(0, totalItems - lowStock),
       lowOnly: Math.max(0, lowStock - outOfStock),
       pendingTransfers,
