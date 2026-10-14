@@ -941,6 +941,27 @@ function ListRow({ u, now, onEdit, onToggle }: ItemProps) {
 
 /* ───────────────────────── ديالوج الإضافة / التعديل ───────────────────────── */
 
+const MODULE_LABELS: Record<string, string> = {
+  dashboard: 'لوحة المعلومات', pos: 'نقطة البيع', products: 'المنتجات',
+  sales: 'سجل المبيعات', maintenance: 'الصيانة', customers: 'العملاء',
+  suppliers: 'الموردين', purchases: 'المشتريات', inventory: 'المخزون',
+  finance: 'المعاملات المالية', expenses: 'المصروفات', cash: 'الخزنة',
+  reports: 'التقارير', settings: 'الإعدادات', users: 'المستخدمين',
+  branches: 'الفروع',
+}
+const PERM_MODULES: string[] = ALL_MODULES.filter((m) => m !== 'guide')
+
+// صف في سجل البطاقة: «الاسم ........ القيمة» بخط منقّط زي الفواتير
+function LedgerRow({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
+  return (
+    <div className="flex items-baseline gap-2 text-[13px]">
+      <dt className="shrink-0 text-white/70">{label}</dt>
+      <span aria-hidden className="flex-1 border-b border-dotted border-white/30" />
+      <dd className={cn('truncate font-bold', warn && 'text-amber-300')}>{value}</dd>
+    </div>
+  )
+}
+
 interface Props {
   open: boolean
   onOpenChange: (o: boolean) => void
@@ -1026,329 +1047,432 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
     { v: 'ADMIN' as const, icon: ShieldCheck, title: 'مدير', desc: 'صلاحيات كاملة على كل الفروع' },
   ]
 
+  const isAdmin = role === 'ADMIN'
+  // الصفحات مقفولة (بتتعرض كلها مفعّلة) لو مدير أو لو الموظف على «كل الصفحات»
+  const locked = isAdmin || !useCustomPerms
+  const has = (m: string) => locked || selectedPerms.includes(m)
+  const grantedCount = PERM_MODULES.filter(has).length
+  const profitsOn = isAdmin || canViewProfits
+  const toggleMod = (m: string) =>
+    setSelectedPerms((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]))
+
+  const pagesText = locked
+    ? 'كل الصفحات'
+    : grantedCount === 0
+      ? 'ولا صفحة'
+      : `${grantedCount} من ${PERM_MODULES.length}`
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent showCloseButton={false} mobileSheet className="gap-0 overflow-hidden p-0 sm:max-w-[520px]">
-        {/* معاينة البطاقة — بتتحدّث وإنت بتكتب */}
-        <div
+      <DialogContent
+        showCloseButton={false}
+        mobileSheet
+        className="gap-0 p-0 sm:max-w-[min(1020px,calc(100vw-2rem))] md:grid-cols-[288px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:overflow-hidden md:rounded-3xl"
+      >
+        {/* ───────── شريط البطاقة (يمين): معاينة حيّة + سجل الصلاحيات ───────── */}
+        <aside
           className={cn(
-            'relative px-6 pt-6 pb-7 text-white transition-colors duration-300',
-            role === 'ADMIN'
-              ? 'bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-500'
-              : 'bg-gradient-to-br from-slate-800 to-slate-600 dark:from-slate-600 dark:to-slate-500'
+            'relative flex flex-col text-white transition-colors duration-300 max-md:rounded-t-[inherit] md:min-h-0',
+            isAdmin
+              ? 'bg-gradient-to-b from-violet-700 via-purple-700 to-fuchsia-600'
+              : 'bg-gradient-to-b from-slate-800 via-slate-800 to-slate-700 dark:from-slate-700 dark:to-slate-600'
           )}
         >
+          {/* خطوط ناعمة تدّي ملمس البطاقة */}
           <span
             aria-hidden
-            className="absolute top-2.5 left-1/2 h-1.5 w-12 -translate-x-1/2 rounded-full bg-black/30 shadow-[inset_0_1px_2px_rgba(0,0,0,.35)]"
+            className="pointer-events-none absolute inset-0 opacity-[0.07]"
+            style={{
+              backgroundImage:
+                'repeating-linear-gradient(135deg, #fff 0 1px, transparent 1px 11px)',
+            }}
           />
-          <DialogHeader className="text-start">
-            <DialogTitle className="flex items-center gap-2 text-base text-white">
-              <UserCog className="size-5" />
-              {initial ? 'تعديل مستخدم' : 'مستخدم جديد'}
-            </DialogTitle>
-            <DialogDescription className="text-xs text-white/75">
-              {initial ? 'غيّر البيانات أو الصلاحية — البطاقة بتتحدّث قدامك.' : 'اعمل بطاقة دخول جديدة للفريق.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="mt-4 flex items-center gap-3 rounded-2xl bg-black/15 p-3 backdrop-blur-sm">
-            <Avatar u={{ name: name || '?' }} size="size-14 text-2xl" />
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-extrabold">{name.trim() || 'اسم المستخدم'}</p>
-              <p className="truncate text-start text-xs text-white/75">
-                <bdi dir="ltr">{email.trim() || 'email@example.com'}</bdi>
-              </p>
-              <div className="mt-1.5 flex items-center gap-1.5">
-                <RolePill admin={role === 'ADMIN'} onDark />
-                <span
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold',
-                    unscoped ? 'bg-amber-400 text-amber-950' : 'bg-white/15'
-                  )}
-                >
-                  {unscoped ? <AlertTriangle className="size-3" /> : <Store className="size-3" />}
-                  {branchName ?? 'كل الفروع'}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+          {/* فتحة الشريط */}
+          <span
+            aria-hidden
+            className="absolute top-3 left-1/2 hidden h-1.5 w-14 -translate-x-1/2 rounded-full bg-black/35 shadow-[inset_0_1px_2px_rgba(0,0,0,.4)] md:block"
+          />
 
-        <div className="space-y-4 p-6">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="u-name">
-                الاسم <span className="text-destructive">*</span>
-              </Label>
-              <Input id="u-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="u-email">
-                البريد الإلكتروني <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="u-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                dir="ltr"
-                autoComplete="off"
-              />
-            </div>
-          </div>
+          <div className="relative flex flex-1 flex-col gap-5 px-6 pt-6 pb-5 md:pt-10 md:pb-6">
+            <DialogHeader className="text-start">
+              <DialogTitle className="flex items-center gap-2 text-base text-white">
+                <UserCog className="size-5" />
+                {initial ? 'تعديل مستخدم' : 'مستخدم جديد'}
+              </DialogTitle>
+              <DialogDescription className="text-xs leading-relaxed text-white/70">
+                {initial ? 'غيّر البيانات أو الصلاحية — البطاقة بتتحدّث قدامك.' : 'اعمل بطاقة دخول جديدة للفريق.'}
+              </DialogDescription>
+            </DialogHeader>
 
-          {/* الصلاحية */}
-          <div className="space-y-1.5">
-            <Label>الصلاحية</Label>
-            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="الصلاحية">
-              {roles.map((r) => {
-                const sel = role === r.v
-                return (
-                  <button
-                    key={r.v}
-                    type="button"
-                    role="radio"
-                    aria-checked={sel}
-                    onClick={() => setRole(r.v)}
-                    className={cn(
-                      'relative rounded-xl border p-3 text-start transition-colors',
-                      sel
-                        ? 'border-violet-500 bg-violet-500/5 ring-1 ring-violet-500'
-                        : 'hover:bg-muted/50'
-                    )}
-                  >
-                    <span className="flex items-center gap-2 text-sm font-bold">
-                      <r.icon className={cn('size-4', sel ? 'text-violet-600 dark:text-violet-400' : 'text-muted-foreground')} />
-                      {r.title}
-                    </span>
-                    <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">{r.desc}</span>
-                    {sel && (
-                      <span className="absolute top-2 end-2 flex size-4 items-center justify-center rounded-full bg-violet-600 text-white">
-                        <Check className="size-3" />
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {branches.length > 0 && (
-            <div className="space-y-1.5">
-              <Label>
-                الفرع{' '}
-                {role === 'EMPLOYEE' && (
-                  <span className="text-xs font-normal text-muted-foreground">(الموظف هيشوف بيانات الفرع ده بس)</span>
-                )}
-              </Label>
-              <Select dir="rtl" value={branchId || 'none'} onValueChange={(v) => setBranchId(v === 'none' ? '' : v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="اختر" />
-                </SelectTrigger>
-                <SelectContent dir="rtl">
-                  <SelectItem value="none">كل الفروع (مدير)</SelectItem>
-                  {branches.map((b) => (
-                    <SelectItem key={b.id} value={String(b.id)}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {unscoped && (
-                <p className="flex items-start gap-2 rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200" role="alert">
-                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  الموظف من غير فرع مش هيتقيّد بفرع معيّن. اختار فرعه لو عايزه يشوف بياناته بس.
+            {/* هوية */}
+            <div className="flex items-center gap-3 md:flex-col md:items-start md:gap-4">
+              <Avatar u={{ name: name || '?' }} size="size-14 text-2xl md:size-20 md:text-4xl" />
+              <div className="min-w-0 md:w-full">
+                <p className="truncate text-lg font-extrabold md:text-xl">{name.trim() || 'اسم المستخدم'}</p>
+                <p className="truncate text-start text-xs text-white/70">
+                  <bdi dir="ltr">{email.trim() || 'email@example.com'}</bdi>
                 </p>
-              )}
-            </div>
-          )}
-
-          {/* 🔑 صلاحيات الموظف */}
-          {role === 'EMPLOYEE' && (
-            <div className="space-y-3 rounded-2xl border border-dashed p-4">
-              <div className="flex items-center gap-2">
-                <Lock className="size-4 text-muted-foreground" />
-                <span className="text-sm font-semibold">الصفحات المتاحة</span>
               </div>
+            </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { v: false, label: 'كل الصفحات', sub: 'افتراضي — زي الباقة' },
-                  { v: true, label: 'تحديد يدوي', sub: 'اختار الصفحات اللي يشوفها' },
-                ].map((opt) => (
-                  <button
-                    key={String(opt.v)}
-                    type="button"
-                    onClick={() => { setUseCustomPerms(opt.v); if (!opt.v) setSelectedPerms([]) }}
-                    className={`rounded-xl border p-3 text-start text-xs transition-colors ${
-                      useCustomPerms === opt.v
-                        ? 'border-violet-500 bg-violet-500/5 ring-1 ring-violet-500'
-                        : 'hover:bg-muted/50'
-                    }`}
-                  >
-                    <span className="block font-bold">{opt.label}</span>
-                    <span className="text-muted-foreground">{opt.sub}</span>
-                  </button>
+            {/* عدّاد الصفحات: كل شرطة = صفحة */}
+            <div className="hidden md:block" aria-hidden>
+              <div className="flex gap-[3px]">
+                {PERM_MODULES.map((m) => (
+                  <span
+                    key={m}
+                    className={cn(
+                      'h-6 flex-1 rounded-[3px] transition-colors duration-200',
+                      has(m) ? 'bg-white' : 'bg-white/20'
+                    )}
+                  />
                 ))}
               </div>
+            </div>
 
-              {useCustomPerms && (
+            {/* سجل الصلاحيات */}
+            <dl className="mt-auto hidden space-y-2.5 md:block">
+              <LedgerRow label="الصلاحية" value={isAdmin ? 'مدير' : 'موظف'} />
+              <LedgerRow label="الفرع" value={branchName ?? 'كل الفروع'} warn={unscoped} />
+              <LedgerRow label="الصفحات" value={pagesText} warn={!locked && grantedCount === 0} />
+              <LedgerRow label="الأرباح" value={profitsOn ? 'مسموح' : 'محجوبة'} />
+            </dl>
+
+            {/* نسخة الجوال المختصرة */}
+            <div className="flex flex-wrap gap-1.5 md:hidden">
+              <RolePill admin={isAdmin} onDark />
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold',
+                  unscoped ? 'bg-amber-400 text-amber-950' : 'bg-white/15'
+                )}
+              >
+                {unscoped ? <AlertTriangle className="size-3" /> : <Store className="size-3" />}
+                {branchName ?? 'كل الفروع'}
+              </span>
+            </div>
+          </div>
+        </aside>
+
+        {/* ───────── النموذج (يسار) ───────── */}
+        <section className="flex min-h-0 min-w-0 flex-col">
+          {/* الجسم: على الشاشات العادية كله ظاهر من غير تمرير، والتمرير احتياطي للشاشات القصيرة */}
+          <div className="min-h-0 flex-1 space-y-5 p-5 md:overflow-y-auto md:p-7">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="u-name">
+                  الاسم <span className="text-destructive">*</span>
+                </Label>
+                <Input id="u-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="u-email">
+                  البريد الإلكتروني <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="u-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  dir="ltr"
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+
+            {/* الصلاحية */}
+            <div className="space-y-1.5">
+              <Label>الصلاحية</Label>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="الصلاحية">
+                {roles.map((r) => {
+                  const sel = role === r.v
+                  return (
+                    <button
+                      key={r.v}
+                      type="button"
+                      role="radio"
+                      aria-checked={sel}
+                      onClick={() => setRole(r.v)}
+                      className={cn(
+                        'flex items-center gap-3 rounded-xl border p-3 text-start outline-none transition-colors focus-visible:ring-2 focus-visible:ring-violet-500/60',
+                        sel ? 'border-violet-500 bg-violet-500/5 ring-1 ring-violet-500' : 'hover:bg-muted/50'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors',
+                          sel ? 'bg-violet-600 text-white' : 'bg-muted text-muted-foreground'
+                        )}
+                      >
+                        <r.icon className="size-4" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-bold">{r.title}</span>
+                        <span className="block truncate text-[11px] text-muted-foreground">{r.desc}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* الفرع + كلمة المرور */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {branches.length > 0 && (
                 <div className="space-y-1.5">
-                  <p className="text-xs text-muted-foreground">ضع علامة على الصفحات اللي هيقدر يدخلها:</p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {ALL_MODULES.filter((m) => m !== 'guide').map((mod) => {
-                      const labels: Record<string, string> = {
-                        dashboard: 'لوحة المعلومات', pos: 'نقطة البيع', products: 'المنتجات',
-                        sales: 'سجل المبيعات', maintenance: 'الصيانة', customers: 'العملاء',
-                        suppliers: 'الموردين', purchases: 'المشتريات', inventory: 'المخزون',
-                        finance: 'المعاملات المالية', expenses: 'المصروفات', cash: 'الخزنة',
-                        reports: 'التقارير', settings: 'الإعدادات', users: 'المستخدمين',
-                        branches: 'الفروع',
-                      }
-                      const checked = selectedPerms.includes(mod)
+                  <Label>الفرع</Label>
+                  <Select dir="rtl" value={branchId || 'none'} onValueChange={(v) => setBranchId(v === 'none' ? '' : v)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="اختر" />
+                    </SelectTrigger>
+                    <SelectContent dir="rtl">
+                      <SelectItem value="none">كل الفروع (مدير)</SelectItem>
+                      {branches.map((b) => (
+                        <SelectItem key={b.id} value={String(b.id)}>
+                          {b.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p
+                    className={cn(
+                      'flex items-start gap-1.5 text-[11px] leading-snug',
+                      unscoped ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'
+                    )}
+                    role={unscoped ? 'alert' : undefined}
+                  >
+                    {unscoped && <AlertTriangle className="mt-0.5 size-3 shrink-0" />}
+                    {unscoped
+                      ? 'الموظف من غير فرع مش هيتقيّد بفرع معيّن. اختار فرعه لو عايزه يشوف بياناته بس.'
+                      : isAdmin
+                        ? 'المدير بيشوف كل الفروع.'
+                        : 'الموظف هيشوف بيانات الفرع ده بس.'}
+                  </p>
+                </div>
+              )}
+
+              <div className={cn('space-y-1.5', branches.length === 0 && 'sm:col-span-2')}>
+                <Label htmlFor="u-pass">
+                  كلمة المرور{' '}
+                  {initial ? (
+                    <span className="text-xs font-normal text-muted-foreground">(سيبها فاضية لو مش هتغيّرها)</span>
+                  ) : (
+                    <span className="text-destructive">*</span>
+                  )}
+                </Label>
+                <div className="flex gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <Input
+                      id="u-pass"
+                      type={showPw ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      dir="ltr"
+                      autoComplete="new-password"
+                      placeholder="••••••"
+                      className="pe-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPw((s) => !s)}
+                      aria-label={showPw ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                      className="absolute top-1/2 right-2.5 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setPassword(genPassword())
+                      setShowPw(true)
+                    }}
+                    title="توليد كلمة مرور قوية"
+                  >
+                    <Sparkles className="size-4" />
+                    توليد
+                  </Button>
+                </div>
+                {/* مكان ثابت لمؤشر القوة عشان الارتفاع ما يتحركش */}
+                <div className={cn('flex h-4 items-center gap-2', !password && 'invisible')} aria-live="polite">
+                  <div className="flex flex-1 gap-1">
+                    {[1, 2, 3, 4].map((n) => (
+                      <span
+                        key={n}
+                        className={cn(
+                          'h-1 flex-1 rounded-full bg-muted transition-colors',
+                          strength.score >= n &&
+                            (strength.score <= 1 ? 'bg-rose-500' : strength.score === 2 ? 'bg-amber-500' : 'bg-emerald-500')
+                        )}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-[11px] text-muted-foreground">{strength.label}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 🔑 الصفحات المتاحة — دايمًا ظاهرة بنفس الحجم؛ بتتقفل لو مدير أو «كل الصفحات» */}
+            <div className="rounded-2xl border bg-muted/20 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Lock className="size-4 text-muted-foreground" />
+                  <span className="text-sm font-semibold">الصفحات المتاحة</span>
+                  {isAdmin && (
+                    <span className="text-[11px] text-muted-foreground">المدير بيدخل كل الصفحات</span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {!locked && (
+                    <div className="flex items-center gap-1 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPerms([...PERM_MODULES])}
+                        className="rounded-md px-1.5 py-1 font-semibold text-violet-700 hover:bg-violet-500/10 dark:text-violet-300"
+                      >
+                        تحديد الكل
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPerms([])}
+                        className="rounded-md px-1.5 py-1 font-semibold text-muted-foreground hover:bg-muted"
+                      >
+                        مسح
+                      </button>
+                    </div>
+                  )}
+                  <div
+                    className={cn('flex rounded-xl border bg-muted/60 p-0.5', isAdmin && 'pointer-events-none opacity-50')}
+                    role="radiogroup"
+                    aria-label="طريقة تحديد الصفحات"
+                  >
+                    {[
+                      { v: false, label: 'كل الصفحات' },
+                      { v: true, label: 'تحديد يدوي' },
+                    ].map((opt) => {
+                      const sel = !isAdmin && useCustomPerms === opt.v
                       return (
                         <button
-                          key={mod}
+                          key={String(opt.v)}
                           type="button"
-                          onClick={() =>
-                            setSelectedPerms((prev) =>
-                              prev.includes(mod) ? prev.filter((x) => x !== mod) : [...prev, mod]
-                            )
-                          }
-                          className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs transition-colors ${
-                            checked
-                              ? 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                              : 'hover:bg-muted/50 text-muted-foreground'
-                          }`}
+                          role="radio"
+                          aria-checked={sel}
+                          disabled={isAdmin}
+                          onClick={() => {
+                            setUseCustomPerms(opt.v)
+                            if (!opt.v) setSelectedPerms([])
+                          }}
+                          className={cn(
+                            'rounded-[10px] px-3 py-1 text-xs font-bold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-violet-500/60',
+                            sel ? 'bg-card text-violet-700 shadow-sm dark:text-violet-300' : 'text-muted-foreground hover:text-foreground'
+                          )}
                         >
-                          <span className={`flex size-4 shrink-0 items-center justify-center rounded border text-[10px] transition-colors ${
-                            checked ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-muted-foreground/40'
-                          }`}>
-                            {checked && <Check className="size-3" />}
-                          </span>
-                          {labels[mod] ?? mod}
+                          {opt.label}
                         </button>
                       )
                     })}
                   </div>
                 </div>
-              )}
+              </div>
+
+              <div
+                className={cn('mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4', locked && 'opacity-60')}
+                role="group"
+                aria-label="الصفحات"
+              >
+                {PERM_MODULES.map((mod) => {
+                  const checked = has(mod)
+                  return (
+                    <button
+                      key={mod}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={checked}
+                      disabled={locked}
+                      onClick={() => toggleMod(mod)}
+                      className={cn(
+                        'flex items-center gap-2 rounded-lg border px-2.5 py-2 text-start text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500/60',
+                        checked
+                          ? 'border-emerald-500/60 bg-emerald-500/10 font-semibold text-emerald-700 dark:text-emerald-300'
+                          : 'bg-card text-muted-foreground hover:bg-muted/50',
+                        locked && 'cursor-default'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'flex size-4 shrink-0 items-center justify-center rounded border transition-colors',
+                          checked ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-muted-foreground/40'
+                        )}
+                      >
+                        {checked && <Check className="size-3" />}
+                      </span>
+                      <span className="truncate">{MODULE_LABELS[mod] ?? mod}</span>
+                    </button>
+                  )
+                })}
+              </div>
 
               {/* 🔒 رؤية الأرباح */}
-              <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
-                <TrendingUp className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                <div className="flex-1 space-y-1">
+              <div
+                className={cn(
+                  'mt-3 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2.5',
+                  isAdmin && 'opacity-60'
+                )}
+              >
+                <TrendingUp className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold text-amber-800 dark:text-amber-300">رؤية الأرباح والتكاليف</p>
                   <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80">
-                    هل يقدر يشوف أرقام الأرباح والتكاليف في الداشبورد والتقارير؟
+                    أرقام الأرباح والتكاليف في الداشبورد والتقارير.
                   </p>
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={canViewProfits}
-                      onClick={() => setCanViewProfits((v) => !v)}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                        canViewProfits ? 'bg-emerald-500' : 'bg-muted-foreground/30'
-                      }`}
-                    >
-                      <span className={`pointer-events-none block size-4 rounded-full bg-white shadow-lg ring-0 transition-transform ${
-                        canViewProfits ? 'translate-x-4' : 'translate-x-0'
-                      }`} />
-                    </button>
-                    <span className="text-xs font-semibold">
-                      {canViewProfits
-                        ? <span className="text-emerald-600 dark:text-emerald-400">مسموح يشوف الأرباح</span>
-                        : <span className="text-muted-foreground">محجوبة عنه (افتراضي)</span>
-                      }
-                    </span>
-                  </div>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* كلمة المرور */}
-          <div className="space-y-1.5">
-            <Label htmlFor="u-pass">
-              كلمة المرور{' '}
-              {initial ? (
-                <span className="text-xs font-normal text-muted-foreground">(سيبها فاضية لو مش عايز تغيّرها)</span>
-              ) : (
-                <span className="text-destructive">*</span>
-              )}
-            </Label>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Input
-                  id="u-pass"
-                  type={showPw ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  dir="ltr"
-                  autoComplete="new-password"
-                  placeholder="••••••"
-                  className="pe-10"
-                />
+                <span
+                  className={cn(
+                    'text-xs font-semibold',
+                    profitsOn ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'
+                  )}
+                >
+                  {profitsOn ? 'مسموح' : 'محجوبة'}
+                </span>
                 <button
                   type="button"
-                  onClick={() => setShowPw((s) => !s)}
-                  aria-label={showPw ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
-                  className="absolute top-1/2 right-2.5 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  role="switch"
+                  aria-checked={profitsOn}
+                  aria-label="رؤية الأرباح والتكاليف"
+                  disabled={isAdmin}
+                  onClick={() => setCanViewProfits((v) => !v)}
+                  className={cn(
+                    'relative h-5 w-9 shrink-0 rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500/60 disabled:cursor-default',
+                    profitsOn ? 'bg-emerald-500' : 'bg-muted-foreground/30'
+                  )}
                 >
-                  {showPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  <span
+                    className={cn(
+                      'absolute top-0.5 size-4 rounded-full bg-white shadow transition-[inset-inline-start] duration-150',
+                      profitsOn ? 'start-[calc(100%-1.125rem)]' : 'start-0.5'
+                    )}
+                  />
                 </button>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setPassword(genPassword())
-                  setShowPw(true)
-                }}
-                title="توليد كلمة مرور قوية"
-              >
-                <Sparkles className="size-4" />
-                توليد
-              </Button>
             </div>
-            {password && (
-              <div className="flex items-center gap-2" aria-live="polite">
-                <div className="flex flex-1 gap-1">
-                  {[1, 2, 3, 4].map((n) => (
-                    <span
-                      key={n}
-                      className={cn(
-                        'h-1 flex-1 rounded-full bg-muted transition-colors',
-                        strength.score >= n &&
-                          (strength.score <= 1
-                            ? 'bg-rose-500'
-                            : strength.score === 2
-                              ? 'bg-amber-500'
-                              : 'bg-emerald-500')
-                      )}
-                    />
-                  ))}
-                </div>
-                <span className="text-[11px] text-muted-foreground">{strength.label}</span>
-              </div>
-            )}
           </div>
-        </div>
 
-        <DialogFooter className="border-t bg-muted/30 px-6 py-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            إلغاء
-          </Button>
-          <Button
-            onClick={submit}
-            disabled={saving}
-            className="bg-gradient-to-br from-violet-600 to-fuchsia-500 text-white hover:from-violet-500 hover:to-fuchsia-400"
-          >
-            {saving && <Loader2 className="size-4 animate-spin" />}
-            {initial ? 'حفظ التعديلات' : 'إضافة المستخدم'}
-          </Button>
-        </DialogFooter>
+          <DialogFooter className="flex-row justify-end gap-2 border-t bg-muted/30 px-5 py-3.5 md:px-7">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              إلغاء
+            </Button>
+            <Button
+              onClick={submit}
+              disabled={saving}
+              className="bg-gradient-to-br from-violet-600 to-fuchsia-500 text-white hover:from-violet-500 hover:to-fuchsia-400"
+            >
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              {initial ? 'حفظ التعديلات' : 'إضافة المستخدم'}
+            </Button>
+          </DialogFooter>
+        </section>
       </DialogContent>
     </Dialog>
   )
