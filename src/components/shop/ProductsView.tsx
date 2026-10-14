@@ -77,7 +77,8 @@ interface Product {
   category: string | null
   barcode: string | null
   price: number
-  cost: number
+  /** null = المستخدم ممنوع من رؤية التكلفة/الأرباح (RBAC) */
+  cost: number | null
   quantity: number
   minQuantity: number
   imagePath: string | null
@@ -163,6 +164,8 @@ export function ProductsView() {
   const [collectionDlg, setCollectionDlg] = React.useState(false)
   const t = useVocab()
   const capabilities = useShopStore((st) => st.plan.capabilities)
+  // 🔒 RBAC: التكلفة والهامش للمدير أو لمن عنده صلاحية الأرباح بس
+  const canSeeCost = useShopStore((st) => st.user?.role === 'ADMIN' || st.user?.role === 'SUPER_ADMIN' || st.user?.canViewProfits === true)
   const [singlePrintProduct, setSinglePrintProduct] = React.useState<Product | null>(null)
   const quickAdd = useShopStore((s) => s.quickAddProduct)
   const closeQuickAdd = useShopStore((s) => s.closeQuickAddProduct)
@@ -584,7 +587,7 @@ export function ProductsView() {
         { header: 'الباركود', key: 'barcode', format: 'text' },
         { header: 'سعر البيع', key: 'price', format: 'currency' },
         { header: 'سعر القطعة', key: 'effectiveRetailPrice', format: 'currency' },
-        { header: 'التكلفة', key: 'cost', format: 'currency' },
+        ...(canSeeCost ? [{ header: 'التكلفة', key: 'cost', format: 'currency' as const }] : []),
         { header: 'الكمية المتاحة', key: 'quantity', format: 'int' },
         { header: 'الحد الأدنى', key: 'minQuantity', format: 'int' },
         { header: 'الكمية المباعة', key: 'soldQuantity', format: 'int' },
@@ -598,7 +601,7 @@ export function ProductsView() {
         // "Piece / قطعة" unit — cost+margin when enabled, else same as
         // the flat sale price. Never the wholesale ProductUnit price.
         effectiveRetailPrice: p.dynamicRetailPrice ?? p.price,
-        cost: p.cost,
+        ...(canSeeCost ? { cost: p.cost } : {}),
         quantity: p.quantity,
         minQuantity: p.minQuantity,
         soldQuantity: p.soldQuantity ?? 0,
@@ -949,7 +952,7 @@ export function ProductsView() {
                     </TableHead>
                     <TableHead>المنتج</TableHead>
                     <TableHead className="w-44">الباركود</TableHead>
-                    <TableHead className="w-24 text-center">التكلفة</TableHead>
+                    {canSeeCost && <TableHead className="w-24 text-center">التكلفة</TableHead>}
                     <TableHead className="w-28 text-center">السعر</TableHead>
                     {/* 🛡️ 2026-10-03: header عمود سعر القطعة — باقة احترافية فقط */}
                     {capabilities.includes('dynamic_retail_pricing') && <TableHead className="w-36 text-center">سعر القطعة</TableHead>}
@@ -994,9 +997,11 @@ export function ProductsView() {
                         <TableCell>
                           {p.barcode ? <Barcode value={p.barcode} height={20} fontSize={8} fitContainer /> : <NoBarcode compact />}
                         </TableCell>
-                        <TableCell className="text-center tabular-nums text-muted-foreground">
-                          {formatCurrency(p.cost)}
-                        </TableCell>
+                        {canSeeCost && (
+                          <TableCell className="text-center tabular-nums text-muted-foreground">
+                            {formatCurrency(p.cost)}
+                          </TableCell>
+                        )}
                         <TableCell className="text-center font-extrabold tabular-nums">
                           {formatCurrency(p.price)}
                         </TableCell>
@@ -1305,8 +1310,10 @@ function ProductTag({
   const { p, onEdit } = actions
   const st = stockState(p)
   const ui = STOCK_UI[st]
-  const profit = p.price - p.cost
-  const margin = p.cost > 0 && p.price > 0 ? Math.round((profit / p.price) * 100) : null
+  const canSeeCost = useShopStore((st) => st.user?.role === 'ADMIN' || st.user?.role === 'SUPER_ADMIN' || st.user?.canViewProfits === true)
+  const cost = p.cost ?? 0
+  const profit = p.price - cost
+  const margin = canSeeCost && p.cost != null && p.cost > 0 && p.price > 0 ? Math.round((profit / p.price) * 100) : null
   const compact = variant === 'compact'
 
   return (
@@ -1462,7 +1469,11 @@ function ProductTag({
             <p className="rounded-lg bg-muted/40 py-2 text-center text-[11px] text-muted-foreground">بدون باركود</p>
           )}
           <div className="flex items-center justify-between text-[11px] tabular-nums text-muted-foreground">
-            <span>تكلفة {p.cost.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+            {canSeeCost && p.cost != null ? (
+              <span>تكلفة {p.cost.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+            ) : (
+              <span />
+            )}
             {margin !== null && (
               <span className={cn('font-bold', margin >= 0 ? 'text-success-subtle-foreground' : 'text-destructive')}>
                 هامش {margin}%

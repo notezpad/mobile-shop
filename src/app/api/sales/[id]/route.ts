@@ -29,6 +29,11 @@ async function __GET(
   if (!sale || sale.tenantId !== session.tenantId) {
     return NextResponse.json({ error: 'البيع غير موجود' }, { status: 404 })
   }
+  // 🔒 RBAC: تكلفة البنود مخفية عن اللي ملوش صلاحية الأرباح
+  const canViewProfits = session.role === 'ADMIN' || session.role === 'SUPER_ADMIN' || session.canViewProfits === true
+  if (!canViewProfits) {
+    return NextResponse.json({ ...sale, items: sale.items.map((it) => ({ ...it, cost: null })) })
+  }
   return NextResponse.json(sale)
 }
 

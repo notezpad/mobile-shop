@@ -187,7 +187,7 @@ export function PurchaseOrderDialog({
       const toAdd = visiblePendingToday.filter(
         (p) => !prev.some((c) => c.product.id === p.id)
       )
-      return [...toAdd.map((p) => ({ product: p, cost: p.cost, quantity: 1 })), ...prev]
+      return [...toAdd.map((p) => ({ product: p, cost: p.cost ?? 0, quantity: 1 })), ...prev]
     })
   }
 
@@ -199,7 +199,7 @@ export function PurchaseOrderDialog({
           i.product.id === p.id ? { ...i, quantity: i.quantity + 1 } : i
         )
       }
-      return [{ product: p, cost: p.cost, quantity: 1 }, ...prev]
+      return [{ product: p, cost: p.cost ?? 0, quantity: 1 }, ...prev]
     })
     setQuery('')
     setResults([])
@@ -518,7 +518,7 @@ export function PurchaseOrderDialog({
                                     </span>
                                   </span>
                                   <span className="shrink-0 text-end">
-                                    <span className="block text-sm font-extrabold tabular-nums">{formatCurrency(p.cost)}</span>
+                                    <span className="block text-sm font-extrabold tabular-nums">{p.cost == null ? '—' : formatCurrency(p.cost)}</span>
                                     {inCart ? (
                                       <span className="block text-[11px] font-bold text-cyan-700 dark:text-cyan-300">في السلة × {inCart.quantity}</span>
                                     ) : (
@@ -601,7 +601,7 @@ export function PurchaseOrderDialog({
                         )}
                       >
                         {shownCart.map((i) => {
-                          const costChanged = Math.abs(i.cost - i.product.cost) > 0.001
+                          const costChanged = i.product.cost != null && Math.abs(i.cost - i.product.cost) > 0.001
                           return (
                             <li key={i.product.id} className="rounded-2xl border bg-card p-3">
                               <div className={cn('grid grid-cols-2 gap-x-3 gap-y-3 md:items-center md:gap-x-4', CART_COLS)}>
@@ -616,7 +616,7 @@ export function PurchaseOrderDialog({
                                     </p>
                                     {costChanged && (
                                       <p className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-amber-800 dark:text-amber-200">
-                                        آخر تكلفة {formatCurrency(i.product.cost)}
+                                        آخر تكلفة {i.product.cost == null ? '—' : formatCurrency(i.product.cost)}
                                       </p>
                                     )}
                                   </div>

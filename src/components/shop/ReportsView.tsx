@@ -110,6 +110,9 @@ export function ReportsView() {
   const [to, setTo] = React.useState(() => rangeFor('month')[1])
   const [branchId, setBranchId] = React.useState<string>('all')
   const [report, setReport] = React.useState<Report | null>(null)
+  // 🔒 RBAC: لو الموظف ممنوع من الأرباح السيرفر بيرجّع قيم null — الواجهة لازم تخفي مش تعرض ٠
+  const canProfit = report?.canViewProfits !== false
+  const showFin = hasFinance && canProfit
   const [loading, setLoading] = React.useState(true)
   const [activePreset, setActivePreset] = React.useState<PresetKey | null>('month')
   const [active, setActive] = React.useState('ch-rhythm')
@@ -148,7 +151,7 @@ export function ReportsView() {
 
   React.useEffect(() => {
     if (!report) return
-    const ids = ['ch-rhythm', 'ch-leaders', 'ch-stock', ...(hasFinance ? ['ch-finance'] : [])]
+    const ids = ['ch-rhythm', 'ch-leaders', 'ch-stock', ...(showFin ? ['ch-finance'] : [])]
     const els = ids.map((i) => document.getElementById(i)).filter(Boolean) as HTMLElement[]
     const io = new IntersectionObserver(
       (es) => es.forEach((e) => e.isIntersecting && setActive(e.target.id)),
@@ -156,7 +159,7 @@ export function ReportsView() {
     )
     els.forEach((e) => io.observe(e))
     return () => io.disconnect()
-  }, [!!report, hasFinance])
+  }, [!!report, showFin])
 
   const ins = React.useMemo(() => {
     if (!report) return null
@@ -174,7 +177,7 @@ export function ReportsView() {
       avgs,
       maxAvg: Math.max(1, ...avgs.map((a) => a.avg)),
       best: t.reduce<(typeof t)[number] | null>((b, x) => (!b || x.total > b.total ? x : b), null),
-      netMargin: pct(report.netProfit, report.totalSales),
+      netMargin: pct(report.netProfit ?? 0, report.totalSales),
       expRatio: pct(report.totalExpenses, report.totalSales),
     }
   }, [report])
@@ -191,9 +194,9 @@ export function ReportsView() {
       note: rr?.topProducts[0] ? `الأول: ${rr.topProducts[0].name}` : 'مفيش مبيعات' },
     { id: 'ch-stock', n: '03', label: 'المخزون', tone: rr && rr.lowStockCount > 0 ? 'warn' : 'ok',
       note: rr && rr.lowStockCount > 0 ? `${num(rr.lowStockCount)} صنف تحت الحد` : 'كله فوق الحد الأدنى' },
-    ...(hasFinance
-      ? [{ id: 'ch-finance', n: '04', label: 'المالية', tone: (rr && rr.netProfit < 0 ? 'bad' : 'ok') as ChapterItem['tone'],
-          note: rr ? (rr.netProfit < 0 ? `خسارة ${num(Math.round(Math.abs(rr.netProfit)))} جنيه` : `صافي ربح ${num(Math.round(rr.netProfit))} جنيه`) : '' }]
+    ...(showFin
+      ? [{ id: 'ch-finance', n: '04', label: 'المالية', tone: (rr && (rr.netProfit ?? 0) < 0 ? 'bad' : 'ok') as ChapterItem['tone'],
+          note: rr ? ((rr.netProfit ?? 0) < 0 ? `خسارة ${num(Math.round(Math.abs(rr.netProfit ?? 0)))} جنيه` : `صافي ربح ${num(Math.round(rr.netProfit ?? 0))} جنيه`) : '' }]
       : []),
   ]
   const branchLabel =
@@ -217,7 +220,7 @@ export function ReportsView() {
         </div>
       ) : (
         <div className={cn('space-y-4 transition-opacity duration-base sm:space-y-6', loading && 'opacity-70')}>
-          <Hero r={r} ins={ins} hasFinance={hasFinance} shop={shopName} range={rangeText(from, to)} branch={branchLabel} />
+          <Hero r={r} ins={ins} hasFinance={hasFinance} canProfit={canProfit} shop={shopName} range={rangeText(from, to)} branch={branchLabel} />
 
           <Stage r={r} ins={ins} />
 
@@ -275,11 +278,11 @@ export function ReportsView() {
               {/* ───── ٠٢ الأبطال ───── */}
               <Chapter id="ch-leaders" n="02" title="الأبطال" hint={tv('المنتجات والعملاء اللي شايلين الفترة')}>
                 <div className="grid gap-4 lg:grid-cols-5">
-                  <Panel title={tv('أفضل المنتجات')} hint="الشريط = الإيراد · الجزء الملوّن = الربح · النسبة = الهامش" className="lg:col-span-3">
+                  <Panel title={tv('أفضل المنتجات')} hint={canProfit ? 'الشريط = الإيراد · الجزء الملوّن = الربح · النسبة = الهامش' : 'الشريط = الإيراد'} className="lg:col-span-3">
                     {r.topProducts.length > 0 ? (
                       <ul className="space-y-3.5">
                         {r.topProducts.map((p, i) => {
-                          const mg = r.canViewProfits !== false ? pct(p.profit, p.total) : null
+                          const mg = r.canViewProfits !== false && p.profit != null ? pct(p.profit, p.total) : null
                           const maxP = Math.max(1, ...r.topProducts.map((x) => x.total))
                           return (
                             <li key={i} className="flex items-center gap-2 sm:gap-3">
@@ -291,11 +294,13 @@ export function ReportsView() {
                                 </div>
                                 <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
                                   <div className="relative h-full rounded-full" style={{ width: `${Math.max(4, (p.total / maxP) * 100)}%`, background: `${V}33` }}>
-                                    <div className="absolute inset-y-0 start-0 rounded-full" style={{ width: `${Math.max(0, Math.min(100, mg))}%`, background: GRAD }} />
+                                    {mg != null && <div className="absolute inset-y-0 start-0 rounded-full" style={{ width: `${Math.max(0, Math.min(100, mg))}%`, background: GRAD }} />}
                                   </div>
                                 </div>
                               </div>
-                              <span className="shrink-0 rounded-md bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-fuchsia-600 dark:text-fuchsia-400">{mg.toFixed(0)}٪</span>
+                              {mg != null && (
+                                <span className="shrink-0 rounded-md bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-fuchsia-600 dark:text-fuchsia-400">{mg.toFixed(0)}٪</span>
+                              )}
                             </li>
                           )
                         })}
@@ -351,6 +356,7 @@ export function ReportsView() {
               {/* ───── ٠٣ المخزون ───── */}
               <Chapter id="ch-stock" n="03" title="المخزون" hint="قيمة اللي على الرف، واللي لازم يتزوّد">
                 <div className="grid gap-4 lg:grid-cols-2">
+                  {canProfit && (
                   <Panel title="قيمة المخزون" hint="التكلفة مقابل الربح المتوقع عند البيع">
                     {r.stockValuePrice > 0 ? (
                       <>
@@ -370,6 +376,7 @@ export function ReportsView() {
                       <Empty t="لا توجد بيانات مخزون" />
                     )}
                   </Panel>
+                  )}
 
                   <Panel title="محتاجة تزويد" hint="الكمية الحالية مقابل الحد الأدنى">
                     {r.lowStockProducts.length > 0 ? (
@@ -622,11 +629,11 @@ function FilterBar({
 }
 
 function Hero({
-  r, ins, hasFinance, shop, range, branch,
+  r, ins, hasFinance, canProfit, shop, range, branch,
 }: {
   r: Report
   ins: { best: { date: string; total: number } | null; netMargin: number; expRatio: number } | null
-  hasFinance: boolean; shop: string; range: string; branch: string
+  hasFinance: boolean; canProfit: boolean; shop: string; range: string; branch: string
 }) {
   const netMargin = ins?.netMargin ?? 0
   const ch = r.changes.totalSales
@@ -634,12 +641,16 @@ function Hero({
 
   const verdict =
     r.salesCount === 0 ? { t: 'مفيش بيانات', d: 'مفيش مبيعات في الفترة دي', c: '#94a3b8', tx: 'text-slate-500 dark:text-slate-400' }
-    : r.netProfit < 0 ? { t: 'خسارة', d: 'المصروفات أكبر من الربح', c: '#f43f5e', tx: 'text-rose-600 dark:text-rose-400' }
+    : !canProfit
+      ? (ch ?? 0) < 0
+        ? { t: 'مبيعات أقل', d: 'المبيعات أقل من الفترة السابقة', c: '#f59e0b', tx: 'text-amber-700 dark:text-amber-400' }
+        : { t: 'مبيعات مستقرة', d: ch == null ? 'مبيعات الفترة مسجّلة' : 'المبيعات في صعود عن الفترة السابقة', c: '#10b981', tx: 'text-emerald-700 dark:text-emerald-400' }
+    : (r.netProfit ?? 0) < 0 ? { t: 'خسارة', d: 'المصروفات أكبر من الربح', c: '#f43f5e', tx: 'text-rose-600 dark:text-rose-400' }
     : netMargin < 10 ? { t: 'ربح ضعيف', d: 'هامش الصافي أقل من 10٪', c: '#f59e0b', tx: 'text-amber-700 dark:text-amber-400' }
     : (ch ?? 0) < 0 ? { t: 'مستقر', d: 'ربح كويس والمبيعات أقل من السابقة', c: V, tx: 'text-violet-700 dark:text-violet-300' }
     : { t: 'أداء قوي', d: ch == null ? 'ربح صحي بهامش كويس' : 'ربح صحي ومبيعات في صعود', c: '#10b981', tx: 'text-emerald-700 dark:text-emerald-400' }
 
-  const loss = r.netProfit < 0
+  const loss = canProfit && (r.netProfit ?? 0) < 0
   const topExp = r.expensesByCategory?.[0]
   const extra: React.ReactNode[] = []
   if (loss && topExp && topExp.amount > 0)
@@ -663,25 +674,25 @@ function Hero({
             المحل باع بـ <Hl>{num(Math.round(r.totalSales))} جنيه</Hl> من <Hl>{num(r.salesCount)} فاتورة</Hl>
             {ch != null && <>، {ch >= 0 ? 'أعلى' : 'أقل'} بـ <Hl tone={ch >= 0 ? 'good' : 'bad'}>{Math.abs(ch).toFixed(0)}٪</Hl> من الفترة اللي فاتت</>}.
           </>,
-          loss ? (
+          !canProfit ? null : loss ? (
             <>
-              لكن بعد خصم المصروفات الحساب خسران <Hl tone="bad">{num(Math.round(Math.abs(r.netProfit)))} جنيه</Hl>، يعني بتخسر <Hl tone="bad">{mAbs} جنيه</Hl> من كل 100 جنيه مبيعات
+              لكن بعد خصم المصروفات الحساب خسران <Hl tone="bad">{num(Math.round(Math.abs(r.netProfit ?? 0)))} جنيه</Hl>، يعني بتخسر <Hl tone="bad">{mAbs} جنيه</Hl> من كل 100 جنيه مبيعات
               {(ins?.expRatio ?? 0) > 0 && <>، والمصروفات واخدة {(ins?.expRatio ?? 0).toFixed(0)}٪ من المبيعات</>}.
             </>
           ) : (
             <>
-              وبعد خصم المصروفات فضل لك <Hl tone={netMargin < 10 ? 'warn' : 'good'}>{num(Math.round(r.netProfit))} جنيه</Hl> صافي ربح، يعني <Hl tone={netMargin < 10 ? 'warn' : 'good'}>{mAbs} جنيه</Hl> من كل 100 جنيه مبيعات
+              وبعد خصم المصروفات فضل لك <Hl tone={netMargin < 10 ? 'warn' : 'good'}>{num(Math.round(r.netProfit ?? 0))} جنيه</Hl> صافي ربح، يعني <Hl tone={netMargin < 10 ? 'warn' : 'good'}>{mAbs} جنيه</Hl> من كل 100 جنيه مبيعات
               {(ins?.expRatio ?? 0) > 0 && <>، والمصروفات واخدة {(ins?.expRatio ?? 0).toFixed(0)}٪ منها</>}.
             </>
           ),
           ...extra.slice(0, 2),
-        ]
+        ].filter((b) => b !== null) as React.ReactNode[]
 
   const asks = [
     { l: 'أنهي أيام أحسن؟', id: 'ch-rhythm' },
     { l: 'إيه أكتر حاجة بتتباع؟', id: 'ch-leaders' },
     { l: 'المخزون عامل إيه؟', id: 'ch-stock' },
-    ...(hasFinance ? [{ l: 'الفلوس رايحة فين؟', id: 'ch-finance' }] : []),
+    ...(hasFinance && canProfit ? [{ l: 'الفلوس رايحة فين؟', id: 'ch-finance' }] : []),
   ]
 
   return (
@@ -742,7 +753,7 @@ function Hero({
           </div>
         </div>
 
-        <VerdictCard r={r} netMargin={netMargin} verdict={verdict} />
+        <VerdictCard r={r} netMargin={netMargin} verdict={verdict} canProfit={canProfit} />
       </div>
     </section>
   )
@@ -751,20 +762,43 @@ function Hero({
 /* ═════════════════════ مكوّنات الهوية ═════════════════════ */
 
 function VerdictCard({
-  r, netMargin, verdict,
+  r, netMargin, verdict, canProfit,
 }: {
   r: Report
   netMargin: number
   verdict: { t: string; d: string; c: string; tx: string }
+  canProfit: boolean
 }) {
   const has = r.salesCount > 0
-  const earned = Math.max(0, r.netProfit + r.totalExpenses)
+  const earned = Math.max(0, (r.netProfit ?? 0) + r.totalExpenses)
   const spent = Math.max(0, r.totalExpenses)
   const max = Math.max(earned, spent, 1)
   const clamped = Math.max(-50, Math.min(50, netMargin))
   const pos = clamped + 50
   const m = Math.round(Math.abs(netMargin))
-  const netNeg = r.netProfit < 0
+  const netNeg = (r.netProfit ?? 0) < 0
+
+  if (!canProfit) {
+    return (
+      <aside className="relative flex flex-col justify-between gap-4 overflow-hidden rounded-2xl border bg-background/60 p-3.5 backdrop-blur-sm sm:gap-5 sm:p-5">
+        <div className="relative">
+          <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+            <span className="size-2 rounded-full" style={{ backgroundColor: verdict.c }} />
+            حالة الفترة
+          </p>
+          <p className={cn('mt-1.5 text-2xl font-black leading-none sm:text-3xl', verdict.tx)}>{verdict.t}</p>
+          <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{verdict.d}</p>
+        </div>
+        {has && (
+          <div className="relative space-y-2.5 border-t border-dashed pt-4 text-xs">
+            <div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">المبيعات</span><b className="tabular-nums">{num(Math.round(r.totalSales))} جنيه</b></div>
+            <div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">عدد الفواتير</span><b className="tabular-nums">{num(r.salesCount)}</b></div>
+            <div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">متوسط الفاتورة</span><b className="tabular-nums">{num(Math.round(r.avgOrderValue))} جنيه</b></div>
+          </div>
+        )}
+      </aside>
+    )
+  }
 
   return (
     <aside className="relative flex flex-col justify-between gap-4 overflow-hidden rounded-2xl border bg-background/60 p-3.5 backdrop-blur-sm sm:gap-5 sm:p-5">
@@ -822,7 +856,7 @@ function VerdictCard({
           <div className="flex items-center justify-between gap-2 border-t pt-2.5">
             <span className="shrink-0 text-xs font-bold">الصافي</span>
             <span dir="ltr" className={cn('min-w-0 break-all text-sm font-extrabold tabular-nums', netNeg ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
-              {netNeg ? '−' : ''}{num(Math.round(Math.abs(r.netProfit)))} جنيه
+              {netNeg ? '−' : ''}{num(Math.round(Math.abs(r.netProfit ?? 0)))} جنيه
             </span>
           </div>
         </div>
@@ -1355,6 +1389,8 @@ function buildReportHtml(
   const maxMethod = Math.max(1, ...(r.paymentMethods.map((m) => m.amount) || [1]))
   const maxExpense = Math.max(1, ...(r.expensesByCategory.map((e) => e.amount) || [1]))
 
+  const canProfit = r.canViewProfits !== false // 🔒 RBAC — الطباعة كمان لازم تحترمها
+
   const topProductsRows = r.topProducts.length
     ? r.topProducts
         .map(
@@ -1364,7 +1400,7 @@ function buildReportHtml(
           <td style="text-align:right;font-weight:600">${escapeHtml(p.name)}</td>
           <td>${formatNumber(p.qty)}</td>
           <td>${fmtMoney(p.total)}</td>
-          <td style="font-weight:700;color:${BRAND.primaryDark}">${fmtMoney(p.profit)}</td>
+          ${canProfit ? `<td style="font-weight:700;color:${BRAND.primaryDark}">${fmtMoney(p.profit)}</td>` : ''}
         </tr>`
         )
         .join('')
@@ -1477,18 +1513,18 @@ function buildReportHtml(
 
     <div class="kpi-grid">
       ${kpi('إجمالي المبيعات', fmtMoney(r.totalSales) + ' ')}
-      ${kpi('صافي الربح', fmtMoney(r.netProfit) + ' ', true)}
+      ${canProfit ? kpi('صافي الربح', fmtMoney(r.netProfit) + ' ', true) : kpi('رصيد الخزنة', fmtMoney(r.cashBalance) + ' ', true)}
       ${kpi('عدد الفواتير', formatNumber(r.salesCount))}
       ${kpi('متوسط الفاتورة', fmtMoney(r.avgOrderValue) + ' ')}
       ${kpi('إيراد الصيانة', fmtMoney(r.maintenanceRevenue) + ' ')}
       ${kpi('إجمالي الالمعاملات المالية', fmtMoney(r.totalExpenses) + ' ')}
-      ${kpi('رصيد الخزنة', fmtMoney(r.cashBalance) + ' ', true)}
+      ${canProfit ? kpi('رصيد الخزنة', fmtMoney(r.cashBalance) + ' ', true) : ''}
       ${kpi('إجمالي المشتريات', fmtMoney(r.totalPurchases) + ' ')}
     </div>
 
     ${section(
       'أفضل المنتجات مبيعاً',
-      `<table><thead><tr><th>#</th><th>المنتج</th><th>الكمية</th><th>الإيراد</th><th>الربح</th></tr></thead><tbody>${topProductsRows}</tbody></table>`
+      `<table><thead><tr><th>#</th><th>المنتج</th><th>الكمية</th><th>الإيراد</th>${canProfit ? '<th>الربح</th>' : ''}</tr></thead><tbody>${topProductsRows}</tbody></table>`
     )}
 
     <div class="two-col">
@@ -1517,10 +1553,10 @@ function buildReportHtml(
       'الملخص المالي',
       `<div class="two-col">
         <div class="formula-box">
-          <div class="formula-row"><span>هامش ربح المبيعات</span><span>${fmtMoney(r.totalProfit)} </span></div>
+          ${canProfit ? `<div class="formula-row"><span>هامش ربح المبيعات</span><span>${fmtMoney(r.totalProfit)} </span></div>` : ''}
           <div class="formula-row"><span>+ إيراد الصيانة</span><span>${fmtMoney(r.maintenanceRevenue)} </span></div>
           <div class="formula-row"><span>− الالمعاملات المالية</span><span style="color:${BRAND.red}">${fmtMoney(r.totalExpenses)} </span></div>
-          <div class="formula-row total"><span>= صافي الربح</span><span>${fmtMoney(r.netProfit)} </span></div>
+          ${canProfit ? `<div class="formula-row total"><span>= صافي الربح</span><span>${fmtMoney(r.netProfit)} </span></div>` : ''}
         </div>
         <div class="formula-box">
           <div class="formula-row"><span>إيداعات مالية</span><span>${fmtMoney(r.financeIn)} </span></div>

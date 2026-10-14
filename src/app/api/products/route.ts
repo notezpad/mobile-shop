@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
       !lowOnly
     const invQuery = `branch=${session.branchId ?? 0}&inv=1&page=${page}`
     if (invCacheable) {
-      const invHit = await matchEdgeCache('/api/products', invQuery, session.tenantId, '4')
+      const invHit = await matchEdgeCache('/api/products', invQuery, session.tenantId, canViewProfits ? '4' : '4n')
       if (invHit) return invHit
     }
 
@@ -129,7 +129,7 @@ export async function GET(req: NextRequest) {
       !searchParams.has('stock')
     const cacheQuery = `branch=${session.branchId ?? 0}`
     if (cacheable) {
-      const hit = await matchEdgeCache('/api/products', cacheQuery, session.tenantId, '4')
+      const hit = await matchEdgeCache('/api/products', cacheQuery, session.tenantId, canViewProfits ? '4' : '4n')
       if (hit) return hit
     }
 
@@ -266,9 +266,9 @@ export async function GET(req: NextRequest) {
       totalPages: Math.ceil(total / limit),
     })
     if (invCacheable) {
-      await putEdgeCache(listRes.clone(), '/api/products', invQuery, session.tenantId, 20, '4')
+      await putEdgeCache(listRes.clone(), '/api/products', invQuery, session.tenantId, 20, canViewProfits ? '4' : '4n')
     } else if (cacheable) {
-      await putEdgeCache(listRes.clone(), '/api/products', cacheQuery, session.tenantId, 20, '4')
+      await putEdgeCache(listRes.clone(), '/api/products', cacheQuery, session.tenantId, 20, canViewProfits ? '4' : '4n')
     }
     return listRes
   })

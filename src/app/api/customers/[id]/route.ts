@@ -26,6 +26,8 @@ async function __GET(
     return NextResponse.json(err?.body, { status: err?.status })
   }
 
+  // 🔒 RBAC: تكلفة بنود الفواتير مخفية عن اللي ملوش صلاحية الأرباح
+  const canViewProfits = session.role === 'ADMIN' || session.role === 'SUPER_ADMIN' || session.canViewProfits === true
   const { id } = await params
   const cid = parseInt(id, 10)
   if (isNaN(cid)) {
@@ -102,7 +104,7 @@ async function __GET(
         price: it.price,
         quantity: it.quantity,
         returnedQty: it.returnedQty,
-        cost: it.cost,
+        cost: canViewProfits ? it.cost : null,
       })),
     })),
     payments: customer.payments.map((p) => ({

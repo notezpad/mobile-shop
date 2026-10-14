@@ -28,13 +28,16 @@ export async function GET() {
       const err = authErrorResponse(e)
       return NextResponse.json(err?.body, { status: err?.status })
     }
+    // 🔒 RBAC: الربح لكل فرع للمدير أو لمن عنده صلاحية الأرباح بس
+    const canViewProfits = s.role === 'ADMIN' || s.role === 'SUPER_ADMIN' || s.canViewProfits === true
+    const cacheV = canViewProfits ? '1' : '1n'
 
     // ⚡ v12 EDGE CACHE (Error 1102 / CPU limit): تقرير الفروع = 4 استعلامات
     // تجميعية في كل فتح صفحة فروع. صفحة الفروع كانت من الصفحات اللي بيسقطها
     // الموقع (مع /users و /reports) لأن الطلب ده كان بيشتغّل Prisma في
     // isolate بارد كل مرة. 25 ثانية كاش (نفس نهج /api/reports) + مسح فوري
     // بعد أي بيع/تغيير فرع = الافتتاحيات المتتالية بتكلف ≈ صفر CPU.
-    const cached = await matchEdgeCache('/api/reports/branches', '', s.tenantId, '1')
+    const cached = await matchEdgeCache('/api/reports/branches', '', s.tenantId, cacheV)
     if (cached) return cached
 
     // 1) Branches list (1 query)
@@ -102,7 +105,7 @@ export async function GET() {
         isMain: b.isMain,
         salesCount: s?.salesCount ?? 0,
         totalSales: s?.totalSales ?? 0,
-        totalProfit: profitMap.get(b.id) ?? 0,
+        totalProfit: canViewProfits ? (profitMap.get(b.id) ?? 0) : null,
         productCount: productMap.get(b.id) ?? 0,
       }
     })
@@ -117,14 +120,14 @@ export async function GET() {
           isMain: false,
           salesCount: unassigned.salesCount,
           totalSales: unassigned.totalSales,
-          totalProfit: profitMap.get(0) ?? 0,
+          totalProfit: canViewProfits ? (profitMap.get(0) ?? 0) : null,
           productCount: productMap.get(0) ?? 0,
         })
       }
     }
 
     const res = NextResponse.json(results)
-    await putEdgeCache(res.clone(), '/api/reports/branches', '', s.tenantId, 25, '1')
+    await putEdgeCache(res.clone(), '/api/reports/branches', '', s.tenantId, 25, cacheV)
     return res
   })
 }

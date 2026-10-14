@@ -220,9 +220,9 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
     const val = (p: InventoryProduct) =>
       sort.key === 'name' ? p.name
       : sort.key === 'quantity' ? p.quantity
-      : sort.key === 'cost' ? p.cost
+      : sort.key === 'cost' ? (p.cost ?? 0)
       : sort.key === 'price' ? p.price
-      : p.quantity * p.cost
+      : p.quantity * (p.cost ?? 0)
     const m = sort.dir === 'asc' ? 1 : -1
     return [...filtered].sort((a, b) => {
       const x = val(a), y = val(b)
@@ -239,7 +239,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
       else if (st === 'low') low++
       else out++
       qty += Math.max(0, p.quantity)
-      value += Math.max(0, p.quantity) * Math.max(0, p.cost)
+      value += Math.max(0, p.quantity) * Math.max(0, p.cost ?? 0)
     }
     return { ok, low, out, qty, value }
   }, [filtered])
@@ -375,8 +375,9 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                       const ui = STOCK_UI[st]
                       const out = st === 'out'
                       const bName = branchName(p.branchId)
-                      const margin = p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : null
-                      const stockValue = Math.max(0, p.quantity) * Math.max(0, p.cost)
+                      const costHidden = p.cost == null // 🔒 RBAC
+                      const margin = !costHidden && p.price > 0 ? Math.round(((p.price - (p.cost ?? 0)) / p.price) * 100) : null
+                      const stockValue = Math.max(0, p.quantity) * Math.max(0, p.cost ?? 0)
                       return (
                         <TableRow key={p.id} className={cn('group hover:bg-muted/50', ui.row)}>
                           {/* الصنف: شريط حالة جانبي + صورة + اسم + تصنيف/فرع */}
@@ -423,7 +424,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
 
                           {/* التكلفة */}
                           <TableCell className="text-center tabular-nums text-muted-foreground">
-                            {formatCurrency(p.cost)}
+                            {costHidden ? '—' : formatCurrency(p.cost)}
                           </TableCell>
 
                           {/* سعر البيع + هامش الربح */}
@@ -443,7 +444,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
 
                           {/* قيمة المخزون (كمية × تكلفة) */}
                           <TableCell className={cn('text-center font-bold tabular-nums', out && 'text-muted-foreground/60')}>
-                            {formatCurrency(stockValue)}
+                            {costHidden ? '—' : formatCurrency(stockValue)}
                           </TableCell>
 
                           {/* إجراءات الحركة */}
@@ -627,7 +628,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                       <div className="rounded-xl bg-muted/50 px-3 py-2">
                         <p className="text-[10px] font-semibold text-muted-foreground">التكلفة</p>
                         <p className="mt-0.5 text-sm font-bold leading-tight tabular-nums text-muted-foreground [overflow-wrap:anywhere]">
-                          {formatCurrency(p.cost)}
+                          {p.cost == null ? '—' : formatCurrency(p.cost)}
                         </p>
                       </div>
                       {/* سعر البيع */}
@@ -705,7 +706,7 @@ function AdjustDialog({
 
   const qNum = parseInt(qty, 10) || 0
   // 🛡️ قيمة الخسارة المتوقعة = الكمية × التكلفة الحالية (المتوسط المرجح)
-  const lossPreview = type === 'damage' && qNum > 0 ? qNum * Math.max(0, product.cost) : 0
+  const lossPreview = type === 'damage' && qNum > 0 && product.cost != null ? qNum * Math.max(0, product.cost) : 0
 
   const submit = async () => {
     const q = parseInt(qty, 10)
@@ -999,7 +1000,7 @@ function ExchangeDialog({
       toast.error('الصنف مضاف بالفعل — عدّل الكمية')
       return
     }
-    setter([...lines, { productId: p.id, name: p.name, cost: p.cost, quantity: '1' }])
+    setter([...lines, { productId: p.id, name: p.name, cost: p.cost ?? 0, quantity: '1' }])
   }
 
   const valueOf = (lines: ExchangeLineUI[]) =>

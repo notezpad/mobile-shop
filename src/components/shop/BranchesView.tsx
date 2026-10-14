@@ -70,7 +70,8 @@ interface BranchReport {
   isMain: boolean
   salesCount: number
   totalSales: number
-  totalProfit: number
+  /** null = مخفي عن المستخدم (RBAC) */
+  totalProfit: number | null
   productCount: number
 }
 
@@ -136,6 +137,8 @@ const UNASSIGNED_COLOR = '#a8a29e'
 export function BranchesView() {
   const confirm = useConfirm()
   const shopName = useShopStore((s) => s.shopName)
+  // 🔒 RBAC
+  const canSeeProfit = useShopStore((s) => s.user?.role === 'ADMIN' || s.user?.role === 'SUPER_ADMIN' || s.user?.canViewProfits === true)
   const shopBranding = useShopStore((s) => s.branding)
   const [branches, setBranches] = React.useState<Branch[]>([])
   const [reports, setReports] = React.useState<BranchReport[]>([])
@@ -272,7 +275,7 @@ export function BranchesView() {
   const totals = React.useMemo(() => {
     return reports.reduce((acc, r) => ({
       sales: acc.sales + r.totalSales,
-      profit: acc.profit + r.totalProfit,
+      profit: acc.profit + (r.totalProfit ?? 0),
       count: acc.count + r.salesCount,
       products: acc.products + r.productCount,
     }), { sales: 0, profit: 0, count: 0, products: 0 })
@@ -290,7 +293,7 @@ export function BranchesView() {
           { header: 'الحالة' },
           { header: 'عدد الفواتير' },
           { header: 'إجمالي المبيعات' },
-          { header: 'إجمالي الأرباح' },
+          ...(canSeeProfit ? [{ header: 'إجمالي الأرباح' }] : []),
           { header: 'عدد الأصناف' },
         ],
         rows: reports.map((r) => [
@@ -299,13 +302,13 @@ export function BranchesView() {
           r.branchId === 0 ? '—' : branches.find((b) => b.id === r.branchId)?.active === false ? 'موقوف' : 'نشط',
           String(r.salesCount),
           formatCurrency(r.totalSales),
-          formatCurrency(r.totalProfit),
+          ...(canSeeProfit ? [formatCurrency(r.totalProfit)] : []),
           String(r.productCount),
         ]),
         kpis: [
           { label: 'عدد الفروع', value: String(branches.length) },
           { label: 'إجمالي المبيعات', value: formatCurrency(totals.sales) },
-          { label: 'إجمالي الأرباح', value: formatCurrency(totals.profit), emphasize: true },
+          ...(canSeeProfit ? [{ label: 'إجمالي الأرباح', value: formatCurrency(totals.profit), emphasize: true }] : []),
           { label: 'إجمالي الفواتير', value: String(totals.count) },
         ],
         emptyMessage: 'لا توجد فروع',
@@ -439,7 +442,7 @@ export function BranchesView() {
                 <span aria-hidden className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-lime-400 via-lime-500 to-lime-600" />
                 <div className="grid grid-cols-2 gap-x-1 gap-y-4 sm:grid-cols-4 sm:gap-x-0 sm:divide-x sm:divide-x-reverse">
                   <Stat icon={Wallet} label="إجمالي المبيعات" value={fmtBig(totals.sales)} full={num(totals.sales)} unit="جنيه" big />
-                  <Stat icon={TrendingUp} label="الأرباح" value={fmtBig(totals.profit)} full={num(totals.profit)} sub={totals.sales > 0 ? `هامش ${summary.margin.toFixed(summary.margin >= 10 ? 0 : 1)}%` : undefined} lime />
+                  {canSeeProfit && <Stat icon={TrendingUp} label="الأرباح" value={fmtBig(totals.profit)} full={num(totals.profit)} sub={totals.sales > 0 ? `هامش ${summary.margin.toFixed(summary.margin >= 10 ? 0 : 1)}%` : undefined} lime />}
                   <Stat icon={Receipt} label="الفواتير" value={num(totals.count)} sub={totals.count > 0 ? `متوسط ${num(Math.round(summary.avg))} جنيه` : undefined} />
                   <Stat
                     icon={Boxes}
@@ -841,6 +844,7 @@ function Station({
   onToggle: () => void
 }) {
   const sales = r?.totalSales ?? 0
+  const canSeeProfit = useShopStore((s) => s.user?.role === 'ADMIN' || s.user?.role === 'SUPER_ADMIN' || s.user?.canViewProfits === true)
   const profit = r?.totalProfit ?? 0
   const count = r?.salesCount ?? 0
   const products = r?.productCount ?? 0
@@ -984,8 +988,8 @@ function Station({
                   <p className="mt-1 text-[10px] font-semibold tabular-nums text-muted-foreground">{pctText(share)} من مبيعات المحل</p>
                 </div>
               </div>
-              <div className="grid grid-cols-3 divide-x divide-x-reverse divide-lime-500/20">
-                <Mini
+              <div className={cn('grid divide-x divide-x-reverse divide-lime-500/20', canSeeProfit ? 'grid-cols-3' : 'grid-cols-2')}>
+                {canSeeProfit && <Mini
                   lime
                   label="الأرباح"
                   value={fmtBig(profit)}
@@ -998,7 +1002,7 @@ function Station({
                       </span>
                     ) : undefined
                   }
-                />
+                />}
                 <Mini label="الفواتير" value={num(count)} sub={count > 0 ? `متوسط ${num(Math.round(avg))} جنيه` : undefined} />
                 <Mini label="الأصناف" value={num(products)} />
               </div>
@@ -1084,14 +1088,16 @@ function Station({
               <div className="border-b border-e border-lime-500/20 p-3">
                 <MobileStat label="إجمالي المبيعات" value={fmtBig(sales)} unit="جنيه" />
               </div>
-              <div className="border-b border-lime-500/20 p-3">
-                <MobileStat
-                  lime
-                  label="الأرباح"
-                  value={fmtBig(profit)}
-                  sub={sales > 0 ? `هامش ${margin.toFixed(margin >= 10 ? 0 : 1)}%` : undefined}
-                />
-              </div>
+              {canSeeProfit && (
+                <div className="border-b border-lime-500/20 p-3">
+                  <MobileStat
+                    lime
+                    label="الأرباح"
+                    value={fmtBig(profit)}
+                    sub={sales > 0 ? `هامش ${margin.toFixed(margin >= 10 ? 0 : 1)}%` : undefined}
+                  />
+                </div>
+              )}
               <div className="border-e border-lime-500/20 p-3">
                 <MobileStat
                   label="الفواتير"

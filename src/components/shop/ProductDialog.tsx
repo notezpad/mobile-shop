@@ -29,7 +29,8 @@ export interface ProductFormValues {
   category: string | null
   barcode: string | null
   price: number
-  cost: number
+  /** null = التكلفة مخفية عن المستخدم (RBAC) */
+  cost: number | null
   quantity: number
   minQuantity: number
   imagePath: string | null
@@ -152,7 +153,8 @@ export function ProductDialog({
         category: category || null,
         barcode: barcode?.trim() || null,
         price: priceNum,
-        cost: parseFloat(cost) || 0,
+        // 🔒 لو التكلفة مخفية عن المستخدم ما نبعتهاش خالص (كانت هتتبعت ٠ وتتحفظ غلط أو تترفض من السيرفر)
+        ...(costHidden ? {} : { cost: parseFloat(cost) || 0 }),
         // 🥬 2026-10-12: الكمية Float — بيع بالوزن بكسور (45.5 كيلو)
         quantity: Math.round((parseFloat(quantity) || 0) * 1000) / 1000,
         minQuantity: Math.round((parseFloat(minQuantity) || 0) * 100) / 100 || 1,
@@ -203,6 +205,7 @@ export function ProductDialog({
   }
 
   const priceNum = parseFloat(price)
+  const costHidden = !!initial && initial.cost == null
   const costNum = parseFloat(cost)
   const showMargin = Number.isFinite(priceNum) && priceNum > 0 && Number.isFinite(costNum) && costNum > 0
   const profit = showMargin ? priceNum - costNum : 0
@@ -349,17 +352,19 @@ export function ProductDialog({
                   onChange={(e) => edit(setPrice)(e.target.value)}
                 />
               </Field>
-              <Field label="سعر التكلفة" htmlFor="p-cost">
-                <InkInput
-                  id="p-cost"
-                  num
-                  type="number"
-                  min={0}
-                  suffix="جنيه"
-                  value={cost}
-                  onChange={(e) => edit(setCost)(e.target.value)}
-                />
-              </Field>
+              {!costHidden && (
+                <Field label="سعر التكلفة" htmlFor="p-cost">
+                  <InkInput
+                    id="p-cost"
+                    num
+                    type="number"
+                    min={0}
+                    suffix="جنيه"
+                    value={cost}
+                    onChange={(e) => edit(setCost)(e.target.value)}
+                  />
+                </Field>
+              )}
 
               {/* 🥬 2026-10-12: بيع بالوزن — للمحلات الغذائية بس (كيلو بكسور) */}
               {isFoodVertical && (

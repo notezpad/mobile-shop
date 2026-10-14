@@ -39,7 +39,7 @@ async function __GET(req: NextRequest) {
   // والحد أقصى للقِدَم 25 ثانية + بيتصفّر بالـ TTL بعد أي بيع/مصروف —
   // يعني عملياً بيانات حديثة. (مدى التواريخ غير محدود فمفيش purge بالمفتاح
   // — الـ TTL هو ضمان الحداثة هنا، زي نهج /api/dashboard بالظبط.)
-  const reportQuery = `from=${fromStr ?? ''}&to=${toStr ?? ''}&branch=${branchIdStr ?? ''}`
+  const reportQuery = `from=${fromStr ?? ''}&to=${toStr ?? ''}&branch=${branchIdStr ?? ''}&p=${canViewProfits ? 1 : 0}`
   const cachedReport = await matchEdgeCache('/api/reports', reportQuery, session.tenantId, '1')
   if (cachedReport) return cachedReport
 
