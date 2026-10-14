@@ -204,10 +204,12 @@ model User {
   name        String
   email       String    @unique
   password    String
-  role        String    @default("EMPLOYEE")
-  active      Boolean   @default(true)
-  lastLoginAt DateTime?
-  createdAt   DateTime  @default(now())
+  role           String    @default("EMPLOYEE")
+  active         Boolean   @default(true)
+  permissions    String?   // JSON: string[] of module keys; null = يشوف كل الباقة
+  canViewProfits Boolean   @default(false) // هل يقدر يشوف الأرباح والتكاليف؟
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
 
   tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   branch Branch? @relation(fields: [branchId], references: [id])

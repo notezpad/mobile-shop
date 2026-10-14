@@ -649,10 +649,26 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
     return () => ro.disconnect()
   }, [measure])
   const enabledModules = useShopStore((s) => s.plan.enabledModules)
+  const user = useShopStore((s) => s.user)
 
-  const hasModule = (key: string) =>
+  // 🔑 RBAC: تحديد إمكانية الوصول للموديول
+  // - المدير: يشوف كل ما تسمح به الباقة
+  // - الموظف بدون permissions: يشوف كل ما تسمح به الباقة (الوضع الافتراضي)
+  // - الموظف بـ permissions: يشوف الـ permissions الخاصة بيه فقط
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN'
+  const userPermissions = (!isAdmin && user?.permissions && user.permissions.length > 0)
+    ? user.permissions
+    : null
+
+  const planHasModule = (key: string) =>
     enabledModules.includes(key) ||
     (CRITICAL_MODULES as readonly string[]).includes(key)
+
+  const hasModule = (key: string) => {
+    if (!planHasModule(key)) return false    // الباقة مش بتسمح → مخفي دايمًا
+    if (userPermissions) return userPermissions.includes(key) // موظف بصلاحيات محددة
+    return true  // مدير أو موظف بكل الصلاحيات
+  }
 
   const mainItems = MAIN_GROUP.filter((it) => hasModule(it.module))
   const manageItems = MANAGE_GROUP.filter((it) => hasModule(it.module))

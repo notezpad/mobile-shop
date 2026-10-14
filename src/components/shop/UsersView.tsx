@@ -27,12 +27,14 @@ import {
   LayoutGrid,
   List,
   Loader2,
+  Lock,
   Pencil,
   Plus,
   Search,
   ShieldCheck,
   Sparkles,
   Store,
+  TrendingUp,
   User,
   UserCog,
   UserX,
@@ -66,6 +68,7 @@ import { printListReportHtml, openPrintWindow } from '@/lib/print'
 import { useShopStore } from '@/lib/store'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { useConfirm } from './ConfirmDialogProvider'
+import { ALL_MODULES } from '@/lib/plan-constants'
 
 /* ───────────────────────── الأنواع والمساعدات ───────────────────────── */
 
@@ -79,6 +82,8 @@ interface UserRow {
   lastLoginAt?: string | null
   branchId?: number | null
   branch?: { name: string } | null
+  permissions?: string | null
+  canViewProfits?: boolean
 }
 
 type RoleFilter = 'all' | 'ADMIN' | 'EMPLOYEE'
@@ -952,6 +957,10 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
   const [saving, setSaving] = React.useState(false)
   const [branchId, setBranchId] = React.useState<string>('')
   const [branches, setBranches] = React.useState<{ id: number; name: string }[]>([])
+  // 🔑 RBAC
+  const [useCustomPerms, setUseCustomPerms] = React.useState(false)
+  const [selectedPerms, setSelectedPerms] = React.useState<string[]>([])
+  const [canViewProfits, setCanViewProfits] = React.useState(false)
 
   React.useEffect(() => {
     if (open) {
@@ -961,6 +970,13 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
       setShowPw(false)
       setRole(initial && isAdminRole(initial.role) ? 'ADMIN' : 'EMPLOYEE')
       setBranchId(initial?.branchId != null ? String(initial.branchId) : '')
+      // RBAC init
+      const parsedPerms = (() => {
+        try { const v = JSON.parse(initial?.permissions ?? 'null'); return Array.isArray(v) ? v : null } catch { return null }
+      })()
+      setUseCustomPerms(!!parsedPerms && parsedPerms.length > 0)
+      setSelectedPerms(parsedPerms ?? [])
+      setCanViewProfits(Boolean(initial?.canViewProfits))
       fetch('/api/branches')
         .then((r) => (r.ok ? r.json() : []))
         .then(setBranches)
@@ -984,6 +1000,8 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
         email: email.trim().toLowerCase(),
         role,
         branchId: branchId ? parseInt(branchId, 10) : null,
+        permissions: role === 'ADMIN' ? null : (useCustomPerms ? selectedPerms : null),
+        canViewProfits: role === 'ADMIN' ? true : canViewProfits,
       }
       if (initial) {
         if (password) body.password = password
@@ -1142,6 +1160,111 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
                   الموظف من غير فرع مش هيتقيّد بفرع معيّن. اختار فرعه لو عايزه يشوف بياناته بس.
                 </p>
               )}
+            </div>
+          )}
+
+          {/* 🔑 صلاحيات الموظف */}
+          {role === 'EMPLOYEE' && (
+            <div className="space-y-3 rounded-2xl border border-dashed p-4">
+              <div className="flex items-center gap-2">
+                <Lock className="size-4 text-muted-foreground" />
+                <span className="text-sm font-semibold">الصفحات المتاحة</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { v: false, label: 'كل الصفحات', sub: 'افتراضي — زي الباقة' },
+                  { v: true, label: 'تحديد يدوي', sub: 'اختار الصفحات اللي يشوفها' },
+                ].map((opt) => (
+                  <button
+                    key={String(opt.v)}
+                    type="button"
+                    onClick={() => { setUseCustomPerms(opt.v); if (!opt.v) setSelectedPerms([]) }}
+                    className={`rounded-xl border p-3 text-start text-xs transition-colors ${
+                      useCustomPerms === opt.v
+                        ? 'border-violet-500 bg-violet-500/5 ring-1 ring-violet-500'
+                        : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    <span className="block font-bold">{opt.label}</span>
+                    <span className="text-muted-foreground">{opt.sub}</span>
+                  </button>
+                ))}
+              </div>
+
+              {useCustomPerms && (
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground">ضع علامة على الصفحات اللي هيقدر يدخلها:</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {ALL_MODULES.filter((m) => m !== 'guide').map((mod) => {
+                      const labels: Record<string, string> = {
+                        dashboard: 'لوحة المعلومات', pos: 'نقطة البيع', products: 'المنتجات',
+                        sales: 'سجل المبيعات', maintenance: 'الصيانة', customers: 'العملاء',
+                        suppliers: 'الموردين', purchases: 'المشتريات', inventory: 'المخزون',
+                        finance: 'المعاملات المالية', expenses: 'المصروفات', cash: 'الخزنة',
+                        reports: 'التقارير', settings: 'الإعدادات', users: 'المستخدمين',
+                        branches: 'الفروع',
+                      }
+                      const checked = selectedPerms.includes(mod)
+                      return (
+                        <button
+                          key={mod}
+                          type="button"
+                          onClick={() =>
+                            setSelectedPerms((prev) =>
+                              prev.includes(mod) ? prev.filter((x) => x !== mod) : [...prev, mod]
+                            )
+                          }
+                          className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs transition-colors ${
+                            checked
+                              ? 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                              : 'hover:bg-muted/50 text-muted-foreground'
+                          }`}
+                        >
+                          <span className={`flex size-4 shrink-0 items-center justify-center rounded border text-[10px] transition-colors ${
+                            checked ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-muted-foreground/40'
+                          }`}>
+                            {checked && <Check className="size-3" />}
+                          </span>
+                          {labels[mod] ?? mod}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 🔒 رؤية الأرباح */}
+              <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+                <TrendingUp className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="flex-1 space-y-1">
+                  <p className="text-xs font-bold text-amber-800 dark:text-amber-300">رؤية الأرباح والتكاليف</p>
+                  <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80">
+                    هل يقدر يشوف أرقام الأرباح والتكاليف في الداشبورد والتقارير؟
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={canViewProfits}
+                      onClick={() => setCanViewProfits((v) => !v)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                        canViewProfits ? 'bg-emerald-500' : 'bg-muted-foreground/30'
+                      }`}
+                    >
+                      <span className={`pointer-events-none block size-4 rounded-full bg-white shadow-lg ring-0 transition-transform ${
+                        canViewProfits ? 'translate-x-4' : 'translate-x-0'
+                      }`} />
+                    </button>
+                    <span className="text-xs font-semibold">
+                      {canViewProfits
+                        ? <span className="text-emerald-600 dark:text-emerald-400">مسموح يشوف الأرباح</span>
+                        : <span className="text-muted-foreground">محجوبة عنه (افتراضي)</span>
+                      }
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

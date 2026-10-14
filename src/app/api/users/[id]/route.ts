@@ -83,6 +83,23 @@ async function __PUT(
   if (body.role !== undefined) {
     data.role = body.role === 'ADMIN' ? 'ADMIN' : 'EMPLOYEE'
   }
+  // 🔑 RBAC: تحديث صلاحيات الموظف
+  if (body.permissions !== undefined) {
+    const newRole = data.role ?? existing.role
+    if (newRole === 'ADMIN') {
+      data.permissions = null // المدير لا يقيّد
+      data.canViewProfits = true
+    } else {
+      data.permissions = Array.isArray(body.permissions) && body.permissions.length > 0
+        ? JSON.stringify(body.permissions)
+        : null
+    }
+  }
+  // 🔒 تحديث رؤية الأرباح (للموظفين فقط — المدير دايمًا true)
+  if (body.canViewProfits !== undefined) {
+    const newRole = data.role ?? existing.role
+    data.canViewProfits = newRole === 'ADMIN' ? true : Boolean(body.canViewProfits)
+  }
   if (body.branchId !== undefined) {
     data.branchId = body.branchId ? parseInt(body.branchId, 10) : null
   }
@@ -111,6 +128,8 @@ async function __PUT(
       active: true,
       branchId: true,
       createdAt: true,
+      permissions: true,
+      canViewProfits: true,
     },
   })
   // ⚡ v12: تعديل/إيقاف مستخدم → امسح كاش قائمة المستخدمين فورًا

@@ -19,6 +19,8 @@ async function __GET(req: NextRequest) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
   }
+  // 🔒 RBAC: رؤية الأرباح
+  const canViewProfits = session.role === 'ADMIN' || session.role === 'SUPER_ADMIN' || session.canViewProfits === true
   try { await requireModule(session, 'reports') } catch (e) {
     const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
@@ -83,7 +85,8 @@ async function __GET(req: NextRequest) {
   const [
     cur, prev, maintenanceCount, maintAgg, prevMaintAgg, finIn, finOut, cashAgg,
     stockRows, lowStockRows, expAgg, prevExpAgg, expByCat, purchAgg, custAgg, suppAgg,
-    branches, trendRows, topProductRows, categoryRows, topCustomerRows, methodRows, commissionAgg,
+    branches,
+    canViewProfits, // للفرونت عشان يخفي قسم الأرباح trendRows, topProductRows, categoryRows, topCustomerRows, methodRows, commissionAgg,
   ] = await Promise.all([
     saleAgg(from, to),
     hasBoundedRange ? saleAgg(prevFrom, prevTo) : Promise.resolve([{ total: 0, profit: 0, cnt: 0 }]),
@@ -191,8 +194,8 @@ async function __GET(req: NextRequest) {
   const customersReceivable = n(custAgg._sum.balance)
   const suppliersPayable = n(suppAgg._sum.balance)
 
-  const salesTrend = trendRows.map((r) => ({ date: r.date, total: n(r.total), profit: n(r.profit), unitLabel: r.pieceLabel ?? null }))
-  const topProducts = topProductRows.map((r) => ({ name: r.name, qty: n(r.qty), total: n(r.total), profit: n(r.profit) }))
+  const salesTrend = trendRows.map((r) => ({ date: r.date, total: n(r.total), profit: canViewProfits ? n(r.profit) : null, unitLabel: r.pieceLabel ?? null }))
+  const topProducts = topProductRows.map((r) => ({ name: r.name, qty: n(r.qty), total: n(r.total), profit: canViewProfits ? n(r.profit) : null }))
   const categoryBreakdown = categoryRows.map((r) => ({ category: r.category, total: n(r.total) }))
   const topCustomers = topCustomerRows.map((r) => ({ name: r.name, total: n(r.total), salesCount: n(r.salesCount) }))
   const paymentMethods = methodRows
@@ -213,16 +216,17 @@ async function __GET(req: NextRequest) {
     to: toStr,
     branchId,
     branches,
+    canViewProfits, // للفرونت عشان يخفي قسم الأرباح
 
     totalSales,
-    totalProfit,
-    profitMargin: totalSales > 0 ? (totalProfit / totalSales) * 100 : 0,
+    totalProfit: canViewProfits ? totalProfit : null,
+    profitMargin: canViewProfits ? (totalSales > 0 ? (totalProfit / totalSales) * 100 : 0) : null,
     salesCount,
     avgOrderValue,
     maintenanceRevenue,
     maintenanceCount,
     totalExpenses,
-    netProfit,
+    netProfit: canViewProfits ? netProfit : null,
 
     changes: {
       totalSales: pct(totalSales, prevTotalSales),
@@ -244,8 +248,8 @@ async function __GET(req: NextRequest) {
     customersReceivable,
     suppliersPayable,
 
-    stockValueCost,
-    stockValuePrice,
+    stockValueCost: canViewProfits ? stockValueCost : null,
+    stockValuePrice: canViewProfits ? stockValuePrice : null,
     lowStockCount,
     lowStockProducts: lowStockRows.map((p) => ({ name: p.name, quantity: n(p.quantity), minQuantity: n(p.minQuantity), unitLabel: p.unitLabel ?? null })),
 

@@ -82,6 +82,18 @@ async function __POST(req: NextRequest) {
       /* ignore */
     }
 
+    // 🔑 RBAC: تحميل الصلاحيات من الداتابيز وتخزينها في الـ JWT
+    const fullUser = await db.user.findUnique({
+      where: { id: user.id },
+      select: { permissions: true, canViewProfits: true },
+    })
+    const permissions = (() => {
+      try { const v = JSON.parse(fullUser?.permissions ?? 'null'); return Array.isArray(v) ? v : null } catch { return null }
+    })()
+    const canViewProfits = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN'
+      ? true
+      : Boolean(fullUser?.canViewProfits)
+
     await createSession({
       id: user.id,
       tenantId: user.tenantId,
@@ -89,6 +101,8 @@ async function __POST(req: NextRequest) {
       name: user.name,
       email: user.email,
       branchId: (user as any).branchId ?? null,
+      permissions,
+      canViewProfits,
     })
 
     return NextResponse.json({
@@ -100,6 +114,8 @@ async function __POST(req: NextRequest) {
         tenantId: user.tenantId,
         email: user.email,
         branchId: (user as any).branchId ?? null,
+        permissions,
+        canViewProfits,
       },
     })
   } catch (e: any) {

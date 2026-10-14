@@ -7,6 +7,10 @@ export interface AuthUser {
   role: 'SUPER_ADMIN' | 'ADMIN' | 'EMPLOYEE'
   tenantId: string
   branchId?: number | null
+  /** الموديولات المسموح بها — null = كل الباقة */
+  permissions?: string[] | null
+  /** هل يشوف الأرباح؟ */
+  canViewProfits?: boolean
 }
 
 const RETRYABLE_LOGIN_STATUS = new Set([500, 502, 503, 504])

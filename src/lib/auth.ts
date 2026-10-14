@@ -54,6 +54,10 @@ export type Session = {
   name: string
   email: string
   branchId: number | null
+  /** الموديولات المسموح بها لهذا الموظف — null = كل الباقة */
+  permissions: string[] | null
+  /** هل يشوف الأرباح والتكاليف؟ دايمًا true للمدير، محكوم عليه للموظف */
+  canViewProfits: boolean
 }
 
 // ─── Password helpers (Web Crypto PBKDF2) ────────────────────────────────────
@@ -110,7 +114,13 @@ export async function createSession(user: {
   name: string
   email: string
   branchId: number | null
+  permissions?: string[] | null
+  canViewProfits?: boolean
 }) {
+  // المدير دايمًا يشوف الأرباح — مش محتاج تخزين في الـ JWT
+  const canViewProfits = (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN')
+    ? true
+    : Boolean(user.canViewProfits)
   const token = await new SignJWT({
     userId: user.id,
     tenantId: user.tenantId,
@@ -118,6 +128,8 @@ export async function createSession(user: {
     name: user.name,
     email: user.email,
     branchId: user.branchId ?? null,
+    permissions: user.permissions ?? null,
+    canViewProfits,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -146,6 +158,8 @@ export async function getSession(): Promise<Session | null> {
       name: decoded.name as string,
       email: decoded.email as string,
       branchId: (decoded.branchId as number | null) ?? null,
+      permissions: (decoded.permissions as string[] | null) ?? null,
+      canViewProfits: Boolean(decoded.canViewProfits),
     }
   } catch {
     return null

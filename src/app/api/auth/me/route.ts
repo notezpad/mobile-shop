@@ -28,6 +28,8 @@ async function __GET() {
       tenantId,
       branchId: s.branchId ?? null,
       impersonating,
+      permissions: s.permissions ?? null,
+      canViewProfits: s.canViewProfits,
     },
   })
   // 🛡️ FIX (stuck-logout / "unauthorized" toast storm / data goes blank):

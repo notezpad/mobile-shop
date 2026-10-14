@@ -65,7 +65,8 @@ interface DashboardData {
   stockValuePrice: number
   totalOutstandingDebt: number
   totalSupplierDebt: number
-  last7DaysSales: { date: string; total: number; profit: number }[]
+  last7DaysSales: { date: string; total: number; profit: number | null }[]
+  canViewProfits?: boolean
   topProducts: { name: string; quantity: number; total: number; unitLabel?: string | null }[]
   last10Sales: Array<{
     id: number
@@ -413,7 +414,8 @@ export function DashboardView() {
   // أرقام فوق الأعمدة على 7 أيام: بتخلّي الأيام الصغيرة قدام عمود ضخم مقروءة
   const showBarLabels = days.length <= 7
   const loadingFirst = loading && !data
-  const weekProfit = days.reduce((a, d) => a + (d.profit || 0), 0)
+  const weekProfit = days.reduce((a, d) => a + (Number(d.profit) || 0), 0)
+  const showProfits = data?.canViewProfits !== false // 🔒 RBAC
   const weekTotal = days.reduce((a, d) => a + (d.total || 0), 0)
   // مقارنة اليوم بأمس وبمتوسط الأيام اللي قبله (من نفس بيانات المنحنى)
   const prior = days.slice(0, -1)
@@ -520,7 +522,7 @@ export function DashboardView() {
                   <CalendarDays className="size-3.5" />
                   {data?.todaySalesCount ?? 0} فاتورة اليوم
                 </span>
-                {(() => {
+                {data?.canViewProfits !== false && (() => {
                   const pr = data?.todayProfit ?? 0
                   const tone = pr > 0 ? TONE.success.chip : pr < 0 ? TONE.danger.chip : TONE.neutral.chip
                   const PIcon = pr > 0 ? TrendingUp : pr < 0 ? TrendingDown : Minus
@@ -620,8 +622,8 @@ export function DashboardView() {
                               <span className="font-bold tabular-nums">{formatCurrency(row.total)}</span>
                             </p>
                             <p className="flex items-center justify-between gap-4">
-                              <span className="text-muted-foreground">الربح</span>
-                              <span className="font-bold tabular-nums text-success">{formatCurrency(row.profit)}</span>
+                              {showProfits && <span className="text-muted-foreground">الربح</span>}
+                              {showProfits && <span className="font-bold tabular-nums text-success">{formatCurrency(row.profit ?? 0)}</span>}
                             </p>
                           </div>
                         )
@@ -668,14 +670,16 @@ export function DashboardView() {
               <>
                 <MobileStat label="رصيد الخزنة" value={n(data?.cashBalance)} unit="جنيه" dot="bg-sky-500" loading={loadingFirst} />
                 <MobileStat label="مبيعات الشهر" value={n(data?.monthSales)} unit="جنيه" dot="bg-primary" loading={loadingFirst} />
-                <MobileStat
-                  label="ربح الشهر"
-                  value={n(data?.monthProfit)}
-                  unit="جنيه"
-                  dot="bg-emerald-500"
-                  sub={margin !== null ? `هامش آخر ${chartDays} يوم: ${margin}%` : undefined}
-                  loading={loadingFirst}
-                />
+                {data?.canViewProfits !== false && (
+                  <MobileStat
+                    label="ربح الشهر"
+                    value={n(data?.monthProfit)}
+                    unit="جنيه"
+                    dot="bg-emerald-500"
+                    sub={showProfits && margin !== null ? `هامش آخر ${chartDays} يوم: ${margin}%` : undefined}
+                    loading={loadingFirst}
+                  />
+                )}
                 <MobileStat label="العملاء" value={String(data?.customersCount ?? 0)} dot="bg-teal-500" href="/customers" loading={loadingFirst} />
                 <MobileStat
                   label="تنبيهات المخزون"
@@ -706,14 +710,16 @@ export function DashboardView() {
             loading={loadingFirst}
             dot="bg-primary"
           />
-          <StatCell
-            className="border-b border-e lg:border-b-0"
-            label="ربح الشهر"
-            value={formatCurrency(data?.monthProfit ?? 0)}
-            loading={loadingFirst}
-            dot="bg-emerald-500"
-            foot={margin !== null ? <span>هامش آخر {chartDays} يوم: {margin}%</span> : undefined}
-          />
+          {data?.canViewProfits !== false && (
+            <StatCell
+              className="border-b border-e lg:border-b-0"
+              label="ربح الشهر"
+              value={formatCurrency(data?.monthProfit ?? 0)}
+              loading={loadingFirst}
+              dot="bg-emerald-500"
+              foot={margin !== null ? <span>هامش آخر {chartDays} يوم: {margin}%</span> : undefined}
+            />
+          )}
           <StatCell
             className="border-b lg:border-b-0 lg:border-e"
             label="العملاء"
@@ -1097,12 +1103,14 @@ export function DashboardView() {
             </li>
           ))}
         </ul>
-        <div className="flex items-center justify-between gap-3 border-t border-border bg-primary-subtle/60 px-5 py-3.5">
-          <span className="text-xs font-semibold text-primary-subtle-foreground">الربح المتوقع من المخزون</span>
-          <span className="text-base font-extrabold tabular-nums text-primary-subtle-foreground">
-            {formatCurrency((data?.stockValuePrice ?? 0) - (data?.stockValueCost ?? 0))}
-          </span>
-        </div>
+        {data?.canViewProfits !== false && (
+          <div className="flex items-center justify-between gap-3 border-t border-border bg-primary-subtle/60 px-5 py-3.5">
+            <span className="text-xs font-semibold text-primary-subtle-foreground">الربح المتوقع من المخزون</span>
+            <span className="text-base font-extrabold tabular-nums text-primary-subtle-foreground">
+              {formatCurrency((data?.stockValuePrice ?? 0) - (data?.stockValueCost ?? 0))}
+            </span>
+          </div>
+        )}
       </section>
       </div>
     </div>

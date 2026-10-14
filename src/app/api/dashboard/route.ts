@@ -26,7 +26,12 @@ export async function GET(req: Request) {
   // نسخة مخزنة على حافة Cloudflare لحد 45 ثانية = ≈ صفر CPU للطلبات المتكررة.
   // مفتاح per-tenant — بيانات كل محل منفصلة. والجديد دايماً متاح لأن أي
   // بيع/سداد بيعمل purge للمفتاح (انظر api/sales و api/payments).
-  const dashQuery = `days=${chartDays}`
+  // 🔒 RBAC: هل المستخدم مسموحله يشوف الأرباح؟
+  // المدير دايمًا يشوفها — الموظف بيتحكم فيه صاحب المحل
+  const canViewProfits = session.role === 'ADMIN' || session.role === 'SUPER_ADMIN' || session.canViewProfits === true
+
+  // Edge cache key includes profit visibility so each group gets its own cache
+  const dashQuery = `days=${chartDays}&p=${canViewProfits ? '1' : '0'}`
   const cachedDashboard = await matchEdgeCache('/api/dashboard', dashQuery, session.tenantId, 2)
   if (cachedDashboard) return cachedDashboard
 
@@ -230,26 +235,32 @@ export async function GET(req: Request) {
       }))
       .filter((s) => s.remaining > 0.005)
 
+    // 🔒 RBAC: نخفي أرقام الأرباح والتكاليف لو المستخدم مش مسموحله
+    const sanitizedDays = canViewProfits
+      ? last7DaysSales
+      : last7DaysSales.map(({ date, total }) => ({ date, total, profit: null }))
+
     const res = NextResponse.json({
       todaySales: todaySalesTotal,
-      todayProfit,
+      todayProfit: canViewProfits ? todayProfit : null,
       cashBalance,
       lowStockCount,
       todaySalesCount,
       monthSales: monthSalesTotal,
-      monthProfit,
+      monthProfit: canViewProfits ? monthProfit : null,
       customersCount,
       activeMaintenance,
       totalOutstandingDebt,
       totalSupplierDebt,
-      stockValueCost,
-      stockValuePrice,
-      last7DaysSales,
+      stockValueCost: canViewProfits ? stockValueCost : null,
+      stockValuePrice: canViewProfits ? stockValuePrice : null,
+      last7DaysSales: sanitizedDays,
       topProducts,
       last10Sales,
       lowStockProducts: lowStockAlerts,
       activeMaintenanceOrders: activeMaintenanceList,
       overdueInvoices,
+      canViewProfits, // بعتهاله الفرونت عشان يعرف يخفي UI الأرباح
     })
     if (shouldRunChecks) {
       res.cookies.set('notif_checked_at', String(Date.now()), {
@@ -260,7 +271,7 @@ export async function GET(req: Request) {
       })
     }
     // ⚡ خزّن نسخة على الحافة (clone — الرد الأصلي يكمل للمتصفح)
-    await putEdgeCache(res.clone(), '/api/dashboard', dashQuery, session.tenantId, 45, 2)
+    await putEdgeCache(res.clone(), '/api/dashboard', dashQuery, session.tenantId, 45, 2) // dashQuery includes p=0|1
     return res
   })
 }

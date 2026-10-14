@@ -37,6 +37,8 @@ async function __GET() {
       branchId: true,
       createdAt: true,
       lastLoginAt: true,
+      permissions: true,
+      canViewProfits: true,
       branch: { select: { name: true } },
     },
   })
@@ -72,6 +74,13 @@ async function __POST(req: NextRequest) {
   const password = String(body.password ?? '')
   const role = body.role === 'ADMIN' ? 'ADMIN' : 'EMPLOYEE'
   const branchId = body.branchId ? parseInt(body.branchId, 10) : null
+  // 🔑 RBAC: الصلاحيات الخاصة بالموظف (null = يشوف كل الباقة)
+  const permissions = role === 'ADMIN' ? null :
+    (Array.isArray(body.permissions) && body.permissions.length > 0
+      ? JSON.stringify(body.permissions)
+      : null)
+  // 🔒 الأرباح: المدير دايمًا يشوفها — الموظف بيحدده صاحب المحل
+  const canViewProfits = role === 'ADMIN' ? true : Boolean(body.canViewProfits)
 
   if (!name) {
     return NextResponse.json({ error: 'الاسم مطلوب' }, { status: 400 })
@@ -102,6 +111,8 @@ async function __POST(req: NextRequest) {
       password: hash,
       role,
       branchId,
+      permissions,
+      canViewProfits,
     },
     select: {
       id: true,
@@ -111,6 +122,8 @@ async function __POST(req: NextRequest) {
       active: true,
       branchId: true,
       createdAt: true,
+      permissions: true,
+      canViewProfits: true,
     },
   })
   // ⚡ v12: مستخدم جديد → امسح كاش قائمة المستخدمين فورًا

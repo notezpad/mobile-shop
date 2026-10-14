@@ -48,6 +48,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(err?.body, { status: err?.status })
   }
 
+  // 🔒 RBAC: رؤية التكاليف
+  const canViewProfits = session.role === 'ADMIN' || session.role === 'SUPER_ADMIN' || session.canViewProfits === true
+
   return withDb(async () => {
     const { searchParams } = new URL(req.url)
     const from = searchParams.get('from')
@@ -97,6 +100,8 @@ export async function GET(req: NextRequest) {
     const userNameById = new Map(users.map((u) => [u.id, u.name]))
     const result = sales.map((s) => ({
       ...s,
+      // 🔒 RBAC: نخفي تكلفة المنتجات لمن لا يملك صلاحية رؤية الأرباح
+      items: canViewProfits ? s.items : s.items.map(({ cost: _cost, ...item }) => ({ ...item, cost: null })),
       userName: s.userId ? (userNameById.get(s.userId) ?? null) : null,
     }))
     return NextResponse.json({

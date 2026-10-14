@@ -47,6 +47,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(err?.body, { status: err?.status })
     }
 
+    // 🔒 RBAC: رؤية التكاليف
+    const canViewProfits = session.role === 'ADMIN' || session.role === 'SUPER_ADMIN' || session.canViewProfits === true
+
     const { searchParams } = new URL(req.url)
     const search = searchParams.get('search')?.trim() || ''
     const category = searchParams.get('category')?.trim() || ''
@@ -250,8 +253,13 @@ export async function GET(req: NextRequest) {
           : null,
     }))
 
+    // 🔒 RBAC: نخفي حقل التكلفة لمن لا يملك صلاحية رؤية الأرباح
+    const withSalesSanitized = canViewProfits
+      ? withSales
+      : withSales.map(({ cost: _c, ...p }: any) => ({ ...p, cost: null }))
+
     const listRes = NextResponse.json({
-      data: withSales,
+      data: withSalesSanitized,
       total,
       page,
       limit,

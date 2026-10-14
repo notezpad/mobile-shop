@@ -27,19 +27,20 @@ interface Report {
   to: string | null
   branches: Branch[]
   totalSales: number
-  totalProfit: number
-  profitMargin: number
+  totalProfit: number | null
+  profitMargin: number | null
+  canViewProfits?: boolean
   salesCount: number
   avgOrderValue: number
   maintenanceRevenue: number
   maintenanceCount: number
   totalExpenses: number
-  netProfit: number
+  netProfit: number | null
   changes: {
     totalSales: number | null
-    totalProfit: number | null
+    totalProfit: number | null | null
     salesCount: number | null
-    netProfit: number | null
+    netProfit: number | null | null
   }
   salesTrend: { date: string; total: number; profit: number }[]
   topProducts: { name: string; qty: number; total: number; profit: number; unitLabel?: string | null }[]
@@ -269,7 +270,7 @@ export function ReportsView() {
                     )}
                   </Panel>
                 </div>
-              </Chapter>
+              </Chapter>}
 
               {/* ───── ٠٢ الأبطال ───── */}
               <Chapter id="ch-leaders" n="02" title="الأبطال" hint={tv('المنتجات والعملاء اللي شايلين الفترة')}>
@@ -278,7 +279,7 @@ export function ReportsView() {
                     {r.topProducts.length > 0 ? (
                       <ul className="space-y-3.5">
                         {r.topProducts.map((p, i) => {
-                          const mg = pct(p.profit, p.total)
+                          const mg = r.canViewProfits !== false ? pct(p.profit, p.total) : null
                           const maxP = Math.max(1, ...r.topProducts.map((x) => x.total))
                           return (
                             <li key={i} className="flex items-center gap-2 sm:gap-3">
@@ -396,7 +397,7 @@ export function ReportsView() {
 
               {/* ───── ٠٤ المالية ───── */}
               {hasFinance && (
-                <Chapter id="ch-finance" n="04" title="المالية" hint="من هامش البيع لحد الصافي، وإيه اللي ليك وعليك">
+                {r.canViewProfits !== false && <Chapter id="ch-finance" n="04" title="المالية" hint="من هامش البيع لحد الصافي، وإيه اللي ليك وعليك">
                   <div className="grid gap-4 lg:grid-cols-2">
                     <Panel title="جسر الأرباح" hint={`هامش المبيعات + الصيانة (${num(r.maintenanceCount)} أمر) − المصروفات`} className="lg:col-span-2">
                       <Waterfall
@@ -1189,7 +1190,7 @@ function StageTip({ active, payload, label }: any) {
       {payload.map((p: any) => (
         <p key={p.dataKey} className="flex items-center gap-2">
           <i className="size-2 rounded-full" style={{ background: p.color }} />
-          {p.dataKey === 'total' ? 'المبيعات' : 'الربح'}
+          {p.dataKey === 'total' ? 'المبيعات' : r.canViewProfits !== false ? 'الربح' : ''}
           <b className="ms-auto ps-3 tabular-nums">{formatCurrency(Number(p.value))}</b>
         </p>
       ))}
@@ -1211,7 +1212,7 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
           label="نوع المنحنى"
           value={m}
           onChange={setM}
-          options={[{ v: 'both', l: 'الاثنين' }, { v: 'total', l: 'المبيعات' }, { v: 'profit', l: 'الربح' }]}
+          options={[{ v: 'both', l: 'الاثنين' }, { v: 'total', l: 'المبيعات' }, ...(r.canViewProfits !== false ? [{ v: 'profit' as const, l: 'الربح' }] : [])]}
         />
       </div>
 
@@ -1228,14 +1229,14 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
               <YAxis tickFormatter={compact} tickLine={false} axisLine={false} fontSize={11} width={44} />
               <Tooltip content={<StageTip />} cursor={{ stroke: V, strokeDasharray: '4 4' }} />
               {m !== 'profit' && <Area type="monotone" dataKey="total" stroke={V} strokeWidth={2.5} fill="url(#rpt-gv)" />}
-              {m !== 'total' && <Area type="monotone" dataKey="profit" stroke={F} strokeWidth={2.5} fill="url(#rpt-gf)" />}
+              {r.canViewProfits !== false && m !== 'total' && <Area type="monotone" dataKey="profit" stroke={F} strokeWidth={2.5} fill="url(#rpt-gf)" />}
             </AreaChart>
           </ResponsiveContainer>
         ) : t.length === 1 ? (
           <div dir="rtl" className="flex h-full flex-col items-center justify-center gap-1 text-center">
             <p className="text-xs text-muted-foreground">يوم واحد في الفترة · {shortDate(t[0].date)}</p>
             <p className="min-w-0 break-all text-3xl font-extrabold tabular-nums tracking-tight sm:text-5xl">{formatCurrency(t[0].total)}</p>
-            <p className="text-sm font-semibold text-fuchsia-600 dark:text-fuchsia-400">ربح {formatCurrency(t[0].profit)}</p>
+            {r.canViewProfits !== false && <p className="text-sm font-semibold text-fuchsia-600 dark:text-fuchsia-400">ربح {formatCurrency(t[0].profit ?? 0)}</p>}
             <p className="mt-2 text-[11px] text-muted-foreground">وسّع المدى (أسبوع / شهر) علشان يظهر المنحنى</p>
           </div>
         ) : (
@@ -1247,12 +1248,12 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
         <Signal label="إجمالي المبيعات" value={num(Math.round(r.totalSales))} unit="جنيه" delta={r.changes.totalSales}>
           <div className="w-16 sm:w-20"><Spark v={t.map((x) => x.total)} /></div>
         </Signal>
-        <Signal label="صافي الربح" value={num(Math.round(r.netProfit))} unit="جنيه" delta={r.changes.netProfit}>
+        {r.canViewProfits !== false && <Signal label="صافي الربح" value={num(Math.round(r.netProfit ?? 0))} unit="جنيه" delta={r.changes.netProfit}>
           <div className="relative">
             <Ring className="size-12 sm:size-14" p={Math.abs(ins?.netMargin ?? 0)} color={(ins?.netMargin ?? 0) >= 0 ? V : '#f43f5e'} />
             <span dir="ltr" className="absolute inset-0 flex items-center justify-center text-[10px] font-extrabold tabular-nums">{(ins?.netMargin ?? 0) < 0 ? '−' : ''}{Math.abs(Math.round(ins?.netMargin ?? 0))}٪</span>
           </div>
-        </Signal>
+        </Signal>}
         <Signal label="عدد الفواتير" value={num(r.salesCount)} delta={r.changes.salesCount}>
           <p className="text-end text-[10px] text-muted-foreground">متوسط<br /><b className="text-xs text-foreground tabular-nums">{num(Math.round(r.avgOrderValue))}</b></p>
         </Signal>
