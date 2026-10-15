@@ -432,7 +432,7 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
       {!collapsed && (
         <div className="min-w-0 flex-1">
           <p
-            className="line-clamp-2 text-[20px] font-bold leading-[1.3] text-sidebar-foreground"
+            className="line-clamp-2 text-[17px] font-bold leading-[1.3] text-sidebar-foreground"
             style={{ fontFamily: 'var(--font-brand), var(--font-cairo), sans-serif' }}
             title={shopName}
           >
