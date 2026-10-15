@@ -1216,7 +1216,7 @@ function Signal({ label, value, unit, delta, children }: { label: string; value:
   )
 }
 
-function StageTip({ active, payload, label }: any) {
+function StageTip({ active, payload, label, canViewProfits }: any) {
   if (!active || !payload?.length) return null
   return (
     <div dir="rtl" className="rounded-xl border bg-popover/95 px-3 py-2 text-xs shadow-lg backdrop-blur">
@@ -1224,7 +1224,7 @@ function StageTip({ active, payload, label }: any) {
       {payload.map((p: any) => (
         <p key={p.dataKey} className="flex items-center gap-2">
           <i className="size-2 rounded-full" style={{ background: p.color }} />
-          {p.dataKey === 'total' ? 'المبيعات' : r.canViewProfits !== false ? 'الربح' : ''}
+          {p.dataKey === 'total' ? 'المبيعات' : canViewProfits !== false ? 'الربح' : ''}
           <b className="ms-auto ps-3 tabular-nums">{formatCurrency(Number(p.value))}</b>
         </p>
       ))}
@@ -1261,7 +1261,7 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
               <XAxis dataKey="date" tickFormatter={shortDate} tickLine={false} axisLine={false} fontSize={11} minTickGap={24} />
               <YAxis tickFormatter={compact} tickLine={false} axisLine={false} fontSize={11} width={44} />
-              <Tooltip content={<StageTip />} cursor={{ stroke: V, strokeDasharray: '4 4' }} />
+              <Tooltip content={<StageTip canViewProfits={r.canViewProfits} />} cursor={{ stroke: V, strokeDasharray: '4 4' }} />
               {m !== 'profit' && <Area type="monotone" dataKey="total" stroke={V} strokeWidth={2.5} fill="url(#rpt-gv)" />}
               {r.canViewProfits !== false && m !== 'total' && <Area type="monotone" dataKey="profit" stroke={F} strokeWidth={2.5} fill="url(#rpt-gf)" />}
             </AreaChart>

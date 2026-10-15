@@ -765,18 +765,21 @@ self.addEventListener('message', (event) => {
       // مختلفة) ومتسامح URL-بـ-URL: فشل endpoint واحد عمره ما يبطّل الباقي.
       if (Array.isArray(event.data.urls)) {
         event.waitUntil(
-          caches.open(CACHE_VERSION).then((cache) =>
-            Promise.allSettled(
-              event.data.urls.map((u) =>
-                cache.match(u).then((hit) => {
-                  if (hit) return
-                  return cache
-                    .add(new Request(u, { redirect: 'follow', credentials: 'same-origin' }))
-                    .catch(() => {})
-                }).catch(() => {})
-              )
-            )
-          )
+          caches.open(CACHE_VERSION).then(async (cache) => {
+            // واحد ورا التاني (مش كله مرة واحدة) + إلغاء التكرار — الطلبات
+            // المتوازية كانت بتزحم الـ Worker وتطلّع 503 وقت التنقل بين الصفحات.
+            const seen = new Set()
+            for (const u of event.data.urls) {
+              if (seen.has(u)) continue
+              seen.add(u)
+              try {
+                const hit = await cache.match(u)
+                if (hit) continue
+                await cache.add(new Request(u, { redirect: 'follow', credentials: 'same-origin' })).catch(() => {})
+                await new Promise((r) => setTimeout(r, 150))
+              } catch { /* skip */ }
+            }
+          })
         )
       }
       break
