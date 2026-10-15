@@ -87,7 +87,7 @@ export async function GET(req: Request) {
         SELECT MIN(i."name") AS name, MAX(i."pieceLabel") AS "pieceLabel", SUM(i."quantity")::float8 AS quantity, SUM(i."price" * i."quantity")::float8 AS total
         FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
         WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${last30Start}
-        GROUP BY COALESCE(i."productId", 0) ORDER BY quantity DESC LIMIT 5`,
+        GROUP BY COALESCE(i."productId", 0) ORDER BY quantity DESC LIMIT 8`,
       db.customer.count({ where: tenantFilter }),
       db.customer.aggregate({ where: { ...tenantFilter, balance: { gt: 0 } }, _sum: { balance: true } }),
       db.supplier.aggregate({ where: { ...tenantFilter, balance: { gt: 0 } }, _sum: { balance: true } }),

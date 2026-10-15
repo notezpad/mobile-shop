@@ -753,23 +753,23 @@ export function DashboardView() {
 
       {/* ═════════ بانر الفواتير المتأخرة — يظهر بس لو فيه متأخرات ═════════ */}
       {hasOverdue && (
-        <section className="overflow-hidden rounded-3xl border border-warning/40 bg-warning-subtle/40 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-warning/30 px-5 py-3.5">
+        <section className="overflow-hidden rounded-3xl border border-orange-300/60 bg-orange-50/70 dark:border-orange-500/30 dark:bg-orange-500/10 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-orange-300/50 dark:border-orange-500/20 px-5 py-3.5">
             <div className="flex min-w-0 items-center gap-2.5">
-              <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-warning text-warning-foreground">
+              <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-orange-500 text-white">
                 <AlertTriangle className="size-4" strokeWidth={2.5} />
               </span>
               <div className="min-w-0">
                 <h2 className="text-sm font-bold">فواتير متأخرة محتاجة تحصيل</h2>
                 <p className="text-[11px] text-muted-foreground">
                   {data!.overdueInvoices.length} فاتورة • إجمالي{' '}
-                  <span className="font-bold text-warning-subtle-foreground">{formatCurrency(overdueTotal)}</span>
+                  <span className="font-bold text-orange-700 dark:text-orange-300">{formatCurrency(overdueTotal)}</span>
                 </p>
               </div>
             </div>
             <Link
               href="/sales"
-              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-warning/40 bg-card px-2.5 text-[11px] font-bold text-warning-subtle-foreground transition-colors hover:bg-warning-subtle/60"
+              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-orange-300/60 bg-card px-2.5 text-[11px] font-bold text-orange-700 transition-colors hover:bg-orange-50 dark:border-orange-500/30 dark:text-orange-300 dark:hover:bg-orange-500/10"
             >
               عرض الكل
               <ArrowUpLeft className="size-3" />
@@ -789,7 +789,7 @@ export function DashboardView() {
                       {days > 0 && (
                         <>
                           <span className="h-3 w-px bg-border" />
-                          <span className="font-semibold text-warning-subtle-foreground">
+                          <span className="font-semibold text-orange-700 dark:text-orange-300">
                             متأخرة {days} يوم
                           </span>
                         </>
@@ -898,8 +898,9 @@ export function DashboardView() {
                 ))}
               </div>
             ) : data?.lowStockProducts?.length ? (
+              <>
               <ul className="space-y-1.5">
-                {data.lowStockProducts.map((p) => (
+                {data.lowStockProducts.slice(0, 8).map((p) => (
                   <li
                     key={p.id}
                     className="flex items-center gap-2.5 rounded-xl bg-destructive-subtle/50 px-3 py-2.5 text-sm"
@@ -912,6 +913,12 @@ export function DashboardView() {
                   </li>
                 ))}
               </ul>
+              {data.lowStockProducts.length > 8 && (
+                <Link href="/inventory" className="mt-2.5 block text-center text-xs font-semibold text-primary hover:underline">
+                  + {data.lowStockProducts.length - 8} منتج آخر — عرض الكل
+                </Link>
+              )}
+              </>
             ) : (
               <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
                 <CheckCircle2 className="size-8 text-success" />
