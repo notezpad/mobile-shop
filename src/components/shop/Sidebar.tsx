@@ -424,7 +424,7 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
     <div
       className={cn(
-        'flex items-center gap-3 border-b border-sidebar-border px-4 py-3',
+        'flex items-center gap-2.5 border-b border-sidebar-border px-3 py-3',
         collapsed && 'justify-center px-0',
       )}
     >
@@ -432,7 +432,7 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
       {!collapsed && (
         <div className="min-w-0 flex-1">
           <p
-            className="line-clamp-2 text-[17px] font-bold leading-[1.3] text-sidebar-foreground"
+            className="truncate whitespace-nowrap text-[14px] font-bold leading-[1.4] text-sidebar-foreground"
             style={{ fontFamily: 'var(--font-brand), var(--font-cairo), sans-serif' }}
             title={shopName}
           >
