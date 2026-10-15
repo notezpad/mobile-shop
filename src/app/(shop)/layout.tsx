@@ -204,6 +204,16 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
       } catch { /* ignore */ }
 
       if (cachedUser) {
+        // اسم المحل المخبّأ (نفس اليوزر + نفس صلاحية الـ 10 دقايق) — عشان السايدبار
+        // يظهر الاسم الصح من أول فريم بدل ما يستنى /api/tenant.
+        try {
+          const rawShop = sessionStorage.getItem('boot-shop-v1')
+          const ps = rawShop ? JSON.parse(rawShop) : null
+          if (ps?.userId === cachedUser.userId && ps?.name && Date.now() - ps.at < 10 * 60 * 1000) {
+            setShopName(ps.name)
+            if (ps.logoPath) setBranding({ logoPath: ps.logoPath })
+          }
+        } catch { /* ignore */ }
         setUser(cachedUser)
         setBootState('authed')
       }
@@ -233,7 +243,10 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
 
         if (tenantResult.status === 'fulfilled') {
           const t = tenantResult.value
-          if (t?.shopName) setShopName(t.shopName)
+          if (t?.shopName) {
+            setShopName(t.shopName)
+            try { sessionStorage.setItem('boot-shop-v1', JSON.stringify({ userId: me.userId, name: t.shopName, logoPath: t?.logoPath ?? null, at: Date.now() })) } catch { /* ignore */ }
+          }
           setBranding({
             phone: t?.phone ?? null,
             address: t?.address ?? null,

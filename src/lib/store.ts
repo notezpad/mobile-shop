@@ -202,7 +202,7 @@ export const useShopStore = create<ShopState>()(
     (set) => ({
       activeView: 'dashboard',
       setActiveView: (v) => set({ activeView: v }),
-      shopName: 'محل الاتصالات',
+      shopName: '', // فاضي لحد ما الاسم الحقيقي يوصل من /api/tenant (كان placeholder بيظهر في السايدبار)
       setShopName: (n) => set({ shopName: n }),
       branding: { phone: null, address: null, logoPath: null, invoicePrefix: 'INV', timezone: 'Africa/Cairo' },
       setBranding: (b) => set((s) => ({ branding: { ...s.branding, ...b } })),

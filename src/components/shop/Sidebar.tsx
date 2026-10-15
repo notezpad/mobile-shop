@@ -436,7 +436,7 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
             style={{ fontFamily: 'var(--font-brand), var(--font-cairo), sans-serif' }}
             title={shopName}
           >
-            {shopName}
+            {shopName || <span className="inline-block h-4 w-28 animate-pulse rounded bg-sidebar-foreground/10 align-middle" />}
           </p>
         </div>
       )}
