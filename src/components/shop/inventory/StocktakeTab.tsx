@@ -17,6 +17,9 @@ import {
   Hash,
   Scale,
   ArrowLeftRight,
+  TrendingUp,
+  TrendingDown,
+  Boxes,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -66,7 +69,6 @@ const AMBER = '#f59e0b'
 const ROSE = '#f43f5e'
 
 const diffColor = (d: number) => (d === 0 ? VIOLET : d > 0 ? GREEN : ROSE)
-const pad3 = (n: number) => String(n).padStart(3, '0')
 /** ختم الحالة */
 function Stamp({ status, rot = -8 }: { status: string; rot?: number }) {
   const committed = status === 'committed'
@@ -348,25 +350,14 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
             </div>
           </div>
 
-          {/* العدّادات الرقمية */}
-          {/* 📱 2026-10-07: العدّادات على الجوال تتكدس عمودي (الحلقة فوق الأرقام)
-              — عرضها الأفقي كان 353px وبيتقص على شاشات 360px */}
-          <aside className="flex flex-col items-center justify-center gap-4 border-t border-stocktake/15 bg-stocktake-soft p-5 sm:flex-row sm:gap-5 lg:flex-col lg:gap-6 lg:border-s lg:border-t-0 lg:px-7">
-            <MatchRing value={matchedCount} total={items.length} />
-            <div className="grid grid-cols-3 gap-5 text-center lg:gap-6">
-              <Digit label="معدود" value={pad3(items.length)} className="text-stocktake" />
-              <Digit label="مطابق" value={pad3(matchedCount)} className="text-emerald-600 dark:text-emerald-400" />
-              <Digit label="فرق" value={pad3(diffCount)} className={diffCount ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'} />
-            </div>
-            <div className="hidden text-center lg:block">
-              <p className="text-xs text-muted-foreground">صافي الفرق</p>
-              <p dir="ltr" className="font-mono text-2xl font-black tabular-nums">
-                <span className={totalDiff === 0 ? 'text-muted-foreground' : totalDiff > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
-                  <Signed value={totalDiff} />
-                </span>
-              </p>
-            </div>
-          </aside>
+          {/* لوحة الجلسة: حالة فاضية إرشادية / حالة جرد نشط */}
+          <SessionPanel
+            items={items}
+            matchedCount={matchedCount}
+            diffCount={diffCount}
+            totalDiff={totalDiff}
+            productsCount={scopedProducts.length}
+          />
         </div>
 
         {items.length > 0 && (
@@ -601,14 +592,150 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
   )
 }
 
-function Digit({ label, value, className }: { label: string; value: string; className?: string }) {
+/** لوحة الجلسة الجانبية — إرشادية لو مفيش عدّ، ولوحة قياس حيّة لو فيه */
+function SessionPanel({
+  items,
+  matchedCount,
+  diffCount,
+  totalDiff,
+  productsCount,
+}: {
+  items: { systemQty: number; countedQty: number }[]
+  matchedCount: number
+  diffCount: number
+  totalDiff: number
+  productsCount: number
+}) {
+  const aside = 'flex flex-col gap-5 border-t border-stocktake/15 bg-stocktake-soft p-5 lg:border-s lg:border-t-0 lg:px-6 lg:py-6'
+
+  if (items.length === 0) {
+    const steps = [
+      { n: 1, t: 'امسح الباركود', d: 'أو اكتب اسم الصنف واضغط Enter' },
+      { n: 2, t: 'راجع العدد الفعلي', d: 'كل قراءة تزيد العدد واحدًا' },
+      { n: 3, t: 'اعتمد التسوية', d: 'المخزون بيتعدّل حسب العدّ' },
+    ]
+    return (
+      <aside className={cn(aside, 'justify-center')}>
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="relative size-24">
+            <svg viewBox="0 0 100 100" className="size-full">
+              <circle cx="50" cy="50" r="44" fill="none" stroke="var(--stocktake)" strokeOpacity="0.45" strokeWidth="2.5" strokeDasharray="6 6" style={{ animation: 'inv-dash 1.6s linear infinite' }} />
+            </svg>
+            <span className="absolute inset-3.5 flex items-center justify-center rounded-full bg-card text-stocktake shadow-sm ring-1 ring-stocktake/20">
+              <ScanLine className="size-8" />
+            </span>
+          </div>
+          <div>
+            <p className="text-lg font-black leading-tight">جاهز لبدء الجرد</p>
+            <p className="mt-1 text-xs font-medium text-muted-foreground">الإحصائيات هتظهر هنا لحظيًا مع أول صنف تمسحه</p>
+          </div>
+        </div>
+
+        <ol className="space-y-2">
+          {steps.map((st) => (
+            <li key={st.n} className="flex items-center gap-3 rounded-xl border border-stocktake/15 bg-card px-3 py-2.5 shadow-xs">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-stocktake text-xs font-black text-stocktake-foreground">{st.n}</span>
+              <div className="min-w-0">
+                <p className="text-[13px] font-bold leading-tight">{st.t}</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{st.d}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        <div className="flex items-center justify-center gap-2 rounded-lg bg-stocktake/10 px-3 py-2 text-xs font-bold text-stocktake">
+          <Boxes className="size-4" />
+          {num(productsCount)} صنف متاح للجرد
+        </div>
+      </aside>
+    )
+  }
+
+  const surplus = items.reduce((s, i) => s + Math.max(i.countedQty - i.systemQty, 0), 0)
+  const shortage = items.reduce((s, i) => s + Math.max(i.systemQty - i.countedQty, 0), 0)
+  const matchPct = (matchedCount / items.length) * 100
+  const diffPct = 100 - matchPct
+
+  const tiles = [
+    { label: 'معدود', value: items.length, dot: 'bg-stocktake', text: 'text-stocktake' },
+    { label: 'مطابق', value: matchedCount, dot: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400' },
+    { label: 'بفرق', value: diffCount, dot: diffCount ? 'bg-amber-500' : 'bg-muted-foreground/40', text: diffCount ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground' },
+  ]
+
   return (
-    <div>
-      <p className={cn('font-mono text-3xl font-black leading-none tabular-nums tracking-wider', className)}>
-        {value}
-      </p>
-      <p className="mt-1.5 text-xs font-medium text-muted-foreground">{label}</p>
-    </div>
+    <aside className={cn(aside, 'items-stretch')}>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-black">جلسة الجرد</p>
+        <span className="flex items-center gap-1.5 rounded-full bg-stocktake/10 px-2.5 py-1 text-[11px] font-bold text-stocktake">
+          <span className="inv-blink size-1.5 rounded-full bg-stocktake" />
+          جارية
+        </span>
+      </div>
+
+      <div className="flex justify-center">
+        <MatchRing value={matchedCount} total={items.length} />
+      </div>
+
+      {/* شريط تقدّم: مطابق / بفرق */}
+      <div>
+        <div className="flex h-2.5 overflow-hidden rounded-full bg-card ring-1 ring-stocktake/15">
+          <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${matchPct}%` }} />
+          <div className="h-full bg-amber-500 transition-all duration-500" style={{ width: `${diffPct}%` }} />
+        </div>
+        <div className="mt-1.5 flex justify-between text-[11px] font-medium text-muted-foreground">
+          <span>{Math.round(matchPct)}% مطابق</span>
+          <span>{Math.round(diffPct)}% بفرق</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        {tiles.map((t) => (
+          <div key={t.label} className="rounded-xl border border-stocktake/15 bg-card px-2 py-2.5 text-center shadow-xs">
+            <p className={cn('text-2xl font-black leading-none tabular-nums', t.text)}>{num(t.value)}</p>
+            <p className="mt-1.5 flex items-center justify-center gap-1 text-[11px] font-medium text-muted-foreground">
+              <span className={cn('size-1.5 rounded-full', t.dot)} />
+              {t.label}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* الفروقات بالوحدات */}
+      <div className="rounded-xl border border-stocktake/15 bg-card p-3 shadow-xs">
+        <div className="flex items-center justify-between py-1 text-sm">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <TrendingUp className="size-4 text-emerald-600 dark:text-emerald-400" />
+            زيادة
+          </span>
+          <b className="tabular-nums text-emerald-600 dark:text-emerald-400">
+            <Signed value={surplus} />
+          </b>
+        </div>
+        <div className="flex items-center justify-between py-1 text-sm">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <TrendingDown className="size-4 text-rose-600 dark:text-rose-400" />
+            عجز
+          </span>
+          <b className="tabular-nums text-rose-600 dark:text-rose-400">
+            <Signed value={-shortage} />
+          </b>
+        </div>
+        <div className="mt-1.5 flex items-center justify-between border-t border-dashed border-stocktake/20 pt-2.5">
+          <span className="flex items-center gap-1.5 text-xs font-bold">
+            <Scale className="size-4 text-stocktake" />
+            صافي الفرق
+          </span>
+          <span
+            className={cn(
+              'font-mono text-xl font-black tabular-nums',
+              totalDiff === 0 ? 'text-muted-foreground' : totalDiff > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
+            )}
+          >
+            <Signed value={totalDiff} />
+          </span>
+        </div>
+      </div>
+    </aside>
   )
 }
 

@@ -302,6 +302,13 @@ function tintFor(name: string) {
   }
 }
 
+/** درجة لون ثابتة لكل اسم منتج (نفس منطق tintFor) — بتتستخدم للغلاف والشريط الجانبي */
+function hueOf(name: string) {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 3600
+  return TINT_HUES[h % TINT_HUES.length]
+}
+
 /** حرفين من أول كلمتين في الاسم (أو أول حرفين لو كلمة واحدة) */
 function initialsOf(name: string) {
   const words = name.trim().split(/\s+/).filter(Boolean)
@@ -333,23 +340,36 @@ function ProductThumb({
       </div>
     )
   }
+  const hue = hueOf(name)
   return (
     <div
       className={cn(
-        'relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl text-lg font-extrabold',
+        'relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl font-black text-[hsl(var(--h)_55%_32%)] dark:text-[hsl(var(--h)_70%_78%)]',
         className
       )}
-      style={tintFor(name)}
+      style={
+        {
+          '--h': hue,
+          backgroundImage: `linear-gradient(135deg, hsl(${hue} 70% 55% / .22), hsl(${hue} 70% 55% / .07))`,
+          boxShadow: `inset 0 0 0 1px hsl(${hue} 60% 50% / .24)`,
+        } as React.CSSProperties
+      }
       aria-hidden
     >
+      {/* شبكة نقاط خفيفة */}
       <span
-        className="pointer-events-none absolute inset-0 opacity-[0.10]"
+        className="pointer-events-none absolute inset-0"
         style={{
-          backgroundImage:
-            'repeating-linear-gradient(135deg, currentColor 0 1px, transparent 1px 9px)',
+          backgroundImage: `radial-gradient(hsl(${hue} 60% 45% / .22) 1px, transparent 1.2px)`,
+          backgroundSize: '10px 10px',
         }}
       />
-      <span className="relative">{initialsOf(name)}</span>
+      {/* دايرة ضوء في الركن */}
+      <span
+        className="pointer-events-none absolute -bottom-[22%] -start-[8%] size-[68%] rounded-full"
+        style={{ background: `hsl(${hue} 70% 55% / .15)` }}
+      />
+      <span className="relative tracking-tight">{initialsOf(name)}</span>
     </div>
   )
 }
@@ -374,6 +394,40 @@ function StockBadge({ quantity, weight, unit }: { quantity: number; weight?: boo
   return (
     <span className="whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-[length:var(--fs-2xs,0.75rem)] font-medium text-muted-foreground tabular-nums">
       متاح {fmt(quantity)}
+    </span>
+  )
+}
+
+/** شارة مخزون بنقطة حالة ملوّنة — للكروت اللي من غير صور */
+function StockChip({
+  quantity,
+  weight,
+  unit,
+  className,
+}: {
+  quantity: number
+  weight?: boolean
+  unit?: string | null
+  className?: string
+}) {
+  const fmt = (n: number) =>
+    weight ? `${Math.round(n * 100) / 100} كجم` : unit ? formatQtyUnit(n, unit) : String(n)
+  const state =
+    quantity <= 0
+      ? { dot: 'bg-rose-500', text: 'text-rose-700 dark:text-rose-300', label: 'نفد' }
+      : quantity <= LOW_STOCK_THRESHOLD
+        ? { dot: 'bg-amber-500', text: 'text-amber-700 dark:text-amber-300', label: `باقي ${fmt(quantity)}` }
+        : { dot: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-300', label: `متاح ${fmt(quantity)}` }
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[length:var(--fs-2xs,0.75rem)] font-bold tabular-nums',
+        state.text,
+        className
+      )}
+    >
+      <span className={cn('size-1.5 rounded-full', state.dot)} />
+      {state.label}
     </span>
   )
 }
@@ -790,9 +844,12 @@ export function POSView() {
      الشاشة. على الشاشات الكبيرة (xl) بس — الموبايل/التابلت بيفضلوا بالتمرير الطبيعي. */
   const isXl = useMediaQuery('(min-width: 1280px)')
   // لوحة الدفع بتتضغط تلقائياً *لو* محتواها مش داخل في ارتفاعها (بنقيس فعلياً، مش بنخمّن من حجم الشاشة)
-  const [tight, setTight] = React.useState(false)
+  // 🛡️ 2026-10-16: الضغط بقى ثابت حسب ارتفاع الشاشة بس — كان بيتغيّر لما المحتوى يكبر
+  // (مثلاً الضغط على «سداد جزئي») فكل اللوحة كانت بتنكمش فجأة. دلوقتي لو المحتوى زاد
+  // اللوحة بتسكرول من جواها وزرار الدفع يفضل ثابت تحت.
+  const shortScreen = useMediaQuery('(max-height: 700px)')
   const payBodyRef = React.useRef<HTMLDivElement>(null)
-  const compact = isXl && tight
+  const compact = isXl && shortScreen
   const gridBoxRef = React.useRef<HTMLDivElement>(null)
   const gridRef = React.useRef<HTMLUListElement>(null)
   const [perPage, setPerPage] = React.useState(0) // 0 = لسه ماتقاسش
@@ -1736,16 +1793,6 @@ export function POSView() {
      Panels (JSX values, not inner components, so inputs keep focus)
      ──────────────────────────────────────────────────────────── */
 
-  // 1) أي تغيير في محتوى اللوحة ← نرجع للعرض العادي ونجرّب تاني  2) لو لسه مش داخل ← نضغط (قبل الرسم، فمفيش وميض)
-  React.useLayoutEffect(() => {
-    setTight(false)
-  }, [paidFull, dueDate, shortBy > 0, resolvedCustomer?.id, remaining > 0, change > 0, paymentMethod, scale, isXl, isFull, cart.length === 0])
-  React.useLayoutEffect(() => {
-    const el = payBodyRef.current
-    if (!el || !isXl) return
-    if (!tight && el.scrollHeight > el.clientHeight + 1) setTight(true)
-  })
-
   const panelCls =
     'flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm'
   const viewMode = effMode
@@ -2022,6 +2069,7 @@ export function POSView() {
                 .filter((i) => i.product.id === p.id)
                 .reduce((s, i) => s + i.quantity, 0)
               const out = p.quantity <= 0
+              const noImg = !p.imagePath
               const badge =
                 inCart > 0 ? (
                   <span className="absolute -left-1.5 -top-1.5 z-10 flex min-w-6 items-center justify-center rounded-full bg-brand-600 px-1.5 py-0.5 text-[length:var(--fs-2xs,0.6875rem)] font-extrabold tabular-nums text-white shadow ring-2 ring-card">
@@ -2041,8 +2089,14 @@ export function POSView() {
                       out && 'opacity-55 grayscale',
                       viewMode === 'compact'
                         ? 'flex h-full items-center gap-2.5 p-2'
-                        : 'flex h-full flex-col gap-2 p-2.5'
+                        : 'flex h-full flex-col gap-2 p-2.5',
+                      noImg && viewMode === 'compact' && 'border-s-[3px]'
                     )}
+                    style={
+                      noImg && viewMode === 'compact'
+                        ? { borderInlineStartColor: `hsl(${hueOf(p.name)} 60% 48%)` }
+                        : undefined
+                    }
                   >
                     {badge}
                     <div
@@ -2055,8 +2109,13 @@ export function POSView() {
                       <ProductThumb
                         name={p.name}
                         imagePath={p.imagePath}
-                        className={viewMode === 'compact' ? 'size-12 text-lg' : 'h-full w-full text-xl'}
+                        className={viewMode === 'compact' ? 'size-11 rounded-lg text-base' : 'h-full w-full text-4xl'}
                       />
+                      {viewMode === 'cards' && noImg && (
+                        <span className="absolute end-1.5 top-1.5 z-[1] rounded-full bg-card/90 shadow-sm backdrop-blur-sm">
+                          <StockChip quantity={p.quantity} weight={p.soldByWeight} unit={p.unitLabel} />
+                        </span>
+                      )}
                       {viewMode === 'cards' && p.matchedVariantLabel && (
                         <span className="absolute inset-x-1.5 bottom-1.5 truncate rounded-md bg-stone-950/80 px-1.5 py-0.5 text-center text-[length:var(--fs-2xs,0.75rem)] font-semibold text-white">
                           {p.matchedVariantLabel}
@@ -2074,7 +2133,11 @@ export function POSView() {
                       </p>
                       {viewMode === 'compact' && (
                         <div className="mt-1 flex items-center gap-1.5">
-                          <StockBadge quantity={p.quantity} weight={p.soldByWeight} unit={p.unitLabel} />
+                          {noImg ? (
+                            <StockChip quantity={p.quantity} weight={p.soldByWeight} unit={p.unitLabel} className="px-0" />
+                          ) : (
+                            <StockBadge quantity={p.quantity} weight={p.soldByWeight} unit={p.unitLabel} />
+                          )}
                           {p.soldByWeight && (
                             <span className="shrink-0 rounded-full bg-brand-600/15 px-1.5 py-0.5 text-[length:var(--fs-2xs,0.6875rem)] font-bold text-brand-700 dark:text-brand-300">
                               بالكيلو
@@ -2103,7 +2166,15 @@ export function POSView() {
                             <span className="text-[11px] font-bold text-muted-foreground"> / كيلو</span>
                           )}
                         </span>
-                        <StockBadge quantity={p.quantity} weight={p.soldByWeight} unit={p.unitLabel} />
+                        {noImg ? (
+                          !out && (
+                            <span className="flex size-7 items-center justify-center rounded-lg bg-brand-600/10 text-brand-700 transition-colors group-hover:bg-brand-600 group-hover:text-white dark:text-brand-300">
+                              <Plus className="size-4" />
+                            </span>
+                          )
+                        ) : (
+                          <StockBadge quantity={p.quantity} weight={p.soldByWeight} unit={p.unitLabel} />
+                        )}
                       </div>
                     )}
                   </button>
