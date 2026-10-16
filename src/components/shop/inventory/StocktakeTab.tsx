@@ -112,8 +112,10 @@ function MatchRing({ value, total }: { value: number; total: number }) {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="font-mono text-3xl font-black leading-none tabular-nums text-foreground">
-          {Math.round(pct * 100)}
-          <span className="text-base text-muted-foreground">%</span>
+          <span dir="ltr" className="inline-flex items-baseline">
+            <span className="me-0.5 text-base text-muted-foreground">%</span>
+            {Math.round(pct * 100)}
+          </span>
         </span>
         <span className="mt-1 text-xs font-medium text-muted-foreground">مطابقة</span>
       </div>
@@ -683,8 +685,8 @@ function SessionPanel({
           <div className="h-full bg-amber-500 transition-all duration-500" style={{ width: `${diffPct}%` }} />
         </div>
         <div className="mt-1.5 flex justify-between text-[11px] font-medium text-muted-foreground">
-          <span>{Math.round(matchPct)}% مطابق</span>
-          <span>{Math.round(diffPct)}% بفرق</span>
+          <span><span dir="ltr" className="inline-block tabular-nums">%{Math.round(matchPct)}</span> مطابق</span>
+          <span><span dir="ltr" className="inline-block tabular-nums">%{Math.round(diffPct)}</span> بفرق</span>
         </div>
       </div>
 

@@ -309,12 +309,62 @@ function hueOf(name: string) {
   return TINT_HUES[h % TINT_HUES.length]
 }
 
-/** حرفين من أول كلمتين في الاسم (أو أول حرفين لو كلمة واحدة) */
-function initialsOf(name: string) {
-  const words = name.trim().split(/\s+/).filter(Boolean)
-  if (words.length === 0) return '؟'
-  if (words.length === 1) return Array.from(words[0]).slice(0, 2).join('')
-  return Array.from(words[0])[0] + Array.from(words[1])[0]
+/** نقش هندسي (Bauhaus) فريد لكل منتج — بيتولّد من اسمه، فنفس المنتج دايمًا ليه نفس الشكل */
+function artRand(name: string) {
+  let h = 2166136261
+  for (const ch of name) {
+    h ^= ch.codePointAt(0) ?? 0
+    h = Math.imul(h, 16777619)
+  }
+  let a = h >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+function buildArt(name: string) {
+  const rnd = artRand(name)
+  const hue = hueOf(name)
+  const hue2 = (hue + 38) % 360
+  const pal = [
+    `hsl(${hue} 62% 42% / .88)`,
+    `hsl(${hue2} 72% 56% / .82)`,
+    `hsl(${hue} 60% 78% / .65)`,
+  ]
+  const S = 20
+  const cols = 8
+  const rows = 5
+  const out: React.ReactNode[] = []
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = c * S
+      const y = r * S
+      const roll = rnd()
+      const fill = pal[Math.floor(rnd() * pal.length)]
+      const k = Math.floor(rnd() * 4)
+      const key = `${r}-${c}`
+      if (roll < 0.3) continue // مساحات فاضية = تنفّس
+      if (roll < 0.62) {
+        const P: [number, number][] = [[x, y], [x + S, y], [x + S, y + S], [x, y + S]]
+        const cx = P[k]
+        const p1 = P[(k + 1) % 4]
+        const p2 = P[(k + 3) % 4]
+        out.push(<path key={key} fill={fill} d={`M${cx[0]} ${cx[1]}L${p1[0]} ${p1[1]}A${S} ${S} 0 0 1 ${p2[0]} ${p2[1]}Z`} />)
+      } else if (roll < 0.76) {
+        out.push(<circle key={key} cx={x + S / 2} cy={y + S / 2} r={S * 0.34} fill={fill} />)
+      } else if (roll < 0.86) {
+        out.push(<circle key={key} cx={x + S / 2} cy={y + S / 2} r={S * 0.3} fill="none" stroke={fill} strokeWidth={2.4} />)
+      } else {
+        const P: [number, number][] = [[x, y], [x + S, y], [x + S, y + S], [x, y + S]]
+        const pts = P.filter((_, i) => i !== k).map((q) => q.join(',')).join(' ')
+        out.push(<polygon key={key} points={pts} fill={fill} />)
+      }
+    }
+  }
+  return { hue, hue2, shapes: out }
 }
 
 function ProductThumb({
@@ -327,7 +377,9 @@ function ProductThumb({
   className?: string
 }) {
   const [failed, setFailed] = React.useState(false)
-  if (imagePath && !failed) {
+  const showImg = !!imagePath && !failed
+  const art = React.useMemo(() => (showImg ? null : buildArt(name)), [showImg, name])
+  if (showImg) {
     return (
       <div className={cn('shrink-0 overflow-hidden rounded-xl bg-muted', className)}>
         <img
@@ -340,36 +392,19 @@ function ProductThumb({
       </div>
     )
   }
-  const hue = hueOf(name)
+  const { hue, hue2, shapes } = art!
   return (
     <div
-      className={cn(
-        'relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl font-black text-[hsl(var(--h)_55%_32%)] dark:text-[hsl(var(--h)_70%_78%)]',
-        className
-      )}
-      style={
-        {
-          '--h': hue,
-          backgroundImage: `linear-gradient(135deg, hsl(${hue} 70% 55% / .22), hsl(${hue} 70% 55% / .07))`,
-          boxShadow: `inset 0 0 0 1px hsl(${hue} 60% 50% / .24)`,
-        } as React.CSSProperties
-      }
+      className={cn('relative shrink-0 overflow-hidden rounded-xl', className)}
+      style={{
+        backgroundImage: `linear-gradient(135deg, hsl(${hue} 70% 55% / .20), hsl(${hue2} 75% 60% / .10))`,
+        boxShadow: `inset 0 0 0 1px hsl(${hue} 60% 50% / .22)`,
+      }}
       aria-hidden
     >
-      {/* شبكة نقاط خفيفة */}
-      <span
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage: `radial-gradient(hsl(${hue} 60% 45% / .22) 1px, transparent 1.2px)`,
-          backgroundSize: '10px 10px',
-        }}
-      />
-      {/* دايرة ضوء في الركن */}
-      <span
-        className="pointer-events-none absolute -bottom-[22%] -start-[8%] size-[68%] rounded-full"
-        style={{ background: `hsl(${hue} 70% 55% / .15)` }}
-      />
-      <span className="relative tracking-tight">{initialsOf(name)}</span>
+      <svg viewBox="0 0 160 100" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 size-full">
+        {shapes}
+      </svg>
     </div>
   )
 }
@@ -578,96 +613,99 @@ function DueDatePicker({
     { label: '30 يوم', iso: toISODate(inDays(30)) },
   ]
   const selected = value ? fromISODate(value) : null
-  const isPreset = presets.some((x) => x.iso === value)
   const startOfToday = new Date()
   startOfToday.setHours(0, 0, 0, 0)
   const diff = selected ? Math.floor((selected.getTime() - startOfToday.getTime()) / 86_400_000) : 0
   const rel = diff <= 0 ? 'النهارده' : diff === 1 ? 'بكرة' : `بعد ${diff} يوم`
-  const chip = (on: boolean) =>
-    cn(
-      'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-1 text-sm font-semibold transition-colors',
-      compact ? 'py-1' : 'py-1.5',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40',
-      on
-        ? 'border-brand-600 bg-brand-600/10 text-brand-800 dark:text-brand-200'
-        : 'border-foreground/25 bg-card hover:border-foreground/50 hover:bg-muted'
-    )
+  const h = compact ? 'h-9' : 'h-11'
 
+  // 🛡️ 2026-10-16: صف واحد بدل ٤ صفوف (شرائح + زر تاريخ + بطاقة) — الاختيارات السريعة
+  // والتقويم جوه نافذة منبثقة، فلوحة الدفع ما بتطولش وما بيحصلش تمرير.
   return (
-    <div className={compact ? 'space-y-1.5' : 'space-y-2'}>
-      <p className={cn('font-bold text-foreground/75', compact ? 'text-xs' : 'text-sm')}>
-        استحقاق الآجل <span className="font-medium">(اختياري)</span>
-      </p>
-      <div className="grid grid-cols-5 gap-1.5">
-        {presets.map((x) => {
-          const on = value === x.iso
-          return (
-            <button
-              key={x.label}
-              type="button"
-              aria-pressed={on}
-              onClick={() => onChange(on ? '' : x.iso)}
-              className={chip(on)}
-            >
-              {x.label}
-            </button>
-          )
-        })}
-      </div>
+    <div className="flex items-stretch gap-1.5">
       <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className={cn(chip(!!value && !isPreset), 'w-full px-3', compact ? 'h-8' : 'h-9')}
-              aria-label="اختيار تاريخ مخصص من التقويم"
-            >
-              <CalendarDays className="size-4" />
-              تاريخ مخصص
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" collisionPadding={12} className="w-auto p-0">
-            <Calendar
-              mode="single"
-              dir="rtl"
-              locale={arEG}
-              weekStartsOn={6}
-              formatters={{
-                // أسماء الأيام كاملة بتتداخل في خلية 32px — حرف واحد كفاية (ح ن ث ر خ ج س)
-                formatWeekdayName: (d) => d.toLocaleDateString('ar-EG', { weekday: 'narrow' }),
-              }}
-              selected={selected ?? undefined}
-              defaultMonth={selected ?? undefined}
-              disabled={{ before: startOfToday }}
-              onSelect={(d) => {
-                if (d) {
-                  onChange(toISODate(d))
-                  setOpen(false)
-                }
-              }}
-            />
-          </PopoverContent>
-        </Popover>
-      {selected && (
-        <div className={cn('flex items-center justify-between gap-2 rounded-xl bg-muted px-3 text-sm', compact ? 'py-1' : 'py-2')}>
-          <span className="flex min-w-0 items-center gap-2">
-            <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 leading-snug">
-              <span className={cn('font-semibold', compact ? 'inline' : 'block')}>
-                يستحق{' '}
-                {selected.toLocaleDateString('ar-EG-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })}
-              </span>
-              <span className={cn('text-xs font-medium text-muted-foreground', compact ? 'ms-2 inline' : 'block')}>{rel}</span>
-            </span>
-          </span>
+        <PopoverTrigger asChild>
           <button
             type="button"
-            onClick={() => onChange('')}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground"
-            aria-label="إزالة تاريخ الاستحقاق"
+            aria-label="اختيار تاريخ استحقاق الآجل"
+            className={cn(
+              'flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-3 text-start text-sm transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40',
+              h,
+              selected
+                ? 'border-brand-600 bg-brand-600/10 text-brand-800 dark:text-brand-200'
+                : 'border-foreground/25 bg-card hover:border-foreground/50 hover:bg-muted'
+            )}
           >
-            <X className="size-4" />
+            <CalendarDays className="size-4 shrink-0" />
+            {selected ? (
+              <span className="min-w-0 truncate font-semibold">
+                يستحق {selected.toLocaleDateString('ar-EG-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })}
+                <span className="text-xs font-medium opacity-70"> · {rel}</span>
+              </span>
+            ) : (
+              <span className="min-w-0 truncate font-semibold">
+                استحقاق الآجل <span className="font-medium text-muted-foreground">(اختياري)</span>
+              </span>
+            )}
+            <ChevronDown className="ms-auto size-4 shrink-0 opacity-60" />
           </button>
-        </div>
+        </PopoverTrigger>
+        <PopoverContent align="start" collisionPadding={12} className="w-auto space-y-1 p-2">
+          <div className="grid grid-cols-5 gap-1">
+            {presets.map((x) => {
+              const on = value === x.iso
+              return (
+                <button
+                  key={x.label}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => {
+                    onChange(on ? '' : x.iso)
+                    setOpen(false)
+                  }}
+                  className={cn(
+                    'whitespace-nowrap rounded-lg border px-1 py-1.5 text-xs font-semibold transition-colors',
+                    on
+                      ? 'border-brand-600 bg-brand-600/10 text-brand-800 dark:text-brand-200'
+                      : 'border-foreground/20 bg-card hover:border-foreground/50 hover:bg-muted'
+                  )}
+                >
+                  {x.label}
+                </button>
+              )
+            })}
+          </div>
+          <Calendar
+            mode="single"
+            dir="rtl"
+            locale={arEG}
+            weekStartsOn={6}
+            formatters={{
+              // أسماء الأيام كاملة بتتداخل في خلية 32px — حرف واحد كفاية (ح ن ث ر خ ج س)
+              formatWeekdayName: (d) => d.toLocaleDateString('ar-EG', { weekday: 'narrow' }),
+            }}
+            selected={selected ?? undefined}
+            defaultMonth={selected ?? undefined}
+            disabled={{ before: startOfToday }}
+            onSelect={(d) => {
+              if (d) {
+                onChange(toISODate(d))
+                setOpen(false)
+              }
+            }}
+          />
+        </PopoverContent>
+      </Popover>
+      {selected && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className={cn('flex aspect-square shrink-0 items-center justify-center rounded-xl border border-foreground/25 bg-card text-muted-foreground hover:bg-muted hover:text-foreground', h)}
+          aria-label="إزالة تاريخ الاستحقاق"
+        >
+          <X className="size-4" />
+        </button>
       )}
     </div>
   )
@@ -2688,11 +2726,6 @@ export function POSView() {
         ? 'border-brand-600 bg-brand-600/10 font-extrabold text-brand-800 shadow-sm dark:text-brand-200'
         : 'border-foreground/15 bg-card font-bold text-muted-foreground hover:border-foreground/40 hover:text-foreground'
     )
-  const checkMark = (
-    <span className="absolute end-1.5 top-1.5 flex size-4 items-center justify-center rounded-full bg-brand-600 text-white">
-      <Check className="size-3" strokeWidth={3} />
-    </span>
-  )
   const payBtn = cn(
     'rounded-lg border border-foreground/25 bg-card px-3 text-sm font-semibold tabular-nums transition-colors hover:border-foreground/50 hover:bg-muted disabled:opacity-40',
     compact ? 'py-1' : 'py-1.5'
@@ -2857,7 +2890,6 @@ export function POSView() {
         {/* وسيلة الدفع: بتحدد الدرج اللي الفلوس دخلت فيه
             (انستاباي وفوري اتشالوا من الكاشير بطلب صاحب المحل) */}
         <div className="space-y-1.5">
-          {!compact && <p className="text-sm font-bold text-foreground/75">وسيلة الدفع</p>}
           <div role="radiogroup" aria-label="وسيلة الدفع" className="grid grid-cols-2 gap-2">
             {[
               { v: 'cash', label: 'كاش', icon: Banknote },
@@ -2871,9 +2903,8 @@ export function POSView() {
                   role="radio"
                   aria-checked={active}
                   onClick={() => setPaymentMethod(m.v)}
-                  className={cn(choiceCls(active), 'flex-row gap-2', compact ? 'h-9 text-sm' : 'h-11 text-base')}
+                  className={cn(choiceCls(active), 'flex-row gap-2', compact ? 'h-9 text-sm' : 'h-10 text-[0.95rem]')}
                 >
-                  {active && checkMark}
                   <m.icon className="size-5" />
                   {m.label}
                 </button>
@@ -2884,7 +2915,6 @@ export function POSView() {
 
         {/* نوع الدفع: كامل / جزئي (الباقي آجل) */}
         <div className="space-y-1.5">
-          {!compact && <p className="text-sm font-bold text-foreground/75">نوع الدفع</p>}
           <div role="radiogroup" aria-label="نوع الدفع" className="grid grid-cols-2 gap-2">
             {[
               { full: true, label: 'سداد كامل' },
@@ -2901,20 +2931,13 @@ export function POSView() {
                     setPaidFull(m.full)
                     setPaidAmount(m.full ? 0 : total)
                   }}
-                  className={cn(choiceCls(active), 'flex-row gap-2', compact ? 'h-9 text-sm' : 'h-11 text-base')}
+                  className={cn(choiceCls(active), 'flex-row gap-2', compact ? 'h-9 text-sm' : 'h-10 text-[0.95rem]')}
                 >
-                  {active && checkMark}
                   <span className="whitespace-nowrap">{m.label}</span>
                 </button>
               )
             })}
           </div>
-          {/* الشرح سطر واحد تحت الاختيارين (بدل سطر ثاني داخل كل زر كان بيلزق في الحد) */}
-          <p className={cn('text-xs font-medium leading-snug text-muted-foreground', compact && 'hidden')}>
-            {paidFull
-              ? 'العميل بيدفع كامل المبلغ دلوقتي.'
-              : 'العميل بيدفع جزء دلوقتي والباقي بيتسجل آجل عليه.'}
-          </p>
         </div>
 
         {paidFull ? (
@@ -2971,9 +2994,16 @@ export function POSView() {
           </div>
         ) : (
           <div className="space-y-2">
-            <label className={cn('block font-bold text-foreground/75', compact ? 'text-xs' : 'text-sm')} htmlFor="paid-amount">
-              المبلغ المدفوع دلوقتي
-            </label>
+            <div className="flex items-center justify-between gap-2">
+              <label className={cn('block font-bold text-foreground/75', compact ? 'text-xs' : 'text-sm')} htmlFor="paid-amount">
+                المبلغ المدفوع دلوقتي
+              </label>
+              {remaining > 0 && (
+                <span className="rounded-md bg-danger-subtle px-2 py-0.5 text-xs font-extrabold tabular-nums text-danger-subtle-foreground">
+                  آجل {formatCurrency(remaining)}
+                </span>
+              )}
+            </div>
             <NumField
               id="paid-amount"
               value={paidAmount}
@@ -2992,12 +3022,6 @@ export function POSView() {
                 </button>
               ))}
             </div>
-            {remaining > 0 && !compact && (
-              <div className="flex items-center justify-between rounded-xl bg-danger-subtle px-3 py-2.5 text-sm text-danger-subtle-foreground">
-                <span className="font-semibold">المتبقي (آجل)</span>
-                <span className="font-extrabold tabular-nums">{formatCurrency(remaining)}</span>
-              </div>
-            )}
             <DueDatePicker value={dueDate} onChange={setDueDate} compact={compact} />
           </div>
         )}
