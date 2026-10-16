@@ -305,6 +305,13 @@ function tintFor(name: string) {
   }
 }
 
+/** درجة لون ثابتة لكل اسم منتج (نفس منطق tintFor) — للشريط الجانبي في وضع القائمة */
+function hueOf(name: string) {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 3600
+  return TINT_HUES[h % TINT_HUES.length]
+}
+
 /** أيقونة البدج حسب نوع المنتج (من اسمه) — الافتراضي علبة منتج */
 function badgeIconFor(name: string) {
   const n = name.toLowerCase()
@@ -516,11 +523,11 @@ const inDays = (n: number) => {
 function DueDatePicker({
   value,
   onChange,
-  compact = false,
+  density = 0,
 }: {
   value: string
   onChange: (v: string) => void
-  compact?: boolean
+  density?: 0 | 1 | 2
 }) {
   const [open, setOpen] = React.useState(false)
   const presets = [
@@ -531,98 +538,96 @@ function DueDatePicker({
     { label: '30 يوم', iso: toISODate(inDays(30)) },
   ]
   const selected = value ? fromISODate(value) : null
+  const isPreset = presets.some((x) => x.iso === value)
   const startOfToday = new Date()
   startOfToday.setHours(0, 0, 0, 0)
   const diff = selected ? Math.floor((selected.getTime() - startOfToday.getTime()) / 86_400_000) : 0
   const rel = diff <= 0 ? 'النهارده' : diff === 1 ? 'بكرة' : `بعد ${diff} يوم`
-  const h = compact ? 'h-9' : 'h-11'
+  const chip = (on: boolean) =>
+    cn(
+      'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-1 text-sm font-semibold transition-colors',
+      density >= 1 ? 'py-1' : 'py-1.5',
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40',
+      on
+        ? 'border-brand-600 bg-brand-600/10 text-brand-800 dark:text-brand-200'
+        : 'border-foreground/25 bg-card hover:border-foreground/50 hover:bg-muted'
+    )
 
-  // صف واحد بدل ٤ صفوف — الشرائح السريعة والتقويم جوه نافذة منبثقة، فلوحة الدفع ما بتطولش.
   return (
-    <div className="flex items-stretch gap-1.5">
+    <div className={density >= 1 ? 'space-y-1.5' : 'space-y-2'}>
+      <p className={cn('font-bold text-foreground/75', density >= 2 ? 'text-xs' : 'text-sm')}>
+        استحقاق الآجل <span className="font-medium">(اختياري)</span>
+      </p>
+      <div className="grid grid-cols-5 gap-1.5">
+        {presets.map((x) => {
+          const on = value === x.iso
+          return (
+            <button
+              key={x.label}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onChange(on ? '' : x.iso)}
+              className={chip(on)}
+            >
+              {x.label}
+            </button>
+          )
+        })}
+      </div>
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={cn(chip(!!value && !isPreset), 'w-full px-3', density >= 1 ? 'h-8' : 'h-9')}
+              aria-label="اختيار تاريخ مخصص من التقويم"
+            >
+              <CalendarDays className="size-4" />
+              تاريخ مخصص
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" collisionPadding={12} className="w-auto p-0">
+            <Calendar
+              mode="single"
+              dir="rtl"
+              locale={arEG}
+              weekStartsOn={6}
+              formatters={{
+                // أسماء الأيام كاملة بتتداخل في خلية 32px — حرف واحد كفاية (ح ن ث ر خ ج س)
+                formatWeekdayName: (d) => d.toLocaleDateString('ar-EG', { weekday: 'narrow' }),
+              }}
+              selected={selected ?? undefined}
+              defaultMonth={selected ?? undefined}
+              disabled={{ before: startOfToday }}
+              onSelect={(d) => {
+                if (d) {
+                  onChange(toISODate(d))
+                  setOpen(false)
+                }
+              }}
+            />
+          </PopoverContent>
+        </Popover>
+      {selected && (
+        <div className={cn('flex items-center justify-between gap-2 rounded-xl bg-muted px-3 text-sm', density >= 2 ? 'py-1' : density === 1 ? 'py-1.5' : 'py-2')}>
+          <span className="flex min-w-0 items-center gap-2">
+            <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 leading-snug">
+              <span className={cn('font-semibold', density >= 2 ? 'inline' : 'block')}>
+                يستحق{' '}
+                {selected.toLocaleDateString('ar-EG-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </span>
+              <span className={cn('text-xs font-medium text-muted-foreground', density >= 2 ? 'ms-2 inline' : 'block')}>{rel}</span>
+            </span>
+          </span>
           <button
             type="button"
-            aria-label="اختيار تاريخ استحقاق الآجل"
-            className={cn(
-              'flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-3 text-start text-sm transition-colors',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40',
-              h,
-              selected
-                ? 'border-brand-600 bg-brand-600/10 text-brand-800 dark:text-brand-200'
-                : 'border-foreground/25 bg-card hover:border-foreground/50 hover:bg-muted'
-            )}
+            onClick={() => onChange('')}
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground"
+            aria-label="إزالة تاريخ الاستحقاق"
           >
-            <CalendarDays className="size-4 shrink-0" />
-            {selected ? (
-              <span className="min-w-0 truncate font-semibold">
-                يستحق {selected.toLocaleDateString('ar-EG-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })}
-                <span className="text-xs font-medium opacity-70"> · {rel}</span>
-              </span>
-            ) : (
-              <span className="min-w-0 truncate font-semibold">
-                استحقاق الآجل <span className="font-medium text-muted-foreground">(اختياري)</span>
-              </span>
-            )}
-            <ChevronDown className="ms-auto size-4 shrink-0 opacity-60" />
+            <X className="size-4" />
           </button>
-        </PopoverTrigger>
-        <PopoverContent align="start" collisionPadding={12} className="w-auto space-y-1 p-2">
-          <div className="grid grid-cols-5 gap-1">
-            {presets.map((x) => {
-              const on = value === x.iso
-              return (
-                <button
-                  key={x.label}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => {
-                    onChange(on ? '' : x.iso)
-                    setOpen(false)
-                  }}
-                  className={cn(
-                    'whitespace-nowrap rounded-lg border px-1 py-1.5 text-xs font-semibold transition-colors',
-                    on
-                      ? 'border-brand-600 bg-brand-600/10 text-brand-800 dark:text-brand-200'
-                      : 'border-foreground/20 bg-card hover:border-foreground/50 hover:bg-muted'
-                  )}
-                >
-                  {x.label}
-                </button>
-              )
-            })}
-          </div>
-          <Calendar
-            mode="single"
-            dir="rtl"
-            locale={arEG}
-            weekStartsOn={6}
-            formatters={{
-              // أسماء الأيام كاملة بتتداخل في خلية 32px — حرف واحد كفاية (ح ن ث ر خ ج س)
-              formatWeekdayName: (d) => d.toLocaleDateString('ar-EG', { weekday: 'narrow' }),
-            }}
-            selected={selected ?? undefined}
-            defaultMonth={selected ?? undefined}
-            disabled={{ before: startOfToday }}
-            onSelect={(d) => {
-              if (d) {
-                onChange(toISODate(d))
-                setOpen(false)
-              }
-            }}
-          />
-        </PopoverContent>
-      </Popover>
-      {selected && (
-        <button
-          type="button"
-          onClick={() => onChange('')}
-          className={cn('flex aspect-square shrink-0 items-center justify-center rounded-xl border border-foreground/25 bg-card text-muted-foreground hover:bg-muted hover:text-foreground', h)}
-          aria-label="إزالة تاريخ الاستحقاق"
-        >
-          <X className="size-4" />
-        </button>
+        </div>
       )}
     </div>
   )
@@ -799,11 +804,12 @@ export function POSView() {
      الشاشة. على الشاشات الكبيرة (xl) بس — الموبايل/التابلت بيفضلوا بالتمرير الطبيعي. */
   const isXl = useMediaQuery('(min-width: 1280px)')
   // لوحة الدفع بتتضغط تلقائياً *لو* محتواها مش داخل في ارتفاعها (بنقيس فعلياً، مش بنخمّن من حجم الشاشة)
-  // 🛡️ 2026-10-16: الضغط بقى ثابت حسب ارتفاع الشاشة بس — كان بيتغيّر لما المحتوى يكبر
-  // (مثلاً الضغط على «سداد جزئي») فكل اللوحة كانت بتنكمش فجأة.
-  const shortScreen = useMediaQuery('(max-height: 700px)')
+  // 🛡️ 2026-10-16: ضغط متدرّج بدل القفزة الواحدة — لو محتوى الدفع زاد عن المساحة بنقلّل
+  // المسافات والارتفاعات شوية (مستوى 1)، ولو لسه مش كفاية نزوّد شوية (مستوى 2). كل
+  // العناوين والعناصر فاضلة ظاهرة في المستويين، ولو لسه زايد اللوحة بتسكرول من جواها.
+  const [density, setDensity] = React.useState<0 | 1 | 2>(0)
   const payBodyRef = React.useRef<HTMLDivElement>(null)
-  const compact = isXl && shortScreen
+  const d: 0 | 1 | 2 = isXl ? density : 0
   const gridBoxRef = React.useRef<HTMLDivElement>(null)
   const gridRef = React.useRef<HTMLUListElement>(null)
   const [perPage, setPerPage] = React.useState(0) // 0 = لسه ماتقاسش
@@ -1747,6 +1753,16 @@ export function POSView() {
      Panels (JSX values, not inner components, so inputs keep focus)
      ──────────────────────────────────────────────────────────── */
 
+  // 1) أي تغيير في محتوى اللوحة ← نرجع للعرض العادي ونجرّب تاني  2) لو لسه مش داخل ← نزوّد الضغط درجة (قبل الرسم، فمفيش وميض)
+  React.useLayoutEffect(() => {
+    setDensity(0)
+  }, [paidFull, dueDate, shortBy > 0, resolvedCustomer?.id, remaining > 0, change > 0, paymentMethod, scale, isXl, isFull, cart.length === 0])
+  React.useLayoutEffect(() => {
+    const el = payBodyRef.current
+    if (!el || !isXl) return
+    if (density < 2 && el.scrollHeight > el.clientHeight + 1) setDensity((v) => (v === 0 ? 1 : 2))
+  })
+
   const panelCls =
     'flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm'
   const viewMode = effMode
@@ -2023,6 +2039,7 @@ export function POSView() {
                 .filter((i) => i.product.id === p.id)
                 .reduce((s, i) => s + i.quantity, 0)
               const out = p.quantity <= 0
+              const noImg = !p.imagePath
               const badge =
                 inCart > 0 ? (
                   <span className="absolute -left-1.5 -top-1.5 z-10 flex min-w-6 items-center justify-center rounded-full bg-brand-600 px-1.5 py-0.5 text-[length:var(--fs-2xs,0.6875rem)] font-extrabold tabular-nums text-white shadow ring-2 ring-card">
@@ -2042,8 +2059,14 @@ export function POSView() {
                       out && 'opacity-55 grayscale',
                       viewMode === 'compact'
                         ? 'flex h-full items-center gap-2.5 p-2'
-                        : 'flex h-full flex-col gap-2 p-2.5'
+                        : 'flex h-full flex-col gap-2 p-2.5',
+                      noImg && viewMode === 'compact' && 'border-s-[3px]'
                     )}
+                    style={
+                      noImg && viewMode === 'compact'
+                        ? { borderInlineStartColor: `hsl(${hueOf(p.name)} 60% 48%)` }
+                        : undefined
+                    }
                   >
                     {badge}
                     <div
@@ -2618,12 +2641,17 @@ export function POSView() {
         ? 'border-brand-600 bg-brand-600/10 font-extrabold text-brand-800 shadow-sm dark:text-brand-200'
         : 'border-foreground/15 bg-card font-bold text-muted-foreground hover:border-foreground/40 hover:text-foreground'
     )
+  const checkMark = (
+    <span className="absolute end-1.5 top-1.5 flex size-4 items-center justify-center rounded-full bg-brand-600 text-white">
+      <Check className="size-3" strokeWidth={3} />
+    </span>
+  )
   const payBtn = cn(
     'rounded-lg border border-foreground/25 bg-card px-3 text-sm font-semibold tabular-nums transition-colors hover:border-foreground/50 hover:bg-muted disabled:opacity-40',
-    compact ? 'py-1' : 'py-1.5'
+    d >= 1 ? 'py-1' : 'py-1.5'
   )
   const payInput = cn(
-    compact ? 'h-9 text-base' : 'h-11 text-lg',
+    d === 2 ? 'h-9 text-base' : d === 1 ? 'h-10 text-lg' : 'h-11 text-lg',
     'w-full rounded-xl border border-foreground/25 bg-card shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] placeholder:text-sm placeholder:font-medium placeholder:text-muted-foreground text-center font-extrabold tabular-nums outline-none transition-colors focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20'
   )
 
@@ -2635,33 +2663,33 @@ export function POSView() {
 
       <div
         ref={payBodyRef}
-        className={cn('min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain', compact ? 'space-y-2 p-3' : 'space-y-3 p-3.5', slimScroll)}
+        className={cn('min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain', d === 2 ? 'space-y-2 p-3' : d === 1 ? 'space-y-2.5 p-3' : 'space-y-3 p-3.5', slimScroll)}
       >
         {/* شاشة الكاشير: الإجمالي هو أكبر وأوضح عنصر في الصفحة */}
-        <div className={cn('relative overflow-hidden rounded-2xl bg-stone-950 text-stone-50 shadow-md ring-1 ring-black/10 dark:ring-white/10', compact ? 'px-3.5 py-2' : 'px-4 py-3')}>
+        <div className={cn('relative overflow-hidden rounded-2xl bg-stone-950 text-stone-50 shadow-md ring-1 ring-black/10 dark:ring-white/10', d === 2 ? 'px-3.5 py-2' : d === 1 ? 'px-4 py-2.5' : 'px-4 py-3')}>
           <div
             aria-hidden
             className="pointer-events-none absolute -top-16 start-1/2 h-32 w-64 -translate-x-1/2 rounded-full bg-emerald-400/15 blur-3xl"
           />
           <div className="relative">
-            <div className={cn('flex items-center justify-between gap-2 font-semibold text-stone-300', compact ? 'text-xs' : 'text-sm')}>
+            <div className={cn('flex items-center justify-between gap-2 font-semibold text-stone-300', d === 2 ? 'text-xs' : 'text-sm')}>
               <span>الإجمالي المستحق</span>
               <span className="tabular-nums">
                 {cart.length} صنف · {formatQtyUnit(totalPieces, cartUnit)}
               </span>
             </div>
-            <p className={cn('flex items-baseline gap-2 leading-none tabular-nums text-emerald-300', compact ? 'mt-1' : 'mt-2')}>
-              <span className={cn('font-extrabold tracking-tight', compact ? 'text-3xl' : 'text-4xl')}>{formatNumber(Math.round(total * 100) / 100)}</span>
+            <p className={cn('flex items-baseline gap-2 leading-none tabular-nums text-emerald-300', d === 2 ? 'mt-1' : d === 1 ? 'mt-1.5' : 'mt-2')}>
+              <span className={cn('font-extrabold tracking-tight', d === 2 ? 'text-3xl' : 'text-4xl')}>{formatNumber(Math.round(total * 100) / 100)}</span>
               <span className="text-lg font-bold text-emerald-300/70">جنيه</span>
             </p>
             {!paidFull && (
-              <div className={cn('flex items-center justify-between gap-2 border-t border-white/10 text-xs font-semibold tabular-nums', compact ? 'mt-1.5 pt-1.5' : 'mt-3 pt-2.5')}>
+              <div className={cn('flex items-center justify-between gap-2 border-t border-white/10 text-xs font-semibold tabular-nums', d === 2 ? 'mt-1.5 pt-1.5' : d === 1 ? 'mt-2 pt-2' : 'mt-3 pt-2.5')}>
                 <span className="text-stone-300">مدفوع {formatCurrency(effectivePaid)}</span>
                 <span className="text-amber-300">آجل {formatCurrency(remaining)}</span>
               </div>
             )}
             {paidFull && change > 0 && (
-              <div className={cn('flex items-center justify-between gap-2 border-t border-white/10 text-sm font-bold tabular-nums', compact ? 'mt-1.5 pt-1.5' : 'mt-3 pt-2.5')}>
+              <div className={cn('flex items-center justify-between gap-2 border-t border-white/10 text-sm font-bold tabular-nums', d === 2 ? 'mt-1.5 pt-1.5' : d === 1 ? 'mt-2 pt-2' : 'mt-3 pt-2.5')}>
                 <span className="text-stone-300">الباقي للعميل</span>
                 <span className="text-emerald-300">{formatCurrency(change)}</span>
               </div>
@@ -2671,7 +2699,7 @@ export function POSView() {
 
         {/* العميل */}
         <div className="space-y-1.5">
-          {!compact && (
+          {d < 2 && (
             <p className="text-sm font-bold text-foreground/75">
               العميل <span className="font-medium">(اختياري — مطلوب للبيع الآجل)</span>
             </p>
@@ -2680,13 +2708,13 @@ export function POSView() {
             <div
               className={cn(
                 'flex items-center gap-2.5 rounded-xl border',
-                compact ? 'p-1.5' : 'p-2.5',
+                d === 2 ? 'p-1.5' : d === 1 ? 'p-2' : 'p-2.5',
                 resolvedCustomer.balance > 0
                   ? 'border-warning-subtle bg-warning-subtle/60'
                   : 'border-brand-600/30 bg-brand-600/[0.06]'
               )}
             >
-              <div className={cn('flex shrink-0 items-center justify-center rounded-full bg-foreground text-sm font-bold text-background', compact ? 'size-7' : 'size-9')}>
+              <div className={cn('flex shrink-0 items-center justify-center rounded-full bg-foreground text-sm font-bold text-background', d === 2 ? 'size-7' : d === 1 ? 'size-8' : 'size-9')}>
                 {resolvedCustomer.name.trim().charAt(0)}
               </div>
               <div className="min-w-0 flex-1">
@@ -2727,9 +2755,9 @@ export function POSView() {
                 }}
                 onFocus={() => setCustOpen(true)}
                 onBlur={() => setTimeout(() => setCustOpen(false), 150)}
-                placeholder={compact ? 'عميل (للآجل) — ابحث بالاسم أو الهاتف' : 'ابحث بالاسم أو رقم الهاتف'}
+                placeholder={d === 2 ? 'عميل (للآجل) — ابحث بالاسم أو الهاتف' : 'ابحث بالاسم أو رقم الهاتف'}
                 className={cn(
-                  compact ? 'h-9' : 'h-11',
+                  d === 2 ? 'h-9' : d === 1 ? 'h-10' : 'h-11',
                   'rounded-xl border-foreground/25 bg-card pr-9 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]',
                   creditNeedsCustomer && 'border-destructive focus-visible:ring-destructive/30'
                 )}
@@ -2782,6 +2810,7 @@ export function POSView() {
         {/* وسيلة الدفع: بتحدد الدرج اللي الفلوس دخلت فيه
             (انستاباي وفوري اتشالوا من الكاشير بطلب صاحب المحل) */}
         <div className="space-y-1.5">
+          {d < 2 && <p className="text-sm font-bold text-foreground/75">وسيلة الدفع</p>}
           <div role="radiogroup" aria-label="وسيلة الدفع" className="grid grid-cols-2 gap-2">
             {[
               { v: 'cash', label: 'كاش', icon: Banknote },
@@ -2795,8 +2824,9 @@ export function POSView() {
                   role="radio"
                   aria-checked={active}
                   onClick={() => setPaymentMethod(m.v)}
-                  className={cn(choiceCls(active), 'flex-row gap-2', compact ? 'h-9 text-sm' : 'h-10 text-[0.95rem]')}
+                  className={cn(choiceCls(active), 'flex-row gap-2', d === 2 ? 'h-9 text-sm' : d === 1 ? 'h-10 text-base' : 'h-11 text-base')}
                 >
+                  {active && checkMark}
                   <m.icon className="size-5" />
                   {m.label}
                 </button>
@@ -2807,6 +2837,7 @@ export function POSView() {
 
         {/* نوع الدفع: كامل / جزئي (الباقي آجل) */}
         <div className="space-y-1.5">
+          {d < 2 && <p className="text-sm font-bold text-foreground/75">نوع الدفع</p>}
           <div role="radiogroup" aria-label="نوع الدفع" className="grid grid-cols-2 gap-2">
             {[
               { full: true, label: 'سداد كامل' },
@@ -2823,18 +2854,25 @@ export function POSView() {
                     setPaidFull(m.full)
                     setPaidAmount(m.full ? 0 : total)
                   }}
-                  className={cn(choiceCls(active), 'flex-row gap-2', compact ? 'h-9 text-sm' : 'h-10 text-[0.95rem]')}
+                  className={cn(choiceCls(active), 'flex-row gap-2', d === 2 ? 'h-9 text-sm' : d === 1 ? 'h-10 text-base' : 'h-11 text-base')}
                 >
+                  {active && checkMark}
                   <span className="whitespace-nowrap">{m.label}</span>
                 </button>
               )
             })}
           </div>
+          {/* الشرح سطر واحد تحت الاختيارين (بدل سطر ثاني داخل كل زر كان بيلزق في الحد) */}
+          <p className={cn('text-xs font-medium leading-snug text-muted-foreground', d === 2 && 'hidden')}>
+            {paidFull
+              ? 'العميل بيدفع كامل المبلغ دلوقتي.'
+              : 'العميل بيدفع جزء دلوقتي والباقي بيتسجل آجل عليه.'}
+          </p>
         </div>
 
         {paidFull ? (
           <div className="space-y-2">
-            <label className={cn('block font-bold text-foreground/75', compact ? 'text-xs' : 'text-sm')} htmlFor="received">
+            <label className={cn('block font-bold text-foreground/75', d === 2 ? 'text-xs' : 'text-sm')} htmlFor="received">
               المبلغ المستلم من العميل <span className="font-medium">(لحساب الباقي)</span>
             </label>
             <NumField
@@ -2886,16 +2924,9 @@ export function POSView() {
           </div>
         ) : (
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <label className={cn('block font-bold text-foreground/75', compact ? 'text-xs' : 'text-sm')} htmlFor="paid-amount">
-                المبلغ المدفوع دلوقتي
-              </label>
-              {remaining > 0 && (
-                <span className="rounded-md bg-danger-subtle px-2 py-0.5 text-xs font-extrabold tabular-nums text-danger-subtle-foreground">
-                  آجل {formatCurrency(remaining)}
-                </span>
-              )}
-            </div>
+            <label className={cn('block font-bold text-foreground/75', d === 2 ? 'text-xs' : 'text-sm')} htmlFor="paid-amount">
+              المبلغ المدفوع دلوقتي
+            </label>
             <NumField
               id="paid-amount"
               value={paidAmount}
@@ -2914,13 +2945,19 @@ export function POSView() {
                 </button>
               ))}
             </div>
-            <DueDatePicker value={dueDate} onChange={setDueDate} compact={compact} />
+            {remaining > 0 && d < 2 && (
+              <div className="flex items-center justify-between rounded-xl bg-danger-subtle px-3 py-2.5 text-sm text-danger-subtle-foreground">
+                <span className="font-semibold">المتبقي (آجل)</span>
+                <span className="font-extrabold tabular-nums">{formatCurrency(remaining)}</span>
+              </div>
+            )}
+            <DueDatePicker value={dueDate} onChange={setDueDate} density={d} />
           </div>
         )}
       </div>
 
       {/* Footer: السبب اللي مانع الزر ظاهر جنب الزر */}
-      <footer className={cn('space-y-2 border-t border-border bg-card', compact ? 'p-2.5' : 'p-3.5')}>
+      <footer className={cn('space-y-2 border-t border-border bg-card', d === 2 ? 'p-2.5' : d === 1 ? 'p-3' : 'p-3.5')}>
         {creditNeedsCustomer && (
           <p className="flex items-start gap-1.5 rounded-lg bg-warning-subtle px-3 py-2 text-xs font-medium text-warning-subtle-foreground">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -2931,7 +2968,7 @@ export function POSView() {
         )}
         <Button
           size="lg"
-          className={cn(compact ? 'h-11' : 'h-12', 'w-full rounded-xl bg-brand-700 text-base font-extrabold text-white shadow-md hover:bg-brand-800 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none')}
+          className={cn(d >= 1 ? 'h-11' : 'h-12', 'w-full rounded-xl bg-brand-700 text-base font-extrabold text-white shadow-md hover:bg-brand-800 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none')}
           onClick={checkout}
           disabled={!canCheckout}
         >
