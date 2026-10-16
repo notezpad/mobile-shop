@@ -19,12 +19,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
-import { StockTab } from './inventory/StockTab'
-import { MovementsTab } from './inventory/MovementsTab'
-import { TransfersTab } from './inventory/TransfersTab'
-import { StocktakeTab } from './inventory/StocktakeTab'
+import { StockTab } from './StockTab'
+import { MovementsTab } from './MovementsTab'
+import { TransfersTab } from './TransfersTab'
+import { StocktakeTab } from './StocktakeTab'
 import { useDataRefresh } from '@/lib/offline/data-events'
-import { StatTile, num } from './inventory/shared'
+import { StatTile, num } from './shared'
 
 export interface Branch {
   id: number

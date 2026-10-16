@@ -43,14 +43,14 @@ const PRECACHE_ENDPOINTS = [
  * كاش الـ SW نفسه (مش IDB فقط) لأن صفحات المخزون بتقرأ بـ fetch خام
  * مباشر، والـ fetch الخام أوفلاين بياخد جوابه من كاش الـ SW.
  * من غير كده صفحة المخزون كانت بتفتح أوفلاين بصفر + "الخطأ: رمز 503".
+ *
+ * ⚡ 2026-10-17 (تقليل CPU — الخطوة 3): اتشالت المكررات من القايمة
+ * (branches/movements/transfers/stocktake كانوا موجودين مرتين — مرة من
+ * PRECACHE_ENDPOINTS ومرة مكتوبين يدوي) — كل مكرر كان طلب Worker زيادة
+ * عند كل دورة تسخين.
  */
 const SW_API_ENDPOINTS = [
   ...PRECACHE_ENDPOINTS,
-  '/api/branches',
-  '/api/products?limit=1000&status=all',
-  '/api/inventory/movements',
-  '/api/inventory/transfers',
-  '/api/inventory/stocktake',
 ]
 
 /**
@@ -111,14 +111,30 @@ export function installPrewarmResetOnSwUpdate(): void {
  * 🛡️ PWA OFFLINE FIX v4: إرسال ردود الـ API لكاش الـ SW (الطبقة اللي
  * بتقرأ منها fetches الخام أوفلاين) — رسالة PRECACHE_APIS، متسامحة
  * URL-بـ-URL جوا الـ SW نفسه.
+ *
+ * ⚡ 2026-10-17 (تقليل CPU — الخطوة 3): ثروتل 10 دقايق — الطلبات دي أصلاً
+ * بتتخزن في كاش الـ SW تلقائيًا أثناء الاستخدام الطبيعي (fetch handler
+ * بيخزن أي /api GET سليم)، فإعادة "التسخين" الصريحة مش لازم تحصل مع كل
+ * دورة sync. أول تفعيل/تحديث SW بيفضل شغال فورًا لأن الثروتل بيتصفّر
+ * مع reset الـ prewarm (installPrewarmResetOnSwUpdate).
  */
+const SW_API_WARM_TTL_MS = 10 * 60 * 1000
 async function warmSwApiCache(): Promise<void> {
   try {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    const lastWarm = await idb.getMeta<number>('lastSwApiWarmAt')
+    const lastPrewarm = await idb.getMeta<number>('lastPrewarmAt')
+    // reset بعد تحديث الـ SW بيتعمل بوضع lastPrewarmAt = 0 (شوف
+    // installPrewarmResetOnSwUpdate) — في الحالة دي بنسمح بالتسخين فورًا.
+    const swJustReset = lastPrewarm === 0
+    if (lastWarm && Date.now() - lastWarm < SW_API_WARM_TTL_MS && !swJustReset) {
+      return // اتسخّن حالًا — متضغطش الـ Worker من غير لزوم
+    }
     const reg = await navigator.serviceWorker.ready
     const sw = reg?.active
     if (!sw) return
     sw.postMessage({ type: 'PRECACHE_APIS', urls: SW_API_ENDPOINTS })
+    await idb.setMeta('lastSwApiWarmAt', Date.now())
   } catch {
     /* ignore */
   }
@@ -216,6 +232,8 @@ export async function prewarmAll(): Promise<{ products: number; endpoints: numbe
   // أصلاً (cache.match قبل الـ fetch) فتكلفة الدورة شبه صفر، وميزة الأمان
   // كبيرة: أي صفحة جديدة اتقفلت من كاش تحديث SW بترجع تلقائياً.
   void prewarmAppShell()
+  // ⚡ 2026-10-17: تسخين كاش الـ API بقى مُثروتل (10 دقايق) بدل كل دورة —
+  // الأصناف نفسها بتتخزن أصلاً أثناء الاستخدام الطبيعي عبر الـ fetch handler.
   void warmSwApiCache()
 
   // Check if we already pre-warmed recently (within 20 minutes) —

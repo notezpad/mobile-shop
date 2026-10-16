@@ -31,8 +31,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatDate, formatCurrency } from '@/lib/format'
-import { DateTimeCell } from '../DateTimeCell'
-import type { Branch, Movement } from '../InventoryView'
+import { DateTimeCell } from './DateTimeCell'
+import type { Branch, Movement } from './InventoryView'
 
 interface Props {
   movements: Movement[]

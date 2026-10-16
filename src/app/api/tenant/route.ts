@@ -6,6 +6,7 @@ import {
   authErrorResponse,
 } from '@/lib/auth'
 import { getPlanContext } from '@/lib/features'
+import { withSql } from '@/lib/sql'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,37 +25,31 @@ async function __GET() {
     return NextResponse.json(err?.body, { status: err?.status })
   }
 
-  const tenant = await db.tenant.findUnique({
-    where: { id: session.tenantId },
-    select: {
-      id: true,
-      shopName: true,
-      phone: true,
-      address: true,
-      logoPath: true,
-      invoicePrefix: true,
-      timezone: true,
-      commissionVodafoneCash: true,
-      commissionInstapay: true,
-      commissionFawry: true,
-      retailEnabled: true,
-      dynamicRetailPricingEnabled: true,
-      defaultRetailMarginPercent: true,
-      productCardStyle: true,
-    },
+  // ⚡ 2026-10-17 (تقليل CPU — الخطوة 1): GET بقى SQL مباشر (postgres.js) —
+  // نفس الأعمدة المحددة select بنفس الشكل. PUT فضل Prisma (عملية نادرة).
+  return withSql(async (sql) => {
+    const rows = await sql`
+      SELECT "id", "shopName", "phone", "address", "logoPath", "invoicePrefix",
+             "timezone", "commissionVodafoneCash", "commissionInstapay",
+             "commissionFawry", "retailEnabled", "dynamicRetailPricingEnabled",
+             "defaultRetailMarginPercent", "productCardStyle"
+      FROM "Tenant"
+      WHERE "id" = ${session.tenantId}
+      LIMIT 1`
+    const tenant = rows[0]
+    if (!tenant) {
+      return NextResponse.json({ error: 'المحل غير موجود' }, { status: 404 })
+    }
+    const res = NextResponse.json(tenant)
+    // 🛡️ FIX (stuck-logout / stale data across sessions): same class of bug
+    // as /api/auth/me — caching a per-session response in the browser's own
+    // HTTP cache means it can outlive the session itself. If tenant A logs
+    // out and tenant B logs in on the same browser within the cache window,
+    // B could briefly see A's cached shop name/branding too. See the note
+    // in src/app/api/auth/me/route.ts for the full explanation.
+    res.headers.set('Cache-Control', 'no-store')
+    return res
   })
-  if (!tenant) {
-    return NextResponse.json({ error: 'المحل غير موجود' }, { status: 404 })
-  }
-  const res = NextResponse.json(tenant)
-  // 🛡️ FIX (stuck-logout / stale data across sessions): same class of bug
-  // as /api/auth/me — caching a per-session response in the browser's own
-  // HTTP cache means it can outlive the session itself. If tenant A logs
-  // out and tenant B logs in on the same browser within the cache window,
-  // B could briefly see A's cached shop name/branding too. See the note
-  // in src/app/api/auth/me/route.ts for the full explanation.
-  res.headers.set('Cache-Control', 'no-store')
-  return res
 }
 
 async function __PUT(req: NextRequest) {

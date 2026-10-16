@@ -115,9 +115,15 @@ function NavButton({
     if (!shouldSkipPreload()) preloadView(item.path)
   }, [item.path])
 
+  // ⚡ 2026-10-17 (تقليل CPU — الخطوة 3): prefetch={false} بدل viewport-prefetch
+  // — كل لينك في القايمة كان بيطلع طلب RSC للـ Worker أول ما يدخل الشاشة
+  // (20+ استدعاء Worker مع كل فتح صفحة) حتى لو المستخدم مش هيضغط. دلوقتي
+  // التنزيل يحصل عند الهوفر/الكليك بس — نفس سرعة التنقل تقريبًا (الصفحات كلها
+  // prerendered)، والأوفلاين مش متأثر لأنه معتمد على كاش الـ SW للصفحات
+  // (PRECACHE_URLS) مش على prefetch الراوتر.
   const linkEl = (
     <Link
-      prefetch
+      prefetch={false}
       href={item.path}
       onMouseEnter={warmup}
       onPointerDown={warmup}
@@ -211,7 +217,7 @@ function InventoryGroup({
   if (collapsed) {
     const linkEl = (
       <Link
-        prefetch
+        prefetch={false}
         href="/inventory"
         onMouseEnter={warmInventory}
         onPointerDown={warmInventory}
@@ -270,7 +276,7 @@ function InventoryGroup({
         )}
 
         <Link
-          prefetch
+          prefetch={false}
           href="/inventory"
           onMouseEnter={warmInventory}
           onPointerDown={warmInventory}
@@ -329,7 +335,7 @@ function InventoryGroup({
             return (
               <Link
                 key={child.path}
-                prefetch
+                prefetch={false}
                 href={child.path}
                 onMouseEnter={() => shouldSkipPreload() || preloadView(child.path)}
                 onPointerDown={() => shouldSkipPreload() || preloadView(child.path)}

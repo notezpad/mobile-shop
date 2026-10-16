@@ -46,8 +46,8 @@ import {
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/format'
-import { DateTimeCell } from '../DateTimeCell'
-import type { Branch, InventoryProduct, Stocktake } from '../InventoryView'
+import { DateTimeCell } from './DateTimeCell'
+import type { Branch, InventoryProduct, Stocktake } from './InventoryView'
 
 interface Props {
   stocktakes: Stocktake[]

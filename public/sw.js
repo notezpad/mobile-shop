@@ -700,6 +700,9 @@ self.addEventListener('notificationclick', (event) => {
   )
 })
 
+// ⚡ 2026-10-17: قفل دورة تسخين الـ API — يمنع رسالتين PRECACHE_APIS متزامنتين
+let apiWarmInProgress = false
+
 // ─── Message handler (client → SW) ──────────────────────────
 self.addEventListener('message', (event) => {
   if (!event.data) return
@@ -763,21 +766,37 @@ self.addEventListener('message', (event) => {
       // fetches الخام أوفلاين (صفحات المخزون والحركات والجرد). هنا المطابقة
       // بالـ URL **الكامل** (الـ query مهم في الـ APIs — فلتر مختلف = داتا
       // مختلفة) ومتسامح URL-بـ-URL: فشل endpoint واحد عمره ما يبطّل الباقي.
+      //
+      // ⚡ 2026-10-17 (تقليل CPU — الخطوة 3):
+      //   1) الـ pace بقى 400ms بدل 150ms — كل طلب API بيحسب CPU للـ Worker
+      //      (فحص كوكي + auth + SQL)، والفجوات الأوسع بتخلي الحمل بينجح على
+      //      طلبات المستخدم الفعلية بدل ما يتراكم فوق بعضها.
+      //   2) قفل واحد للدورة (apiWarmInProgress) — رسالتين PRECACHE_APIS
+      //      ورا بعض (sync + online مثلاً) عمرها ما تشغّلوا الدورة مرتين
+      //      في نفس اللحظة (منع التكرار المطلوب).
+      //   3) التخطي لو المتخزن أصلاً زي الأول — الدورة الجاية بعد 6 ساعات
+      //      بتعيد بس الـ endpoints اللي فشلت أو غير متخزنة.
       if (Array.isArray(event.data.urls)) {
+        if (apiWarmInProgress) break
+        apiWarmInProgress = true
         event.waitUntil(
           caches.open(CACHE_VERSION).then(async (cache) => {
-            // واحد ورا التاني (مش كله مرة واحدة) + إلغاء التكرار — الطلبات
-            // المتوازية كانت بتزحم الـ Worker وتطلّع 503 وقت التنقل بين الصفحات.
-            const seen = new Set()
-            for (const u of event.data.urls) {
-              if (seen.has(u)) continue
-              seen.add(u)
-              try {
-                const hit = await cache.match(u)
-                if (hit) continue
-                await cache.add(new Request(u, { redirect: 'follow', credentials: 'same-origin' })).catch(() => {})
-                await new Promise((r) => setTimeout(r, 150))
-              } catch { /* skip */ }
+            try {
+              // واحد ورا التاني (مش كله مرة واحدة) + إلغاء التكرار — الطلبات
+              // المتوازية كانت بتزحم الـ Worker وتطلّع 503 وقت التنقل بين الصفحات.
+              const seen = new Set()
+              for (const u of event.data.urls) {
+                if (seen.has(u)) continue
+                seen.add(u)
+                try {
+                  const hit = await cache.match(u)
+                  if (hit) continue
+                  await cache.add(new Request(u, { redirect: 'follow', credentials: 'same-origin' })).catch(() => {})
+                  await new Promise((r) => setTimeout(r, 400))
+                } catch { /* skip */ }
+              }
+            } finally {
+              apiWarmInProgress = false
             }
           })
         )

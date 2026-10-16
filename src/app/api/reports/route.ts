@@ -116,7 +116,9 @@ async function __GET(req: NextRequest) {
     db.customer.aggregate({ where: { tenantId: tid, balance: { gt: 0 } }, _sum: { balance: true } }),
     db.supplier.aggregate({ where: { tenantId: tid, balance: { gt: 0 } }, _sum: { balance: true } }),
     db.branch.findMany({ where: { tenantId: tid }, orderBy: [{ isMain: 'desc' }, { id: 'asc' }], select: { id: true, name: true } }),
-    db.$queryRaw<{ date: string; total: number; profit: number }[]>`
+    // 🛡️ FIX (tsc): pieceLabel جزء من شكل الرد المتوقع في salesTrend (بيترجع
+    // undefined من الاستعلام حاليًا فيتحول null بـ ?? — نفس السلوك بالظبط).
+    db.$queryRaw<{ date: string; total: number; profit: number; pieceLabel: string | null }[]>`
       -- 🕐 التجميع اليومي بتوقيت المحل (AT TIME ZONE بيتعامل مع التوقيت الصيفي تلقائياً)
       -- ⚡ v9: subquery الربح مقيّد بنفس النافذة (JOIN على Sale) بدل GROUP BY
       -- على جدول SaleItem كله — أرخص في CPU مع نمو البيانات.

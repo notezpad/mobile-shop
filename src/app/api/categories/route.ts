@@ -2,17 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { matchEdgeCache, putEdgeCache, purgeCatalogCaches } from '@/lib/edgeCache'
+import { withSql } from '@/lib/sql'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * 🚀 2026-09-13: Wrapped in `withDb` — on Cloudflare Workers this reuses
- * ONE PrismaClient per request (saves ~200-500ms per query that would
- * otherwise establish a new TCP+TLS+auth connection to Supabase).
+ * ⚡ 2026-10-17 (تقليل CPU — الخطوة 1): GET بقى SQL مباشر عبر postgres.js —
+ * نفس الرد بالظبط (مصفوفة { id, name }). POST/PUT/DELETE فضلوا Prisma
+ * (عمليات نادرة فيها معاملات).
  */
 
 export async function GET() {
-  return withDb(async () => {
+  return withSql(async (sql) => {
     let session
     try {
       session = await requireAuth()
@@ -26,11 +27,10 @@ export async function GET() {
     const hit = await matchEdgeCache('/api/categories', '', session.tenantId, '3')
     if (hit) return hit
 
-    const cats = await db.category.findMany({
-      where: { tenantId: session.tenantId },
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true },
-    })
+    const cats = await sql<{ id: number; name: string }[]>`
+      SELECT "id", "name" FROM "Category"
+      WHERE "tenantId" = ${session.tenantId}
+      ORDER BY "name" ASC`
     const catsRes = NextResponse.json(cats)
     await putEdgeCache(catsRes.clone(), '/api/categories', '', session.tenantId, 60, '3')
     return catsRes

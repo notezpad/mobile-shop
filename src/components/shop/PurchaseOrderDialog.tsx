@@ -252,17 +252,18 @@ export function PurchaseOrderDialog({
         id: saved.id,
         name: saved.name,
         barcode: saved.barcode ?? null,
-        cost: saved.cost,
+        // 🛡️ FIX (tsc): cost = number | null (التكلفة ممكن تكون مخفية RBAC) —
+        // السلة محتاجة رقم، فالـ null بيتعامل كصفر.
+        cost: saved.cost ?? 0,
         quantity: saved.quantity,
       })
       toast.success('تم إضافة المنتج الجديد للسلة')
     }
   }
 
-  // المبلغ المكتوب في «دفعت جزء» بيفضل محفوظ لو غيّرت الوضع ورجعت —
-  // المدفوع الفعلي بيتحسب من الوضع نفسه (آجل = 0)، فمفيش خطر.
   const choosePay = (m: PayMode) => {
     setPayMode(m)
+    if (m === 'credit') setPaidAmount(0)
   }
 
   const submit = async () => {

@@ -42,8 +42,23 @@ import {
   toISODate,
 } from './shared'
 
+/**
+ * 🛡️ FIX (tsc): شكل meta اللي بيرجعه /api/inventory/movements (إجمالي النتائج
+ * + مجموع الوارد/الصادر + سلسلة الرسم). كان مستورد من هنا في
+ * InventoryView بس مش متعرّف خالص.
+ */
+export type MovementMeta = {
+  total: number
+  inTotal: number
+  outTotal: number
+  series: Array<{ label?: string; date?: string; in?: number; out?: number } & Record<string, unknown>>
+}
+
 interface Props {
   movements: Movement[]
+  // 🛡️ FIX (tsc): InventoryView بيبعت meta — اختياري عشان الاستدعاءات القديمة
+  // ما تتكسرش، والتاب بيحسب ملخصه بنفسه من movements.
+  meta?: MovementMeta | null
   branches: Branch[]
   isEmployee: boolean
   userBranchId: number | null
@@ -90,7 +105,7 @@ function periodRange(p: Period): { from: string; to: string } {
   return { from: toISODate(new Date(now.getFullYear(), now.getMonth(), 1)), to }
 }
 
-export function MovementsTab({ movements, branches, isEmployee, userBranchId: _userBranchId, onChanged: _onChanged }: Props) {
+export function MovementsTab({ movements, meta: _meta, branches, isEmployee, userBranchId: _userBranchId, onChanged: _onChanged }: Props) {
   const [search, setSearch] = React.useState('')
   const [branchFilter, setBranchFilter] = React.useState<string>('all')
   const [typeFilter, setTypeFilter] = React.useState<string>('all')

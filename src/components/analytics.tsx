@@ -12,8 +12,10 @@ const GA_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
 
 declare global {
   interface Window {
-    dataLayer: unknown[];
-    gtag: (...args: unknown[]) => void;
+    // 🛡️ FIX (tsc): لازم يطابق نفس التعريف في src/lib/tracking/client.ts
+    // (اختياري + نفس التوقيع) وإلا TS2687/TS2717.
+    dataLayer?: unknown[];
+    gtag?: (...args: unknown[]) => void;
   }
 }
 

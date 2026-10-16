@@ -46,9 +46,9 @@ import {
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/format'
-import { DateTimeCell } from '../DateTimeCell'
-import { useConfirm } from '../ConfirmDialogProvider'
-import type { Branch, InventoryProduct, Transfer } from '../InventoryView'
+import { DateTimeCell } from './DateTimeCell'
+import { useConfirm } from './ConfirmDialogProvider'
+import type { Branch, InventoryProduct, Transfer } from './InventoryView'
 
 interface Props {
   transfers: Transfer[]

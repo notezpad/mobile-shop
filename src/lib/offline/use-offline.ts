@@ -44,7 +44,11 @@ export function usePendingOperations() {
       setPending(count)
       load()
     })
-    return un
+    // 🛡️ FIX (tsc): الـ effect لازم يرجّع void أو destructor — onOutboxChange
+    // بيرجّع boolean (هل الاشتراك اتعمل) فبنغلّفه.
+    return () => {
+      un()
+    }
   }, [])
 
   return { entries, pending }

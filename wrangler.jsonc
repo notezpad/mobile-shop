@@ -12,7 +12,12 @@
 	],
 	"assets": {
 		"directory": ".open-next/assets",
-		"binding": "ASSETS"
+		"binding": "ASSETS",
+		// ⚡ 2026-10-17 (الخطوة 5 — توثيق السلوك الحالي صراحةً): false = القيمة الافتراضية. معناه:
+		// كل الملفات الموجودة في .open-next/assets (بما فيها /_next/static/* كله) بتتخدم من
+		// مخزن الأصول عند الحافة **من غير ما يشغّل الـ Worker أصلاً** = صفر CPU من حصة الـ 10ms.
+		// ممنوع يتحول true — راجع public/_headers لقواعد الكاش (immutable سنة لملفات /_next/static).
+		"run_worker_first": false
 	},
 	"observability": {
 		"enabled": true

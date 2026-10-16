@@ -8,17 +8,20 @@ import { computeDynamicRetailPrice } from '@/lib/retail-pricing'
 import { matchEdgeCache, putEdgeCache, purgeCatalogCaches } from '@/lib/edgeCache'
 import { runNonBlocking, trackServerEvent, extractRequestContext } from '@/lib/tracking/server'
 import { TRACKING_EVENTS } from '@/lib/tracking/types'
+import { withSql, type Sql } from '@/lib/sql'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * 🚀 2026-09-13: All handlers wrapped in `withDb` to reuse ONE PrismaClient
- * per request on Cloudflare Workers. Without this, every `db.*` call
- * creates a new TCP+TLS+auth connection (~200-500ms each).
- *
- * Product GET specifically makes 3 sequential queries (products + variants +
- * salesAgg groupBy) — without `withDb` that was 3 separate connections =
- * ~600-1500ms just from setup, plus query time.
+ * ⚡ 2026-10-17 (تقليل CPU — الخطوة 1): GET بقى SQL مباشر عبر postgres.js —
+ * ده أثقل GET في التطبيق (بحث/فلترة/ترتيب/تجميع مباع/تسعير ديناميكي) وكان
+ * بيشغّل Prisma wasm + 3-5 استعلامات في كل طلب. نفس المنطق ونفس شكل الرد
+ * { data, total, page, limit, totalPages } بالظبط، بما فيها:
+ *   - ILIKE للبحث في الاسم/الباركود (كان mode:'insensitive')
+ *   - LIKE حساس الحروف للباركود بتاع المتغيرات (كان بدون mode)
+ *   - نفس ترتيبات sort وlow-stock وsold
+ *   - نفس كاش الحافة ومفاتيحه
+ * POST فضل Prisma (عملية نادرة).
  */
 
 /** Ensure a category row exists for the given name (auto-create feature) — tenant scoped. */
@@ -37,8 +40,56 @@ export async function ensureCategory(
   return clean
 }
 
+/** يبني شرط الـ WHERE المشترك (نفس where القديم حرفيًا) — مصفوفة fragments
+ * (postgres.js 3.4: المصفوفة بتتربط بمسافات، فالـ AND جزء من كل شرط). */
+function buildWhere(
+  sql: Sql,
+  tenantId: string,
+  status: string,
+  hasSessionBranch: boolean,
+  sessionBranchId: number | null,
+  branchIdParam: string | null,
+  search: string,
+  category: string,
+) {
+  const parts = [sql`"tenantId" = ${tenantId}`]
+  if (status === 'active') parts.push(sql`AND "active" = true`)
+  else if (status === 'inactive') parts.push(sql`AND "active" = false`)
+
+  if (hasSessionBranch) {
+    parts.push(sql`AND ("branchId" = ${sessionBranchId} OR "branchId" IS NULL)`)
+  } else if (branchIdParam && branchIdParam !== 'all') {
+    if (branchIdParam === 'none') parts.push(sql`AND "branchId" IS NULL`)
+    else parts.push(sql`AND "branchId" = ${parseInt(branchIdParam, 10)}`)
+  }
+
+  if (search) {
+    const pattern = `%${search}%`
+    parts.push(sql`AND (
+      "name" ILIKE ${pattern}
+      OR "barcode" ILIKE ${pattern}
+      OR EXISTS (SELECT 1 FROM "ProductVariant" v WHERE v."productId" = "Product"."id" AND v."barcode" LIKE ${pattern})
+    )`)
+  }
+  if (category && category !== 'all') {
+    parts.push(sql`AND "category" = ${category}`)
+  }
+  return parts
+}
+
+function buildOrderBy(sql: Sql, sortKey: string) {
+  switch (sortKey) {
+    case 'name': return sql`"name" ASC, "id" DESC`
+    case 'price_desc': return sql`"price" DESC, "id" DESC`
+    case 'price_asc': return sql`"price" ASC, "id" DESC`
+    case 'qty_asc': return sql`"quantity" ASC, "id" DESC`
+    case 'qty_desc': return sql`"quantity" DESC, "id" DESC`
+    default: return sql`"id" DESC`
+  }
+}
+
 export async function GET(req: NextRequest) {
-  return withDb(async () => {
+  return withSql(async (sql) => {
     let session
     try {
       session = await requireAuth()
@@ -53,52 +104,18 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const search = searchParams.get('search')?.trim() || ''
     const category = searchParams.get('category')?.trim() || ''
-    // status: 'active' (default — used by POS/purchasing so disabled products
-    // can't be sold or re-ordered), 'inactive', or 'all' (used by the products
-    // management screen so disabled products can still be reviewed/reactivated).
     const status = searchParams.get('status') || 'active'
-
-    const where: any = { tenantId: session.tenantId, AND: [] as any[] }
-    if (status === 'active') where.active = true
-    else if (status === 'inactive') where.active = false
     const branchIdParam = searchParams.get('branchId')
-    if (session.branchId) {
-      where.AND.push({ OR: [{ branchId: session.branchId }, { branchId: null }] })
-    } else if (branchIdParam && branchIdParam !== 'all') {
-      if (branchIdParam === 'none') where.branchId = null
-      else where.branchId = parseInt(branchIdParam, 10)
-    }
-    if (search) {
-      where.AND.push({
-        OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { barcode: { contains: search, mode: 'insensitive' } },
-          // A scanned/typed code that belongs to a specific color/size (variant
-          // barcode) must still surface the parent product here — otherwise
-          // scanning a variant's own label at the POS finds nothing at all.
-          { variants: { some: { barcode: { contains: search } } } },
-        ],
-      })
-    }
-    if (category && category !== 'all') {
-      where.category = category
-    }
 
     const page  = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)))
     const skip  = (page - 1) * limit
 
-    // ── Sorting + low-stock filter (Products management screen) ──
-    // sort: newest (default) | name | price_desc | price_asc | qty_asc | qty_desc | sold
-    // stock: 'low' → only products with quantity <= minQuantity (incl. out of stock)
-    // Both are applied BEFORE pagination so page 2 continues the same ordering.
     const sortKey = searchParams.get('sort') || 'newest'
     const lowOnly = searchParams.get('stock') === 'low'
-    // meta=slim — شاشة المخزون: بدون soldQuantity / تسعير ديناميكي
     const metaSlim = searchParams.get('meta') === 'slim'
 
-    // كاش استدعاء المخزون (status=all + limit=1000 + slim) — نفس قواعد الأمان:
-    // بدون بحث/فلترة/ترتيب، والمفتاح لكل فرع + رقم الصفحة
+    // ── كاش الحافة (نفس المفاتيح والشروط القديمة حرفيًا) ──
     const invCacheable =
       metaSlim &&
       !search &&
@@ -112,12 +129,6 @@ export async function GET(req: NextRequest) {
       if (invHit) return invHit
     }
 
-    // ⚡ EDGE CACHE v9: كاش حافة للاستدعاء الافتراضي (كاشير/شاشة المنتجات)
-    // — أتعمر طلبات GET المتكررة من غير ما تشغل الـ Worker أصلاً. الكاشية
-    // فقط لو مفيش بحث/فلترة/ترتيب/صفحات — لأن دي كلها بتغير النتيجة.
-    // المفتاح بيشمل فرع المستخدم (session.branchId) لأن GET بيفلتر بيه.
-    // TTL 20 ثانية بس عشان الكميات تفضل قريبة من الواقع + أي mutation
-    // بيمسح الكاش فوراً.
     const cacheable =
       !search &&
       !category &&
@@ -133,119 +144,92 @@ export async function GET(req: NextRequest) {
       if (hit) return hit
     }
 
-    // ⚡ v10 (2026-10-06) — إصلاح Error 1102: شاشة المخزون كانت بتطلب
-    // /api/products?limit=1000&status=all في *كل* فتح — استدعاء غير مخزّن
-    // بيرجّع 1000 منتج كاملين + groupBy على عناصر الفواتير (soldQuantity)
-    // + حساب تسعير ديناميكي لكل منتج — أثقل استدعاء في التطبيق، وكان بيتكرر
-    // مع كل زيارة ⇒ تراكم CPU/ذاكرة ⇒ 1102.
-    // الحل:
-    //  1) meta=slim → شاشة المخزون مش محتاجة soldQuantity/التسعير الديناميكي
-    //     فبنحذف الاستعلامين دول خالص.
-    //  2) كاش حافة 20 ثانية لنفس الاستدعاء (مفتاح لكل فرع) — زيارات المخزون
-    //     المتتالية بترجع ≈ بصفر CPU، وأي mutation على منتجات/مبيعات بيمسحه.
-    const orderBy: any = (() => {
-      switch (sortKey) {
-        case 'name': return [{ name: 'asc' }, { id: 'desc' }]
-        case 'price_desc': return [{ price: 'desc' }, { id: 'desc' }]
-        case 'price_asc': return [{ price: 'asc' }, { id: 'desc' }]
-        case 'qty_asc': return [{ quantity: 'asc' }, { id: 'desc' }]
-        case 'qty_desc': return [{ quantity: 'desc' }, { id: 'desc' }]
-        default: return [{ id: 'desc' }]
-      }
-    })()
+    const orderBy = buildOrderBy(sql, sortKey)
+    const where = buildWhere(
+      sql, session.tenantId, status,
+      Boolean(session.branchId), session.branchId, branchIdParam,
+      search, category,
+    )
 
-    // 🛡️ 2026-10-03: نجيب plan context وبيانات التسعير بالتوازي.
-    // الـ dynamicRetailPrice بيتحسب فقط لو الباقة فيها capability = dynamic_retail_pricing
-    // (باقة احترافية). لو الباقة أساسية نرجّع null وبالتالي الـ POS هيستخدم p.price العادي.
-    // ⚡ v10: في وضع slim (شاشة المخزون) الاستدعاءين دول مش محتاجين — توفير
-    // استعلامين كاملين من كل تحميل مخزون.
+    // ⚡ v10: في وضع slim (شاشة المخزون) plan context والتسعير مش محتاجين
     const [planCtxForGet, retailPricingTenant] = metaSlim
       ? [null as never, null as never]
       : await Promise.all([
           getPlanContext(session.tenantId),
-          db.tenant.findUnique({
-            where: { id: session.tenantId },
-            select: { dynamicRetailPricingEnabled: true, defaultRetailMarginPercent: true },
-          }),
+          (async () => {
+            const t = await sql<{ dynamicRetailPricingEnabled: boolean; defaultRetailMarginPercent: number }[]>`
+              SELECT "dynamicRetailPricingEnabled", "defaultRetailMarginPercent"
+              FROM "Tenant" WHERE "id" = ${session.tenantId} LIMIT 1`
+            return t[0] ?? null
+          })(),
         ])
 
     let products: any[]
     let total: number
     if (lowOnly || sortKey === 'sold') {
-      // Prisma can't compare two columns in `where` (quantity <= minQuantity) and
-      // can't order by an aggregate, so the ordered id list is resolved in memory
-      // (ids + 2 small columns only), then just the requested page is loaded.
-      const slim = await db.product.findMany({
-        where,
-        orderBy,
-        select: { id: true, quantity: true, minQuantity: true },
-      })
+      // نفس منطق القديم: قائمة مختصرة (id/كميات) للفلترة والترتيب في الذاكرة،
+      // وبعدين جلب صفوف الصفحة المطلوبة فقط.
+      const slim = await sql<{ id: number; quantity: number; minQuantity: number }[]>`
+        SELECT "id", "quantity", "minQuantity" FROM "Product"
+        WHERE ${where} ORDER BY ${orderBy}`
       let ids = slim.filter((r) => !lowOnly || r.quantity <= r.minQuantity).map((r) => r.id)
       if (sortKey === 'sold' && ids.length > 0) {
-        const agg = await db.saleItem.groupBy({
-          by: ['productId'],
-          where: { productId: { in: ids } },
-          _sum: { quantity: true },
-        })
-        const sold = new Map(agg.filter((a) => a.productId != null).map((a) => [a.productId as number, a._sum.quantity ?? 0]))
+        const agg = await sql<{ productId: number | null; sold: number }[]>`
+          SELECT "productId", COALESCE(SUM("quantity"), 0)::float8 AS sold
+          FROM "SaleItem"
+          WHERE "productId" IN ${sql(ids)}
+          GROUP BY "productId"`
+        const sold = new Map(agg.filter((a) => a.productId != null).map((a) => [Number(a.productId), a.sold ?? 0]))
         const pos = new Map(ids.map((id, idx) => [id, idx]))
         ids = [...ids].sort((a, b) => (sold.get(b) ?? 0) - (sold.get(a) ?? 0) || (pos.get(a)! - pos.get(b)!))
       }
       total = ids.length
       const pageIds = ids.slice(skip, skip + limit)
-      const rows = pageIds.length > 0 ? await db.product.findMany({ where: { id: { in: pageIds } } }) : []
-      const byId = new Map(rows.map((r) => [r.id, r]))
+      const rows = pageIds.length > 0
+        ? await sql<any[]>`SELECT * FROM "Product" WHERE "id" IN ${sql(pageIds)}`
+        : []
+      const byId = new Map(rows.map((r) => [Number(r.id), r]))
       products = pageIds.map((id) => byId.get(id)).filter(Boolean) as any[]
     } else {
-      const [rows, count] = await Promise.all([
-        db.product.findMany({ where, orderBy, skip, take: limit }),
-        db.product.count({ where }),
+      const [rows, cnt] = await Promise.all([
+        sql<any[]>`SELECT * FROM "Product" WHERE ${where} ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${skip}`,
+        sql<{ cnt: number }[]>`SELECT COUNT(*)::int AS cnt FROM "Product" WHERE ${where}`,
       ])
       products = rows
-      total = count
+      total = Number(cnt[0]?.cnt ?? 0)
     }
+
     // If the search term is an EXACT match for one of this product's variant
-    // barcodes (i.e. someone scanned a specific color/size's own label), tell
-    // the client which variant that is so the POS can add that exact one
-    // straight to the cart instead of asking the cashier to pick again.
+    // barcodes → matchedVariantId/Label (نفس سلوك القديم).
     let matchedVariantByProduct = new Map<number, { id: number; label: string }>()
     if (search && products.length > 0) {
-      const matchingVariants = await db.productVariant.findMany({
-        where: { productId: { in: products.map((p) => p.id) }, barcode: search },
-        select: { id: true, productId: true, size: true, color: true },
-      })
+      const matchingVariants = await sql<{ id: number; productId: number; size: string | null; color: string | null }[]>`
+        SELECT "id", "productId", "size", "color" FROM "ProductVariant"
+        WHERE "productId" IN ${sql(products.map((p) => p.id))} AND "barcode" = ${search}`
       matchedVariantByProduct = new Map(
         matchingVariants.map((v) => [
-          v.productId,
+          Number(v.productId),
           { id: v.id, label: [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}` },
         ])
       )
     }
 
-    // إجمالي عدد الوحدات المباعة لكل منتج (من عناصر الفواتير)
-    // 🚀 Skip this expensive groupBy when there are no products returned
-    // (e.g. filtered out, or tenant has no products yet) — saves a query.
-    // ⚡ v10: ومفيش داعي له خالص في وضع slim (شاشة المخزون مش بتعرضه)
+    // إجمالي عدد الوحدات المباعة لكل منتج (⚡ يتسكب في وضع slim — زي القديم)
     let soldMap = new Map<number, number>()
     if (products.length > 0 && !metaSlim) {
-      const salesAgg = await db.saleItem.groupBy({
-        by: ['productId'],
-        where: { productId: { in: products.map((p) => p.id) } },
-        _sum: { quantity: true },
-      })
-      soldMap = new Map(salesAgg.filter((s) => s.productId != null).map((s) => [s.productId as number, s._sum.quantity ?? 0]))
+      const salesAgg = await sql<{ productId: number | null; sold: number }[]>`
+        SELECT "productId", COALESCE(SUM("quantity"), 0)::float8 AS sold
+        FROM "SaleItem"
+        WHERE "productId" IN ${sql(products.map((p) => p.id))}
+        GROUP BY "productId"`
+      soldMap = new Map(salesAgg.filter((s) => s.productId != null).map((s) => [Number(s.productId), s.sold ?? 0]))
     }
 
     const withSales = products.map((p) => ({
       ...p,
-      soldQuantity: soldMap.get(p.id) ?? 0,
-      matchedVariantId: matchedVariantByProduct.get(p.id)?.id ?? null,
-      matchedVariantLabel: matchedVariantByProduct.get(p.id)?.label ?? null,
-      // 🛡️ 2026-10-03: Unit-Based Dynamic Pricing — باقة احترافية فقط.
-      // الشرط مزدوج: الباقة لازم فيها capability = dynamic_retail_pricing
-      // + التينانت لازم فعّل الميزة من الإعدادات.
-      // لو أي شرط مش متحقق → null → الـ POS يستخدم p.price العادي.
-      // ⚡ v10: في وضع slim نرجّع null مباشرة (شاشة المخزون مش بتستخدمه)
+      soldQuantity: soldMap.get(Number(p.id)) ?? 0,
+      matchedVariantId: matchedVariantByProduct.get(Number(p.id))?.id ?? null,
+      matchedVariantLabel: matchedVariantByProduct.get(Number(p.id))?.label ?? null,
       dynamicRetailPrice: metaSlim
         ? null
         : planCtxForGet.capabilities.includes('dynamic_retail_pricing') && retailPricingTenant
@@ -288,8 +272,7 @@ export async function POST(req: NextRequest) {
     if (!body || typeof body !== 'object') {
       return NextResponse.json({ error: 'بيانات غير صالحة' }, { status: 400 })
     }
-    // 🛡️ 2026-10-10 FIX: فحص حد المنتجات (maxProducts) — قبل الإصلاح ده الحد
-    // كان بيتحفظ في الباقة بس مكانش بيتفحص، فكان يقدر يضيف منتجات بلا حدود.
+    // 🛡️ 2026-10-10 FIX: فحص حد المنتجات (maxProducts)
     try {
       await assertWithinPlanLimit(session, 'products')
     } catch (e) {
@@ -321,10 +304,6 @@ export async function POST(req: NextRequest) {
         )
       }
     }
-    // 🛡️ 2026-10-05 FIX: planCtx was declared AFTER db.product.create but
-    // USED inside its data object (retailMarginPercent) → ReferenceError
-    // "Cannot access 'planCtx' before initialization" → EVERY product
-    // creation returned 500. Moved the lookup above the create call.
     const planCtx = await getPlanContext(session.tenantId)
     const created = await db.product.create({
       data: {
@@ -334,17 +313,11 @@ export async function POST(req: NextRequest) {
         barcode,
         price,
         cost: Number(body.cost ?? 0) || 0,
-        // 🥬 2026-10-12: الكمية Float — منتجات البيع بالوزن بالكيلو بكسور
         quantity: Math.round((Number(body.quantity ?? 0) || 0) * 1000) / 1000,
         minQuantity: Math.round((Number(body.minQuantity ?? 1) || 0) * 100) / 100 || 1,
-        // 🥬 2026-10-12: بيع بالوزن — للمحلات الغذائية فقط (حماية السيرفر:
-        // أي tenant تاني بيبعت الحقل ده بنفسه بيتجاهل)
         soldByWeight:
           planCtx.businessType === 'food' &&
           (body.soldByWeight === true || body.soldByWeight === 'true'),
-        // 🥬 2026-10-12: وحدة المنتج (علبة/كيس/برطمان...) — غذائية فقط.
-        // لو العميل ماحددش وحدة (undefined) بنخمّنها من الاسم (رز → كيس).
-        // null/'' = «قطعة» صريحة. منتجات الوزن بتتباع بالكيلو فمالهاش وحدة.
         unitLabel:
           planCtx.businessType === 'food' &&
           !(body.soldByWeight === true || body.soldByWeight === 'true')
@@ -355,9 +328,6 @@ export async function POST(req: NextRequest) {
         imagePath: body.imagePath ? String(body.imagePath) : null,
         branchId: session.branchId ?? (body.branchId ? parseInt(body.branchId, 10) : null),
         collection: body.collection ? String(body.collection).trim() || null : null,
-        // 🛡️ 2026-10-03: نسبة الهامش لكل منتج — باقة احترافية فقط.
-        // لو الباقة مش فيها dynamic_retail_pricing نحفظ null حتى لو الـ
-        // client بعت قيمة (UI مخفي، بس حماية السيرفر أهم).
         retailMarginPercent:
           planCtx.capabilities.includes('dynamic_retail_pricing') &&
           body.retailMarginPercent !== undefined &&
@@ -367,15 +337,7 @@ export async function POST(req: NextRequest) {
             : null,
       },
     })
-    // 🛡️ إنشاء الوحدات تلقائياً فور حفظ المنتج (ربع/نص/دستة/ونص دستة) —
-    // بس لو الباقة فيها capability = multi_unit (احترافية فقط: electronics-pro
-    // أو fashion-pro). قبل الإصلاح ده كانت الوحدات بتتعمل لكل منتج في أي باقة
-    // (حتى الأساسية)، وده كان بيسيب وحدات جملة جاهزة بالسعر الصح في الداتابيز
-    // لعملاء ملهومش الحق فيها أصلاً حسب باقتهم.
-    // 🥬 2026-10-12: المحلات الغذائية مابيتعملهاليش وحدات دستة تلقائية —
-    // منتجات الغذائية أذواقها مختلفة جذرياً (كيلو/كيس/طبق/برطمان) وده
-    // بيتظبط من "وحدات البيع" لكل منتج لوحده (أو عن طريق توoggle البيع
-    // بالوزن). الافتراض العام (دستة) هيكون ضوضاء على 2000 منتج بقالة.
+    // 🛡️ إنشاء الوحدات تلقائياً (باقة multi_unit احترافية — غذائية مستثناة)
     if (planCtx.capabilities.includes('multi_unit') && planCtx.businessType !== 'food') {
       try {
         await db.productUnit.createMany({
@@ -386,7 +348,6 @@ export async function POST(req: NextRequest) {
       }
     }
     // stock in movement on initial quantity
-    // 🥬 2026-10-12: الكمية الافتتاحية بالوزن بتتقبل كسور (45.5 كيلو)
     const initialQty = Math.round((Number(body.quantity ?? 0) || 0) * 1000) / 1000
     if (initialQty > 0) {
       await db.stockMovement.create({
@@ -402,13 +363,10 @@ export async function POST(req: NextRequest) {
         },
       })
     }
-    // ⚡ v9: مسح كاش الكتالوج فوراً بعد إضافة منتج (القائمة + كميات الفرع)
+    // ⚡ v9: مسح كاش الكتالوج فوراً بعد إضافة منتج
     await purgeCatalogCaches(session.tenantId, session.branchId)
 
-    // 📊 أول منتج للمحل → حدث AddedFirstProduct (Meta CAPI / TikTok / GA4).
-    // - eventId ثابت لكل محل (first-product-<tenantId>) → مفيش تكرار حتى لو
-    //   اتحذف المنتج واتضاف تاني (trackServerEvent عنده alreadySent).
-    // - لا يعمل لحساب السوبر أدمن (impersonation) ولا يوقف إضافة المنتج أبداً.
+    // 📊 أول منتج للمحل → حدث AddedFirstProduct (لا يوقف إضافة المنتج أبداً)
     if (session.role !== 'SUPER_ADMIN') {
       try {
         const total = await db.product.count({ where: { tenantId: session.tenantId } })

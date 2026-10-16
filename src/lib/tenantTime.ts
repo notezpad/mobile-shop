@@ -33,15 +33,14 @@
  *   تلقائياً، من غير ما نفترض offset ثابت.
  */
 
-import { db } from './db'
+import { getSql } from './sql'
 
 export const DEFAULT_TENANT_TIMEZONE = 'Africa/Cairo'
 
 // ─────────────────────────────────────────────
 // جلب توقيت المحل (مع fallback آمن لو مش موجود)
-// ⚡ v10 (2026-10-06): كاش per-isolate لمدة 5 دقايق — المنطقة الزمنية نادراً
-// ما بتتغير، والداشبورد/التقارير/المخزون كانت بتدفع استعلام Tenant كامل في
-// *كل* طلب. جزء من إصلاح Error 1102 (تقليل الاستعلامات الثابتة لكل طلب).
+// ⚡ 2026-10-17: كاش per-isolate 5 دقايق + استعلام SQL خفيف (postgres.js)
+// بدل Prisma — كانت بتدفع استعلام Tenant كامل في كل طلب فيه فلتر تاريخ.
 // ─────────────────────────────────────────────
 const TZ_CACHE_TTL_MS = 5 * 60_000
 const tzCache = new Map<string, { at: number; tz: string }>()
@@ -50,11 +49,8 @@ export async function getTenantTimezone(tenantId: string): Promise<string> {
   const hit = tzCache.get(tenantId)
   if (hit && Date.now() - hit.at < TZ_CACHE_TTL_MS) return hit.tz
   try {
-    const tenant = await db.tenant.findUnique({
-      where: { id: tenantId },
-      select: { timezone: true },
-    })
-    const tz = tenant?.timezone || DEFAULT_TENANT_TIMEZONE
+    const rows = await getSql()`SELECT "timezone" FROM "Tenant" WHERE "id" = ${tenantId} LIMIT 1`
+    const tz = rows[0]?.timezone || DEFAULT_TENANT_TIMEZONE
     if (tzCache.size > 500) tzCache.clear()
     tzCache.set(tenantId, { at: Date.now(), tz })
     return tz

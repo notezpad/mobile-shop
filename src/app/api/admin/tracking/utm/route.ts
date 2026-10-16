@@ -14,7 +14,10 @@ export const dynamic = 'force-dynamic'
  * وفي الإنتاج (PostgreSQL) يمر الخيار كما هو بلا أي تغيير.
  */
 const LIKE = (() => {
-  const insensitive = describeDbConnection() !== 'sqlite-local'
+  // 🛡️ FIX (tsc): describeDbConnection بيرجّع 'hyperdrive' | 'direct' | 'missing'
+  // — قيمة 'sqlite-local' القديمة بقت مستحيلة. المعنى المقصود: أي اتصال
+  // قاعدة بيانات حقيقي = PostgreSQL → mode:'insensitive' مسموح.
+  const insensitive = describeDbConnection() !== 'missing'
   return (v: string) => (insensitive ? { contains: v, mode: 'insensitive' as const } : { contains: v })
 })()
 

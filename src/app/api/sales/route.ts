@@ -6,6 +6,7 @@ import { requireCapability, featureErrorResponse } from '@/lib/features'
 import { deductStock } from '@/lib/deduct-stock'
 import { getTenantTimezone, localDateStrToUtcBounds, dateStrInTz } from '@/lib/tenantTime'
 import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
+import { withSql } from '@/lib/sql'
 import type { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -51,18 +52,21 @@ export async function GET(req: NextRequest) {
   // 🔒 RBAC: رؤية التكاليف
   const canViewProfits = session.role === 'ADMIN' || session.role === 'SUPER_ADMIN' || session.canViewProfits === true
 
-  return withDb(async () => {
+  // ⚡ 2026-10-17 (الخطوتان 1 + 4): GET بقى SQL مباشر (postgres.js) + رد مخفّف
+  // — كل فاتورة بترجع بالحقول اللي SalesHistoryView.tsx بتعرضها فعلًا فقط:
+  //   Sale: id, invoiceNo, total, paid, status, createdAt, refunded, paymentMethod
+  //   SaleItem: id, name, price, quantity, cost, unitLabel, unitQuantity, pieceLabel, returnedQty
+  //   Customer: id, name, phone
+  //   + userName من join بدل استعلام users منفصل
+  // بدون تغيير الحدود (limit) أو كسر كاش الأوفلاين — نفس { data, total, page,
+  // limit, totalPages } ومفتاح الكاش زي ما هو.
+  return withSql(async (sql) => {
     const { searchParams } = new URL(req.url)
     const from = searchParams.get('from')
     const to = searchParams.get('to')
 
-    // 🕐 ROOT FIX (2026-09-27): "from"/"to" used to be resolved with the
-    // *browser's* tzOffset — which meant two employees of the SAME shop,
-    // opening this page from different devices/countries, would see
-    // different sales for "today". A shop has ONE local day, so we now
-    // resolve it from the tenant's own stored timezone instead (see
-    // src/lib/tenantTime.ts) — consistent for everyone looking at this
-    // shop's data, and correct through DST changes.
+    // 🕐 ROOT FIX (2026-09-27): "today" is the tenant's own local day
+    // (Tenant.timezone) — consistent for everyone, DST-safe.
     const createdAt: { gte?: Date; lte?: Date } = {}
     if (from || to) {
       const tz = await getTenantTimezone(session.tenantId)
@@ -74,36 +78,69 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(200, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)))
     const skip  = (page - 1) * limit
 
-    const where = {
-      tenantId: session.tenantId,
-      ...(from || to ? { createdAt } : {}),
+    const rangeParts = [sql`"tenantId" = ${session.tenantId}`]
+    if (createdAt.gte) rangeParts.push(sql`AND "createdAt" >= ${createdAt.gte}`)
+    if (createdAt.lte) rangeParts.push(sql`AND "createdAt" <= ${createdAt.lte}`)
+    const rangeWhere = rangeParts
+
+    const [saleRows, cnt] = await Promise.all([
+      sql<any[]>`
+        SELECT s."id", s."invoiceNo", s."total", s."paid", s."status",
+               s."createdAt", s."refunded", s."paymentMethod",
+               (SELECT json_build_object('id', c."id", 'name', c."name", 'phone', c."phone")
+                FROM "Customer" c WHERE c."id" = s."customerId") AS customer,
+               (SELECT u."name" FROM "User" u WHERE u."id" = s."userId") AS "userName"
+        FROM "Sale" s
+        WHERE ${rangeWhere}
+        ORDER BY s."id" DESC
+        LIMIT ${limit} OFFSET ${skip}`,
+      sql<{ cnt: number }[]>`
+        SELECT COUNT(*)::int AS cnt FROM "Sale" WHERE ${rangeWhere}`,
+    ])
+    const total = Number(cnt[0]?.cnt ?? 0)
+
+    // عناصر الصفحة في استعلام واحد (بدل include لكل فاتورة)
+    const saleIds = saleRows.map((r) => r.id)
+    const itemRows = saleIds.length
+      ? await sql<any[]>`
+          SELECT "id", "saleId", "name", "price", "quantity", "cost",
+                 "unitLabel", "unitQuantity", "pieceLabel", "returnedQty"
+          FROM "SaleItem"
+          WHERE "saleId" IN ${sql(saleIds)}
+          ORDER BY "id" ASC`
+      : []
+    const itemsBySale = new Map<number, any[]>()
+    for (const it of itemRows) {
+      const list = itemsBySale.get(it.saleId) ?? []
+      list.push(it)
+      itemsBySale.set(it.saleId, list)
     }
 
-    const [sales, total] = await Promise.all([
-      db.sale.findMany({
-        where,
-        orderBy: { id: 'desc' },
-        include: { items: true, customer: true },
-        skip,
-        take: limit,
-      }),
-      db.sale.count({ where }),
-    ])
-
-    const userIds = [...new Set(sales.map((s) => s.userId).filter(Boolean))] as string[]
-    const users = userIds.length
-      ? await db.user.findMany({
-          where: { id: { in: userIds } },
-          select: { id: true, name: true },
-        })
-      : []
-    const userNameById = new Map(users.map((u) => [u.id, u.name]))
-    const result = sales.map((s) => ({
-      ...s,
+    const result = saleRows.map((s) => ({
+      id: s.id,
+      invoiceNo: s.invoiceNo,
+      total: s.total,
+      paid: s.paid,
+      status: s.status,
+      createdAt: s.createdAt,
+      refunded: s.refunded,
+      paymentMethod: s.paymentMethod,
+      userName: s.userName ?? null,
+      customer: s.customer ?? null,
       // 🔒 RBAC: نخفي تكلفة المنتجات لمن لا يملك صلاحية رؤية الأرباح
-      items: canViewProfits ? s.items : s.items.map(({ cost: _cost, ...item }) => ({ ...item, cost: null })),
-      userName: s.userId ? (userNameById.get(s.userId) ?? null) : null,
+      items: (itemsBySale.get(s.id) ?? []).map((it) => ({
+        id: it.id,
+        name: it.name,
+        price: it.price,
+        quantity: it.quantity,
+        cost: canViewProfits ? it.cost : null,
+        unitLabel: it.unitLabel ?? null,
+        unitQuantity: it.unitQuantity ?? null,
+        pieceLabel: it.pieceLabel ?? null,
+        returnedQty: it.returnedQty ?? 0,
+      })),
     }))
+
     return NextResponse.json({
       data: result,
       total,

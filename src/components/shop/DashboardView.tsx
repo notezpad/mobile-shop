@@ -635,7 +635,7 @@ export function DashboardView() {
                       fill="var(--primary)"
                       radius={[8, 8, 0, 0]}
                       maxBarSize={44}
-                      minPointSize={(v: number) => (v > 0 ? 4 : 0)}
+                      minPointSize={(v: number | null | undefined) => ((v ?? 0) > 0 ? 4 : 0)}
                     >
                       {showBarLabels && (
                         <LabelList

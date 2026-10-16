@@ -2,9 +2,11 @@
 // New hashes use Web Crypto PBKDF2 — zero CPU overhead on Workers.
 import { cookies, headers } from 'next/headers'
 import { SignJWT, jwtVerify } from 'jose'
-import { countableSubWhere } from '@/lib/subscription-status'
-import { db } from './db'
 import { isProductionRuntime, readEnv } from './env'
+// ⚡ 2026-10-17 (تقليل CPU): auth.ts ماعادش يستورد Prisma نهائيًا — التحقق من
+// الاشتراك بقى استعلام SQL واحد عبر عميل postgres.js الخفيف (شوف sql.ts).
+// ده بيشيل محرك Prisma wasm من bundle كل المسارات اللي بتستورد auth.
+import { getSql } from './sql'
 
 function getJwtSecret(): Uint8Array {
   const secret = readEnv('JWT_SECRET')
@@ -70,7 +72,9 @@ function toHex(buf: Uint8Array): string {
   return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-async function pbkdf2Derive(password: string, salt: Uint8Array): Promise<string> {
+// 🛡️ FIX (tsc): Uint8Array<ArrayBuffer> — WebCrypto بيطلب BufferSource
+// مدعوم بـ ArrayBuffer فعلي (TS 5.9 بيفصل بين ArrayBufferLike والعادي).
+async function pbkdf2Derive(password: string, salt: Uint8Array<ArrayBuffer>): Promise<string> {
   const enc = new TextEncoder()
   const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits'])
   const bits = await crypto.subtle.deriveBits(
@@ -174,12 +178,12 @@ export async function clearSession() {
 }
 
 /** Returns the active subscription for a tenant, or null if none. */
-export async function getActiveSubscription(tenantId: string) {
-  return db.subscription.findFirst({
-    where: { tenantId, status: 'active' },
-    orderBy: { endDate: 'desc' },
-  })
-}
+// 🛡️ REMOVED (2026-10-17): getActiveSubscription كان غير مستخدم في أي مكان
+// وكان الوحيد اللي فاصل Prisma في الملف ده.
+
+// الحالات اللي بتحسب كاشتراك فعلٍ (نفس countableSubWhere القديم —
+// 'pending'/'failed'/'cancelled' عمرها ما تدي وقت).
+const COUNTABLE_SUB_STATUSES = ['active', 'expired']
 
 /**
  * FIXED: requireActiveSubscription previously ran 2-3 sequential DB queries
@@ -191,6 +195,11 @@ export async function getActiveSubscription(tenantId: string) {
  *
  * This trades off: a subscription could take up to 5 min to "expire" after
  * the DB record changes, which is an acceptable trade-off for a B2B POS.
+ *
+ * ⚡ 2026-10-17 (تقليل CPU): الاستعلامين–تلاتة بتوع Prisma بقوا استعلام SQL
+ * *واحد* (Tenant LEFT JOIN LATERAL آخر اشتراك معدود) عبر postgres.js الخفيف —
+ * نفس المنطق والإجراءات بالظبط، بس مرة واحدة على الشبكة وبجزء ضئيل من CPU.
+ * مسار التحديث التلقائي المنتهي (نادر) فضل تحديثين SQL عادي.
  */
 export async function requireActiveSubscription(tenantId: string) {
   const cookieStore = await cookies()
@@ -199,29 +208,43 @@ export async function requireActiveSubscription(tenantId: string) {
   const subOk = cookieStore.get('sub_ok')?.value
   if (subOk === tenantId) return null
 
-  // Slow path: validate subscription from DB
-  const tenant = await db.tenant.findUnique({
-    where: { id: tenantId },
-    select: { id: true, status: true },
-  })
-  if (!tenant) throw new Error('TENANT_NOT_FOUND')
+  const sql = getSql()
+  type Row = {
+    tenant_status: string | null
+    sub_id: number | null
+    sub_status: string | null
+    start_date: Date | null
+    end_date: Date | null
+  }
+  const rows = await sql<Row[]>`
+    SELECT t."status" AS tenant_status,
+           s."id"        AS sub_id,
+           s."status"    AS sub_status,
+           s."startDate" AS start_date,
+           s."endDate"   AS end_date
+    FROM "Tenant" t
+    LEFT JOIN LATERAL (
+      SELECT s2."id", s2."status", s2."startDate", s2."endDate"
+      FROM "Subscription" s2
+      WHERE s2."tenantId" = t."id"
+        AND s2."status" IN ${sql(COUNTABLE_SUB_STATUSES)}
+      ORDER BY s2."endDate" DESC
+      LIMIT 1
+    ) s ON true
+    WHERE t."id" = ${tenantId}
+    LIMIT 1`
+  const row = rows[0]
+  if (!row || row.tenant_status == null) throw new Error('TENANT_NOT_FOUND')
 
   if (
-    tenant.status === 'suspended' ||
-    tenant.status === 'cancelled'
+    row.tenant_status === 'suspended' ||
+    row.tenant_status === 'cancelled'
   ) {
     throw new Error('TENANT_SUSPENDED')
   }
 
-  // 🛡️ 2026-09-27: ONLY count real subscriptions. A 'pending' row created
-  // when the user merely opened the Paymob checkout must never grant access.
-  const latestSub = await db.subscription.findFirst({
-    where: { tenantId, ...countableSubWhere },
-    orderBy: { endDate: 'desc' },
-  })
-
-  if (!latestSub) {
-    if (tenant.status !== 'active') throw new Error('SUBSCRIPTION_EXPIRED')
+  if (!row.sub_id) {
+    if (row.tenant_status !== 'active') throw new Error('SUBSCRIPTION_EXPIRED')
     // Allow if tenant marked active but no subscription yet (legacy)
     // Set sub_ok so we don't re-query for the next 5 minutes
     cookieStore.set('sub_ok', tenantId, {
@@ -234,26 +257,27 @@ export async function requireActiveSubscription(tenantId: string) {
     return null
   }
 
+  const latestSub = {
+    id: row.sub_id,
+    status: row.sub_status,
+    startDate: row.start_date,
+    endDate: row.end_date,
+  }
+
   const now = new Date()
-  if (latestSub.endDate < now && latestSub.status === 'active') {
-    // Auto-expire — run both updates in parallel
+  if (latestSub.endDate && latestSub.endDate < now && latestSub.status === 'active') {
+    // Auto-expire — run both updates (نفس سلوك Promise.all القديم)
     await Promise.all([
-      db.subscription.update({
-        where: { id: latestSub.id },
-        data: { status: 'expired' },
-      }),
-      db.tenant.update({
-        where: { id: tenantId },
-        data: { status: 'expired' },
-      }),
+      sql`UPDATE "Subscription" SET "status" = 'expired' WHERE "id" = ${latestSub.id}`,
+      sql`UPDATE "Tenant" SET "status" = 'expired' WHERE "id" = ${tenantId}`,
     ])
     cookieStore.delete('sub_ok')
     throw new Error('SUBSCRIPTION_EXPIRED')
   }
-  if (latestSub.endDate < now) {
+  if (latestSub.endDate && latestSub.endDate < now) {
     throw new Error('SUBSCRIPTION_EXPIRED')
   }
-  if (tenant.status === 'expired') {
+  if (row.tenant_status === 'expired') {
     throw new Error('SUBSCRIPTION_EXPIRED')
   }
 
@@ -415,4 +439,6 @@ export async function getImpersonatedTenantId(): Promise<string | null> {
   return cookieStore.get('impersonate_tenant')?.value ?? null
 }
 
-export { PLATFORM_TENANT_ID, db }
+// 🛡️ 2026-10-17: الـ re-export بتاع db اتشال — كان بيرجّع Prisma لكل مسار
+// بيستورد auth. مين يحتاجه يستورده من '@/lib/db' مباشرة.
+export { PLATFORM_TENANT_ID }

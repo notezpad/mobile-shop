@@ -16,10 +16,13 @@ async function __POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> 
   await db.$transaction(async (tx) => {
     for (const it of st.items) {
       if (it.diff !== 0) {
+        // 🛡️ FIX (tsc): productId Int? — صفوف بقيت بعد حذف المنتج بتتسكب
+        // (مفيش مخزون نعدّله لمنتج اتمسح).
+        if (it.productId == null) continue
         await tx.product.update({ where: { id: it.productId }, data: { quantity: it.countedQty } })
         await tx.stockMovement.create({
           data: {
-            tenantId: s.tenantId, branchId: st.branchId, productId: it.productId,
+            tenantId: s.tenantId, branchId: st.branchId ?? undefined, productId: it.productId,
             type: 'stocktake', quantity: it.diff, refType: 'stocktake', refId: st.id,
             note: 'تسوية جرد', userId: s.userId,
           },

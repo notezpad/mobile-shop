@@ -1,6 +1,7 @@
 import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { db, PLATFORM_TENANT_ID, hashPassword } from '@/lib/auth'
+import { PLATFORM_TENANT_ID, hashPassword } from '@/lib/auth'
+import { db } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 

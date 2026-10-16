@@ -5,13 +5,15 @@
  * `plan-constants.ts` (CLIENT-SAFE — no db import). This file re-exports
  * them so existing API routes keep working with the same import path.
  *
- * DO NOT import this file from a client component — it pulls in Prisma
- * (`db`), `pg` (Postgres driver), and Node's `dns` module, all of which
- * break the browser bundle. Use `@/lib/plan-constants` for client code.
+ * DO NOT import this file from a client component — it pulls in the server
+ * SQL client (`postgres.js`) which breaks the browser bundle. Use
+ * `@/lib/plan-constants` for client code.
  */
 
-import { db } from './db'
 import type { Session } from './auth'
+// ⚡ 2026-10-17 (تقليل CPU): features.ts ماعادش يستورد Prisma — خطة المحل
+// بترجع باستعلام SQL واحد (Subscription JOIN Plan) عبر postgres.js.
+import { getSql } from './sql'
 
 // 🛡️ Re-export client-safe constants + types so existing server imports
 // (`import { CRITICAL_MODULES, ALL_MODULES, requireModule } from '@/lib/features'`)
@@ -104,12 +106,26 @@ export async function getPlanContext(tenantId: string): Promise<PlanContext> {
 }
 
 async function loadPlanContext(tenantId: string): Promise<PlanContext> {
-  const sub = await db.subscription.findFirst({
-    where: { tenantId, status: 'active' },
-    orderBy: { endDate: 'desc' },
-    include: { plan: true },
-  })
-  const plan = sub?.plan
+  // ⚡ استعلام واحد بدل findFirst + include plan (مرة واحدة على الشبكة)
+  const sql = getSql()
+  type Row = {
+    code: string | null
+    businessType: string | null
+    enabledModules: string | null
+    capabilities: string | null
+    maxUsers: number | null
+    maxProducts: number | null
+    maxBranches: number | null
+  }
+  const rows = await sql<Row[]>`
+    SELECT p."code", p."businessType", p."enabledModules", p."capabilities",
+           p."maxUsers", p."maxProducts", p."maxBranches"
+    FROM "Subscription" s
+    JOIN "Plan" p ON p."id" = s."planId"
+    WHERE s."tenantId" = ${tenantId} AND s."status" = 'active'
+    ORDER BY s."endDate" DESC
+    LIMIT 1`
+  const plan = rows[0] ?? null
   const parsedModules = safeParseArray(plan?.enabledModules ?? null)
   // 🛡️ Force-include the CRITICAL_MODULES in EVERY plan response
   // (just settings + users — everything else is plan-gated)
@@ -224,15 +240,21 @@ export async function assertWithinPlanLimit(
   // Super admin bypasses all plan gating.
   if (session.role === 'SUPER_ADMIN') return
   const ctx = await getPlanContext(session.tenantId)
-  const limit = ctx.limits[kind]
+  // 🛡️ FIX (tsc + سلوك مقصود): كان `ctx.limits[kind]` — مفاتيح الـ limits هي
+  // maxUsers/maxProducts/maxBranches بينما kind هو users/products/branches،
+  // فكانت النتيجة undefined دايمًا → حدود الباقة كانت بتتتجاهل بصمت.
+  const limitKey: 'maxUsers' | 'maxProducts' | 'maxBranches' =
+    kind === 'users' ? 'maxUsers' : kind === 'products' ? 'maxProducts' : 'maxBranches'
+  const limit = ctx.limits[limitKey]
   if (!limit || limit >= UNLIMITED_PLAN_LIMIT) return
 
-  const count =
-    kind === 'users'
-      ? await db.user.count({ where: { tenantId: session.tenantId } })
-      : kind === 'products'
-        ? await db.product.count({ where: { tenantId: session.tenantId } })
-        : await db.branch.count({ where: { tenantId: session.tenantId } })
+  // ⚡ العدّ بقى SQL خفيف بدل Prisma count (sql() هنا = مُعرّف آمن من whitelist ثابت)
+  const sql = getSql()
+  const tid = session.tenantId
+  const table = kind === 'users' ? 'User' : kind === 'products' ? 'Product' : 'Branch'
+  const res = await sql<{ cnt: number }[]>`
+    SELECT COUNT(*)::int AS cnt FROM ${sql(table)} WHERE "tenantId" = ${tid}`
+  const count = Number(res[0]?.cnt ?? 0)
 
   if (count >= limit) {
     throw new FeatureError(

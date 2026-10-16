@@ -39,7 +39,9 @@ export function edgeCacheAvailable(): boolean {
  * بنمرر الـ searchParams مرتبة كـ string جاهزة (rawQuery) عشان المفتاح
  * يكون حتمي (deterministic) — نفس الطلب = نفس المفتاح دايماً.
  */
-function buildKey(pathname: string, rawQuery: string, tenantId: number | string, v: string): Request {
+// 🛡️ FIX (tsc): المُنادي بيمرر إصدارات number أحيانًا (2/3/4) وأحيانًا string ('4n')
+// — الواقع أن المفتاح نص في الحالتين، فالنوع موحّد الآن.
+function buildKey(pathname: string, rawQuery: string, tenantId: number | string, v: number | string): Request {
   const q = rawQuery ? `?${rawQuery}` : ''
   return new Request(`https://${CACHE_HOST}${pathname}${q}#tenant=${tenantId}&v=${v}`)
 }
@@ -49,7 +51,7 @@ export async function matchEdgeCache(
   pathname: string,
   rawQuery: string,
   tenantId: number | string,
-  v = '1'
+  v: number | string = '1'
 ): Promise<Response | null> {
   if (!edgeCacheAvailable()) return null
   try {
@@ -79,7 +81,7 @@ export async function putEdgeCache(
   rawQuery: string,
   tenantId: number | string,
   ttlSeconds: number,
-  v = '1'
+  v: number | string = '1'
 ): Promise<void> {
   if (!edgeCacheAvailable()) return
   if (res.status !== 200) return
@@ -100,7 +102,7 @@ export async function putEdgeCache(
 export async function purgeEdgeCache(
   entries: Array<{ pathname: string; rawQuery?: string }>,
   tenantId: number | string,
-  v = '1'
+  v: number | string = '1'
 ): Promise<void> {
   if (!edgeCacheAvailable()) return
   try {
@@ -166,7 +168,7 @@ export const PURGE_KEYS = {
 export async function purgeCatalogCaches(
   tenantId: number | string,
   branchId: number | null | undefined,
-  v = '3'
+  v: number | string = '3'
 ): Promise<void> {
   await purgeEdgeCache(
     [

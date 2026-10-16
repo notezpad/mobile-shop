@@ -24,6 +24,10 @@ async function __POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> 
 
   // Re-validate availability at commit time
   for (const it of t.items) {
+    // 🛡️ FIX (tsc): productId Int? — صف تحويل لمنتج اتمسح = مفيش إيه يتتنفذ له
+    if (it.productId == null) {
+      return NextResponse.json({ error: 'منتج غير صالح' }, { status: 400 })
+    }
     const p = await db.product.findUnique({ where: { id: it.productId } })
     if (!p) return NextResponse.json({ error: 'منتج غير صالح' }, { status: 400 })
     if (p.quantity < it.quantity) {
@@ -33,6 +37,7 @@ async function __POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> 
 
   await db.$transaction(async (tx) => {
     for (const it of t.items) {
+      if (it.productId == null) throw new Error('منتج غير صالح') // 🛡️ FIX (tsc): productId Int?
       const srcProduct = await tx.product.findUnique({ where: { id: it.productId } })
       if (!srcProduct) throw new Error('منتج غير صالح')
       // decrement source

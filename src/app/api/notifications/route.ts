@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, withDb } from '@/lib/db'
 import { requireAuthIgnoreSubscription, authErrorResponse } from '@/lib/auth'
+import { withSql } from '@/lib/sql'
 import {
   checkLowStockAndNotify,
   checkExpiringSubscriptions,
@@ -15,26 +15,18 @@ export const dynamic = 'force-dynamic'
  * Returns unread + recent (last 50) notifications for the current user's tenant.
  * Query: ?unread=true → only unread, ?debug=true → verbose server logs
  *
- * 🔔 2026-09-14: We run the proactive checks (low stock + expiring subs) before
- * returning the list. The checks are now rate-limited (5 min per tenant) + dedup
- * is strengthened (24h window) so they won't spam.
+ * ⚡ 2026-10-17 (تقليل CPU — الخطوة 1): كل الاستعلامات (الفحوصات + التنظيف +
+ * القائمة + العدّ) بقت SQL مباشر عبر postgres.js الخفيف بدل Prisma wasm —
+ * نفس الرد بنفس الشكل بالظبط. الراوتر ده بيتسحب كل 3 دقايق من كل تاب مفتوح،
+ * فكان من أثقل مصادر الـ CPU المستمر.
  *
- * 🛡️ 2026-09-15 (v3): Major fix for the ~500x duplicate spam.
- *   - `cleanupDuplicateNotifications()` now runs on EVERY poll but is cheap
- *     (single findMany + a deleteMany only if duplicates exist).
- *   - Removed the unreliable `globalThis.__notifCleanupDone` flag — on
- *     Cloudflare Workers, each request gets a fresh isolate so the flag was
- *     always reset, and the cleanup was running anyway. Making it explicit
- *     + cheap is the right call.
- *   - The v3 helpers in `lib/notifications.ts` fix the actual root cause:
- *     the dedup check now searches by `message contains product_name`
- *     (was previously searching `title contains product_name`, but the
- *     title was a constant string and never contained the product name,
- *     so every poll inserted a new row).
+ * 🔔 2026-09-14: We run the proactive checks (low stock + expiring subs) before
+ * returning the list. The checks are rate-limited (5 min per tenant, cookie
+ * cooldown) + dedup is strengthened (24h window) so they won't spam.
  */
 
 export async function GET(req: NextRequest) {
-  return withDb(async () => {
+  return withSql(async (sql) => {
     let session
     try {
       // 🛡️ 2026-09-21: Use requireAuthIgnoreSubscription so the notification
@@ -51,16 +43,8 @@ export async function GET(req: NextRequest) {
     const onlyUnread = url.searchParams.get('unread') === 'true'
     const debug = url.searchParams.get('debug') === 'true'
 
-    // 🛡️ REAL FIX for the rate limiter: the in-memory `shouldRunCheck` map in
-    // lib/notifications.ts only works if the same isolate handles consecutive
-    // requests, which Cloudflare Workers never guarantees — so the promised
-    // "runs at most once every 5 minutes" was not actually true; it could run
-    // on every single poll (every 3 min per open tab, times however many
-    // staff have the app open). The checks themselves aren't CPU-heavy
-    // (small, capped queries), so this wasn't the cause of Error 1102 — but
-    // it was still firing far more DB round-trips than intended. A cookie
-    // survives across isolates (it round-trips through the browser), so it's
-    // an actual, reliable cooldown instead of one that silently does nothing.
+    // 🛡️ Cookie-based cooldown — the in-memory limiter alone can't be trusted
+    // across Cloudflare Workers isolates (كل isolate ممكن يكون جديد).
     const COOLDOWN_MS = 5 * 60 * 1000
     const lastCheckedCookie = req.cookies.get('notif_checked_at')?.value
     const lastChecked = lastCheckedCookie ? Number(lastCheckedCookie) : 0
@@ -70,21 +54,18 @@ export async function GET(req: NextRequest) {
     if (shouldRunChecks) {
       try {
         await Promise.allSettled([
-          checkLowStockAndNotify(db, session.tenantId),
-          checkExpiringSubscriptions(db, session.tenantId),
+          checkLowStockAndNotify(sql, session.tenantId),
+          checkExpiringSubscriptions(sql, session.tenantId),
         ])
       } catch (e: any) {
         if (debug) console.error('[notifications GET] checks failed:', e?.message ?? e)
       }
     }
 
-    // 🧹 2026-09-15 (v3): Run cleanup on every poll.
-    // This is now cheap (single findMany + a deleteMany only if duplicates
-    // exist) and is the right call given that serverless isolates don't
-    // preserve `globalThis` flags between requests. The cleanup also
-    // handles any legacy duplicates from the v2 broken dedup.
+    // 🧹 Cleanup duplicates on every poll — أصبحت عبارة DELETE واحدة رخيصة
+    // (ROW_NUMBER) بدل تحميل 500 صف وتجميعهم في الذاكرة.
     try {
-      const deleted = await cleanupDuplicateNotifications(db, session.tenantId)
+      const deleted = await cleanupDuplicateNotifications(sql, session.tenantId)
       if (deleted > 0 && debug) {
         console.log(`[notifications GET] cleaned up ${deleted} duplicate notifications`)
       }
@@ -101,18 +82,22 @@ export async function GET(req: NextRequest) {
     let dbError: string | undefined
 
     try {
-      const where: any = { tenantId: session.tenantId }
-      if (onlyUnread) where.isRead = false
+      notifications = onlyUnread
+        ? await sql`
+            SELECT * FROM "Notification"
+            WHERE "tenantId" = ${session.tenantId} AND "isRead" = false
+            ORDER BY "createdAt" DESC
+            LIMIT 50`
+        : await sql`
+            SELECT * FROM "Notification"
+            WHERE "tenantId" = ${session.tenantId}
+            ORDER BY "createdAt" DESC
+            LIMIT 50`
 
-      notifications = await db.notification.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      })
-
-      unreadCount = await db.notification.count({
-        where: { tenantId: session.tenantId, isRead: false },
-      })
+      const cnt = await sql<{ cnt: number }[]>`
+        SELECT COUNT(*)::int AS cnt FROM "Notification"
+        WHERE "tenantId" = ${session.tenantId} AND "isRead" = false`
+      unreadCount = Number(cnt[0]?.cnt ?? 0)
     } catch (e: any) {
       dbError = e?.message ?? String(e)
       // Detect "table does not exist" errors and surface a friendly message
@@ -189,19 +174,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'العنوان والرسالة مطلوبان' }, { status: 400 })
   }
 
-  try {
-    const notif = await db.notification.create({
-      data: { tenantId: session.tenantId, userId, type, title, message, link },
-    })
-    return NextResponse.json({ ok: true, notification: notif })
-  } catch (e: any) {
-    console.error('[notifications POST] create failed:', e?.message ?? e)
-    return NextResponse.json(
-      {
-        error: 'فشل إنشاء الإشعار — تأكد من تطبيق migration الإشعارات على قاعدة البيانات',
-        detail: e?.message ?? String(e),
-      },
-      { status: 500 },
-    )
-  }
+  return withSql(async (sql) => {
+    try {
+      const rows = await sql`
+        INSERT INTO "Notification" ("tenantId", "userId", "type", "title", "message", "link")
+        VALUES (${session.tenantId}, ${userId}, ${type}, ${title}, ${message}, ${link})
+        RETURNING *`
+      return NextResponse.json({ ok: true, notification: rows[0] })
+    } catch (e: any) {
+      console.error('[notifications POST] create failed:', e?.message ?? e)
+      return NextResponse.json(
+        {
+          error: 'فشل إنشاء الإشعار — تأكد من تطبيق migration الإشعارات على قاعدة البيانات',
+          detail: e?.message ?? String(e),
+        },
+        { status: 500 },
+      )
+    }
+  })
 }

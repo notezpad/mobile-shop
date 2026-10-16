@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { withSql } from '@/lib/sql'
 import { checkLowStockAndNotify, checkExpiringSubscriptions } from '@/lib/notifications'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +12,8 @@ export const dynamic = 'force-dynamic'
  * want to force-run the checks without waiting for the 30s poll or a
  * dashboard refresh. Useful for debugging ("why don't I see notifications?").
  *
+ * ⚡ 2026-10-17: بقى SQL مباشر (postgres.js) — نفس الرد بالظبط.
+ *
  * Response: {
  *   ok: true,
  *   lowStock: { triggered: true/false, error?: string },
@@ -21,7 +23,7 @@ export const dynamic = 'force-dynamic'
  * }
  */
 export async function POST() {
-  return withDb(async () => {
+  return withSql(async (sql) => {
     let session
     try {
       session = await requireAuth()
@@ -47,28 +49,28 @@ export async function POST() {
     }
 
     try {
-      await checkLowStockAndNotify(db, session.tenantId)
+      await checkLowStockAndNotify(sql, session.tenantId)
       results.lowStock.triggered = true
     } catch (e: any) {
       results.lowStock.error = e?.message ?? String(e)
     }
 
     try {
-      await checkExpiringSubscriptions(db, session.tenantId)
+      await checkExpiringSubscriptions(sql, session.tenantId)
       results.expiring.triggered = true
     } catch (e: any) {
       results.expiring.error = e?.message ?? String(e)
     }
 
     try {
-      const unreadCount = await db.notification.count({
-        where: { tenantId: session.tenantId, isRead: false },
-      })
-      const totalCount = await db.notification.count({
-        where: { tenantId: session.tenantId },
-      })
-      results.unread = unreadCount
-      results.total = totalCount
+      const cnt = await sql<{ unread: number; total: number }[]>`
+        SELECT
+          COUNT(*) FILTER (WHERE "isRead" = false)::int AS unread,
+          COUNT(*)::int AS total
+        FROM "Notification"
+        WHERE "tenantId" = ${session.tenantId}`
+      results.unread = Number(cnt[0]?.unread ?? 0)
+      results.total = Number(cnt[0]?.total ?? 0)
     } catch (e: any) {
       // likely: Notification table doesn't exist
       return NextResponse.json(

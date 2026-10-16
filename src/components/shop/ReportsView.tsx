@@ -409,10 +409,10 @@ export function ReportsView() {
                     <Panel title="جسر الأرباح" hint={`هامش المبيعات + الصيانة (${num(r.maintenanceCount)} أمر) − المصروفات`} className="lg:col-span-2">
                       <Waterfall
                         steps={[
-                          { label: 'هامش المبيعات', v: r.totalProfit },
-                          { label: 'إيراد الصيانة', v: r.maintenanceRevenue },
-                          { label: 'المصروفات', v: -r.totalExpenses },
-                          { label: 'الصافي', v: r.netProfit, total: true },
+                          { label: 'هامش المبيعات', v: r.totalProfit ?? 0 },
+                          { label: 'إيراد الصيانة', v: r.maintenanceRevenue ?? 0 },
+                          { label: 'المصروفات', v: -(r.totalExpenses ?? 0) },
+                          { label: 'الصافي', v: r.netProfit ?? 0, total: true },
                         ]}
                       />
                     </Panel>
@@ -1158,7 +1158,7 @@ function Spark({ v }: { v: number[] }) {
   const rng = max - min || 1
   const pts = v.map((x, i) => `${(i / (v.length - 1)) * 100},${26 - ((x - min) / rng) * 24}`).join(' ')
   return (
-    <svg viewBox="0 0 100 28" preserveAspectRatio="none" dir="ltr" className="mt-3 h-8 w-full">
+    <svg viewBox="0 0 100 28" preserveAspectRatio="none" className="mt-3 h-8 w-full">
       <polyline points={pts} fill="none" stroke={V} strokeWidth="2" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
     </svg>
   )
@@ -1513,8 +1513,8 @@ function buildReportHtml(
 
     <div class="kpi-grid">
       ${kpi('إجمالي المبيعات', fmtMoney(r.totalSales) + ' ')}
-      ${canProfit ? kpi('صافي الربح', fmtMoney(r.netProfit) + ' ', true) : kpi('رصيد الخزنة', fmtMoney(r.cashBalance) + ' ', true)}
-      ${kpi('عدد الفواتير', formatNumber(r.salesCount))}
+      ${canProfit ? kpi('صافي الربح', fmtMoney(r.netProfit ?? 0) + ' ', true) : kpi('رصيد الخزنة', fmtMoney(r.cashBalance) + ' ', true)}
+      ${kpi('عدد الفواتير', formatNumber(r.salesCount ?? 0))}
       ${kpi('متوسط الفاتورة', fmtMoney(r.avgOrderValue) + ' ')}
       ${kpi('إيراد الصيانة', fmtMoney(r.maintenanceRevenue) + ' ')}
       ${kpi('إجمالي الالمعاملات المالية', fmtMoney(r.totalExpenses) + ' ')}
@@ -1553,10 +1553,10 @@ function buildReportHtml(
       'الملخص المالي',
       `<div class="two-col">
         <div class="formula-box">
-          ${canProfit ? `<div class="formula-row"><span>هامش ربح المبيعات</span><span>${fmtMoney(r.totalProfit)} </span></div>` : ''}
-          <div class="formula-row"><span>+ إيراد الصيانة</span><span>${fmtMoney(r.maintenanceRevenue)} </span></div>
-          <div class="formula-row"><span>− الالمعاملات المالية</span><span style="color:${BRAND.red}">${fmtMoney(r.totalExpenses)} </span></div>
-          ${canProfit ? `<div class="formula-row total"><span>= صافي الربح</span><span>${fmtMoney(r.netProfit)} </span></div>` : ''}
+          ${canProfit ? `<div class="formula-row"><span>هامش ربح المبيعات</span><span>${fmtMoney(r.totalProfit ?? 0)} </span></div>` : ''}
+          <div class="formula-row"><span>+ إيراد الصيانة</span><span>${fmtMoney(r.maintenanceRevenue ?? 0)} </span></div>
+          <div class="formula-row"><span>− الالمعاملات المالية</span><span style="color:${BRAND.red}">${fmtMoney(r.totalExpenses ?? 0)} </span></div>
+          ${canProfit ? `<div class="formula-row total"><span>= صافي الربح</span><span>${fmtMoney(r.netProfit ?? 0)} </span></div>` : ''}
         </div>
         <div class="formula-box">
           <div class="formula-row"><span>إيداعات مالية</span><span>${fmtMoney(r.financeIn)} </span></div>

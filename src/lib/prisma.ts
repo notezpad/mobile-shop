@@ -1,7 +1,8 @@
-import { PrismaClient } from "./prisma-wasm";
+import { PrismaClient, PrismaClientType } from "./prisma-wasm";
 
 const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
+  // 🛡️ FIX (tsc): النوع الصريح للعميل (PrismaClient في wasm مش class type)
+  prisma: PrismaClientType | undefined;
 };
 
 export const prisma =

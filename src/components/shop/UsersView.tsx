@@ -309,12 +309,10 @@ export function UsersView() {
           isAdminRole(u.role) ? 'المدير' : 'الموظف',
           u.active ? 'نشط' : 'موقوف',
           u.branch?.name ?? 'كل الفروع',
-          <span dir="ltr" style={{ unicodeBidi: 'isolate' }}>{formatArabicDateTime(u.createdAt)}</span>,
-          u.lastLoginAt ? (
-            <span dir="ltr" style={{ unicodeBidi: 'isolate' }}>{formatArabicDateTime(u.lastLoginAt)}</span>
-          ) : (
-            'لم يسجل دخول بعد'
-          ),
+          // 🛡️ FIX (tsc): تصدير Excel يستقبل نصوص فقط — كان JSX Element
+          // (يتحوّل [object Object] في الملف) فبناخد النص مباشرة.
+          formatArabicDateTime(u.createdAt),
+          u.lastLoginAt ? formatArabicDateTime(u.lastLoginAt) : 'لم يسجل دخول بعد',
         ]),
         kpis: [
           { label: 'إجمالي المستخدمين', value: String(users.length) },

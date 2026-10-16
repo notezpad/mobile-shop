@@ -99,6 +99,7 @@ async function __POST(req: NextRequest) {
     })
     if (mode === 'pending') return t // just save the draft; no stock movement yet
     for (const it of t.items) {
+      if (it.productId == null) throw new Error('منتج غير صالح') // 🛡️ FIX (tsc): productId Int?
       const srcProduct = await tx.product.findUnique({ where: { id: it.productId } })
       if (!srcProduct || srcProduct.tenantId !== s.tenantId) throw new Error('منتج غير صالح')
       if (it.quantity <= 0) throw new Error('كمية غير صالحة')

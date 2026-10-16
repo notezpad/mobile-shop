@@ -2,36 +2,27 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
+import { withSql } from '@/lib/sql'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * 🚀 2026-09-13: Wrapped in `withDb` — on Cloudflare Workers reuses ONE
- * PrismaClient per request instead of creating a new TCP+TLS+auth connection
- * per query. GET makes 2 parallel queries; without `withDb` each was 200-500ms
- * of pure connection overhead.
+ * ⚡ 2026-10-17 (تقليل CPU — الخطوة 1): GET بقى SQL مباشر عبر postgres.js —
+ * كان بيشغّل استعلامين Prisma (قائمة + groupBy على كل المبيعات) + إنشاء
+ * PrismaClient في كل طلب، وكان من أوضح اللي بتقع معاه "Exceeded CPU Limit"
+ * في wrangler tail. نفس الرد بنفس الشكل بالظبط ( bare array أو {data,...}
+ * مع _count.sales وtotalPurchases وlastSaleAt).
  *
- * 🛡️ 2026-09-27: This list had no `take` limit at all — every request
- * fetched the tenant's ENTIRE customer table. Fine with a handful of rows,
- * but the same unbounded-scan shape as the Error 1102 fix elsewhere,
- * just waiting to happen as a shop's customer base grows.
+ * 🛡️ 2026-09-27: SAFETY_CAP بيوازن "كل العملاء" المطلوب للأوفلاين/الإكسل
+ * مع عدم فتح باب مسح غير محدود.
  *
- * Every current caller (CustomersView's table, POS autocomplete, offline
- * prewarm) still calls this route with NO `page` param and gets the same
- * bare array as before — CustomersView's stats cards and Excel export need
- * the whole tenant's customers in memory to stay correct, so behavior is
- * unchanged there. What changed is that "all of them" is now bounded by
- * SAFETY_CAP instead of a truly unbounded query.
- *
- * Real, opt-in pagination is available for whoever wants it: pass `page`
- * (and optionally `limit`) and the response becomes { data, total, page,
- * limit, totalPages } instead of a bare array — mirroring /api/products.
- * No current page uses this yet.
+ * 🛡️ 2026-09-30 (C6/M12): الفواتير المرتجعة بالكامل ماتتحسبش مشتريات
+ * (status <> 'مرتجعة') — نفس الشرط في SQL.
  */
 const SAFETY_CAP = 3000
 
 export async function GET(req: NextRequest) {
-  return withDb(async () => {
+  return withSql(async (sql) => {
     let session
     try {
       session = await requireAuth()
@@ -43,23 +34,11 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const search = searchParams.get('search')?.trim() || ''
 
-    // ⚡ EDGE CACHE (2026-10-06) — إصلاح Error 1102: القائمة الافتراضية (بدون
-    // بحث/صفحات) بتجيب حتى 3000 عميل + groupBy على كل المبيعات — ده الطلب
-    // اللي بيقع في كل تصفح سريع (شفناه في wrangler tail بـ Exceeded CPU Limit).
-    // كاش حافة 20 ثانية بمفتاح per-tenant — والجديد فوري لأن أي إضافة
-    // عميل/فاتورة/سداد بتعمل purge للمفتاح فوراً.
+    // ⚡ EDGE CACHE (2026-10-06) — نفس مفاتيح الكاش القديمة بدون تغيير
     const cacheable = !search && !searchParams.has('page') && searchParams.keys().next().done === true
     if (cacheable) {
       const cached = await matchEdgeCache('/api/customers', '', session.tenantId, 2)
       if (cached) return cached
-    }
-
-    const where: any = { tenantId: session.tenantId }
-    if (search) {
-      where.OR = [
-        { name: { contains: search } },
-        { phone: { contains: search } },
-      ]
     }
 
     const paginated = searchParams.has('page')
@@ -69,38 +48,53 @@ export async function GET(req: NextRequest) {
     const page = paginated ? Math.max(1, parseInt(searchParams.get('page') ?? '1', 10)) : 1
     const skip = paginated ? (page - 1) * limit : 0
 
-    const [customers, total, salesAgg] = await Promise.all([
-      db.customer.findMany({
-        where,
-        orderBy: { id: 'desc' },
-        include: { _count: { select: { sales: true } } },
-        skip,
-        take: limit,
-      }),
-      paginated ? db.customer.count({ where }) : Promise.resolve(null),
-      db.sale.groupBy({
-        by: ['customerId'],
-        // 🛡️ 2026-09-30 (C6/M12): الفواتير المرتجعة بالكامل ماتتحسبش مشتريات.
-        where: {
-          tenantId: session.tenantId,
-          customerId: { not: null },
-          status: { not: 'مرتجعة' },
-        },
-        _sum: { total: true },
-        _max: { createdAt: true },
-      }),
-    ])
+    // ملاحظة: بحث Prisma القديم كان contains **حساس لحالة الحروف** (بدون
+    // mode:'insensitive') — LIKE في Postgres بنفس السلوك حرفيًا.
+    const searchPattern = search ? `%${search}%` : null
+
+    const rows = await sql<any[]>`
+      SELECT c.*,
+             (SELECT COUNT(*)::int FROM "Sale" s WHERE s."customerId" = c."id") AS "__salesCount"
+      FROM "Customer" c
+      WHERE c."tenantId" = ${session.tenantId}
+        ${searchPattern ? sql`AND (c."name" LIKE ${searchPattern} OR c."phone" LIKE ${searchPattern})` : sql``}
+      ORDER BY c."id" DESC
+      LIMIT ${limit} OFFSET ${skip}`
+
+    // إجمالي عدد العملاء (paginated فقط — زي القديم بالظبط)
+    let total: number | null = null
+    if (paginated) {
+      const cnt = await sql<{ cnt: number }[]>`
+        SELECT COUNT(*)::int AS cnt FROM "Customer"
+        WHERE "tenantId" = ${session.tenantId}
+          ${searchPattern ? sql`AND ("name" LIKE ${searchPattern} OR "phone" LIKE ${searchPattern})` : sql``}`
+      total = Number(cnt[0]?.cnt ?? 0)
+    }
+
+    // 🛡️ C6/M12: تجميع المشتريات + آخر فاتورة لكل عميل (بدون المرتجعة)
+    type AggRow = { customerId: number; total: number; lastSaleAt: Date | null }
+    const salesAgg = await sql<AggRow[]>`
+      SELECT "customerId",
+             COALESCE(SUM("total"), 0)::float8 AS total,
+             MAX("createdAt") AS "lastSaleAt"
+      FROM "Sale"
+      WHERE "tenantId" = ${session.tenantId}
+        AND "customerId" IS NOT NULL
+        AND "status" <> 'مرتجعة'
+      GROUP BY "customerId"`
     const aggByCustomer = new Map<number, { totalPurchases: number; lastSaleAt: Date | null }>(
-      salesAgg.map((a) => [
-        a.customerId as number,
-        { totalPurchases: a._sum.total ?? 0, lastSaleAt: a._max.createdAt },
-      ])
+      salesAgg.map((a) => [Number(a.customerId), { totalPurchases: a.total ?? 0, lastSaleAt: a.lastSaleAt }])
     )
-    const result = customers.map((c) => ({
-      ...c,
-      totalPurchases: aggByCustomer.get(c.id)?.totalPurchases ?? 0,
-      lastSaleAt: aggByCustomer.get(c.id)?.lastSaleAt ?? null,
-    }))
+
+    const result = rows.map((c) => {
+      const { __salesCount, ...rest } = c
+      return {
+        ...rest,
+        _count: { sales: Number(__salesCount ?? 0) },
+        totalPurchases: aggByCustomer.get(Number(c.id))?.totalPurchases ?? 0,
+        lastSaleAt: aggByCustomer.get(Number(c.id))?.lastSaleAt ?? null,
+      }
+    })
 
     if (!paginated) {
       const res = NextResponse.json(result)

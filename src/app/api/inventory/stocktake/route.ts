@@ -112,11 +112,13 @@ async function __POST(req: NextRequest) {
     if (commit) {
       for (const it of st.items) {
         if (it.diff !== 0) {
+          // 🛡️ FIX (tsc): productId Int? — بنسكب صفوف المنتج المحذوف.
+          if (it.productId == null) continue
           await tx.product.update({ where: { id: it.productId }, data: { quantity: it.countedQty } })
           await tx.stockMovement.create({
             data: {
               tenantId: s.tenantId,
-              branchId: branchId ?? null,
+              branchId: branchId ?? undefined,
               productId: it.productId,
               type: 'stocktake',
               quantity: it.diff,

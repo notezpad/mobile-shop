@@ -173,7 +173,9 @@ export function ProductDialog({
       if (initial?.id) {
         await api(`/api/products/${initial.id}`, { method: 'PUT', body: payload })
         toast.success(t('تم تحديث المنتج'))
-        onSaved({ ...payload, id: initial.id })
+        // 🛡️ FIX (tsc): نفس cast السطر اللي بعده — الـ payload قد يكون بدون cost
+        // (لو التكلفة مخفية RBAC) فالشكل الحرفي مش مطابق لـ ProductFormValues.
+        onSaved({ ...payload, id: initial.id } as ProductFormValues)
       } else {
         const created = await api<ProductFormValues>('/api/products', {
           method: 'POST',

@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { computeEndDate } from '@/lib/admin-utils'
 import { getSession } from '@/lib/auth'
 import { createNotification } from '@/lib/notifications'
+import { getSql } from '@/lib/sql'
 
 export const dynamic = 'force-dynamic'
 
@@ -185,7 +186,8 @@ async function __POST(req: NextRequest) {
             ? 30
             : result.ac.plan.trialDays || 14
 
-      await createNotification(db, tenantId, {
+      // ⚡ 2026-10-17: الدالة بقت تستقبل عميل SQL خفيف بدل Prisma
+      await createNotification(getSql(), tenantId, {
         type: 'subscription_redeemed',
         title: 'تم تفعيل الاشتراك بنجاح',
         message:

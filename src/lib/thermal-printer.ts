@@ -326,7 +326,16 @@ export function printThermalReceiptBrowser(data: ThermalReceiptData, settings: P
 }
 
 // ─── WebUSB Direct Printing ────────────────────────────────
-let usbDevice: USBDevice | null = null
+// 🛡️ FIX (tsc): نوع WebUSB مش موجود في lib.dom الحالي — بنعرّف الحد الأدنى
+// من الشكل المستخدم فعليًا هنا (open/transferOut) بدل any.
+interface UsbDeviceLike {
+  open: () => Promise<void>
+  close: () => Promise<void>
+  // 🛡️ FIX (tsc): بياخد Uint8Array مباشرة (بنية WebUSB الحقيقية أوسع من
+  // BufferSource في lib.dom الحالي).
+  transferOut: (endpointNumber: number, data: Uint8Array<ArrayBufferLike>) => Promise<unknown>
+}
+let usbDevice: UsbDeviceLike | null = null
 
 export async function connectUsbPrinter(): Promise<boolean> {
   if (typeof navigator === 'undefined' || !(navigator as any).usb) {

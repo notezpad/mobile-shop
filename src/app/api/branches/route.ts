@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse, assertWithinPlanLimit } from '@/lib/features'
 import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
+import { withSql } from '@/lib/sql'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,7 +14,9 @@ export const dynamic = 'force-dynamic'
  */
 
 export async function GET() {
-  return withDb(async () => {
+  // ⚡ 2026-10-17 (تقليل CPU — الخطوة 1): GET بقى SQL مباشر (postgres.js) —
+  // نفس الرد بالظبط. POST فضل Prisma (عملية نادرة مع فحص الحدود).
+  return withSql(async (sql) => {
     let s
     try {
       s = await requireAuth()
@@ -37,10 +40,10 @@ export async function GET() {
     const cachedBranches = await matchEdgeCache('/api/branches', '', s.tenantId, '1')
     if (cachedBranches) return cachedBranches
 
-    const branches = await db.branch.findMany({
-      where: { tenantId: s.tenantId },
-      orderBy: [{ isMain: 'desc' }, { id: 'asc' }],
-    })
+    const branches = await sql`
+      SELECT * FROM "Branch"
+      WHERE "tenantId" = ${s.tenantId}
+      ORDER BY "isMain" DESC, "id" ASC`
     const res = NextResponse.json(branches)
     await putEdgeCache(res.clone(), '/api/branches', '', s.tenantId, 60, '1')
     return res
