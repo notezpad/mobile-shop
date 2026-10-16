@@ -555,7 +555,7 @@ function DueDatePicker({
 
   return (
     <div className={density >= 1 ? 'space-y-1.5' : 'space-y-2'}>
-      <p className={cn('font-bold text-foreground/75', density >= 2 ? 'text-xs' : 'text-sm')}>
+      <p className={cn('font-bold text-foreground/75', 'text-sm')}>
         استحقاق الآجل <span className="font-medium">(اختياري)</span>
       </p>
       <div className="grid grid-cols-5 gap-1.5">
@@ -616,7 +616,7 @@ function DueDatePicker({
                 يستحق{' '}
                 {selected.toLocaleDateString('ar-EG-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })}
               </span>
-              <span className={cn('text-xs font-medium text-muted-foreground', density >= 2 ? 'ms-2 inline' : 'block')}>{rel}</span>
+              <span className={cn('whitespace-nowrap text-xs font-medium text-muted-foreground', density >= 2 ? 'ms-2 inline' : 'block')}>{rel}</span>
             </span>
           </span>
           <button
@@ -2657,29 +2657,29 @@ export function POSView() {
 
   const renderPaymentPanel = (inSheet: boolean) => (
     <section className={cn(panelCls, inSheet && 'min-h-0 flex-1 rounded-none border-0 shadow-none')}>
-      <header className="border-b border-border px-3.5 py-3">
+      <header className={cn('border-b border-border px-3.5', d === 2 ? 'py-2.5' : 'py-3')}>
         <PanelHead n={3} tag="Checkout" title="ادفع" aside={statusChip} />
       </header>
 
       <div
         ref={payBodyRef}
-        className={cn('min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain', d === 2 ? 'space-y-2 p-3' : d === 1 ? 'space-y-2.5 p-3' : 'space-y-3 p-3.5', slimScroll)}
+        className={cn('min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain', d === 2 ? 'space-y-1.5 p-2.5' : d === 1 ? 'space-y-2.5 p-3' : 'space-y-3 p-3.5', slimScroll)}
       >
         {/* شاشة الكاشير: الإجمالي هو أكبر وأوضح عنصر في الصفحة */}
-        <div className={cn('relative overflow-hidden rounded-2xl bg-stone-950 text-stone-50 shadow-md ring-1 ring-black/10 dark:ring-white/10', d === 2 ? 'px-3.5 py-2' : d === 1 ? 'px-4 py-2.5' : 'px-4 py-3')}>
+        <div className={cn('relative overflow-hidden rounded-2xl bg-stone-950 text-stone-50 shadow-md ring-1 ring-black/10 dark:ring-white/10', d === 2 ? 'px-4 py-2' : d === 1 ? 'px-4 py-2.5' : 'px-4 py-3')}>
           <div
             aria-hidden
             className="pointer-events-none absolute -top-16 start-1/2 h-32 w-64 -translate-x-1/2 rounded-full bg-emerald-400/15 blur-3xl"
           />
           <div className="relative">
-            <div className={cn('flex items-center justify-between gap-2 font-semibold text-stone-300', d === 2 ? 'text-xs' : 'text-sm')}>
+            <div className={cn('flex items-center justify-between gap-2 font-semibold text-stone-300', 'text-sm')}>
               <span>الإجمالي المستحق</span>
               <span className="tabular-nums">
                 {cart.length} صنف · {formatQtyUnit(totalPieces, cartUnit)}
               </span>
             </div>
             <p className={cn('flex items-baseline gap-2 leading-none tabular-nums text-emerald-300', d === 2 ? 'mt-1' : d === 1 ? 'mt-1.5' : 'mt-2')}>
-              <span className={cn('font-extrabold tracking-tight', d === 2 ? 'text-3xl' : 'text-4xl')}>{formatNumber(Math.round(total * 100) / 100)}</span>
+              <span className={cn('font-extrabold tracking-tight', 'text-4xl')}>{formatNumber(Math.round(total * 100) / 100)}</span>
               <span className="text-lg font-bold text-emerald-300/70">جنيه</span>
             </p>
             {!paidFull && (
@@ -2699,7 +2699,7 @@ export function POSView() {
 
         {/* العميل */}
         <div className="space-y-1.5">
-          {d < 2 && (
+          {(
             <p className="text-sm font-bold text-foreground/75">
               العميل <span className="font-medium">(اختياري — مطلوب للبيع الآجل)</span>
             </p>
@@ -2755,9 +2755,9 @@ export function POSView() {
                 }}
                 onFocus={() => setCustOpen(true)}
                 onBlur={() => setTimeout(() => setCustOpen(false), 150)}
-                placeholder={d === 2 ? 'عميل (للآجل) — ابحث بالاسم أو الهاتف' : 'ابحث بالاسم أو رقم الهاتف'}
+                placeholder="ابحث بالاسم أو رقم الهاتف"
                 className={cn(
-                  d === 2 ? 'h-9' : d === 1 ? 'h-10' : 'h-11',
+                  d >= 1 ? 'h-10' : 'h-11',
                   'rounded-xl border-foreground/25 bg-card pr-9 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]',
                   creditNeedsCustomer && 'border-destructive focus-visible:ring-destructive/30'
                 )}
@@ -2810,7 +2810,7 @@ export function POSView() {
         {/* وسيلة الدفع: بتحدد الدرج اللي الفلوس دخلت فيه
             (انستاباي وفوري اتشالوا من الكاشير بطلب صاحب المحل) */}
         <div className="space-y-1.5">
-          {d < 2 && <p className="text-sm font-bold text-foreground/75">وسيلة الدفع</p>}
+          <p className="text-sm font-bold text-foreground/75">وسيلة الدفع</p>
           <div role="radiogroup" aria-label="وسيلة الدفع" className="grid grid-cols-2 gap-2">
             {[
               { v: 'cash', label: 'كاش', icon: Banknote },
@@ -2837,7 +2837,7 @@ export function POSView() {
 
         {/* نوع الدفع: كامل / جزئي (الباقي آجل) */}
         <div className="space-y-1.5">
-          {d < 2 && <p className="text-sm font-bold text-foreground/75">نوع الدفع</p>}
+          <p className="text-sm font-bold text-foreground/75">نوع الدفع</p>
           <div role="radiogroup" aria-label="نوع الدفع" className="grid grid-cols-2 gap-2">
             {[
               { full: true, label: 'سداد كامل' },
@@ -2863,7 +2863,7 @@ export function POSView() {
             })}
           </div>
           {/* الشرح سطر واحد تحت الاختيارين (بدل سطر ثاني داخل كل زر كان بيلزق في الحد) */}
-          <p className={cn('text-xs font-medium leading-snug text-muted-foreground', d === 2 && 'hidden')}>
+          <p className={cn('text-xs font-medium leading-snug text-muted-foreground')}>
             {paidFull
               ? 'العميل بيدفع كامل المبلغ دلوقتي.'
               : 'العميل بيدفع جزء دلوقتي والباقي بيتسجل آجل عليه.'}
@@ -2872,7 +2872,7 @@ export function POSView() {
 
         {paidFull ? (
           <div className="space-y-2">
-            <label className={cn('block font-bold text-foreground/75', d === 2 ? 'text-xs' : 'text-sm')} htmlFor="received">
+            <label className={cn('block font-bold text-foreground/75', 'text-sm')} htmlFor="received">
               المبلغ المستلم من العميل <span className="font-medium">(لحساب الباقي)</span>
             </label>
             <NumField
@@ -2924,7 +2924,7 @@ export function POSView() {
           </div>
         ) : (
           <div className="space-y-2">
-            <label className={cn('block font-bold text-foreground/75', d === 2 ? 'text-xs' : 'text-sm')} htmlFor="paid-amount">
+            <label className={cn('block font-bold text-foreground/75', 'text-sm')} htmlFor="paid-amount">
               المبلغ المدفوع دلوقتي
             </label>
             <NumField
@@ -2945,8 +2945,8 @@ export function POSView() {
                 </button>
               ))}
             </div>
-            {remaining > 0 && d < 2 && (
-              <div className="flex items-center justify-between rounded-xl bg-danger-subtle px-3 py-2.5 text-sm text-danger-subtle-foreground">
+            {remaining > 0 && (
+              <div className={cn('flex items-center justify-between rounded-xl bg-danger-subtle px-3 text-sm text-danger-subtle-foreground', d === 2 ? 'py-1.5' : 'py-2.5')}>
                 <span className="font-semibold">المتبقي (آجل)</span>
                 <span className="font-extrabold tabular-nums">{formatCurrency(remaining)}</span>
               </div>
@@ -2957,7 +2957,7 @@ export function POSView() {
       </div>
 
       {/* Footer: السبب اللي مانع الزر ظاهر جنب الزر */}
-      <footer className={cn('space-y-2 border-t border-border bg-card', d === 2 ? 'p-2.5' : d === 1 ? 'p-3' : 'p-3.5')}>
+      <footer className={cn('space-y-2 border-t border-border bg-card', d === 2 ? 'p-2' : d === 1 ? 'p-3' : 'p-3.5')}>
         {creditNeedsCustomer && (
           <p className="flex items-start gap-1.5 rounded-lg bg-warning-subtle px-3 py-2 text-xs font-medium text-warning-subtle-foreground">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
