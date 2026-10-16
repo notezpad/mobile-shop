@@ -259,9 +259,10 @@ export function PurchaseOrderDialog({
     }
   }
 
+  // المبلغ المكتوب في «دفعت جزء» بيفضل محفوظ لو غيّرت الوضع ورجعت —
+  // المدفوع الفعلي بيتحسب من الوضع نفسه (آجل = 0)، فمفيش خطر.
   const choosePay = (m: PayMode) => {
     setPayMode(m)
-    if (m === 'credit') setPaidAmount(0)
   }
 
   const submit = async () => {
