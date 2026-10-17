@@ -4,9 +4,20 @@ import type { Session } from '@/lib/auth'
 import { requireCapability, featureErrorResponse } from '@/lib/features'
 import { getTenantTimezone, localDateStrToUtcBounds, dateStrInTz } from '@/lib/tenantTime'
 import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
-import { withSql, isUniqueViolation, type Sql } from '@/lib/sql'
+import { withSql, isUniqueViolation } from '@/lib/sql'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * 🛡️ 2026-09-30: توليد رقم الفاتورة جوه الـ transaction نفسه.
+ *
+ * المشكلة: الرقم كان بيتحسب بره الـ transaction (قراءة أعلى رقم ثم كتابة)،
+ * فكاشيرين بيفطوا في نفس اللحظة بيقرّوا نفس الرقم ويتكتب مرتين (تكرار).
+ * الحل: القراءة جوه الـ tx + فهرس فريد `@@unique([tenantId, invoiceNo])`
+ * في الداتابيز كضمانة أخيرة — لو حصل تضارب، الـ POST بيعيد المحاولة
+ * برقم جديد (retry على P2002). والسنة دلوقتي بتوقيت المحل (Tenant.timezone)
+ * مش توقيت السيرفر.
+ */
 
 export async function GET(req: NextRequest) {
   let session: Session
@@ -119,46 +130,23 @@ export async function GET(req: NextRequest) {
   })
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// أنواع صفوف SQL — نفس الحقول المستخدمة فعليًا من كائنات Prisma القديمة
-// ─────────────────────────────────────────────────────────────────────────────
-type ProductRow = {
-  id: number
-  name: string
-  cost: number
-  quantity: number
-  unitLabel: string | null
-}
-type ProductUnitRow = {
-  id: number
-  productId: number
-  name: string
-  factor: number
-}
-type ProductVariantRow = {
-  id: number
-  productId: number
-  quantity: number
-}
-type CustomerRow = {
-  id: number
-  tenantId: string
-  name: string
-  balance: number
-  creditLimit: number | null
-}
-
 /**
- * 🛡️ (M7) جلب فاتورة كاملة بمفتاح الأوفلاين clientRef عبر دالة get_sale_by_ref
- * — نفس شكل sale.findUnique({ where: tenantId_clientRef, include: { items:
- * { include: { variant } }, customer } }) القديم بالظبط.
+ * ⚡ 2026-10-17 (تقليل CPU — الخطوة 5): إعادة كتابة POST /api/sales —
+ * أثقل مسار كتابة في النظام (بيحصل مع كل فاتورة بيع).
+ *
+ * القديم: مُصادقة → تحميل منتجات/وحدات/متغيرات/عميل/محل (5 استعلامات Prisma)
+ *   → حلقة تحقق لكل صنف → transaction برisma جواها توليد الرقم + إنشاء
+ *   الفاتورة + الأصناف + (لكل صنف: خصم مخزون ذرّي + مزامنة إجمالي المنتج +
+ *   حركة مخزون) + دين العميل + قيد الخزنة = 15-40 استعلام متسلسل عبر Prisma
+ *   wasm — بيتجاوز حصة CPU (10ms) فيطلع 503 عشوائي وقت الزحمة.
+ *
+ * الجديد: نفس التحققات ونفس رسائل الخطأ بالظبط، لكن الحفظ كله بيحصل في
+ * **دالة Postgres واحدة** (prisma/sql/create-sale.sql) تتنفذ باستدعاء واحد
+ * داخل transaction في الداتابيز — الـ Worker بيبعت الـ payload وبيستقبل
+ * الرد الجاهز. إعادة المحاولة عند تضارب الرقم الفريد بقت على SQLSTATE 23505
+ * (بديل P2002)، وتضارب clientRef (أوفلاين) الدالة نفسها بترجع الفاتورة
+ * الأصلية بدون استثناء.
  */
-async function fetchSaleByClientRef(sql: Sql, tenantId: string, clientRef: string) {
-  const rows = await sql<{ sale: any }[]>`
-    SELECT get_sale_by_ref(${tenantId}, ${clientRef}) AS sale`
-  return rows[0]?.sale ?? null
-}
-
 export async function POST(req: NextRequest) {
   let session: Session
   try {
@@ -206,66 +194,82 @@ export async function POST(req: NextRequest) {
     customerId = parseInt(body.customerId, 10) || null
   }
 
-  // ⚡ 2026-10-17: POST بقى SQL مباشر + RPC واحد (create_sale) — نفس ترتيب
-  // التحقق ونفس رسائل الخطأ بالظبط، بس بدل 8-30 استعلام Prisma متسلسل +
-  // $transaction كبيرة، كله بقى: 4-5 استعلامات قراءة خفيفة + استدعاء واحد
-  // جوه الداتابيز بيقفل الفاتورة والمخزون والدين والخزنة مرة واحدة.
   return withSql(async (sql) => {
-    // load products scoped to tenant
+    // load products scoped to tenant (⚡ استعلام SQL خفيف بدل Prisma)
     const ids = body.items
       .map((i: any) => parseInt(i.productId, 10))
       .filter((n: number) => !isNaN(n))
 
-    // Collect all unitIds/variantIds first, then batch-fetch in ONE query
-    // instead of one lookup per cart item (N+1 problem — زي القديم بالظبط)
+    // batch-load all units referenced by the cart in ONE query
     const unitIds = body.items
       .map((i: any) => i.unitId ? parseInt(i.unitId, 10) : null)
       .filter((id: number | null): id is number => id !== null && !isNaN(id))
 
+    // batch-load all variants (colors/sizes) referenced by the cart in ONE query
     const variantIds = body.items
       .map((i: any) => i.variantId ? parseInt(i.variantId, 10) : null)
       .filter((id: number | null): id is number => id !== null && !isNaN(id))
 
-    const [products, units, variants, customerRows, tenantRows] = await Promise.all([
-      (ids.length > 0
+    type ProductRow = {
+      id: number
+      name: string
+      cost: number
+      quantity: number
+      unitLabel: string | null
+    }
+    type UnitRow = { id: number; productId: number; name: string; factor: number }
+    type VariantRow = { id: number; productId: number; quantity: number }
+    type CustomerRow = {
+      id: number
+      tenantId: string
+      name: string
+      balance: number | null
+      creditLimit: number | null
+    }
+
+    const [products, units, variants, customerCheck, tenantRows] = await Promise.all([
+      (ids.length
         ? sql<ProductRow[]>`
             SELECT "id", "name", "cost", "quantity", "unitLabel"
             FROM "Product"
-            WHERE "tenantId" = ${session.tenantId} AND "id" IN ${sql(ids)}`
+            WHERE "id" IN ${sql(ids)} AND "tenantId" = ${session.tenantId}`
         : Promise.resolve([] as ProductRow[])),
+      // batch-load all units needed in ONE query
       (unitIds.length > 0
-        ? sql<ProductUnitRow[]>`
+        ? sql<UnitRow[]>`
             SELECT "id", "productId", "name", "factor"
             FROM "ProductUnit"
             WHERE "id" IN ${sql(unitIds)}`
-        : Promise.resolve([] as ProductUnitRow[])),
+        : Promise.resolve([] as UnitRow[])),
+      // batch-load all variants referenced by the cart in ONE query
       (variantIds.length > 0
-        ? sql<ProductVariantRow[]>`
+        ? sql<VariantRow[]>`
             SELECT "id", "productId", "quantity"
             FROM "ProductVariant"
             WHERE "id" IN ${sql(variantIds)}`
-        : Promise.resolve([] as ProductVariantRow[])),
+        : Promise.resolve([] as VariantRow[])),
+      // validate customer in parallel with products
       (customerId
         ? sql<CustomerRow[]>`
             SELECT "id", "tenantId", "name", "balance", "creditLimit"
             FROM "Customer"
-            WHERE "id" = ${customerId}`
+            WHERE "id" = ${customerId} LIMIT 1`
         : Promise.resolve([] as CustomerRow[])),
-      sql<{ invoicePrefix: string }[]>`
-        SELECT "invoicePrefix" FROM "Tenant" WHERE "id" = ${session.tenantId}`,
+      // load tenant prefix in parallel instead of after everything else
+      sql<{ invoicePrefix: string | null }[]>`
+        SELECT "invoicePrefix" FROM "Tenant" WHERE "id" = ${session.tenantId} LIMIT 1`,
     ])
 
     // validate customer
-    const customerCheck = customerRows[0] ?? null
     if (customerId) {
-      if (!customerCheck || customerCheck.tenantId !== session.tenantId) {
+      if (!customerCheck[0] || customerCheck[0].tenantId !== session.tenantId) {
         return NextResponse.json({ error: 'العميل غير صالح' }, { status: 400 })
       }
     }
 
     const productMap = new Map<number, ProductRow>(products.map((p) => [p.id, p]))
-    const unitMap = new Map<number, ProductUnitRow>(units.map((u) => [u.id, u]))
-    const variantMap = new Map<number, ProductVariantRow>(variants.map((v) => [v.id, v]))
+    const unitMap = new Map<number, UnitRow>(units.map((u) => [u.id, u]))
+    const variantMap = new Map<number, VariantRow>(variants.map((v) => [v.id, v]))
 
     // Pre-check capability if any item references a unitId.
     const hasUnits = body.items.some((i: any) => i.unitId)
@@ -405,29 +409,48 @@ export async function POST(req: NextRequest) {
 
     // 🛡️ 2026-09-30 (M10): الحد الائتماني — لو العميل متحدد له حد وبيع آجل
     // هيعديه، البيع يترفض (بدون فرض ولا استثناء تلقائي).
-    if (customerId && paid < total && customerCheck?.creditLimit != null) {
-      const projected = (customerCheck.balance ?? 0) + (total - paid)
-      if (projected > customerCheck.creditLimit + 0.005) {
+    if (customerId && paid < total && customerCheck[0]?.creditLimit != null) {
+      const projected = (customerCheck[0].balance ?? 0) + (total - paid)
+      if (projected > customerCheck[0].creditLimit + 0.005) {
         return NextResponse.json(
-          { error: `بيع آجل هيعدي الحد الائتماني للعميل ${customerCheck.name} (الحد: ${customerCheck.creditLimit}، الرصيد الحالي: ${customerCheck.balance}، إجمالي بعد البيع: ${Math.round(projected * 100) / 100})` },
+          { error: `بيع آجل هيعدي الحد الائتماني للعميل ${customerCheck[0].name} (الحد: ${customerCheck[0].creditLimit}، الرصيد الحالي: ${customerCheck[0].balance}، إجمالي بعد البيع: ${Math.round(projected * 100) / 100})` },
           { status: 400 }
         )
       }
     }
 
     // 🛡️ 2026-09-30 (M7): idempotency — نفس clientRef؟ رجّع الفاتورة الأصلية.
+    // (⚡ استعلامات SQL خفيفة بدل Prisma — نفس شكل include القديم:
+    //  كل أعمدة Sale + SaleItem + Customer، بدون variant)
     if (clientRef) {
-      const existing = await fetchSaleByClientRef(sql, session.tenantId, clientRef)
+      const existingRows = await sql<any[]>`
+        SELECT * FROM "Sale"
+        WHERE "tenantId" = ${session.tenantId} AND "clientRef" = ${clientRef}
+        LIMIT 1`
+      const existing = existingRows[0]
       if (existing) {
-        return NextResponse.json(existing, { status: 200 })
+        const [exItems, exCustomer] = await Promise.all([
+          sql<any[]>`SELECT * FROM "SaleItem" WHERE "saleId" = ${existing.id} ORDER BY "id" ASC`,
+          (existing.customerId
+            ? sql<any[]>`SELECT * FROM "Customer" WHERE "id" = ${existing.customerId} LIMIT 1`
+            : Promise.resolve([] as any[])),
+        ])
+        return NextResponse.json(
+          { ...existing, items: exItems, customer: exCustomer[0] ?? null },
+          { status: 200 }
+        )
       }
     }
 
     const prefix = tenantRows[0]?.invoicePrefix || 'INV'
-    // 🛡️ رقم الفاتورة بيتركب جوه الدالة + إعادة المحاولة عند التضارب
+    // 🛡️ 2026-09-30: السنة بتوقيت المحل (Tenant.timezone) — نفس القديم
     const tz = await getTenantTimezone(session.tenantId)
     const invYear = parseInt(dateStrInTz(new Date(), tz).slice(0, 4), 10)
 
+    // ⚡ THE BIG ONE: الحفظ كله في استدعاء واحد لدالة Postgres (transaction
+    // داخلية) — الترقيم، الفاتورة، الأصناف، الخصم الذرّي للمخزون، مزامنة
+    // الإجمالي، حركات المخزون، دين العميل، قيد الخزنة.
+    // شوف prisma/sql/create-sale.sql
     const payload = {
       tenantId: session.tenantId,
       branchId: session.branchId ?? null,
@@ -436,10 +459,10 @@ export async function POST(req: NextRequest) {
       total,
       paid,
       paymentMethod,
-      dueDate: dueDate ? dueDate.toISOString() : null,
+      dueDate,
       clientRef,
-      year: invYear,
       prefix,
+      year: invYear,
       items: itemsData,
     }
 
@@ -448,28 +471,21 @@ export async function POST(req: NextRequest) {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
         // ⚠️ لازم نمرر الكائن عبر sql.json() (مش JSON.stringify نصيًا) —
-        // postgres.js بيسلسله بصيغة JSON صحيحة على السلك (نفس درس أمر الشراء).
-        const rows = await sql<{ sale: any }[]>`
-          SELECT create_sale(${sql.json(payload)}::jsonb) AS sale`
-        sale = rows[0]?.sale
+        // postgres.js بيسلسله بصيغة JSON صحيحة على السلك.
+        const rows = await sql<{ result: any }[]>`
+          SELECT create_sale(${sql.json(payload)}::jsonb) AS result`
+        sale = rows[0]?.result
         break
       } catch (e: any) {
-        // 🛡️ تضارب فريد متزامن (SQLSTATE 23505 — بديل P2002 بتاع Prisma):
-        // لو السبب clientRef (أوفلاين أرسل نفس الفاتورة مرتين) → النسخة
-        // الأصلية اتحفظ بالفعل، رجّعها بدل إعادة المحاولة.
-        if (isUniqueViolation(e) && clientRef) {
-          const existing = await fetchSaleByClientRef(sql, session.tenantId, clientRef)
-          if (existing) {
-            return NextResponse.json(existing, { status: 200 })
-          }
-        }
-        // تضارب في الرقم الفريد (فاتورة متزامنة معانا) → جرّب تاني برقم أعلى
+        // تضارب رقم فاتورة متزامن معانا (SQLSTATE 23505 بديل P2002) →
+        // جرّب تاني برقم أعلى (الدالة نفسها بتولّد رقم أعلى في كل محاولة).
+        // تضارب clientRef مش بيوصلك هنا أصلاً — الدالة بترجّع الأصلية.
         if (isUniqueViolation(e) && attempt < MAX_ATTEMPTS) continue
         throw e
       }
     }
 
-    // ⚡ EDGE CACHE purge (2026-10-06): البيع الجديد لازم يظهر فورًا في الداشبورد
+    // ⚡ EDGE CACHE purge (2026-10-06): البيع الجديد لازم يظهر فوراً في الداشبورد
     // وديون العملاء — بنمسح مفاتيح الكاش بلا انتظار الـ TTL
     await purgeEdgeCache(
       [
