@@ -58,6 +58,18 @@ export async function PUT(
         : existing.quantity
     const costChanged = Math.abs(newCost - existing.cost) > 1e-9
     const qtyChanged = Math.abs(newQty - existing.quantity) > 1e-9
+    // 🎨 2026-10-18: المنتج اللي له ألوان/مقاسات كميته = مجموع مقاساته دايماً.
+    // تعديل الكمية الإجمالية من هنا كان بيتمسح عند أول بيعة (المزامنة بتعيد
+    // الحساب من الـ variants) — فبنرفضه ونوجّه لحركة مخزون على اللون/المقاس.
+    if (qtyChanged) {
+      const variantCount = await db.productVariant.count({ where: { productId: pid } })
+      if (variantCount > 0) {
+        return NextResponse.json(
+          { error: 'المنتج ده له ألوان ومقاسات — كميته مجموع مقاساته. عدّل الكمية من «حركة مخزون» واختار اللون/المقاس (أو من نافذة الألوان والمقاسات)' },
+          { status: 400 },
+        )
+      }
+    }
     if (costChanged || qtyChanged) {
       try {
         await requireAdmin()

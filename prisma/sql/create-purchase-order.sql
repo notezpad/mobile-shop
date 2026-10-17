@@ -8,6 +8,9 @@
 --   1) توليد رقم الأمر (max+1 على سنة معينة — الحذف مش بيأثر عليه)
 --   2) إنشاء الأمر + الأصناف
 --   3) تحديث المخزون + تكلفة المتوسط المرجح (Weighted Moving Average)
+--      🎨 2026-10-18: المنتج اللي له ألوان/مقاسات بيدخل مخزونه على الـ variant
+--      (variantId إجباري للسطر)، وكمية المنتج بتتحسب = مجموع الـ variants.
+--      قبل كده الكمية كانت بتتضاف على المنتج بس فتتمسح عند أول بيعة.
 --   4) حركة مخزون (type='in') لكل صنف
 --   5) رصيد المورد (total - paid) بالإشارة الصحيحة
 --   6) قيد الخزنة (source='purchase'، amount سالب) بطريقة الدفع
@@ -45,6 +48,8 @@ DECLARE
   v_diff       float8      := FLOOR((v_total - v_paid) * 100 + 0.5)::float8 / 100;
   it           record;
   v_oldQty     float8;
+  v_varCnt     int;
+  v_varSum     float8;
   v_oldCost    float8;
   v_totalQty   float8;
   v_avgCost    float8;
@@ -72,16 +77,35 @@ BEGIN
 
   -- ── 3+4) الأصناف: إنشاء السطر + تحديث المخزون بالمتوسط المرجح + حركة مخزون ──
   FOR it IN
-    SELECT x."productId", x."name", x."cost", x."quantity"
+    SELECT x."productId", x."variantId", x."name", x."cost", x."quantity"
     FROM jsonb_to_recordset(payload->'items')
-      AS x("productId" int, "name" text, "cost" float8, "quantity" float8)
+      AS x("productId" int, "variantId" int, "name" text, "cost" float8, "quantity" float8)
   LOOP
-    INSERT INTO "PurchaseOrderItem"
-      ("purchaseOrderId", "productId", "name", "cost", "quantity")
-    VALUES
-      (v_orderId, it."productId", it."name", it."cost", it."quantity");
+    -- 🎨 الأمان الأخير (الـ route بيتحقق الأول برسائل عربي): منتج له variants
+    -- لازم السطر يحدد variant، ومنتج بدون variants ما ينفعش يجيله variantId.
+    SELECT COUNT(*), COALESCE(SUM(v."quantity"), 0)
+      INTO v_varCnt, v_varSum
+      FROM "ProductVariant" v WHERE v."productId" = it."productId";
 
-    SELECT GREATEST(p."quantity", 0), GREATEST(p."cost", 0)
+    IF v_varCnt > 0 AND it."variantId" IS NULL THEN
+      RAISE EXCEPTION 'PRODUCT_HAS_VARIANTS:%', it."productId";
+    END IF;
+    IF it."variantId" IS NOT NULL AND NOT EXISTS (
+      SELECT 1 FROM "ProductVariant" v
+       WHERE v."id" = it."variantId" AND v."productId" = it."productId"
+    ) THEN
+      RAISE EXCEPTION 'VARIANT_NOT_FOUND:%', it."variantId";
+    END IF;
+
+    INSERT INTO "PurchaseOrderItem"
+      ("purchaseOrderId", "productId", "variantId", "name", "cost", "quantity")
+    VALUES
+      (v_orderId, it."productId", it."variantId", it."name", it."cost", it."quantity");
+
+    -- المخزون القديم لحساب المتوسط المرجح: للمنتج ذو الـ variants هو مجموعهم
+    -- (مش عمود Product.quantity اللي ممكن يكون اتزحزح).
+    SELECT CASE WHEN v_varCnt > 0 THEN GREATEST(v_varSum, 0) ELSE GREATEST(p."quantity", 0) END,
+           GREATEST(p."cost", 0)
     INTO v_oldQty, v_oldCost
     FROM "Product" p WHERE p."id" = it."productId";
 
@@ -93,17 +117,33 @@ BEGIN
       ELSE it."cost"
     END;
 
-    UPDATE "Product"
-    SET "quantity" = "quantity" + it."quantity",
-        "cost" = GREATEST(v_avgCost, 0)
-    WHERE "id" = it."productId";
+    IF it."variantId" IS NOT NULL THEN
+      -- المخزون يدخل على المقاس/اللون نفسه، وكمية المنتج = مجموع كل مقاساته
+      UPDATE "ProductVariant"
+         SET "quantity" = "quantity" + it."quantity"::int
+       WHERE "id" = it."variantId";
+
+      UPDATE "Product"
+         SET "quantity" = (SELECT COALESCE(SUM(v."quantity"), 0)
+                             FROM "ProductVariant" v WHERE v."productId" = it."productId"),
+             "cost" = GREATEST(v_avgCost, 0)
+       WHERE "id" = it."productId";
+    ELSE
+      UPDATE "Product"
+      SET "quantity" = "quantity" + it."quantity",
+          "cost" = GREATEST(v_avgCost, 0)
+      WHERE "id" = it."productId";
+    END IF;
 
     INSERT INTO "StockMovement"
-      ("tenantId", "branchId", "productId", "type", "quantity",
+      ("tenantId", "branchId", "productId", "variantId", "type", "quantity",
        "refType", "refId", "note", "userId")
     VALUES
-      (v_tenantId, v_branchId, it."productId", 'in', it."quantity",
-       'purchase', v_orderId, 'أمر شراء ' || v_orderNo, v_userId);
+      (v_tenantId, v_branchId, it."productId", it."variantId", 'in', it."quantity",
+       'purchase', v_orderId,
+       'أمر شراء ' || v_orderNo ||
+         CASE WHEN it."variantId" IS NOT NULL THEN ' — ' || it."name" ELSE '' END,
+       v_userId);
   END LOOP;
 
   -- ── 5) رصيد المورد: موجب = علينا أكتر، سالب = دفعنا زيادة (نفس القديم) ──
@@ -139,6 +179,7 @@ BEGIN
                'id', i."id",
                'purchaseOrderId', i."purchaseOrderId",
                'productId', i."productId",
+               'variantId', i."variantId",
                'name', i."name",
                'cost', i."cost",
                'quantity', i."quantity",

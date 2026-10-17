@@ -9,7 +9,7 @@
 
 import * as React from 'react'
 import { commonUnit, formatQtyUnit } from '@/lib/unit-label'
-import { Check, ChevronDown, Info, Loader2, PackagePlus, Plus, Search, Trash2, Truck, X } from 'lucide-react'
+import { Check, ChevronDown, Grid3x3, Info, Loader2, PackagePlus, Plus, Search, Trash2, Truck, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -18,6 +18,7 @@ import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { ProductDialog, type ProductFormValues } from './ProductDialog'
 import { DecimalInput, DialogHero, MethodPills, SectionTitle, Stepper } from './purchase-dialog-ui'
+import { PurchaseVariantsDialog, type PurchaseVariantLite, type PurchaseVariantsResult } from './PurchaseVariantsDialog'
 
 interface ProductLite {
   id: number
@@ -40,9 +41,18 @@ interface SupplierLite {
 
 interface CartItem {
   product: ProductLite
+  // 🎨 2026-10-18: لو المنتج له ألوان/مقاسات، كل سطر في السلة = لون/مقاس واحد
+  // والمخزون بيدخل عليه هو (مش على المنتج). null = منتج عادي.
+  variant?: { id: number; label: string; stock: number } | null
   cost: number
   quantity: number
 }
+
+const variantLabelOf = (v: PurchaseVariantLite) =>
+  [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`
+/** مفتاح سطر السلة: منتج + (لون/مقاس) */
+const lineKey = (i: CartItem) => `${i.product.id}:${i.variant?.id ?? 0}`
+const lineName = (i: CartItem) => (i.variant ? `${i.product.name} — ${i.variant.label}` : i.product.name)
 
 type PayMode = 'full' | 'partial' | 'credit'
 
@@ -89,12 +99,17 @@ export function PurchaseOrderDialog({
   const [newProductSeed, setNewProductSeed] = React.useState('')
   const [pendingToday, setPendingToday] = React.useState<ProductLite[]>([])
   const [cartQ, setCartQ] = React.useState('')
+  // 🎨 شبكة الألوان/المقاسات: المنتج الحالي + طابور منتجات (من «ضيف الكل للسلة»)
+  const [matrix, setMatrix] = React.useState<{ product: ProductLite; variants: PurchaseVariantLite[] } | null>(null)
+  const [matrixQueue, setMatrixQueue] = React.useState<ProductLite[]>([])
   const searchRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
     if (!open) return
     setCart([])
     setCartQ('')
+    setMatrix(null)
+    setMatrixQueue([])
     setQuery('')
     setResults([])
     setPayMode('full')
@@ -147,7 +162,7 @@ export function PurchaseOrderDialog({
   const manyItems = cart.length > 8
   const cartNeedle = cartQ.trim().toLowerCase()
   const shownCart = cartNeedle
-    ? cart.filter((i) => i.product.name.toLowerCase().includes(cartNeedle) || (i.product.barcode ?? '').includes(cartNeedle))
+    ? cart.filter((i) => lineName(i).toLowerCase().includes(cartNeedle) || (i.product.barcode ?? '').includes(cartNeedle))
     : cart
   const noSupplier = supplierId === 'none'
   const selectedSupplier = !noSupplier ? suppliers.find((s) => String(s.id) === supplierId) : null
@@ -180,38 +195,141 @@ export function PurchaseOrderDialog({
       .sort((a, b) => b.balance - a.balance || a.name.localeCompare(b.name, 'ar'))
   }, [suppliers, supplierQuery])
 
+  // كميات/تكلفة المنتج اللي في السلة بالفعل (لما التاجر يعدّل الشبكة)
+  const matrixInitialQty = React.useMemo(() => {
+    const out: Record<number, number> = {}
+    if (matrix) for (const i of cart) if (i.product.id === matrix.product.id && i.variant) out[i.variant.id] = i.quantity
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matrix])
+  const matrixInitialCost = React.useMemo(() => {
+    if (!matrix) return 0
+    const inCart = cart.find((i) => i.product.id === matrix.product.id && i.variant)
+    return inCart ? inCart.cost : matrix.product.cost ?? 0
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matrix])
+
   /* ───── عمليات السلة ───── */
 
-  const addAllPendingToday = () => {
+  /** يفتح شبكة المقاسات للمنتج التالي في الطابور (لو فيه). */
+  const openNextInQueue = async (queue: ProductLite[]) => {
+    const [next, ...rest] = queue
+    setMatrixQueue(rest)
+    if (!next) {
+      setMatrix(null)
+      return
+    }
+    try {
+      const variants = await api<PurchaseVariantLite[]>(`/api/products/${next.id}/variants`)
+      if (variants.length > 0) {
+        setMatrix({ product: next, variants })
+        return
+      }
+    } catch {
+      /* لو فشل جلب المقاسات نعامله كمنتج عادي */
+    }
+    addPlain(next, 1)
+    await openNextInQueue(rest)
+  }
+
+  const addPlain = (p: ProductLite, qty = 1) => {
     setCart((prev) => {
-      const toAdd = visiblePendingToday.filter(
-        (p) => !prev.some((c) => c.product.id === p.id)
-      )
-      return [...toAdd.map((p) => ({ product: p, cost: p.cost ?? 0, quantity: 1 })), ...prev]
+      const existing = prev.find((i) => i.product.id === p.id && !i.variant)
+      if (existing) {
+        return prev.map((i) => (i === existing ? { ...i, quantity: i.quantity + qty } : i))
+      }
+      return [{ product: p, variant: null, cost: p.cost ?? 0, quantity: qty }, ...prev]
     })
   }
 
-  const addToCart = (p: ProductLite) => {
-    setCart((prev) => {
-      const existing = prev.find((i) => i.product.id === p.id)
-      if (existing) {
-        return prev.map((i) =>
-          i.product.id === p.id ? { ...i, quantity: i.quantity + 1 } : i
-        )
-      }
-      return [{ product: p, cost: p.cost ?? 0, quantity: 1 }, ...prev]
-    })
+  const addAllPendingToday = async () => {
+    const toAdd = visiblePendingToday.filter((p) => !cart.some((c) => c.product.id === p.id))
+    if (toAdd.length === 0) return
+    // نفحص كل منتج: عادي يدخل السلة فوراً، وله مقاسات يستنى دوره في شبكة الألوان/المقاسات
+    const checked = await Promise.all(
+      toAdd.map(async (p) => {
+        try {
+          const v = await api<PurchaseVariantLite[]>(`/api/products/${p.id}/variants`)
+          return { p, has: v.length > 0 }
+        } catch {
+          return { p, has: false }
+        }
+      }),
+    )
+    const plain = checked.filter((c) => !c.has).map((c) => c.p)
+    const withVariants = checked.filter((c) => c.has).map((c) => c.p)
+    if (plain.length) setCart((prev) => [...plain.map((p) => ({ product: p, variant: null, cost: p.cost ?? 0, quantity: 1 })), ...prev])
+    if (withVariants.length) {
+      toast.info(`${withVariants.length} منتج ليه ألوان ومقاسات — حدّد الكمية لكل لون/مقاس`)
+      await openNextInQueue(withVariants)
+    }
+  }
+
+  /** إضافة منتج من البحث/الباركود: لو له ألوان ومقاسات تفتح الشبكة، وإلا يدخل السلة مباشرة. */
+  const addToCart = async (p: ProductLite) => {
     setQuery('')
     setResults([])
     setSearchOpen(false)
+    try {
+      const variants = await api<PurchaseVariantLite[]>(`/api/products/${p.id}/variants`)
+      if (variants.length > 0) {
+        setMatrix({ product: p, variants })
+        return
+      }
+    } catch {
+      /* نكمل كمنتج عادي — الـ API هيرفض لو فعلاً له مقاسات */
+    }
+    addPlain(p, 1)
     searchRef.current?.focus()
   }
 
-  const updateQty = (id: number, q: number) => {
+  // تأكيد شبكة المقاسات: بنستبدل كل أسطر المنتج ده في السلة بالكميات الجديدة
+  const confirmMatrix = (r: PurchaseVariantsResult) => {
+    if (!matrix) return
+    const { product, variants } = matrix
+    const lines: CartItem[] = variants
+      .filter((v) => (r.qty[v.id] ?? 0) > 0)
+      .map((v) => ({
+        product,
+        variant: { id: v.id, label: variantLabelOf(v), stock: v.quantity },
+        cost: r.cost,
+        quantity: r.qty[v.id],
+      }))
+    setCart((prev) => {
+      const firstIdx = prev.findIndex((i) => i.product.id === product.id)
+      const rest = prev.filter((i) => i.product.id !== product.id)
+      if (firstIdx < 0) return [...lines, ...rest]
+      const at = Math.min(firstIdx, rest.length)
+      return [...rest.slice(0, at), ...lines, ...rest.slice(at)]
+    })
+    const queue = matrixQueue
+    setMatrix(null)
+    if (queue.length) void openNextInQueue(queue)
+    else searchRef.current?.focus()
+  }
+
+  const closeMatrix = (o: boolean) => {
+    if (o) return
+    // إلغاء: نكمّل الطابور (لو فيه) من غير ما نضيف المنتج ده
+    const queue = matrixQueue
+    setMatrix(null)
+    if (queue.length) void openNextInQueue(queue)
+  }
+
+  const editVariantsOf = async (p: ProductLite) => {
+    try {
+      const variants = await api<PurchaseVariantLite[]>(`/api/products/${p.id}/variants`)
+      if (variants.length > 0) setMatrix({ product: p, variants })
+    } catch {
+      toast.error('تعذّر تحميل الألوان والمقاسات')
+    }
+  }
+
+  const updateQty = (key: string, q: number) => {
     setCart((prev) =>
       prev.map((i) =>
         // 🥬 2026-10-12: منتج الوزن — أقل 0.05 كيلو، ومننضف الكسر
-        i.product.id === id
+        lineKey(i) === key
           ? {
               ...i,
               quantity: i.product.soldByWeight
@@ -222,13 +340,14 @@ export function PurchaseOrderDialog({
       ),
     )
   }
-  const updateCost = (id: number, c: number) => {
-    setCart((prev) =>
-      prev.map((i) => (i.product.id === id ? { ...i, cost: Math.max(0, c) } : i))
-    )
+  const updateCost = (key: string, c: number) => {
+    setCart((prev) => prev.map((i) => {
+      if (lineKey(i) !== key) return i
+      return { ...i, cost: Math.max(0, c) }
+    }))
   }
-  const removeItem = (id: number) => {
-    setCart((prev) => prev.filter((i) => i.product.id !== id))
+  const removeItem = (key: string) => {
+    setCart((prev) => prev.filter((i) => lineKey(i) !== key))
   }
 
   // الباركود: Enter بيضيف الصنف لو النتيجة واحدة أو الباركود مطابق تماماً
@@ -248,7 +367,7 @@ export function PurchaseOrderDialog({
     setNewProductOpen(false)
     setNewProductSeed('')
     if (saved?.id) {
-      addToCart({
+      void addToCart({
         id: saved.id,
         name: saved.name,
         barcode: saved.barcode ?? null,
@@ -290,6 +409,9 @@ export function PurchaseOrderDialog({
         body: {
           items: cart.map((i) => ({
             productId: i.product.id,
+            // 🎨 المقاس/اللون اللي المخزون هيدخل عليه (null = منتج عادي)
+            variantId: i.variant?.id ?? null,
+            name: lineName(i),
             quantity: i.quantity,
             cost: i.cost,
           })),
@@ -500,7 +622,8 @@ export function PurchaseOrderDialog({
                       ) : (
                         <ul className="max-h-64 divide-y overflow-y-auto">
                           {results.map((p) => {
-                            const inCart = cart.find((c) => c.product.id === p.id)
+                            const inCartQty = cart.filter((c) => c.product.id === p.id).reduce((n, c) => n + c.quantity, 0)
+                            const inCart = inCartQty > 0 ? { quantity: inCartQty } : null
                             return (
                               <li key={p.id}>
                                 <button
@@ -604,18 +727,36 @@ export function PurchaseOrderDialog({
                       >
                         {shownCart.map((i) => {
                           const costChanged = i.product.cost != null && Math.abs(i.cost - i.product.cost) > 0.001
+                          const key = lineKey(i)
                           return (
-                            <li key={i.product.id} className="rounded-2xl border bg-card p-3">
+                            <li key={key} className="rounded-2xl border bg-card p-3">
                               <div className={cn('grid grid-cols-2 gap-x-3 gap-y-3 md:items-center md:gap-x-4', CART_COLS)}>
                                 {/* الاسم */}
                                 <div className="col-span-2 flex items-start justify-between gap-2 md:col-span-1">
                                   <div className="min-w-0">
-                                    <p className="text-sm font-extrabold leading-snug">{i.product.name}</p>
-                                    <p className="mt-0.5 text-xs font-medium tabular-nums text-foreground/65">
-                                      {i.product.barcode ? <bdi dir="ltr">{i.product.barcode}</bdi> : null}
-                                      {i.product.barcode ? ' · ' : ''}
-                                      مخزون {i.product.quantity}{i.product.soldByWeight ? ' كجم' : ''}
+                                    <p className="text-sm font-extrabold leading-snug">
+                                      {i.product.name}
+                                      {i.variant && (
+                                        <span className="ms-2 inline-flex items-center rounded-lg bg-cyan-700/10 px-2 py-0.5 text-xs font-extrabold text-cyan-800 dark:text-cyan-200">
+                                          {i.variant.label}
+                                        </span>
+                                      )}
                                     </p>
+                                    <p className="mt-0.5 text-xs font-medium tabular-nums text-foreground/65">
+                                      {i.variant ? null : i.product.barcode ? <bdi dir="ltr">{i.product.barcode}</bdi> : null}
+                                      {!i.variant && i.product.barcode ? ' · ' : ''}
+                                      مخزون {i.variant ? i.variant.stock : i.product.quantity}{i.product.soldByWeight ? ' كجم' : ''}
+                                    </p>
+                                    {i.variant && (
+                                      <button
+                                        type="button"
+                                        onClick={() => void editVariantsOf(i.product)}
+                                        className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-cyan-700 hover:underline dark:text-cyan-300"
+                                      >
+                                        <Grid3x3 className="size-3" aria-hidden />
+                                        تعديل الألوان والمقاسات
+                                      </button>
+                                    )}
                                     {costChanged && (
                                       <p className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-amber-800 dark:text-amber-200">
                                         آخر تكلفة {i.product.cost == null ? '—' : formatCurrency(i.product.cost)}
@@ -624,8 +765,8 @@ export function PurchaseOrderDialog({
                                   </div>
                                   <button
                                     type="button"
-                                    onClick={() => removeItem(i.product.id)}
-                                    aria-label={`حذف ${i.product.name}`}
+                                    onClick={() => removeItem(key)}
+                                    aria-label={`حذف ${lineName(i)}`}
                                     className="flex size-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-rose-500/30 md:hidden"
                                   >
                                     <Trash2 className="size-4" />
@@ -640,8 +781,8 @@ export function PurchaseOrderDialog({
                                   <Stepper
                                     value={i.quantity}
                                     min={i.product.soldByWeight ? 0.05 : 1}
-                                    onChange={(n) => updateQty(i.product.id, n)}
-                                    label={`${i.product.soldByWeight ? 'وزن' : 'كمية'} ${i.product.name}`}
+                                    onChange={(n) => updateQty(key, n)}
+                                    label={`${i.product.soldByWeight ? 'وزن' : 'كمية'} ${lineName(i)}`}
                                     decimal={i.product.soldByWeight}
                                     step={i.product.soldByWeight ? 0.5 : 1}
                                   />
@@ -655,8 +796,8 @@ export function PurchaseOrderDialog({
                                   <DecimalInput
                                     size="sm"
                                     value={i.cost}
-                                    onChange={(n) => updateCost(i.product.id, n)}
-                                    label={`تكلفة ${i.product.name}`}
+                                    onChange={(n) => updateCost(key, n)}
+                                    label={`تكلفة ${lineName(i)}`}
                                     invalid={false}
                                   />
                                 </div>
@@ -670,8 +811,8 @@ export function PurchaseOrderDialog({
                                 {/* حذف (شاشات كبيرة) */}
                                 <button
                                   type="button"
-                                  onClick={() => removeItem(i.product.id)}
-                                  aria-label={`حذف ${i.product.name}`}
+                                  onClick={() => removeItem(key)}
+                                  aria-label={`حذف ${lineName(i)}`}
                                   className="hidden size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-rose-500/30 md:flex"
                                 >
                                   <Trash2 className="size-4" />
@@ -812,6 +953,16 @@ export function PurchaseOrderDialog({
           </div>
         </div>
       </DialogContent>
+
+      <PurchaseVariantsDialog
+        open={matrix !== null}
+        onOpenChange={closeMatrix}
+        productName={matrix?.product.name ?? ''}
+        variants={matrix?.variants ?? []}
+        initialQty={matrixInitialQty}
+        initialCost={matrixInitialCost}
+        onConfirm={confirmMatrix}
+      />
 
       <ProductDialog
         open={newProductOpen}

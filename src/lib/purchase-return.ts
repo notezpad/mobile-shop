@@ -36,6 +36,7 @@
 
 import type { Prisma } from '@prisma/client'
 import { createPrincipalCashEntry } from '@/lib/commission'
+import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
 
 export class PurchaseReturnError extends Error {
   status: number
@@ -231,6 +232,7 @@ export async function performPurchaseReturn(
           return {
             purchaseOrderItemId: it.id,
             productId: it.productId,
+            variantId: it.variantId,
             name: it.name,
             cost: it.cost,
             quantity: qty,
@@ -260,19 +262,41 @@ export async function performPurchaseReturn(
         where: { id: it.productId },
         select: { quantity: true, cost: true },
       })
-      const out = await tx.product.updateMany({
-        where: { id: it.productId, tenantId, quantity: { gte: qty } },
-        data: { quantity: { decrement: qty } },
-      })
-      if (out.count !== 1) {
-        const cur2 = await tx.product.findUnique({
-          where: { id: it.productId },
-          select: { quantity: true },
+      if (it.variantId != null) {
+        // 🎨 2026-10-18: السطر اتشترى على مقاس/لون معيّن → المرتجع بيخصم من
+        // نفس الـ variant (شرط ذري: مايروحش تحت الصفر)، وكمية المنتج بتتحسب
+        // من مجموع الـ variants — مش بنخصم من Product.quantity مباشرة وإلا
+        // أول مزامنة هتمسح الخصم.
+        const vOut = await tx.productVariant.updateMany({
+          where: { id: it.variantId, productId: it.productId, quantity: { gte: qty } },
+          data: { quantity: { decrement: qty } },
         })
-        throw new PurchaseReturnError(
-          `لا يمكن إرجاع ${qty} من "${it.name}": المتاح بالمخزن ${cur2?.quantity ?? 0} فقط (باقي الكمية اتباعت أو اتسحبت). قلّل الكمية.`,
-          409,
-        )
+        if (vOut.count !== 1) {
+          const v2 = await tx.productVariant.findUnique({
+            where: { id: it.variantId },
+            select: { quantity: true },
+          })
+          throw new PurchaseReturnError(
+            `لا يمكن إرجاع ${qty} من "${it.name}": المتاح من هذا اللون/المقاس ${v2?.quantity ?? 0} فقط (باقي الكمية اتباعت أو اتسحبت). قلّل الكمية.`,
+            409,
+          )
+        }
+        await syncProductQuantityFromVariants(tx, it.productId)
+      } else {
+        const out = await tx.product.updateMany({
+          where: { id: it.productId, tenantId, quantity: { gte: qty } },
+          data: { quantity: { decrement: qty } },
+        })
+        if (out.count !== 1) {
+          const cur2 = await tx.product.findUnique({
+            where: { id: it.productId },
+            select: { quantity: true },
+          })
+          throw new PurchaseReturnError(
+            `لا يمكن إرجاع ${qty} من "${it.name}": المتاح بالمخزن ${cur2?.quantity ?? 0} فقط (باقي الكمية اتباعت أو اتسحبت). قلّل الكمية.`,
+            409,
+          )
+        }
       }
       const qBefore = Math.max(0, cur?.quantity ?? 0)
       const cBefore = Math.max(0, cur?.cost ?? 0)
@@ -297,6 +321,7 @@ export async function performPurchaseReturn(
         tenantId,
         branchId: order.branchId,
         productId: it.productId, // null if the product was archived/deleted
+        variantId: it.variantId,
         type: 'out',
         quantity: -qty,
         refType: 'purchase',

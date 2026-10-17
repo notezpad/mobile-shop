@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { namesOfProductsWithVariants, variantGuardMessage } from '@/lib/variant-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +21,12 @@ async function __POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> 
   if (t.status !== 'pending') return NextResponse.json({ error: 'التحويل ليس معلّقاً' }, { status: 400 })
   if (s.branchId && t.fromBranchId !== s.branchId) {
     return NextResponse.json({ error: 'يمكن تنفيذ التحويل من فرع المصدر فقط' }, { status: 403 })
+  }
+
+  // 🎨 منتج له مقاسات/ألوان — ممنوع (التحويل بيكتب Product.quantity مباشرة)
+  {
+    const vNames = await namesOfProductsWithVariants(db, t.items.map((it) => it.productId))
+    if (vNames.length) return NextResponse.json({ error: variantGuardMessage(vNames, 'تنفيذ التحويل') }, { status: 400 })
   }
 
   // Re-validate availability at commit time

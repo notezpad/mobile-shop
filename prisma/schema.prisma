@@ -449,6 +449,9 @@ model PurchaseOrderItem {
   // losing purchase-order history. The `name`, `cost`, `quantity` are
   // snapshot values stored at purchase time → reports stay correct.
   productId       Int?
+  // 🎨 2026-10-18: لو المنتج له ألوان/مقاسات، السطر بيشاور على الـ variant اللي
+  // دخل مخزونه (بدون FK عشان حذف الـ variant ما يمسحش تاريخ الشراء).
+  variantId       Int?
   name            String
   cost            Float
   // 🥬 2026-10-12: Float — شراء لحمة 45.5 كيلو من المورد
@@ -495,6 +498,7 @@ model PurchaseReturnItem {
   purchaseReturnId    Int
   purchaseOrderItemId Int?
   productId           Int?
+  variantId           Int?
   name                String
   cost                Float
   // 🥬 2026-10-12: Float — مرتجع مورد بالوزن (3.5 كيلو)
@@ -765,6 +769,8 @@ model StockMovement {
   // 🛡️ 2026-09-15 (v3): nullable so a product can be hard-deleted without
   // losing stock-movement history (audit trail stays intact).
   productId Int?
+  // 🎨 2026-10-18: الـ variant (لون/مقاس) اللي اتحرك مخزونه، null = المنتج نفسه
+  variantId Int?
   type      String // in | out | adjust | sale | return | transfer_in | transfer_out | stocktake
   // 🥬 2026-10-12: Float — حركات بالوزن (بيع 1.65 كيلو / جرد -0.5)
   quantity  Float // signed: + increases, - decreases

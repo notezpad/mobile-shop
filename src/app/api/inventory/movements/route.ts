@@ -5,6 +5,7 @@ import { requireModule, featureErrorResponse } from '@/lib/features'
 import { getTenantTimezone, localDateStrToUtcBounds, startOfDayInTz } from '@/lib/tenantTime'
 import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 import { withSql, type Sql } from '@/lib/sql'
+import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
 
 export const dynamic = 'force-dynamic'
 
@@ -194,6 +195,34 @@ async function __POST(req: NextRequest) {
   if (s.branchId && product.branchId && product.branchId !== s.branchId) {
     return NextResponse.json({ error: 'لا صلاحية على منتجات فرع آخر' }, { status: 403 })
   }
+
+  // 🎨 2026-10-18: المنتج اللي له ألوان/مقاسات — أي حركة مخزون لازم تتحدد على
+  // المقاس/اللون. تعديل Product.quantity لوحده كان بيتمسح عند أول بيعة لأن كمية
+  // المنتج بتتحسب دايماً من مجموع الـ variants.
+  const variants = await db.productVariant.findMany({
+    where: { productId },
+    select: { id: true, size: true, color: true, quantity: true },
+  })
+  let variant: { id: number; size: string | null; color: string | null; quantity: number } | null = null
+  if (variants.length > 0) {
+    const vid = b?.variantId != null && b.variantId !== '' ? parseInt(b.variantId, 10) : NaN
+    variant = variants.find((v) => v.id === vid) ?? null
+    if (!variant) {
+      return NextResponse.json(
+        { error: 'المنتج ده له ألوان ومقاسات — اختار اللون/المقاس اللي عايز تحرّك مخزونه' },
+        { status: 400 },
+      )
+    }
+    if (!Number.isInteger(qty)) {
+      return NextResponse.json({ error: 'الكمية لازم تكون عدد صحيح' }, { status: 400 })
+    }
+  } else if (b?.variantId != null && b.variantId !== '') {
+    return NextResponse.json({ error: 'المنتج ده ليس له ألوان أو مقاسات' }, { status: 400 })
+  }
+  const variantLabel = variant ? [variant.color, variant.size].filter(Boolean).join(' / ') || `#${variant.id}` : null
+  // المخزون المرجعي للفحص: مخزون الـ variant لو موجود، وإلا المنتج
+  const stockRef = variant ? variant.quantity : product.quantity
+
   let delta = qty
   if (type === 'out') delta = -Math.abs(qty)
   else if (type === 'in') delta = Math.abs(qty)
@@ -204,8 +233,11 @@ async function __POST(req: NextRequest) {
   // 'adjust' (which had no check at all). Fast pre-check for a friendly message,
   // then an atomic conditional UPDATE inside the transaction as the real guard
   // (protects against two concurrent withdrawals / a sale in between).
-  if (delta < 0 && product.quantity < Math.abs(delta)) {
-    return NextResponse.json({ error: `الكمية غير متوفرة (المتاح: ${product.quantity})` }, { status: 400 })
+  if (delta < 0 && stockRef < Math.abs(delta)) {
+    return NextResponse.json(
+      { error: `الكمية غير متوفرة${variantLabel ? ` للمقاس/اللون ${variantLabel}` : ''} (المتاح: ${stockRef})` },
+      { status: 400 },
+    )
   }
 
   // 🛡️ 2026-09-30: قيمة الهالك = الكمية × التكلفة الحالية (المتوسط المرجح).
@@ -216,7 +248,19 @@ async function __POST(req: NextRequest) {
 
   try {
     const result = await db.$transaction(async (tx) => {
-      if (delta < 0) {
+      if (variant) {
+        // 🎨 الحركة على الـ variant نفسه (شرط ذري للخصم) + كمية المنتج = مجموعهم
+        if (delta < 0) {
+          const r = await tx.productVariant.updateMany({
+            where: { id: variant.id, productId, quantity: { gte: Math.abs(delta) } },
+            data: { quantity: { increment: delta } },
+          })
+          if (r.count !== 1) throw new Error('INSUFFICIENT_STOCK')
+        } else {
+          await tx.productVariant.update({ where: { id: variant.id }, data: { quantity: { increment: delta } } })
+        }
+        await syncProductQuantityFromVariants(tx, productId)
+      } else if (delta < 0) {
         const r = await tx.product.updateMany({
           where: { id: productId, tenantId: s.tenantId, quantity: { gte: Math.abs(delta) } },
           data: { quantity: { increment: delta } },
@@ -235,7 +279,7 @@ async function __POST(req: NextRequest) {
             branchId: product.branchId ?? (s.branchId ?? null),
             category: 'هالك وتالف',
             amount: lossValue,
-            note: `هالك: ${product.name} × ${Math.abs(delta)} — ${note}`,
+            note: `هالك: ${product.name}${variantLabel ? ` (${variantLabel})` : ''} × ${Math.abs(delta)} — ${note}`,
             userId: s.userId,
             // source يمنع حذفه من شاشة المصروفات (الحذف بيرجّع فلوس للخزنة غلط)
             source: 'damage',
@@ -249,11 +293,12 @@ async function __POST(req: NextRequest) {
           tenantId: s.tenantId,
           branchId: product.branchId ?? (s.branchId ?? null),
           productId,
+          variantId: variant?.id ?? null,
           type,
           quantity: delta,
           refType: type === 'damage' ? 'damage' : 'manual',
           refId: damageExpenseId ?? undefined,
-          note: note || null,
+          note: variantLabel ? [`[${variantLabel}]`, note].filter(Boolean).join(' ') : (note || null),
           userId: s.userId,
         },
       })

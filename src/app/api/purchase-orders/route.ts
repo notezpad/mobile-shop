@@ -162,10 +162,28 @@ async function __POST(req: NextRequest) {
       : []
     const productMap = new Map<number, { id: number; name: string }>(products.map((p) => [p.id, p]))
 
+    // 🎨 2026-10-18: المنتجات اللي ليها ألوان/مقاسات — الشراء لازم يتحدد على
+    // المقاس/اللون نفسه، وإلا الكمية بتتضاف على المنتج بس وتتمسح عند أول بيعة.
+    const variantRows = ids.length
+      ? await sql<{ id: number; productId: number; size: string | null; color: string | null }[]>`
+          SELECT "id", "productId", "size", "color" FROM "ProductVariant"
+          WHERE "productId" IN ${sql(ids)}
+          ORDER BY "id" ASC`
+      : []
+    const variantsByProduct = new Map<number, typeof variantRows>()
+    for (const v of variantRows) {
+      const list = variantsByProduct.get(Number(v.productId)) ?? []
+      list.push(v)
+      variantsByProduct.set(Number(v.productId), list)
+    }
+    const variantLabel = (v: { size: string | null; color: string | null; id: number }) =>
+      [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`
+
     // validate items & compute total (نفس الرسائل والتحققات بالظبط)
     let total = 0
     const itemsData: Array<{
       productId: number
+      variantId: number | null
       name: string
       cost: number
       quantity: number
@@ -178,31 +196,65 @@ async function __POST(req: NextRequest) {
           { status: 400 }
         )
       }
+      // 🎨 المقاس/اللون: إجباري لو المنتج له variants، ممنوع لو مالوش
+      const productVariants = variantsByProduct.get(p.id) ?? []
+      let variantId: number | null = null
+      let lineName = p.name
+      if (productVariants.length > 0) {
+        const vid = it.variantId != null && it.variantId !== '' ? parseInt(it.variantId, 10) : NaN
+        const variant = productVariants.find((v) => Number(v.id) === vid)
+        if (!variant) {
+          return NextResponse.json(
+            {
+              error: Number.isNaN(vid)
+                ? `المنتج "${p.name}" له ألوان ومقاسات — حدّد اللون والمقاس لكل كمية بتشتريها`
+                : `اللون/المقاس غير تابع للمنتج "${p.name}"`,
+            },
+            { status: 400 }
+          )
+        }
+        variantId = variant.id
+        lineName = `${p.name} — ${variantLabel(variant)}`
+        // مخزون الـ variants أعداد صحيحة
+        if (!Number.isInteger(Number(it.quantity))) {
+          return NextResponse.json(
+            { error: `كمية غير صالحة للمنتج ${lineName} — لازم عدد صحيح` },
+            { status: 400 }
+          )
+        }
+      } else if (it.variantId != null && it.variantId !== '') {
+        return NextResponse.json(
+          { error: `المنتج "${p.name}" ليس له ألوان أو مقاسات` },
+          { status: 400 }
+        )
+      }
+
       // 🥬 2026-10-12: الكمية Float — شراء بالوزن بكسور (45.5 كيلو من المورد)
       const qty = Math.round((Number(it.quantity) || 0) * 1000) / 1000
       if (!qty || qty <= 0) {
         return NextResponse.json(
-          { error: `كمية غير صالحة للمنتج ${p.name}` },
+          { error: `كمية غير صالحة للمنتج ${lineName}` },
           { status: 400 }
         )
       }
       const cost = Number(it.cost)
       if (isNaN(cost) || cost < 0) {
         return NextResponse.json(
-          { error: `سعر تكلفة غير صالح للمنتج ${p.name}` },
+          { error: `سعر تكلفة غير صالح للمنتج ${lineName}` },
           { status: 400 }
         )
       }
       if (!Number.isFinite(cost)) {
         return NextResponse.json(
-          { error: `سعر تكلفة غير صالح للمنتج ${p.name}` },
+          { error: `سعر تكلفة غير صالح للمنتج ${lineName}` },
           { status: 400 }
         )
       }
       total += cost * qty
       itemsData.push({
         productId: p.id,
-        name: p.name,
+        variantId,
+        name: lineName,
         cost,
         quantity: qty,
       })
@@ -269,6 +321,17 @@ async function __POST(req: NextRequest) {
         // تضارب في الرقم الفريد (طلب متزامن معانا — SQLSTATE 23505 بديل P2002)
         // → جرّب تاني برقم أعلى. أي خطأ تاني بيتنشر طبيعي.
         if (isUniqueViolation(e) && attempt < MAX_ATTEMPTS) continue
+        // 🎨 حواجز الدالة (لو الـ route اتجاوز لأي سبب) → 400 برسالة واضحة
+        const msg = String(e?.message ?? '')
+        if (msg.includes('PRODUCT_HAS_VARIANTS')) {
+          return NextResponse.json(
+            { error: 'في منتج له ألوان ومقاسات — حدّد اللون والمقاس لكل كمية بتشتريها' },
+            { status: 400 }
+          )
+        }
+        if (msg.includes('VARIANT_NOT_FOUND')) {
+          return NextResponse.json({ error: 'لون/مقاس غير موجود — حدّث الصفحة وحاول تاني' }, { status: 400 })
+        }
         throw e
       }
     }

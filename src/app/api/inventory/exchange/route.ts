@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { round2 } from '@/lib/purchase-return'
+import { namesOfProductsWithVariants, variantGuardMessage } from '@/lib/variant-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,6 +94,12 @@ export async function POST(req: NextRequest) {
     if (s.branchId && p.branchId && p.branchId !== s.branchId) {
       return NextResponse.json({ error: `لا صلاحية على الصنف "${p.name}" (فرع آخر)` }, { status: 403 })
     }
+  }
+
+  // 🎨 الاستبدال بيعدّل Product.quantity مباشرة — ممنوع على منتج له مقاسات/ألوان
+  {
+    const vNames = await namesOfProductsWithVariants(db, allIds)
+    if (vNames.length) return NextResponse.json({ error: variantGuardMessage(vNames, 'الاستبدال مع المورد') }, { status: 400 })
   }
 
   // فحص توفر الكميات الخارجة (فحص مبدئي للرسالة اللطيفة — الفحص الذري جوه الـ tx)

@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { withSql, type Sql } from '@/lib/sql'
+import { namesOfProductsWithVariants, variantGuardMessage } from '@/lib/variant-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -97,6 +98,12 @@ async function __POST(req: NextRequest) {
   ])
   if (!fb || fb.tenantId !== s.tenantId || !tb || tb.tenantId !== s.tenantId)
     return NextResponse.json({ error: 'فرع غير صالح' }, { status: 400 })
+
+  // 🎨 التحويل بين الفروع بيعدّل Product.quantity مباشرة — ممنوع على منتج له مقاسات/ألوان
+  {
+    const vNames = await namesOfProductsWithVariants(db, items.map((it: any) => parseInt(it.productId, 10)))
+    if (vNames.length) return NextResponse.json({ error: variantGuardMessage(vNames, 'التحويل بين الفروع') }, { status: 400 })
+  }
 
   // Validate quantities first (only when about to execute)
   if (mode === 'completed') {
