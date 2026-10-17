@@ -127,7 +127,7 @@ export async function checkLowStockAndNotify(sql: Sql, tenantId: string) {
     await sql`
       INSERT INTO "Notification" ("tenantId", "userId", "type", "title", "message", "link")
       SELECT x."tenantId", x."userId", x."type", x."title", x."message", x."link"
-      FROM jsonb_to_recordset(${JSON.stringify(toCreate)}::jsonb)
+      FROM jsonb_to_recordset(${sql.json(toCreate)}::jsonb)
         AS x("tenantId" text, "userId" text, "type" text, "title" text, "message" text, "link" text)`
   } catch (e) {
     console.error('[checkLowStockAndNotify] bulk insert failed:', e)
