@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { checkLowStockAndNotify, checkExpiringSubscriptions } from '@/lib/notifications'
+import { getSql } from '@/lib/sql'
 import { getTenantTimezone, startOfDayInTz, startOfMonthInTz, dateStrInTz } from '@/lib/tenantTime'
 import { matchEdgeCache, putEdgeCache } from '@/lib/edgeCache'
 
@@ -187,9 +188,12 @@ export async function GET(req: Request) {
     const shouldRunChecks = !Number.isFinite(lastChecked) || Date.now() - lastChecked >= NOTIF_COOLDOWN_MS
     if (shouldRunChecks) {
       try {
+        // ⚡ دوال الإشعارات بقت تاخد عميل postgres.js (Sql) مش Prisma —
+        // نفس اتصال الطلب (requireAuth بيستخدم نفس getSql()).
+        const notifSql = getSql()
         await Promise.allSettled([
-          checkLowStockAndNotify(db, session.tenantId),
-          checkExpiringSubscriptions(db, session.tenantId),
+          checkLowStockAndNotify(notifSql, session.tenantId),
+          checkExpiringSubscriptions(notifSql, session.tenantId),
         ])
       } catch {
         // 🛡️ Never let notification failures break the dashboard.
