@@ -1,494 +1,277 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth, authErrorResponse } from '@/lib/auth'
-import type { Session } from '@/lib/auth'
-import { requireCapability, featureErrorResponse } from '@/lib/features'
-import { getTenantTimezone, localDateStrToUtcBounds, dateStrInTz } from '@/lib/tenantTime'
-import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
-import { withSql, isUniqueViolation, type Sql } from '@/lib/sql'
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ⚡ create_sale(payload jsonb) — حفظ فاتورة البيع في استدعاء واحد (2026-10-17)
+-- ─────────────────────────────────────────────────────────────────────────────
+-- POST /api/sales كان أثقل مسار في الموقع (Prisma + $transaction كبيرة:
+-- فاتورة + أصناف + خصم مخزون + دين عميل + خزنة) — كل استعلام منهم بياكل CPU
+-- من حصة الـ 10ms بتاعة Workers المجانية → 503 عشوائي وقت الضغط.
+--
+-- الدالة بتعمل بالترتيب نفس اللي كان بيحصل حرفيًا في route.ts:
+--   1) توليد رقم الفاتورة (أعلى رقم لسنة المحل + 1 — جوه نفس الاستدعاء)
+--   2) إنشاء الفاتورة + الأصناف
+--   3) خصم المخزون ذريًا لكل صنف (منتج عادي / وحدة جملة / لون-مقاس)
+--      بنفس رسائل الخطأ العربية بتاعة deductStock حرفيًا
+--   4) Product.quantity = مجموع المتغيرات (لو البيع من لون/مقاس)
+--   5) حركة مخزون type='sale' لكل صنف
+--   6) دين العميل (لو بيع آجل) + قيد الخزنة بطريقة الدفع
+-- وترجّع نفس شكل الرد القديم بالظبط (sale + items[] + variant + customer).
+--
+-- ملاحظة مهمة: جدول SaleItem **مفيهوش** عمود createdAt (النسخة الأولى من
+-- السكريبت ده غلطت فيه وفشلت) — التاريخ على الفاتورة الأم Sale فقط.
+-- كل التواريخ بترجع بصيغة Prisma بالظبط: "2026-10-17T09:00:00.000Z".
+--
+-- عدم التكرار (أوفلاين): الفهارس الفريدة @@unique([tenantId, invoiceNo])
+-- و @@unique([tenantId, clientRef]) هي الضمانة — أي تضارب بيرجع SQLSTATE
+-- 23505 والـ route يرجّع الفاتورة الأصلية أو يعيد المحاولة برقم أعلى
+-- (بديل P2002 بتاع Prisma).
+--
+-- التركيب (مرة واحدة): الصق الملف ده كله في Supabase → SQL Editor → Run
+-- (نفس اللي عملناه مع create-purchase-order.sql بالظبط).
+-- ═══════════════════════════════════════════════════════════════════════════
 
-export const dynamic = 'force-dynamic'
-
-export async function GET(req: NextRequest) {
-  let session: Session
-  try {
-    session = await requireAuth()
-  } catch (e) {
-    const err = authErrorResponse(e)
-    return NextResponse.json(err?.body, { status: err?.status })
-  }
-
-  // 🔒 RBAC: رؤية التكاليف
-  const canViewProfits = session.role === 'ADMIN' || session.role === 'SUPER_ADMIN' || session.canViewProfits === true
-
-  // ⚡ 2026-10-17 (الخطوتان 1 + 4): GET بقى SQL مباشر (postgres.js) + رد مخفّف
-  // — كل فاتورة بترجع بالحقول اللي SalesHistoryView.tsx بتعرضها فعلًا فقط:
-  //   Sale: id, invoiceNo, total, paid, status, createdAt, refunded, paymentMethod
-  //   SaleItem: id, name, price, quantity, cost, unitLabel, unitQuantity, pieceLabel, returnedQty
-  //   Customer: id, name, phone
-  //   + userName من join بدل استعلام users منفصل
-  // بدون تغيير الحدود (limit) أو كسر كاش الأوفلاين — نفس { data, total, page,
-  // limit, totalPages } ومفتاح الكاش زي ما هو.
-  return withSql(async (sql) => {
-    const { searchParams } = new URL(req.url)
-    const from = searchParams.get('from')
-    const to = searchParams.get('to')
-
-    // 🕐 ROOT FIX (2026-09-27): "today" is the tenant's own local day
-    // (Tenant.timezone) — consistent for everyone, DST-safe.
-    const createdAt: { gte?: Date; lte?: Date } = {}
-    if (from || to) {
-      const tz = await getTenantTimezone(session.tenantId)
-      if (from) createdAt.gte = localDateStrToUtcBounds(from, 'start', tz)
-      if (to)   createdAt.lte = localDateStrToUtcBounds(to, 'end', tz)
-    }
-
-    const page  = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
-    const limit = Math.min(200, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)))
-    const skip  = (page - 1) * limit
-
-    const rangeParts = [sql`"tenantId" = ${session.tenantId}`]
-    if (createdAt.gte) rangeParts.push(sql`AND "createdAt" >= ${createdAt.gte}`)
-    if (createdAt.lte) rangeParts.push(sql`AND "createdAt" <= ${createdAt.lte}`)
-    const rangeWhere = rangeParts
-
-    const [saleRows, cnt] = await Promise.all([
-      sql<any[]>`
-        SELECT s."id", s."invoiceNo", s."total", s."paid", s."status",
-               s."createdAt", s."refunded", s."paymentMethod",
-               (SELECT json_build_object('id', c."id", 'name', c."name", 'phone', c."phone")
-                FROM "Customer" c WHERE c."id" = s."customerId") AS customer,
-               (SELECT u."name" FROM "User" u WHERE u."id" = s."userId") AS "userName"
-        FROM "Sale" s
-        WHERE ${rangeWhere}
-        ORDER BY s."id" DESC
-        LIMIT ${limit} OFFSET ${skip}`,
-      sql<{ cnt: number }[]>`
-        SELECT COUNT(*)::int AS cnt FROM "Sale" WHERE ${rangeWhere}`,
-    ])
-    const total = Number(cnt[0]?.cnt ?? 0)
-
-    // عناصر الصفحة في استعلام واحد (بدل include لكل فاتورة)
-    const saleIds = saleRows.map((r) => r.id)
-    const itemRows = saleIds.length
-      ? await sql<any[]>`
-          SELECT "id", "saleId", "name", "price", "quantity", "cost",
-                 "unitLabel", "unitQuantity", "pieceLabel", "returnedQty"
-          FROM "SaleItem"
-          WHERE "saleId" IN ${sql(saleIds)}
-          ORDER BY "id" ASC`
-      : []
-    const itemsBySale = new Map<number, any[]>()
-    for (const it of itemRows) {
-      const list = itemsBySale.get(it.saleId) ?? []
-      list.push(it)
-      itemsBySale.set(it.saleId, list)
-    }
-
-    const result = saleRows.map((s) => ({
-      id: s.id,
-      invoiceNo: s.invoiceNo,
-      total: s.total,
-      paid: s.paid,
-      status: s.status,
-      createdAt: s.createdAt,
-      refunded: s.refunded,
-      paymentMethod: s.paymentMethod,
-      userName: s.userName ?? null,
-      customer: s.customer ?? null,
-      // 🔒 RBAC: نخفي تكلفة المنتجات لمن لا يملك صلاحية رؤية الأرباح
-      items: (itemsBySale.get(s.id) ?? []).map((it) => ({
-        id: it.id,
-        name: it.name,
-        price: it.price,
-        quantity: it.quantity,
-        cost: canViewProfits ? it.cost : null,
-        unitLabel: it.unitLabel ?? null,
-        unitQuantity: it.unitQuantity ?? null,
-        pieceLabel: it.pieceLabel ?? null,
-        returnedQty: it.returnedQty ?? 0,
-      })),
-    }))
-
-    return NextResponse.json({
-      data: result,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    })
-  })
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// أنواع صفوف SQL — نفس الحقول المستخدمة فعليًا من كائنات Prisma القديمة
-// ─────────────────────────────────────────────────────────────────────────────
-type ProductRow = {
-  id: number
-  name: string
-  cost: number
-  quantity: number
-  unitLabel: string | null
-}
-type ProductUnitRow = {
-  id: number
-  productId: number
-  name: string
-  factor: number
-}
-type ProductVariantRow = {
-  id: number
-  productId: number
-  quantity: number
-}
-type CustomerRow = {
-  id: number
-  tenantId: string
-  name: string
-  balance: number
-  creditLimit: number | null
-}
-
-/**
- * 🛡️ (M7) جلب فاتورة كاملة بمفتاح الأوفلاين clientRef عبر دالة get_sale_by_ref
- * — نفس شكل sale.findUnique({ where: tenantId_clientRef, include: { items:
- * { include: { variant } }, customer } }) القديم بالظبط.
- */
-async function fetchSaleByClientRef(sql: Sql, tenantId: string, clientRef: string) {
-  const rows = await sql<{ sale: any }[]>`
-    SELECT get_sale_by_ref(${tenantId}, ${clientRef}) AS sale`
-  return rows[0]?.sale ?? null
-}
-
-export async function POST(req: NextRequest) {
-  let session: Session
-  try {
-    session = await requireAuth()
-  } catch (e) {
-    const err = authErrorResponse(e)
-    return NextResponse.json(err?.body, { status: err?.status })
-  }
-
-  const body = await req.json().catch(() => null)
-  if (!body || !Array.isArray(body.items) || body.items.length === 0) {
-    return NextResponse.json(
-      { error: 'السلة فارغة' },
-      { status: 400 }
-    )
-  }
-  const paid = Number(body.paid ?? 0) || 0
-  // 🛡️ 2026-09-30 (C4): paid سالب كان بيزوّد دين العميل بمقداره ويخصم الخزنة — مرفوض.
-  if (!Number.isFinite(paid) || paid < 0) {
-    return NextResponse.json({ error: 'المبلغ المدفوع غير صالح' }, { status: 400 })
-  }
-  // 🛡️ 2026-09-30 (C12): طريقة دفع مبلغ البيع — زي أمر الشراء بالظبط،
-  // عشان الخزنة تتفصل كاش / محافظ / انستاباي على أكبر تدفق فلوس في النظام.
-  const SALE_METHODS = new Set(['cash', 'vodafone_cash', 'instapay', 'fawry'])
-  const paymentMethod = body.paymentMethod === undefined || body.paymentMethod === null || body.paymentMethod === ''
-    ? 'cash'
-    : String(body.paymentMethod)
-  if (!SALE_METHODS.has(paymentMethod)) {
-    return NextResponse.json({ error: 'طريقة الدفع غير صالحة' }, { status: 400 })
-  }
-  // 🛡️ 2026-09-30 (M10): تاريخ استحقاق اختياري للفاتورة الآجلة.
-  let dueDate: Date | null = null
-  if (body.dueDate) {
-    const d = new Date(body.dueDate)
-    if (isNaN(d.getTime())) {
-      return NextResponse.json({ error: 'تاريخ الاستحقاق غير صالح' }, { status: 400 })
-    }
-    dueDate = d
-  }
-  // 🛡️ 2026-09-30 (M7): مفتاح عدم التكرار للأوفلاين — retry لنفس الفاتورة بيرجّع
-  // الفاتورة الأصلية بدل ما يعمل خصم مخزن وخزنة ودين مكرر.
-  const clientRef = body.clientRef ? String(body.clientRef).slice(0, 64) : null
-  let customerId: number | null = null
-  if (body.customerId) {
-    customerId = parseInt(body.customerId, 10) || null
-  }
-
-  // ⚡ 2026-10-17: POST بقى SQL مباشر + RPC واحد (create_sale) — نفس ترتيب
-  // التحقق ونفس رسائل الخطأ بالظبط، بس بدل 8-30 استعلام Prisma متسلسل +
-  // $transaction كبيرة، كله بقى: 4-5 استعلامات قراءة خفيفة + استدعاء واحد
-  // جوه الداتابيز بيقفل الفاتورة والمخزون والدين والخزنة مرة واحدة.
-  return withSql(async (sql) => {
-    // load products scoped to tenant
-    const ids = body.items
-      .map((i: any) => parseInt(i.productId, 10))
-      .filter((n: number) => !isNaN(n))
-
-    // Collect all unitIds/variantIds first, then batch-fetch in ONE query
-    // instead of one lookup per cart item (N+1 problem — زي القديم بالظبط)
-    const unitIds = body.items
-      .map((i: any) => i.unitId ? parseInt(i.unitId, 10) : null)
-      .filter((id: number | null): id is number => id !== null && !isNaN(id))
-
-    const variantIds = body.items
-      .map((i: any) => i.variantId ? parseInt(i.variantId, 10) : null)
-      .filter((id: number | null): id is number => id !== null && !isNaN(id))
-
-    const [products, units, variants, customerRows, tenantRows] = await Promise.all([
-      (ids.length > 0
-        ? sql<ProductRow[]>`
-            SELECT "id", "name", "cost", "quantity", "unitLabel"
-            FROM "Product"
-            WHERE "tenantId" = ${session.tenantId} AND "id" IN ${sql(ids)}`
-        : Promise.resolve([] as ProductRow[])),
-      (unitIds.length > 0
-        ? sql<ProductUnitRow[]>`
-            SELECT "id", "productId", "name", "factor"
-            FROM "ProductUnit"
-            WHERE "id" IN ${sql(unitIds)}`
-        : Promise.resolve([] as ProductUnitRow[])),
-      (variantIds.length > 0
-        ? sql<ProductVariantRow[]>`
-            SELECT "id", "productId", "quantity"
-            FROM "ProductVariant"
-            WHERE "id" IN ${sql(variantIds)}`
-        : Promise.resolve([] as ProductVariantRow[])),
-      (customerId
-        ? sql<CustomerRow[]>`
-            SELECT "id", "tenantId", "name", "balance", "creditLimit"
-            FROM "Customer"
-            WHERE "id" = ${customerId}`
-        : Promise.resolve([] as CustomerRow[])),
-      sql<{ invoicePrefix: string }[]>`
-        SELECT "invoicePrefix" FROM "Tenant" WHERE "id" = ${session.tenantId}`,
-    ])
-
-    // validate customer
-    const customerCheck = customerRows[0] ?? null
-    if (customerId) {
-      if (!customerCheck || customerCheck.tenantId !== session.tenantId) {
-        return NextResponse.json({ error: 'العميل غير صالح' }, { status: 400 })
-      }
-    }
-
-    const productMap = new Map<number, ProductRow>(products.map((p) => [p.id, p]))
-    const unitMap = new Map<number, ProductUnitRow>(units.map((u) => [u.id, u]))
-    const variantMap = new Map<number, ProductVariantRow>(variants.map((v) => [v.id, v]))
-
-    // Pre-check capability if any item references a unitId.
-    const hasUnits = body.items.some((i: any) => i.unitId)
-    if (hasUnits) {
-      try {
-        await requireCapability(session, 'multi_unit')
-      } catch (e) {
-        const fErr = featureErrorResponse(e)
-        if (fErr) return NextResponse.json(fErr.body, { status: fErr.status })
-        throw e
-      }
-    }
-    const hasVariants = body.items.some((i: any) => i.variantId)
-    if (hasVariants) {
-      try {
-        await requireCapability(session, 'variants')
-      } catch (e) {
-        const fErr = featureErrorResponse(e)
-        if (fErr) return NextResponse.json(fErr.body, { status: fErr.status })
-        throw e
-      }
-    }
-
-    let total = 0
-
-    const itemsData: Array<{
-      productId: number
-      name: string
-      price: number
-      cost: number
-      quantity: number
-      unitsEntered: number
-      unitId: number | null
-      unitLabel: string | null
-      unitQuantity: number | null
-      // 🥬 لقطة وحدة المنتج (علبة/كيس..) وقت البيع — null = قطعة
-      pieceLabel: string | null
-      variantId: number | null
-    }> = []
-
-    for (const it of body.items) {
-      const p = productMap.get(parseInt(it.productId, 10))
-      if (!p) {
-        return NextResponse.json({ error: 'منتج غير موجود في السلة' }, { status: 400 })
-      }
-      // 🥬 2026-10-12: الكمية بقيت Float — منتجات البيع بالوزن بتتباع بكسور
-      // (لحمة 1.65 كيلو). منتجات القطع/الوحدات بتفضل أعداد صحيحة زي ما هي.
-      // بنسمح لحد 3 خانات عشرية (جرام) ونشيل أي ضوضاء عائمة.
-      const qty = Math.round((Number(it.quantity) || 0) * 1000) / 1000
-      if (!qty || qty <= 0) {
-        return NextResponse.json({ error: `كمية غير صالحة للمنتج ${p.name}` }, { status: 400 })
-      }
-
-      let unitId: number | null = null
-      let unitLabel: string | null = null
-      let unitQuantity: number | null = null
-      let totalPieces = qty
-      let unitFactor = 1
-      let variantId: number | null = null
-
-      // If this line is a specific color/size, validate it and use ITS stock
-      // as the ceiling — not the product's aggregate quantity. Selling a
-      // variant no longer touches Product.quantity directly.
-      if (it.variantId) {
-        const vid = parseInt(it.variantId, 10)
-        const variant = variantMap.get(vid)
-        if (!variant || variant.productId !== p.id) {
-          return NextResponse.json(
-            { error: `متغير (لون/مقاس) غير صالح للمنتج ${p.name}` },
-            { status: 400 }
-          )
-        }
-        variantId = variant.id
-      }
-
-      if (it.unitId) {
-        const uid = parseInt(it.unitId, 10)
-        const unit = unitMap.get(uid)
-        if (!unit || unit.productId !== p.id) {
-          return NextResponse.json(
-            { error: `وحدة بيع غير صالحة للمنتج ${p.name}` },
-            { status: 400 }
-          )
-        }
-        unitId = unit.id
-        unitLabel = unit.name
-        unitQuantity = qty
-        unitFactor = unit.factor
-        totalPieces = unit.factor * qty
-      }
-
-      const stockCeiling = variantId != null ? (variantMap.get(variantId)!.quantity) : p.quantity
-      if (totalPieces > stockCeiling + 1e-9) {
-        return NextResponse.json(
-          { error: `الكمية المطلوبة من ${p.name} غير متوفرة (المتاح: ${Math.round(stockCeiling * 1000) / 1000})` },
-          { status: 400 }
-        )
-      }
-
-      const price = Number(it.price)
-      if (isNaN(price) || price < 0) {
-        return NextResponse.json({ error: `سعر غير صالح للمنتج ${p.name}` }, { status: 400 })
-      }
-      total += price * qty
-
-      const pricePerPiece = price / unitFactor
-
-      itemsData.push({
-        productId: p.id,
-        name: p.name,
-        price: pricePerPiece,
-        cost: p.cost,
-        quantity: totalPieces,
-        unitsEntered: qty,
-        unitId,
-        unitLabel,
-        unitQuantity,
-        pieceLabel: p.unitLabel ?? null,
-        variantId,
-      })
-    }
-
-    if (paid < total && !customerId) {
-      return NextResponse.json(
-        { error: 'البيع بالآجل لازم يكون مرتبط بعميل' },
-        { status: 400 }
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 1) بنّاء شكل الرد — نفس Prisma:
+--    sale.create({ include: { items: { include: { variant: true } }, customer: true } })
+-- كل حقل موجود بالاسم الحقيقي من schema.prisma — لا أكثر ولا أقل.
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION get_sale_full(p_tenantId text, p_saleId int)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT jsonb_build_object(
+    'id',           s."id",
+    'tenantId',     s."tenantId",
+    'branchId',     s."branchId",
+    'invoiceNo',    s."invoiceNo",
+    'customerId',   s."customerId",
+    'userId',       s."userId",
+    'total',        s."total",
+    'paid',         s."paid",
+    'paymentMethod', s."paymentMethod",
+    'refunded',     s."refunded",
+    'dueDate',      CASE WHEN s."dueDate" IS NULL THEN NULL
+                         ELSE to_char(s."dueDate", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END,
+    'clientRef',    s."clientRef",
+    'status',       s."status",
+    'createdAt',    to_char(s."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+    'items', COALESCE((
+      SELECT jsonb_agg(jsonb_build_object(
+               'id',           i."id",
+               'saleId',       i."saleId",
+               'productId',    i."productId",
+               'name',         i."name",
+               'price',        i."price",
+               'quantity',     i."quantity",
+               'returnedQty',  i."returnedQty",
+               'cost',         i."cost",
+               'unitId',       i."unitId",
+               'unitLabel',    i."unitLabel",
+               'unitQuantity', i."unitQuantity",
+               'pieceLabel',   i."pieceLabel",
+               'variantId',    i."variantId",
+               'variant', CASE WHEN v."id" IS NULL THEN NULL ELSE jsonb_build_object(
+                 'id',        v."id",
+                 'productId', v."productId",
+                 'size',      v."size",
+                 'color',     v."color",
+                 'barcode',   v."barcode",
+                 'quantity',  v."quantity",
+                 'createdAt', to_char(v."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+               ) END
+             ) ORDER BY i."id")
+      FROM "SaleItem" i
+      LEFT JOIN "ProductVariant" v ON v."id" = i."variantId"
+      WHERE i."saleId" = s."id"
+    ), '[]'::jsonb),
+    'customer', CASE WHEN s."customerId" IS NULL THEN NULL ELSE (
+      SELECT jsonb_build_object(
+        'id',         c."id",
+        'tenantId',   c."tenantId",
+        'name',       c."name",
+        'phone',      c."phone",
+        'balance',    c."balance",
+        'creditLimit', c."creditLimit",
+        'createdAt',  to_char(c."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
       )
-    }
+      FROM "Customer" c
+      WHERE c."id" = s."customerId"
+    ) END
+  )
+  INTO v_result
+  FROM "Sale" s
+  WHERE s."id" = p_saleId AND s."tenantId" = p_tenantId;
 
-    // 🛡️ 2026-09-30 (C5 — قرار تجاري: ترفض): مدفوع أكبر من الإجمالي مرفوض.
-    if (paid > total + 0.005) {
-      return NextResponse.json(
-        { error: `المدفوع (${paid}) أكبر من إجمالي الفاتورة (${Math.round(total * 100) / 100}) — لو العميل دفع زيادة سجلها دفعة على حسابه` },
-        { status: 400 }
-      )
-    }
+  RETURN v_result;
+END;
+$$;
 
-    // 🛡️ 2026-09-30 (M10): الحد الائتماني — لو العميل متحدد له حد وبيع آجل
-    // هيعديه، البيع يترفض (بدون فرض ولا استثناء تلقائي).
-    if (customerId && paid < total && customerCheck?.creditLimit != null) {
-      const projected = (customerCheck.balance ?? 0) + (total - paid)
-      if (projected > customerCheck.creditLimit + 0.005) {
-        return NextResponse.json(
-          { error: `بيع آجل هيعدي الحد الائتماني للعميل ${customerCheck.name} (الحد: ${customerCheck.creditLimit}، الرصيد الحالي: ${customerCheck.balance}، إجمالي بعد البيع: ${Math.round(projected * 100) / 100})` },
-          { status: 400 }
-        )
-      }
-    }
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 2) البحث عن فاتورة بمفتاح الأوفلاين clientRef — بيرجّع نفس شكل get_sale_full
+--    أو NULL لو مفيش. الـ route بيستخدمها في فحص التكرار قبل الحفظ
+--    وعند التضارب (23505) — بديل sale.findUnique({ where: tenantId_clientRef }).
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION get_sale_by_ref(p_tenantId text, p_ref text)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT get_sale_full(p_tenantId, s."id")
+  FROM "Sale" s
+  WHERE s."tenantId" = p_tenantId AND s."clientRef" = p_ref
+  LIMIT 1;
+$$;
 
-    // 🛡️ 2026-09-30 (M7): idempotency — نفس clientRef؟ رجّع الفاتورة الأصلية.
-    if (clientRef) {
-      const existing = await fetchSaleByClientRef(sql, session.tenantId, clientRef)
-      if (existing) {
-        return NextResponse.json(existing, { status: 200 })
-      }
-    }
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 3) الدالة الرئيسية: حفظ الفاتورة كاملة في استدعاء واحد (transaction واحدة).
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION create_sale(payload jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_tenantId   text      := payload->>'tenantId';
+  v_branchId   int       := (payload->>'branchId')::int;
+  v_userId     text      := payload->>'userId';
+  v_customerId int       := (payload->>'customerId')::int;
+  v_total      float8    := (payload->>'total')::float8;
+  v_paid       float8    := (payload->>'paid')::float8;
+  v_method     text      := COALESCE(payload->>'paymentMethod', 'cash');
+  -- ISO مع Z → UTC wall-clock (أعمدة Prisma timestamp بدون منطقة زمنية)
+  v_dueDate    timestamp := (NULLIF(payload->>'dueDate', ''))::timestamptz AT TIME ZONE 'UTC';
+  v_clientRef  text      := NULLIF(payload->>'clientRef', '');
+  v_year       int       := (payload->>'year')::int;
+  v_prefix     text      := COALESCE(payload->>'prefix', 'INV');
+  v_start      text      := v_prefix || '-' || v_year || '-';
+  v_lastSeq    int;
+  v_invoiceNo  text;
+  v_saleId     int;
+  v_toDeduct   float8;
+  v_curQty     float8;
+  it           record;
+BEGIN
+  -- ── 1) رقم الفاتورة: أعلى رقم موجود لسنة المحل + 1 (نفس nextInvoiceNo:
+  --       قراءة آخر فاتورة بالفهرس مش عدّ كل فواتير السنة)
+  --       استخلاص الرقم بدون regexp: LTRIM بيشيل الأرقام البادئة، والفرق
+  --       في الطول بيحدد العدد — نفس parseInt(اللاحقة) || 0 بتاعة JS حرفيًا
+  --       ('00042abc' → 42، 'abc' → 0، '' → 0) ──
+  v_lastSeq := COALESCE((
+    SELECT NULLIF(LEFT(t.sfx, LENGTH(t.sfx) - LENGTH(LTRIM(t.sfx, '0123456789'))), '')::int
+    FROM (
+      SELECT SUBSTRING(s."invoiceNo" FROM LENGTH(v_start) + 1) AS sfx
+      FROM "Sale" s
+      WHERE s."tenantId" = v_tenantId
+        AND LEFT(s."invoiceNo", LENGTH(v_start)) = v_start
+      ORDER BY s."id" DESC
+      LIMIT 1
+    ) t
+  ), 0) + 1;
+  v_invoiceNo := v_start || LPAD(v_lastSeq::text, 5, '0');
 
-    const prefix = tenantRows[0]?.invoicePrefix || 'INV'
-    // 🛡️ رقم الفاتورة بيتركب جوه الدالة + إعادة المحاولة عند التضارب
-    const tz = await getTenantTimezone(session.tenantId)
-    const invYear = parseInt(dateStrInTz(new Date(), tz).slice(0, 4), 10)
+  -- ── 2) الفاتورة (status='مكتملة' زي القديم، refunded بتفضل 0) ──
+  INSERT INTO "Sale"
+    ("tenantId", "branchId", "invoiceNo", "customerId", "userId",
+     "total", "paid", "paymentMethod", "dueDate", "clientRef", "status")
+  VALUES
+    (v_tenantId, v_branchId, v_invoiceNo, v_customerId, v_userId,
+     v_total, v_paid, v_method, v_dueDate, v_clientRef, 'مكتملة')
+  RETURNING "id" INTO v_saleId;
 
-    const payload = {
-      tenantId: session.tenantId,
-      branchId: session.branchId ?? null,
-      userId: session.userId,
-      customerId,
-      total,
-      paid,
-      paymentMethod,
-      dueDate: dueDate ? dueDate.toISOString() : null,
-      clientRef,
-      year: invYear,
-      prefix,
-      items: itemsData,
-    }
+  -- ── 3) الأصناف: سطر فاتورة + خصم مخزون ذري + حركة مخزون (نفس deductStock) ──
+  FOR it IN
+    SELECT x."productId", x."name", x."price", x."cost", x."quantity",
+           x."unitId", x."unitLabel", x."unitQuantity", x."pieceLabel", x."variantId"
+    FROM jsonb_to_recordset(payload->'items')
+      AS x("productId" int, "name" text, "price" float8, "cost" float8,
+           "quantity" float8, "unitId" int, "unitLabel" text,
+           "unitQuantity" float8, "pieceLabel" text, "variantId" int)
+  LOOP
+    INSERT INTO "SaleItem"
+      ("saleId", "productId", "name", "price", "quantity", "cost",
+       "unitId", "unitLabel", "unitQuantity", "pieceLabel", "variantId")
+    VALUES
+      (v_saleId, it."productId", it."name", it."price", it."quantity", it."cost",
+       it."unitId", it."unitLabel", it."unitQuantity", it."pieceLabel", it."variantId");
 
-    let sale: any = null
-    const MAX_ATTEMPTS = 5
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      try {
-        // ⚠️ لازم نمرر الكائن عبر sql.json() (مش JSON.stringify نصيًا) —
-        // postgres.js بيسلسله بصيغة JSON صحيحة على السلك (نفس درس أمر الشراء).
-        const rows = await sql<{ sale: any }[]>`
-          SELECT create_sale(${sql.json(payload)}::jsonb) AS sale`
-        sale = rows[0]?.sale
-        break
-      } catch (e: any) {
-        // 🛡️ تضارب فريد متزامن (SQLSTATE 23505 — بديل P2002 بتاع Prisma):
-        // لو السبب clientRef (أوفلاين أرسل نفس الفاتورة مرتين) → النسخة
-        // الأصلية اتحفظ بالفعل، رجّعها بدل إعادة المحاولة.
-        if (isUniqueViolation(e) && clientRef) {
-          const existing = await fetchSaleByClientRef(sql, session.tenantId, clientRef)
-          if (existing) {
-            return NextResponse.json(existing, { status: 200 })
-          }
-        }
-        // تضارب في الرقم الفريد (فاتورة متزامنة معانا) → جرّب تاني برقم أعلى
-        if (isUniqueViolation(e) && attempt < MAX_ATTEMPTS) continue
-        throw e
-      }
-    }
+    -- إجمالي القطع (الفاكتور مضروب مسبقًا في الـ route — نفس ناتج
+    -- deductStock: factor × unitsEntered بنفس الحساب العشري بالظبط)
+    v_toDeduct := it."quantity";
 
-    // ⚡ EDGE CACHE purge (2026-10-06): البيع الجديد لازم يظهر فورًا في الداشبورد
-    // وديون العملاء — بنمسح مفاتيح الكاش بلا انتظار الـ TTL
-    await purgeEdgeCache(
-      [
-        PURGE_KEYS.customersDefault,
-        PURGE_KEYS.dashboard(7),
-        PURGE_KEYS.dashboard(14),
-        PURGE_KEYS.dashboard(30),
-        PURGE_KEYS.reportsBranches, // ⚡ v12: تقرير الفروع (صفحة الفروع) بيتغير مع كل بيعة
-      ],
-      session.tenantId,
-      '2'
-    )
-    // ⚡ v9: البيع بيخصم مخزون — امسح كاش قائمة المنتجات كمان (نفس فرع البائع)
-    // ⚡ v10: وكمان نسخة قائمة المخزون (شاشة المخزون) عشان الكميات تفضل حية
-    await purgeEdgeCache(
-      [PURGE_KEYS.products(session.branchId), PURGE_KEYS.productsInventory(session.branchId)],
-      session.tenantId,
-      '3'
-    )
-    return NextResponse.json(sale, { status: 201 })
-  })
-}
+    -- فحص الوحدة جوه المعاملة (زي deductStock بالظبط — حماية من حذف متزامن)
+    IF it."unitId" IS NOT NULL THEN
+      PERFORM 1 FROM "ProductUnit"
+      WHERE "id" = it."unitId" AND "productId" = it."productId";
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'الوحدة مش موجودة أو غير مرتبطة بالمنتج';
+      END IF;
+    END IF;
+
+    IF it."variantId" IS NOT NULL THEN
+      -- فحص المتغير جوه المعاملة (زي deductStock)
+      PERFORM 1 FROM "ProductVariant"
+      WHERE "id" = it."variantId" AND "productId" = it."productId";
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'المتغير (اللون/المقاس) مش موجود أو غير مرتبط بالمنتج';
+      END IF;
+
+      -- 🛡️ خصم ذري: UPDATE بشرط quantity >= المطلوب (نفس updateMany)
+      UPDATE "ProductVariant"
+      SET "quantity" = "quantity" - v_toDeduct
+      WHERE "id" = it."variantId" AND "quantity" >= v_toDeduct;
+      IF NOT FOUND THEN
+        SELECT "quantity" INTO v_curQty FROM "ProductVariant" WHERE "id" = it."variantId";
+        RAISE EXCEPTION 'المخزون مش كافي لهذا اللون/المقاس — متاح: %، مطلوب: %',
+          COALESCE(v_curQty, 0), v_toDeduct;
+      END IF;
+
+      -- 🛡️ syncProductQuantityFromVariants: مجمع المنتج = مجموع متغيراته
+      UPDATE "Product" p
+      SET "quantity" = COALESCE(agg.s, 0)
+      FROM (SELECT SUM("quantity") AS s
+            FROM "ProductVariant" WHERE "productId" = it."productId") agg
+      WHERE p."id" = it."productId";
+    ELSE
+      -- 🛡️ خصم ذري للمنتج العادي (نفس updateMany بالظبط)
+      UPDATE "Product"
+      SET "quantity" = "quantity" - v_toDeduct
+      WHERE "id" = it."productId" AND "quantity" >= v_toDeduct;
+      IF NOT FOUND THEN
+        SELECT "quantity" INTO v_curQty FROM "Product" WHERE "id" = it."productId";
+        IF NOT FOUND THEN
+          RAISE EXCEPTION 'المنتج غير موجود';
+        END IF;
+        RAISE EXCEPTION 'المخزون مش كافي — متاح: %، مطلوب: %', v_curQty, v_toDeduct;
+      END IF;
+    END IF;
+
+    -- حركة المخزون (نفس stockMovement.create: type='sale'، الكمية بالسالب)
+    INSERT INTO "StockMovement"
+      ("tenantId", "branchId", "productId", "type", "quantity",
+       "refType", "refId", "note", "userId")
+    VALUES
+      (v_tenantId, v_branchId, it."productId", 'sale', -it."quantity",
+       'sale', v_saleId, 'فاتورة ' || v_invoiceNo || ' — ' || it."name", v_userId);
+  END LOOP;
+
+  -- ── 4) دين العميل (بيع آجل: الباقي يتزود على رصيده) ──
+  IF v_customerId IS NOT NULL AND v_paid < v_total THEN
+    UPDATE "Customer"
+    SET "balance" = "balance" + (v_total - v_paid)
+    WHERE "id" = v_customerId;
+  END IF;
+
+  -- ── 5) قيد الخزنة للمبلغ المدفوع (فلوس داخلية للمحل) بطريقة الدفع ──
+  IF v_paid > 0 THEN
+    INSERT INTO "CashEntry"
+      ("tenantId", "source", "refId", "amount", "method", "note", "userId")
+    VALUES
+      (v_tenantId, 'sale', v_saleId, v_paid, v_method,
+       'بيع فاتورة ' || v_invoiceNo, v_userId);
+  END IF;
+
+  -- ── الرد: نفس شكل sale.create({ include: { items: { include: { variant } }, customer } }) ──
+  RETURN get_sale_full(v_tenantId, v_saleId);
+END;
+$$;
