@@ -172,14 +172,10 @@ const emptyBucket = (): Bucket => ({ dep: 0, wd: 0, comm: 0, n: 0 })
 
 /** إجماليات من غير الملغي — بالوسيلة وإجمالي */
 function summarize(rows: Txn[]) {
-  // 🛡️ درع الشكل (2026-10-18): لو وصلت قيمة مش مصفوفة (رد فاشل/ظرف كاش قديم
-  // من نسخة أقدم) كانت الحلقة here بتوقّع الصفحة كلها بـ TypeError "e is not iterable"
-  // — دلوقتي أي شكل غلط بيتعامل كقائمة فاضية والإجماليات ترجع أصفار بدل الكراش.
-  const list = Array.isArray(rows) ? rows : ([] as Txn[])
   const by: Record<string, Bucket> = Object.fromEntries(METHODS.map((m) => [m.key, emptyBucket()]))
   const total = emptyBucket()
   let cancelled = 0
-  for (const t of list) {
+  for (const t of rows) {
     if (isCancelled(t)) {
       cancelled++
       continue
@@ -243,10 +239,7 @@ export function FinanceView() {
       if (from) params.set('from', from)
       if (to) params.set('to', to)
       const data = await api<Txn[]>(`/api/finance?${params.toString()}`)
-      // 🛡️ درع الشكل (2026-10-18): مهما رجع من السيرفر أو الكاش المحلي — الحالة
-      // مصفوفة سليمة أو فاضية. ده بيقطع جذر خطأ "e is not iterable" اللي كان
-      // بيسقط صفحة التمويل كلها لحظة فشل أي طلب قبل ما التوست يظهر أصلاً.
-      setRows(Array.isArray(data) ? data : [])
+      setRows(data)
     } catch (e: any) {
       toast.error(e?.message || 'فشل التحميل')
     } finally {
