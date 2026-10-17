@@ -4,13 +4,39 @@ import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { recordCommission, createPrincipalCashEntry } from '@/lib/commission'
 import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
+import { matchEdgeCache, putEdgeCache, purgeEdgeCache } from '@/lib/edgeCache'
+import { withSql, type Sql } from '@/lib/sql'
 
 export const dynamic = 'force-dynamic'
 
 const METHODS = new Set(['vodafone_cash', 'instapay', 'fawry'])
 const KINDS = new Set(['deposit', 'withdraw'])
 
-async function __GET(req: NextRequest) {
+/* ── ⚠️ التصديرات في أول الملف عمداً (2026-10-18) ──────────────────────────
+   لزقة مشوهة (قص من الآخر أو ملف غلط) كانت خلت الملف المنشور من غير
+   export POST → كل حفظ معاملة يرجع 405. لو حصل قص تاني من هنا ورايح
+   البناء هيقع فشل ظاهر فوراً بدل ما يفضل شغال ناقص بصمت.
+   الـ function declarations بتترفع (hoisting) فالترتيب ده سليم 100%.
+   ═════════════════════════════════════════════════════════════════════ */
+export async function GET(req: NextRequest) {
+  return withSql((sql) => __GET(req, sql))
+}
+export async function POST(...args: Parameters<typeof __POST>) {
+  return withDb(() => __POST(...args))
+}
+
+/**
+ * ⚡ 2026-10-18 (نفس دوا صفحة المخزون): GET بقى SQL مباشر عبر postgres.js بدل
+ * Prisma wasm — كانت أتقل صفحة متبقية في الموقع (التمويل مش متخزن في المتصفح،
+ * فكل فتح صفحة = Prisma كامل + 3 جولات استعلام). الآن:
+ *   - استعلام واحد (المعاملات + اسم المستخدم من subselect بدل findMany تاني)
+ *   - كاش حافة 20 ثانية بنفس نمط مفاتيح المخزون (per-tenant + الفلاتر الفعلية)
+ *   - الرد مصفوفة بنفس الحقول والترتيب بالظبط (id DESC، سقف 500):
+ *     id, tenantId, method, kind, amount, commission, note, userId,
+ *     status, cancelledAt, cancelledBy, createdAt, userName
+ * POST فضل Prisma زي ما هو (عملية إيداع/سحب نادرة + عمولات).
+ */
+async function __GET(req: NextRequest, sql: Sql) {
   let session
   try {
     session = await requireAuth()
@@ -26,38 +52,53 @@ async function __GET(req: NextRequest) {
   const from = searchParams.get('from')
   const to = searchParams.get('to')
   const method = searchParams.get('method')
+  const methodOk = !!method && METHODS.has(method)
 
-  const where: any = { tenantId: session.tenantId }
-  // 🕐 2026-09-30: حدود from/to بتوقيت المحل مش توقيت السيرفر
+  // ⚡ كاش حافة 20 ثانية — المفتاح بيشمل الفلاتر الفعلية بس (deterministic)
+  const filterParts: string[] = []
+  if (from) filterParts.push(`from=${from}`)
+  if (to) filterParts.push(`to=${to}`)
+  if (methodOk) filterParts.push(`method=${method}`)
+  const finQuery = filterParts.join('&')
+  const cached = await matchEdgeCache('/api/finance', finQuery, session.tenantId, '1')
+  if (cached) return cached
+
+  const tid = session.tenantId
+  const whereParts = [sql`t."tenantId" = ${tid}`]
   if (from || to) {
-    const tz = await getTenantTimezone(session.tenantId)
-    where.createdAt = {}
-    if (from) where.createdAt.gte = localDateStrToUtcBounds(from, 'start', tz)
-    if (to) where.createdAt.lte = localDateStrToUtcBounds(to, 'end', tz)
+    // 🕐 نفس دلالات from/to القديمة بتوقيت المحل (localDateStrToUtcBounds)
+    const tz = await getTenantTimezone(tid)
+    if (from) whereParts.push(sql` AND t."createdAt" >= ${localDateStrToUtcBounds(from, 'start', tz)}`)
+    if (to) whereParts.push(sql` AND t."createdAt" <= ${localDateStrToUtcBounds(to, 'end', tz)}`)
   }
-  if (method && METHODS.has(method)) {
-    where.method = method
-  }
-  const rows = await db.transaction.findMany({
-    where,
-    orderBy: { id: 'desc' },
-    take: 500,
-  })
-  // `userId` on Transaction is a plain string (no Prisma relation defined),
-  // so resolve names with a separate lookup instead of `include`.
-  const userIds = [...new Set(rows.map((r) => r.userId).filter(Boolean))] as string[]
-  const users = userIds.length
-    ? await db.user.findMany({
-        where: { id: { in: userIds } },
-        select: { id: true, name: true },
-      })
-    : []
-  const userNameById = new Map(users.map((u) => [u.id, u.name]))
-  const result = rows.map((r) => ({
-    ...r,
-    userName: r.userId ? (userNameById.get(r.userId) ?? null) : null,
-  }))
-  return NextResponse.json(result)
+  if (methodOk) whereParts.push(sql` AND t."method" = ${method}`)
+
+  const rows = await sql<{
+    id: number
+    tenantId: string
+    method: string
+    kind: string
+    amount: number
+    commission: number
+    note: string | null
+    userId: string | null
+    status: string
+    cancelledAt: Date | null
+    cancelledBy: string | null
+    createdAt: Date
+    userName: string | null
+  }[]>`
+    SELECT t."id", t."tenantId", t."method", t."kind", t."amount", t."commission",
+           t."note", t."userId", t."status", t."cancelledAt", t."cancelledBy", t."createdAt",
+           (SELECT u."name" FROM "User" u WHERE u."id" = t."userId") AS "userName"
+    FROM "Transaction" t
+    WHERE ${whereParts}
+    ORDER BY t."id" DESC
+    LIMIT 500`
+
+  const res = NextResponse.json(rows)
+  await putEdgeCache(res.clone(), '/api/finance', finQuery, tid, 20, '1')
+  return res
 }
 
 async function __POST(req: NextRequest) {
@@ -158,12 +199,11 @@ async function __POST(req: NextRequest) {
       linkedCashEntryId: principalEntry.id,
     }
   })
-  return NextResponse.json(tx, { status: 201 })
-}
 
-export async function GET(...args: Parameters<typeof __GET>) {
-  return withDb(() => __GET(...args))
-}
-export async function POST(...args: Parameters<typeof __POST>) {
-  return withDb(() => __POST(...args))
+  // ⚡ المعاملة الجديدة لازم تظهر فوراً في القايمة — نمسح كاش قائمة التمويل
+  // الافتراضية (بدون فلاتر — نفس الشكل اللي بيطابقه الـ UI عند الفتح).
+  // أي فلاتر تانية شغالة بتنضفي تلقائياً بالـ TTL (20 ثانية).
+  await purgeEdgeCache([{ pathname: '/api/finance', rawQuery: '' }], session.tenantId, '1')
+
+  return NextResponse.json(tx, { status: 201 })
 }

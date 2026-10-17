@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { purgeEdgeCache } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -135,6 +136,10 @@ async function __DELETE(
     }
     throw e
   }
+
+  // ⚡ القايمة اتغيرت (status='cancelled' + قيود عكسية في الخزنة) — نمسح كاش
+  // قائمة التمويل الافتراضية؛ أي فلاتر تانية بتنضفي بالـ TTL (20 ثانية).
+  await purgeEdgeCache([{ pathname: '/api/finance', rawQuery: '' }], session.tenantId, '1')
 
   return NextResponse.json({ ok: true })
 }
