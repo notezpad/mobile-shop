@@ -14,6 +14,7 @@
  */
 
 import * as React from 'react'
+import { usePathname } from 'next/navigation'
 import { api } from '@/lib/api'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import type { Branch, InventoryProduct, Movement, Stocktake, Transfer } from './types'
@@ -144,6 +145,8 @@ const EMPTY_LOAD_ERRORS: InventoryLoadErrors = {
   stocktakes: null,
 }
 
+type SourceKey = 'branches' | 'products' | 'movements' | 'transfers' | 'stocktake'
+
 export function useInventoryData(): InventoryData {
   const [branches, setBranches] = React.useState<Branch[]>([])
   const [products, setProducts] = React.useState<InventoryProduct[]>([])
@@ -154,35 +157,63 @@ export function useInventoryData(): InventoryData {
   // 🛡️ v14: الكائن موجود من أول رندر — الصفحات بتفكّه وتقرأ مفاتيحه فوراً
   const [loadErrors, setLoadErrors] = React.useState<InventoryLoadErrors>(EMPTY_LOAD_ERRORS)
 
+  // ⚡ 2026-10-17 (تحميل على مرحلتين — علاج «الصفحة بطيئة»):
+  // قبل كده Promise.all على المصادر الخمسة كان بيخلي كل صفحة تستنى **أتقل**
+  // مصدر (منتجات limit=1000) حتى لو الرسم مش محتاجه — الحركات/التحويلات/الجرد
+  // كانوا بيتأخروا ورا المنتجات. دلوقتي:
+  //   المرحلة 1 = الفروع + القائمة الأساسية للصفحة نفسها → الرسم يبدأ فوراً
+  //   المرحلة 2 = الباقي في الخلفية (بيغذّي عدّادات كروت التنقّل فقط)
+  // شكل الشاشة مطابق 100%: العدّادات كانت أصلاً بتظهر أصفار أثناء التحميل.
+  const pathname = usePathname()
+
   const load = React.useCallback(async () => {
     setLoading(true)
+    const fetchOne = async (k: SourceKey): Promise<void> => {
+      if (k === 'branches') {
+        const r = await apiSafe<Branch[]>('/api/branches', [])
+        setBranches(asArray<Branch>(r.data))
+        setLoadErrors((p) => ({ ...p, branches: r.error }))
+      } else if (k === 'products') {
+        const r = await apiSafe<{ data: InventoryProduct[] } | InventoryProduct[]>('/api/products?limit=1000&status=all', [])
+        setProducts(asArray<InventoryProduct>(r.data))
+        setLoadErrors((p) => ({ ...p, products: r.error }))
+      } else if (k === 'movements') {
+        const r = await apiSafe<Movement[]>('/api/inventory/movements', [])
+        setMovements(asArray<Movement>(r.data))
+        setLoadErrors((p) => ({ ...p, movements: r.error }))
+      } else if (k === 'transfers') {
+        const r = await apiSafe<Transfer[]>('/api/inventory/transfers', [])
+        setTransfers(asArray<Transfer>(r.data))
+        setLoadErrors((p) => ({ ...p, transfers: r.error }))
+      } else {
+        const r = await apiSafe<Stocktake[]>('/api/inventory/stocktake', [])
+        setStocktakes(asArray<Stocktake>(r.data))
+        setLoadErrors((p) => ({ ...p, stocktake: r.error, stocktakes: r.error }))
+      }
+    }
+
+    // المرحلة 1: الفروع + القائمة الأساسية حسب الصفحة المستدعية
+    const priority: SourceKey =
+      pathname === '/inventory/movements'
+        ? 'movements'
+        : pathname === '/inventory/transfers'
+          ? 'transfers'
+          : pathname === '/inventory/stocktake'
+            ? 'stocktake'
+            : 'products' // /inventory — القائمة الأساسية هي المنتجات
+    const first: SourceKey[] = ['branches', priority]
+    const rest: SourceKey[] = (
+      ['branches', 'products', 'movements', 'transfers', 'stocktake'] as SourceKey[]
+    ).filter((k) => !first.includes(k))
+
     try {
-      const [bs, ps, mv, tf, st] = await Promise.all([
-        apiSafe<Branch[]>('/api/branches', []),
-        apiSafe<{ data: InventoryProduct[] } | InventoryProduct[]>('/api/products?limit=1000&status=all', []),
-        apiSafe<Movement[]>('/api/inventory/movements', []),
-        apiSafe<Transfer[]>('/api/inventory/transfers', []),
-        apiSafe<Stocktake[]>('/api/inventory/stocktake', []),
-      ])
-      // 🛡️ v12: تطبيع صارم — كل مصدر بيدخل الـ state كـ Array حقيقية
-      setBranches(asArray<Branch>(bs.data))
-      setProducts(asArray<InventoryProduct>(ps.data))
-      setMovements(asArray<Movement>(mv.data))
-      setTransfers(asArray<Transfer>(tf.data))
-      setStocktakes(asArray<Stocktake>(st.data))
-      // 🛡️ v14: أخطاء كل مصدر على حدة — مصدر فاشل ما يمنعش الباقي يظهر
-      setLoadErrors({
-        branches: bs.error,
-        products: ps.error,
-        movements: mv.error,
-        transfers: tf.error,
-        stocktake: st.error,
-        stocktakes: st.error,
-      })
+      await Promise.all(first.map(fetchOne))
     } finally {
       setLoading(false)
     }
-  }, [])
+    // المرحلة 2: الباقي في الخلفية — fetchOne ما بترميشن (apiSafe بتلقط)
+    void Promise.all(rest.map(fetchOne))
+  }, [pathname])
 
   React.useEffect(() => {
     load()

@@ -114,9 +114,23 @@ export function MovementsTab({ movements, meta: _meta, branches, isEmployee, use
 
   // Reload movements when filters change
   const [liveMovements, setLiveMovements] = React.useState<Movement[]>(movements)
-  React.useEffect(() => { setLiveMovements(movements) }, [movements])
 
+  // 🐛 FIX (2026-10-17) — سبب «الفلاتر مش شغالة»:
+  // الـ API بيرجّع الرد كظرف { data:[...], total, ... } والكود القديم كان بيعمل
+  // Array.isArray(data) → بيرفض الظرف دايماً → liveMovements ما بتتحدثش أبداً
+  // عند تغيير أي فلتر (القائمة بتفضل ثابتة كأن الفلتر ميت). بنفك الظرف بنفسنا
+  // الآن (مصفوفة عارية أو ظرف فيه data) — وبيعمل كمان طلب مكرر لنفس رابط
+  // تحميل الصفحة أول ما تفتح؛ دلوقتي الطلب المفلتر بيحصل فقط مع فلاتر فعلية.
+  const hasActiveFilters = !!(search.trim() || branchFilter !== 'all' || typeFilter !== 'all' || from || to)
+
+  // مفيش فلاتر؟ القائمة = نتيجة تحميل الصفحة نفسها (بدون طلب شبكة مكرر)
   React.useEffect(() => {
+    if (!hasActiveFilters) setLiveMovements(movements)
+  }, [movements, hasActiveFilters])
+
+  // فيه فلاتر؟ نجيب القائمة المفلترة من السيرفر — نفس where القديم حرفياً
+  React.useEffect(() => {
+    if (!hasActiveFilters) return
     const params = new URLSearchParams()
     if (branchFilter !== 'all') params.set('branchId', branchFilter)
     if (typeFilter !== 'all') params.set('type', typeFilter)
@@ -128,13 +142,19 @@ export function MovementsTab({ movements, meta: _meta, branches, isEmployee, use
     const t = setTimeout(async () => {
       try {
         // 🛡️ v11: من خلال api() بدل fetch خام — أوفلاين بترجّع آخر نسخة
-        // مخزنة في IDB بدل 503 فجّ (الفلاتر الجديدة بياخد آخر نسخة للمسار).
-        const data = await api<Movement[]>(url)
-        if (alive && Array.isArray(data)) setLiveMovements(data)
+        // مخزنة في IDB بدل 503 فجّ (الفلاتر بياخد آخر نسخة للمسار).
+        const data = await api<Movement[] | { data?: Movement[] }>(url)
+        const raw: unknown = data
+        const list: Movement[] | null = Array.isArray(raw)
+          ? (raw as Movement[])
+          : raw && typeof raw === 'object' && Array.isArray((raw as { data?: unknown }).data)
+            ? ((raw as { data: Movement[] }).data)
+            : null
+        if (alive && list) setLiveMovements(list)
       } catch {}
     }, 250)
     return () => { alive = false; clearTimeout(t) }
-  }, [branchFilter, typeFilter, from, to, search])
+  }, [branchFilter, typeFilter, from, to, search, hasActiveFilters])
 
   const filtered = liveMovements
 
