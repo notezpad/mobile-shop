@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { parseSignedAmount } from '@/lib/amount'
+import { withSql, type Sql } from '@/lib/sql'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +11,18 @@ export const dynamic = 'force-dynamic'
 // عشان رصيد الكاش يفضل منفصل عن المحافظ/الانستاباي/البنك.
 const MANUAL_METHODS = new Set(['cash', 'vodafone_cash', 'instapay', 'fawry', 'card', 'bank'])
 
-async function __GET() {
+/**
+ * ⚡ 2026-10-18 (نفس دوا صفحة المخزون): GET بقى SQL مباشر عبر postgres.js بدل
+ * Prisma wasm — آخر صفحة كبيرة كانت بتشغّل محرك Prisma كامل في كل فتح
+ * (استعلامان + findMany للمستخدمين = 3 جولات). الآن استعلامان متوازيان:
+ *   - القايمة: آخر 200 حركة + اسم المستخدم من subselect
+ *   - الرصيد: SUM على كل حركات المحل (مش آخر 200) — زي الـ aggregate القديم
+ * الرد { balance, entries } بنفس الحقول والترتيب بالظبط
+ * (id, tenantId, source, refId, amount, note, userId, method, createdAt, userName).
+ * من غير كاش حافة عمداً — الخزنة بتتغير مع كل بيعة/مصروف/سداد، وحدثة الرصيد
+ * أهم هنا من أي توفير إضافي.
+ */
+async function __GET(sql: Sql) {
   let session
   try {
     session = await requireAuth()
@@ -22,34 +34,36 @@ async function __GET() {
     const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
-  const [entries, agg] = await Promise.all([
-    db.cashEntry.findMany({
-      where: { tenantId: session.tenantId },
-      orderBy: { id: 'desc' },
-      take: 200,
-    }),
-    db.cashEntry.aggregate({
-      where: { tenantId: session.tenantId },
-      _sum: { amount: true },
-    }),
+  const tid = session.tenantId
+  const [entryRows, balanceRows] = await Promise.all([
+    sql<{
+      id: number
+      tenantId: string
+      source: string
+      refId: number | null
+      amount: number
+      note: string | null
+      userId: string | null
+      method: string | null
+      createdAt: Date
+      userName: string | null
+    }[]>`
+      SELECT e."id", e."tenantId", e."source", e."refId", e."amount", e."note",
+             e."userId", e."method", e."createdAt",
+             (SELECT u."name" FROM "User" u WHERE u."id" = e."userId") AS "userName"
+      FROM "CashEntry" e
+      WHERE e."tenantId" = ${tid}
+      ORDER BY e."id" DESC
+      LIMIT 200`,
+    sql<{ balance: number }[]>`
+      SELECT COALESCE(SUM("amount"), 0)::float8 AS balance
+      FROM "CashEntry"
+      WHERE "tenantId" = ${tid}`,
   ])
-  // `userId` on CashEntry is a plain string (no Prisma relation defined),
-  // so resolve names with a separate lookup instead of `include`.
-  const userIds = [...new Set(entries.map((e) => e.userId).filter(Boolean))] as string[]
-  const users = userIds.length
-    ? await db.user.findMany({
-        where: { id: { in: userIds } },
-        select: { id: true, name: true },
-      })
-    : []
-  const userNameById = new Map(users.map((u) => [u.id, u.name]))
-  const entriesWithNames = entries.map((e) => ({
-    ...e,
-    userName: e.userId ? (userNameById.get(e.userId) ?? null) : null,
-  }))
+
   return NextResponse.json({
-    balance: agg._sum.amount ?? 0,
-    entries: entriesWithNames,
+    balance: Number(balanceRows[0]?.balance ?? 0),
+    entries: entryRows,
   })
 }
 
@@ -79,7 +93,7 @@ async function __POST(req: NextRequest) {
     return NextResponse.json({ error: 'المبلغ غير صالح' }, { status: 400 })
   }
   // 🛡️ 2026-09-30: السبب بقى إجباري. قبل كده الحركة اليدوية كانت بتنقبل أي
-  // مبلغ من غير سبب — فبсаها في الخزنة من غير اسم ولا تفسير، ومحدش بيعرف
+  // مبلغ من غير سبب — فبlsaها في الخزنة من غير اسم ولا تفسير، ومحدش بيعرف
   // بعدين الفلوس دي دخلتة ليه أو خرجت ليه. الحد الأدنى 3 حروف عشان
   // "..." أو مسافات ماتعدّيش كسبب.
   const note = body.note ? String(body.note).trim() : ''
@@ -109,8 +123,8 @@ async function __POST(req: NextRequest) {
   return NextResponse.json(created, { status: 201 })
 }
 
-export async function GET(...args: Parameters<typeof __GET>) {
-  return withDb(() => __GET(...args))
+export async function GET() {
+  return withSql((sql) => __GET(sql))
 }
 export async function POST(...args: Parameters<typeof __POST>) {
   return withDb(() => __POST(...args))

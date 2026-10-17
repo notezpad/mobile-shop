@@ -109,10 +109,13 @@ export async function GET(req: Request) {
         FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
         WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${last30Start}
         GROUP BY COALESCE(i."productId", 0) ORDER BY quantity DESC LIMIT 8`,
-      // ⚡ v9: التجميع اليومي جوه PostgreSQL (AT TIME ZONE بتوقيت المحل) —
+      // ⚡ v9: التجميع اليومي جوه PostgreSQL (بتوقيت المحل) —
       // صف واحد لكل يوم، والحساب كله في الداتابيز.
+      // 🛡️ 2026-10-18: createdAt مخزّن naive-UTC — لازم نعلنه UTC الأول
+      // (AT TIME ZONE 'UTC') وبعدين نحوله لتوقيت المحل، وإلا أي بيعة بعد
+      // 9 مساءً بتوقيت القاهرة بتتحسب في يوم الشهر/الرسم السابق.
       sql<{ date: string; total: number; profit: number }[]>`
-        SELECT to_char(s."createdAt" AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS date,
+        SELECT to_char((s."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS date,
                SUM(s."total")::float8 AS total,
                COALESCE(SUM(ip.profit), 0)::float8 AS profit
         FROM "Sale" s
