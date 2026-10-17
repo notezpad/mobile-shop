@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import type { Session } from '@/lib/auth'
 import { requireCapability, featureErrorResponse } from '@/lib/features'
-import { deductStock } from '@/lib/deduct-stock'
 import { getTenantTimezone, localDateStrToUtcBounds, dateStrInTz } from '@/lib/tenantTime'
 import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
-import { withSql } from '@/lib/sql'
-import type { Prisma } from '@prisma/client'
+import { withSql, isUniqueViolation } from '@/lib/sql'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,24 +18,6 @@ export const dynamic = 'force-dynamic'
  * برقم جديد (retry على P2002). والسنة دلوقتي بتوقيت المحل (Tenant.timezone)
  * مش توقيت السيرفر.
  */
-async function nextInvoiceNo(
-  prefix: string,
-  tenantId: string,
-  tx: Prisma.TransactionClient,
-  year: number,
-): Promise<string> {
-  const start = `${prefix}-${year}-`
-  // Read only the latest invoice number (uses the index) instead of counting
-  // every invoice of the year; avoids duplicate numbers after deletions.
-  const last = await tx.sale.findFirst({
-    where: { tenantId, invoiceNo: { startsWith: start } },
-    orderBy: { id: 'desc' },
-    select: { invoiceNo: true },
-  })
-  const lastSeq = last?.invoiceNo ? parseInt(last.invoiceNo.slice(start.length), 10) || 0 : 0
-  const seq = (lastSeq + 1).toString().padStart(5, '0')
-  return `${start}${seq}`
-}
 
 export async function GET(req: NextRequest) {
   let session: Session
@@ -151,6 +130,23 @@ export async function GET(req: NextRequest) {
   })
 }
 
+/**
+ * ⚡ 2026-10-17 (تقليل CPU — الخطوة 5): إعادة كتابة POST /api/sales —
+ * أثقل مسار كتابة في النظام (بيحصل مع كل فاتورة بيع).
+ *
+ * القديم: مُصادقة → تحميل منتجات/وحدات/متغيرات/عميل/محل (5 استعلامات Prisma)
+ *   → حلقة تحقق لكل صنف → transaction برisma جواها توليد الرقم + إنشاء
+ *   الفاتورة + الأصناف + (لكل صنف: خصم مخزون ذرّي + مزامنة إجمالي المنتج +
+ *   حركة مخزون) + دين العميل + قيد الخزنة = 15-40 استعلام متسلسل عبر Prisma
+ *   wasm — بيتجاوز حصة CPU (10ms) فيطلع 503 عشوائي وقت الزحمة.
+ *
+ * الجديد: نفس التحققات ونفس رسائل الخطأ بالظبط، لكن الحفظ كله بيحصل في
+ * **دالة Postgres واحدة** (prisma/sql/create-sale.sql) تتنفذ باستدعاء واحد
+ * داخل transaction في الداتابيز — الـ Worker بيبعت الـ payload وبيستقبل
+ * الرد الجاهز. إعادة المحاولة عند تضارب الرقم الفريد بقت على SQLSTATE 23505
+ * (بديل P2002)، وتضارب clientRef (أوفلاين) الدالة نفسها بترجع الفاتورة
+ * الأصلية بدون استثناء.
+ */
 export async function POST(req: NextRequest) {
   let session: Session
   try {
@@ -198,87 +194,82 @@ export async function POST(req: NextRequest) {
     customerId = parseInt(body.customerId, 10) || null
   }
 
-  return withDb(async () => {
-    // load products scoped to tenant
+  return withSql(async (sql) => {
+    // load products scoped to tenant (⚡ استعلام SQL خفيف بدل Prisma)
     const ids = body.items
       .map((i: any) => parseInt(i.productId, 10))
       .filter((n: number) => !isNaN(n))
 
-    // FIXED: Collect all unitIds first, then batch-fetch in ONE query instead of
-    // one db.productUnit.findUnique per cart item (N+1 problem)
+    // batch-load all units referenced by the cart in ONE query
     const unitIds = body.items
       .map((i: any) => i.unitId ? parseInt(i.unitId, 10) : null)
       .filter((id: number | null): id is number => id !== null && !isNaN(id))
 
-    // FIXED: same batch pattern as units — collect variant ids referenced by
-    // the cart, then load them all in ONE query instead of one lookup per item.
+    // batch-load all variants (colors/sizes) referenced by the cart in ONE query
     const variantIds = body.items
       .map((i: any) => i.variantId ? parseInt(i.variantId, 10) : null)
       .filter((id: number | null): id is number => id !== null && !isNaN(id))
 
-    // FIXED: تعريف نوع صريح لـ ProductUnit مطابق لموديل prisma/schema.prisma.
-    // السبب: في هذه البيئة، Prisma Client المولّد (node_modules/.prisma/client)
-    // كان مجرد stub فارغ (بدون تشغيل `prisma generate` بنجاح)، فكانت كل
-    // استدعاءات db.productUnit.* تُستنتَج كنوع {} بدون خصائص، فيفشل الوصول
-    // إلى unit.productId / unit.name / unit.factor. تعريف الشكل هنا صراحةً
-    // يفصل نوع البيانات المستخدمة في هذا الملف عن جودة توليد Prisma Client،
-    // ولا يغيّر أي سلوك وقت التشغيل (نفس الاستعلام بالظبط).
-    type ProductUnitRow = {
+    type ProductRow = {
       id: number
-      productId: number
       name: string
-      price: number | null
-      barcode: string | null
-      factor: number
-      active: boolean
-      createdAt: Date
-    }
-
-    // Same reasoning as ProductUnitRow above — explicit shape so this file's
-    // typing doesn't depend on how well `prisma generate` ran in this sandbox.
-    type ProductVariantRow = {
-      id: number
-      productId: number
-      size: string | null
-      color: string | null
-      barcode: string | null
+      cost: number
       quantity: number
-      createdAt: Date
+      unitLabel: string | null
+    }
+    type UnitRow = { id: number; productId: number; name: string; factor: number }
+    type VariantRow = { id: number; productId: number; quantity: number }
+    type CustomerRow = {
+      id: number
+      tenantId: string
+      name: string
+      balance: number | null
+      creditLimit: number | null
     }
 
-    const [products, units, variants, customerCheck, tenant] = await Promise.all([
-      db.product.findMany({
-        where: { id: { in: ids }, tenantId: session.tenantId },
-      }),
-      // FIXED: batch-load all units needed in ONE query
+    const [products, units, variants, customerCheck, tenantRows] = await Promise.all([
+      (ids.length
+        ? sql<ProductRow[]>`
+            SELECT "id", "name", "cost", "quantity", "unitLabel"
+            FROM "Product"
+            WHERE "id" IN ${sql(ids)} AND "tenantId" = ${session.tenantId}`
+        : Promise.resolve([] as ProductRow[])),
+      // batch-load all units needed in ONE query
       (unitIds.length > 0
-        ? db.productUnit.findMany({ where: { id: { in: unitIds } } })
-        : Promise.resolve([])) as Promise<ProductUnitRow[]>,
-      // batch-load all variants (colors/sizes) referenced by the cart in ONE query
+        ? sql<UnitRow[]>`
+            SELECT "id", "productId", "name", "factor"
+            FROM "ProductUnit"
+            WHERE "id" IN ${sql(unitIds)}`
+        : Promise.resolve([] as UnitRow[])),
+      // batch-load all variants referenced by the cart in ONE query
       (variantIds.length > 0
-        ? db.productVariant.findMany({ where: { id: { in: variantIds } } })
-        : Promise.resolve([])) as Promise<ProductVariantRow[]>,
-      // FIXED: validate customer in parallel with products, not sequentially after
-      customerId
-        ? db.customer.findUnique({ where: { id: customerId } })
-        : Promise.resolve(null),
-      // FIXED: load tenant prefix in parallel instead of after everything else
-      db.tenant.findUnique({
-        where: { id: session.tenantId },
-        select: { invoicePrefix: true },
-      }),
+        ? sql<VariantRow[]>`
+            SELECT "id", "productId", "quantity"
+            FROM "ProductVariant"
+            WHERE "id" IN ${sql(variantIds)}`
+        : Promise.resolve([] as VariantRow[])),
+      // validate customer in parallel with products
+      (customerId
+        ? sql<CustomerRow[]>`
+            SELECT "id", "tenantId", "name", "balance", "creditLimit"
+            FROM "Customer"
+            WHERE "id" = ${customerId} LIMIT 1`
+        : Promise.resolve([] as CustomerRow[])),
+      // load tenant prefix in parallel instead of after everything else
+      sql<{ invoicePrefix: string | null }[]>`
+        SELECT "invoicePrefix" FROM "Tenant" WHERE "id" = ${session.tenantId} LIMIT 1`,
     ])
 
     // validate customer
     if (customerId) {
-      if (!customerCheck || customerCheck.tenantId !== session.tenantId) {
+      if (!customerCheck[0] || customerCheck[0].tenantId !== session.tenantId) {
         return NextResponse.json({ error: 'العميل غير صالح' }, { status: 400 })
       }
     }
 
-    const productMap = new Map<number, (typeof products)[number]>(products.map((p) => [p.id, p]))
-    const unitMap = new Map(units.map((u) => [u.id, u]))
-    const variantMap = new Map(variants.map((v) => [v.id, v]))
+    const productMap = new Map<number, ProductRow>(products.map((p) => [p.id, p]))
+    const unitMap = new Map<number, UnitRow>(units.map((u) => [u.id, u]))
+    const variantMap = new Map<number, VariantRow>(variants.map((v) => [v.id, v]))
 
     // Pre-check capability if any item references a unitId.
     const hasUnits = body.items.some((i: any) => i.unitId)
@@ -341,7 +332,7 @@ export async function POST(req: NextRequest) {
 
       // If this line is a specific color/size, validate it and use ITS stock
       // as the ceiling — not the product's aggregate quantity. Selling a
-      // variant no longer touches Product.quantity directly (see deductStock).
+      // variant no longer touches Product.quantity directly.
       if (it.variantId) {
         const vid = parseInt(it.variantId, 10)
         const variant = variantMap.get(vid)
@@ -356,7 +347,6 @@ export async function POST(req: NextRequest) {
 
       if (it.unitId) {
         const uid = parseInt(it.unitId, 10)
-        // FIXED: use pre-loaded unitMap instead of await db.productUnit.findUnique per item
         const unit = unitMap.get(uid)
         if (!unit || unit.productId !== p.id) {
           return NextResponse.json(
@@ -397,7 +387,7 @@ export async function POST(req: NextRequest) {
         unitId,
         unitLabel,
         unitQuantity,
-        pieceLabel: (p as any).unitLabel ?? null,
+        pieceLabel: p.unitLabel ?? null,
         variantId,
       })
     }
@@ -410,7 +400,6 @@ export async function POST(req: NextRequest) {
     }
 
     // 🛡️ 2026-09-30 (C5 — قرار تجاري: ترفض): مدفوع أكبر من الإجمالي مرفوض.
-    // قبل كده الفرق كان بيضيع من الحسابات (بيخلش الخزنة ومفيش رصيد دائن للعميل).
     if (paid > total + 0.005) {
       return NextResponse.json(
         { error: `المدفوع (${paid}) أكبر من إجمالي الفاتورة (${Math.round(total * 100) / 100}) — لو العميل دفع زيادة سجلها دفعة على حسابه` },
@@ -420,143 +409,80 @@ export async function POST(req: NextRequest) {
 
     // 🛡️ 2026-09-30 (M10): الحد الائتماني — لو العميل متحدد له حد وبيع آجل
     // هيعديه، البيع يترفض (بدون فرض ولا استثناء تلقائي).
-    if (customerId && paid < total && customerCheck?.creditLimit != null) {
-      const projected = (customerCheck.balance ?? 0) + (total - paid)
-      if (projected > customerCheck.creditLimit + 0.005) {
+    if (customerId && paid < total && customerCheck[0]?.creditLimit != null) {
+      const projected = (customerCheck[0].balance ?? 0) + (total - paid)
+      if (projected > customerCheck[0].creditLimit + 0.005) {
         return NextResponse.json(
-          { error: `بيع آجل هيعدي الحد الائتماني للعميل ${customerCheck.name} (الحد: ${customerCheck.creditLimit}، الرصيد الحالي: ${customerCheck.balance}، إجمالي بعد البيع: ${Math.round(projected * 100) / 100})` },
+          { error: `بيع آجل هيعدي الحد الائتماني للعميل ${customerCheck[0].name} (الحد: ${customerCheck[0].creditLimit}، الرصيد الحالي: ${customerCheck[0].balance}، إجمالي بعد البيع: ${Math.round(projected * 100) / 100})` },
           { status: 400 }
         )
       }
     }
 
     // 🛡️ 2026-09-30 (M7): idempotency — نفس clientRef؟ رجّع الفاتورة الأصلية.
+    // (⚡ استعلامات SQL خفيفة بدل Prisma — نفس شكل include القديم:
+    //  كل أعمدة Sale + SaleItem + Customer، بدون variant)
     if (clientRef) {
-      const existing = await db.sale.findUnique({
-        where: { tenantId_clientRef: { tenantId: session.tenantId, clientRef } },
-        include: { items: true, customer: true },
-      })
+      const existingRows = await sql<any[]>`
+        SELECT * FROM "Sale"
+        WHERE "tenantId" = ${session.tenantId} AND "clientRef" = ${clientRef}
+        LIMIT 1`
+      const existing = existingRows[0]
       if (existing) {
-        return NextResponse.json(existing, { status: 200 })
+        const [exItems, exCustomer] = await Promise.all([
+          sql<any[]>`SELECT * FROM "SaleItem" WHERE "saleId" = ${existing.id} ORDER BY "id" ASC`,
+          (existing.customerId
+            ? sql<any[]>`SELECT * FROM "Customer" WHERE "id" = ${existing.customerId} LIMIT 1`
+            : Promise.resolve([] as any[])),
+        ])
+        return NextResponse.json(
+          { ...existing, items: exItems, customer: exCustomer[0] ?? null },
+          { status: 200 }
+        )
       }
     }
 
-    const prefix = tenant?.invoicePrefix || 'INV'
-    // 🛡️ 2026-09-30: توليد الرقم جوه الـ tx + إعادة المحاولة عند التضارب
+    const prefix = tenantRows[0]?.invoicePrefix || 'INV'
+    // 🛡️ 2026-09-30: السنة بتوقيت المحل (Tenant.timezone) — نفس القديم
     const tz = await getTenantTimezone(session.tenantId)
     const invYear = parseInt(dateStrInTz(new Date(), tz).slice(0, 4), 10)
 
-    let sale: Awaited<ReturnType<typeof createSaleTx>> | null = null
+    // ⚡ THE BIG ONE: الحفظ كله في استدعاء واحد لدالة Postgres (transaction
+    // داخلية) — الترقيم، الفاتورة، الأصناف، الخصم الذرّي للمخزون، مزامنة
+    // الإجمالي، حركات المخزون، دين العميل، قيد الخزنة.
+    // شوف prisma/sql/create-sale.sql
+    const payload = {
+      tenantId: session.tenantId,
+      branchId: session.branchId ?? null,
+      userId: session.userId,
+      customerId,
+      total,
+      paid,
+      paymentMethod,
+      dueDate,
+      clientRef,
+      prefix,
+      year: invYear,
+      items: itemsData,
+    }
+
+    let sale: any = null
     const MAX_ATTEMPTS = 5
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        sale = await createSaleTx(prefix, invYear)
+        // ⚠️ لازم نمرر الكائن عبر sql.json() (مش JSON.stringify نصيًا) —
+        // postgres.js بيسلسله بصيغة JSON صحيحة على السلك.
+        const rows = await sql<{ result: any }[]>`
+          SELECT create_sale(${sql.json(payload)}::jsonb) AS result`
+        sale = rows[0]?.result
         break
       } catch (e: any) {
-        // 🛡️ تضارب فريد متزامن: لو السبب clientRef (أوفلاين أرسل نفس الفاتورة
-        // مرتين) → النسخة الأصلية اتحفظ بالفعل، رجّعها بدل إعادة المحاولة.
-        if (e?.code === 'P2002' && clientRef) {
-          const existing = await db.sale.findUnique({
-            where: { tenantId_clientRef: { tenantId: session.tenantId, clientRef } },
-            include: { items: true, customer: true },
-          })
-          if (existing) {
-            return NextResponse.json(existing, { status: 200 })
-          }
-        }
-        // تضارب في الرقم الفريد (فاتورة متزامنة معانا) → جرّب تاني برقم أعلى
-        if (e?.code === 'P2002' && attempt < MAX_ATTEMPTS) continue
+        // تضارب رقم فاتورة متزامن معانا (SQLSTATE 23505 بديل P2002) →
+        // جرّب تاني برقم أعلى (الدالة نفسها بتولّد رقم أعلى في كل محاولة).
+        // تضارب clientRef مش بيوصلك هنا أصلاً — الدالة بترجّع الأصلية.
+        if (isUniqueViolation(e) && attempt < MAX_ATTEMPTS) continue
         throw e
       }
-    }
-
-    async function createSaleTx(prefix: string, year: number) {
-      return db.$transaction(async (tx) => {
-        const invoiceNo = await nextInvoiceNo(prefix, session.tenantId, tx, year)
-        const created = await tx.sale.create({
-          data: {
-            tenantId: session.tenantId,
-            branchId: session.branchId ?? null,
-            invoiceNo,
-            customerId,
-            userId: session.userId,
-            total,
-            paid,
-            paymentMethod,
-            dueDate,
-            clientRef,
-            status: 'مكتملة',
-            items: {
-              create: itemsData.map((i) => ({
-                productId: i.productId,
-                name: i.name,
-                price: i.price,
-                cost: i.cost,
-                quantity: i.quantity,
-                unitId: i.unitId,
-                unitLabel: i.unitLabel,
-                pieceLabel: i.pieceLabel,
-                unitQuantity: i.unitQuantity,
-                variantId: i.variantId,
-              })),
-            },
-          },
-          include: { items: { include: { variant: true } }, customer: true },
-        })
-
-        for (const it of itemsData) {
-          // 🛡️ 2026-09-30 (X2): كل بيع بيسجل حركة مخزون من نوع 'sale' — كان
-          // دفتر الحركات طرف واحد (البيع أكبر حركة خروج ومفيش منها أي أثر).
-          await deductStock(tx, {
-            tenantId: session.tenantId,
-            branchId: session.branchId ?? null,
-            userId: session.userId,
-            productId: it.productId,
-            quantity: it.unitsEntered,
-            unitId: it.unitId,
-            variantId: it.variantId,
-            refType: 'sale',
-            refId: created.id,
-            note: `فاتورة ${invoiceNo}`,
-          })
-          await tx.stockMovement.create({
-            data: {
-              tenantId: session.tenantId,
-              branchId: session.branchId ?? null,
-              productId: it.productId,
-              type: 'sale',
-              quantity: -it.quantity, // pieces (unit factor already applied)
-              refType: 'sale',
-              refId: created.id,
-              note: `فاتورة ${invoiceNo} — ${it.name}`,
-              userId: session.userId,
-            },
-          })
-        }
-
-        if (customerId && paid < total) {
-          await tx.customer.update({
-            where: { id: customerId },
-            data: { balance: { increment: total - paid } },
-          })
-        }
-
-        if (paid > 0) {
-          await tx.cashEntry.create({
-            data: {
-              tenantId: session.tenantId,
-              source: 'sale',
-              refId: created.id,
-              amount: paid,
-              method: paymentMethod, // 🛡️ C12: الخزنة بتتفصل بطريقة الدفع
-              note: `بيع فاتورة ${invoiceNo}`,
-              userId: session.userId,
-            },
-          })
-        }
-
-        return created
-      }, { maxWait: 10000, timeout: 20000 }) // default 5s was too short over a remote DB → sale hung/failed
     }
 
     // ⚡ EDGE CACHE purge (2026-10-06): البيع الجديد لازم يظهر فوراً في الداشبورد
