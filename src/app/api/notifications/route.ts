@@ -60,17 +60,16 @@ export async function GET(req: NextRequest) {
       } catch (e: any) {
         if (debug) console.error('[notifications GET] checks failed:', e?.message ?? e)
       }
-    }
 
-    // 🧹 Cleanup duplicates on every poll — أصبحت عبارة DELETE واحدة رخيصة
-    // (ROW_NUMBER) بدل تحميل 500 صف وتجميعهم في الذاكرة.
-    try {
-      const deleted = await cleanupDuplicateNotifications(sql, session.tenantId)
-      if (deleted > 0 && debug) {
-        console.log(`[notifications GET] cleaned up ${deleted} duplicate notifications`)
+      // 🧹 Cleanup duplicates — ⚡ كل 5 دقائق مع الفحوصات بدل كل poll (توفير CPU).
+      try {
+        const deleted = await cleanupDuplicateNotifications(sql, session.tenantId)
+        if (deleted > 0 && debug) {
+          console.log(`[notifications GET] cleaned up ${deleted} duplicate notifications`)
+        }
+      } catch (e: any) {
+        if (debug) console.error('[notifications GET] cleanup failed:', e?.message ?? e)
       }
-    } catch (e: any) {
-      if (debug) console.error('[notifications GET] cleanup failed:', e?.message ?? e)
     }
 
     // 🛡️ Wrap the actual list fetch in try/catch — if the Notification table
@@ -82,21 +81,23 @@ export async function GET(req: NextRequest) {
     let dbError: string | undefined
 
     try {
-      notifications = onlyUnread
-        ? await sql`
+      const listQuery = onlyUnread
+        ? sql`
             SELECT * FROM "Notification"
             WHERE "tenantId" = ${session.tenantId} AND "isRead" = false
             ORDER BY "createdAt" DESC
             LIMIT 50`
-        : await sql`
+        : sql`
             SELECT * FROM "Notification"
             WHERE "tenantId" = ${session.tenantId}
             ORDER BY "createdAt" DESC
             LIMIT 50`
-
-      const cnt = await sql<{ cnt: number }[]>`
+      const countQuery = sql<{ cnt: number }[]>`
         SELECT COUNT(*)::int AS cnt FROM "Notification"
         WHERE "tenantId" = ${session.tenantId} AND "isRead" = false`
+      // ⚡ الاستعلامان يتبعتوا مع بعض (pipelining على نفس الاتصال)
+      const [list, cnt] = await Promise.all([listQuery, countQuery])
+      notifications = list as any[]
       unreadCount = Number(cnt[0]?.cnt ?? 0)
     } catch (e: any) {
       dbError = e?.message ?? String(e)

@@ -102,6 +102,10 @@ function createSql(): Sql {
     max: 1,
     // انظر شرح الترويسة — أمان مع pooling وأقل كمية CPU ممكنة.
     prepare: false,
+    // ⚡ CPU: بدون ده postgres.js بيشغّل استعلام إضافي في *كل* اتصال جديد (pg_type)
+    // ويعالج مئات الصفوف داخل الـ Worker. الكود مفيهوش أعمدة/باراميترات مصفوفات
+    // (كله IN ${sql(list)})، فآمن. نفس توصية Cloudflare لـ Hyperdrive.
+    fetch_types: false,
     connect_timeout: 8,
     idle_timeout: 5,
     // لو الـ pooler/الشبكة قطعت: خطأ سريع يرجع retry بدل تعليق → 503.
