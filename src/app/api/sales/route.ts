@@ -1,11 +1,3 @@
-// ╔══════════════════════════════════════════════════════════════════════╗
-// ║ ✅✅✅  ده ملف TypeScript (كود الموقع) — اسمه على GitHub: route.ts   ║
-// ║ أول سطر حقيقي في الملف لازم يبدأ بكلمة:  import                       ║
-// ║ ⚠️ لو لاقيت عندك أوامر SQL (زي -- ═══ أو CREATE FUNCTION)             ║
-// ║    يبقى ده ملف create-sale.sql بالغلط — سيبه وابلغني فوراً            ║
-// ║ (ملف الـ SQL بتاع Supabase ليه شغلانة تانية خالص — ميتحطش هنا)        ║
-// ╚══════════════════════════════════════════════════════════════════════╝
-
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import type { Session } from '@/lib/auth'
