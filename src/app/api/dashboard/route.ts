@@ -1,209 +1,277 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
-import { requireModule, featureErrorResponse } from '@/lib/features'
-import { recordCommission, createPrincipalCashEntry } from '@/lib/commission'
-import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
-import { matchEdgeCache, putEdgeCache, purgeEdgeCache } from '@/lib/edgeCache'
-import { withSql, type Sql } from '@/lib/sql'
+import { checkLowStockAndNotify, checkExpiringSubscriptions } from '@/lib/notifications'
+import { getTenantTimezone, startOfDayInTz, startOfMonthInTz, dateStrInTz } from '@/lib/tenantTime'
+import { matchEdgeCache, putEdgeCache } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
 
-const METHODS = new Set(['vodafone_cash', 'instapay', 'fawry'])
-const KINDS = new Set(['deposit', 'withdraw'])
-
-/* ── ⚠️ التصديرات في أول الملف عمداً (2026-10-18) ──────────────────────────
-   لزقة مشوهة (قص من الآخر أو ملف غلط) كانت خلت الملف المنشور من غير
-   export POST → كل حفظ معاملة يرجع 405. لو حصل قص تاني من هنا ورايح
-   البناء هيقع فشل ظاهر فوراً بدل ما يفضل شغال ناقص بصمت.
-   الـ function declarations بتترفع (hoisting) فالترتيب ده سليم 100%.
-   ═════════════════════════════════════════════════════════════════════ */
-export async function GET(req: NextRequest) {
-  return withSql((sql) => __GET(req, sql))
-}
-export async function POST(...args: Parameters<typeof __POST>) {
-  return withDb(() => __POST(...args))
-}
-
-/**
- * ⚡ 2026-10-18 (نفس دوا صفحة المخزون): GET بقى SQL مباشر عبر postgres.js بدل
- * Prisma wasm — كانت أتقل صفحة متبقية في الموقع (التمويل مش متخزن في المتصفح،
- * فكل فتح صفحة = Prisma كامل + 3 جولات استعلام). الآن:
- *   - استعلام واحد (المعاملات + اسم المستخدم من subselect بدل findMany تاني)
- *   - كاش حافة 20 ثانية بنفس نمط مفاتيح المخزون (per-tenant + الفلاتر الفعلية)
- *   - الرد مصفوفة بنفس الحقول والترتيب بالظبط (id DESC، سقف 500):
- *     id, tenantId, method, kind, amount, commission, note, userId,
- *     status, cancelledAt, cancelledBy, createdAt, userName
- * POST فضل Prisma زي ما هو (عملية إيداع/سحب نادرة + عمولات).
- */
-async function __GET(req: NextRequest, sql: Sql) {
+export async function GET(req: Request) {
   let session
   try {
     session = await requireAuth()
-    await requireModule(session, 'finance')
   } catch (e) {
-    const fErr = featureErrorResponse(e)
-    if (fErr) return NextResponse.json(fErr.body, { status: fErr.status })
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
   }
 
-  const { searchParams } = new URL(req.url)
-  const from = searchParams.get('from')
-  const to = searchParams.get('to')
-  const method = searchParams.get('method')
-  const methodOk = !!method && METHODS.has(method)
+  // ?days=7|14|30 — controls the chart period (default 7)
+  const url = new URL(req.url)
+  const rawDays = parseInt(url.searchParams.get('days') ?? '7', 10)
+  const chartDays = [7, 14, 30].includes(rawDays) ? rawDays : 7
 
-  // ⚡ كاش حافة 20 ثانية — المفتاح بيشمل الفلاتر الفعلية بس (deterministic)
-  const filterParts: string[] = []
-  if (from) filterParts.push(`from=${from}`)
-  if (to) filterParts.push(`to=${to}`)
-  if (methodOk) filterParts.push(`method=${method}`)
-  const finQuery = filterParts.join('&')
-  const cached = await matchEdgeCache('/api/finance', finQuery, session.tenantId, '1')
-  if (cached) return cached
+  // ⚡ EDGE CACHE (2026-10-06) — إصلاح Error 1102: الداشبورد أثقل endpoint
+  // (15+ استعلام + Prisma init لكل طلب) وبيتسحب مع كل زيارة وتحديث تلقائي.
+  // نسخة مخزنة على حافة Cloudflare لحد 45 ثانية = ≈ صفر CPU للطلبات المتكررة.
+  // مفتاح per-tenant — بيانات كل محل منفصلة. والجديد دايماً متاح لأن أي
+  // بيع/سداد بيعمل purge للمفتاح (انظر api/sales و api/payments).
+  // 🔒 RBAC: هل المستخدم مسموحله يشوف الأرباح؟
+  // المدير دايمًا يشوفها — الموظف بيتحكم فيه صاحب المحل
+  const canViewProfits = session.role === 'ADMIN' || session.role === 'SUPER_ADMIN' || session.canViewProfits === true
 
-  const tid = session.tenantId
-  const whereParts = [sql`t."tenantId" = ${tid}`]
-  if (from || to) {
-    // 🕐 نفس دلالات from/to القديمة بتوقيت المحل (localDateStrToUtcBounds)
-    const tz = await getTenantTimezone(tid)
-    if (from) whereParts.push(sql` AND t."createdAt" >= ${localDateStrToUtcBounds(from, 'start', tz)}`)
-    if (to) whereParts.push(sql` AND t."createdAt" <= ${localDateStrToUtcBounds(to, 'end', tz)}`)
-  }
-  if (methodOk) whereParts.push(sql` AND t."method" = ${method}`)
+  // Edge cache key includes profit visibility so each group gets its own cache
+  const dashQuery = `days=${chartDays}&p=${canViewProfits ? '1' : '0'}`
+  const cachedDashboard = await matchEdgeCache('/api/dashboard', dashQuery, session.tenantId, 2)
+  if (cachedDashboard) return cachedDashboard
 
-  const rows = await sql<{
-    id: number
-    tenantId: string
-    method: string
-    kind: string
-    amount: number
-    commission: number
-    note: string | null
-    userId: string | null
-    status: string
-    cancelledAt: Date | null
-    cancelledBy: string | null
-    createdAt: Date
-    userName: string | null
-  }[]>`
-    SELECT t."id", t."tenantId", t."method", t."kind", t."amount", t."commission",
-           t."note", t."userId", t."status", t."cancelledAt", t."cancelledBy", t."createdAt",
-           (SELECT u."name" FROM "User" u WHERE u."id" = t."userId") AS "userName"
-    FROM "Transaction" t
-    WHERE ${whereParts}
-    ORDER BY t."id" DESC
-    LIMIT 500`
+  return withDb(async () => {
+    const tenantFilter = { tenantId: session.tenantId }
+    const now = new Date()
+    // 🕐 ROOT FIX (2026-09-27): "today"/"this month" must mean the shop's
+    // own local day, not the server's (UTC) clock. Previously this used
+    // `now.setHours(0,0,0,0)` — that's UTC midnight on Cloudflare Workers,
+    // so a sale made after local midnight but before UTC midnight (e.g.
+    // ~1-2 AM in Egypt) was silently missing from "today's sales" even
+    // though the invoice itself is stamped with today's date everywhere
+    // else in the UI. See src/lib/tenantTime.ts for the full explanation.
+    const tz = await getTenantTimezone(session.tenantId)
+    const todayStart = startOfDayInTz(now, tz)
+    const monthStart = startOfMonthInTz(now, tz)
+    const last30Start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const lastNStart = startOfDayInTz(new Date(now.getTime() - (chartDays - 1) * 24 * 60 * 60 * 1000), tz)
+    // (⚡ v9: alias last7Start اتشال — الرسم بيتجمع في SQL مباشرة بـ lastNStart)
 
-  const res = NextResponse.json(rows)
-  await putEdgeCache(res.clone(), '/api/finance', finQuery, tid, 20, '1')
-  return res
-}
+    const tid = session.tenantId
+    const chartEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000)
+    // All sums are computed inside PostgreSQL — loading every product and
+    // sale item into the Worker was exceeding Cloudflare's CPU limit.
+    const profitSince = (since: Date) => db.$queryRaw<{ profit: number }[]>`
+      SELECT COALESCE(SUM((i."price" - i."cost") * i."quantity"), 0)::float8 AS profit
+      FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
+      WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${since}`
 
-async function __POST(req: NextRequest) {
-  let session
-  try {
-    session = await requireAuth()
-    await requireModule(session, 'finance')
-  } catch (e) {
-    const fErr = featureErrorResponse(e)
-    if (fErr) return NextResponse.json(fErr.body, { status: fErr.status })
-    const err = authErrorResponse(e)
-    return NextResponse.json(err?.body, { status: err?.status })
-  }
+    const [
+      todaySalesAgg, todayProfitRows, monthSalesAgg, monthProfitRows, cashAgg,
+      stockRows, lowStockRows, activeMaintenance, activeMaintenanceOrders, last10SalesRaw,
+      topProductRows, customersCount, custAgg, suppAgg, chartRows,
+    ] = await Promise.all([
+      db.sale.aggregate({ where: { ...tenantFilter, createdAt: { gte: todayStart }, status: 'مكتملة' }, _sum: { total: true }, _count: { id: true } }),
+      profitSince(todayStart),
+      db.sale.aggregate({ where: { ...tenantFilter, createdAt: { gte: monthStart }, status: 'مكتملة' }, _sum: { total: true }, _count: { id: true } }),
+      profitSince(monthStart),
+      db.cashEntry.aggregate({ where: tenantFilter, _sum: { amount: true } }),
+      db.$queryRaw<{ vcost: number; vprice: number; low: number }[]>`
+        SELECT COALESCE(SUM(p."cost" * p."quantity"), 0)::float8 AS vcost,
+               COALESCE(SUM(p."price" * p."quantity"), 0)::float8 AS vprice,
+               COUNT(*) FILTER (WHERE p."quantity" <= p."minQuantity")::int AS low
+        FROM "Product" p WHERE p."tenantId" = ${tid}`,
+      db.$queryRaw<{ id: number; name: string; quantity: number; minQuantity: number; unitLabel: string | null }[]>`
+        SELECT p."id", p."name", p."quantity", p."minQuantity", p."unitLabel" FROM "Product" p
+        WHERE p."tenantId" = ${tid} AND p."quantity" <= p."minQuantity"
+        ORDER BY p."quantity" ASC LIMIT 50`,
+      db.maintenanceOrder.count({ where: { ...tenantFilter, status: { in: ['مستلم', 'قيد العمل', 'مكتمل'] } } }),
+      db.maintenanceOrder.findMany({ where: { ...tenantFilter, status: { in: ['مستلم', 'قيد العمل', 'مكتمل'] } }, orderBy: { id: 'desc' }, take: 10 }),
+      db.sale.findMany({ where: tenantFilter, orderBy: { id: 'desc' }, take: 10, select: { id: true, invoiceNo: true, createdAt: true, total: true, paid: true, status: true, customer: { select: { name: true } } } }),
+      db.$queryRaw<{ name: string; quantity: number; total: number; pieceLabel: string | null }[]>`
+        SELECT MIN(i."name") AS name, MAX(i."pieceLabel") AS "pieceLabel", SUM(i."quantity")::float8 AS quantity, SUM(i."price" * i."quantity")::float8 AS total
+        FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
+        WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${last30Start}
+        GROUP BY COALESCE(i."productId", 0) ORDER BY quantity DESC LIMIT 8`,
+      db.customer.count({ where: tenantFilter }),
+      db.customer.aggregate({ where: { ...tenantFilter, balance: { gt: 0 } }, _sum: { balance: true } }),
+      db.supplier.aggregate({ where: { ...tenantFilter, balance: { gt: 0 } }, _sum: { balance: true } }),
+      // ⚡ v9 (2026-10-06): التجميع اليومي اتنقل لـ PostgreSQL (GROUP BY يوم
+      // بتوقيت المحل AT TIME ZONE). كان بيرجع كل فاتورة في الفترة + subquery
+      // ربح لكل فاتورة (O(n×m) على قاعدة البيانات) وبيعيد n صف للـ Worker
+      // ويجمعهم في JS — مع 30 يوم وشهر مزدحم كان بيحرق CPU زيادة على
+      // (10ms limit → Error 1102). دلوقتي: صف واحد لكل يوم بس، والحساب كله
+      // جوه Postgres (نفس نمط trendRows في /api/reports).
+      db.$queryRaw<{ date: string; total: number; profit: number }[]>`
+        SELECT to_char(s."createdAt" AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS date,
+               SUM(s."total")::float8 AS total,
+               COALESCE(SUM(ip.profit), 0)::float8 AS profit
+        FROM "Sale" s
+        LEFT JOIN (
+          -- مقيّد بنفس نافذة الرسم — مش GROUP BY على جدول SaleItem كله
+          SELECT i."saleId", SUM((i."price" - i."cost") * i."quantity") AS profit
+          FROM "SaleItem" i
+          JOIN "Sale" s2 ON s2."id" = i."saleId"
+          WHERE s2."tenantId" = ${tid} AND s2."status" = 'مكتملة' AND s2."createdAt" >= ${lastNStart} AND s2."createdAt" < ${chartEnd}
+          GROUP BY i."saleId"
+        ) ip ON ip."saleId" = s."id"
+        WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${lastNStart} AND s."createdAt" < ${chartEnd}
+        GROUP BY 1 ORDER BY 1`,
+    ])
 
-  const body = await req.json().catch(() => null)
-  if (!body) {
-    return NextResponse.json({ error: 'بيانات غير صالحة' }, { status: 400 })
-  }
-  const method = String(body.method ?? '')
-  const kind = String(body.kind ?? '')
-  if (!METHODS.has(method)) {
-    return NextResponse.json({ error: 'وسيلة غير صالحة' }, { status: 400 })
-  }
-  if (!KINDS.has(kind)) {
-    return NextResponse.json({ error: 'نوع غير صالح' }, { status: 400 })
-  }
-  const amount = Number(body.amount)
-  if (isNaN(amount) || amount <= 0) {
-    return NextResponse.json({ error: 'المبلغ غير صالح' }, { status: 400 })
-  }
+    const n = (v: unknown) => Number(v ?? 0)
+    const todaySalesTotal = todaySalesAgg._sum.total ?? 0
+    const todaySalesCount = todaySalesAgg._count.id
+    const todayProfit = n(todayProfitRows[0]?.profit)
+    const monthSalesTotal = monthSalesAgg._sum.total ?? 0
+    const monthProfit = n(monthProfitRows[0]?.profit)
+    const cashBalance = cashAgg._sum.amount ?? 0
+    const lowStockCount = n(stockRows[0]?.low)
+    const stockValueCost = n(stockRows[0]?.vcost)
+    const stockValuePrice = n(stockRows[0]?.vprice)
+    const totalOutstandingDebt = n(custAgg._sum.balance)
+    const totalSupplierDebt = n(suppAgg._sum.balance)
 
-  // 🛡️ 2026-09-15 (v3): commission rate lookup now uses the unified
-  // `recordCommission()` helper inside the transaction. No need to pre-compute
-  // here — the helper will look up the rate and compute correctly.
+    // Chart: rows arrive already aggregated per local day from PostgreSQL
+    // (GROUP BY AT TIME ZONE — see query above). We only re-map the date to
+    // the dd/mm label the chart expects, filling empty days so the line
+    // never breaks.
+    const toDdMm = (isoDate: string) => { const [, m, d] = isoDate.split('-'); return `${d}/${m}` }
+    const dayMap = new Map<string, { total: number; profit: number }>()
+    for (let i = chartDays - 1; i >= 0; i--) {
+      const d = new Date(todayStart.getTime() - i * 24 * 60 * 60 * 1000)
+      dayMap.set(toDdMm(dateStrInTz(d, tz)), { total: 0, profit: 0 })
+    }
+    for (const r of chartRows) {
+      const slot = dayMap.get(toDdMm(r.date))
+      if (slot) { slot.total += n(r.total); slot.profit += n(r.profit) }
+    }
+    const last7DaysSales = Array.from(dayMap.entries()).map(([date, v]) => ({ date, ...v }))
 
-  const note = body.note ? String(body.note) : null
-  const principalSign = kind === 'deposit' ? 1 : -1
-  const methodName =
-    method === 'vodafone_cash'
-      ? 'محافظ إلكترونية'
-      : method === 'instapay'
-        ? 'انستاباي'
-        : 'محفظة إلكترونية'
+    const topProducts = topProductRows.map((r) => ({ name: r.name, quantity: n(r.quantity), total: n(r.total), unitLabel: r.pieceLabel ?? null }))
+    const lowStockAlerts = lowStockRows.map((p) => ({ id: n(p.id), name: p.name, quantity: n(p.quantity), minQuantity: n(p.minQuantity), unitLabel: p.unitLabel ?? null }))
 
-  const tx = await db.$transaction(async (dbx) => {
-    const created = await dbx.transaction.create({
-      data: {
+    // last 10 sales (lightweight payload)
+    const last10Sales = last10SalesRaw.map((s) => ({
+      id: s.id,
+      invoiceNo: s.invoiceNo,
+      createdAt: s.createdAt.toISOString(),
+      total: s.total,
+      paid: s.paid,
+      status: s.status,
+      customerName: s.customer?.name ?? null,
+    }))
+
+    // active maintenance orders payload
+    const activeMaintenanceList = activeMaintenanceOrders.map((o) => ({
+      id: o.id,
+      customerName: o.customerName,
+      device: o.device,
+      status: o.status,
+      receivedAt: o.receivedAt.toISOString(),
+    }))
+
+    // 🔔 2026-09-14: Trigger notification checks (fire-and-forget).
+    // We use `void` so these run in the background without blocking the
+    // dashboard response. The helpers internally check tenant preferences
+    // (notifyLowStock / notifyExpiringSubscription) and dedupe against
+    // existing unread notifications of the same type — so calling them
+    // on every dashboard load is safe (no duplicate notifications).
+    //
+    // 🛡️ Shares the same `notif_checked_at` cookie cooldown as
+    // /api/notifications (see that route for the full explanation): the
+    // in-memory rate limiter in lib/notifications.ts doesn't survive
+    // across Cloudflare Workers isolates, so without this, a tenant with
+    // both the dashboard (5-min auto-refresh) and the notification bell
+    // (3-min poll) open would run these checks from BOTH endpoints,
+    // independently, far more often than the intended 5-minute cooldown.
+    const NOTIF_COOLDOWN_MS = 5 * 60 * 1000
+    const cookieHeader = req.headers.get('cookie') ?? ''
+    const lastCheckedMatch = cookieHeader.match(/(?:^|;\s*)notif_checked_at=([^;]+)/)
+    const lastChecked = lastCheckedMatch ? Number(lastCheckedMatch[1]) : 0
+    const shouldRunChecks = !Number.isFinite(lastChecked) || Date.now() - lastChecked >= NOTIF_COOLDOWN_MS
+    if (shouldRunChecks) {
+      try {
+        await Promise.allSettled([
+          checkLowStockAndNotify(db, session.tenantId),
+          checkExpiringSubscriptions(db, session.tenantId),
+        ])
+      } catch {
+        // 🛡️ Never let notification failures break the dashboard.
+        // The dashboard response is more important than notifications.
+      }
+    }
+
+    // 🛡️ 2026-09-30 (M10): فواتير آجلة متأخرة — استحقاقها عدّى ومفيش سداد
+    // كامل. بتظهر في الداشبورد عشان التحصيل يحصل قبل ما الدين يتقادم.
+    //
+    // ⚡ PERF FIX (2026-10-05): كان بيستدعي getTenantTimezone() تاني هنا —
+    // يعني استعلام Tenant إضافي كامل على كل تحميل داشبورد، وهو متاح أصلاً
+    // في `tz` اللي اتحسب فوق في نفس الطلب. اتصال الـ Postgres هنا بيتفتح
+    // من جديد لكل ريكويست، فكل استعلام زيادة بيحسس المستخدم فعلياً.
+    const tzNow = tz
+    const todayStr2 = dateStrInTz(new Date(), tzNow)
+    const overdueCutoff = new Date(`${todayStr2}T00:00:00.000Z`)
+    const overdueRows = await db.sale.findMany({
+      where: {
         tenantId: session.tenantId,
-        method,
-        kind,
-        amount,
-        // 🛡️ Compute commission via the unified helper for consistency.
-        // Pre-read it for the Transaction.commission field (the helper
-        // creates a separate CashEntry, but the Transaction row also
-        // needs to store it for the finance list view).
-        commission: 0, // filled in below after calling recordCommission
-        note,
-        userId: session.userId,
+        status: { not: 'مرتجعة' },
+        dueDate: { lt: overdueCutoff },
       },
+      select: {
+        id: true,
+        invoiceNo: true,
+        total: true,
+        paid: true,
+        dueDate: true,
+        customer: { select: { name: true, phone: true } },
+      },
+      orderBy: { dueDate: 'asc' },
+      take: 10,
     })
+    const overdueInvoices = overdueRows
+      .map((s) => ({
+        id: s.id,
+        invoiceNo: s.invoiceNo,
+        remaining: Math.max(0, s.total - s.paid),
+        dueDate: s.dueDate ? s.dueDate.toISOString() : null,
+        customerName: s.customer?.name ?? null,
+        customerPhone: s.customer?.phone ?? null,
+      }))
+      .filter((s) => s.remaining > 0.005)
 
-    // Principal cash entry (signed by kind) with `method` column
-    const principalEntry = await createPrincipalCashEntry(dbx, {
-      tenantId: session.tenantId,
-      userId: session.userId,
-      method,
-      source: 'transaction',
-      refId: created.id,
-      amount: principalSign * amount,
-      note: `${kind === 'deposit' ? 'إيداع' : 'سحب'} ${methodName} - ${amount}`,
+    // 🔒 RBAC: نخفي أرقام الأرباح والتكاليف لو المستخدم مش مسموحله
+    const sanitizedDays = canViewProfits
+      ? last7DaysSales
+      : last7DaysSales.map(({ date, total }) => ({ date, total, profit: null }))
+
+    const res = NextResponse.json({
+      todaySales: todaySalesTotal,
+      todayProfit: canViewProfits ? todayProfit : null,
+      cashBalance,
+      lowStockCount,
+      todaySalesCount,
+      monthSales: monthSalesTotal,
+      monthProfit: canViewProfits ? monthProfit : null,
+      customersCount,
+      activeMaintenance,
+      totalOutstandingDebt,
+      totalSupplierDebt,
+      stockValueCost: canViewProfits ? stockValueCost : null,
+      stockValuePrice: canViewProfits ? stockValuePrice : null,
+      last7DaysSales: sanitizedDays,
+      topProducts,
+      last10Sales,
+      lowStockProducts: lowStockAlerts,
+      activeMaintenanceOrders: activeMaintenanceList,
+      overdueInvoices,
+      canViewProfits, // بعتهاله الفرونت عشان يعرف يخفي UI الأرباح
     })
-
-    // 🛡️ Bug #5 fix: Use the unified commission helper (always POSITIVE —
-    // the shop EARNS the commission). This was already the convention here,
-    // but now it's centralized so all routes are consistent.
-    const { commission, commissionEntryId } = await recordCommission(dbx, {
-      tenantId: session.tenantId,
-      userId: session.userId,
-      method,
-      amount,
-      refType: 'transaction',
-      refId: created.id,
-      noteSuffix: methodName,
-    })
-
-    // Update the Transaction row with the commission amount (for the finance list view)
-    if (commission > 0) {
-      await dbx.transaction.update({
-        where: { id: created.id },
-        data: { commission },
+    if (shouldRunChecks) {
+      res.cookies.set('notif_checked_at', String(Date.now()), {
+        maxAge: NOTIF_COOLDOWN_MS / 1000,
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
       })
     }
-
-    return {
-      ...created,
-      commission,
-      commissionEntryId,
-      linkedCashEntryId: principalEntry.id,
-    }
+    // ⚡ خزّن نسخة على الحافة (clone — الرد الأصلي يكمل للمتصفح)
+    await putEdgeCache(res.clone(), '/api/dashboard', dashQuery, session.tenantId, 45, 2) // dashQuery includes p=0|1
+    return res
   })
-
-  // ⚡ المعاملة الجديدة لازم تظهر فوراً في القايمة — نمسح كاش قائمة التمويل
-  // الافتراضية (بدون فلاتر — نفس الشكل اللي بيطابقه الـ UI عند الفتح).
-  // أي فلاتر تانية شغالة بتنضفي تلقائياً بالـ TTL (20 ثانية).
-  await purgeEdgeCache([{ pathname: '/api/finance', rawQuery: '' }], session.tenantId, '1')
-
-  return NextResponse.json(tx, { status: 201 })
 }
