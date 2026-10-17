@@ -2,10 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { withSql, type Sql } from '@/lib/sql'
 
 export const dynamic = 'force-dynamic'
 
-async function __GET() {
+/**
+ * ⚡ 2026-10-17 (تقليل CPU — صفحة المخزون): GET بقى SQL مباشر عبر postgres.js.
+ * كان بيشغّل Prisma wasm + استعلامين (تحويلات بأصنافها + مستخدمين) في *كل* فتح
+ * للصفحة (المسار ده مش متخزن على الحافة). نفس شكل الرد بالظبط: مصفوفة تحويلات،
+ * كل تحويل بنفس حقول Prisma include (fromBranch/toBranch/items{product}) +
+ * createdByName — الـ JSON بيتجمّع جوه PostgreSQL (json_build_object) والـ
+ * Worker بيستقبل نص جاهز بدون أي parse/stringify. التواريخ to_char بصيغة
+ * Prisma ISO-Z، والكميات float مطابقة. POST فضل Prisma زي ما هو (عملية نادرة).
+ */
+async function __GETImpl(sql: Sql) {
   let s
   try { s = await requireAuth() } catch (e) {
     const err = authErrorResponse(e); return NextResponse.json(err?.body,{status:err?.status})
@@ -13,38 +23,55 @@ async function __GET() {
   try { await requireModule(s, 'inventory') } catch (e) {
     const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
-  const where: any = { tenantId: s.tenantId }
-  if (s.branchId) where.OR = [{ fromBranchId: s.branchId }, { toBranchId: s.branchId }]
-  // ⚡ PERF FIX (CPU time / Error 1102): same issue as /api/inventory/stocktake
-  // — no `take` limit, so every transfer ever made (each with its full item
-  // list + product name/barcode) was loaded on every /inventory page open.
-  // Capped at the 300 most recent transfers, matching how the UI actually
-  // displays this list (no pagination exists to reach further back).
-  const rows = await db.transfer.findMany({
-    where,
-    orderBy: { id: 'desc' },
-    take: 300,
-    include: {
-      fromBranch: { select: { name: true } },
-      toBranch: { select: { name: true } },
-      items: { include: { product: { select: { name: true, barcode: true } } } },
-    },
+  // نفس where القديم حرفيًا: tenant دايمًا + فرع الجلسة (من/إلى الفرع بتاعه)
+  const whereParts = [sql`t."tenantId" = ${s.tenantId}`]
+  if (s.branchId) whereParts.push(sql` AND (t."fromBranchId" = ${s.branchId} OR t."toBranchId" = ${s.branchId})`)
+
+  // ⚡ PERF FIX (CPU time / Error 1102): نفس سقف القديم — آخر 300 تحويل
+  // (الـ UI بيعرضهم بالترتيب ده ومفيش pagination أصلاً).
+  const payloadRows = await sql<{ payload: string }[]>`
+    SELECT COALESCE(json_agg(x ORDER BY (x->>'id')::int DESC), '[]'::json)::text AS payload
+    FROM (
+      SELECT json_build_object(
+        'id', t."id", 'tenantId', t."tenantId",
+        'fromBranchId', t."fromBranchId", 'toBranchId', t."toBranchId",
+        'status', t."status", 'note', t."note", 'createdBy', t."createdBy",
+        'createdAt', to_char(t."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'completedAt', CASE WHEN t."completedAt" IS NULL THEN NULL
+                       ELSE to_char(t."completedAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END,
+        'fromBranch', json_build_object('name', fb."name"),
+        'toBranch', json_build_object('name', tb."name"),
+        'items', COALESCE((
+          SELECT json_agg(json_build_object(
+            'id', ti."id", 'transferId', ti."transferId", 'productId', ti."productId",
+            'quantity', ti."quantity",
+            'product', CASE WHEN p."id" IS NULL THEN NULL
+                       ELSE json_build_object('name', p."name", 'barcode', p."barcode") END
+          ) ORDER BY ti."id")
+          FROM "TransferItem" ti
+          LEFT JOIN "Product" p ON p."id" = ti."productId"
+          WHERE ti."transferId" = t."id"
+        ), '[]'::json),
+        'createdByName', u."name"
+      ) AS x
+      FROM "Transfer" t
+      JOIN "Branch" fb ON fb."id" = t."fromBranchId"
+      JOIN "Branch" tb ON tb."id" = t."toBranchId"
+      LEFT JOIN "User" u ON u."id" = t."createdBy"
+      WHERE ${whereParts}
+      ORDER BY t."id" DESC
+      LIMIT 300
+    ) sub`
+
+  // نص JSON جاهز من PostgreSQL — مباشر للرد بدون أي معالجة في الـ Worker
+  return new NextResponse(payloadRows[0]?.payload ?? '[]', {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
   })
-  // `createdBy` on Transfer is a plain string (no Prisma relation defined),
-  // so resolve names with a separate lookup instead of `include`.
-  const userIds = [...new Set(rows.map((r) => r.createdBy).filter(Boolean))] as string[]
-  const users = userIds.length
-    ? await db.user.findMany({
-        where: { id: { in: userIds } },
-        select: { id: true, name: true },
-      })
-    : []
-  const userNameById = new Map(users.map((u) => [u.id, u.name]))
-  const result = rows.map((r) => ({
-    ...r,
-    createdByName: r.createdBy ? (userNameById.get(r.createdBy) ?? null) : null,
-  }))
-  return NextResponse.json(result)
+}
+
+export async function GET(req: NextRequest) {
+  return withSql((sql) => __GETImpl(sql))
 }
 
 async function __POST(req: NextRequest) {
@@ -154,9 +181,6 @@ async function __POST(req: NextRequest) {
   return NextResponse.json(created, { status: 201 })
 }
 
-export async function GET(...args: Parameters<typeof __GET>) {
-  return withDb(() => __GET(...args))
-}
 export async function POST(...args: Parameters<typeof __POST>) {
   return withDb(() => __POST(...args))
 }

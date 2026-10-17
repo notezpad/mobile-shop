@@ -2,10 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { withSql, type Sql } from '@/lib/sql'
 
 export const dynamic = 'force-dynamic'
 
-async function __GET() {
+/**
+ * ⚡ 2026-10-17 (تقليل CPU — صفحة المخزون): GET بقى SQL مباشر عبر postgres.js.
+ * كان بيشغّل Prisma wasm + استعلامين (جلسات الجرد بأصنافها + مستخدمين) في *كل*
+ * فتح للصفحة (المسار ده مش متخزن على الحافة). نفس شكل الرد بالظبط: مصفوفة
+ * جلسات، كل جلسة بنفس حقول Prisma include (branch/items{product}) +
+ * createdByName — الـ JSON بيتجمّع جوه PostgreSQL (json_build_object) والـ
+ * Worker بيستقبل نص جاهز بدون أي parse/stringify. التواريخ to_char بصيغة
+ * Prisma ISO-Z، والكميات float مطابقة. POST فضل Prisma زي ما هو (عملية نادرة).
+ */
+async function __GETImpl(sql: Sql) {
   let s
   try { s = await requireAuth() } catch (e) {
     const err = authErrorResponse(e); return NextResponse.json(err?.body,{status:err?.status})
@@ -13,40 +23,49 @@ async function __GET() {
   try { await requireModule(s, 'inventory') } catch (e) {
     const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
-  const where: any = { tenantId: s.tenantId }
-  if (s.branchId) where.branchId = s.branchId
-  // ⚡ PERF FIX (CPU time / Error 1102): this had NO `take` limit — every
-  // stocktake session ever created for the tenant was loaded, each one WITH
-  // its full item list (one row per counted product) and the product name/
-  // barcode for every item. A shop that does regular stocktakes accumulates
-  // these forever, so this endpoint got heavier every week — and it's
-  // fetched on EVERY page load of /inventory (all 5 calls fire in parallel
-  // regardless of which tab is open). Capped at the 200 most recent sessions,
-  // which is what the UI renders anyway (no pagination/"load more" exists).
-  const rows = await db.stocktake.findMany({
-    where,
-    orderBy: { id: 'desc' },
-    take: 200,
-    include: {
-      branch: { select: { name: true } },
-      items: { include: { product: { select: { name: true, barcode: true } } } },
-    },
+  // نفس where القديم حرفيًا: tenant دايمًا + فرع الجلسة لو موجود
+  const whereParts = [sql`st."tenantId" = ${s.tenantId}`]
+  if (s.branchId) whereParts.push(sql` AND st."branchId" = ${s.branchId}`)
+
+  // ⚡ PERF FIX (CPU time / Error 1102): نفس سقف القديم — آخر 200 جلسة جرد
+  // (الـ UI بيعرضها بالترتيب ده ومفيش pagination أصلاً).
+  const payloadRows = await sql<{ payload: string }[]>`
+    SELECT COALESCE(json_agg(x ORDER BY (x->>'id')::int DESC), '[]'::json)::text AS payload
+    FROM (
+      SELECT json_build_object(
+        'id', st."id", 'tenantId', st."tenantId", 'branchId', st."branchId",
+        'status', st."status", 'note', st."note", 'createdBy', st."createdBy",
+        'createdAt', to_char(st."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'committedAt', CASE WHEN st."committedAt" IS NULL THEN NULL
+                       ELSE to_char(st."committedAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END,
+        'branch', CASE WHEN b."id" IS NULL THEN NULL
+                  ELSE json_build_object('name', b."name") END,
+        'items', COALESCE((
+          SELECT json_agg(json_build_object(
+            'id', si."id", 'stocktakeId', si."stocktakeId", 'productId', si."productId",
+            'systemQty', si."systemQty", 'countedQty', si."countedQty", 'diff', si."diff",
+            'product', CASE WHEN p."id" IS NULL THEN NULL
+                       ELSE json_build_object('name', p."name", 'barcode', p."barcode") END
+          ) ORDER BY si."id")
+          FROM "StocktakeItem" si
+          LEFT JOIN "Product" p ON p."id" = si."productId"
+          WHERE si."stocktakeId" = st."id"
+        ), '[]'::json),
+        'createdByName', u."name"
+      ) AS x
+      FROM "Stocktake" st
+      LEFT JOIN "Branch" b ON b."id" = st."branchId"
+      LEFT JOIN "User" u ON u."id" = st."createdBy"
+      WHERE ${whereParts}
+      ORDER BY st."id" DESC
+      LIMIT 200
+    ) sub`
+
+  // نص JSON جاهز من PostgreSQL — مباشر للرد بدون أي معالجة في الـ Worker
+  return new NextResponse(payloadRows[0]?.payload ?? '[]', {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
   })
-  // `createdBy` on Stocktake is a plain string (no Prisma relation defined),
-  // so resolve names with a separate lookup instead of `include`.
-  const userIds = [...new Set(rows.map((r) => r.createdBy).filter(Boolean))] as string[]
-  const users = userIds.length
-    ? await db.user.findMany({
-        where: { id: { in: userIds } },
-        select: { id: true, name: true },
-      })
-    : []
-  const userNameById = new Map(users.map((u) => [u.id, u.name]))
-  const result = rows.map((r) => ({
-    ...r,
-    createdByName: r.createdBy ? (userNameById.get(r.createdBy) ?? null) : null,
-  }))
-  return NextResponse.json(result)
 }
 
 async function __POST(req: NextRequest) {
@@ -138,8 +157,8 @@ async function __POST(req: NextRequest) {
 
 class StocktakeNegativeError extends Error {}
 
-export async function GET(...args: Parameters<typeof __GET>) {
-  return withDb(() => __GET(...args))
+export async function GET() {
+  return withSql((sql) => __GETImpl(sql))
 }
 export async function POST(...args: Parameters<typeof __POST>) {
   return withDb(async () => {

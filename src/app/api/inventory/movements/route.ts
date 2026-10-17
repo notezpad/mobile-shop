@@ -2,12 +2,29 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
-import { getTenantTimezone, localDateStrToUtcBounds, startOfDayInTz, dateStrInTz } from '@/lib/tenantTime'
+import { getTenantTimezone, localDateStrToUtcBounds, startOfDayInTz } from '@/lib/tenantTime'
 import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
+import { withSql, type Sql } from '@/lib/sql'
 
 export const dynamic = 'force-dynamic'
 
-async function __GET(req: NextRequest) {
+/**
+ * ⚡ 2026-10-17 (تقليل CPU — صفحة المخزون): GET بقى SQL مباشر عبر postgres.js.
+ * كان بيشغّل Prisma wasm + 6 استعلامات (صفحة + count + مجموعين + منحنى حتى
+ * 2000 صف) + تجميع المنحنى في JS عند *كل* فتح للصفحة. الرد { data, total, page,
+ * limit, totalPages, inTotal, outTotal, series } بنفس الشكل والقيم بالظبط —
+ * الـ JSON بيتجمّع كله جوه PostgreSQL (json_build_object) والـ Worker بيستقبل
+ * نص جاهز ويبعته بدون أي parse/stringify (≈ صفر CPU للتسلسل).
+ * مطابقة السلوك مع القديم:
+ *   - نفس الفلاتر (branch/product/type/from/to/q) وبحث LIKE حساس الحروف
+ *   - منحنى 14 يوم: نفس حساب JS القديم (خطوات 24 ساعة من «الآن»، الأيام
+ *     المكررة بتندمج، الحركات اللي يومها المحلي مش ضمن الأيام المعروضة بتتساقط)
+ *     بس التجميع جوه SQL بصيغة AT TIME ZONE 'UTC' AT TIME ZONE tz الصحيحة
+ *   - سقف المنحنى 2000 حركة + الأيام الفارغة {inn:0,out:0}
+ *   - كاش الحافة 15 ثانية بنفس المفتاح
+ * POST فضل Prisma زي ما هو (عملية نادرة).
+ */
+async function __GET(req: NextRequest, sql: Sql) {
   let s
   try { s = await requireAuth() } catch (e) {
     const err = authErrorResponse(e); return NextResponse.json(err?.body,{status:err?.status})
@@ -23,47 +40,35 @@ async function __GET(req: NextRequest) {
   const to = searchParams.get('to')
   const q = searchParams.get('q')?.trim() || ''
 
-  // ⚡ v10 (2026-10-06) — جزء من إصلاح Error 1102: الـ API القديم كان بيرجّع
-  // حتى 1000 حركة بكامل حقولها في *كل* فتح للتبويب و*كل* تغيير فلتر —
-  // تسلسل JSON لكل ده كان بيحرق CPU/ذاكرة الـ Worker (تراكم ⇒ 1102).
-  // دلوقتي: 50 صف/صفحة من السيرفر + الإجماليات ومنحنى 14 يوم بيتحسبوا
-  // جوه PostgreSQL (SUM/GROUP BY) — الـ Worker بيستقبل أرقام صغيرة بس.
+  // ⚡ v10 (2026-10-06) — جزء من إصلاح Error 1102: 50 صف/صفحة والإجماليات
+  // ومنحنى 14 يوم بيتحسبوا جوه PostgreSQL — الـ Worker بيستقبل أرقام صغيرة بس.
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1)
   const limitRaw = parseInt(searchParams.get('limit') ?? '50', 10)
   const limit = Math.min(1000, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 50))
   const skip = (page - 1) * limit
 
-  const where: any = { tenantId: s.tenantId, AND: [] as any[] }
-  if (s.branchId) where.AND.push({ branchId: s.branchId })
+  // ── شروط الفلترة (نفس where القديم حرفيًا) — بتتشارك بين كل أجزاء الاستعلام ──
+  const whereParts = [sql`sm."tenantId" = ${s.tenantId}`]
+  if (s.branchId) whereParts.push(sql` AND sm."branchId" = ${s.branchId}`)
   else if (branchId && branchId !== 'all') {
-    if (branchId === 'none') where.AND.push({ branchId: null })
-    else where.AND.push({ branchId: parseInt(branchId, 10) })
+    if (branchId === 'none') whereParts.push(sql` AND sm."branchId" IS NULL`)
+    else whereParts.push(sql` AND sm."branchId" = ${parseInt(branchId, 10)}`)
   }
-  if (productId) where.AND.push({ productId: parseInt(productId, 10) })
-  if (type && type !== 'all') where.AND.push({ type })
-  // 🕐 "from"/"to" هي تواريخ تقويمية بتوقيت المحل (زي 2026-09-27)، فلازم
-  // تتحول لحدود UTC بتوقيت المحل نفسه — مش بتوقيت السيرفر (كان
-  // `new Date(from)` بيديها منتصف ليل UTC، يعني بتزحلق يوم كامل لأي محل
-  // مش على توقيت UTC بالظبط).
+  if (productId) whereParts.push(sql` AND sm."productId" = ${parseInt(productId, 10)}`)
+  if (type && type !== 'all') whereParts.push(sql` AND sm."type" = ${type}`)
   const tz = await getTenantTimezone(s.tenantId)
-  if (from || to) {
-    if (from) where.AND.push({ createdAt: { gte: localDateStrToUtcBounds(from, 'start', tz) } })
-    if (to) where.AND.push({ createdAt: { lte: localDateStrToUtcBounds(to, 'end', tz) } })
-  }
+  if (from) whereParts.push(sql` AND sm."createdAt" >= ${localDateStrToUtcBounds(from, 'start', tz)}`)
+  if (to) whereParts.push(sql` AND sm."createdAt" <= ${localDateStrToUtcBounds(to, 'end', tz)}`)
   if (q) {
-    where.AND.push({
-      OR: [
-        { product: { name: { contains: q } } },
-        { product: { barcode: { contains: q } } },
-        { note: { contains: q } },
-      ],
-    })
+    // 🔍 نفس سلوك Prisma contains (حساس للحروف — بدون mode)
+    const pattern = `%${q}%`
+    whereParts.push(sql` AND (
+      EXISTS (SELECT 1 FROM "Product" pp WHERE pp."id" = sm."productId" AND (pp."name" LIKE ${pattern} OR pp."barcode" LIKE ${pattern}))
+      OR sm."note" LIKE ${pattern}
+    )`)
   }
 
-  // ⚡ v10 كاش حافة (15 ثانية) — زي نهج /api/reports: التبويب read-heavy
-  // (نفس الفلاتر بتتفتح أكتر من مرة)، والمفتاح بيشمل الفرع + كل الفلاتر +
-  // الصفحة + tenantId. الـ TTL هو ضمان الحداثة (زي التقارير)، وأي تسجيل
-  // حركة يدوي (POST تحت) بيمسح المفتاح الافتراضي فوراً.
+  // ⚡ v10 كاش حافة (15 ثانية) — نفس المفتاح والتزمت القديمة حرفيًا
   const filterParts: string[] = [`branch=${s.branchId ?? 0}`]
   for (const [k, v] of [
     ['branchId', branchId ?? ''], ['productId', productId ?? ''], ['type', type ?? ''],
@@ -76,72 +81,73 @@ async function __GET(req: NextRequest) {
   const cachedMv = await matchEdgeCache('/api/inventory/movements', mvQuery, s.tenantId, '1')
   if (cachedMv) return cachedMv
 
-  // منحنى آخر 14 يوم — بحدود يوم محلي بتوقيت المحل (نفس منهج الداشبورد)
+  // بداية نافذة المنحنى — نفس حساب القديم (خطوات 24 ساعة من «الآن»)
   const seriesStart = startOfDayInTz(new Date(Date.now() - 13 * 24 * 60 * 60 * 1000), tz)
-  const seriesWhere = { AND: [...(where.AND as any[]), { createdAt: { gte: seriesStart } }] }
 
-  const [rows, total, inAgg, outAgg, seriesRaw] = await Promise.all([
-    db.stockMovement.findMany({
-      where,
-      orderBy: { id: 'desc' },
-      take: limit,
-      skip,
-      include: {
-        product: { select: { name: true, barcode: true } },
-        branch: { select: { name: true } },
-      },
-    }),
-    db.stockMovement.count({ where }),
-    // ميزان الحركة كله بيتحسب في SQL — صفوف slim مبيترجعش للـ Worker أصلاً
-    db.stockMovement.aggregate({ where: { ...where, quantity: { gt: 0 } }, _sum: { quantity: true } }),
-    db.stockMovement.aggregate({ where: { ...where, quantity: { lt: 0 } }, _sum: { quantity: true } }),
-    db.stockMovement.findMany({
-      where: seriesWhere,
-      select: { quantity: true, createdAt: true },
-      orderBy: { id: 'desc' },
-      take: 2000,
-    }),
-  ])
-  // `userId` on StockMovement is a plain string (no Prisma relation defined),
-  // so resolve names with a separate lookup instead of `include`.
-  const userIds = [...new Set(rows.map((r) => r.userId).filter(Boolean))] as string[]
-  const users = userIds.length
-    ? await db.user.findMany({
-        where: { id: { in: userIds } },
-        select: { id: true, name: true },
-      })
-    : []
-  const userNameById = new Map(users.map((u) => [u.id, u.name]))
-  const result = rows.map((r) => ({
-    ...r,
-    userName: r.userId ? (userNameById.get(r.userId) ?? null) : null,
-  }))
+  // ⚡ استعلام واحد بيبنى الرد كله جوه PostgreSQL:
+  //   - التواريخ to_char بصيغة Prisma ISO-Z (3 أرقام كسور + Z)
+  //   - منحنى الأيام: نفس دلالات الـ dayMap القديم (خطوات 24h من now،
+  //     DISTINCT = دمج المكرر، LEFT JOIN = تساقط الأيام خارج القائمة)
+  const payloadRows = await sql<{ payload: string }[]>`
+    SELECT json_build_object(
+      'data', COALESCE((
+        SELECT json_agg(x ORDER BY (x->>'id')::int DESC)
+        FROM (
+          SELECT json_build_object(
+            'id', sm."id", 'tenantId', sm."tenantId", 'branchId', sm."branchId",
+            'productId', sm."productId", 'type', sm."type",
+            'quantity', sm."quantity",
+            'refType', sm."refType", 'refId', sm."refId", 'note', sm."note",
+            'userId', sm."userId",
+            'createdAt', to_char(sm."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'product', CASE WHEN p."id" IS NULL THEN NULL
+                       ELSE json_build_object('name', p."name", 'barcode', p."barcode") END,
+            'branch', CASE WHEN b."id" IS NULL THEN NULL
+                      ELSE json_build_object('name', b."name") END,
+            'userName', u."name"
+          ) AS x
+          FROM "StockMovement" sm
+          LEFT JOIN "Product" p ON p."id" = sm."productId"
+          LEFT JOIN "Branch" b ON b."id" = sm."branchId"
+          LEFT JOIN "User" u ON u."id" = sm."userId"
+          WHERE ${whereParts}
+          ORDER BY sm."id" DESC
+          LIMIT ${limit} OFFSET ${skip}
+        ) page_rows
+      ), '[]'::json),
+      'total', t.cnt,
+      'page', ${page}::int,
+      'limit', ${limit}::int,
+      'totalPages', GREATEST(1, CEIL(t.cnt::float8 / ${limit}::float8)::int),
+      'inTotal', (SELECT COALESCE(SUM(sm."quantity"), 0)::float8 FROM "StockMovement" sm WHERE ${whereParts} AND sm."quantity" > 0),
+      'outTotal', (SELECT COALESCE(ABS(SUM(sm."quantity")), 0)::float8 FROM "StockMovement" sm WHERE ${whereParts} AND sm."quantity" < 0),
+      'series', COALESCE((
+        SELECT json_agg(json_build_object('date', d.d, 'inn', COALESCE(a.inn, 0), 'out', COALESCE(a.out, 0)) ORDER BY d.d)
+        FROM (
+          SELECT DISTINCT ((((now() AT TIME ZONE 'UTC') - (g * interval '24 hours')) AT TIME ZONE 'UTC') AT TIME ZONE ${tz})::date::text AS d
+          FROM generate_series(13, 0, -1) AS g
+        ) d
+        LEFT JOIN (
+          SELECT to_char((x2."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS d,
+                 SUM(CASE WHEN x2."quantity" > 0 THEN x2."quantity" ELSE 0 END) AS inn,
+                 SUM(CASE WHEN x2."quantity" <= 0 THEN (-x2."quantity") ELSE 0 END) AS out
+          FROM (
+            SELECT sm."createdAt", sm."quantity"
+            FROM "StockMovement" sm
+            WHERE ${whereParts} AND sm."createdAt" >= ${seriesStart}
+            ORDER BY sm."id" DESC
+            LIMIT 2000
+          ) x2
+          GROUP BY 1
+        ) a ON a.d = d.d
+      ), '[]'::json)
+    )::text AS payload
+    FROM (SELECT COUNT(*)::int AS cnt FROM "StockMovement" sm WHERE ${whereParts}) t`
 
-  // تجميع منحنى 14 يوم: صف واحد لكل يوم محلي (GROUP BY مكافئ في JS على
-  // صفوف slim صغيرة — الحقول الوحيدة المطلوبة quantity/createdAt)
-  const dayMap = new Map<string, { inn: number; out: number }>()
-  for (let i = 13; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
-    dayMap.set(dateStrInTz(d, tz), { inn: 0, out: 0 })
-  }
-  for (const m of seriesRaw) {
-    const key = dateStrInTz(m.createdAt, tz)
-    const slot = dayMap.get(key)
-    if (!slot) continue
-    if (m.quantity > 0) slot.inn += m.quantity
-    else slot.out += Math.abs(m.quantity)
-  }
-  const series = Array.from(dayMap.entries()).map(([date, v]) => ({ date, inn: v.inn, out: v.out }))
-
-  const res = NextResponse.json({
-    data: result,
-    total,
-    page,
-    limit,
-    totalPages: Math.max(1, Math.ceil(total / limit)),
-    inTotal: inAgg._sum.quantity ?? 0,
-    outTotal: Math.abs(outAgg._sum.quantity ?? 0),
-    series,
+  // نص JSON جاهز من PostgreSQL — مباشر للرد بدون أي معالجة في الـ Worker
+  const res = new NextResponse(payloadRows[0]?.payload ?? '{}', {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
   })
   await putEdgeCache(res.clone(), '/api/inventory/movements', mvQuery, s.tenantId, 15, '1')
   return res
@@ -287,8 +293,8 @@ async function __POST(req: NextRequest) {
   }
 }
 
-export async function GET(...args: Parameters<typeof __GET>) {
-  return withDb(() => __GET(...args))
+export async function GET(req: NextRequest) {
+  return withSql((sql) => __GET(req, sql))
 }
 export async function POST(...args: Parameters<typeof __POST>) {
   return withDb(() => __POST(...args))
