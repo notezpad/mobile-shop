@@ -223,7 +223,10 @@ model Product {
   branchId    Int?
   name        String
   category    String?
-  barcode     String?  @unique
+  // 🏬 2026-10-18: الباركود فريد جوه (المحل + الفرع) مش على مستوى النظام كله —
+  // الفريدية بتتفرض بـ partial unique index في migration 20261018_branch_barcodes...
+  // (Prisma مابيعبّرش عن expression index، فمفيش @unique هنا)
+  barcode     String?
   price       Float    @default(0)
   cost        Float    @default(0)
   // 🥬 2026-10-12 (food vertical): الكمية بقى Float عشان منتجات البيع بالوزن
@@ -269,6 +272,7 @@ model Product {
   @@index([tenantId, category])
   @@index([tenantId, collection])
   @@index([branchId])
+  @@index([barcode])
 }
 
 // Wholesale unit (e.g. "قطعة" / "نص دستة" / "دستة" / "كرتونة").
@@ -296,7 +300,8 @@ model ProductVariant {
   productId Int
   size      String?
   color     String?
-  barcode   String?  @unique
+  // 🏬 2026-10-18: فريد جوه المنتج (index) وجوه نفس الفرع (trigger) — migration 20261018
+  barcode   String?
   quantity  Int      @default(0)
   createdAt DateTime @default(now())
 
@@ -304,6 +309,7 @@ model ProductVariant {
   saleItems SaleItem[]
 
   @@index([productId])
+  @@index([barcode])
 }
 
 model Category {
@@ -816,6 +822,8 @@ model TransferItem {
   // 🛡️ 2026-09-15 (v3): nullable so a product can be hard-deleted without
   // losing transfer history.
   productId  Int?
+  // 🎨 2026-10-18: لو المنتج له ألوان/مقاسات، السطر = لون/مقاس واحد
+  variantId  Int?
   // 🥬 2026-10-12: Float — تحويل 12.5 كيلو بين فروع
   quantity   Float
 
@@ -848,6 +856,8 @@ model StocktakeItem {
   // 🛡️ 2026-09-15 (v3): nullable so a product can be hard-deleted without
   // losing stocktake history (the systemQty/countedQty/diff stay intact).
   productId   Int?
+  // 🎨 2026-10-18: جرد لون/مقاس معيّن (systemQty/countedQty بتاعته هو)
+  variantId   Int?
   // 🥬 2026-10-12: Float — جرد بالكيلو (نظامي 45.5 / مُحصى 44.25 / فرق -1.25)
   systemQty   Float
   countedQty  Float

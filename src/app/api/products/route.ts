@@ -296,7 +296,12 @@ export async function POST(req: NextRequest) {
     const barcode = body.barcode ? String(body.barcode).trim() || null : null
     // ensure unique barcode (treat empty as null)
     if (barcode) {
-      const exists = await db.product.findUnique({ where: { barcode } })
+      // 🏬 2026-10-18: الباركود فريد جوه (المحل + الفرع) — نفس الباركود مسموح في فرع تاني
+      const targetBranch = session.branchId ?? (body.branchId ? parseInt(body.branchId, 10) : null)
+      const exists = await db.product.findFirst({
+        where: { tenantId: session.tenantId, barcode, branchId: targetBranch || null },
+        select: { id: true },
+      })
       if (exists) {
         return NextResponse.json(
           { error: 'الباركود مستخدم بالفعل' },

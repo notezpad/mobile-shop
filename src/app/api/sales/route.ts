@@ -226,7 +226,15 @@ export async function POST(req: NextRequest) {
       .map((i: any) => i.variantId ? parseInt(i.variantId, 10) : null)
       .filter((id: number | null): id is number => id !== null && !isNaN(id))
 
-    const [products, units, variants, customerRows, tenantRows] = await Promise.all([
+    // 🎨 2026-10-18: منتجات في السلة من غير variantId — لو ليها ألوان/مقاسات لازم تترفض،
+    // وإلا الخصم بيروح على Product.quantity وبيتمسح (يرجع المخزون) عند أول مزامنة للمقاسات.
+    // (الـ POS بيجبر اختيار المقاس، ده حماية للطلبات القديمة/الأوفلاين/الـ API)
+    const noVariantProductIds = body.items
+      .filter((i: any) => !i.variantId)
+      .map((i: any) => parseInt(i.productId, 10))
+      .filter((n: number) => !isNaN(n))
+
+    const [products, units, variants, customerRows, tenantRows, variantProductRows] = await Promise.all([
       (ids.length > 0
         ? sql<ProductRow[]>`
             SELECT "id", "name", "cost", "quantity", "unitLabel"
@@ -253,7 +261,13 @@ export async function POST(req: NextRequest) {
         : Promise.resolve([] as CustomerRow[])),
       sql<{ invoicePrefix: string }[]>`
         SELECT "invoicePrefix" FROM "Tenant" WHERE "id" = ${session.tenantId}`,
+      (noVariantProductIds.length > 0
+        ? sql<{ productId: number }[]>`
+            SELECT DISTINCT "productId" FROM "ProductVariant"
+            WHERE "productId" IN ${sql(noVariantProductIds)}`
+        : Promise.resolve([] as { productId: number }[])),
     ])
+    const productsWithVariants = new Set<number>(variantProductRows.map((r) => Number(r.productId)))
 
     // validate customer
     const customerCheck = customerRows[0] ?? null
@@ -339,6 +353,11 @@ export async function POST(req: NextRequest) {
           )
         }
         variantId = variant.id
+      } else if (productsWithVariants.has(p.id)) {
+        return NextResponse.json(
+          { error: `المنتج "${p.name}" له ألوان ومقاسات — اختار اللون/المقاس قبل البيع` },
+          { status: 400 }
+        )
       }
 
       if (it.unitId) {

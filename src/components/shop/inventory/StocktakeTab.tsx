@@ -43,6 +43,7 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
 import type { Branch, InventoryProduct, Stocktake } from '../InventoryView'
+import { PurchaseVariantsDialog, type PurchaseVariantLite, type PurchaseVariantsResult } from '../PurchaseVariantsDialog'
 import {
   ACCENT,
   Signed,
@@ -146,6 +147,8 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
   const setNote = (v: string) => setStocktakeDraft({ note: v })
 
   const [scan, setScan] = React.useState('')
+  // 🎨 2026-10-18: منتج له ألوان/مقاسات → شبكة بتسجّل العدّ الفعلي لكل لون/مقاس
+  const [matrix, setMatrix] = React.useState<{ product: InventoryProduct; variants: PurchaseVariantLite[] } | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [viewing, setViewing] = React.useState<Stocktake | null>(null)
   const [statusFilter, setStatusFilter] = React.useState<'all' | 'draft' | 'committed'>('all')
@@ -172,42 +175,121 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
     return products.filter((p) => p.branchId === parseInt(effectiveBranchId, 10) || p.branchId == null)
   }, [products, effectiveBranchId])
 
-  const handleScan = (e: React.FormEvent) => {
+  // مفتاح سطر الجرد: منتج + (لون/مقاس) — منتج واحد ممكن يبقى له أسطر كتير
+  const keyOf = (i: { productId: number; variantId?: number | null }) => `${i.productId}:${i.variantId ?? 0}`
+
+  const handleScan = async (e: React.FormEvent) => {
     e.preventDefault()
     const q = scan.trim()
     if (!q) return
+    setScan('')
     let p = scopedProducts.find((x) => x.barcode && x.barcode === q)
     if (!p) p = scopedProducts.find((x) => x.name.toLowerCase() === q.toLowerCase())
     if (!p) p = scopedProducts.find((x) => x.name.toLowerCase().includes(q.toLowerCase()))
-    if (!p) {
-      toast.error(`لم يتم العثور على المنتج: ${q}`, { id: 'not-found' })
-      setScan('')
+
+    if (p) {
+      // 🎨 منتج له ألوان/مقاسات: باركود المنتج لوحده ما يحددش المقاس → شبكة العدّ
+      try {
+        const variants = await api<PurchaseVariantLite[]>(`/api/products/${p.id}/variants`)
+        if (variants.length > 0) {
+          setMatrix({ product: p, variants })
+          return
+        }
+      } catch {
+        /* نكمّل كمنتج عادي — السيرفر هيرفض لو فعلاً له مقاسات */
+      }
+      const prod = p
+      const existing = items.find((i) => i.productId === prod.id && !i.variantId)
+      // 🥬 2026-10-12: منتج الوزن — الخطوة 0.5 كيلو (القيمة المكتوبة بتقبل كسور)
+      const inc = prod.soldByWeight ? 0.5 : 1
+      const newQty = existing ? Math.round((existing.countedQty + inc) * 1000) / 1000 : inc
+      setItems((prev) => {
+        const exists = prev.find((i) => i.productId === prod.id && !i.variantId)
+        if (exists) {
+          return prev.map((i) => (i === exists ? { ...i, countedQty: Math.round((i.countedQty + inc) * 1000) / 1000 } : i))
+        }
+        return [
+          ...prev,
+          { productId: prod.id, variantId: null, name: prod.name, barcode: prod.barcode, systemQty: prod.quantity, countedQty: inc, soldByWeight: prod.soldByWeight === true },
+        ]
+      })
+      setLast((l) => ({ name: prod.name, qty: newQty, n: (l?.n ?? 0) + 1 }))
       inputRef.current?.focus()
       return
     }
-    const existing = items.find((i) => i.productId === p!.id)
-    // 🥬 2026-10-12: منتج الوزن — الخطوة 0.5 كيلو (القيمة المكتوبة بتقبل كسور)
-    const inc = p!.soldByWeight ? 0.5 : 1
-    const newQty = existing ? Math.round((existing.countedQty + inc) * 1000) / 1000 : inc
-    setItems((prev) => {
-      const exists = prev.find((i) => i.productId === p!.id)
-      if (exists) {
-        return prev.map((i) => (i.productId === p!.id ? { ...i, countedQty: Math.round((i.countedQty + inc) * 1000) / 1000 } : i))
+
+    // 🎨 مفيش منتج بالباركود ده → ممكن يكون باركود لون/مقاس معيّن
+    try {
+      const r = await api<{
+        found: boolean
+        product?: { id: number; name: string; soldByWeight?: boolean }
+        variant?: { id: number; size: string | null; color: string | null; barcode: string | null; quantity: number }
+      }>(`/api/inventory/variant-lookup?code=${encodeURIComponent(q)}${effectiveBranchId ? `&branchId=${effectiveBranchId}` : ''}`)
+      if (r.found && r.product && r.variant) {
+        const v = r.variant
+        const name = `${r.product.name} — ${[v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`}`
+        const pid = r.product.id
+        const existing = items.find((i) => i.productId === pid && i.variantId === v.id)
+        const newQty = (existing?.countedQty ?? 0) + 1
+        setItems((prev) => {
+          const exists = prev.find((i) => i.productId === pid && i.variantId === v.id)
+          if (exists) return prev.map((i) => (i === exists ? { ...i, countedQty: i.countedQty + 1 } : i))
+          return [...prev, { productId: pid, variantId: v.id, name, barcode: v.barcode, systemQty: v.quantity, countedQty: 1, soldByWeight: false }]
+        })
+        setLast((l) => ({ name, qty: newQty, n: (l?.n ?? 0) + 1 }))
+        inputRef.current?.focus()
+        return
       }
-      return [
-        ...prev,
-        { productId: p!.id, name: p!.name, barcode: p!.barcode, systemQty: p!.quantity, countedQty: inc, soldByWeight: p!.soldByWeight === true },
-      ]
-    })
-    setLast((l) => ({ name: p!.name, qty: newQty, n: (l?.n ?? 0) + 1 }))
-    setScan('')
+    } catch {
+      /* ننزل لرسالة «مش لاقيه» */
+    }
+    toast.error(`لم يتم العثور على المنتج: ${q}`, { id: 'not-found' })
     inputRef.current?.focus()
   }
 
-  const setCounted = (productId: number, qty: number) => {
-    setItems((prev) => prev.map((i) => (i.productId === productId ? { ...i, countedQty: Math.max(0, qty) } : i)))
+  const confirmMatrix = (r: PurchaseVariantsResult) => {
+    if (!matrix) return
+    const { product, variants } = matrix
+    const lines = variants
+      .filter((v) => r.qty[v.id] !== undefined)
+      .map((v) => ({
+        productId: product.id,
+        variantId: v.id,
+        name: `${product.name} — ${[v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`}`,
+        barcode: v.barcode ?? product.barcode,
+        systemQty: v.quantity,
+        countedQty: r.qty[v.id],
+        soldByWeight: false,
+      }))
+    // بنستبدل كل أسطر المنتج ده بنتيجة العدّ الجديدة
+    setItems((prev) => [...prev.filter((i) => i.productId !== product.id), ...lines])
+    setLast((l) => ({ name: product.name, qty: lines.reduce((n, x) => n + x.countedQty, 0), n: (l?.n ?? 0) + 1 }))
+    setMatrix(null)
+    inputRef.current?.focus()
   }
-  const removeItem = (productId: number) => setItems((prev) => prev.filter((i) => i.productId !== productId))
+
+  const editVariantsOf = async (productId: number) => {
+    const p = scopedProducts.find((x) => x.id === productId)
+    if (!p) return
+    try {
+      const variants = await api<PurchaseVariantLite[]>(`/api/products/${p.id}/variants`)
+      if (variants.length > 0) setMatrix({ product: p, variants })
+    } catch {
+      toast.error('تعذّر تحميل الألوان والمقاسات')
+    }
+  }
+
+  const matrixInitialQty = React.useMemo(() => {
+    const out: Record<number, number> = {}
+    if (matrix) for (const i of items) if (i.productId === matrix.product.id && i.variantId) out[i.variantId] = i.countedQty
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matrix])
+
+  const setCounted = (key: string, qty: number) => {
+    setItems((prev) => prev.map((i) => (keyOf(i) === key ? { ...i, countedQty: Math.max(0, qty) } : i)))
+  }
+  const removeItem = (key: string) => setItems((prev) => prev.filter((i) => keyOf(i) !== key))
 
   const resetForm = () => {
     clearStocktakeDraft()
@@ -224,7 +306,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
         method: 'POST',
         body: {
           branchId: effectiveBranchId ? parseInt(effectiveBranchId, 10) : null,
-          items: items.map((i) => ({ productId: i.productId, systemQty: i.systemQty, countedQty: i.countedQty })),
+          items: items.map((i) => ({ productId: i.productId, variantId: i.variantId ?? null, systemQty: i.systemQty, countedQty: i.countedQty })),
           note: note.trim() || null,
           commit,
         },
@@ -411,7 +493,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
               const max = Math.max(it.systemQty, it.countedQty, 1)
               return (
                  <article
-                  key={it.productId}
+                  key={keyOf(it)}
                    className="group relative overflow-hidden rounded-2xl border border-stocktake/15 bg-card shadow-xs transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-stocktake/35 hover:shadow-md"
                 >
                    <div className="flex items-start gap-3 border-b border-stocktake/10 bg-stocktake-soft p-4">
@@ -424,11 +506,16 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                          <span className="font-mono text-[10px] font-bold text-muted-foreground">#{String(it.productId).padStart(4, '0')}</span>
                        </div>
                        <h4 className="text-base font-black leading-snug [overflow-wrap:anywhere]">{it.name}</h4>
+                       {it.variantId ? (
+                         <button type="button" onClick={() => void editVariantsOf(it.productId)} className="mt-0.5 text-[11px] font-bold text-stocktake hover:underline">
+                           تعديل عدّ الألوان والمقاسات
+                         </button>
+                       ) : null}
                        <p dir="ltr" className="mt-1 flex items-center gap-1 text-start font-mono text-xs text-muted-foreground"><Hash className="size-3 shrink-0" />{it.barcode || 'بدون باركود'}</p>
                     </div>
                      <Button
                        type="button" variant="ghost" size="icon"
-                      onClick={() => removeItem(it.productId)}
+                      onClick={() => removeItem(keyOf(it))}
                       title="حذف"
                        className="size-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                     >
@@ -444,7 +531,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                     </div>
                      <div className="text-center">
                        <p className="mb-1.5 text-xs font-black text-stocktake">{it.soldByWeight ? 'الوزن الفعلي (كجم)' : 'العدد الفعلي'}</p>
-                       <QtyStepper value={it.countedQty} min={0} onChange={(v) => setCounted(it.productId, v)} accent={c} decimal={it.soldByWeight} step={it.soldByWeight ? 0.5 : 1} />
+                       <QtyStepper value={it.countedQty} min={0} onChange={(v) => setCounted(keyOf(it), v)} accent={c} decimal={it.soldByWeight} step={it.soldByWeight ? 0.5 : 1} />
                      </div>
                   </div>
 
@@ -568,6 +655,22 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
           </div>
         )}
       </section>
+
+      <PurchaseVariantsDialog
+        open={matrix !== null}
+        onOpenChange={(o) => { if (!o) setMatrix(null) }}
+        productName={matrix?.product.name ?? ''}
+        variants={matrix?.variants ?? []}
+        initialQty={matrixInitialQty}
+        initialCost={0}
+        onConfirm={confirmMatrix}
+        showCost={false}
+        allowZero
+        title="العدّ الفعلي لكل لون ومقاس"
+        confirmLabel="سجّل العدّ"
+        emptyHint="اكتب العدد الفعلي لكل لون/مقاس (اكتب 0 لو مفيش منه). الخلية الفاضية = ما اتعدّتش"
+        stockLabel="بالنظام"
+      />
 
       {viewing && (
         <StocktakeDetailDialog
@@ -841,7 +944,7 @@ function StocktakeDetailDialog({
                     {/* 🛡️ 2026-10-05: بعد الحذف المحاسبي للمنتج بيفضل الربط null —
                         نعرض بديل واضح بدل اسم فاضي، والكميات (systemQty/countedQty) محفوظة. */}
                     <p className="truncate text-sm font-bold text-foreground">
-                      {it.product?.name ?? 'منتج محذوف (الكميات محفوظة)'}
+                      {it.product?.name ? it.product.name + (it.variant ? ` — ${[it.variant.color, it.variant.size].filter(Boolean).join(' / ')}` : '') : 'منتج محذوف (الكميات محفوظة)'}
                     </p>
                     <p className="text-xs tabular-nums text-muted-foreground">
                       النظام <span className="font-mono font-bold">{num(it.systemQty)}</span>

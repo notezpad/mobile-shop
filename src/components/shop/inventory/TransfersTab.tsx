@@ -43,6 +43,7 @@ import { useConfirm } from '../ConfirmDialogProvider'
 import { ProductPickerCombobox } from '../ProductPickerCombobox'
 import { useShopStore } from '@/lib/store'
 import type { Branch, InventoryProduct, Transfer } from '../InventoryView'
+import { PurchaseVariantsDialog, type PurchaseVariantLite, type PurchaseVariantsResult } from '../PurchaseVariantsDialog'
 import {
   ACCENT,
   EmptyState,
@@ -199,6 +200,8 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
 
   const [pick, setPick] = React.useState('')
   const [saving, setSaving] = React.useState(false)
+  // 🎨 2026-10-18: منتج له ألوان/مقاسات → شبكة بتحدد الكمية المحوّلة من كل لون/مقاس
+  const [matrix, setMatrix] = React.useState<{ product: InventoryProduct; variants: PurchaseVariantLite[] } | null>(null)
   const [viewing, setViewing] = React.useState<Transfer | null>(null)
   const [statusFilter, setStatusFilter] = React.useState<'all' | StatusKey>('all')
 
@@ -215,27 +218,76 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
     return products.filter((p) => p.branchId === parseInt(from, 10))
   }, [products, from])
 
-  const addItem = () => {
+  // كميات المنتج اللي على البوليصة بالفعل (لما التاجر يعدّل الشبكة)
+  const matrixInitialQty = React.useMemo(() => {
+    const out: Record<number, number> = {}
+    if (matrix) for (const i of items) if (i.productId === matrix.product.id && i.variantId) out[i.variantId] = i.quantity
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matrix])
+
+  const addItem = async () => {
     if (!pick) return
     const p = eligibleProducts.find((pr) => pr.id === parseInt(pick, 10))
     if (!p) return
+    // 🎨 المنتج اللي له ألوان/مقاسات بيتحوّل لون/مقاس لون/مقاس — بنفتح الشبكة
+    try {
+      const variants = await api<PurchaseVariantLite[]>(`/api/products/${p.id}/variants`)
+      if (variants.length > 0) {
+        setMatrix({ product: p, variants })
+        setPick('')
+        return
+      }
+    } catch {
+      /* نكمّل كمنتج عادي — السيرفر هيرفض لو فعلاً له مقاسات */
+    }
     setItems((prev) => {
-      const exists = prev.find((i) => i.productId === p.id)
+      const exists = prev.find((i) => i.productId === p.id && !i.variantId)
       if (exists) return prev
       // 🥬 2026-10-12: منتج الوزن — التحويل بيبقى بالكيلو (نبدأ بنص كيلو)
       return [
         ...prev,
-        { productId: p.id, name: p.name, quantity: p.soldByWeight ? 0.5 : 1, available: p.quantity, soldByWeight: p.soldByWeight === true },
+        { productId: p.id, variantId: null, name: p.name, quantity: p.soldByWeight ? 0.5 : 1, available: p.quantity, soldByWeight: p.soldByWeight === true },
       ]
     })
     setPick('')
+  }
+
+  const confirmMatrix = (r: PurchaseVariantsResult) => {
+    if (!matrix) return
+    const { product, variants } = matrix
+    const lines = variants
+      .filter((v) => (r.qty[v.id] ?? 0) > 0)
+      .map((v) => ({
+        productId: product.id,
+        variantId: v.id,
+        name: `${product.name} — ${[v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`}`,
+        quantity: r.qty[v.id],
+        available: v.quantity,
+        soldByWeight: false,
+      }))
+    // بنستبدل كل أسطر المنتج ده بالكميات الجديدة
+    setItems((prev) => [...prev.filter((i) => i.productId !== product.id), ...lines])
+    setMatrix(null)
+  }
+
+  const editVariantsOf = async (productId: number) => {
+    const p = eligibleProducts.find((pr) => pr.id === productId)
+    if (!p) return
+    try {
+      const variants = await api<PurchaseVariantLite[]>(`/api/products/${p.id}/variants`)
+      if (variants.length > 0) setMatrix({ product: p, variants })
+    } catch {
+      toast.error('تعذّر تحميل الألوان والمقاسات')
+    }
   }
 
   const updateQty = (idx: number, q: number) => {
     setItems((prev) =>
       prev.map((x, i) => {
         if (i !== idx) return x
-        const item = eligibleProducts.find((p) => p.id === x.productId)
+        // 🎨 سطر لون/مقاس: الحد الأقصى = مخزون اللون/المقاس (اللي اتحمّل مع الشبكة)
+        const item = x.variantId ? undefined : eligibleProducts.find((p) => p.id === x.productId)
         const max = item?.quantity ?? x.available
         // 🥬 منتج الوزن: أقل كمية 0.05 كيلو
         const minQty = x.soldByWeight ? 0.05 : 1
@@ -269,7 +321,7 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
         body: {
           fromBranchId: parseInt(from, 10),
           toBranchId: parseInt(to, 10),
-          items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+          items: items.map((i) => ({ productId: i.productId, variantId: i.variantId ?? null, quantity: i.quantity })),
           note: note.trim() || null,
           mode,
         },
@@ -433,7 +485,7 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
                 {items.map((it, idx) => {
                   const over = it.quantity > it.available + 1e-9
                   return (
-                    <li key={it.productId} className="flex items-center gap-2 py-2.5">
+                    <li key={`${it.productId}:${it.variantId ?? 0}`} className="flex items-center gap-2 py-2.5">
                       <span className="w-5 shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
                         {String(idx + 1).padStart(2, '0')}
                       </span>
@@ -442,6 +494,15 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
                         <p className={cn('text-xs', over ? 'font-bold text-destructive' : 'text-muted-foreground')}>
                           المتاح {num(it.available)}{it.soldByWeight ? ' كجم' : ''}
                         </p>
+                        {it.variantId ? (
+                          <button
+                            type="button"
+                            onClick={() => void editVariantsOf(it.productId)}
+                            className="mt-0.5 text-[11px] font-bold text-amber-700 hover:underline dark:text-amber-300"
+                          >
+                            تعديل الألوان والمقاسات
+                          </button>
+                        ) : null}
                       </div>
                       <QtyStepper
                         value={it.quantity}
@@ -553,6 +614,22 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
           </div>
         )}
       </section>
+
+      <PurchaseVariantsDialog
+        open={matrix !== null}
+        onOpenChange={(o) => { if (!o) setMatrix(null) }}
+        productName={matrix?.product.name ?? ''}
+        variants={matrix?.variants ?? []}
+        initialQty={matrixInitialQty}
+        initialCost={0}
+        onConfirm={confirmMatrix}
+        showCost={false}
+        maxByStock
+        title="الكمية المحوّلة لكل لون ومقاس"
+        confirmLabel="حمّل على الشحنة"
+        emptyHint="اكتب الكمية في الألوان/المقاسات اللي هتحوّلها"
+        stockLabel="متاح"
+      />
 
       {viewing && (
         <TransferDetailDialog
@@ -730,7 +807,7 @@ function TransferDetailDialog({
               <li key={idx} className="flex items-center gap-3 py-2.5">
                 <span className="w-5 font-mono text-xs text-muted-foreground">{String(idx + 1).padStart(2, '0')}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold leading-snug [overflow-wrap:anywhere]">{it.product?.name}</p>
+                  <p className="text-sm font-bold leading-snug [overflow-wrap:anywhere]">{it.product?.name}{it.variant ? ` — ${[it.variant.color, it.variant.size].filter(Boolean).join(' / ')}` : ''}</p>
                   <p className="font-mono text-xs text-muted-foreground" dir="ltr">{it.product?.barcode || '—'}</p>
                 </div>
                 <span className="rounded-lg bg-amber-500/10 px-2.5 py-1 font-mono text-sm font-black tabular-nums text-amber-700 dark:text-amber-400">

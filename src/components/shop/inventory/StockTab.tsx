@@ -58,14 +58,12 @@ interface Props {
   onChanged: () => void
 }
 
-const ADJUST_REASONS = [
-  'استلام بضاعة',
-  'مرتجع مورد',
-  'تالف',
-  'هدايا/عينات',
-  'خطأ تسجيل',
-  'أخرى',
-]
+// 🎨 2026-10-18: الأسباب بقت حسب نوع الحركة — «مرتجع مورد» و«تالف» سبب صادر مش وارد،
+// فكانوا بيظهروا غلط في شاشة الإضافة ويلخبطوا سجل الحركات.
+const IN_REASONS = ['استلام بضاعة', 'تسوية زيادة (جرد)', 'هدايا/عينات', 'خطأ تسجيل', 'أخرى']
+const OUT_REASONS = ['مرتجع مورد', 'تالف', 'هدايا/عينات', 'خطأ تسجيل', 'أخرى']
+const reasonsFor = (type: 'in' | 'out' | 'damage') =>
+  type === 'damage' ? DAMAGE_REASONS : type === 'in' ? IN_REASONS : OUT_REASONS
 
 // 🛡️ 2026-09-30: أسباب مخصصة لتسجيل الهالك — الخسارة بتتسجل بقيمتها في
 // المصروفات (فئة "هالك وتالف") والسبب بيتكتب في الحركة والمصروف.
@@ -691,11 +689,28 @@ function AdjustDialog({
   onDone: () => void
 }) {
   const [qty, setQty] = React.useState('')
-  const [reason, setReason] = React.useState(type === 'damage' ? DAMAGE_REASONS[0] : ADJUST_REASONS[0])
+  const [reason, setReason] = React.useState(reasonsFor(type)[0])
   const [note, setNote] = React.useState('')
   const [saving, setSaving] = React.useState(false)
+  // 🎨 المنتج اللي له ألوان/مقاسات: الحركة لازم تتحدد على لون/مقاس (وإلا الكمية بتتمسح)
+  const [variants, setVariants] = React.useState<{ id: number; size: string | null; color: string | null; quantity: number }[]>([])
+  const [variantId, setVariantId] = React.useState<number | null>(null)
 
-  const reasons = type === 'damage' ? DAMAGE_REASONS : ADJUST_REASONS
+  React.useEffect(() => {
+    if (!open) return
+    let alive = true
+    setVariants([])
+    setVariantId(null)
+    api<{ id: number; size: string | null; color: string | null; quantity: number }[]>(`/api/products/${product.id}/variants`)
+      .then((v) => { if (alive) setVariants(Array.isArray(v) ? v : []) })
+      .catch(() => { /* منتج عادي أو أوفلاين — السيرفر هو الحاكم */ })
+    return () => { alive = false }
+  }, [open, product.id])
+
+  const reasons = reasonsFor(type)
+  const pickedVariant = variants.find((v) => v.id === variantId) ?? null
+  // المخزون المرجعي: مخزون اللون/المقاس لو اتحدد، وإلا إجمالي المنتج
+  const stockNow = pickedVariant ? pickedVariant.quantity : product.quantity
 
   // Reset fields whenever the dialog opens (keyed by product id + type)
   const resetKey = `${product.id}-${type}`
@@ -703,8 +718,9 @@ function AdjustDialog({
   if (resetKey !== lastResetKey) {
     setLastResetKey(resetKey)
     setQty('')
-    setReason(type === 'damage' ? DAMAGE_REASONS[0] : ADJUST_REASONS[0])
+    setReason(reasonsFor(type)[0])
     setNote('')
+    setVariantId(null)
   }
 
   const qNum = parseInt(qty, 10) || 0
@@ -714,6 +730,7 @@ function AdjustDialog({
   const submit = async () => {
     const q = parseInt(qty, 10)
     if (!q || q <= 0) { toast.error('كمية غير صالحة'); return }
+    if (variants.length > 0 && variantId == null) { toast.error('اختار اللون/المقاس الأول'); return }
     // 🛡️ 2026-09-30: السبب إجباري للصادر والهالك (السيرفر بيرفض بدونه كمان)
     if (type !== 'in' && `${reason}${note ? ' — ' + note : ''}`.trim().length < 3) {
       toast.error('اكتب سبب الحركة (إجباري)')
@@ -725,6 +742,7 @@ function AdjustDialog({
         method: 'POST',
         body: {
           productId: product.id,
+          variantId: variantId ?? undefined,
           quantity: q,
           type,
           note: `${reason}${note ? ' — ' + note : ''}`,
@@ -749,9 +767,9 @@ function AdjustDialog({
   const title = isDamage ? 'تسجيل هالك / تالف' : isIn ? 'إضافة كمية واردة' : 'خصم كمية صادرة'
   const tone: StockTone = type
   const t = TONE[tone]
-  const after = isIn ? product.quantity + qNum : product.quantity - qNum
-  const over = !isIn && qNum > product.quantity
-  const quicks = isIn ? [1, 5, 10, 50] : [1, 5, 10].filter((n) => n < product.quantity)
+  const after = isIn ? stockNow + qNum : stockNow - qNum
+  const over = !isIn && qNum > stockNow
+  const quicks = isIn ? [1, 5, 10, 50] : [1, 5, 10].filter((n) => n < stockNow)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -774,7 +792,7 @@ function AdjustDialog({
             <div className="flex shrink-0 items-center gap-2 text-center tabular-nums">
               <div>
                 <p className="text-[10px] font-bold text-foreground/55">الحالية</p>
-                <p className="text-lg font-extrabold">{product.quantity}</p>
+                <p className="text-lg font-extrabold">{stockNow}</p>
               </div>
               <span className="text-foreground/40">←</span>
               <div>
@@ -791,6 +809,31 @@ function AdjustDialog({
               تسجيل الهالك هيخصم الكمية من المخزون <b>وهيسجّل الخسارة تلقائياً</b> في
               المصروفات (فئة «هالك وتالف») بقيمة <b>الكمية × التكلفة الحالية</b> — فتظهر
               في صافي الربح. الخزنة مش هتتأثر (مفيش فلوس خرجت).
+            </div>
+          )}
+
+          {variants.length > 0 && (
+            <section>
+              <SecLabel required>اللون / المقاس</SecLabel>
+              <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
+                {variants.map((v) => (
+                  <Pill key={v.id} tone={tone} active={variantId === v.id} onClick={() => setVariantId(v.id)}>
+                    {[v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`} · {v.quantity}
+                  </Pill>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[11px] font-medium text-foreground/60">
+                المنتج ده له ألوان ومقاسات — الحركة بتتسجل على اللون/المقاس المختار، وكمية المنتج بتتحسب من مجموعهم.
+              </p>
+            </section>
+          )}
+
+          {(reason === 'استلام بضاعة' || reason === 'مرتجع مورد') && (
+            <div className="rounded-2xl bg-amber-500/10 p-3 text-xs font-medium leading-relaxed text-amber-900 dark:text-amber-200">
+              الحركة دي بتغيّر <b>الكمية بس</b> — مش بتسجّل فاتورة ولا دين على المورد ولا بتحدّث التكلفة ولا الخزنة.
+              {reason === 'استلام بضاعة'
+                ? ' لبضاعة اشتريتها من مورد استخدم «المشتريات ← أمر شراء جديد».'
+                : ' لإرجاع بضاعة للمورد وتخفيض حسابه استخدم «المشتريات ← مرتجع».'}
             </div>
           )}
 
@@ -831,15 +874,15 @@ function AdjustDialog({
                   {n}
                 </Pill>
               ))}
-              {!isIn && product.quantity > 0 && (
-                <Pill tone={tone} active={qNum === product.quantity} onClick={() => setQty(String(product.quantity))}>
-                  الكل ({product.quantity})
+              {!isIn && stockNow > 0 && (
+                <Pill tone={tone} active={qNum === stockNow} onClick={() => setQty(String(stockNow))}>
+                  الكل ({stockNow})
                 </Pill>
               )}
             </div>
             {over && (
               <p className="mt-1.5 text-[11px] font-bold text-destructive">
-                الكمية أكبر من المتاح ({product.quantity})
+                الكمية أكبر من المتاح ({stockNow})
               </p>
             )}
             {lossPreview > 0 && (

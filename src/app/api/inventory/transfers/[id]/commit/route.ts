@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
-import { namesOfProductsWithVariants, variantGuardMessage } from '@/lib/variant-guard'
+import { applyTransferItem, validateVariantLines, TransferStockError } from '@/lib/transfer-stock'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,79 +23,41 @@ async function __POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: 'يمكن تنفيذ التحويل من فرع المصدر فقط' }, { status: 403 })
   }
 
-  // 🎨 منتج له مقاسات/ألوان — ممنوع (التحويل بيكتب Product.quantity مباشرة)
-  {
-    const vNames = await namesOfProductsWithVariants(db, t.items.map((it) => it.productId))
-    if (vNames.length) return NextResponse.json({ error: variantGuardMessage(vNames, 'تنفيذ التحويل') }, { status: 400 })
-  }
-
-  // Re-validate availability at commit time
+  // 🎨 بنود التحويل المعلّق (منتج + لون/مقاس) — نتأكد إنها لسه صالحة
+  const lines: Array<{ productId: number; variantId: number | null; quantity: number }> = []
   for (const it of t.items) {
     // 🛡️ FIX (tsc): productId Int? — صف تحويل لمنتج اتمسح = مفيش إيه يتتنفذ له
-    if (it.productId == null) {
-      return NextResponse.json({ error: 'منتج غير صالح' }, { status: 400 })
-    }
-    const p = await db.product.findUnique({ where: { id: it.productId } })
-    if (!p) return NextResponse.json({ error: 'منتج غير صالح' }, { status: 400 })
-    if (p.quantity < it.quantity) {
-      return NextResponse.json({ error: `الكمية غير متوفرة (${p.name} — متاح: ${p.quantity})` }, { status: 400 })
-    }
+    if (it.productId == null) return NextResponse.json({ error: 'منتج غير صالح' }, { status: 400 })
+    lines.push({ productId: it.productId, variantId: it.variantId, quantity: it.quantity })
+  }
+  {
+    const vErr = await validateVariantLines(db, s.tenantId, lines)
+    if (vErr) return NextResponse.json({ error: vErr }, { status: 400 })
   }
 
-  await db.$transaction(async (tx) => {
-    for (const it of t.items) {
-      if (it.productId == null) throw new Error('منتج غير صالح') // 🛡️ FIX (tsc): productId Int?
-      const srcProduct = await tx.product.findUnique({ where: { id: it.productId } })
-      if (!srcProduct) throw new Error('منتج غير صالح')
-      // decrement source
-      await tx.product.update({ where: { id: srcProduct.id }, data: { quantity: { decrement: it.quantity } } })
-      await tx.stockMovement.create({
-        data: {
-          tenantId: s.tenantId, branchId: t.fromBranchId, productId: srcProduct.id,
-          type: 'transfer_out', quantity: -it.quantity, refType: 'transfer', refId: t.id,
-          note: `تحويل إلى ${t.toBranch.name}`, userId: s.userId,
-        },
+  try {
+    await db.$transaction(async (tx) => {
+      // 🛡️ حجز ذري: ضغطتين على «تنفيذ» كانوا بينفّذوا التحويل مرتين (خصم/إضافة مضاعفة)
+      const claimed = await tx.transfer.updateMany({
+        where: { id: tid, tenantId: s.tenantId, status: 'pending' },
+        data: { status: 'completed', completedAt: new Date() },
       })
-      // find or create matching product at destination
-      let destProduct = await tx.product.findFirst({
-        where: {
-          tenantId: s.tenantId,
-          branchId: t.toBranchId,
-          OR: [
-            srcProduct.barcode ? { barcode: srcProduct.barcode } : { name: srcProduct.name },
-            { name: srcProduct.name },
-          ],
-        },
-      })
-      if (!destProduct) {
-        destProduct = await tx.product.create({
-          data: {
-            tenantId: s.tenantId,
-            branchId: t.toBranchId,
-            name: srcProduct.name,
-            category: srcProduct.category,
-            barcode: null,
-            price: srcProduct.price,
-            cost: srcProduct.cost,
-            quantity: 0,
-            minQuantity: srcProduct.minQuantity,
-          },
-        })
+      if (claimed.count !== 1) throw new TransferStockError('التحويل اتنفّذ بالفعل أو لم يعد معلّقاً', 409)
+      const ctx = {
+        tenantId: s.tenantId,
+        userId: s.userId,
+        transferId: t.id,
+        from: { id: t.fromBranchId, name: t.fromBranch.name },
+        to: { id: t.toBranchId, name: t.toBranch.name },
       }
-      await tx.product.update({ where: { id: destProduct.id }, data: { quantity: { increment: it.quantity } } })
-      await tx.stockMovement.create({
-        data: {
-          tenantId: s.tenantId, branchId: t.toBranchId, productId: destProduct.id,
-          type: 'transfer_in', quantity: it.quantity, refType: 'transfer', refId: t.id,
-          note: `تحويل من ${t.fromBranch.name}`, userId: s.userId,
-        },
-      })
-    }
-    await tx.transfer.update({
-      where: { id: tid },
-      data: { status: 'completed', completedAt: new Date() },
+      // الخصم الذري جوه applyTransferItem — لو أي بند ناقص كل الـ transaction بتتلغي
+      // (بما فيها حجز الحالة) فالتحويل يفضل معلّق ويتنفّذ بعد توفير الكمية.
+      for (const l of lines) await applyTransferItem(tx, ctx, l)
     })
-  })
+  } catch (e) {
+    if (e instanceof TransferStockError) return NextResponse.json({ error: e.message }, { status: e.status })
+    throw e
+  }
   return NextResponse.json({ ok: true })
 }
 

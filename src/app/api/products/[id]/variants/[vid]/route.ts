@@ -41,14 +41,46 @@ async function __PUT(
   if (body.barcode !== undefined) data.barcode = body.barcode ? String(body.barcode).trim() : null
   if (body.quantity !== undefined) data.quantity = parseInt(body.quantity, 10) || 0
 
+  if (data.barcode) {
+    // 🏬 2026-10-18: باركود المقاس فريد جوه نفس (المحل + الفرع) — فحص برسالة واضحة
+    // (الـ trigger في الداتابيز هو الحاجز الأخير)
+    const prod = await db.product.findUnique({ where: { id: pid }, select: { branchId: true } })
+    const taken = await db.productVariant.findFirst({
+      where: {
+        barcode: data.barcode,
+        id: { not: vId },
+        product: { tenantId: session.tenantId, branchId: prod?.branchId ?? null },
+      },
+      select: { id: true },
+    })
+    if (taken) return NextResponse.json({ error: 'الباركود مستخدم' }, { status: 400 })
+  }
   try {
     const updated = await db.productVariant.update({ where: { id: vId }, data })
     if (data.quantity !== undefined) {
       await syncProductQuantityFromVariants(db, pid)
+      // 📒 2026-10-18: تعديل كمية لون/مقاس مباشرة يتسجل في سجل الحركات (كان بيتغير من غير أثر)
+      const delta = data.quantity - owned.quantity
+      if (delta !== 0) {
+        const prodRow = await db.product.findUnique({ where: { id: pid }, select: { branchId: true } })
+        await db.stockMovement.create({
+          data: {
+            tenantId: session.tenantId,
+            branchId: prodRow?.branchId ?? null,
+            productId: pid,
+            variantId: vId,
+            type: delta > 0 ? 'in' : 'out',
+            quantity: delta,
+            refType: 'manual',
+            note: `تعديل كمية — ${[updated.color, updated.size].filter(Boolean).join(' / ')}`,
+            userId: session.userId,
+          },
+        })
+      }
     }
     return NextResponse.json(updated)
   } catch (e: any) {
-    if (e?.code === 'P2002') {
+    if (e?.code === 'P2002' || String(e?.message ?? '').includes('نفس الفرع')) {
       return NextResponse.json({ error: 'الباركود مستخدم' }, { status: 400 })
     }
     return NextResponse.json({ error: 'فشل التحديث' }, { status: 500 })
@@ -76,6 +108,23 @@ async function __DELETE(
   if (!owned) return NextResponse.json({ error: 'غير موجود' }, { status: 404 })
   await db.productVariant.delete({ where: { id: vId } })
   await syncProductQuantityFromVariants(db, pid)
+  // 📒 2026-10-18: حذف لون/مقاس بمخزون = خروج كمية — يتسجل في سجل الحركات
+  if (owned.quantity > 0) {
+    const prodRow = await db.product.findUnique({ where: { id: pid }, select: { branchId: true } })
+    await db.stockMovement.create({
+      data: {
+        tenantId: session.tenantId,
+        branchId: prodRow?.branchId ?? null,
+        productId: pid,
+        variantId: null, // الـ variant اتمسح
+        type: 'out',
+        quantity: -owned.quantity,
+        refType: 'manual',
+        note: `حذف لون/مقاس — ${[owned.color, owned.size].filter(Boolean).join(' / ')}`,
+        userId: session.userId,
+      },
+    })
+  }
   return NextResponse.json({ ok: true })
 }
 

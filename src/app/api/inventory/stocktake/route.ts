@@ -3,6 +3,8 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { withSql, type Sql } from '@/lib/sql'
+import { validateVariantLines } from '@/lib/transfer-stock'
+import { applyStocktakeDiff } from '@/lib/stocktake-stock'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,12 +45,16 @@ async function __GETImpl(sql: Sql) {
         'items', COALESCE((
           SELECT json_agg(json_build_object(
             'id', si."id", 'stocktakeId', si."stocktakeId", 'productId', si."productId",
+            'variantId', si."variantId",
+            'variant', CASE WHEN pv."id" IS NULL THEN NULL
+                       ELSE json_build_object('size', pv."size", 'color', pv."color") END,
             'systemQty', si."systemQty", 'countedQty', si."countedQty", 'diff', si."diff",
             'product', CASE WHEN p."id" IS NULL THEN NULL
                        ELSE json_build_object('name', p."name", 'barcode', p."barcode") END
           ) ORDER BY si."id")
           FROM "StocktakeItem" si
           LEFT JOIN "Product" p ON p."id" = si."productId"
+          LEFT JOIN "ProductVariant" pv ON pv."id" = si."variantId"
           WHERE si."stocktakeId" = st."id"
         ), '[]'::json),
         'createdByName', u."name"
@@ -95,9 +101,35 @@ async function __POST(req: NextRequest) {
     }
   }
 
-  const productIds = items.map((it: any) => parseInt(it.productId, 10)).filter(Boolean)
+  // 🎨 بنود الجرد: منتج + (لون/مقاس لو المنتج له ألوان ومقاسات)
+  const lines = items.map((it: any) => ({
+    productId: parseInt(it.productId, 10),
+    variantId: it.variantId != null && it.variantId !== '' ? parseInt(it.variantId, 10) : (null as number | null),
+    // 🥬 2026-10-12: الجرد بالكيلو بكسور (محصى 44.25)
+    counted: Math.round((Number(it.countedQty) || 0) * 1000) / 1000,
+  }))
+  for (const l of lines) {
+    if (!l.productId || (l.variantId !== null && Number.isNaN(l.variantId))) {
+      return NextResponse.json({ error: 'بيانات أصناف غير صالحة' }, { status: 400 })
+    }
+  }
+  {
+    // الكمية المعدودة سالبة بتترفض هنا برسالة واضحة، والـ variants لازم أعداد صحيحة
+    const vErr = await validateVariantLines(
+      db, s.tenantId,
+      lines.map((l: { productId: number; variantId: number | null; counted: number }) => ({ productId: l.productId, variantId: l.variantId, quantity: Math.max(l.counted, 0) })),
+    )
+    if (vErr) return NextResponse.json({ error: vErr }, { status: 400 })
+  }
+
+  const productIds = [...new Set(lines.map((l: { productId: number }) => l.productId))] as number[]
   const products = await db.product.findMany({ where: { id: { in: productIds }, tenantId: s.tenantId } })
   const pMap = new Map<number, (typeof products)[number]>(products.map((p) => [p.id, p]))
+  const variantIds = lines.map((l: { variantId: number | null }) => l.variantId).filter((v: number | null): v is number => v != null)
+  const variantRows = variantIds.length
+    ? await db.productVariant.findMany({ where: { id: { in: variantIds } }, select: { id: true, quantity: true } })
+    : []
+  const vQty = new Map<number, number>(variantRows.map((v) => [v.id, v.quantity]))
 
   const created = await db.$transaction(async (tx) => {
     const st = await tx.stocktake.create({
@@ -109,45 +141,32 @@ async function __POST(req: NextRequest) {
         createdBy: s.userId,
         committedAt: commit ? new Date() : null,
         items: {
-          create: items.map((it: any) => {
-            const pid = parseInt(it.productId, 10)
-            // 🥬 2026-10-12: الجرد بالكيلو بكسور (محصى 44.25)
-            const counted = Math.round((Number(it.countedQty) || 0) * 1000) / 1000
+          create: lines.map((l: { productId: number; variantId: number | null; counted: number }) => {
             // 🛡️ 2026-09-30 (X8): الكمية المعدودة سالب → مرفوضة. كانت بتتحفظ
             // كقيمة مطلقة في المخزن وبتكسر أرضية الصفر اللي باقي النظام بيحافظ عليها.
-            if (counted < 0) {
+            if (l.counted < 0) {
               throw new StocktakeNegativeError(
-                `الكمية المعدودة للمنتج "${pMap.get(pid)?.name ?? pid}" لا يمكن أن تكون سالبة`,
+                `الكمية المعدودة للمنتج "${pMap.get(l.productId)?.name ?? l.productId}" لا يمكن أن تكون سالبة`,
               )
             }
-            const p = pMap.get(pid)
-            const sys = p?.quantity ?? 0
-            return { productId: pid, systemQty: sys, countedQty: counted, diff: counted - sys }
+            // الكمية بالنظام بتتقرا من السيرفر (مش من العميل): مخزون اللون/المقاس لو اتحدد
+            const sys = l.variantId != null ? (vQty.get(l.variantId) ?? 0) : (pMap.get(l.productId)?.quantity ?? 0)
+            return { productId: l.productId, variantId: l.variantId, systemQty: sys, countedQty: l.counted, diff: l.counted - sys }
           }),
         },
       },
       include: { items: true },
     })
     if (commit) {
+      const note = b?.note ? String(b.note).trim() : 'تسوية جرد'
       for (const it of st.items) {
-        if (it.diff !== 0) {
-          // 🛡️ FIX (tsc): productId Int? — بنسكب صفوف المنتج المحذوف.
-          if (it.productId == null) continue
-          await tx.product.update({ where: { id: it.productId }, data: { quantity: it.countedQty } })
-          await tx.stockMovement.create({
-            data: {
-              tenantId: s.tenantId,
-              branchId: branchId ?? undefined,
-              productId: it.productId,
-              type: 'stocktake',
-              quantity: it.diff,
-              refType: 'stocktake',
-              refId: st.id,
-              note: b?.note ? String(b.note).trim() : 'تسوية جرد',
-              userId: s.userId,
-            },
-          })
-        }
+        // 🛡️ FIX (tsc): productId Int? — بنسكب صفوف المنتج المحذوف.
+        if (it.productId == null) continue
+        await applyStocktakeDiff(
+          tx,
+          { tenantId: s.tenantId, userId: s.userId, branchId, stocktakeId: st.id, note },
+          { productId: it.productId, variantId: it.variantId, diff: it.diff },
+        )
       }
     }
     return st

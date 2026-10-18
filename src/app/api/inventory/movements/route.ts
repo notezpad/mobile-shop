@@ -96,19 +96,23 @@ async function __GET(req: NextRequest, sql: Sql) {
         FROM (
           SELECT json_build_object(
             'id', sm."id", 'tenantId', sm."tenantId", 'branchId', sm."branchId",
-            'productId', sm."productId", 'type', sm."type",
+            'productId', sm."productId", 'variantId', sm."variantId", 'type', sm."type",
             'quantity', sm."quantity",
             'refType', sm."refType", 'refId', sm."refId", 'note', sm."note",
             'userId', sm."userId",
             'createdAt', to_char(sm."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
             'product', CASE WHEN p."id" IS NULL THEN NULL
-                       ELSE json_build_object('name', p."name", 'barcode', p."barcode") END,
+                       ELSE json_build_object(
+                              -- 🎨 اسم المنتج + اللون/المقاس لو الحركة على variant
+                              'name', p."name" || COALESCE(' — ' || NULLIF(concat_ws(' / ', pv."color", pv."size"), ''), ''),
+                              'barcode', COALESCE(pv."barcode", p."barcode")) END,
             'branch', CASE WHEN b."id" IS NULL THEN NULL
                       ELSE json_build_object('name', b."name") END,
             'userName', u."name"
           ) AS x
           FROM "StockMovement" sm
           LEFT JOIN "Product" p ON p."id" = sm."productId"
+          LEFT JOIN "ProductVariant" pv ON pv."id" = sm."variantId"
           LEFT JOIN "Branch" b ON b."id" = sm."branchId"
           LEFT JOIN "User" u ON u."id" = sm."userId"
           WHERE ${whereParts}

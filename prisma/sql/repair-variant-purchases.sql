@@ -34,6 +34,12 @@ JOIN "ProductVariant" v ON v."productId" = p."id"
 GROUP BY p."id"
 HAVING p."quantity" <> SUM(v."quantity");
 
+-- 2.5) مزامنة كمية المنتج مع مجموع مقاساته — ⚠️ نفّذها *بعد* ما توزّع الكميات الضايعة
+--      من الاستعلام (1) على المقاسات، وإلا هتمسح الفرق (الـ 100 مثلاً) نهائياً.
+-- UPDATE "Product" p SET "quantity" = s.total
+-- FROM (SELECT "productId", SUM("quantity") AS total FROM "ProductVariant" GROUP BY "productId") s
+-- WHERE s."productId" = p."id" AND p."quantity" <> s.total;
+
 -- 3) قالب التوزيع (عدّل الأرقام وشغّله مرة واحدة) — مثال: 100 قطعة على مقاسين
 -- BEGIN;
 --   UPDATE "ProductVariant" SET "quantity" = "quantity" + 50 WHERE "id" = <variantId1>;
@@ -42,3 +48,37 @@ HAVING p."quantity" <> SUM(v."quantity");
 --     (SELECT SUM("quantity") FROM "ProductVariant" WHERE "productId" = <productId>)
 --   WHERE "id" = <productId>;
 -- COMMIT;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 🏬 إكمال باركود النسخ اللي اتعملت بالتحويل بين الفروع قبل تعديل 2026-10-18
+-- (كانت بتتعمل بباركود فاضي فمكنتش بتتلاقي بالمسح). شغّل بعد migration
+-- 20261018_branch_barcodes_and_variant_transfers.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- أ) معاينة: النسخة + الباركود اللي هيتحط (بس لو في باركود واحد واضح من أصل في فرع تاني
+--    ومفيش منتج في نفس الفرع بيستخدمه)
+SELECT d."id", d."branchId", d."name", c."bc" AS "الباركود المقترح"
+FROM "Product" d
+JOIN (
+  SELECT d2."id", MIN(s."barcode") AS bc
+  FROM "Product" d2
+  JOIN "Product" s
+    ON s."tenantId" = d2."tenantId" AND s."name" = d2."name"
+   AND s."branchId" IS DISTINCT FROM d2."branchId" AND s."barcode" IS NOT NULL
+  WHERE d2."barcode" IS NULL AND d2."branchId" IS NOT NULL
+    AND EXISTS (SELECT 1 FROM "StockMovement" m WHERE m."productId" = d2."id" AND m."type" = 'transfer_in')
+  GROUP BY d2."id"
+  HAVING COUNT(DISTINCT s."barcode") = 1
+) c ON c."id" = d."id"
+WHERE NOT EXISTS (
+  SELECT 1 FROM "Product" x
+  WHERE x."tenantId" = d."tenantId" AND x."branchId" = d."branchId" AND x."barcode" = c."bc"
+);
+
+-- ب) التنفيذ (فك التعليق بعد مراجعة المعاينة)
+-- UPDATE "Product" d SET "barcode" = c."bc"
+-- FROM ( ...نفس الاستعلام الفرعي بتاع المعاينة... ) c
+-- WHERE d."id" = c."id"
+--   AND NOT EXISTS (SELECT 1 FROM "Product" x WHERE x."tenantId" = d."tenantId"
+--                   AND x."branchId" = d."branchId" AND x."barcode" = c."bc");

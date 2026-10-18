@@ -103,6 +103,8 @@ const DEFAULT_PLAN: PlanContext = {
 
 export interface StocktakeDraftItem {
   productId: number
+  /** 🎨 2026-10-18: لون/مقاس معيّن (null/undefined = منتج عادي) */
+  variantId?: number | null
   name: string
   barcode: string | null
   systemQty: number
@@ -121,6 +123,8 @@ export interface StocktakeDraft {
 
 export interface TransfersDraftItem {
   productId: number
+  /** 🎨 2026-10-18: لون/مقاس معيّن (null/undefined = منتج عادي) */
+  variantId?: number | null
   name: string
   quantity: number
   available: number

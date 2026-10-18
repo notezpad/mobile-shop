@@ -106,8 +106,12 @@ export async function PUT(
     if (body.barcode !== undefined) {
       barcode = body.barcode ? String(body.barcode).trim() || null : null
       if (barcode) {
-        const dup = await db.product.findUnique({ where: { barcode } })
-        if (dup && dup.id !== pid) {
+        // 🏬 2026-10-18: التكرار بيتفحص جوه نفس (المحل + فرع المنتج) بس
+        const dup = await db.product.findFirst({
+          where: { tenantId: session.tenantId, barcode, branchId: existing.branchId, id: { not: pid } },
+          select: { id: true },
+        })
+        if (dup) {
           return NextResponse.json(
             { error: 'الباركود مستخدم بالفعل' },
             { status: 400 }

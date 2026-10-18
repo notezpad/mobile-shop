@@ -22,13 +22,15 @@ export interface PurchaseVariantLite {
   id: number
   size: string | null
   color: string | null
+  /** باركود اللون/المقاس (لو متسجل) */
+  barcode?: string | null
   quantity: number
 }
 
 export interface PurchaseVariantsResult {
-  /** variantId → الكمية المشتراة (> 0 فقط) */
+  /** variantId → الكمية (الخلايا الفاضية مش موجودة؛ والصفر موجود بس لو allowZero) */
   qty: Record<number, number>
-  /** تكلفة القطعة (واحدة لكل المنتج) */
+  /** تكلفة القطعة (واحدة لكل المنتج) — 0 لو showCost=false */
   cost: number
 }
 
@@ -50,9 +52,12 @@ function compareSizes(a: string, b: string) {
 }
 
 const labelOf = (v: PurchaseVariantLite) => [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`
-const toInt = (s: string) => {
-  const n = parseInt(normalizeDigits(s).replace(/[^\d]/g, ''), 10)
-  return Number.isFinite(n) && n > 0 ? n : 0
+/** '' → undefined (خلية فاضية)، غير كده عدد صحيح ≥ 0 */
+const parseCell = (s: string): number | undefined => {
+  const digits = normalizeDigits(s).replace(/[^\d]/g, '')
+  if (digits === '') return undefined
+  const n = parseInt(digits, 10)
+  return Number.isFinite(n) ? n : undefined
 }
 
 export function PurchaseVariantsDialog({
@@ -63,6 +68,13 @@ export function PurchaseVariantsDialog({
   initialQty,
   initialCost,
   onConfirm,
+  showCost = true,
+  allowZero = false,
+  maxByStock = false,
+  title = 'الكمية لكل لون ومقاس',
+  confirmLabel = 'أضف للسلة',
+  emptyHint = 'اكتب الكمية في الخلايا اللي هتشتريها',
+  stockLabel = 'مخزون',
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
@@ -72,6 +84,16 @@ export function PurchaseVariantsDialog({
   initialQty?: Record<number, number>
   initialCost: number
   onConfirm: (r: PurchaseVariantsResult) => void
+  /** إظهار حقل تكلفة القطعة (الشراء فقط) */
+  showCost?: boolean
+  /** الجرد: الصفر «معدود وملقيتش منه» مختلف عن الخلية الفاضية «ماتعدّتش» */
+  allowZero?: boolean
+  /** التحويل: الكمية ماتتعداش مخزون اللون/المقاس */
+  maxByStock?: boolean
+  title?: string
+  confirmLabel?: string
+  emptyHint?: string
+  stockLabel?: string
 }) {
   const [qty, setQty] = React.useState<Record<number, number>>({})
   const [cost, setCost] = React.useState(0)
@@ -100,46 +122,58 @@ export function PurchaseVariantsDialog({
     return m
   }, [variants])
 
-  const setOne = (id: number, n: number) => setQty((p) => ({ ...p, [id]: n }))
-  const total = Object.values(qty).reduce((s, n) => s + (n > 0 ? n : 0), 0)
-  const lines = Object.values(qty).filter((n) => n > 0).length
+  const stockOf = (id: number) => variants.find((v) => v.id === id)?.quantity ?? 0
+  const clamp = (id: number, n: number) => (maxByStock ? Math.min(n, stockOf(id)) : n)
+  // خلية فاضية (undefined) أو صفر في وضع الشراء/التحويل = مش داخلة في العملية
+  const counts = (n: number | undefined): n is number => n !== undefined && (allowZero ? n >= 0 : n > 0)
+
+  const setOne = (id: number, n: number | undefined) =>
+    setQty((p) => {
+      const next = { ...p }
+      if (n === undefined) delete next[id]
+      else next[id] = clamp(id, n)
+      return next
+    })
+  const lines = Object.values(qty).filter(counts).length
+  const total = Object.values(qty).reduce((s, n) => s + (counts(n) ? n : 0), 0)
 
   const applyFill = () => {
-    const n = toInt(fillAll)
-    if (!n) return
-    setQty(Object.fromEntries(variants.map((v) => [v.id, n])))
+    const n = parseCell(fillAll)
+    if (n === undefined || (!allowZero && n === 0)) return
+    setQty(Object.fromEntries(variants.map((v) => [v.id, clamp(v.id, n)])))
   }
   const clearAll = () => setQty({})
 
   const confirm = () => {
     const out: Record<number, number> = {}
-    for (const [k, n] of Object.entries(qty)) if (n > 0) out[Number(k)] = n
-    onConfirm({ qty: out, cost })
+    for (const [k, n] of Object.entries(qty)) if (counts(n)) out[Number(k)] = n
+    onConfirm({ qty: out, cost: showCost ? cost : 0 })
   }
 
   const cell = (v: PurchaseVariantLite | undefined) => {
     if (!v) {
       return <div className="h-12 rounded-xl border border-dashed bg-muted/30" aria-hidden />
     }
-    const n = qty[v.id] ?? 0
+    const n = qty[v.id]
+    const filled = counts(n)
     return (
       <label
         className={cn(
           'flex h-12 flex-col items-center justify-center rounded-xl border bg-card px-1 transition-colors focus-within:border-cyan-600 focus-within:ring-[3px] focus-within:ring-cyan-600/25',
-          n > 0 && 'border-cyan-600/60 bg-cyan-600/[0.08]',
+          filled && 'border-cyan-600/60 bg-cyan-600/[0.08]',
         )}
       >
         <input
           inputMode="numeric"
           dir="ltr"
-          value={n > 0 ? String(n) : ''}
-          placeholder="0"
-          onChange={(e) => setOne(v.id, toInt(e.target.value))}
+          value={n === undefined ? '' : String(n)}
+          placeholder={allowZero ? '—' : '0'}
+          onChange={(e) => setOne(v.id, parseCell(e.target.value))}
           onFocus={(e) => e.currentTarget.select()}
           aria-label={`كمية ${labelOf(v)}`}
           className="h-6 w-full bg-transparent text-center text-sm font-extrabold tabular-nums outline-none placeholder:text-muted-foreground/50"
         />
-        <span className="text-[10px] font-medium tabular-nums text-foreground/55">مخزون {v.quantity}</span>
+        <span className="text-[10px] font-medium tabular-nums text-foreground/55">{stockLabel} {v.quantity}</span>
       </label>
     )
   }
@@ -149,16 +183,18 @@ export function PurchaseVariantsDialog({
       <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
         <DialogHero
           icon={isGrid ? Grid3x3 : Shirt}
-          title="الكمية لكل لون ومقاس"
+          title={title}
           subtitle={productName}
         />
         <DialogBody className="space-y-4">
           {/* أدوات سريعة */}
           <div className="flex flex-wrap items-end gap-3">
-            <div className="min-w-[9rem] flex-1">
-              <span className="mb-1 block text-[11px] font-semibold text-foreground/60">تكلفة القطعة (لكل المنتج)</span>
-              <DecimalInput value={cost} onChange={setCost} label="تكلفة القطعة" suffix="جنيه" />
-            </div>
+            {showCost && (
+              <div className="min-w-[9rem] flex-1">
+                <span className="mb-1 block text-[11px] font-semibold text-foreground/60">تكلفة القطعة (لكل المنتج)</span>
+                <DecimalInput value={cost} onChange={setCost} label="تكلفة القطعة" suffix="جنيه" />
+              </div>
+            )}
             <div className="flex items-end gap-2">
               <div className="w-24">
                 <span className="mb-1 block text-[11px] font-semibold text-foreground/60">نفس الكمية للكل</span>
@@ -225,12 +261,12 @@ export function PurchaseVariantsDialog({
         </DialogBody>
         <DialogFooter className="flex-row items-center gap-3 border-t bg-card px-4 py-3 sm:px-6">
           <p className="min-w-0 flex-1 text-xs font-semibold tabular-nums text-foreground/70">
-            {total > 0 ? (
+            {lines > 0 ? (
               <>
                 <b className="text-base font-extrabold text-foreground">{total}</b> قطعة · {lines} لون/مقاس
               </>
             ) : (
-              'اكتب الكمية في الخلايا اللي هتشتريها'
+              emptyHint
             )}
           </p>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="h-11 rounded-xl px-5">
@@ -238,10 +274,10 @@ export function PurchaseVariantsDialog({
           </Button>
           <Button
             onClick={confirm}
-            disabled={total === 0}
+            disabled={lines === 0}
             className="h-11 rounded-xl bg-cyan-700 px-6 font-bold text-white hover:bg-cyan-600 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
           >
-            أضف للسلة
+            {confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

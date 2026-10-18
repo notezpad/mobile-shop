@@ -101,15 +101,40 @@ async function __POST(
   if (!size && !color) {
     return NextResponse.json({ error: 'لازم مقاس أو لون على الأقل' }, { status: 400 })
   }
+  if (barcode) {
+    // 🏬 2026-10-18: باركود المقاس فريد جوه نفس (المحل + الفرع) — الفحص هنا برسالة واضحة،
+    // والـ trigger في الداتابيز هو الحاجز الأخير
+    const taken = await db.productVariant.findFirst({
+      where: { barcode, product: { tenantId: session.tenantId, branchId: prod.branchId } },
+      select: { id: true },
+    })
+    if (taken) return NextResponse.json({ error: 'الباركود مستخدم بالفعل' }, { status: 400 })
+  }
   try {
     const created = await db.productVariant.create({
       data: { productId: pid, size, color, barcode, quantity },
     })
     // Keep Product.quantity as the sum of all its variants from here on.
     await syncProductQuantityFromVariants(db, pid)
+    // 📒 2026-10-18: رصيد افتتاحي للون/المقاس يتسجل في سجل الحركات (كان بيدخل المخزون من غير أثر)
+    if (quantity > 0) {
+      await db.stockMovement.create({
+        data: {
+          tenantId: session.tenantId,
+          branchId: prod.branchId,
+          productId: pid,
+          variantId: created.id,
+          type: 'in',
+          quantity,
+          refType: 'manual',
+          note: `رصيد افتتاحي — ${[color, size].filter(Boolean).join(' / ')}`,
+          userId: session.userId,
+        },
+      })
+    }
     return NextResponse.json(created, { status: 201 })
   } catch (e: any) {
-    if (e?.code === 'P2002') {
+    if (e?.code === 'P2002' || String(e?.message ?? '').includes('نفس الفرع')) {
       return NextResponse.json({ error: 'الباركود مستخدم بالفعل' }, { status: 400 })
     }
     return NextResponse.json({ error: 'فشل إنشاء المتغير' }, { status: 500 })

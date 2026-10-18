@@ -52,7 +52,7 @@ export interface Transfer {
   toBranchId: number
   fromBranch: { name: string }
   toBranch: { name: string }
-  items: { productId: number; quantity: number; product: { name: string; barcode: string | null } }[]
+  items: { productId: number; variantId?: number | null; variant?: { size: string | null; color: string | null } | null; quantity: number; product: { name: string; barcode: string | null } }[]
   createdByName?: string | null
 }
 
@@ -67,6 +67,8 @@ export interface Stocktake {
   createdByName?: string | null
   items: {
     productId: number
+    variantId?: number | null
+    variant?: { size: string | null; color: string | null } | null
     systemQty: number
     countedQty: number
     diff: number
