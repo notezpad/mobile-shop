@@ -302,7 +302,8 @@ async function __POST(req: NextRequest) {
           quantity: delta,
           refType: type === 'damage' ? 'damage' : 'manual',
           refId: damageExpenseId ?? undefined,
-          note: variantLabel ? [`[${variantLabel}]`, note].filter(Boolean).join(' ') : (note || null),
+          // اللون/المقاس بيظهر في اسم المنتج في سجل الحركات — مش محتاجينه في الملاحظة تاني
+          note: note || null,
           userId: s.userId,
         },
       })

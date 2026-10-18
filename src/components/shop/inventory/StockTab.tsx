@@ -61,7 +61,10 @@ interface Props {
 // 🎨 2026-10-18: الأسباب بقت حسب نوع الحركة — «مرتجع مورد» و«تالف» سبب صادر مش وارد،
 // فكانوا بيظهروا غلط في شاشة الإضافة ويلخبطوا سجل الحركات.
 const IN_REASONS = ['استلام بضاعة', 'تسوية زيادة (جرد)', 'هدايا/عينات', 'خطأ تسجيل', 'أخرى']
-const OUT_REASONS = ['مرتجع مورد', 'تالف', 'هدايا/عينات', 'خطأ تسجيل', 'أخرى']
+// «تالف» اتشال من هنا: الصرف العادي بيشيل الكمية بس من غير ما يحسب خسارة، فكان نفس
+// الحادثة بتتسجل بطريقتين مختلفتين (وأرباح التقارير بتطلع أعلى من الحقيقي). التالف بيتسجل
+// من زر الهالك ⚠ (بيحسب الخسارة بسعر التكلفة في المصروفات من غير ما يمس الخزنة).
+const OUT_REASONS = ['مرتجع مورد', 'هدايا/عينات', 'خطأ تسجيل', 'أخرى']
 const reasonsFor = (type: 'in' | 'out' | 'damage') =>
   type === 'damage' ? DAMAGE_REASONS : type === 'in' ? IN_REASONS : OUT_REASONS
 
@@ -769,7 +772,9 @@ function AdjustDialog({
   const t = TONE[tone]
   const after = isIn ? stockNow + qNum : stockNow - qNum
   const over = !isIn && qNum > stockNow
-  const quicks = isIn ? [1, 5, 10, 50] : [1, 5, 10].filter((n) => n < stockNow)
+  // 🎨 منتج له مقاسات ولسه ما اتختارش مقاس: مفيش أزرار سريعة (الرقم الإجمالي مش مخزون المقاس)
+  const needVariant = variants.length > 0 && variantId == null
+  const quicks = needVariant ? [] : isIn ? [1, 5, 10, 50] : [1, 5, 10].filter((n) => n < stockNow)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -874,7 +879,7 @@ function AdjustDialog({
                   {n}
                 </Pill>
               ))}
-              {!isIn && stockNow > 0 && (
+              {!isIn && stockNow > 0 && !needVariant && (
                 <Pill tone={tone} active={qNum === stockNow} onClick={() => setQty(String(stockNow))}>
                   الكل ({stockNow})
                 </Pill>
@@ -894,6 +899,11 @@ function AdjustDialog({
 
           <section>
             <SecLabel required={!isIn}>السبب</SecLabel>
+            {type === 'out' && (
+              <p className="mb-1.5 text-[11px] font-medium text-foreground/60">
+                بضاعة تالفة أو منتهية؟ سجّلها من زر ⚠ «هالك» عشان الخسارة تتحسب في المصروفات والأرباح.
+              </p>
+            )}
             <div className="flex flex-wrap gap-1.5">
               {reasons.map((r) => (
                 <Pill key={r} tone={tone} active={reason === r} onClick={() => setReason(r)}>
