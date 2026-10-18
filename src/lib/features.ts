@@ -185,12 +185,48 @@ export class FeatureError extends Error {
  * Maintenance, finance, expenses, cash are now properly gated — only
  * electronics plans can access them.
  */
+/**
+ * 🔐 2026-10-18 — صلاحيات الموظف (user.permissions) على السيرفر.
+ *
+ * قبل كده الصلاحيات كانت بتتطبق في الواجهة بس (السايدبار بيخبّي الصفحات)، فأي موظف
+ * ممكن يبعت طلب مباشر لـ API الموردين/المشتريات/المخزون ويدفع لمورد من الخزنة أو
+ * يلغي أمر شراء. دلوقتي نفس القاعدة بتتفرض هنا:
+ *   - المدير: بدون قيود.
+ *   - موظف بدون permissions (null/فاضية): كل اللي بتسمح بيه الباقة (زي السايدبار بالظبط).
+ *   - موظف بـ permissions: لازم الموديول (أو أي موديول مرتبط) يكون ضمنها.
+ *
+ * بنفرضها على الموديولات المستقلة (مخزون / موردين / مشتريات) اللي ليها شاشات وAPIs
+ * خاصة بيها بس — عشان ما نكسرش شاشات مشتركة زي نقطة البيع.
+ */
+const PERMISSION_ALIASES: Partial<Record<ModuleKey, ModuleKey[]>> = {
+  inventory: ['inventory'],
+  // شاشة الشراء بتحتاج قايمة الموردين، وشاشة الموردين بتعرض أوامر شرائهم
+  suppliers: ['suppliers', 'purchases'],
+  purchases: ['purchases'],
+}
+
+export function requireModulePermission(
+  session: { role: string; permissions?: string[] | null },
+  moduleKey: ModuleKey,
+) {
+  if (session.role !== 'EMPLOYEE') return
+  const allowedKeys = PERMISSION_ALIASES[moduleKey]
+  if (!allowedKeys) return
+  const p = session.permissions
+  if (!p || p.length === 0) return
+  if (!allowedKeys.some((k) => p.includes(k))) {
+    throw new FeatureError('ليس لديك صلاحية لهذه العملية', 403)
+  }
+}
+
 export async function requireModule(
-  session: Pick<Session, 'tenantId' | 'role'>,
+  session: Pick<Session, 'tenantId' | 'role'> & { permissions?: string[] | null },
   moduleKey: ModuleKey,
 ) {
   // Super admin bypasses all module gating.
   if (session.role === 'SUPER_ADMIN') return
+  // 🔐 صلاحيات الموظف (قبل فحص الباقة)
+  requireModulePermission(session, moduleKey)
   // 🛡️ Critical modules bypass the plan check — always allowed.
   if ((CRITICAL_MODULES as readonly string[]).includes(moduleKey)) return
   const modules = await getTenantModules(session.tenantId)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireModulePermission, featureErrorResponse } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,6 +10,9 @@ async function __GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }
   let s
   try { s = await requireAuth() } catch (e) {
     const err = authErrorResponse(e); return NextResponse.json(err?.body, { status: err?.status })
+  }
+  try { requireModulePermission(s, 'inventory') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
   const { id } = await ctx.params
   const tid = parseInt(id, 10)
@@ -34,6 +38,9 @@ async function __DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }
   let s
   try { s = await requireAuth() } catch (e) {
     const err = authErrorResponse(e); return NextResponse.json(err?.body, { status: err?.status })
+  }
+  try { requireModulePermission(s, 'inventory') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
   const { id } = await ctx.params
   const tid = parseInt(id, 10)

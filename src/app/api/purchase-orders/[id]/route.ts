@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireModulePermission, featureErrorResponse } from '@/lib/features'
 import { performPurchaseReturn, PurchaseReturnError } from '@/lib/purchase-return'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +16,9 @@ async function __GET(
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+  try { requireModulePermission(session, 'purchases') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   const { id } = await params
@@ -48,6 +52,9 @@ async function __DELETE(
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+  try { requireModulePermission(session, 'purchases') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   const { id } = await params
