@@ -80,7 +80,7 @@ export function useViewRouter() {
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   // Navigation function — updates Zustand AND URL hash

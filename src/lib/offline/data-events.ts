@@ -160,7 +160,8 @@ export function emitDataChanged(url: string, method: string) {
  */
 export function useDataRefresh(tags: DataTag[], onChange: () => void, enabled = true) {
   const cbRef = useRef(onChange)
-  cbRef.current = onChange
+  // 🛡️ 2026-10-19: تحديث الـ ref في effect بدل أثناء الرندر (قاعدة react-hooks/refs)
+  useEffect(() => { cbRef.current = onChange })
   const tagsKey = tags.join(',')
 
   useEffect(() => {
@@ -174,6 +175,6 @@ export function useDataRefresh(tags: DataTag[], onChange: () => void, enabled = 
     }
     window.addEventListener(DATA_CHANGED_EVENT, handler)
     return () => window.removeEventListener(DATA_CHANGED_EVENT, handler)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [tagsKey, enabled])
 }

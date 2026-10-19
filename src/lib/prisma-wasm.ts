@@ -31,7 +31,7 @@
 const isCloudflareWorkers =
   typeof navigator !== 'undefined' && navigator.userAgent === 'Cloudflare-Workers'
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const prismaClientModule: typeof import('@prisma/client') = isCloudflareWorkers
   ? // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('@prisma/client/wasm')
