@@ -2125,17 +2125,17 @@ export function POSView() {
                               {p.matchedVariantLabel}
                             </span>
                           )}
+                          {/* السعر جوه نفس صف المخزون → الاسم ياخد عرض الكارت كله ومايتقطعش */}
+                          <span className="ms-auto shrink-0 whitespace-nowrap text-base font-extrabold tabular-nums text-brand-700 dark:text-brand-300">
+                            {formatCurrency(piecePrice(p))}
+                            {p.soldByWeight && (
+                              <span className="text-[11px] font-bold text-muted-foreground"> / كيلو</span>
+                            )}
+                          </span>
                         </div>
                       )}
                     </div>
-                    {viewMode === 'compact' ? (
-                      <span className="shrink-0 text-base font-extrabold tabular-nums text-brand-700 dark:text-brand-300">
-                        {formatCurrency(piecePrice(p))}
-                        {p.soldByWeight && (
-                          <span className="text-[11px] font-bold text-muted-foreground"> / كيلو</span>
-                        )}
-                      </span>
-                    ) : (
+                    {viewMode === 'compact' ? null : (
                       <div className="flex flex-wrap items-center justify-between gap-x-1 gap-y-1">
                         <span className="whitespace-nowrap text-base font-extrabold tabular-nums text-brand-700 dark:text-brand-300">
                           {formatCurrency(piecePrice(p))}
