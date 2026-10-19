@@ -6,6 +6,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { withDataBatch } from '@/lib/offline/data-events'
 import { useShopStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { useConfirm } from './ConfirmDialogProvider'
@@ -95,26 +96,30 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
     // never collide, on top of not reusing any barcode this product
     // already has.
     const usedBarcodes = new Set(existingBarcodes)
-    for (const row of preview) {
-      const barcode = generateUniqueEan13(usedBarcodes)
-      usedBarcodes.add(barcode)
-      try {
-        await api(`/api/products/${product.id}/variants`, {
-          method: 'POST',
-          body: {
-            size: row.size,
-            color: row.color,
-            barcode,
-            quantity: row.quantity || 0,
-          },
-        })
-        okCount++
-      } catch (e: any) {
-        failCount++
-        // نحتفظ بأول رسالة خطأ حقيقية من السيرفر بدل التخمين
-        if (!firstError) firstError = String(e?.body?.error ?? e?.message ?? '').trim()
+    // كل الإضافات جوه batch → الشاشات اللي ورا بتتحدّث مرة واحدة في الآخر مش 18 مرة
+    await withDataBatch(async () => {
+      for (const row of preview) {
+        const barcode = generateUniqueEan13(usedBarcodes)
+        usedBarcodes.add(barcode)
+        try {
+          await api(`/api/products/${product.id}/variants`, {
+            method: 'POST',
+            body: {
+              size: row.size,
+              color: row.color,
+              barcode,
+              quantity: row.quantity || 0,
+            },
+          })
+          okCount++
+        } catch (e: any) {
+          failCount++
+          // نحتفظ بأول رسالة خطأ حقيقية من السيرفر بدل التخمين
+          if (!firstError) firstError = String(e?.body?.error ?? e?.message ?? '').trim()
+        }
       }
-    }
+
+    })
     setBulkSaving(false)
     if (okCount) toast.success(`تمت إضافة ${okCount} متغير`)
     if (failCount) toast.error(`فشلت إضافة ${failCount} متغير${firstError ? ` — ${firstError}` : ' (تكرار باركود أو خطأ)'}`, { duration: 9000 })

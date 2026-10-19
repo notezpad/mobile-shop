@@ -140,13 +140,58 @@ export function resourceTagsForUrl(url: string): DataTag[] {
   return Array.from(tags)
 }
 
-export function emitDataChanged(url: string, method: string) {
-  if (typeof window === 'undefined') return
-  const tags = resourceTagsForUrl(url)
+// ─── تجميع الأحداث (batching) ───────────────────────────────────────────
+// عمليات الإضافة الجماعية (مثلاً 18 لون/مقاس ورا بعض) كانت بتطلق حدث تحديث
+// مع كل طلب → الشاشات اللي ورا (المنتجات/المخزون/اللوحة) بتعيد الجلب 18 مرة
+// وبتطلع/تنزل مع كل مرة. دلوقتي الكتابة جوه batch بتجمّع الـ tags وتطلق
+// حدث واحد في الآخر → تحديث واحد وحركة واحدة.
+let batchDepth = 0
+const batchedTags = new Set<DataTag>()
+let batchedMeta: { url: string; method: string } | null = null
+
+function dispatchTags(tags: DataTag[], url: string, method: string) {
   if (tags.length === 0) return
   window.dispatchEvent(
     new CustomEvent<DataChangedDetail>(DATA_CHANGED_EVENT, { detail: { tags, url, method } })
   )
+}
+
+export function beginDataBatch() {
+  batchDepth++
+}
+
+export function endDataBatch() {
+  if (batchDepth === 0) return
+  batchDepth--
+  if (batchDepth === 0 && batchedTags.size > 0 && batchedMeta && typeof window !== 'undefined') {
+    const tags = Array.from(batchedTags)
+    const { url, method } = batchedMeta
+    batchedTags.clear()
+    batchedMeta = null
+    dispatchTags(tags, url, method)
+  }
+}
+
+/** شغّل fn وكل أحداث التحديث اللي جواها تتجمّع في حدث واحد بعد ما تخلص. */
+export async function withDataBatch<T>(fn: () => Promise<T>): Promise<T> {
+  beginDataBatch()
+  try {
+    return await fn()
+  } finally {
+    endDataBatch()
+  }
+}
+
+export function emitDataChanged(url: string, method: string) {
+  if (typeof window === 'undefined') return
+  const tags = resourceTagsForUrl(url)
+  if (tags.length === 0) return
+  if (batchDepth > 0) {
+    tags.forEach((t) => batchedTags.add(t))
+    batchedMeta = { url, method }
+    return
+  }
+  dispatchTags(tags, url, method)
 }
 
 /**
