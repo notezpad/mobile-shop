@@ -286,17 +286,31 @@ export function ProductsView() {
   }
 
   // 👋 جاي من شاشة الترحيب (/products?new=1) → افتح نافذة إضافة منتج مرة واحدة
+  // 🆕 2026-10-20: قارئ سياق عام بنفس النمط — ?search= (بحث جاهز من الإشعارات/الداشبورد)
+  // و ?stock=low (فلتر النواقص من كارت تنبيهات المخزون) — يتقروا مرة واحدة ويتمسحوا من الـ URL
   React.useEffect(() => {
     try {
       const url = new URL(window.location.href)
-      if (url.searchParams.get('new') === '1') {
-        url.searchParams.delete('new')
-        window.history.replaceState(null, '', url.pathname + url.search)
+      const sp = url.searchParams
+      const isNew = sp.get('new') === '1'
+      const q = sp.get('search')
+      const low = sp.get('stock') === 'low'
+      if (isNew) {
         setInitial(null)
         setDialogOpen(true)
       }
+      if (q) setSearch(q)
+      if (low) {
+        setLowOnly(true)
+        toast.info('المنتجات اللي وصلت الحد الأدنى قدامك')
+      }
+      if (isNew || q || low) {
+        sp.delete('new')
+        sp.delete('search')
+        sp.delete('stock')
+        window.history.replaceState(null, '', url.pathname + url.search)
+      }
     } catch { /* ignore */ }
-     
   }, [])
   const openEdit = (p: Product) => {
     setInitial({

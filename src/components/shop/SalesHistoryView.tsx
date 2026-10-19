@@ -197,6 +197,32 @@ export function SalesHistoryView() {
      
   }, [])
 
+  // 🆕 2026-10-20: قارئ سياق — ?open={id} (افتح فاتورة من الداشبورد)، ?late=1 (فلتر المتأخرة)،
+  // ?q= (بحث جاهز). يتقروا مرة واحدة ويتمسحوا من الـ URL زي نمط ?new=1 في المنتجات
+  const [pendingOpenId, setPendingOpenId] = React.useState<number | null>(null)
+  React.useEffect(() => {
+    try {
+      const url = new URL(window.location.href)
+      const sp = url.searchParams
+      const openId = sp.get('open')
+      const late = sp.get('late')
+      const q = sp.get('q')
+      const touched = !!(openId || late || q)
+      if (openId && /^\d+$/.test(openId)) setPendingOpenId(Number(openId))
+      if (late === '1') {
+        setOnlyLate(true)
+        toast.info('الفواتير المتأخرة قدامك')
+      }
+      if (q) setQuery(q)
+      if (touched) {
+        sp.delete('open')
+        sp.delete('late')
+        sp.delete('q')
+        window.history.replaceState(null, '', url.pathname + url.search)
+      }
+    } catch { /* ignore */ }
+  }, [])
+
   // 🛡️ تحديث لحظي — راجع data-events.ts
   useDataRefresh(['sales'], () => load(from, to, page))
 
@@ -390,6 +416,19 @@ export function SalesHistoryView() {
 
   const flat = React.useMemo(() => listDays.flatMap((d) => d.list), [listDays])
   const selected = flat.find((s) => s.id === selectedId) ?? flat[0] ?? null
+
+  // 🆕 2026-10-20: لما البيانات تيجي — افتح الفاتورة المطلوبة (?open=) أو أرشد لو مش موجودة
+  // (متأخر عن التعريف فوق عشان الـ TDZ: flat بيتحسب في useMemo قبل السطر ده)
+  React.useEffect(() => {
+    if (pendingOpenId == null || loading) return
+    const target = flat.find((s) => s.id === pendingOpenId)
+    if (target) {
+      setSelectedId(pendingOpenId)
+    } else {
+      toast.info('الفاتورة مش في النتائج الحالية — لو متأخرة جرّب فلتر «متأخرة»')
+    }
+    setPendingOpenId(null)
+  }, [pendingOpenId, loading, flat])
 
   /* ── طباعة / PDF / Excel ── */
   const toPrintable = (s: Sale) => ({

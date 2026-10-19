@@ -979,7 +979,7 @@ function PlanSwitcher({
   const handleSwitch = async (planCode: string) => {
     if (switching) return
     if (planCode === currentPlanCode) {
-      toast.info('إنت уже على الباقة دي')
+      toast.info('إنت بالفعل على الباقة دي')
       return
     }
     if (!confirm(`هل أنت متأكد إنك عاوز تبديل باقتك لـ "${PLANS.find((p) => p.code === planCode)?.name}"؟`)) {

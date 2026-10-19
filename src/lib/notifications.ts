@@ -118,7 +118,9 @@ export async function checkLowStockAndNotify(sql: Sql, tenantId: string) {
       type: 'low_stock',
       title: `مخزون منخفض — ${p.name}`,
       message: `المنتج "${p.name}" وصل للحد الأدنى (${p.quantity} متبقي)`,
-      link: '/products',
+      // 🆕 2026-10-20: اللينك بقى بسياق — بيفتح المنتجات بالبحث جاهز على المنتج نفسه
+      // بدل لينكة عامة للمخزون (كليك = توصلك للمنتج فوراً)
+      link: `/products?search=${encodeURIComponent(p.name)}`,
     }))
 
   if (toCreate.length === 0) return
@@ -178,7 +180,7 @@ export async function checkStockIntegrityAndNotify(sql: Sql, tenantId: string) {
       if (dup.length > 0) continue
       await sql`
         INSERT INTO "Notification" ("tenantId", "userId", "type", "title", "message", "link")
-        VALUES (${tenantId}, ${a.id}, 'stock_integrity', 'تنبيه سلامة المخزون', ${message}, '/inventory')`
+        VALUES (${tenantId}, ${a.id}, 'stock_integrity', 'تنبيه سلامة المخزون', ${message}, '/inventory/movements?review=1')`
     }
   } catch (e) {
     console.error('[checkStockIntegrityAndNotify] failed:', e)

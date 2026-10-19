@@ -369,6 +369,17 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
                         </span>
                         <p className="font-bold text-foreground/80">لا توجد منتجات مطابقة</p>
                         <p className="mt-1 text-xs">جرّب تغيّر البحث أو الفلاتر</p>
+                        {/* 🆕 2026-10-20: إجراء جاهز بدل نص بس — نفس نمط ProductsView */}
+                        {(search.trim() || branchFilter !== 'all') && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="mt-3"
+                            onClick={() => { setSearch(''); setBranchFilter('all') }}
+                          >
+                            مسح الفلاتر
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ) : (

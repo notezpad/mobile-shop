@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Bell,
   BellOff,
@@ -10,6 +11,7 @@ import {
   Loader2,
   Info,
   Shield,
+  ShieldAlert,
   Wallet,
   Calendar,
   Crown,
@@ -61,6 +63,12 @@ const TYPE_META: Record<string, {
     color: '#fbbf24',
     bg: 'rgba(251, 191, 36, 0.12)',
     label: 'مخزون',
+  },
+  stock_integrity: {
+    icon: ShieldAlert,
+    color: '#fb923c',
+    bg: 'rgba(251, 146, 60, 0.12)',
+    label: 'سلامة المخزون',
   },
   expiring_subscription: {
     icon: Clock,
@@ -146,6 +154,7 @@ function fmtTimeAgo(iso: string): string {
 }
 
 export function NotificationBell() {
+  const router = useRouter()
   const [notifications, setNotifications] = React.useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = React.useState(0)
   const [open, setOpen] = React.useState(false)
@@ -225,8 +234,10 @@ export function NotificationBell() {
       }
     }
     if (notif.link) {
-      // 🛡️ 2026-10-19: assign() بدل إسناد href (قاعدة react-hooks/immutability) — نفس السلوك
-      window.location.assign(notif.link)
+      // 🛡️ 2026-10-20: لينك داخلي → router.push (تنقّل فوري بدون ريلود كامل — كان location.assign
+      // بيعمل تحميل الصفحة كلها ويفقد الحالة)؛ لينك خارجي → يفضل زي ما هو
+      if (notif.link.startsWith('/')) router.push(notif.link)
+      else window.location.assign(notif.link)
     }
     setOpen(false)
   }
@@ -409,7 +420,7 @@ export function NotificationBell() {
             <div className="notif-panel-foot">
               <span className="notif-panel-foot-text">
                 <Info className="size-3" />
-                الإشعارات تُحدّث تلقائياً كل 30 ثانية
+                الإشعارات تُحدّث تلقائياً كل 10 دقايق
               </span>
             </div>
           )}

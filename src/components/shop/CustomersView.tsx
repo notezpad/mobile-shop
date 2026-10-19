@@ -30,6 +30,7 @@ import {
   CalendarDays,
   ArrowUpDown,
   ChevronDown,
+  HandCoins,
 } from 'lucide-react'
 import { Dialog, DialogBody, DialogContent, DialogFooter } from '@/components/ui/dialog'
 import { Card, CardContent } from '@/components/ui/card'
@@ -50,6 +51,7 @@ import { api } from '@/lib/api'
 import { formatCurrency, formatArabicDate } from '@/lib/format'
 import { useConfirm } from './ConfirmDialogProvider'
 import { CustomerDetailDialog } from './CustomerDetailDialog'
+import { PaymentDialog } from './PaymentDialog'
 import { DialogHero as CustomerHero } from './customer-dialog-ui'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
@@ -241,6 +243,23 @@ export function CustomersView() {
 
   /* ───────── الفلاتر والترتيب (عرض فقط على القايمة اللي اتحمّلت) ───────── */
   const [status, setStatus] = React.useState<StatusFilter>('all')
+
+  // 🆕 2026-10-20: جاي من الداشبورد (المركز المالي ← ديون العملاء) بـ ?status=debt
+  // → الفلتر بيتفعّل لوحده والعميل يلاقي المديونين قدامه
+  React.useEffect(() => {
+    try {
+      const url = new URL(window.location.href)
+      if (url.searchParams.get('status') === 'debt') {
+        url.searchParams.delete('status')
+        window.history.replaceState(null, '', url.pathname + url.search)
+        setStatus('debt')
+        toast.info('العملاء اللي عليهم آجل قدامك')
+      }
+    } catch { /* ignore */ }
+  }, [])
+
+  // 🆕 2026-10-20: تحصيل فوري من كارت العميل — بدل 3 ضغطات (كشف الحساب ← الدفعات ← تسجيل دفعة)
+  const [payTarget, setPayTarget] = React.useState<{ id: number; name: string; balance: number } | null>(null)
   const [sort, setSort] = React.useState<SortKey>('default')
   const counts = React.useMemo(
     () => ({
@@ -602,6 +621,7 @@ export function CustomersView() {
               onOpen={() => setDetailCustomer(c)}
               onEdit={() => openEdit(c)}
               onDelete={() => remove(c.id)}
+              onPay={c.balance > 0 ? () => setPayTarget({ id: c.id, name: c.name, balance: c.balance }) : undefined}
             />
           ))}
           {!hasFilters && (
@@ -648,6 +668,15 @@ export function CustomersView() {
         onOpenChange={(o) => !o && setDetailCustomer(null)}
         customerId={detailCustomer?.id ?? null}
         customerName={detailCustomer?.name}
+      />
+      {/* 🆕 2026-10-20: تحصيل فوري من كارت العميل — نفس نافذة الدفعة المستعملة في كشف الحساب */}
+      <PaymentDialog
+        open={payTarget !== null}
+        onOpenChange={(o) => { if (!o) setPayTarget(null) }}
+        customerId={payTarget?.id ?? null}
+        customerName={payTarget?.name ?? ''}
+        currentBalance={payTarget?.balance ?? 0}
+        onSaved={() => setPayTarget(null)}
       />
     </div>
   )
@@ -1038,6 +1067,7 @@ function CustomerCard({
   onOpen,
   onEdit,
   onDelete,
+  onPay,
 }: {
   c: Customer
   index: number
@@ -1045,6 +1075,7 @@ function CustomerCard({
   onOpen: () => void
   onEdit: () => void
   onDelete: () => void
+  onPay?: () => void
 }) {
   const color = colorOf(c.name)
   const hasDebt = c.balance > 0
@@ -1157,6 +1188,16 @@ function CustomerCard({
         </div>
 
         <div className="mt-auto flex items-center gap-2">
+          {/* 🆕 2026-10-20: للعميل المديون — زر التحصيل هو الأول (نفس نمط الموردين setPayTarget) */}
+          {onPay && (
+            <Button
+              className="flex-1 rounded-xl border-0 bg-rose-600 font-extrabold text-white hover:bg-rose-700"
+              onClick={onPay}
+            >
+              <HandCoins className="size-4" />
+              سدد الآن
+            </Button>
+          )}
           <Button variant="outline" className="flex-1 rounded-xl font-semibold" onClick={onOpen}>
             <Eye className="size-4" />
             كشف الحساب

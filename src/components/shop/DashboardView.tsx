@@ -30,6 +30,7 @@ import {
   TrendingDown,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   Bar,
   BarChart as RechartsBarChart,
@@ -310,12 +311,26 @@ function PanelTitle({
 }
 
 export function DashboardView() {
+  const router = useRouter()
   const [data, setData] = React.useState<DashboardData | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [chartDays, setChartDays] = React.useState<7 | 14 | 30>(7)
   const isMobile = useIsMobile()
   const t = useVocab()
   const user = useShopStore((s) => s.user)
+
+  // 🆕 2026-10-20: «اطلب توريد» بنقرة واحدة من صف المخزون المنخفض — نفس هاند-أوف
+  // زر «سجّلها كأمر شراء» في المخزون: prefill في sessionStorage + قفزة للمشتريات
+  // و أمر شراء جديد بيتفتح لوحده والصنف جوه السلة (بيتقري في PurchaseOrderDialog)
+  const goRestock = (p: { id: number; name: string }) => {
+    try {
+      sessionStorage.setItem(
+        'purchasePrefill',
+        JSON.stringify({ id: p.id, name: p.name, barcode: null, cost: 0, quantity: 0 }),
+      )
+    } catch { /* sessionStorage غير متاح */ }
+    router.push('/purchases')
+  }
   const enabledModules = useShopStore((s) => s.plan.enabledModules)
   const hasMaintenance = enabledModules.includes('maintenance')
   const tz = useShopStore((s) => s.branding.timezone) || 'Africa/Cairo'
@@ -668,7 +683,7 @@ export function DashboardView() {
             const low = data?.lowStockCount ?? 0
             return (
               <>
-                <MobileStat label="رصيد الخزنة" value={n(data?.cashBalance)} unit="جنيه" dot="bg-sky-500" loading={loadingFirst} />
+                <MobileStat label="رصيد الخزنة" value={n(data?.cashBalance)} unit="جنيه" dot="bg-sky-500" href="/cash" loading={loadingFirst} />
                 <MobileStat label="مبيعات الشهر" value={n(data?.monthSales)} unit="جنيه" dot="bg-primary" loading={loadingFirst} />
                 {data?.canViewProfits !== false && (
                   <MobileStat
@@ -686,7 +701,7 @@ export function DashboardView() {
                   value={String(low)}
                   dot={low > 0 ? 'bg-amber-500' : 'bg-emerald-500'}
                   sub={low > 0 ? 'مراجعة المخزون' : t('كل المنتجات فوق الحد الأدنى')}
-                  href={low > 0 ? '/inventory' : undefined}
+                  href={low > 0 ? '/products?stock=low' : undefined}
                   loading={loadingFirst}
                 />
               </>
@@ -740,7 +755,7 @@ export function DashboardView() {
             dot={(data?.lowStockCount ?? 0) > 0 ? 'bg-amber-500' : 'bg-emerald-500'}
             foot={
               (data?.lowStockCount ?? 0) > 0 ? (
-                <Link href="/inventory" className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
+                <Link href="/products?stock=low" className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
                   مراجعة المخزون <ArrowUpLeft className="size-3" />
                 </Link>
               ) : (
@@ -768,7 +783,7 @@ export function DashboardView() {
               </div>
             </div>
             <Link
-              href="/sales"
+              href="/sales?late=1"
               className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-orange-300/60 bg-card px-2.5 text-[11px] font-bold text-orange-700 transition-colors hover:bg-orange-50 dark:border-orange-500/30 dark:text-orange-300 dark:hover:bg-orange-500/10"
             >
               عرض الكل
@@ -781,24 +796,27 @@ export function DashboardView() {
                 ? Math.max(0, Math.floor((Date.now() - new Date(inv.dueDate).getTime()) / 86400000))
                 : 0
               return (
-                <li key={inv.id} className="flex items-center justify-between gap-3 px-5 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold">{inv.customerName ?? 'عميل'}</p>
-                    <p className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-                      <span className="tabular-nums">{inv.invoiceNo ?? `#${inv.id}`}</span>
-                      {days > 0 && (
-                        <>
-                          <span className="h-3 w-px bg-border" />
-                          <span className="font-semibold text-orange-700 dark:text-orange-300">
-                            متأخرة {days} يوم
-                          </span>
-                        </>
-                      )}
+                <li key={inv.id} className="group flex items-center justify-between gap-3 px-5 py-2.5 transition-colors hover:bg-orange-50/70 dark:hover:bg-orange-500/10">
+                  {/* 🆕 2026-10-20: الصف نفسه قابل للضغط → بيفتح الفاتورة في سجل المبيعات */}
+                  <Link href={`/sales?open=${inv.id}&q=${encodeURIComponent(inv.invoiceNo ?? '')}`} className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold">{inv.customerName ?? 'عميل'}</p>
+                      <p className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <span className="tabular-nums">{inv.invoiceNo ?? `#${inv.id}`}</span>
+                        {days > 0 && (
+                          <>
+                            <span className="h-3 w-px bg-border" />
+                            <span className="font-semibold text-orange-700 dark:text-orange-300">
+                              متأخرة {days} يوم
+                            </span>
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-sm font-extrabold tabular-nums">
+                      {formatCurrency(inv.remaining)}
                     </p>
-                  </div>
-                  <p className="shrink-0 text-sm font-extrabold tabular-nums">
-                    {formatCurrency(inv.remaining)}
-                  </p>
+                  </Link>
                 </li>
               )
             })}
@@ -882,7 +900,7 @@ export function DashboardView() {
               tone="text-destructive"
               action={
                 (data?.lowStockProducts?.length ?? 0) > 0 ? (
-                  <Link href="/inventory" className="text-xs font-semibold text-primary hover:underline">
+                  <Link href="/products?stock=low" className="text-xs font-semibold text-primary hover:underline">
                     عرض الكل
                   </Link>
                 ) : undefined
@@ -903,7 +921,10 @@ export function DashboardView() {
                 {data.lowStockProducts.slice(0, 8).map((p) => (
                   <li
                     key={p.id}
-                    className="flex items-center gap-2.5 rounded-xl bg-destructive-subtle/50 px-3 py-2.5 text-sm"
+                    // 🆕 2026-10-20: الصف نفسه = «اطلب توريد» — كليكة واحدة تفتح أمر شراء والصنف في السلة
+                    onClick={() => goRestock(p)}
+                    title="اطلب توريد — هيتفتح أمر شراء جديد بالصنف في السلة"
+                    className="flex cursor-pointer items-center gap-2.5 rounded-xl bg-destructive-subtle/50 px-3 py-2.5 text-sm transition-colors hover:bg-destructive-subtle"
                   >
                     <StatusDot status="danger" pulse />
                     <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span>
@@ -914,7 +935,7 @@ export function DashboardView() {
                 ))}
               </ul>
               {data.lowStockProducts.length > 8 && (
-                <Link href="/inventory" className="mt-2.5 block text-center text-xs font-semibold text-primary hover:underline">
+                <Link href="/products?stock=low" className="mt-2.5 block text-center text-xs font-semibold text-primary hover:underline">
                   + {data.lowStockProducts.length - 8} منتج آخر — عرض الكل
                 </Link>
               )}
@@ -971,7 +992,7 @@ export function DashboardView() {
                 <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
                   <Wrench className="size-8 text-muted-foreground/50" />
                   <p className="text-sm font-medium text-muted-foreground">لا توجد أوامر صيانة نشطة</p>
-                  <Link href="/maintenance" className="text-xs font-semibold text-primary hover:underline">
+                  <Link href="/maintenance?new=1" className="text-xs font-semibold text-primary hover:underline">
                     إضافة أمر صيانة جديد
                   </Link>
                 </div>
@@ -1045,7 +1066,9 @@ export function DashboardView() {
                     return (
                       <li
                         key={s.id}
-                        className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-1 px-5 py-3.5 transition-colors hover:bg-muted/40 md:grid-cols-[auto_minmax(0,1.3fr)_minmax(0,1fr)_auto]"
+                        // 🆕 2026-10-20: الفاتورة نفسها قابلة للضغط → بتتفتح في سجل المبيعات
+                        onClick={() => router.push(`/sales?open=${s.id}&q=${encodeURIComponent(s.invoiceNo ?? '')}`)}
+                        className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-1 px-5 py-3.5 transition-colors hover:bg-muted/40 md:grid-cols-[auto_minmax(0,1.3fr)_minmax(0,1fr)_auto]"
                       >
                         <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl', TONE[tone].chip)}>
                           <Icon className="size-4" strokeWidth={2.4} />
@@ -1092,23 +1115,40 @@ export function DashboardView() {
         </div>
         <ul className="divide-y divide-border">
           {[
-            { label: 'المخزون (تكلفة)', v: data?.stockValueCost ?? 0, dot: 'bg-slate-400' },
-            { label: 'المخزون (بيع)', v: data?.stockValuePrice ?? 0, dot: 'bg-primary' },
-            { label: 'ديون العملاء', v: data?.totalOutstandingDebt ?? 0, dot: 'bg-amber-500' },
-            { label: 'مستحق الموردين', v: data?.totalSupplierDebt ?? 0, dot: 'bg-rose-500' },
-          ].map((r) => (
-            <li key={r.label} className="flex items-center justify-between gap-3 px-5 py-3.5">
-              <span className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className={cn('size-2 rounded-full', r.dot)} />
-                {r.label}
-              </span>
-              {loadingFirst ? (
-                <Skeleton className="h-5 w-20" />
-              ) : (
-                <span className="text-base font-extrabold tabular-nums">{formatCurrency(r.v)}</span>
-              )}
-            </li>
-          ))}
+            { label: 'المخزون (تكلفة)', v: data?.stockValueCost ?? 0, dot: 'bg-slate-400', href: undefined },
+            { label: 'المخزون (بيع)', v: data?.stockValuePrice ?? 0, dot: 'bg-primary', href: undefined },
+            // 🆕 2026-10-20: الديون بقى ليها مقصد — كليكة تفتح القائمة مفلتة على المطلوب
+            { label: 'ديون العملاء', v: data?.totalOutstandingDebt ?? 0, dot: 'bg-amber-500', href: '/customers?status=debt' },
+            { label: 'مستحق الموردين', v: data?.totalSupplierDebt ?? 0, dot: 'bg-rose-500', href: '/suppliers' },
+          ].map((r) => {
+            const row = (
+              <>
+                <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className={cn('size-2 rounded-full', r.dot)} />
+                  {r.label}
+                </span>
+                {loadingFirst ? (
+                  <Skeleton className="h-5 w-20" />
+                ) : (
+                  <span className="text-base font-extrabold tabular-nums">{formatCurrency(r.v)}</span>
+                )}
+              </>
+            )
+            return (
+              <li
+                key={r.label}
+                className={r.href ? 'cursor-pointer transition-colors hover:bg-muted/40' : undefined}
+              >
+                {r.href ? (
+                  <Link href={r.href} className="flex items-center justify-between gap-3 px-5 py-3.5">
+                    {row}
+                  </Link>
+                ) : (
+                  <div className="flex items-center justify-between gap-3 px-5 py-3.5">{row}</div>
+                )}
+              </li>
+            )
+          })}
         </ul>
         {data?.canViewProfits !== false && (
           <div className="flex items-center justify-between gap-3 border-t border-border bg-primary-subtle/60 px-5 py-3.5">
