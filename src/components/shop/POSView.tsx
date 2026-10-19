@@ -2056,7 +2056,6 @@ export function POSView() {
                 .filter((i) => i.product.id === p.id)
                 .reduce((s, i) => s + i.quantity, 0)
               const out = p.quantity <= 0
-              const noImg = !p.imagePath
               const badge =
                 inCart > 0 ? (
                   <span className="absolute -left-1.5 -top-1.5 z-10 flex min-w-6 items-center justify-center rounded-full bg-brand-600 px-1.5 py-0.5 text-[length:var(--fs-2xs,0.6875rem)] font-extrabold tabular-nums text-white shadow ring-2 ring-card">
@@ -2077,10 +2076,10 @@ export function POSView() {
                       viewMode === 'compact'
                         ? 'flex h-full items-center gap-2.5 p-2'
                         : 'flex h-full flex-col gap-2 p-2.5',
-                      noImg && viewMode === 'compact' && 'border-s-[3px]'
+                      viewMode === 'compact' && 'border-s-[3px]'
                     )}
                     style={
-                      noImg && viewMode === 'compact'
+                      viewMode === 'compact'
                         ? { borderInlineStartColor: `hsl(${hueOf(p.name)} 60% 48%)` }
                         : undefined
                     }
