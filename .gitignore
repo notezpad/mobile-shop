@@ -4,3 +4,12 @@ node_modules/
 .open-next/
 .wrangler/
 *.log
+
+# secrets / local env
+.env
+.env.*
+!.env.example
+
+# build artifacts & scratch
+*.tsbuildinfo
+public/uploads/

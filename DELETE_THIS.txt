@@ -1,1 +1,0 @@
-احذف هذا الملف من مشروعك: src/app/api/admin/tracking/test/route.ts
