@@ -226,7 +226,7 @@ export function FinanceView() {
       setFrom(r.from)
       setTo(r.to)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [tz])
 
   const apply = (p: Preset) => {

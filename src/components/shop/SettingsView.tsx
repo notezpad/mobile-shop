@@ -117,7 +117,7 @@ function NumInput({
   const [text, setText] = React.useState(String(value))
   React.useEffect(() => {
     if ((parseFloat(text) || 0) !== value) setText(String(value))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [value])
   return (
     <div dir="ltr" className="relative">
@@ -193,7 +193,7 @@ export function SettingsView() {
 
   React.useEffect(() => {
     refreshSubscription().finally(() => setSubLoading(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   const load = React.useCallback(async () => {
@@ -219,7 +219,8 @@ export function SettingsView() {
   )
   const dirty = changed.length > 0
   const dirtyRef = React.useRef(false)
-  dirtyRef.current = dirty
+  // 🛡️ 2026-10-19: تحديث الـ ref في effect بدل أثناء الرندر (قاعدة react-hooks/refs)
+  React.useEffect(() => { dirtyRef.current = dirty })
 
   useDataRefresh(['settings'], () => {
     if (!dirtyRef.current) load()
@@ -285,7 +286,8 @@ export function SettingsView() {
   }, [])
 
   const saveRef = React.useRef(save)
-  saveRef.current = save
+  // 🛡️ 2026-10-19: تحديث الـ ref في effect بدل أثناء الرندر (قاعدة react-hooks/refs)
+  React.useEffect(() => { saveRef.current = save })
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
@@ -454,7 +456,7 @@ export function SettingsView() {
                 className="group relative flex size-24 items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-foreground/30 bg-muted/50 text-muted-foreground outline-none transition-colors hover:border-foreground/50 focus-visible:ring-[3px] focus-visible:ring-foreground/20 sm:size-28"
               >
                 {data?.logoPath ? (
-                  // eslint-disable-next-line @next/next/no-img-element
+                   
                   <img src={data.logoPath} alt="الشعار" className="h-full w-full object-cover" />
                 ) : (
                   <span className="flex flex-col items-center gap-1 text-[11px] font-semibold">
@@ -536,7 +538,7 @@ export function SettingsView() {
             >
               <div className="flex flex-col items-center text-center">
                 {data?.logoPath ? (
-                  // eslint-disable-next-line @next/next/no-img-element
+                   
                   <img src={data.logoPath} alt="" className="size-12 rounded-lg object-cover" />
                 ) : (
                   <span className="flex size-12 items-center justify-center rounded-lg bg-stone-900 text-xl font-extrabold text-white">

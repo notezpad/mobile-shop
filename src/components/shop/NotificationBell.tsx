@@ -225,7 +225,8 @@ export function NotificationBell() {
       }
     }
     if (notif.link) {
-      window.location.href = notif.link
+      // 🛡️ 2026-10-19: assign() بدل إسناد href (قاعدة react-hooks/immutability) — نفس السلوك
+      window.location.assign(notif.link)
     }
     setOpen(false)
   }

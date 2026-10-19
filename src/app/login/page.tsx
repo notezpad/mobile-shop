@@ -73,8 +73,10 @@ export default function LoginPage() {
     if (!savedUser) return;
     setUser(savedUser);
     // Full navigation (مش router.push): أوفلاين الـ RSC transition بيفشل،
-    // أما full load فبيخدمها الـ SW من كاش الصفحات مباشرة.
-    window.location.href = "/dashboard";
+    // أما full load فبيخدمها الـ SW من كاش الصفحات مباشرة. مقصودة — نتخطى
+    // تحذير القاعدة هنا عشان router.push هيغير السلوك المجرّب.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign("/dashboard");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

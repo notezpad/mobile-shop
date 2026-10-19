@@ -313,11 +313,13 @@ function hueOf(name: string) {
 }
 
 /** أيقونة البدج حسب نوع المنتج (من اسمه) — الافتراضي علبة منتج */
-function badgeIconFor(name: string) {
+/** 🛡️ 2026-10-19: بيرجع مفتاح نصي بدل component نفسه — الـJSX الشرطي تحت بيرسمه
+ * بدون إنشاء/اختيار component أثناء الرندر (قاعدة react-hooks/static-components) */
+function badgeKindFor(name: string): 'shirt' | 'foot' | 'package' {
   const n = name.toLowerCase()
-  if (/(شيرت|تيشرت|تي شيرت|قميص|بلوز|سويت|هودي|جاكت|جاكيت|بنطلون|بنطال|فستان|جيبة|بدلة|ملابس|shirt|tee|hoodie|jacket|pants|dress|jeans)/.test(n)) return Shirt
-  if (/(حذاء|جزمة|كوتشي|كوتش|شبشب|صندل|بوت|سنيكر|shoe|sneaker|boot|sandal)/.test(n)) return Footprints
-  return Package
+  if (/(شيرت|تيشرت|تي شيرت|قميص|بلوز|سويت|هودي|جاكت|جاكيت|بنطلون|بنطال|فستان|جيبة|بدلة|ملابس|shirt|tee|hoodie|jacket|pants|dress|jeans)/.test(n)) return 'shirt'
+  if (/(حذاء|جزمة|كوتشي|كوتش|شبشب|صندل|بوت|سنيكر|shoe|sneaker|boot|sandal)/.test(n)) return 'foot'
+  return 'package'
 }
 
 function ProductThumb({
@@ -343,7 +345,7 @@ function ProductThumb({
       </div>
     )
   }
-  const Icon = badgeIconFor(name)
+  const kind = badgeKindFor(name)
   return (
     <div
       className={cn(
@@ -362,7 +364,13 @@ function ProductThumb({
       />
       {/* بدج دائري بأيقونة المنتج بدل الحروف — حجمه نسبة من عرض المربع */}
       <span className="relative flex aspect-square w-[38cqw] min-w-6 max-w-[3.25rem] items-center justify-center rounded-full bg-white/70 shadow-sm ring-1 ring-black/5">
-        <Icon className="size-[54%]" strokeWidth={1.9} />
+        {kind === 'shirt' ? (
+          <Shirt className="size-[54%]" strokeWidth={1.9} />
+        ) : kind === 'foot' ? (
+          <Footprints className="size-[54%]" strokeWidth={1.9} />
+        ) : (
+          <Package className="size-[54%]" strokeWidth={1.9} />
+        )}
       </span>
     </div>
   )
@@ -440,7 +448,7 @@ function NumField({
     if (focused.current && (text === '' || text.endsWith('.'))) return
     const same = value === '' ? text === '' : parseFloat(text) === value
     if (!same) setText(String(value))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [value])
   return (
     <input
@@ -656,7 +664,9 @@ function ensureBackListener() {
 }
 function useBackLayer(active: boolean, onBack: () => void) {
   const cb = React.useRef(onBack)
-  cb.current = onBack
+  // 🛡️ 2026-10-19: تحديث الـ ref في effect بدل أثناء الرندر (قاعدة react-hooks/refs)
+  // — نفس التوقيت عملياً لأن القارئ (حدث history) بيجي بعد الـ effects
+  React.useEffect(() => { cb.current = onBack })
   React.useEffect(() => {
     if (!active) return
     ensureBackListener()
@@ -719,7 +729,8 @@ export function POSView() {
   const [confirmClear, setConfirmClear] = React.useState(false)
   // نسخة متزامنة من السلة: عشان سكانين متتاليين سريعين مايضيّعوش زيادة (الحساب بيتم عليها مباشرة)
   const cartRef = React.useRef<CartItem[]>(cart)
-  cartRef.current = cart
+  // 🛡️ 2026-10-19: تحديث الـ ref في effect بدل أثناء الرندر (قاعدة react-hooks/refs)
+  React.useEffect(() => { cartRef.current = cart })
   const [lastSale, setLastSale] = React.useState<any | null>(null)
 
   const [customers, setCustomers] = React.useState<CustomerLite[]>([])
@@ -834,7 +845,7 @@ export function POSView() {
       return
     }
     if (simplePaged) panelTopRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [safePage])
   const hasImages = products.some((x) => x.imagePath)
   const effMode: 'cards' | 'compact' =
@@ -891,7 +902,7 @@ export function POSView() {
     const ro = new ResizeObserver(measure)
     ro.observe(box)
     return () => ro.disconnect()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [paged, effMode, scale, products, safePage])
 
   // PageUp / PageDown للتنقل بين الصفحات (لما مفيش حقل بيتكتب فيه)
@@ -1284,7 +1295,10 @@ export function POSView() {
   const enqueueScan = (code: string, mode: 'scan' | 'manual' = 'scan') => {
     scanChain.current = scanChain.current.then(() => processScan(code, mode)).catch(() => {})
   }
-  enqueueScanRef.current = (code) => enqueueScan(code, 'scan')
+  // 🛡️ 2026-10-19: تحديث الـ ref في effect بدل أثناء الرندر (قاعدة react-hooks/refs)
+  React.useEffect(() => {
+    enqueueScanRef.current = (code) => enqueueScan(code, 'scan')
+  })
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -1664,15 +1678,18 @@ export function POSView() {
       )
       if (adjusted > 0) toast.warning('اتعدّلت كميات في السلة المسترجعة حسب المخزون الحالي')
     })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   /* ── keyboard shortcuts: "/" search · Esc clear · F9 pay ─────── */
 
   const checkoutRef = React.useRef(checkout)
-  checkoutRef.current = checkout
   const canCheckoutRef = React.useRef(canCheckout)
-  canCheckoutRef.current = canCheckout
+  // 🛡️ 2026-10-19: تحديث الـ refs في effect بدل أثناء الرندر (قاعدة react-hooks/refs)
+  React.useEffect(() => {
+    checkoutRef.current = checkout
+    canCheckoutRef.current = canCheckout
+  })
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

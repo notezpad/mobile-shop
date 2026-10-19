@@ -27,6 +27,11 @@ export function Sparkline({
   strokeWidth?: number
   className?: string
 }) {
+  // 🛡️ 2026-10-19: الـ hook لازم يتنادى فوق أي early return — لو اتندت تحت
+  // الشرط كان بكسر ترتيب الـ hooks (وكراش حقيقي) لما الداتا تروح تيجي
+  // (فارغة → شارت → فارغة). اللي تحت بيحسب من غير hooks فمفيش مشكلة.
+  const gradientId = React.useId()
+
   if (!data.length) return null
   const max = Math.max(...data)
   const min = Math.min(...data)
@@ -44,8 +49,6 @@ export function Sparkline({
     .join(" ")
 
   const areaPath = `${path} L ${width} ${height} L 0 ${height} Z`
-
-  const gradientId = React.useId()
 
   return (
     <svg

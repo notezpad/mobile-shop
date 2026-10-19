@@ -485,7 +485,7 @@ export function PlanDialog({
     setFeatureDraft('')
     setCodeUnlocked(false)
     setTouched(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [open, plan?.id])
 
   const dirty = open && JSON.stringify(form) !== initialJson

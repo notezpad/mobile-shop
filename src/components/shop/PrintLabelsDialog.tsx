@@ -210,7 +210,7 @@ export function PrintLabelsDialog({ open, onOpenChange, products }: Props) {
     if (n > 60)
       return `المقاس صغير على A4 — ${columns} × ${rows} = ${n} ملصق، والباركود ممكن يبقى صغير على القارئ. جرّب مقاس أكبر.`
     return null
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [mode, preset, labelSize.widthMm, labelSize.heightMm, layout.sheet])
 
   // تغيير التبويب يرجّع التمرير لفوق
@@ -900,32 +900,39 @@ function PreviewPanel({
   showText: boolean
   sheets: number
 }) {
-  // باركود كل منتج بيتولّد مرة واحدة لكل مقاس (نفس طريقة print-client)
-  const svgFor = React.useMemo(() => {
-    const cache = new Map<string, string>()
-    return (code: string) => {
-      let s = cache.get(code)
-      if (s === undefined) {
-        s =
-          typeof window === 'undefined'
-            ? ''
-            : renderBarcodeSvg(code, {
-                height: layout.barcodeHeightPx,
-                width: layout.barcodeBarWidth,
-                fontSize: layout.barcodeTextFontSizePt,
-                displayValue: false,
-              })
-        cache.set(code, s)
-      }
-      return s
-    }
-  }, [layout.barcodeHeightPx, layout.barcodeBarWidth, layout.barcodeTextFontSizePt])
-
   const showSheet = mode === 'sheet' && view === 'sheet' && !!layout.sheet
 
   const sample: Sample = focus
     ? { name: focus.name, barcode: focus.barcode as string, price: focus.price }
     : { name: 'منتج تجريبي', barcode: '2000000000017', price: 25 }
+
+  // 🛡️ 2026-10-19: باركود كل منتج بيتولّد مرة واحدة لكل مقاس (نفس طريقة print-client) —
+  // اتغير من كاش كسول جوه closure بيتعدّل أثناء الرندر إلى useMemo واحد مبني مسبقاً
+  // (قاعدة react-hooks/immutability). نفس النتيجة: نفس SVG بنفس إعدادات المقاس.
+  const codes = React.useMemo(
+    () => [...new Set([sample.barcode, ...products.map((p) => p.barcode)].filter((c): c is string => !!c))],
+    [sample.barcode, products],
+  )
+  const codesKey = codes.join('|')
+  const svgByCode = React.useMemo(() => {
+    const m = new Map<string, string>()
+    for (const code of codes) {
+      m.set(
+        code,
+        typeof window === 'undefined'
+          ? ''
+          : renderBarcodeSvg(code, {
+              height: layout.barcodeHeightPx,
+              width: layout.barcodeBarWidth,
+              fontSize: layout.barcodeTextFontSizePt,
+              displayValue: false,
+            }),
+      )
+    }
+    return m
+     
+  }, [codesKey, layout.barcodeHeightPx, layout.barcodeBarWidth, layout.barcodeTextFontSizePt])
+  const svgFor = (code: string) => svgByCode.get(code) ?? ''
 
   return (
     <div className="flex h-full min-h-0 flex-col">

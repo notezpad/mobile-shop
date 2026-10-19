@@ -98,7 +98,7 @@ export default function ShopError({
       reset()
     }, 1_200)
     return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [error])
 
   const copyDetails = async () => {

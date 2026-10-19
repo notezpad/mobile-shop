@@ -35,7 +35,12 @@ export function DonutChart({
   const total = data.reduce((s, d) => s + d.value, 0) || 1
   const radius = (size - thickness) / 2
   const circumference = 2 * Math.PI * radius
-  let offset = 0
+  // 🛡️ 2026-10-19: الإزاحات بتتحسب مرة واحدة بـ reduce بدل متغيّر بيتعدّل
+  // جوه callback أثناء الرندر (قاعدة react-hooks/immutability) — نفس النتيجة بالظبط
+  const offsets = data.reduce<number[]>((acc, d) => {
+    acc.push((acc[acc.length - 1] ?? 0) + (d.value / total) * circumference)
+    return acc
+  }, [])
 
   const colors = [
     "var(--chart-1)",
@@ -61,7 +66,8 @@ export function DonutChart({
         {/* Data segments */}
         {data.map((d, i) => {
           const len = (d.value / total) * circumference
-          const seg = (
+          const start = offsets[i - 1] ?? 0
+          return (
             <circle
               key={i}
               cx={size / 2}
@@ -71,13 +77,11 @@ export function DonutChart({
               stroke={d.color || colors[i % colors.length]}
               strokeWidth={thickness}
               strokeDasharray={`${len} ${circumference - len}`}
-              strokeDashoffset={-offset}
+              strokeDashoffset={-start}
               strokeLinecap="round"
               className="transition-all duration-slow ease-out"
             />
           )
-          offset += len
-          return seg
         })}
       </svg>
       {(centerLabel || centerValue) && (

@@ -200,13 +200,13 @@ export function PurchaseOrderDialog({
     const out: Record<number, number> = {}
     if (matrix) for (const i of cart) if (i.product.id === matrix.product.id && i.variant) out[i.variant.id] = i.quantity
     return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [matrix])
   const matrixInitialCost = React.useMemo(() => {
     if (!matrix) return 0
     const inCart = cart.find((i) => i.product.id === matrix.product.id && i.variant)
     return inCart ? inCart.cost : matrix.product.cost ?? 0
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [matrix])
 
   /* ───── عمليات السلة ───── */
@@ -293,7 +293,7 @@ export function PurchaseOrderDialog({
       const p = JSON.parse(raw) as ProductLite
       if (p?.id) void addToCart({ id: p.id, name: p.name, barcode: p.barcode ?? null, cost: p.cost ?? 0, quantity: p.quantity ?? 0 })
     } catch { /* */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [open])
 
   // تأكيد شبكة المقاسات: بنستبدل كل أسطر المنتج ده في السلة بالكميات الجديدة

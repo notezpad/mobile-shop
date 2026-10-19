@@ -64,7 +64,25 @@ export function useBarcodeDetector({
   const rafRef = React.useRef<number | null>(null)
   const lastDetectRef = React.useRef<{ code: string; at: number } | null>(null)
   const onDetectRef = React.useRef(onDetect)
-  onDetectRef.current = onDetect
+  // 🛡️ 2026-10-19: تحديث الـ ref في effect بدل أثناء الرندر (قاعدة react-hooks/refs)
+  React.useEffect(() => { onDetectRef.current = onDetect })
+
+  // 🛡️ 2026-10-19: stopInternal اتنقل فوق الـ effects اللي بتستخدمه (كان متعرّف
+  // بعدهم فبيتقرأ قبل تعريفه — قاعدة react-hooks/immutability) — نفس الجسم بالظبط
+  const stopInternal = () => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+    setScanning(false)
+  }
 
   // Check support on mount
   React.useEffect(() => {
@@ -80,7 +98,7 @@ export function useBarcodeDetector({
     return () => {
       stopInternal()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   // Pause when tab is hidden
@@ -93,21 +111,6 @@ export function useBarcodeDetector({
     document.addEventListener('visibilitychange', onVis)
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [scanning])
-
-  const stopInternal = () => {
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current)
-      rafRef.current = null
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop())
-      streamRef.current = null
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null
-    }
-    setScanning(false)
-  }
 
   const start = React.useCallback(async () => {
     if (!supported) {

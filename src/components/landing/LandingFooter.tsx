@@ -29,8 +29,11 @@ export function LandingFooter() {
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' })
     } else if (href.startsWith('#')) {
-      // We're on a non-landing page — go to landing page with the hash
-      window.location.href = '/' + href
+      // We're on a non-landing page — go to landing page with the hash.
+      // Full navigation مقصودة عشان المتصفح يعمل scroll للهاش على صفحة الـlanding
+      // (router.push مابيضمنش السكرول ده من صفحة تانية) — نتخطى التحذير هنا.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign('/' + href)
     }
   }
 

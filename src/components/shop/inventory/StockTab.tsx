@@ -50,6 +50,7 @@ import { NoBarcode } from '../NoBarcode'
 import { ProductAvatar } from '../ProductAvatar'
 import { StockHero, TONE, SecLabel, Pill, STOCK_FIELD, STOCK_RING, type StockTone } from './stock-dialog-ui'
 import { num } from './shared'
+import { PurchaseVariantsDialog, type PurchaseVariantLite, type PurchaseVariantsResult } from '../PurchaseVariantsDialog'
 import type { Branch, InventoryProduct } from '../InventoryView'
 
 interface Props {
@@ -982,6 +983,10 @@ interface ExchangeLineUI {
   name: string
   cost: number
   quantity: string
+  /** 🎨 2026-10-19: لون/مقاس محدد للمنتجات ذات الشبكة — null للمنتجات البسيطة.
+   * الكمية بتدخل على المقاس نفسه في المخزون (كمية المنتج = مجموع مقاساته) */
+  variantId?: number | null
+  variantLabel?: string | null
 }
 
 /** بحث صنف + إضافته (بدل القائمة الطويلة) */
@@ -1064,6 +1069,13 @@ function ExchangeDialog({
   const [inLines, setInLines] = React.useState<ExchangeLineUI[]>([])
   const [reason, setReason] = React.useState('')
   const [saving, setSaving] = React.useState(false)
+  // 🎨 2026-10-19: شبكة الألوان×المقاسات للمنتجات ذات المقاسات — نفس نمط أمر الشراء:
+  // الكمية بتتسجل على كل لون/مقاس لوحده عشان كمية المنتج (= مجموع مقاساته) ما تتمسحش
+  const [matrix, setMatrix] = React.useState<{
+    kind: 'out' | 'in'
+    product: InventoryProduct
+    variants: PurchaseVariantLite[]
+  } | null>(null)
 
   React.useEffect(() => {
     if (open) {
@@ -1071,6 +1083,7 @@ function ExchangeDialog({
       setInLines([])
       setReason('')
       setSupplierId('')
+      setMatrix(null)
       api<Array<{ id: number; name: string }>>('/api/suppliers')
         .then((rows) => setSuppliers(rows.map((r) => ({ id: r.id, name: r.name }))))
         .catch(() => setSuppliers([]))
@@ -1079,19 +1092,60 @@ function ExchangeDialog({
 
   const productById = React.useMemo(() => new Map(products.map(p => [p.id, p])), [products])
 
-  const addLine = (
-    setter: React.Dispatch<React.SetStateAction<ExchangeLineUI[]>>,
-    lines: ExchangeLineUI[],
-    pid: string,
-  ) => {
-    const id = parseInt(pid, 10)
-    const p = productById.get(id)
+  /** اختيار صنف: منتج له ألوان/مقاسات → شبكة كميات، منتج بسيط → سطر مباشر */
+  const pickProduct = async (kind: 'out' | 'in', pid: number) => {
+    const p = productById.get(pid)
     if (!p) return
-    if (lines.some(l => l.productId === p.id)) {
+    try {
+      const variants = await api<PurchaseVariantLite[]>(`/api/products/${p.id}/variants`)
+      if (variants.length > 0) {
+        setMatrix({ kind, product: p, variants })
+        return
+      }
+    } catch {
+      /* فشل الجلب: نكمل كمنتج بسيط والسيرفر حاجز أي حال */
+    }
+    const setter = kind === 'out' ? setOutLines : setInLines
+    const lines = kind === 'out' ? outLines : inLines
+    if (lines.some(l => l.productId === p.id && l.variantId == null)) {
       toast.error('الصنف مضاف بالفعل — عدّل الكمية')
       return
     }
-    setter([...lines, { productId: p.id, name: p.name, cost: p.cost ?? 0, quantity: '1' }])
+    setter([...lines, { productId: p.id, name: p.name, cost: p.cost ?? 0, quantity: '1', variantId: null, variantLabel: null }])
+  }
+
+  /** كميات الشبكة الحالية لنفس المنتج (للتعديل) */
+  const matrixInitialQty = React.useMemo((): Record<number, number> => {
+    if (!matrix) return {}
+    const lines = matrix.kind === 'out' ? outLines : inLines
+    const out: Record<number, number> = {}
+    for (const l of lines) {
+      if (l.productId === matrix.product.id && l.variantId != null) {
+        out[l.variantId] = parseInt(l.quantity, 10) || 0
+      }
+    }
+    return out
+  }, [matrix, outLines, inLines])
+
+  /** تأكيد الشبكة: سطور المنتج دي بتتشال وتتحل بأرقام المقاسات الجديدة */
+  const confirmMatrix = (r: PurchaseVariantsResult) => {
+    if (!matrix) return
+    const setter = matrix.kind === 'out' ? setOutLines : setInLines
+    const lines = matrix.kind === 'out' ? outLines : inLines
+    const others = lines.filter(l => l.productId !== matrix.product.id)
+    const newLines: ExchangeLineUI[] = Object.entries(r.qty).map(([vid, qty]) => {
+      const v = matrix.variants.find(x => x.id === Number(vid))
+      return {
+        productId: matrix.product.id,
+        name: matrix.product.name,
+        cost: matrix.product.cost ?? 0,
+        quantity: String(qty),
+        variantId: Number(vid),
+        variantLabel: [v?.color, v?.size].filter(Boolean).join(' / ') || null,
+      }
+    })
+    setter([...others, ...newLines])
+    setMatrix(null)
   }
 
   const valueOf = (lines: ExchangeLineUI[]) =>
@@ -1102,10 +1156,10 @@ function ExchangeDialog({
 
   const submit = async () => {
     const out = outLines
-      .map(l => ({ productId: l.productId, quantity: parseInt(l.quantity, 10) || 0 }))
+      .map(l => ({ productId: l.productId, variantId: l.variantId ?? undefined, quantity: parseInt(l.quantity, 10) || 0 }))
       .filter(l => l.quantity > 0)
     const inn = inLines
-      .map(l => ({ productId: l.productId, quantity: parseInt(l.quantity, 10) || 0 }))
+      .map(l => ({ productId: l.productId, variantId: l.variantId ?? undefined, quantity: parseInt(l.quantity, 10) || 0 }))
       .filter(l => l.quantity > 0)
     if (!supplierId) { toast.error('اختار المورد'); return }
     if (out.length === 0 || inn.length === 0) {
@@ -1139,17 +1193,20 @@ function ExchangeDialog({
         items={kind === 'out' ? available : products}
         placeholder={kind === 'out' ? 'ابحث عن صنف راجع للمورد…' : 'ابحث عن صنف بديل من المورد…'}
         showStock={kind === 'out'}
-        onPick={(id) => addLine(setter, lines, String(id))}
+        onPick={(id) => { void pickProduct(kind, id) }}
       />
       {lines.length > 0 && (
         <div className={cn('space-y-1.5', lines.length > 3 && 'max-h-48 overflow-y-auto overscroll-contain pe-1')}>
           {lines.map((l, idx) => {
-            const avail = kind === 'out' ? productById.get(l.productId)?.quantity ?? 0 : null
+            const avail = kind === 'out' && l.variantId == null ? productById.get(l.productId)?.quantity ?? 0 : null
             const over = avail !== null && (parseInt(l.quantity, 10) || 0) > avail
             return (
-              <div key={l.productId} className="flex items-center gap-2 rounded-xl border bg-background p-2">
+              <div key={`${l.productId}-${l.variantId ?? 0}`} className="flex items-center gap-2 rounded-xl border bg-background p-2">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold">{l.name}</p>
+                  <p className="truncate text-sm font-bold">
+                    {l.name}
+                    {l.variantLabel && <span className="font-semibold text-foreground/60"> — {l.variantLabel}</span>}
+                  </p>
                   <p className={cn('text-[11px] font-medium', over ? 'text-destructive' : 'text-foreground/60')}>
                     {over ? `أكبر من المتاح (${avail})` : `تكلفة الوحدة: ${formatCurrency(l.cost)}`}
                   </p>
@@ -1250,6 +1307,23 @@ function ExchangeDialog({
           <Button variant="outline" className="h-11 rounded-xl" onClick={() => onOpenChange(false)}>إلغاء</Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* 🎨 2026-10-19: شبكة الألوان×المقاسات — للخروج محدودة بمخزون كل مقاس، وللوارد حرة */}
+      <PurchaseVariantsDialog
+        open={matrix !== null}
+        onOpenChange={(o) => { if (!o) setMatrix(null) }}
+        productName={matrix?.product.name ?? ''}
+        variants={matrix?.variants ?? []}
+        initialQty={matrixInitialQty}
+        initialCost={0}
+        onConfirm={confirmMatrix}
+        showCost={false}
+        maxByStock={matrix?.kind === 'out'}
+        title={matrix?.kind === 'out' ? 'الكمية الراجعة للمورد لكل لون ومقاس' : 'كمية البديل لكل لون ومقاس'}
+        confirmLabel={matrix?.kind === 'out' ? 'أضف للبضاعة الراجعة' : 'أضف للبضاعة البديلة'}
+        emptyHint="اكتب الكمية في الألوان/المقاسات المطلوبة"
+        stockLabel={matrix?.kind === 'out' ? 'متاح' : 'مخزون'}
+      />
     </Dialog>
   )
 }

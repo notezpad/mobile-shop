@@ -185,7 +185,7 @@ export function Journey() {
                 <i />
                 <span>Nezam POS — نظام المحل</span>
               </div>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              { }
               <img src={s.img} alt={s.cap} decoding="async" />
               <figcaption className="gd-shot-cap">{s.cap}</figcaption>
             </figure>

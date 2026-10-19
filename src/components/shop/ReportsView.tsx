@@ -1300,13 +1300,18 @@ function Stage({ r, ins }: { r: Report; ins: { netMargin: number; expRatio: numb
 }
 
 function Waterfall({ steps }: { steps: { label: string; v: number; total?: boolean }[] }) {
-  let run = 0
-  const bars = steps.map((s) => {
-    const start = s.total ? 0 : run
-    const end = s.total ? s.v : run + s.v
-    run = end
-    return { ...s, start, end }
-  })
+  // 🛡️ 2026-10-19: بُدايات ونهايات الأعمدة بتتحسب بـ reduce بدل متغيّر بيتعدّل
+  // جوه callback أثناء الرندر (قاعدة react-hooks/immutability) — نفس النتيجة
+  const bars = steps.reduce<Array<{ label: string; v: number; total?: boolean; start: number; end: number }>>(
+    (acc, s) => {
+      const prevEnd = acc.length ? acc[acc.length - 1].end : 0
+      const start = s.total ? 0 : prevEnd
+      const end = s.total ? s.v : prevEnd + s.v
+      acc.push({ ...s, start, end })
+      return acc
+    },
+    [],
+  )
   const all = bars.flatMap((b) => [b.start, b.end])
   const lo = Math.min(0, ...all)
   const hi = Math.max(0, ...all)

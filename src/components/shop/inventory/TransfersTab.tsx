@@ -210,7 +210,7 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
     if (!from && userBranchId) {
       setFrom(String(userBranchId))
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [userBranchId, from])
 
   const eligibleProducts = React.useMemo(() => {
@@ -223,7 +223,7 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
     const out: Record<number, number> = {}
     if (matrix) for (const i of items) if (i.productId === matrix.product.id && i.variantId) out[i.variantId] = i.quantity
     return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [matrix])
 
   const addItem = async () => {

@@ -164,7 +164,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
     if (!branchId && userBranchId) {
       setBranchId(String(userBranchId))
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [userBranchId, branchId])
 
   React.useEffect(() => {
@@ -284,7 +284,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
     const out: Record<number, number> = {}
     if (matrix) for (const i of items) if (i.productId === matrix.product.id && i.variantId) out[i.variantId] = i.countedQty
     return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [matrix])
 
   const setCounted = (key: string, qty: number) => {

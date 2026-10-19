@@ -194,7 +194,7 @@ export function SalesHistoryView() {
 
   React.useEffect(() => {
     load(from, to)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   // 🛡️ تحديث لحظي — راجع data-events.ts

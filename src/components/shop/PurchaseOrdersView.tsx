@@ -235,7 +235,7 @@ export function PurchaseOrdersView() {
 
   React.useEffect(() => {
     load('', '')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   useDataRefresh(['purchase-orders'], () => load(from, to))

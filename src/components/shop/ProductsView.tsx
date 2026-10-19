@@ -296,7 +296,7 @@ export function ProductsView() {
         setDialogOpen(true)
       }
     } catch { /* ignore */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
   const openEdit = (p: Product) => {
     setInitial({

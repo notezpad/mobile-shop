@@ -62,6 +62,25 @@ function variantLabelOf(v: PickerVariant): string {
   return [v.size, v.color].filter(Boolean).join(' / ') || `#${v.id}`
 }
 
+/** 🛡️ 2026-10-19: Pill اترفعت لمستوى الموديول — كانت بتيتعرف جوه الـcomponent
+ * في كل رندر (قاعدة react-hooks/static-components) وبتخلي الأزرار تعمل remount */
+function Pill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'inline-flex h-10 items-center whitespace-nowrap rounded-xl border px-4 text-sm font-bold transition-colors',
+        INK_RING,
+        active ? 'border-foreground bg-foreground text-background' : 'bg-background hover:bg-muted'
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
 export function POSItemPickerDialog({ open, onOpenChange, product, onConfirm }: Props) {
   const [loading, setLoading] = React.useState(false)
   const [units, setUnits] = React.useState<PickerUnit[]>([])
@@ -160,21 +179,6 @@ export function POSItemPickerDialog({ open, onOpenChange, product, onConfirm }: 
     })
     onOpenChange(false)
   }
-
-  const Pill = ({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        'inline-flex h-10 items-center whitespace-nowrap rounded-xl border px-4 text-sm font-bold transition-colors',
-        INK_RING,
-        active ? 'border-foreground bg-foreground text-background' : 'bg-background hover:bg-muted'
-      )}
-    >
-      {children}
-    </button>
-  )
 
   const showVariants = !isAssortment && variants.length > 0
 

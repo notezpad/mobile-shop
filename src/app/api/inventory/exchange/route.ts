@@ -4,7 +4,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { round2 } from '@/lib/purchase-return'
-import { namesOfProductsWithVariants, variantGuardMessage } from '@/lib/variant-guard'
+import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,12 +27,27 @@ export const dynamic = 'force-dynamic'
  * من/إلى الخزنة (ده دور مرتجع الشراء الموجود بالفعل).
  *
  * القيمة بتتحسب بسعر التكلفة الحالي (المتوسط المرجح) للصنفين.
+ *
+ * 🎨 2026-10-19: دعم الألوان/المقاسات — نفس نمط مرتجع المورد (purchase-return):
+ *   - السطر على منتج له مقاسات لازم يجي بـ variantId تابع للمنتج نفسه
+ *     (الرفض السيرفري يمنع أي سطر من غير مقاس — نفس درس خسارة الـ 100).
+ *   - الخروج/الدخول بيحصل على الـ variant نفسه بـ UPDATE ذري مشروط
+ *     (quantity gte qty للخروج — المخزون ماينزلش تحت الصفر مهما حصل)،
+ *     وكمية المنتج بتتزامن من مجموع المقاسات (syncProductQuantityFromVariants)
+ *     بدل أي تعديل مباشر على Product.quantity — عشان أول مزامنة ماتمسحش الحركة.
+ *   - التكلفة من مستوى المنتج (المتوسط المرجح) — الـ variant ملوش تكلفة لوحده.
  */
 
 interface ExchangeLine {
   productId: number
+  /** 🎨 للمنتجات ذات الألوان/المقاسات — إجباري وساعتها، وممنوع للمنتجات البسيطة */
+  variantId: number | null
   quantity: number
 }
+
+/** تسمية اللون/المقاس لعرضها في الرسائل وحركات المخزون */
+const variantLabel = (v: { color: string | null; size: string | null } | null | undefined) =>
+  v ? [v.color, v.size].filter(Boolean).join(' / ') : ''
 
 export async function POST(req: NextRequest) {
   return withIdempotency(req, () => __POST(req))
@@ -58,16 +73,26 @@ async function __POST(req: NextRequest) {
     return NextResponse.json({ error: 'اكتب سبب الاستبدال (إجباري)' }, { status: 400 })
   }
 
-  // تحويل الأسطر والتحقق الأساسي
+  // تحويل الأسطر والتحقق الأساسي (مع دمج المكرر product+variant)
   const parseLines = (raw: any): ExchangeLine[] => {
     if (!Array.isArray(raw)) return []
-    return raw
+    const merged = new Map<string, ExchangeLine>()
+    for (const l of raw) {
+      const productId = parseInt(l?.productId, 10)
+      const rawVariant = l?.variantId
+      const variantId = rawVariant === null || rawVariant === undefined || rawVariant === ''
+        ? null
+        : parseInt(rawVariant, 10)
       // 🥬 2026-10-12: الكمية Float — استبدال بالوزن (مرتجع 1.5 كيلو وبديل 1.2)
-      .map((l: any) => ({
-        productId: parseInt(l?.productId, 10),
-        quantity: Math.round((Number(l?.quantity) || 0) * 1000) / 1000,
-      }))
-      .filter((l: ExchangeLine) => Number.isInteger(l.productId) && l.quantity > 0)
+      const quantity = Math.round((Number(l?.quantity) || 0) * 1000) / 1000
+      if (!Number.isInteger(productId) || quantity <= 0) continue
+      if (rawVariant !== null && rawVariant !== undefined && rawVariant !== '' && !Number.isInteger(variantId)) continue
+      const key = `${productId}:${variantId ?? 0}`
+      const prev = merged.get(key)
+      if (prev) prev.quantity = Math.round((prev.quantity + quantity) * 1000) / 1000
+      else merged.set(key, { productId, variantId, quantity })
+    }
+    return [...merged.values()]
   }
   const outLines = parseLines(b?.lines) // البضاعة الراجعة للمورد
   const inLines = parseLines(b?.replacements) // البضاعة البديلة
@@ -101,24 +126,59 @@ async function __POST(req: NextRequest) {
     }
   }
 
-  // 🎨 الاستبدال بيعدّل Product.quantity مباشرة — ممنوع على منتج له مقاسات/ألوان
-  {
-    const vNames = await namesOfProductsWithVariants(db, allIds)
-    if (vNames.length) return NextResponse.json({ error: variantGuardMessage(vNames, 'الاستبدال مع المورد') }, { status: 400 })
+  // 🎨 التحقق من المقاسات: منتج له مقاسات → السطر لازم يجي بمقاس تابع له،
+  // ومنتج بسيط → ممنوع يجي بمقاس. (نفس الرفض السيرفري اللي في الشراء)
+  const variantIds = [...new Set(
+    [...outLines, ...inLines].map((l) => l.variantId).filter((v): v is number => v != null),
+  )]
+  const variants = variantIds.length
+    ? await db.productVariant.findMany({ where: { id: { in: variantIds } } })
+    : []
+  const variantMap = new Map(variants.map((v) => [v.id, v]))
+
+  for (const l of [...outLines, ...inLines]) {
+    const p = productMap.get(l.productId)!
+    const v = l.variantId != null ? variantMap.get(l.variantId) : null
+    if (l.variantId != null) {
+      if (!v || v.productId !== l.productId) {
+        return NextResponse.json(
+          { error: `المقاس المحدد غير صالح للصنف "${p.name}" — اختار اللون/المقاس من القائمة` },
+          { status: 400 },
+        )
+      }
+    } else {
+      const hasVariants = await db.productVariant.count({ where: { productId: p.id } })
+      if (hasVariants > 0) {
+        return NextResponse.json(
+          { error: `الصنف "${p.name}" له ألوان ومقاسات — لازم تحدد اللون/المقاس لكل سطر عشان الكمية ما تتمسحش` },
+          { status: 400 },
+        )
+      }
+    }
   }
 
   // فحص توفر الكميات الخارجة (فحص مبدئي للرسالة اللطيفة — الفحص الذري جوه الـ tx)
   for (const l of outLines) {
-    const p = productMap.get(l.productId)!
-    if (p.quantity < l.quantity) {
-      return NextResponse.json(
-        { error: `الكمية غير متوفرة من "${p.name}" (المتاح: ${p.quantity})` },
-        { status: 400 },
-      )
+    if (l.variantId != null) {
+      const v = variantMap.get(l.variantId)!
+      if (v.quantity < l.quantity) {
+        return NextResponse.json(
+          { error: `الكمية غير متوفرة من "${productMap.get(l.productId)!.name}" (${variantLabel(v)}) — المتاح: ${v.quantity}` },
+          { status: 400 },
+        )
+      }
+    } else {
+      const p = productMap.get(l.productId)!
+      if (p.quantity < l.quantity) {
+        return NextResponse.json(
+          { error: `الكمية غير متوفرة من "${p.name}" (المتاح: ${p.quantity})` },
+          { status: 400 },
+        )
+      }
     }
   }
 
-  // قيم التكلفة الحالية (المتوسط المرجح)
+  // قيم التكلفة الحالية (المتوسط المرجح — من مستوى المنتج)
   const costOf = (pid: number) => Math.max(0, productMap.get(pid)?.cost ?? 0)
   const nameOf = (pid: number) => productMap.get(pid)?.name ?? `#${pid}`
   const valueOut = round2(outLines.reduce((sum, l) => sum + costOf(l.productId) * l.quantity, 0))
@@ -129,23 +189,42 @@ async function __POST(req: NextRequest) {
     const result = await db.$transaction(async (tx) => {
       // ── 1. الصادر: البضاعة الراجعة للمورد (خروج ذري مشروط بالتوفر)
       for (const l of outLines) {
-        const upd = await tx.product.updateMany({
-          where: { id: l.productId, tenantId: s.tenantId, quantity: { gte: l.quantity } },
-          data: { quantity: { decrement: l.quantity } },
-        })
-        if (upd.count !== 1) {
-          throw new Error(`INSUFFICIENT_STOCK:${l.productId}`)
+        if (l.variantId != null) {
+          // 🎨 الخروج من المقاس نفسه بـ UPDATE ذري مشروط — لو حد باع/سحب من
+          // نفس المقاس في نفس اللحظة العملية كلها بترجع للوراء.
+          const vOut = await tx.productVariant.updateMany({
+            where: { id: l.variantId, productId: l.productId, quantity: { gte: l.quantity } },
+            data: { quantity: { decrement: l.quantity } },
+          })
+          if (vOut.count !== 1) {
+            throw new Error(`INSUFFICIENT_VARIANT_STOCK:${l.variantId}`)
+          }
+          // كمية المنتج بتتزامن دايماً من مجموع المقاسات — مفيش أي تعديل مباشر
+          await syncProductQuantityFromVariants(tx, l.productId)
+        } else {
+          const upd = await tx.product.updateMany({
+            where: { id: l.productId, tenantId: s.tenantId, quantity: { gte: l.quantity } },
+            data: { quantity: { decrement: l.quantity } },
+          })
+          if (upd.count !== 1) {
+            throw new Error(`INSUFFICIENT_STOCK:${l.productId}`)
+          }
         }
+        const v = l.variantId != null ? variantMap.get(l.variantId) : null
+        const lineName = v
+          ? `${nameOf(l.productId)} (${variantLabel(v)})`
+          : nameOf(l.productId)
         await tx.stockMovement.create({
           data: {
             tenantId: s.tenantId,
             branchId: productMap.get(l.productId)?.branchId ?? (s.branchId ?? null),
             productId: l.productId,
+            variantId: l.variantId,
             type: 'out',
             quantity: -l.quantity,
             refType: 'supplier_exchange',
             refId: supplierId,
-            note: `استبدال مع مورد ${supplier.name} — ${nameOf(l.productId)} × ${l.quantity} — ${reason}`,
+            note: `استبدال مع مورد ${supplier.name} — ${lineName} × ${l.quantity} — ${reason}`,
             userId: s.userId,
           },
         })
@@ -153,20 +232,36 @@ async function __POST(req: NextRequest) {
 
       // ── 2. الوارد: البضاعة البديلة (دخول — التكلفة متتغيرش: مقايضة مش شراء جديد)
       for (const l of inLines) {
-        await tx.product.update({
-          where: { id: l.productId },
-          data: { quantity: { increment: l.quantity } },
-        })
+        if (l.variantId != null) {
+          const vIn = await tx.productVariant.updateMany({
+            where: { id: l.variantId, productId: l.productId },
+            data: { quantity: { increment: l.quantity } },
+          })
+          if (vIn.count !== 1) {
+            throw new Error(`INSUFFICIENT_VARIANT_STOCK:${l.variantId}`)
+          }
+          await syncProductQuantityFromVariants(tx, l.productId)
+        } else {
+          await tx.product.update({
+            where: { id: l.productId },
+            data: { quantity: { increment: l.quantity } },
+          })
+        }
+        const v = l.variantId != null ? variantMap.get(l.variantId) : null
+        const lineName = v
+          ? `${nameOf(l.productId)} (${variantLabel(v)})`
+          : nameOf(l.productId)
         await tx.stockMovement.create({
           data: {
             tenantId: s.tenantId,
             branchId: productMap.get(l.productId)?.branchId ?? (s.branchId ?? null),
             productId: l.productId,
+            variantId: l.variantId,
             type: 'in',
             quantity: l.quantity,
             refType: 'supplier_exchange',
             refId: supplierId,
-            note: `بديل من مورد ${supplier.name} — ${nameOf(l.productId)} × ${l.quantity} — ${reason}`,
+            note: `بديل من مورد ${supplier.name} — ${lineName} × ${l.quantity} — ${reason}`,
             userId: s.userId,
           },
         })
@@ -201,6 +296,16 @@ async function __POST(req: NextRequest) {
     })
   } catch (e: any) {
     if (e instanceof Error && e.message.startsWith('INSUFFICIENT_STOCK')) {
+      // رسالة مفصلة حسب نوع الفشل (منتج بسيط أم مقاس معين)
+      if (e.message.startsWith('INSUFFICIENT_VARIANT_STOCK:')) {
+        const vid = parseInt(e.message.split(':')[1] || '0', 10)
+        const v = variantMap.get(vid)
+        const vn = v ? `${productMap.get(v.productId)?.name ?? ''} (${variantLabel(v)})` : 'اللون/المقاس'
+        return NextResponse.json(
+          { error: `الكمية غير متوفرة من "${vn}" — حدّث الصفحة وحاول تاني` },
+          { status: 409 },
+        )
+      }
       return NextResponse.json(
         { error: 'كمية من البضاعة الراجعة باعت أثناء العملية — حدّث الصفحة وحاول تاني' },
         { status: 409 },

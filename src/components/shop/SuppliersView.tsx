@@ -265,7 +265,7 @@ export function SuppliersView() {
       clear: { n: suppliers.filter((c) => c.balance === 0).length, sum: null },
       credit: { n: suppliers.filter((c) => c.balance < 0).length, sum: sum((c) => c.balance < 0) },
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [suppliers])
   const actCounts = React.useMemo(
     () => ({
@@ -274,7 +274,7 @@ export function SuppliersView() {
       never: suppliers.filter((c) => matchActivity(c, 'never')).length,
       nophone: suppliers.filter((c) => matchActivity(c, 'nophone')).length,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     [suppliers]
   )
 
@@ -299,7 +299,7 @@ export function SuppliersView() {
       })
     }
     return rows
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [suppliers, status, activity, sort])
 
   // خطة السداد — «معايا كام؟» نسدّد الأقدم الأول ونقفل حسابات كاملة بقدر الميزانية (عرض فقط)

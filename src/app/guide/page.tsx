@@ -100,7 +100,7 @@ function Shot({ src, cap, alt }: { src: string; cap?: string; alt: string }) {
         <i />
         <span>Nezam POS — نظام المحل</span>
       </div>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
+      { }
       <img src={src} alt={alt} loading="lazy" decoding="async" />
       {cap ? <figcaption className="gd-shot-cap">{cap}</figcaption> : null}
     </figure>
