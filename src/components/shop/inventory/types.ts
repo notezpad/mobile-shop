@@ -40,6 +40,9 @@ export interface Movement {
   product: { name: string; barcode: string | null }
   branch: { name: string } | null
   userName?: string | null
+  /** 📋 حركة يدوية من موظف لسه ماتراجعتش من المدير */
+  needsReview?: boolean
+  reasonCode?: string | null
 }
 
 export interface Transfer {

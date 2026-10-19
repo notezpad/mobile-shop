@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
+import { toast } from 'sonner'
 import type { Branch, Movement } from '../InventoryView'
 import {
   ACCENT,
@@ -51,6 +52,8 @@ export type MovementMeta = {
   total: number
   inTotal: number
   outTotal: number
+  /** عدد حركات الموظفين اللي لسه ماتراجعتش (للمدير) */
+  reviewCount?: number
   series: Array<{ label?: string; date?: string; in?: number; out?: number } & Record<string, unknown>>
 }
 
@@ -105,10 +108,14 @@ function periodRange(p: Period): { from: string; to: string } {
   return { from: toISODate(new Date(now.getFullYear(), now.getMonth(), 1)), to }
 }
 
-export function MovementsTab({ movements, meta: _meta, branches, isEmployee, userBranchId: _userBranchId, onChanged: _onChanged }: Props) {
+export function MovementsTab({ movements, meta, branches, isEmployee, userBranchId: _userBranchId, onChanged: _onChanged }: Props) {
   const [search, setSearch] = React.useState('')
   const [branchFilter, setBranchFilter] = React.useState<string>('all')
   const [typeFilter, setTypeFilter] = React.useState<string>('all')
+  // 📋 «تحتاج مراجعة»: حركات الموظفين اليدوية اللي المدير لسه ماراجعهاش
+  const [reviewOnly, setReviewOnly] = React.useState(false)
+  const [reviewedIds, setReviewedIds] = React.useState<Set<number>>(new Set())
+  const [reviewBusy, setReviewBusy] = React.useState(false)
   const [from, setFrom] = React.useState('')
   const [to, setTo] = React.useState('')
 
@@ -121,7 +128,7 @@ export function MovementsTab({ movements, meta: _meta, branches, isEmployee, use
   // عند تغيير أي فلتر (القائمة بتفضل ثابتة كأن الفلتر ميت). بنفك الظرف بنفسنا
   // الآن (مصفوفة عارية أو ظرف فيه data) — وبيعمل كمان طلب مكرر لنفس رابط
   // تحميل الصفحة أول ما تفتح؛ دلوقتي الطلب المفلتر بيحصل فقط مع فلاتر فعلية.
-  const hasActiveFilters = !!(search.trim() || branchFilter !== 'all' || typeFilter !== 'all' || from || to)
+  const hasActiveFilters = !!(search.trim() || branchFilter !== 'all' || typeFilter !== 'all' || from || to || reviewOnly)
 
   // مفيش فلاتر؟ القائمة = نتيجة تحميل الصفحة نفسها (بدون طلب شبكة مكرر)
   React.useEffect(() => {
@@ -134,6 +141,7 @@ export function MovementsTab({ movements, meta: _meta, branches, isEmployee, use
     const params = new URLSearchParams()
     if (branchFilter !== 'all') params.set('branchId', branchFilter)
     if (typeFilter !== 'all') params.set('type', typeFilter)
+    if (reviewOnly) params.set('review', '1')
     if (from) params.set('from', from)
     if (to) params.set('to', to)
     if (search.trim()) params.set('q', search.trim())
@@ -154,9 +162,32 @@ export function MovementsTab({ movements, meta: _meta, branches, isEmployee, use
       } catch {}
     }, 250)
     return () => { alive = false; clearTimeout(t) }
-  }, [branchFilter, typeFilter, from, to, search, hasActiveFilters])
+  }, [branchFilter, typeFilter, from, to, search, hasActiveFilters, reviewOnly])
 
   const filtered = liveMovements
+
+  // المدير بس: تأكيد مراجعة حركة (أو كل اللي معروض)
+  const markReviewed = async (ids: number[] | 'all') => {
+    setReviewBusy(true)
+    try {
+      await api('/api/inventory/movements', {
+        method: 'PATCH',
+        body: ids === 'all' ? { all: true } : { ids },
+      })
+      setReviewedIds((prev) => {
+        const next = new Set(prev)
+        if (ids === 'all') filtered.forEach((m) => next.add(m.id))
+        else ids.forEach((i) => next.add(i))
+        return next
+      })
+      if (reviewOnly) setLiveMovements((prev) => prev.filter((m) => ids === 'all' ? false : !ids.includes(m.id)))
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذّر تأكيد المراجعة')
+    } finally {
+      setReviewBusy(false)
+    }
+  }
+  const pendingReview = Math.max(0, (meta?.reviewCount ?? 0) - reviewedIds.size)
 
   const summary = React.useMemo(() => {
     let inTotal = 0, outTotal = 0
@@ -205,9 +236,9 @@ export function MovementsTab({ movements, meta: _meta, branches, isEmployee, use
     setTo(r.to)
   }
   const clearFilters = () => {
-    setSearch(''); setBranchFilter('all'); setTypeFilter('all'); setFrom(''); setTo('')
+    setSearch(''); setBranchFilter('all'); setTypeFilter('all'); setFrom(''); setTo(''); setReviewOnly(false)
   }
-  const hasFilters = !!(search || branchFilter !== 'all' || typeFilter !== 'all' || from || to)
+  const hasFilters = !!(search || branchFilter !== 'all' || typeFilter !== 'all' || from || to || reviewOnly)
 
   const flowTotal = summary.inTotal + summary.outTotal
   const inHalf = flowTotal ? (summary.inTotal / flowTotal) * 50 : 0
@@ -360,9 +391,25 @@ export function MovementsTab({ movements, meta: _meta, branches, isEmployee, use
           )}
         </div>
 
+        {!isEmployee && reviewOnly && filtered.length > 0 && (
+          <div className="flex items-center justify-between rounded-xl bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-900 dark:text-amber-200">
+            <span>حركات يدوية عملها موظفين — راجعها وأكّد.</span>
+            <Button size="sm" variant="outline" disabled={reviewBusy} onClick={() => void markReviewed('all')}>
+              تمت مراجعة الكل
+            </Button>
+          </div>
+        )}
+
         {/* نوع الحركة — شريط أيقونات قابل للتمرير */}
         <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
           <TypeButton active={typeFilter === 'all'} onClick={() => setTypeFilter('all')} label="كل الأنواع" />
+          {!isEmployee && (
+            <TypeButton
+              active={reviewOnly}
+              onClick={() => setReviewOnly((v) => !v)}
+              label={pendingReview > 0 ? `تحتاج مراجعة (${pendingReview})` : 'تحتاج مراجعة'}
+            />
+          )}
           {Object.keys(TYPE_LABELS).map((k) => (
             <TypeButton
               key={k}
@@ -429,6 +476,21 @@ export function MovementsTab({ movements, meta: _meta, branches, isEmployee, use
                             </span>
                           </div>
                           {m.note && <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{m.note}</p>}
+                          {m.needsReview && !reviewedIds.has(m.id) && (
+                            <p className="mt-1 flex items-center gap-2 text-xs font-bold text-amber-700 dark:text-amber-300">
+                              <span className="rounded-md bg-amber-500/15 px-2 py-0.5">حركة موظف تحتاج مراجعة</span>
+                              {!isEmployee && (
+                                <button
+                                  type="button"
+                                  disabled={reviewBusy}
+                                  onClick={() => void markReviewed([m.id])}
+                                  className="rounded-md border border-amber-600/40 px-2 py-0.5 hover:bg-amber-500/10 disabled:opacity-50"
+                                >
+                                  تمت المراجعة
+                                </button>
+                              )}
+                            </p>
+                          )}
                           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                             <span className="tabular-nums" title={fullDateLabel(m.createdAt)}>{timeLabel(m.createdAt)}</span>
                             {m.branch?.name && (

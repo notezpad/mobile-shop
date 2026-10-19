@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
@@ -6,6 +7,7 @@ import { getTenantTimezone, localDateStrToUtcBounds, startOfDayInTz } from '@/li
 import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 import { withSql, type Sql } from '@/lib/sql'
 import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
+import { evaluateManualMovement, splitReasonNote, type ManualMoveType } from '@/lib/stock-policy'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +42,8 @@ async function __GET(req: NextRequest, sql: Sql) {
   const from = searchParams.get('from')
   const to = searchParams.get('to')
   const q = searchParams.get('q')?.trim() || ''
+  // 📋 2026-10-18: «تحتاج مراجعة» — حركات الموظفين اليدوية اللي المدير لسه ماراجعهاش
+  const reviewOnly = searchParams.get('review') === '1'
 
   // ⚡ v10 (2026-10-06) — جزء من إصلاح Error 1102: 50 صف/صفحة والإجماليات
   // ومنحنى 14 يوم بيتحسبوا جوه PostgreSQL — الـ Worker بيستقبل أرقام صغيرة بس.
@@ -57,6 +61,7 @@ async function __GET(req: NextRequest, sql: Sql) {
   }
   if (productId) whereParts.push(sql` AND sm."productId" = ${parseInt(productId, 10)}`)
   if (type && type !== 'all') whereParts.push(sql` AND sm."type" = ${type}`)
+  if (reviewOnly) whereParts.push(sql` AND sm."needsReview" = true`)
   const tz = await getTenantTimezone(s.tenantId)
   if (from) whereParts.push(sql` AND sm."createdAt" >= ${localDateStrToUtcBounds(from, 'start', tz)}`)
   if (to) whereParts.push(sql` AND sm."createdAt" <= ${localDateStrToUtcBounds(to, 'end', tz)}`)
@@ -73,7 +78,7 @@ async function __GET(req: NextRequest, sql: Sql) {
   const filterParts: string[] = [`branch=${s.branchId ?? 0}`]
   for (const [k, v] of [
     ['branchId', branchId ?? ''], ['productId', productId ?? ''], ['type', type ?? ''],
-    ['from', from ?? ''], ['to', to ?? ''], ['q', q],
+    ['from', from ?? ''], ['to', to ?? ''], ['q', q], ['review', reviewOnly ? '1' : ''],
     ['page', String(page)], ['limit', String(limit)],
   ] as const) {
     if (v) filterParts.push(`${k}=${v}`)
@@ -99,6 +104,7 @@ async function __GET(req: NextRequest, sql: Sql) {
             'productId', sm."productId", 'variantId', sm."variantId", 'type', sm."type",
             'quantity', sm."quantity",
             'refType', sm."refType", 'refId', sm."refId", 'note', sm."note",
+            'reasonCode', sm."reasonCode", 'needsReview', sm."needsReview",
             'userId', sm."userId",
             'createdAt', to_char(sm."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
             'product', CASE WHEN p."id" IS NULL THEN NULL
@@ -126,6 +132,10 @@ async function __GET(req: NextRequest, sql: Sql) {
       'totalPages', GREATEST(1, CEIL(t.cnt::float8 / ${limit}::float8)::int),
       'inTotal', (SELECT COALESCE(SUM(sm."quantity"), 0)::float8 FROM "StockMovement" sm WHERE ${whereParts} AND sm."quantity" > 0),
       'outTotal', (SELECT COALESCE(ABS(SUM(sm."quantity")), 0)::float8 FROM "StockMovement" sm WHERE ${whereParts} AND sm."quantity" < 0),
+      -- عدد حركات الموظفين اللي لسه محتاجة مراجعة (بغض النظر عن باقي الفلاتر)
+      'reviewCount', (SELECT COUNT(*)::int FROM "StockMovement" r
+                      WHERE r."tenantId" = ${s.tenantId} AND r."needsReview" = true
+                      ${s.branchId ? sql`AND r."branchId" = ${s.branchId}` : sql``}),
       'series', COALESCE((
         SELECT json_agg(json_build_object('date', d.d, 'inn', COALESCE(a.inn, 0), 'out', COALESCE(a.out, 0)) ORDER BY d.d)
         FROM (
@@ -183,21 +193,40 @@ async function __POST(req: NextRequest) {
   }
   if (!productId || !qty) return NextResponse.json({ error: 'المنتج والكمية مطلوبان' }, { status: 400 })
 
-  // 🛡️ 2026-09-30: السبب إجباري على أي حركة صادرة (صرف / تعديل سالب / هالك) —
-  // قبل كده الملاحظة كانت اختيارية فبتتسجل حركات خصم من غير أي تفسير،
-  // ومحدش بيعرف بعدين إيه اللي حصل. الحركة الواردة السبب فيها اختياري.
-  const note = b?.note ? String(b.note).trim() : ''
-  if (type !== 'in' && note.length < 3) {
-    return NextResponse.json(
-      { error: 'اكتب سبب الحركة (إجباري للحركة الصادرة / الهالك)' },
-      { status: 400 },
-    )
+  // 📋 2026-10-18: السبب بقى كود محدد (STOCK_POLICY) — العميل الجديد بيبعت reason + note
+  // منفصلين، والعملاء القدام بيبعتوا «السبب — الملاحظة» في note واحدة فبنفكّها.
+  const rawReason = b?.reason ? String(b.reason).trim() : ''
+  const rawNote = b?.note ? String(b.note).trim() : ''
+  let reason = rawReason
+  let extraNote = rawNote
+  if (!reason) {
+    const sp = splitReasonNote(rawNote)
+    reason = sp.reason
+    extraNote = sp.extra
+  }
+  // الملاحظة المخزّنة: «السبب — توضيح»
+  const note = [reason, extraNote].filter(Boolean).join(' — ')
+  if (type === 'damage' && note.length < 3) {
+    return NextResponse.json({ error: 'اكتب سبب الهالك' }, { status: 400 })
   }
 
   const product = await db.product.findUnique({ where: { id: productId } })
   if (!product || product.tenantId !== s.tenantId) return NextResponse.json({ error: 'منتج غير صالح' }, { status: 400 })
   if (s.branchId && product.branchId && product.branchId !== s.branchId) {
     return NextResponse.json({ error: 'لا صلاحية على منتجات فرع آخر' }, { status: 403 })
+  }
+
+  // 📋 سياسة الحركات اليدوية: سبب مسموح؟ حد الموظف؟ خسارة؟ محتاجة مراجعة؟
+  const policy = evaluateManualMovement({
+    type: type as ManualMoveType,
+    reason,
+    extraNote,
+    qty: Math.abs(qty),
+    unitCost: product.cost,
+    role: s.role,
+  })
+  if (!policy.ok) {
+    return NextResponse.json({ error: policy.error, redirect: policy.redirect ?? null }, { status: policy.status })
   }
 
   // 🎨 2026-10-18: المنتج اللي له ألوان/مقاسات — أي حركة مخزون لازم تتحدد على
@@ -247,8 +276,9 @@ async function __POST(req: NextRequest) {
   // 🛡️ 2026-09-30: قيمة الهالك = الكمية × التكلفة الحالية (المتوسط المرجح).
   // بتتسجل كمصروف "هالك وتالف" يوصل صافي الربح — من غير قيد خزنة،
   // لأن مفيش فلوس خرجت من الخزنة (الخسارة في البضاعة نفسها).
+  // 📋 2026-10-18: الخسارة بتتسجل لكل سبب سياسته «loss» (هالك + هدايا/عينات صادرة)
   const lossValue =
-    type === 'damage' ? Math.round(Math.abs(delta) * Math.max(0, product.cost) * 100) / 100 : 0
+    policy.recordLoss ? Math.round(Math.abs(delta) * Math.max(0, product.cost) * 100) / 100 : 0
 
   try {
     const result = await db.$transaction(async (tx) => {
@@ -274,22 +304,22 @@ async function __POST(req: NextRequest) {
         await tx.product.update({ where: { id: productId }, data: { quantity: { increment: delta } } })
       }
 
-      // الهالك أولاً: مصروف الخسارة عشان نربط الحركة بيه (refId)
-      let damageExpenseId: number | null = null
-      if (type === 'damage') {
+      // الخسارة أولاً: مصروف غير نقدي عشان نربط الحركة بيه (refId)
+      let lossExpenseId: number | null = null
+      if (policy.recordLoss && (type === 'damage' || lossValue > 0)) {
         const exp = await tx.expense.create({
           data: {
             tenantId: s.tenantId,
             branchId: product.branchId ?? (s.branchId ?? null),
-            category: 'هالك وتالف',
+            category: policy.lossCategory ?? 'هالك وتالف',
             amount: lossValue,
-            note: `هالك: ${product.name}${variantLabel ? ` (${variantLabel})` : ''} × ${Math.abs(delta)} — ${note}`,
+            note: `${type === 'damage' ? 'هالك' : reason}: ${product.name}${variantLabel ? ` (${variantLabel})` : ''} × ${Math.abs(delta)}${extraNote ? ` — ${extraNote}` : ''}`,
             userId: s.userId,
             // source يمنع حذفه من شاشة المصروفات (الحذف بيرجّع فلوس للخزنة غلط)
             source: 'damage',
           },
         })
-        damageExpenseId = exp.id
+        lossExpenseId = exp.id
       }
 
       const movement = await tx.stockMovement.create({
@@ -300,8 +330,11 @@ async function __POST(req: NextRequest) {
           variantId: variant?.id ?? null,
           type,
           quantity: delta,
-          refType: type === 'damage' ? 'damage' : 'manual',
-          refId: damageExpenseId ?? undefined,
+          refType: type === 'damage' ? 'damage' : lossExpenseId ? 'gift' : 'manual',
+          refId: lossExpenseId ?? undefined,
+          reasonCode: policy.reasonCode,
+          // حركة موظف يدوية → تظهر للمدير للمراجعة
+          needsReview: policy.needsReview,
           // اللون/المقاس بيظهر في اسم المنتج في سجل الحركات — مش محتاجينه في الملاحظة تاني
           note: note || null,
           userId: s.userId,
@@ -328,10 +361,10 @@ async function __POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      ...(type === 'damage'
+      ...(policy.recordLoss
         ? {
             lossValue: result.lossValue,
-            message: `تم تسجيل الهالك وخسارة ${result.lossValue} في المصروفات`,
+            message: `تم تسجيل ${type === 'damage' ? 'الهالك' : reason} وخسارة ${result.lossValue} في المصروفات`,
           }
         : {}),
     })
@@ -343,9 +376,51 @@ async function __POST(req: NextRequest) {
   }
 }
 
+/**
+ * PATCH /api/inventory/movements — المدير بيأكّد مراجعة حركات الموظفين اليدوية.
+ * body: { ids: number[] } أو { all: true } (كل اللي محتاج مراجعة في المحل/الفرع).
+ */
+async function __PATCH(req: NextRequest) {
+  let s
+  try { s = await requireAdmin() } catch (e) {
+    const err = authErrorResponse(e); return NextResponse.json(err?.body, { status: err?.status })
+  }
+  try { await requireModule(s, 'inventory') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
+  }
+  const b = await req.json().catch(() => null)
+  const ids: number[] = Array.isArray(b?.ids) ? b.ids.map((x: any) => parseInt(x, 10)).filter((n: number) => !isNaN(n)) : []
+  if (!b?.all && ids.length === 0) return NextResponse.json({ error: 'حدّد الحركات' }, { status: 400 })
+
+  const r = await db.stockMovement.updateMany({
+    where: {
+      tenantId: s.tenantId,
+      needsReview: true,
+      ...(s.branchId ? { branchId: s.branchId } : {}),
+      ...(b?.all ? {} : { id: { in: ids } }),
+    },
+    data: { needsReview: false, reviewedAt: new Date(), reviewedBy: s.userId },
+  })
+  const b0 = `branch=${s.branchId ?? 0}`
+  await purgeEdgeCache(
+    [
+      { pathname: '/api/inventory/movements', rawQuery: `${b0}&page=1&limit=50` },
+      { pathname: '/api/inventory/movements', rawQuery: b0 },
+      { pathname: '/api/inventory/movements', rawQuery: `${b0}&review=1&page=1&limit=50` },
+      { pathname: '/api/inventory/movements', rawQuery: `${b0}&review=1` },
+    ],
+    s.tenantId,
+    '1'
+  )
+  return NextResponse.json({ ok: true, reviewed: r.count })
+}
+
 export async function GET(req: NextRequest) {
   return withSql((sql) => __GET(req, sql))
 }
+export async function PATCH(...args: Parameters<typeof __PATCH>) {
+  return withIdempotency(args[0] as NextRequest, () => withDb(() => __PATCH(...args)))
+}
 export async function POST(...args: Parameters<typeof __POST>) {
-  return withDb(() => __POST(...args))
+  return withIdempotency(args[0] as NextRequest, () => withDb(() => __POST(...args)))
 }

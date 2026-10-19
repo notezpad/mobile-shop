@@ -777,6 +777,11 @@ model StockMovement {
   productId Int?
   // 🎨 2026-10-18: الـ variant (لون/مقاس) اللي اتحرك مخزونه، null = المنتج نفسه
   variantId Int?
+  // 📋 2026-10-18: سياسة الحركات اليدوية — كود السبب + مراجعة المدير لحركات الموظفين
+  reasonCode  String?
+  needsReview Boolean   @default(false)
+  reviewedAt  DateTime?
+  reviewedBy  String?
   type      String // in | out | adjust | sale | return | transfer_in | transfer_out | stocktake
   // 🥬 2026-10-12: Float — حركات بالوزن (بيع 1.65 كيلو / جرد -0.5)
   quantity  Float // signed: + increases, - decreases

@@ -58,3 +58,61 @@ export async function applyStocktakeDiff(
     },
   })
 }
+
+/**
+ * 📉 2026-10-18 — عجز الجرد كخسارة.
+ *
+ * النقص اللي بيطلع من الجرد كان بيشيل الكمية بس ومابيتحسبش في الأرباح (نفس مشكلة
+ * «تالف» القديمة). دلوقتي بنحسب قيمته بسعر التكلفة ونسجّله مصروف غير نقدي (source
+ * 'damage' = مابيمسش الخزنة وممنوع حذفه) — الزيادة بتتسجل كمية بس ومابتتحسبش ربح.
+ */
+export interface ShrinkSummary {
+  /** عدد القطع الناقصة */
+  qty: number
+  /** القيمة بسعر التكلفة */
+  value: number
+}
+
+export async function computeStocktakeShrink(
+  db: Tx | import('@prisma/client').PrismaClient,
+  tenantId: string,
+  items: Array<{ productId: number | null; diff: number }>,
+): Promise<ShrinkSummary> {
+  const short = items.filter((i) => i.productId != null && i.diff < 0)
+  if (short.length === 0) return { qty: 0, value: 0 }
+  const ids = [...new Set(short.map((i) => i.productId as number))]
+  const costs = await db.product.findMany({
+    where: { id: { in: ids }, tenantId },
+    select: { id: true, cost: true },
+  })
+  const costOf = new Map(costs.map((c) => [c.id, Math.max(0, c.cost)]))
+  let qty = 0
+  let value = 0
+  for (const i of short) {
+    const n = Math.abs(i.diff)
+    qty += n
+    value += n * (costOf.get(i.productId as number) ?? 0)
+  }
+  return { qty: Math.round(qty * 1000) / 1000, value: Math.round(value * 100) / 100 }
+}
+
+export async function recordStocktakeShrinkLoss(
+  tx: Tx,
+  ctx: { tenantId: string; userId: string | null | undefined; branchId: number | null; stocktakeId: number },
+  shrink: ShrinkSummary,
+): Promise<number | null> {
+  if (shrink.value <= 0) return null
+  const exp = await tx.expense.create({
+    data: {
+      tenantId: ctx.tenantId,
+      branchId: ctx.branchId,
+      category: 'عجز جرد',
+      amount: shrink.value,
+      note: `عجز جرد #${ctx.stocktakeId}: ${shrink.qty} قطعة ناقصة`,
+      userId: ctx.userId,
+      // غير نقدي: مفيش فلوس خرجت من الخزنة (الخسارة في البضاعة) + ممنوع حذفه من المصروفات
+      source: 'damage',
+    },
+  })
+  return exp.id
+}

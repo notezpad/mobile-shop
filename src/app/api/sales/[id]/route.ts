@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
 import { createPrincipalCashEntry } from '@/lib/commission'
@@ -178,6 +179,7 @@ async function __DELETE(
             tenantId: session.tenantId,
             branchId: sale.branchId ?? null,
             productId: it.productId,
+            variantId: it.variantId, // 🎨 اللون/المقاس بيظهر في سجل الحركات
             type: 'return',
             quantity: restoreQty,
             refType: 'sale',
@@ -284,5 +286,5 @@ export async function GET(...args: Parameters<typeof __GET>) {
   return withDb(() => __GET(...args))
 }
 export async function DELETE(...args: Parameters<typeof __DELETE>) {
-  return withDb(() => __DELETE(...args))
+  return withIdempotency(args[0] as NextRequest, () => withDb(() => __DELETE(...args)))
 }

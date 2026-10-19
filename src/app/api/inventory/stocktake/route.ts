@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { withSql, type Sql } from '@/lib/sql'
 import { validateVariantLines } from '@/lib/transfer-stock'
-import { applyStocktakeDiff } from '@/lib/stocktake-stock'
+import { applyStocktakeDiff, computeStocktakeShrink, recordStocktakeShrinkLoss } from '@/lib/stocktake-stock'
+import { STOCK_POLICY } from '@/lib/stock-policy'
 
 export const dynamic = 'force-dynamic'
 
@@ -131,6 +133,26 @@ async function __POST(req: NextRequest) {
     : []
   const vQty = new Map<number, number>(variantRows.map((v) => [v.id, v.quantity]))
 
+  // 📉 عجز الجرد: بيتسجل خسارة (غير نقدية) افتراضياً — المدير يقدر يلغيها (recordLoss:false)،
+  // وفوق حد معيّن لازم ملاحظة توضّح السبب.
+  const recordLoss = b?.recordLoss !== false
+  let shrink = { qty: 0, value: 0 }
+  if (commit) {
+    shrink = await computeStocktakeShrink(
+      db, s.tenantId,
+      lines.map((l: { productId: number; variantId: number | null; counted: number }) => ({
+        productId: l.productId,
+        diff: l.counted - (l.variantId != null ? (vQty.get(l.variantId) ?? 0) : (pMap.get(l.productId)?.quantity ?? 0)),
+      })),
+    )
+    if (shrink.value >= STOCK_POLICY.stocktakeNoteThreshold && !(b?.note && String(b.note).trim().length >= 3)) {
+      return NextResponse.json(
+        { error: `عجز الجرد ${shrink.value} جنيه — اكتب ملاحظة توضّح السبب قبل الاعتماد` },
+        { status: 400 },
+      )
+    }
+  }
+
   const created = await db.$transaction(async (tx) => {
     const st = await tx.stocktake.create({
       data: {
@@ -168,6 +190,9 @@ async function __POST(req: NextRequest) {
           { productId: it.productId, variantId: it.variantId, diff: it.diff },
         )
       }
+      if (recordLoss) {
+        await recordStocktakeShrinkLoss(tx, { tenantId: s.tenantId, userId: s.userId, branchId, stocktakeId: st.id }, shrink)
+      }
     }
     return st
   })
@@ -180,7 +205,7 @@ export async function GET() {
   return withSql((sql) => __GETImpl(sql))
 }
 export async function POST(...args: Parameters<typeof __POST>) {
-  return withDb(async () => {
+  return withIdempotency(args[0] as NextRequest, () => withDb(async () => {
     try {
       return await __POST(...args)
     } catch (e) {
@@ -189,5 +214,5 @@ export async function POST(...args: Parameters<typeof __POST>) {
       }
       throw e
     }
-  })
+  }))
 }

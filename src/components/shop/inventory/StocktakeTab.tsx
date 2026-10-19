@@ -39,6 +39,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { STOCK_POLICY } from '@/lib/stock-policy'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
@@ -298,7 +299,52 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
     inputRef.current?.focus()
   }
 
-  const submit = async (commit: boolean) => {
+  // 📉 عجز الجرد (النقص بسعر التكلفة) — بيتعرض للمدير قبل الاعتماد وبيتسجل خسارة غير نقدية
+  const costById = React.useMemo(() => new Map(products.map((p) => [p.id, Math.max(0, p.cost ?? 0)])), [products])
+  const shrinkOf = (list: Array<{ productId: number | null; diff: number }>) => {
+    let qty = 0
+    let value = 0
+    for (const i of list) {
+      if (i.productId == null || i.diff >= 0) continue
+      qty += -i.diff
+      value += -i.diff * (costById.get(i.productId) ?? 0)
+    }
+    return { qty: Math.round(qty * 1000) / 1000, value: Math.round(value * 100) / 100 }
+  }
+  // طلب اعتماد: لو مفيش عجز يتعتمد مباشرة، وإلا نعرض ملخص العجز الأول
+  const [confirm, setConfirm] = React.useState<{ kind: 'form' | 'draft'; qty: number; value: number } | null>(null)
+  const [recordLoss, setRecordLoss] = React.useState(true)
+  const [confirmNote, setConfirmNote] = React.useState('')
+  const needNote = (v: number) => v >= STOCK_POLICY.stocktakeNoteThreshold
+
+  const commitDraft = async () => {
+    if (!viewing) return
+    setSaving(true)
+    try {
+      await api(`/api/inventory/stocktake/${viewing.id}`, {
+        method: 'POST',
+        body: { recordLoss, note: confirmNote.trim() || undefined },
+      })
+      toast.success('تم اعتماد الجرد')
+      setConfirm(null)
+      setViewing(null)
+      onChanged()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const requestCommit = () => {
+    if (items.length === 0) { toast.error('أضف أصنافاً للجرد'); return }
+    const sh = shrinkOf(items.map((i) => ({ productId: i.productId, diff: i.countedQty - i.systemQty })))
+    if (sh.value <= 0) { void submit(true, false); return }
+    setRecordLoss(true)
+    setConfirm({ kind: 'form', ...sh })
+  }
+
+  const submit = async (commit: boolean, loss = recordLoss) => {
     if (items.length === 0) { toast.error('أضف أصنافاً للجرد'); return }
     setSaving(true)
     try {
@@ -309,6 +355,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
           items: items.map((i) => ({ productId: i.productId, variantId: i.variantId ?? null, systemQty: i.systemQty, countedQty: i.countedQty })),
           note: note.trim() || null,
           commit,
+          recordLoss: loss,
         },
       })
       toast.success(commit ? 'تم اعتماد الجرد وتسوية الكميات' : 'تم حفظ الجرد كمسودة')
@@ -458,7 +505,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                 حفظ مسودة
               </Button>
-              <Button onClick={() => submit(true)} disabled={saving} className="bg-stocktake text-stocktake-foreground hover:bg-stocktake-strong">
+              <Button onClick={requestCommit} disabled={saving} className="bg-stocktake text-stocktake-foreground hover:bg-stocktake-strong">
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
                 اعتماد وتسوية
               </Button>
@@ -672,15 +719,80 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
         stockLabel="بالنظام"
       />
 
+      {/* 📉 ملخص عجز الجرد قبل الاعتماد */}
+      <Dialog open={confirm !== null} onOpenChange={(o: boolean) => { if (!o) setConfirm(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>اعتماد الجرد — في عجز</DialogTitle>
+            <DialogDescription>
+              العجز <b>{confirm?.qty}</b> قطعة بقيمة <b>{confirm?.value}</b> جنيه (بسعر التكلفة).
+            </DialogDescription>
+          </DialogHeader>
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm">
+            <input
+              type="checkbox"
+              checked={recordLoss}
+              onChange={(e) => setRecordLoss(e.target.checked)}
+              className="mt-1 size-4"
+            />
+            <span>
+              <b>سجّل العجز كخسارة في المصروفات</b>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                (الافتراضي) بيظهر في الأرباح ومابيمسش الخزنة. ألغيه لو العجز سببه خطأ عدّ.
+              </span>
+            </span>
+          </label>
+          {confirm && needNote(confirm.value) && (
+            <div>
+              <span className="mb-1 block text-xs font-bold">ملاحظة إجبارية (العجز كبير)</span>
+              <textarea
+                value={confirm.kind === 'form' ? note : confirmNote}
+                onChange={(e) => (confirm.kind === 'form' ? setNote(e.target.value) : setConfirmNote(e.target.value))}
+                rows={2}
+                className="w-full rounded-xl border bg-background p-2 text-sm"
+                placeholder="سبب العجز…"
+              />
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirm(null)}>إلغاء</Button>
+            <Button
+              disabled={
+                saving ||
+                (!!confirm && needNote(confirm.value) && (confirm.kind === 'form' ? note : confirmNote).trim().length < 3)
+              }
+              onClick={() => {
+                if (!confirm) return
+                if (confirm.kind === 'form') { setConfirm(null); void submit(true, recordLoss) }
+                else void commitDraft()
+              }}
+              className="bg-stocktake text-stocktake-foreground hover:bg-stocktake-strong"
+            >
+              اعتمد الجرد
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {viewing && (
         <StocktakeDetailDialog
           stocktake={viewing}
           open={!!viewing}
           onOpenChange={(o) => !o && setViewing(null)}
           onCommit={async () => {
+            // عجز؟ نعرض الملخص الأول (التأكيد الفعلي من نافذة التأكيد)
+            if (!confirm) {
+              const sh = shrinkOf(viewing.items.map((i) => ({ productId: i.productId, diff: i.diff })))
+              if (sh.value > 0) {
+                setRecordLoss(true)
+                setConfirmNote(viewing.note ?? '')
+                setConfirm({ kind: 'draft', ...sh })
+                return
+              }
+            }
             setSaving(true)
             try {
-              await api(`/api/inventory/stocktake/${viewing.id}`, { method: 'POST' })
+              await api(`/api/inventory/stocktake/${viewing.id}`, { method: 'POST', body: { recordLoss } })
               toast.success('تم اعتماد الجرد')
               setViewing(null)
               onChanged()

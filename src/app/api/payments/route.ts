@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { createPrincipalCashEntry } from '@/lib/commission'
 import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
+
+class SaleOverpaid extends Error {}
 
 const VALID_METHODS = new Set(['cash', 'vodafone_cash', 'instapay', 'fawry'])
 
@@ -175,7 +178,25 @@ async function __POST(req: NextRequest) {
   const methodName = METHOD_LABELS[method] || method
   const customerName = customer.name
 
-  const created = await db.$transaction(async (tx) => {
+  let created
+  try {
+  created = await db.$transaction(async (tx) => {
+    // 0. 🛡️ 2026-10-18: سقف الدفعة على الفاتورة بيتفحص *ذرياً* هنا — الفحص اللي فوق (remaining)
+    //    بيتعمل بره الـ transaction، فدفعتين متزامنتين (ضغطتين/إرسال تاني) كانوا بيعدّوه الاتنين
+    //    ويزوّدوا paid فوق إجمالي الفاتورة. حجز الدفعة يتم بـ UPDATE شرطي واحد.
+    if (sale) {
+      const claimed = await tx.sale.updateMany({
+        where: {
+          id: sale.id,
+          tenantId: session.tenantId,
+          status: { not: 'مرتجعة' },
+          paid: { lte: sale.total - amount + 0.005 },
+        },
+        data: { paid: { increment: amount } },
+      })
+      if (claimed.count !== 1) throw new SaleOverpaid()
+    }
+
     // 1. Create the Payment record
     const payment = await tx.payment.create({
       data: {
@@ -222,12 +243,7 @@ async function __POST(req: NextRequest) {
           cashEntryId: principalEntry.id,
         },
       })
-      // Increment Sale.paid — keeps the sale record in sync with what's
-      // actually in the drawer for this sale.
-      await tx.sale.update({
-        where: { id: sale.id },
-        data: { paid: { increment: amount } },
-      })
+      // (Sale.paid اتزوّد فوق في الحجز الذري)
     }
 
     // Attach the freshly-updated customer (post-decrement) to the response
@@ -238,6 +254,15 @@ async function __POST(req: NextRequest) {
       linkedCashEntryId: principalEntry.id,
     }
   })
+  } catch (e) {
+    if (e instanceof SaleOverpaid) {
+      return NextResponse.json(
+        { error: 'الدفعة أكبر من المتبقي على الفاتورة (أو الفاتورة اتغيّرت) — حدّث الصفحة وحاول تاني' },
+        { status: 409 },
+      )
+    }
+    throw e
+  }
 
   // ⚡ EDGE CACHE purge (2026-10-06): السداد بيغير رصيد العميل والخزنة فوراً
   await purgeEdgeCache(
@@ -252,5 +277,5 @@ export async function GET(...args: Parameters<typeof __GET>) {
   return withDb(() => __GET(...args))
 }
 export async function POST(...args: Parameters<typeof __POST>) {
-  return withDb(() => __POST(...args))
+  return withIdempotency(args[0] as NextRequest, () => withDb(() => __POST(...args)))
 }

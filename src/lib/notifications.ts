@@ -127,10 +127,61 @@ export async function checkLowStockAndNotify(sql: Sql, tenantId: string) {
     await sql`
       INSERT INTO "Notification" ("tenantId", "userId", "type", "title", "message", "link")
       SELECT x."tenantId", x."userId", x."type", x."title", x."message", x."link"
-      FROM jsonb_to_recordset(${sql.json(toCreate)}::jsonb)
+      FROM jsonb_to_recordset(${JSON.stringify(toCreate)}::jsonb)
         AS x("tenantId" text, "userId" text, "type" text, "title" text, "message" text, "link" text)`
   } catch (e) {
     console.error('[checkLowStockAndNotify] bulk insert failed:', e)
+  }
+}
+
+
+/**
+ * 🔎 2026-10-18 — تنبيه سلامة المخزون (للمدير بس).
+ * بيفحص (1) منتجات كميتها الإجمالية مش مساوية لمجموع مقاساتها، (2) حركات الموظفين
+ * اليدوية اللي لسه ماتراجعتش، (3) أرصدة سالبة — ويبعت إشعار واحد مجمّع لكل مدير
+ * (مش لكل منتج)، من غير تكرار خلال 24 ساعة. أرقام وعدادات بس — مفيش بيانات حساسة.
+ */
+export async function checkStockIntegrityAndNotify(sql: Sql, tenantId: string) {
+  if (!shouldRunCheck(tenantId, 'stock_integrity')) return
+  try {
+    const rows = await sql<{ drift: number; review: number; negative: number }[]>`
+      SELECT
+        (SELECT COUNT(*)::int FROM (
+           SELECT p."id" FROM "Product" p
+             JOIN "ProductVariant" v ON v."productId" = p."id"
+            WHERE p."tenantId" = ${tenantId}
+            GROUP BY p."id", p."quantity"
+           HAVING p."quantity" <> SUM(v."quantity")
+         ) d) AS drift,
+        (SELECT COUNT(*)::int FROM "StockMovement" m
+          WHERE m."tenantId" = ${tenantId} AND m."needsReview" = true) AS review,
+        (SELECT COUNT(*)::int FROM "Product" p WHERE p."tenantId" = ${tenantId} AND p."quantity" < 0)
+        + (SELECT COUNT(*)::int FROM "ProductVariant" v JOIN "Product" p ON p."id" = v."productId"
+            WHERE p."tenantId" = ${tenantId} AND v."quantity" < 0) AS negative`
+    const { drift, review, negative } = rows[0] ?? { drift: 0, review: 0, negative: 0 }
+    const parts: string[] = []
+    if (drift > 0) parts.push(`${drift} منتج كميته لا تساوي مجموع مقاساته`)
+    if (negative > 0) parts.push(`${negative} رصيد سالب`)
+    if (review > 0) parts.push(`${review} حركة يدوية من الموظفين تحتاج مراجعة`)
+    if (parts.length === 0) return
+
+    const message = `فحص المخزون: ${parts.join(' — ')}`
+    const admins = await sql<{ id: string }[]>`
+      SELECT "id" FROM "User"
+      WHERE "tenantId" = ${tenantId} AND "role" = 'ADMIN' AND "active" = true`
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    for (const a of admins) {
+      const dup = await sql`
+        SELECT 1 FROM "Notification"
+        WHERE "tenantId" = ${tenantId} AND "userId" = ${a.id} AND "type" = 'stock_integrity'
+          AND "message" = ${message} AND "createdAt" >= ${since} LIMIT 1`
+      if (dup.length > 0) continue
+      await sql`
+        INSERT INTO "Notification" ("tenantId", "userId", "type", "title", "message", "link")
+        VALUES (${tenantId}, ${a.id}, 'stock_integrity', 'تنبيه سلامة المخزون', ${message}, '/inventory')`
+    }
+  } catch (e) {
+    console.error('[checkStockIntegrityAndNotify] failed:', e)
   }
 }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withIdempotency } from '@/lib/idempotency'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import type { Session } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
@@ -344,5 +345,5 @@ export async function GET(...args: Parameters<typeof __GET>) {
   return __GET(...args)
 }
 export async function POST(...args: Parameters<typeof __POST>) {
-  return __POST(...args)
+  return withIdempotency(args[0] as NextRequest, () => __POST(...args))
 }

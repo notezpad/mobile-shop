@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
@@ -34,6 +35,10 @@ interface ExchangeLine {
 }
 
 export async function POST(req: NextRequest) {
+  return withIdempotency(req, () => __POST(req))
+}
+
+async function __POST(req: NextRequest) {
   let s
   try { s = await requireAuth() } catch (e) {
     const err = authErrorResponse(e); return NextResponse.json(err?.body, { status: err?.status })

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
@@ -145,5 +146,5 @@ async function __DELETE(
 }
 
 export async function DELETE(...args: Parameters<typeof __DELETE>) {
-  return withDb(() => __DELETE(...args))
+  return withIdempotency(args[0] as NextRequest, () => withDb(() => __DELETE(...args)))
 }

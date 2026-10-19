@@ -103,7 +103,11 @@ export async function flushOutbox(): Promise<{ done: number; failed: number }> {
           entry.body !== undefined ? remapLocalProductIds(entry.body, localMap) : undefined
         const res = await fetch(entry.url, {
           method: entry.method,
-          headers: mappedBody !== undefined ? { 'Content-Type': 'application/json' } : {},
+          headers: {
+            ...(mappedBody !== undefined ? { 'Content-Type': 'application/json' } : {}),
+            // 🔁 نفس مفتاح المحاولة الأولى — السيرفر مابينفّذش العملية تاني لو كانت اتنفّذت
+            ...(entry.idempotencyKey ? { 'Idempotency-Key': entry.idempotencyKey } : {}),
+          },
           body: mappedBody !== undefined ? JSON.stringify(mappedBody) : undefined,
         })
 

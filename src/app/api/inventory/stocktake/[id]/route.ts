@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
-import { applyStocktakeDiff } from '@/lib/stocktake-stock'
+import { applyStocktakeDiff, computeStocktakeShrink, recordStocktakeShrinkLoss } from '@/lib/stocktake-stock'
+import { STOCK_POLICY } from '@/lib/stock-policy'
 export const dynamic = 'force-dynamic'
 
-async function __POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+async function __POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   let s
   // 🛡️ اعتماد الجرد بيغيّر أرصدة المخزن — أدمن بس (زي إنشاء الجرد المعتمد)
   try { s = await requireAdmin() } catch (e) {
@@ -15,6 +17,18 @@ async function __POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> 
   const st = await db.stocktake.findUnique({ where: { id: sid }, include: { items: true } })
   if (!st || st.tenantId !== s.tenantId) return NextResponse.json({ error: 'غير موجود' }, { status: 404 })
   if (st.status === 'committed') return NextResponse.json({ ok: true, alreadyCommitted: true })
+  // 📉 عجز الجرد كخسارة (غير نقدية) — افتراضي، والمدير يقدر يلغيها (recordLoss:false)
+  const body = await req.json().catch(() => null)
+  const recordLoss = body?.recordLoss !== false
+  const extraNote = body?.note ? String(body.note).trim() : (st.note ?? '')
+  const shrink = await computeStocktakeShrink(db, s.tenantId, st.items.map((i) => ({ productId: i.productId, diff: i.diff })))
+  if (shrink.value >= STOCK_POLICY.stocktakeNoteThreshold && extraNote.trim().length < 3) {
+    return NextResponse.json(
+      { error: `عجز الجرد ${shrink.value} جنيه — اكتب ملاحظة توضّح السبب قبل الاعتماد` },
+      { status: 400 },
+    )
+  }
+
   class AlreadyCommitted extends Error {}
   try {
     await db.$transaction(async (tx) => {
@@ -34,6 +48,9 @@ async function __POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> 
           { productId: it.productId, variantId: it.variantId, diff: it.diff },
         )
       }
+      if (recordLoss) {
+        await recordStocktakeShrinkLoss(tx, { tenantId: s.tenantId, userId: s.userId, branchId: st.branchId, stocktakeId: st.id }, shrink)
+      }
     })
   } catch (e) {
     if (e instanceof AlreadyCommitted) return NextResponse.json({ ok: true, alreadyCommitted: true })
@@ -43,5 +60,5 @@ async function __POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> 
 }
 
 export async function POST(...args: Parameters<typeof __POST>) {
-  return withDb(() => __POST(...args))
+  return withIdempotency(args[0] as NextRequest, () => withDb(() => __POST(...args)))
 }

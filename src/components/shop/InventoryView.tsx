@@ -20,6 +20,7 @@ import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { StockTab } from './inventory/StockTab'
 import { MovementsTab, type MovementMeta } from './inventory/MovementsTab'
+import { IntegrityPanel } from './inventory/IntegrityPanel'
 import { TransfersTab } from './inventory/TransfersTab'
 import { StocktakeTab } from './inventory/StocktakeTab'
 import { useDataRefresh } from '@/lib/offline/data-events'
@@ -58,6 +59,9 @@ export interface Movement {
   product: { name: string; barcode: string | null }
   branch: { name: string } | null
   userName?: string | null
+  /** 📋 حركة يدوية من موظف لسه ماتراجعتش من المدير */
+  needsReview?: boolean
+  reasonCode?: string | null
 }
 export interface Transfer {
   id: number
@@ -133,6 +137,7 @@ export function InventoryView() {
           total: (mv as any)?.total ?? (mv as any)?.data?.length ?? 0,
           inTotal: (mv as any)?.inTotal ?? 0,
           outTotal: (mv as any)?.outTotal ?? 0,
+          reviewCount: (mv as any)?.reviewCount ?? 0,
           series: (mv as any)?.series ?? [],
         })
       }
@@ -435,6 +440,12 @@ export function InventoryView() {
       </section>
 
       {/* ═════════ Tabs ═════════ */}
+      {!isEmployee && (
+        <div className="flex justify-end">
+          <IntegrityPanel onChanged={load} />
+        </div>
+      )}
+
       <Tabs dir="rtl" value={tab} onValueChange={setTab} className="space-y-4">
         <TabsList className="grid h-auto w-full grid-cols-2 gap-2.5 rounded-none bg-transparent p-0 lg:grid-cols-4">
           {tabs.map((t) => (

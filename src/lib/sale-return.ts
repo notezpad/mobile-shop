@@ -51,6 +51,7 @@
 import type { Prisma } from '@prisma/client'
 import { createPrincipalCashEntry } from '@/lib/commission'
 import { round2 } from '@/lib/purchase-return'
+import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
 
 export class SaleReturnError extends Error {
   status: number
@@ -74,6 +75,8 @@ export interface SaleReturnLineInput {
 
 export interface SaleExchangeLineInput {
   productId: number
+  /** 🎨 لو بضاعة الاستبدال ليها ألوان/مقاسات: اللون/المقاس إجباري */
+  variantId?: number | null
   quantity: number
   /** Selling price of the replacement; default = the product's retail price. */
   price?: number
@@ -180,6 +183,7 @@ export async function performSaleReturn(
   // ── 3. Exchange goods (optional) — validated + stock out atomically
   const exchangeLines: Array<{
     productId: number
+    variantId: number | null
     name: string
     price: number
     cost: number
@@ -196,6 +200,24 @@ export async function performSaleReturn(
       }
       const p = await tx.product.findFirst({ where: { id: pid, tenantId } })
       if (!p) throw new SaleReturnError('منتج الاستبدال غير موجود', 400)
+      // 🎨 2026-10-18: منتج له ألوان/مقاسات → الاستبدال بيخصم من اللون/المقاس نفسه (كان بيخصم من
+      // Product.quantity بس فالخصم بيتمسح عند أول مزامنة للمقاسات)
+      const exVariants = await tx.productVariant.findMany({
+        where: { productId: pid },
+        select: { id: true, color: true, size: true },
+      })
+      const exVid = ex.variantId != null ? Number(ex.variantId) : null
+      let exVariant: (typeof exVariants)[number] | null = null
+      if (exVariants.length > 0) {
+        exVariant = exVariants.find((v) => v.id === exVid) ?? null
+        if (!exVariant) {
+          throw new SaleReturnError(`المنتج "${p.name}" له ألوان ومقاسات — حدّد اللون/المقاس لبضاعة الاستبدال`, 400)
+        }
+        if (!Number.isInteger(qty)) throw new SaleReturnError('كمية الاستبدال لازم عدد صحيح', 400)
+      } else if (exVid != null) {
+        throw new SaleReturnError(`المنتج "${p.name}" ليس له ألوان أو مقاسات`, 400)
+      }
+      const exLabel = exVariant ? [exVariant.color, exVariant.size].filter(Boolean).join(' / ') || `#${exVariant.id}` : null
       const exPrice = ex.price === undefined || ex.price === null
         ? p.price
         : Number(ex.price)
@@ -204,19 +226,34 @@ export async function performSaleReturn(
       }
       // 🛡️ Atomic stock claim for the replacement — no negative stock, no
       // check-then-write race like the old code.
-      const out = await tx.product.updateMany({
-        where: { id: pid, tenantId, quantity: { gte: qty } },
-        data: { quantity: { decrement: qty } },
-      })
-      if (out.count !== 1) {
-        throw new SaleReturnError(
-          `مخزون "${p.name}" غير كافي للاستبدال (المطلوب ${qty})`,
-          409,
-        )
+      if (exVariant) {
+        const vOut = await tx.productVariant.updateMany({
+          where: { id: exVariant.id, productId: pid, quantity: { gte: qty } },
+          data: { quantity: { decrement: qty } },
+        })
+        if (vOut.count !== 1) {
+          throw new SaleReturnError(
+            `مخزون "${p.name}" (${exLabel}) غير كافي للاستبدال (المطلوب ${qty})`,
+            409,
+          )
+        }
+        await syncProductQuantityFromVariants(tx, pid)
+      } else {
+        const out = await tx.product.updateMany({
+          where: { id: pid, tenantId, quantity: { gte: qty } },
+          data: { quantity: { decrement: qty } },
+        })
+        if (out.count !== 1) {
+          throw new SaleReturnError(
+            `مخزون "${p.name}" غير كافي للاستبدال (المطلوب ${qty})`,
+            409,
+          )
+        }
       }
       exchangeLines.push({
         productId: p.id,
-        name: p.name,
+        variantId: exVariant?.id ?? null,
+        name: exLabel ? `${p.name} — ${exLabel}` : p.name,
         price: exPrice,
         cost: p.cost,
         quantity: qty,
@@ -365,6 +402,7 @@ export async function performSaleReturn(
         tenantId,
         branchId: sale.branchId,
         productId: it.productId,
+        variantId: it.variantId, // 🎨 اللون/المقاس بيظهر في سجل الحركات
         type: 'return',
         quantity: qty, // positive: goods are coming back
         refType: 'sale_return',
@@ -382,6 +420,7 @@ export async function performSaleReturn(
         tenantId,
         branchId: sale.branchId,
         productId: ex.productId,
+        variantId: ex.variantId,
         type: 'sale',
         quantity: -ex.quantity,
         refType: 'sale_return',
@@ -394,6 +433,7 @@ export async function performSaleReturn(
       data: {
         saleId,
         productId: ex.productId,
+        variantId: ex.variantId,
         name: ex.name + ' (استبدال)',
         price: ex.price,
         cost: ex.cost,

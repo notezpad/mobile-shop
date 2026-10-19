@@ -502,6 +502,23 @@ export async function offlineFetch<T = any>(
   const method = options?.method ?? 'GET'
   const isWrite = method !== 'GET'
 
+  // 🔁 2026-10-18: مفتاح منع التكرار بيتولّد *قبل* المحاولة الأولى وبيتبعت معاها، وبنفس القيمة
+  // في طابور الأوفلاين. لو الطلب اتنفّذ على السيرفر والرد ضاع (انقطاع بعد الـ commit)، الإرسال
+  // التاني بيرجّع الرد الأصلي بدل ما ينفّذ العملية مرتين (دفعة/أمر شراء/مصروف/حركة...).
+  // (طلبات idempotent:true زي الدخول مش محتاجة.)
+  let writeBody = options?.body
+  let idemKey: string | undefined
+  if (isWrite && !options?.idempotent) {
+    idemKey =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `k-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
+    // الفواتير: clientRef كمان من أول محاولة (قبل كده كان بيتولّد بعد الفشل بس)
+    if (url === '/api/sales' && method === 'POST' && writeBody && typeof writeBody === 'object') {
+      writeBody = { ...writeBody, clientRef: (writeBody as any).clientRef ?? idemKey }
+    }
+  }
+
   // ── Write operations ──────────────────────────────────
   if (isWrite) {
     try {
@@ -522,8 +539,11 @@ export async function offlineFetch<T = any>(
         url,
         {
           method,
-          headers: options?.body !== undefined ? { 'Content-Type': 'application/json' } : {},
-          body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
+          headers: {
+            ...(writeBody !== undefined ? { 'Content-Type': 'application/json' } : {}),
+            ...(idemKey ? { 'Idempotency-Key': idemKey } : {}),
+          },
+          body: writeBody !== undefined ? JSON.stringify(writeBody) : undefined,
         },
         options?.idempotent ? 2 : 0,
         options?.signal,
@@ -573,7 +593,7 @@ export async function offlineFetch<T = any>(
         // it later, creating a duplicate invoice (double stock/till/debt).
         // Each queued sale now carries a unique clientRef; the sale POST
         // returns the original invoice when it sees the same ref again.
-        let queuedBody = options?.body
+        let queuedBody = writeBody
         if (url === '/api/sales' && method === 'POST' && queuedBody && typeof queuedBody === 'object') {
           queuedBody = {
             ...queuedBody,
@@ -588,6 +608,7 @@ export async function offlineFetch<T = any>(
           url, method,
           body: queuedBody,
           label: getOperationLabel(url, method, queuedBody),
+          idempotencyKey: idemKey,
         })
         // 🛡️ v11 (LOCAL-FIRST ROOT FIX — قصّ جذر "كل حاجة صفر + الإجراء مش
         // بيظهر إلا بعد المزامنة"):

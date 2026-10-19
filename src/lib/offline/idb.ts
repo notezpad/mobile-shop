@@ -70,6 +70,8 @@ export interface OutboxEntry {
   createdAt: number
   tries: number
   lastError?: string
+  /** 🔁 مفتاح منع التكرار — نفس القيمة اللي اتبعتت في المحاولة الأولى (السيرفر بيتجاهل التكرار) */
+  idempotencyKey?: string
 }
 
 export const idb = {

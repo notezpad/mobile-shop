@@ -209,6 +209,10 @@ export function PurchaseOrdersView() {
   const [openId, setOpenId] = React.useState<number | null>(null)
   const [returnId, setReturnId] = React.useState<number | null>(null)
   const [newOpen, setNewOpen] = React.useState(false)
+  // 📋 جاي من «حركة وارد» في المخزون → افتح أمر شراء جديد (الصنف بيتعبّى جوه النافذة)
+  React.useEffect(() => {
+    try { if (sessionStorage.getItem('purchasePrefill')) setNewOpen(true) } catch { /* */ }
+  }, [])
 
   const searchRef = React.useRef<HTMLInputElement>(null)
   const shopName = useShopStore((s) => s.shopName)

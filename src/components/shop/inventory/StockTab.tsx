@@ -1,6 +1,8 @@
 'use client'
 
 import * as React from 'react'
+import { useShopStore } from '@/lib/store'
+import { STOCK_POLICY, reasonLabelsFor } from '@/lib/stock-policy'
 import { unitWord } from '@/lib/unit-label'
 import {
   Search,
@@ -58,15 +60,12 @@ interface Props {
   onChanged: () => void
 }
 
-// 🎨 2026-10-18: الأسباب بقت حسب نوع الحركة — «مرتجع مورد» و«تالف» سبب صادر مش وارد،
-// فكانوا بيظهروا غلط في شاشة الإضافة ويلخبطوا سجل الحركات.
-const IN_REASONS = ['استلام بضاعة', 'تسوية زيادة (جرد)', 'هدايا/عينات', 'خطأ تسجيل', 'أخرى']
-// «تالف» اتشال من هنا: الصرف العادي بيشيل الكمية بس من غير ما يحسب خسارة، فكان نفس
-// الحادثة بتتسجل بطريقتين مختلفتين (وأرباح التقارير بتطلع أعلى من الحقيقي). التالف بيتسجل
-// من زر الهالك ⚠ (بيحسب الخسارة بسعر التكلفة في المصروفات من غير ما يمس الخزنة).
-const OUT_REASONS = ['مرتجع مورد', 'هدايا/عينات', 'خطأ تسجيل', 'أخرى']
+// 📋 2026-10-18: الأسباب بقت أكواد محددة على السيرفر (lib/stock-policy) — القوايم هنا بتتقرا
+// منه عشان الواجهة والسيرفر مايختلفوش. «استلام بضاعة» و«مرتجع مورد» و«تالف» ماعادوش أسباب
+// يدوية: كل واحد ليه مكانه الصح (أمر شراء / مرتجع مورد / زر الهالك) عشان الدين والتكلفة
+// والخسارة تتسجل.
 const reasonsFor = (type: 'in' | 'out' | 'damage') =>
-  type === 'damage' ? DAMAGE_REASONS : type === 'in' ? IN_REASONS : OUT_REASONS
+  type === 'damage' ? DAMAGE_REASONS : reasonLabelsFor(type)
 
 // 🛡️ 2026-09-30: أسباب مخصصة لتسجيل الهالك — الخسارة بتتسجل بقيمتها في
 // المصروفات (فئة "هالك وتالف") والسبب بيتكتب في الحركة والمصروف.
@@ -696,6 +695,7 @@ function AdjustDialog({
   const [note, setNote] = React.useState('')
   const [saving, setSaving] = React.useState(false)
   // 🎨 المنتج اللي له ألوان/مقاسات: الحركة لازم تتحدد على لون/مقاس (وإلا الكمية بتتمسح)
+  const isAdminUser = useShopStore((st) => st.user?.role === 'ADMIN' || st.user?.role === 'SUPER_ADMIN')
   const [variants, setVariants] = React.useState<{ id: number; size: string | null; color: string | null; quantity: number }[]>([])
   const [variantId, setVariantId] = React.useState<number | null>(null)
 
@@ -730,13 +730,28 @@ function AdjustDialog({
   // 🛡️ قيمة الخسارة المتوقعة = الكمية × التكلفة الحالية (المتوسط المرجح)
   const lossPreview = type === 'damage' && qNum > 0 && product.cost != null ? qNum * Math.max(0, product.cost) : 0
 
+  // يفتح المشتريات (ولو منتج: يفتح أمر شراء جديد ومعبّي المنتج)
+  const goPurchases = (p: typeof product | null) => {
+    try {
+      if (p) {
+        sessionStorage.setItem(
+          'purchasePrefill',
+          JSON.stringify({ id: p.id, name: p.name, barcode: p.barcode ?? null, cost: p.cost ?? 0, quantity: p.quantity ?? 0 }),
+        )
+      }
+    } catch { /* sessionStorage غير متاح */ }
+    onOpenChange(false)
+    useShopStore.getState().setActiveView('purchases')
+  }
+
   const submit = async () => {
     const q = parseInt(qty, 10)
     if (!q || q <= 0) { toast.error('كمية غير صالحة'); return }
     if (variants.length > 0 && variantId == null) { toast.error('اختار اللون/المقاس الأول'); return }
-    // 🛡️ 2026-09-30: السبب إجباري للصادر والهالك (السيرفر بيرفض بدونه كمان)
-    if (type !== 'in' && `${reason}${note ? ' — ' + note : ''}`.trim().length < 3) {
-      toast.error('اكتب سبب الحركة (إجباري)')
+    // 📋 السبب إجباري لكل حركة (وارد وصادر وهالك) — و«أخرى» محتاجة ملاحظة (السيرفر بيتحقق كمان)
+    if (!reason) { toast.error('اختار سبب الحركة'); return }
+    if (reason === 'أخرى' && note.trim().length < 3) {
+      toast.error('اكتب ملاحظة توضّح السبب')
       return
     }
     setSaving(true)
@@ -748,13 +763,20 @@ function AdjustDialog({
           variantId: variantId ?? undefined,
           quantity: q,
           type,
-          note: `${reason}${note ? ' — ' + note : ''}`,
+          reason,
+          note: note.trim() || undefined,
         },
       })
       if (type === 'damage') {
         toast.success(`تم تسجيل الهالك — خسارة ${formatCurrency(qNum * Math.max(0, product.cost))} اتسجلت في المصروفات`)
       } else {
-        toast.success(type === 'in' ? 'تم تسجيل الكمية الواردة' : 'تم خصم الكمية')
+        toast.success(
+          type === 'in'
+            ? 'تم تسجيل الكمية الواردة'
+            : reason === 'هدايا/عينات'
+              ? `تم خصم الكمية — خسارة ${formatCurrency(qNum * Math.max(0, product.cost))} اتسجلت في المصروفات`
+              : 'تم خصم الكمية',
+        )
       }
       onOpenChange(false)
       onDone()
@@ -833,13 +855,26 @@ function AdjustDialog({
             </section>
           )}
 
-          {(reason === 'استلام بضاعة' || reason === 'مرتجع مورد') && (
+          {!isDamage && (
             <div className="rounded-2xl bg-amber-500/10 p-3 text-xs font-medium leading-relaxed text-amber-900 dark:text-amber-200">
-              الحركة دي بتغيّر <b>الكمية بس</b> — مش بتسجّل فاتورة ولا دين على المورد ولا بتحدّث التكلفة ولا الخزنة.
-              {reason === 'استلام بضاعة'
-                ? ' لبضاعة اشتريتها من مورد استخدم «المشتريات ← أمر شراء جديد».'
-                : ' لإرجاع بضاعة للمورد وتخفيض حسابه استخدم «المشتريات ← مرتجع».'}
+              {isIn
+                ? 'الحركة دي بتغيّر الكمية بس (تسوية). بضاعة جاية من مورد؟ لازم تتسجل كأمر شراء عشان الدين والتكلفة والخزنة تتحدّث.'
+                : 'الحركة دي بتخصم الكمية بس. إرجاع بضاعة لمورد؟ استخدم «المشتريات ← مرتجع» عشان حساب المورد يتحدّث.'}
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => goPurchases(isIn ? product : null)}
+                  className="rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-amber-700"
+                >
+                  {isIn ? 'سجّلها كأمر شراء' : 'افتح المشتريات'}
+                </button>
+              </div>
             </div>
+          )}
+          {!isAdminUser && !isDamage && (
+            <p className="text-[11px] font-medium text-foreground/60">
+              الحد المسموح للموظف: {STOCK_POLICY.employeeMaxQty} قطع أو {STOCK_POLICY.employeeMaxValue} جنيه للحركة الواحدة — فوق كده محتاج المدير. وحركاتك بتظهر للمدير للمراجعة.
+            </p>
           )}
 
           <section>

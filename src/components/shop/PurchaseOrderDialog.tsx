@@ -283,6 +283,19 @@ export function PurchaseOrderDialog({
     searchRef.current?.focus()
   }
 
+  // 📋 جاي من «حركة وارد» في المخزون: نضيف الصنف تلقائياً (شبكة المقاسات تفتح لو ليه مقاسات)
+  React.useEffect(() => {
+    if (!open) return
+    let raw: string | null = null
+    try { raw = sessionStorage.getItem('purchasePrefill'); if (raw) sessionStorage.removeItem('purchasePrefill') } catch { /* */ }
+    if (!raw) return
+    try {
+      const p = JSON.parse(raw) as ProductLite
+      if (p?.id) void addToCart({ id: p.id, name: p.name, barcode: p.barcode ?? null, cost: p.cost ?? 0, quantity: p.quantity ?? 0 })
+    } catch { /* */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
   // تأكيد شبكة المقاسات: بنستبدل كل أسطر المنتج ده في السلة بالكميات الجديدة
   const confirmMatrix = (r: PurchaseVariantsResult) => {
     if (!matrix) return

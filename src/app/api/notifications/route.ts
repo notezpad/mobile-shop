@@ -3,6 +3,7 @@ import { requireAuthIgnoreSubscription, authErrorResponse } from '@/lib/auth'
 import { withSql } from '@/lib/sql'
 import {
   checkLowStockAndNotify,
+  checkStockIntegrityAndNotify,
   checkExpiringSubscriptions,
   cleanupDuplicateNotifications,
 } from '@/lib/notifications'
@@ -56,20 +57,22 @@ export async function GET(req: NextRequest) {
         await Promise.allSettled([
           checkLowStockAndNotify(sql, session.tenantId),
           checkExpiringSubscriptions(sql, session.tenantId),
+          checkStockIntegrityAndNotify(sql, session.tenantId),
         ])
       } catch (e: any) {
         if (debug) console.error('[notifications GET] checks failed:', e?.message ?? e)
       }
+    }
 
-      // 🧹 Cleanup duplicates — ⚡ كل 5 دقائق مع الفحوصات بدل كل poll (توفير CPU).
-      try {
-        const deleted = await cleanupDuplicateNotifications(sql, session.tenantId)
-        if (deleted > 0 && debug) {
-          console.log(`[notifications GET] cleaned up ${deleted} duplicate notifications`)
-        }
-      } catch (e: any) {
-        if (debug) console.error('[notifications GET] cleanup failed:', e?.message ?? e)
+    // 🧹 Cleanup duplicates on every poll — أصبحت عبارة DELETE واحدة رخيصة
+    // (ROW_NUMBER) بدل تحميل 500 صف وتجميعهم في الذاكرة.
+    try {
+      const deleted = await cleanupDuplicateNotifications(sql, session.tenantId)
+      if (deleted > 0 && debug) {
+        console.log(`[notifications GET] cleaned up ${deleted} duplicate notifications`)
       }
+    } catch (e: any) {
+      if (debug) console.error('[notifications GET] cleanup failed:', e?.message ?? e)
     }
 
     // 🛡️ Wrap the actual list fetch in try/catch — if the Notification table
@@ -81,23 +84,24 @@ export async function GET(req: NextRequest) {
     let dbError: string | undefined
 
     try {
-      const listQuery = onlyUnread
-        ? sql`
+      notifications = onlyUnread
+        ? await sql`
             SELECT * FROM "Notification"
             WHERE "tenantId" = ${session.tenantId} AND "isRead" = false
+              AND ("userId" IS NULL OR "userId" = ${session.userId})
             ORDER BY "createdAt" DESC
             LIMIT 50`
-        : sql`
+        : await sql`
             SELECT * FROM "Notification"
             WHERE "tenantId" = ${session.tenantId}
+              AND ("userId" IS NULL OR "userId" = ${session.userId})
             ORDER BY "createdAt" DESC
             LIMIT 50`
-      const countQuery = sql<{ cnt: number }[]>`
+
+      const cnt = await sql<{ cnt: number }[]>`
         SELECT COUNT(*)::int AS cnt FROM "Notification"
-        WHERE "tenantId" = ${session.tenantId} AND "isRead" = false`
-      // ⚡ الاستعلامان يتبعتوا مع بعض (pipelining على نفس الاتصال)
-      const [list, cnt] = await Promise.all([listQuery, countQuery])
-      notifications = list as any[]
+        WHERE "tenantId" = ${session.tenantId} AND "isRead" = false
+          AND ("userId" IS NULL OR "userId" = ${session.userId})`
       unreadCount = Number(cnt[0]?.cnt ?? 0)
     } catch (e: any) {
       dbError = e?.message ?? String(e)
