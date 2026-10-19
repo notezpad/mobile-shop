@@ -90,6 +90,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
     setBulkSaving(true)
     let okCount = 0
     let failCount = 0
+    let firstError = ''
     // Track codes as we hand them out so two rows in the same batch can
     // never collide, on top of not reusing any barcode this product
     // already has.
@@ -108,13 +109,15 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
           },
         })
         okCount++
-      } catch {
+      } catch (e: any) {
         failCount++
+        // نحتفظ بأول رسالة خطأ حقيقية من السيرفر بدل التخمين
+        if (!firstError) firstError = String(e?.body?.error ?? e?.message ?? '').trim()
       }
     }
     setBulkSaving(false)
     if (okCount) toast.success(`تمت إضافة ${okCount} متغير`)
-    if (failCount) toast.error(`فشلت إضافة ${failCount} متغير (تكرار باركود أو خطأ)`)
+    if (failCount) toast.error(`فشلت إضافة ${failCount} متغير${firstError ? ` — ${firstError}` : ' (تكرار باركود أو خطأ)'}`, { duration: 9000 })
     setPreview(null)
     setSmartText('')
     await load()
