@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useRouter } from 'next/navigation'
 import { useShopStore } from '@/lib/store'
 import { STOCK_POLICY, reasonLabelsFor } from '@/lib/stock-policy'
 import { unitWord } from '@/lib/unit-label'
@@ -691,6 +692,7 @@ function AdjustDialog({
   type: 'in' | 'out' | 'damage'
   onDone: () => void
 }) {
+  const router = useRouter()
   const [qty, setQty] = React.useState('')
   const [reason, setReason] = React.useState(reasonsFor(type)[0])
   const [note, setNote] = React.useState('')
@@ -732,17 +734,26 @@ function AdjustDialog({
   const lossPreview = type === 'damage' && qNum > 0 && product.cost != null ? qNum * Math.max(0, product.cost) : 0
 
   // يفتح المشتريات (ولو منتج: يفتح أمر شراء جديد ومعبّي المنتج)
-  const goPurchases = (p: typeof product | null) => {
+  // 🛡️ ROOT FIX (2026-10-19): الزر كان بينادي setActiveView بتاع الـ store —
+  // ده كان شغال زمان لما كل الشاشات كانت في shell واحد، لكن /inventory
+  // و /purchases بقوا صفحتين منفصلتين فعلياً في الـ App Router، فالنداء ده
+  // مابيعملش أي حاجة مرئية والمستخدم يفضل واقف على المخزون. التنقل الصحيح
+  // هو تنقل route حقيقي (نفس نمط Topbar: router.push).
+  const goPurchases = (p: typeof product | null, mode: 'buy' | 'return' = 'buy') => {
     try {
-      if (p) {
+      if (mode === 'buy' && p) {
         sessionStorage.setItem(
           'purchasePrefill',
           JSON.stringify({ id: p.id, name: p.name, barcode: p.barcode ?? null, cost: p.cost ?? 0, quantity: p.quantity ?? 0 }),
         )
+      } else if (mode === 'return' && p) {
+        // صادر: مفيش مرتجع مورد من غير أمر شراء — بنوجه للمشتريات مع فلتر
+        // جاهز على أوامر الشراء اللي فيها الصنف ده + إرشاد واضح (بيتقري في PurchaseOrdersView)
+        sessionStorage.setItem('purchaseReturnFocus', JSON.stringify({ name: p.name }))
       }
     } catch { /* sessionStorage غير متاح */ }
     onOpenChange(false)
-    useShopStore.getState().setActiveView('purchases')
+    router.push('/purchases')
   }
 
   const submit = async () => {
@@ -864,10 +875,10 @@ function AdjustDialog({
               <div className="mt-2">
                 <button
                   type="button"
-                  onClick={() => goPurchases(isIn ? product : null)}
+                  onClick={() => goPurchases(product, isIn ? 'buy' : 'return')}
                   className="rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-amber-700"
                 >
-                  {isIn ? 'سجّلها كأمر شراء' : 'افتح المشتريات'}
+                  {isIn ? 'سجّلها كأمر شراء' : 'ابحث عن أمر الشراء (مرتجع مورد)'}
                 </button>
               </div>
             </div>

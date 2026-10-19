@@ -209,9 +209,25 @@ export function PurchaseOrdersView() {
   const [openId, setOpenId] = React.useState<number | null>(null)
   const [returnId, setReturnId] = React.useState<number | null>(null)
   const [newOpen, setNewOpen] = React.useState(false)
+  // 📋 جاي من «حركة صادر»: اسم الصنف الجاي من المخزون (عشان رسالة “مفيش أوامر” تبقى محددة)
+  const [returnFocusName, setReturnFocusName] = React.useState<string | null>(null)
   // 📋 جاي من «حركة وارد» في المخزون → افتح أمر شراء جديد (الصنف بيتعبّى جوه النافذة)
+  // 📋 جاي من «حركة صادر» في المخزون → صفّي الأوامر على الصنف ووجّه للمستخدم لزر المرتجع
   React.useEffect(() => {
-    try { if (sessionStorage.getItem('purchasePrefill')) setNewOpen(true) } catch { /* */ }
+    try {
+      const focusRaw = sessionStorage.getItem('purchaseReturnFocus')
+      if (focusRaw) {
+        sessionStorage.removeItem('purchaseReturnFocus')
+        const focus = JSON.parse(focusRaw) as { name?: string }
+        if (focus?.name) {
+          setQuery(focus.name)
+          setReturnFocusName(focus.name)
+          toast.info(`الأوامر اللي فيها «${focus.name}» قدامك — افتح الأمر واضغط أيقونة «مرتجع للمورد»`)
+        }
+        return
+      }
+      if (sessionStorage.getItem('purchasePrefill')) setNewOpen(true)
+    } catch { /* */ }
   }, [])
 
   const searchRef = React.useRef<HTMLInputElement>(null)
@@ -826,11 +842,26 @@ export function PurchaseOrdersView() {
             </>
           ) : (
             <>
-              <p className="mt-3 font-bold">مفيش أوامر بالفلاتر دي</p>
-              <p className="mt-1 text-sm text-muted-foreground">جرّب توسّع الفترة أو تشيل بعض الفلاتر.</p>
-              <Button variant="outline" onClick={clearAll} className="mt-4">
-                مسح الفلاتر
-              </Button>
+              {returnFocusName && query.trim() === returnFocusName.trim() ? (
+                <>
+                  <p className="mt-3 font-bold">مفيش أمر شراء فيه «{returnFocusName}»</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    يعني الصنف ده ما اتشراش من المشتريات — فمفيش مرتجع مورد ممكن.
+                    رجوع الحركة كـ «صادر/تسوية» من المخزون هو الأنسب، أو سجّل أمر شراء قديم لو بضاعة دخلت من غير تسجيل.
+                  </p>
+                  <Button variant="outline" onClick={clearAll} className="mt-4">
+                    مسح البحث
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="mt-3 font-bold">مفيش أوامر بالفلاتر دي</p>
+                  <p className="mt-1 text-sm text-muted-foreground">جرّب توسّع الفترة أو تشيل بعض الفلاتر.</p>
+                  <Button variant="outline" onClick={clearAll} className="mt-4">
+                    مسح الفلاتر
+                  </Button>
+                </>
+              )}
             </>
           )}
         </div>

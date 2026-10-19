@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { WifiOff, RefreshCw, CloudUpload, CheckCircle2, AlertCircle } from 'lucide-react'
-import { useSyncState, usePendingOperations, syncNow } from '@/lib/offline/use-offline'
+import { useSyncState, usePendingOperations, syncNow, getSyncState } from '@/lib/offline/use-offline'
 
 /**
  * OfflineIndicator — floating status toasts (bottom-center overlay):
@@ -25,7 +25,7 @@ import { useSyncState, usePendingOperations, syncNow } from '@/lib/offline/use-o
 export function OfflineIndicator() {
   const sync = useSyncState()
   const { entries } = usePendingOperations()
-  const [syncResult, setSyncResult] = React.useState<{ done: number; failed: number } | null>(null)
+  const [syncResult, setSyncResult] = React.useState<{ done: number; failed: number; error?: string } | null>(null)
 
   // 🛡️ PWA OFFLINE ROOT FIX (2026-10-07): دفعة فحص تحديث الـ Service Worker.
   // الجهاز اللي فضل أوفلاين وقت النشر بيكمّل شغال بالـ SW القديم (بأخطائه
@@ -143,7 +143,14 @@ export function OfflineIndicator() {
   const handleSyncNow = async () => {
     setSyncResult(null)
     const result = await syncNow()
-    setSyncResult(result)
+    // 🛡️ لو الدفعة اتوقفت بخطأ سيرفر (5xx) مفيش فيها حاجة اترفعت ولا فشلت
+    // رسمياً — بنعرض الخطأ نفسه بدل «كل البيانات متزامنة» الكاذبة.
+    const lastError = getSyncState().lastError
+    setSyncResult(
+      result.done === 0 && result.failed === 0 && lastError
+        ? { done: 0, failed: -1, error: lastError }
+        : result,
+    )
     setTimeout(() => setSyncResult(null), 5000)
   }
 
@@ -244,7 +251,11 @@ export function OfflineIndicator() {
 
   // Sync result (temporary toast — auto-hides after 5s)
   if (syncResult) {
-    const ok = syncResult.failed === 0
+    const serverStop = syncResult.failed === -1 && syncResult.error
+    const ok = syncResult.failed === 0 && !serverStop
+    // 🛡️ ROOT FIX («0 عنصر»): لو الضغطة مالقاش حاجة تستنى (المزامنة التلقائية
+    // رفعتها قبلها) نطمنّ رسالة صريحة بدل «تمت مزامنة 0 عملية» المحيّرة.
+    const nothing = ok && syncResult.done === 0
     return (
       <div
         role="status"
@@ -262,9 +273,13 @@ export function OfflineIndicator() {
           {ok ? <CheckCircle2 className="size-[18px]" /> : <AlertCircle className="size-[18px]" />}
         </div>
         <p className="min-w-0 flex-1 truncate text-[13px] font-bold leading-tight">
-          {ok
-            ? `تمت مزامنة ${syncResult.done} عملية بنجاح`
-            : `تمت مزامنة ${syncResult.done}، وفشلت ${syncResult.failed} — هتتجرب تاني تلقائياً`}
+          {serverStop
+            ? `المزامنة متوقفت: ${syncResult.error}`
+            : nothing
+              ? 'كل البيانات متزامنة بالفعل — مفيش حاجة في الانتظار'
+              : ok
+                ? `تمت مزامنة ${syncResult.done} عملية بنجاح`
+                : `تمت مزامنة ${syncResult.done}، وفشلت ${syncResult.failed} — هتتجرب تاني تلقائياً`}
         </p>
       </div>
     )

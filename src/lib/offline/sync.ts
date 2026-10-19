@@ -82,99 +82,114 @@ function set(patch: Partial<SyncState>) {
 }
 
 /**
+ * Flush currently in-flight flush promise (if any). المزامنة التلقائية ممكن
+ * تكون شغّالة بالفعل لما المستخدم يدوس «مزامنة الآن» — بدل ما نرجّع له
+ * {done:0} كذب، بنستنى نفس الدفعة ونرجّع نتيجتها الحقيقية.
+ */
+let inFlightFlush: Promise<{ done: number; failed: number }> | null = null
+
+/**
  * Flush all pending outbox entries to the server.
  */
-export async function flushOutbox(): Promise<{ done: number; failed: number }> {
-  if (!isOnline() || state.syncing) return { done: 0, failed: 0 }
+export function flushOutbox(): Promise<{ done: number; failed: number }> {
+  if (!isOnline()) return Promise.resolve({ done: 0, failed: 0 })
+  // دفعة شغّالة بالفعل (مزامنة تلقائية)؟ استنى نتيجتها الحقيقية بدل 0
+  if (state.syncing) return inFlightFlush ?? Promise.resolve({ done: 0, failed: 0 })
+  const run = (async (): Promise<{ done: number; failed: number }> => {
+    set({ syncing: true, lastError: null })
+    let done = 0
+    let failed = 0
 
-  set({ syncing: true, lastError: null })
-  let done = 0
-  let failed = 0
+    try {
+      const entries = await idb.getOutbox()
+      // 🛡️ v5: خريطة المنتجات المضافة أوفلاين (localRef → realId) — بتُستخدم
+      // لاستبدال الـ ids السالبة في أي عملية قبل إرسالها (شوف remapLocalProductIds).
+      const localMap = await idb.getLocalProductMap().catch(() => ({}) as Record<string, number>)
 
-  try {
-    const entries = await idb.getOutbox()
-    // 🛡️ v5: خريطة المنتجات المضافة أوفلاين (localRef → realId) — بتُستخدم
-    // لاستبدال الـ ids السالبة في أي عملية قبل إرسالها (شوف remapLocalProductIds).
-    const localMap = await idb.getLocalProductMap().catch(() => ({}) as Record<string, number>)
+      for (const entry of entries) {
+        try {
+          const mappedBody =
+            entry.body !== undefined ? remapLocalProductIds(entry.body, localMap) : undefined
+          const res = await fetch(entry.url, {
+            method: entry.method,
+            headers: {
+              ...(mappedBody !== undefined ? { 'Content-Type': 'application/json' } : {}),
+              // 🔁 نفس مفتاح المحاولة الأولى — السيرفر مابينفّذش العملية تاني لو كانت اتنفّذت
+              ...(entry.idempotencyKey ? { 'Idempotency-Key': entry.idempotencyKey } : {}),
+            },
+            body: mappedBody !== undefined ? JSON.stringify(mappedBody) : undefined,
+          })
 
-    for (const entry of entries) {
-      try {
-        const mappedBody =
-          entry.body !== undefined ? remapLocalProductIds(entry.body, localMap) : undefined
-        const res = await fetch(entry.url, {
-          method: entry.method,
-          headers: {
-            ...(mappedBody !== undefined ? { 'Content-Type': 'application/json' } : {}),
-            // 🔁 نفس مفتاح المحاولة الأولى — السيرفر مابينفّذش العملية تاني لو كانت اتنفّذت
-            ...(entry.idempotencyKey ? { 'Idempotency-Key': entry.idempotencyKey } : {}),
-          },
-          body: mappedBody !== undefined ? JSON.stringify(mappedBody) : undefined,
-        })
+          if (!res.ok) {
+            const text = await res.text().catch(() => '')
+            let err: any = null
+            try { err = JSON.parse(text) } catch { err = { error: text } }
 
-        if (!res.ok) {
-          const text = await res.text().catch(() => '')
-          let err: any = null
-          try { err = JSON.parse(text) } catch { err = { error: text } }
+            if (res.status >= 500) {
+              // Server down → stop, will retry later
+              set({ syncing: false, lastError: err?.error || `خطأ في الخادم (${res.status})` })
+              return { done, failed }
+            }
+            // 4xx → invalid operation, discard after 5 tries
+            entry.tries += 1
+            entry.lastError = err?.error || `خطأ (${res.status})`
+            if (entry.tries >= 5) {
+              await idb.removeFromOutbox(entry.id)
+              failed++
+            } else {
+              await idb.updateOutboxEntry(entry)
+            }
+            continue
+          }
 
-          if (res.status >= 500) {
-            // Server down → stop, will retry later
-            set({ syncing: false, lastError: err?.error || `خطأ في الخادم (${res.status})` })
+          // Success
+          // 🛡️ v5: منتج أُضيف أوفلاين اتعمل على السيرفر للحظة — نخزّن الـ id
+          // الحقيقي عشان باقي العمليات اللي بتشاور عليه (فواتير/حركات) تتظبط.
+          if (entry.method === 'POST' && entry.url.startsWith('/api/products')) {
+            try {
+              const created = await res.clone().json()
+              const realId = Number(created?.id)
+              if (Number.isFinite(realId) && realId > 0) {
+                await idb.setLocalProductMapEntry(entry.id, realId)
+              }
+            } catch {
+              /* الرد مش JSON — نتجاهل */
+            }
+          }
+          await idb.removeFromOutbox(entry.id)
+          // 🛡️ ROOT FIX (2026-09-27): an operation made while offline just
+          // landed on the server for real — tell any open screen that shows
+          // this kind of data to refetch, instead of leaving it showing what
+          // was only a local optimistic guess until the user hard-refreshes.
+          emitDataChanged(entry.url, entry.method)
+          done++
+        } catch (err: any) {
+          if (isNetworkError(err)) {
+            set({ syncing: false, lastError: 'انقطع الاتصال أثناء المزامنة' })
             return { done, failed }
           }
-          // 4xx → invalid operation, discard after 5 tries
           entry.tries += 1
-          entry.lastError = err?.error || `خطأ (${res.status})`
+          entry.lastError = String(err?.message || err)
           if (entry.tries >= 5) {
             await idb.removeFromOutbox(entry.id)
             failed++
           } else {
             await idb.updateOutboxEntry(entry)
           }
-          continue
-        }
-
-        // Success
-        // 🛡️ v5: منتج أُضيف أوفلاين اتعمل على السيرفر للحظة — نخزّن الـ id
-        // الحقيقي عشان باقي العمليات اللي بتشاور عليه (فواتير/حركات) تتظبط.
-        if (entry.method === 'POST' && entry.url.startsWith('/api/products')) {
-          try {
-            const created = await res.clone().json()
-            const realId = Number(created?.id)
-            if (Number.isFinite(realId) && realId > 0) {
-              await idb.setLocalProductMapEntry(entry.id, realId)
-            }
-          } catch {
-            /* الرد مش JSON — نتجاهل */
-          }
-        }
-        await idb.removeFromOutbox(entry.id)
-        // 🛡️ ROOT FIX (2026-09-27): an operation made while offline just
-        // landed on the server for real — tell any open screen that shows
-        // this kind of data to refetch, instead of leaving it showing what
-        // was only a local optimistic guess until the user hard-refreshes.
-        emitDataChanged(entry.url, entry.method)
-        done++
-      } catch (err: any) {
-        if (isNetworkError(err)) {
-          set({ syncing: false, lastError: 'انقطع الاتصال أثناء المزامنة' })
-          return { done, failed }
-        }
-        entry.tries += 1
-        entry.lastError = String(err?.message || err)
-        if (entry.tries >= 5) {
-          await idb.removeFromOutbox(entry.id)
-          failed++
-        } else {
-          await idb.updateOutboxEntry(entry)
         }
       }
+    } finally {
+      const pending = await idb.pendingCount()
+      set({ syncing: false, pending, lastSyncAt: Date.now() })
     }
-  } finally {
-    const pending = await idb.pendingCount()
-    set({ syncing: false, pending, lastSyncAt: Date.now() })
-  }
 
-  return { done, failed }
+    return { done, failed }
+  })()
+  inFlightFlush = run
+  void run.finally(() => {
+    if (inFlightFlush === run) inFlightFlush = null
+  })
+  return run
 }
 
 /**
@@ -234,8 +249,27 @@ export function startSyncEngine(): () => void {
   }
 }
 
+/**
+ * 🛡️ ROOT FIX («تمت مزامنة 0 عملية»): الكود القديم كان بينادي fullSync()
+ * (اللي بيرفع المعلّق فعلاً — done=N) وبعدها بينادي flushOutbox() تاني على
+ * الصندوق اللي بقى فاضي → بيرجّع {done:0} → الإشعار يكتب «تمت مزامنة 0
+ * عملية بنجاح» رغم أن الرفع نجح. الآن: نرفع المعلّق مرة واحدة ونسجّل نتيجته
+ * الحقيقية، والـ prewarm يشتغل في الخلفية من غير ما يحاسب الإشعار، ولو حصل
+ * فشل مؤقت نجرّب دفعة تانية ونجمّع الأرقام.
+ */
 export async function syncNow(): Promise<{ done: number; failed: number }> {
   if (!isOnline()) return { done: 0, failed: 0 }
-  await fullSync()
-  return flushOutbox()
+  const result = await flushOutbox()
+  // تحديث نسخة البيانات المحلية في الخلفية — مش شرط الرفع
+  void prewarmAll()
+    .then((r) => {
+      if (r.products > 0) set({ prewarmed: r.products })
+    })
+    .catch(() => {})
+  if (result.failed > 0) {
+    // فشل مؤقت (4xx أو شبكة رجعت لحظة)؟ دفعة تانية — اللي نجح منها يتجمع
+    const second = await flushOutbox()
+    if (second.done > 0) return { done: result.done + second.done, failed: second.failed }
+  }
+  return result
 }

@@ -61,5 +61,5 @@ export function useOfflineReady() {
   }, [])
 }
 
-export { syncNow } from './sync'
+export { syncNow, getSyncState } from './sync'
 export type { OutboxEntry } from './idb'
