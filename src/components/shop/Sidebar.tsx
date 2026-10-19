@@ -22,11 +22,12 @@
 import * as React from 'react'
 import { useVocab, foodTerm } from '@/lib/vocab'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, ShoppingCart, Package, Receipt, Wrench, Users, Truck,
   PackagePlus, Wallet, ReceiptText, Banknote, Warehouse, Building2,
-  BarChart3, Settings as SettingsIcon, UserCog, Power, ChevronLeft, Store, Plus,
+  BarChart3, Settings as SettingsIcon, UserCog, Power, ChevronLeft, ChevronDown, Store,
+  Boxes, Activity, ArrowRightLeft, ClipboardCheck,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -55,11 +56,11 @@ interface NavItem {
  * page-level hero tints in InventoryView/MovementsPage/TransfersPage/
  * StocktakePage so the sidebar dot == the page accent).
  */
-const INVENTORY_CHILDREN: { path: string; label: string; color: string }[] = [
-  { path: '/inventory', label: 'حالة المخزون', color: '#10b981' },
-  { path: '/inventory/movements', label: 'الحركات', color: '#0ea5e9' },
-  { path: '/inventory/transfers', label: 'التحويلات', color: '#f59e0b' },
-  { path: '/inventory/stocktake', label: 'الجرد', color: '#0d9488' },
+const INVENTORY_CHILDREN: { path: string; label: string; color: string; icon: LucideIcon }[] = [
+  { path: '/inventory', label: 'حالة المخزون', color: '#10b981', icon: Boxes },
+  { path: '/inventory/movements', label: 'الحركات', color: '#0ea5e9', icon: Activity },
+  { path: '/inventory/transfers', label: 'التحويلات', color: '#f59e0b', icon: ArrowRightLeft },
+  { path: '/inventory/stocktake', label: 'الجرد', color: '#0d9488', icon: ClipboardCheck },
 ]
 
 const MAIN_GROUP: NavItem[] = [
@@ -194,6 +195,7 @@ function InventoryGroup({
   collapsed?: boolean
   onNavigate?: () => void
 }) {
+  const router = useRouter()
   const { pathname, isActive } = useActivePath()
   const inInventory = pathname.startsWith('/inventory')
   const parentActive = pathname === '/inventory'
@@ -252,134 +254,123 @@ function InventoryGroup({
     )
   }
 
-  /* ── Expanded mode: parent row with chevron + collapsible children ── */
+  /* ── Expanded mode: parent row (toggle) + connected sub-pages ── */
+  const onParentClick = () => {
+    // أول ضغطة من برّه المخزون: افتح القايمة وروح لحالة المخزون مباشرة.
+    // بعد كده الضغطة بتفتح/تقفل القايمة بس — من غير زرار × منفصل.
+    if (!inInventory) {
+      setOpen(true)
+      warmInventory()
+      router.push('/inventory')
+      onNavigate?.()
+      return
+    }
+    setOpen((o) => !o)
+  }
+
   return (
     <div className="relative">
-      {/* Parent row: click navigates to /inventory, (+) toggles children */}
-      <div
+      <button
+        type="button"
+        onClick={onParentClick}
+        onMouseEnter={warmInventory}
+        onFocus={warmInventory}
+        aria-expanded={open}
+        aria-controls="inventory-subnav"
         className={cn(
-          'group relative flex w-full items-center rounded-xl transition-all duration-base',
-          'min-h-[40px] text-right',
-          parentActive
-            ? 'bg-primary-subtle text-primary-subtle-foreground ring-1 ring-primary/15 shadow-[0_2px_8px_-2px_rgba(16,185,129,0.18)]'
-            : inInventory
-              ? 'bg-sidebar-accent/60 text-sidebar-accent-foreground'
-              : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+          'group relative flex min-h-[40px] w-full items-center gap-3 rounded-xl px-3 py-1.5 text-right text-sm font-medium transition-all duration-base',
+          inInventory
+            ? 'bg-primary-subtle text-primary-subtle-foreground ring-1 ring-primary/15'
+            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
         )}
       >
-        {(parentActive || inInventory) && (
+        {inInventory && (
           <span
             aria-hidden
-            className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 h-7 w-[3px] rounded-l-full bg-gradient-to-b from-brand-400 to-brand-600 shadow-[0_0_8px_0px] shadow-brand-500/60"
+            className="pointer-events-none absolute right-0 top-1/2 h-7 w-[3px] -translate-y-1/2 rounded-l-full bg-gradient-to-b from-brand-400 to-brand-600 shadow-[0_0_8px_0px] shadow-brand-500/60"
           />
         )}
-
-        <Link
-          prefetch={false}
-          href="/inventory"
-          onMouseEnter={warmInventory}
-          onPointerDown={warmInventory}
-          onFocus={warmInventory}
-          onClick={onNavigate}
-          aria-current={parentActive ? 'page' : undefined}
-          className="flex min-w-0 flex-1 items-center gap-3 px-3 py-1.5"
-        >
-          <span
-            className={cn(
-              'relative grid place-items-center size-8 shrink-0 rounded-lg transition-all',
-              parentActive || inInventory
-                ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground/75 group-hover:text-sidebar-accent-foreground group-hover:bg-sidebar-accent/80',
-            )}
-          >
-            <Warehouse
-              strokeWidth={parentActive || inInventory ? 2.4 : 2}
-              className={cn('size-[18px]', (parentActive || inInventory) && 'text-primary')}
-            />
-          </span>
-          <span className="flex-1 truncate text-sm font-medium">المخزون</span>
-        </Link>
-
-        {/* Toggle button */}
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          aria-label={open ? 'إخفاء صفحات المخزون' : 'إظهار صفحات المخزون'}
+        <span
           className={cn(
-            'group/toggle me-1.5 flex size-7 shrink-0 items-center justify-center rounded-md transition-all',
-            'active:scale-90',
-            inInventory || open
-              ? 'bg-primary/10 text-primary ring-1 ring-primary/15'
-              : 'text-muted-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+            'relative grid size-8 shrink-0 place-items-center rounded-lg transition-all',
+            inInventory
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground/75 group-hover:bg-sidebar-accent/80 group-hover:text-sidebar-accent-foreground',
           )}
         >
-          <Plus
-            className={cn(
-              'size-3.5 transition-transform duration-base ease-out',
-              open && 'rotate-45',
-            )}
-          />
-        </button>
-      </div>
+          <Warehouse strokeWidth={inInventory ? 2.2 : 2} className="size-[18px]" />
+        </span>
+        <span className="flex-1 truncate">المخزون</span>
+        <ChevronDown
+          aria-hidden
+          className={cn(
+            'size-4 shrink-0 opacity-60 transition-transform duration-base ease-out group-hover:opacity-100',
+            open && 'rotate-180',
+          )}
+        />
+      </button>
 
-      {/* Children — display:none toggling for zero-empty-space collapse */}
+      {/* Sub-pages — display:none toggling for zero-empty-space collapse */}
       <div
+        id="inventory-subnav"
         style={{ display: open ? 'block' : 'none' }}
         className={open ? 'submenu-in' : undefined}
       >
-        <div className="relative ms-[26px] mt-1 space-y-0.5 border-s border-sidebar-border/70 ps-3 pt-1 pb-1">
+        <div className="relative mt-1.5 mb-1 space-y-1 pe-0">
+          {/* العمود الفقري: خط رأسي يمرّ من تحت أيقونة المخزون */}
+          <span
+            aria-hidden
+            className="absolute bottom-5 top-0 w-px bg-sidebar-border"
+            style={{ insetInlineStart: '27px' }}
+          />
           {INVENTORY_CHILDREN.map((child) => {
             const active = pathname === child.path
+            const ChildIcon = child.icon
+            const warm = () => shouldSkipPreload() || preloadView(child.path)
             return (
               <Link
                 key={child.path}
                 prefetch={false}
                 href={child.path}
-                onMouseEnter={() => shouldSkipPreload() || preloadView(child.path)}
-                onPointerDown={() => shouldSkipPreload() || preloadView(child.path)}
-                onFocus={() => shouldSkipPreload() || preloadView(child.path)}
+                onMouseEnter={warm}
+                onPointerDown={warm}
+                onFocus={warm}
                 onClick={onNavigate}
                 aria-current={active ? 'page' : undefined}
-                style={
-                  {
-                    '--dot': child.color,
-                  } as React.CSSProperties
-                }
                 className={cn(
-                  'group/child relative flex min-h-[36px] items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-all',
+                  'group/child relative flex min-h-[44px] items-center gap-3 rounded-xl py-1.5 pe-3 text-sm transition-all duration-base',
+                  'ps-[46px]',
                   active
-                    ? 'font-bold'
-                    : 'text-sidebar-foreground/60 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+                    ? 'font-bold text-sidebar-foreground'
+                    : 'font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
                 )}
+                style={
+                  active
+                    ? { backgroundColor: `${child.color}1a`, boxShadow: `inset 0 0 0 1px ${child.color}40` }
+                    : undefined
+                }
               >
-                {/* Active tint background using the child's color */}
-                {active && (
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 rounded-lg"
-                    style={{
-                      backgroundColor: `${child.color}14`,
-                      boxShadow: `inset 0 0 0 1px ${child.color}33`,
-                    }}
-                  />
-                )}
+                {/* وصلة أفقية من العمود الفقري للصفحة */}
                 <span
                   aria-hidden
-                  className={cn(
-                    'relative size-2 shrink-0 rounded-full transition-transform',
-                    active ? 'scale-110' : 'scale-90 opacity-60 group-hover/child:opacity-100',
-                  )}
-                  style={{ backgroundColor: 'var(--dot)' }}
+                  className="absolute top-1/2 h-px w-[14px] transition-colors"
+                  style={{
+                    insetInlineStart: '27px',
+                    backgroundColor: active ? child.color : 'var(--sidebar-border)',
+                  }}
                 />
-                <span className="relative truncate">{child.label}</span>
-                {active && (
-                  <span
-                    aria-hidden
-                    className="absolute -start-[13px] top-1/2 size-1.5 -translate-y-1/2 rounded-full ring-4 ring-sidebar"
-                    style={{ backgroundColor: 'var(--dot)' }}
-                  />
-                )}
+                {/* بلاطة الأيقونة — ملوّنة بهوية الصفحة دايمًا، وتتملّى لما تكون الصفحة الحالية */}
+                <span
+                  className="relative grid size-8 shrink-0 place-items-center rounded-lg transition-all duration-base group-hover/child:scale-105"
+                  style={
+                    active
+                      ? { backgroundColor: child.color, color: '#fff', boxShadow: `0 4px 12px -2px ${child.color}80` }
+                      : { backgroundColor: `${child.color}1f`, color: child.color }
+                  }
+                >
+                  <ChildIcon strokeWidth={active ? 2.3 : 2} className="size-[17px]" />
+                </span>
+                <span className="relative flex-1 truncate">{child.label}</span>
               </Link>
             )
           })}
