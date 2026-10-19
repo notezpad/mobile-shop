@@ -1,6 +1,6 @@
 'use client'
 
-import { compressImage } from '@/lib/compress-image'
+import { uploadImage } from '@/lib/upload-image'
 import * as React from 'react'
 import {
   ImagePlus, Loader2, Save, Sparkles, CalendarDays, CheckCircle2, Printer, Bell,
@@ -234,12 +234,7 @@ export function SettingsView() {
   const handleUpload = async (file: File) => {
     setUploading(true)
     try {
-      const fd = new FormData()
-      fd.append('file', await compressImage(file, { maxSize: 400, quality: 0.9, skipBelowBytes: 40 * 1024 }))
-      const res = await fetch('/api/upload', { method: 'POST', body: fd })
-      const d = await res.json()
-      if (!res.ok) throw new Error(d?.error || 'فشل رفع الشعار')
-      update('logoPath', d.url)
+      update('logoPath', await uploadImage(file, 'logo', 'فشل رفع الشعار'))
       toast.success('تم رفع الشعار')
     } catch (e: any) {
       toast.error(e?.message || 'فشل الرفع')

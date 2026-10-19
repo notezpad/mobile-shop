@@ -10,7 +10,10 @@ export const dynamic = 'force-dynamic'
 // stores that string directly in `imagePath` / `logoPath` (both are plain
 // unbounded TEXT columns), and <img src="..."> renders a data URL exactly
 // like a normal file URL — no extra storage/CDN setup required.
-const MAX_BYTES = 2 * 1024 * 1024 // 2MB — keeps DB rows/requests reasonable
+// ⚡ 2026-10-19: الواجهة بتضغط أي صورة لأقل حجم قبل الرفع (upload-image.ts) — عادةً
+// أقل من 60KB. الحد هنا مجرد حماية من الإساءة، مش قيد على المستخدم (لو الضغط فشل
+// في متصفح قديم بنقبل الأصلي لحد 10MB بدل ما نرفض).
+const MAX_BYTES = 10 * 1024 * 1024
 const ALLOWED_TYPES = new Set([
   'image/png',
   'image/jpeg',

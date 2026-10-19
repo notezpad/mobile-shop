@@ -1,6 +1,6 @@
 'use client'
 
-import { compressImage } from '@/lib/compress-image'
+import { uploadImage } from '@/lib/upload-image'
 import * as React from 'react'
 import { useVocab } from '@/lib/vocab'
 import { useUnsavedConfirm } from '@/hooks/use-dirty-confirm'
@@ -123,12 +123,7 @@ export function ProductDialog({
   const handleUpload = async (file: File) => {
     setUploading(true)
     try {
-      const fd = new FormData()
-      fd.append('file', await compressImage(file, { maxSize: 900, quality: 0.82 }))
-      const res = await fetch('/api/upload', { method: 'POST', body: fd })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || 'فشل رفع الصورة')
-      setImagePath(data.url)
+      setImagePath(await uploadImage(file, 'product'))
       toast.success('تم رفع الصورة')
     } catch (e: any) {
       toast.error(e?.message || 'فشل رفع الصورة')
