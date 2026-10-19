@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
+import { requireModule, requireModuleWritePermission, featureErrorResponse } from '@/lib/features'
 import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 
 /** ⚡ EDGE CACHE purge بعد أي تعديل/حذف عميل */
@@ -24,6 +25,11 @@ async function __GET(
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+
+  // saleh-mowazaf: module 'customers'
+  try { requireModule(session, 'customers') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   // 🔒 RBAC: تكلفة بنود الفواتير مخفية عن اللي ملوش صلاحية الأرباح
@@ -144,6 +150,11 @@ async function __PUT(
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+
+  // saleh-kateb-mowazaf: module 'customers'
+  try { requireModuleWritePermission(session, 'customers') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   const { id } = await params

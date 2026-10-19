@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireModule, featureErrorResponse } from '@/lib/features'
 import { matchEdgeCache, putEdgeCache } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
@@ -27,6 +28,11 @@ export async function GET() {
     } catch (e) {
       const err = authErrorResponse(e)
       return NextResponse.json(err?.body, { status: err?.status })
+    }
+
+    // saleh-mowazaf: module 'reports'
+    try { requireModule(s, 'reports') } catch (e) {
+      const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
     }
     // 🔒 RBAC: الربح لكل فرع للمدير أو لمن عنده صلاحية الأرباح بس
     const canViewProfits = s.role === 'ADMIN' || s.role === 'SUPER_ADMIN' || s.canViewProfits === true

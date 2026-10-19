@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireModule, featureErrorResponse } from '@/lib/features'
 import { checkLowStockAndNotify, checkExpiringSubscriptions } from '@/lib/notifications'
 import { getSql } from '@/lib/sql'
 import { getTenantTimezone, startOfDayInTz, startOfMonthInTz, dateStrInTz } from '@/lib/tenantTime'
@@ -15,6 +16,11 @@ export async function GET(req: Request) {
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+
+  // 🔐 صلاحيات الموظف: موديول 'dashboard'
+  try { requireModule(session, 'dashboard') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   // ?days=7|14|30 — controls the chart period (default 7)

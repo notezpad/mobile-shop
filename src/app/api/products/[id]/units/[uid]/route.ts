@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
-import { requireCapability, featureErrorResponse } from '@/lib/features'
+import { requireCapability, featureErrorResponse, requireModuleWritePermission } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +26,10 @@ async function __PATCH(
     if (fe) return NextResponse.json(fe.body, { status: fe.status })
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+  // saleh-kateb-mowazaf: module 'products'
+  try { requireModuleWritePermission(session, 'products') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
   const { id, uid } = await params
   const pid = parseInt(id, 10)

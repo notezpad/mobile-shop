@@ -195,14 +195,52 @@ export class FeatureError extends Error {
  *   - موظف بدون permissions (null/فاضية): كل اللي بتسمح بيه الباقة (زي السايدبار بالظبط).
  *   - موظف بـ permissions: لازم الموديول (أو أي موديول مرتبط) يكون ضمنها.
  *
- * بنفرضها على الموديولات المستقلة (مخزون / موردين / مشتريات) اللي ليها شاشات وAPIs
- * خاصة بيها بس — عشان ما نكسرش شاشات مشتركة زي نقطة البيع.
+ * 🛡️ 2026-10-19 — التوسعة لكل الموديولات (المرحلة 2): نفس الفرض بقى على كل
+ * شاشة مستقلة (مبيعات / منتجات / عملاء / لوحة معلومات / تقارير الفروع...).
+ * الشاشات المشتركة محمية بالـ aliases تحت عشان نقطة البيع ما تتعطلش:
+ *   - كتالوج المنتجات بيتقري من نقطة البيع والمشتريات والمخزون.
+ *   - العملاء بيتقروا من نقطة البيع وسجل المبيعات.
+ *   - البيع نفسه موديوله 'pos' (مش 'sales' — سجل المبيعات شاشة مستقلة).
+ * الكتابة بتفرض الموديول نفسه بدون aliases — شوف requireModuleWrite تحت.
  */
 const PERMISSION_ALIASES: Partial<Record<ModuleKey, ModuleKey[]>> = {
   inventory: ['inventory'],
   // شاشة الشراء بتحتاج قايمة الموردين، وشاشة الموردين بتعرض أوامر شرائهم
   suppliers: ['suppliers', 'purchases'],
   purchases: ['purchases'],
+  // 🆕 المرحلة 2 — باقي الموديولات:
+  dashboard: ['dashboard'],
+  pos: ['pos'],
+  // كتالوج المنتجات قراءة مشتركة (نقطة البيع/المشتريات/المخزون/الذكاء الاصطناعي)
+  products: ['products', 'pos', 'purchases', 'inventory'],
+  // سجل المبيعات بيتقري من نقطة البيع كمان (آخر الفواتير)
+  sales: ['sales', 'pos'],
+  maintenance: ['maintenance'],
+  // العملاء بيتقروا من نقطة البيع وسجل المبيعات
+  customers: ['customers', 'pos', 'sales'],
+  finance: ['finance'],
+  expenses: ['expenses'],
+  cash: ['cash'],
+  reports: ['reports'],
+  users: ['users'],
+  branches: ['branches'],
+  settings: ['settings'],
+}
+
+/**
+ * ✍️ الكتابة بتفرض الموديول نفسه (أو alias مكتوب هنا صراحةً) — عشان موظف نقطة
+ * البيع (pos) يقدر يبيع، لكن ما يقدرش ينشئ/يعدّل منتجات أو عملاء من الـ API
+ * مباشرةً ولو كان قراءتهم مسموحة له.
+ * أي موديول مش موجود في الخريطة = الكتابة بتفرض الموديول نفسه فقط.
+ */
+const WRITE_ALIASES: Partial<Record<ModuleKey, ModuleKey[]>> = {
+  // البيع فعل هو شغلانة نقطة البيع
+  pos: ['pos'],
+  // إتمام شراء من شاشة المشتريات — الدفع للمورد جزء من نفس الشغلانة (زي قبل كده)
+  suppliers: ['suppliers', 'purchases'],
+  purchases: ['purchases'],
+  // مرتجع البيع بيتم من شاشة سجل المبيعات
+  sales: ['sales'],
 }
 
 export function requireModulePermission(
@@ -214,6 +252,25 @@ export function requireModulePermission(
   if (!allowedKeys) return
   const p = session.permissions
   if (!p || p.length === 0) return
+  if (!allowedKeys.some((k) => p.includes(k))) {
+    throw new FeatureError('ليس لديك صلاحية لهذه العملية', 403)
+  }
+}
+
+/**
+ * ✍️ 2026-10-19: نفس فكرة requireModulePermission لكن للعمليات اللي بتكتب
+ * (إنشاء/تعديل/حذف). بتفرض الموديول نفسه بدون aliases القراءة، مع استثناءات
+ * WRITE_ALIASES للحالات اللي الكتابة فيها جزء أصيل من موديول تاني.
+ * المدير/SUPER_ADMIN أو الموظف من غير قائمة صلاحيات = بدون قيود (زي السايدبار).
+ */
+export function requireModuleWritePermission(
+  session: { role: string; permissions?: string[] | null },
+  moduleKey: ModuleKey,
+) {
+  if (session.role !== 'EMPLOYEE') return
+  const p = session.permissions
+  if (!p || p.length === 0) return
+  const allowedKeys = WRITE_ALIASES[moduleKey] ?? [moduleKey]
   if (!allowedKeys.some((k) => p.includes(k))) {
     throw new FeatureError('ليس لديك صلاحية لهذه العملية', 403)
   }

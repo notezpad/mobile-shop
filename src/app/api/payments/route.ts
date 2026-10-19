@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireModule, requireModuleWritePermission, featureErrorResponse } from '@/lib/features'
 import { createPrincipalCashEntry } from '@/lib/commission'
 import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 
@@ -25,6 +26,11 @@ async function __GET(req: NextRequest) {
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+
+  // saleh-mowazaf: module 'customers'
+  try { requireModule(session, 'customers') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   const { searchParams } = new URL(req.url)
@@ -82,6 +88,11 @@ async function __POST(req: NextRequest) {
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+
+  // saleh-kateb-mowazaf: module 'customers'
+  try { requireModuleWritePermission(session, 'customers') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   const body = await req.json().catch(() => null)

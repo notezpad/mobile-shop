@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
+import { requireModule, featureErrorResponse } from '@/lib/features'
 import { createPrincipalCashEntry } from '@/lib/commission'
 
 export const dynamic = 'force-dynamic'
@@ -16,6 +17,11 @@ async function __GET(
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+
+  // 🔐 صلاحيات الموظف: موديول 'sales'
+  try { requireModule(session, 'sales') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   const { id } = await params

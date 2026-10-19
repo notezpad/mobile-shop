@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import type { Session } from '@/lib/auth'
-import { requireCapability, featureErrorResponse } from '@/lib/features'
+import { requireCapability, requireModule, requireModuleWritePermission, featureErrorResponse } from '@/lib/features'
 import { getTenantTimezone, localDateStrToUtcBounds, dateStrInTz } from '@/lib/tenantTime'
 import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 import { withSql, isUniqueViolation, type Sql } from '@/lib/sql'
@@ -15,6 +15,11 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+
+  // 🔐 صلاحيات الموظف: موديول 'sales'
+  try { requireModule(session, 'sales') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   // 🔒 RBAC: رؤية التكاليف
@@ -166,6 +171,11 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+
+  // ✍️ صلاحيات كتابة الموظف: موديول 'pos'
+  try { requireModuleWritePermission(session, 'pos') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   const body = await req.json().catch(() => null)

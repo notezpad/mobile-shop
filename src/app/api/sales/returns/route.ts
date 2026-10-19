@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
-import { requireCapability, featureErrorResponse } from '@/lib/features'
+import { requireCapability, featureErrorResponse, requireModuleWritePermission } from '@/lib/features'
 import { performSaleReturn, SaleReturnError } from '@/lib/sale-return'
 
 export const dynamic = 'force-dynamic'
@@ -52,6 +52,10 @@ async function __POST(req: NextRequest) {
     const fe = featureErrorResponse(e)
     if (fe) return NextResponse.json(fe.body, { status: fe.status })
     throw e
+  }
+  // ✍️ صلاحيات كتابة الموظف: موديول 'sales'
+  try { requireModuleWritePermission(session, 'sales') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   const body = await req.json().catch(() => null)

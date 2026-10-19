@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { buildDefaultUnitsData } from '@/lib/default-units'
-import { getPlanContext, assertWithinPlanLimit, featureErrorResponse } from '@/lib/features'
+import { getPlanContext, assertWithinPlanLimit, featureErrorResponse, requireModule, requireModuleWritePermission } from '@/lib/features'
 import { computeDynamicRetailPrice } from '@/lib/retail-pricing'
 import { matchEdgeCache, putEdgeCache, purgeCatalogCaches } from '@/lib/edgeCache'
 import { runNonBlocking, trackServerEvent, extractRequestContext } from '@/lib/tracking/server'
@@ -96,6 +96,11 @@ export async function GET(req: NextRequest) {
     } catch (e) {
       const err = authErrorResponse(e)
       return NextResponse.json(err?.body, { status: err?.status })
+    }
+
+    // saleh-mowazaf: module 'products'
+    try { requireModule(session, 'products') } catch (e) {
+      const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
     }
 
     // 🔒 RBAC: رؤية التكاليف
@@ -266,6 +271,11 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       const err = authErrorResponse(e)
       return NextResponse.json(err?.body, { status: err?.status })
+    }
+
+    // saleh-kateb-mowazaf: module 'products'
+    try { requireModuleWritePermission(session, 'products') } catch (e) {
+      const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
     }
 
     const body = await req.json().catch(() => null)

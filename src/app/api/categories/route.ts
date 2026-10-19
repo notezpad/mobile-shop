@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireModule, requireModuleWritePermission, featureErrorResponse } from '@/lib/features'
 import { matchEdgeCache, putEdgeCache, purgeCatalogCaches } from '@/lib/edgeCache'
 import { withSql } from '@/lib/sql'
 
@@ -20,6 +21,11 @@ export async function GET() {
     } catch (e) {
       const err = authErrorResponse(e)
       return NextResponse.json(err?.body, { status: err?.status })
+    }
+
+    // saleh-mowazaf: module 'products'
+    try { requireModule(session, 'products') } catch (e) {
+      const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
     }
 
     // ⚡ v9: كاش حافة للتصنيفات — بتتغير نادراً جداً فTTL أطول (60 ثانية)،
@@ -45,6 +51,11 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       const err = authErrorResponse(e)
       return NextResponse.json(err?.body, { status: err?.status })
+    }
+
+    // saleh-kateb-mowazaf: module 'products'
+    try { requireModuleWritePermission(session, 'products') } catch (e) {
+      const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
     }
 
     const body = await req.json().catch(() => null)
@@ -75,6 +86,11 @@ export async function PUT(req: NextRequest) {
     } catch (e) {
       const err = authErrorResponse(e)
       return NextResponse.json(err?.body, { status: err?.status })
+    }
+
+    // saleh-kateb-mowazaf: module 'products'
+    try { requireModuleWritePermission(session, 'products') } catch (e) {
+      const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
     }
 
     const body = await req.json().catch(() => null)
@@ -109,6 +125,11 @@ export async function DELETE(req: NextRequest) {
     } catch (e) {
       const err = authErrorResponse(e)
       return NextResponse.json(err?.body, { status: err?.status })
+    }
+
+    // saleh-kateb-mowazaf: module 'products'
+    try { requireModuleWritePermission(session, 'products') } catch (e) {
+      const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
     }
 
     const { searchParams } = new URL(req.url)

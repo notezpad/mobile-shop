@@ -165,13 +165,14 @@ async function __POST(req: NextRequest) {
 
     // 🎨 2026-10-18: المنتجات اللي ليها ألوان/مقاسات — الشراء لازم يتحدد على
     // المقاس/اللون نفسه، وإلا الكمية بتتضاف على المنتج بس وتتمسح عند أول بيعة.
-    const variantRows = ids.length
-      ? await sql<{ id: number; productId: number; size: string | null; color: string | null }[]>`
+    type PoVariantRow = { id: number; productId: number; size: string | null; color: string | null }
+    const variantRows: PoVariantRow[] = ids.length
+      ? await sql<PoVariantRow[]>`
           SELECT "id", "productId", "size", "color" FROM "ProductVariant"
           WHERE "productId" IN ${sql(ids)}
           ORDER BY "id" ASC`
       : []
-    const variantsByProduct = new Map<number, typeof variantRows>()
+    const variantsByProduct = new Map<number, PoVariantRow[]>()
     for (const v of variantRows) {
       const list = variantsByProduct.get(Number(v.productId)) ?? []
       list.push(v)

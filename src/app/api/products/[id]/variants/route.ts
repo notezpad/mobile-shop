@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
-import { requireCapability, featureErrorResponse } from '@/lib/features'
+import { requireCapability, featureErrorResponse, requireModule, requireModuleWritePermission } from '@/lib/features'
 import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
 import { withSql } from '@/lib/sql'
 
@@ -52,6 +52,11 @@ export async function GET(
       const err = authErrorResponse(e)
       return NextResponse.json(err?.body, { status: err?.status })
     }
+
+    // saleh-mowazaf: module 'products'
+    try { requireModule(session, 'products') } catch (e) {
+      const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
+    }
     const { id } = await params
     const pid = parseInt(id, 10)
     if (isNaN(pid)) return NextResponse.json({ error: 'معرف غير صالح' }, { status: 400 })
@@ -87,6 +92,10 @@ async function __POST(
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
   }
+  // saleh-kateb-mowazaf: module 'products'
+  try { requireModuleWritePermission(session, 'products') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
+  }
   const { id } = await params
   const pid = parseInt(id, 10)
   if (isNaN(pid)) return NextResponse.json({ error: 'معرف غير صالح' }, { status: 400 })
@@ -100,6 +109,21 @@ async function __POST(
   const quantity = parseInt(body?.quantity ?? 0, 10) || 0
   if (!size && !color) {
     return NextResponse.json({ error: 'لازم مقاس أو لون على الأقل' }, { status: 400 })
+  }
+  // 🛡️ 2026-10-19: أول مقاس/لون على منتج عليه رصيد قديم «من غير مقاس» — الرصيد
+  // القديم ده هيتمسح بصمت عند أول مزامنة (كمية المنتج بتتحسب = مجموع المقاسات).
+  // نفس خسارة الـ 100 قطعة اللي حصلت في أوامر الشراء قبل إصلاح 2026-10-18.
+  // بنرفض ونوجّه المستخدم يتعامل مع الرصيد القديم بوعي (حركة صرف أو جرد).
+  if (Math.abs(prod.quantity) > 1e-9) {
+    const existingVariants = await db.productVariant.count({ where: { productId: pid } })
+    if (existingVariants === 0) {
+      return NextResponse.json(
+        {
+          error: `المنتج ده عليه رصيد قديم (${prod.quantity}) من غير مقاس — أي رصيد من غير مقاس هيتمسح أول ما تقسّم على ألوان ومقاسات. اعمل «حركة مخزون ← صرف» للرصيد القديم الأول (أو جرد)، وبعدها ضيف الألوان والمقاسات`
+        },
+        { status: 400 },
+      )
+    }
   }
   if (barcode) {
     // 🏬 2026-10-18: باركود المقاس فريد جوه نفس (المحل + الفرع) — الفحص هنا برسالة واضحة،

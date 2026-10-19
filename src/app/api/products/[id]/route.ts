@@ -2,7 +2,7 @@ import { cleanUnitLabel } from '@/lib/unit-label'
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
-import { getPlanContext } from '@/lib/features'
+import { getPlanContext, requireModuleWritePermission, featureErrorResponse } from '@/lib/features'
 import { ensureCategory } from '../route'
 import { purgeCatalogCaches } from '@/lib/edgeCache'
 
@@ -27,6 +27,11 @@ export async function PUT(
     } catch (e) {
       const err = authErrorResponse(e)
       return NextResponse.json(err?.body, { status: err?.status })
+    }
+
+    // saleh-kateb-mowazaf: module 'products'
+    try { requireModuleWritePermission(session, 'products') } catch (e) {
+      const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
     }
 
     const { id } = await params
@@ -246,6 +251,11 @@ export async function PATCH(
       return NextResponse.json(err?.body, { status: err?.status })
     }
 
+    // saleh-kateb-mowazaf: module 'products'
+    try { requireModuleWritePermission(session, 'products') } catch (e) {
+      const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
+    }
+
     const { id } = await params
     const pid = parseInt(id, 10)
     if (isNaN(pid)) {
@@ -280,6 +290,11 @@ export async function DELETE(
     } catch (e) {
       const err = authErrorResponse(e)
       return NextResponse.json(err?.body, { status: err?.status })
+    }
+
+    // saleh-kateb-mowazaf: module 'products'
+    try { requireModuleWritePermission(session, 'products') } catch (e) {
+      const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
     }
 
     const { id } = await params

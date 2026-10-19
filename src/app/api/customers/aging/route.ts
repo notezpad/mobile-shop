@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireModule, featureErrorResponse } from '@/lib/features'
 import { getTenantTimezone, dateStrInTz } from '@/lib/tenantTime'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +27,11 @@ export async function GET() {
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+
+  // saleh-mowazaf: module 'customers'
+  try { requireModule(session, 'customers') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   return withDb(async () => {

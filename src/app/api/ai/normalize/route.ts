@@ -1,6 +1,7 @@
 import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireModule, featureErrorResponse } from '@/lib/features'
 import { extractAttributesFromText } from '@/lib/arabic-dictionary'
 
 export const dynamic = 'force-dynamic'
@@ -43,6 +44,11 @@ async function __POST(req: NextRequest) {
   } catch (e) {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
+  }
+
+  // saleh-mowazaf: module 'products'
+  try { requireModule(session, 'products') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
   const body = await req.json().catch(() => null)

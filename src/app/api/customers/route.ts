@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireModule, requireModuleWritePermission, featureErrorResponse } from '@/lib/features'
 import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 import { withSql } from '@/lib/sql'
 
@@ -29,6 +30,11 @@ export async function GET(req: NextRequest) {
     } catch (e) {
       const err = authErrorResponse(e)
       return NextResponse.json(err?.body, { status: err?.status })
+    }
+
+    // saleh-mowazaf: module 'customers'
+    try { requireModule(session, 'customers') } catch (e) {
+      const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
     }
 
     const { searchParams } = new URL(req.url)
@@ -122,6 +128,11 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       const err = authErrorResponse(e)
       return NextResponse.json(err?.body, { status: err?.status })
+    }
+
+    // saleh-kateb-mowazaf: module 'customers'
+    try { requireModuleWritePermission(session, 'customers') } catch (e) {
+      const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
     }
 
     const body = await req.json().catch(() => null)
