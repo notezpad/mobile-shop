@@ -4,6 +4,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { getPlanContext, requireModuleWritePermission, featureErrorResponse } from '@/lib/features'
 import { ensureCategory } from '../route'
+import { isInternalImageUrl } from '@/lib/product-image'
 import { purgeCatalogCaches } from '@/lib/edgeCache'
 
 export const dynamic = 'force-dynamic'
@@ -165,8 +166,10 @@ export async function PUT(
                 ? cleanUnitLabel(body.unitLabel)
                 : existing.unitLabel
             : null,
+          // لو الواجهة رجّعت رابط الصورة الداخلي (/api/products/:id/image) يبقى الصورة
+          // ماتغيرتش — نسيب الـ base64 الأصلي زي ما هو (مينفعش يتكتب الرابط مكانه).
           imagePath:
-            body.imagePath !== undefined
+            body.imagePath !== undefined && !isInternalImageUrl(body.imagePath)
               ? body.imagePath
                 ? String(body.imagePath)
                 : null

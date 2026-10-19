@@ -9,6 +9,7 @@ import { matchEdgeCache, putEdgeCache, purgeCatalogCaches } from '@/lib/edgeCach
 import { runNonBlocking, trackServerEvent, extractRequestContext } from '@/lib/tracking/server'
 import { TRACKING_EVENTS } from '@/lib/tracking/types'
 import { withSql, type Sql } from '@/lib/sql'
+import { isInternalImageUrl } from '@/lib/product-image'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,23 @@ export const dynamic = 'force-dynamic'
  *   - نفس كاش الحافة ومفاتيحه
  * POST فضل Prisma (عملية نادرة).
  */
+
+/**
+ * ⚡ 2026-10-19 (سرعة): الصور متخزنة base64 جوه عمود imagePath (لحد 2MB للصورة)،
+ * و`SELECT *` كان بيسحب كل الصور من الداتابيز (أيرلندا) ويرجعها جوه JSON القايمة.
+ * دلوقتي القايمة بترجع رابط خفيف /api/products/:id/image?v=<حجم> والمتصفح
+ * بيحمّل كل صورة مرة واحدة ويخزنها (immutable). الصور اللي مش base64
+ * (روابط خارجية) بترجع زي ما هي.
+ */
+function productCols(sql: Sql) {
+  return sql`"id", "tenantId", "branchId", "name", "category", "barcode", "price", "cost",
+    "quantity", "minQuantity", "soldByWeight", "unitLabel", "retailMarginPercent",
+    "active", "createdAt", "collection",
+    CASE WHEN "imagePath" IS NULL THEN NULL
+         WHEN substr("imagePath", 1, 5) = 'data:'
+           THEN '/api/products/' || "id"::text || '/image?v=' || pg_column_size("imagePath")::text
+         ELSE "imagePath" END AS "imagePath"`
+}
 
 /** Ensure a category row exists for the given name (auto-create feature) — tenant scoped. */
 export async function ensureCategory(
@@ -191,13 +209,13 @@ export async function GET(req: NextRequest) {
       total = ids.length
       const pageIds = ids.slice(skip, skip + limit)
       const rows = pageIds.length > 0
-        ? await sql<any[]>`SELECT * FROM "Product" WHERE "id" IN ${sql(pageIds)}`
+        ? await sql<any[]>`SELECT ${productCols(sql)} FROM "Product" WHERE "id" IN ${sql(pageIds)}`
         : []
       const byId = new Map(rows.map((r) => [Number(r.id), r]))
       products = pageIds.map((id) => byId.get(id)).filter(Boolean) as any[]
     } else {
       const [rows, cnt] = await Promise.all([
-        sql<any[]>`SELECT * FROM "Product" WHERE ${where} ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${skip}`,
+        sql<any[]>`SELECT ${productCols(sql)} FROM "Product" WHERE ${where} ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${skip}`,
         sql<{ cnt: number }[]>`SELECT COUNT(*)::int AS cnt FROM "Product" WHERE ${where}`,
       ])
       products = rows
@@ -319,6 +337,16 @@ export async function POST(req: NextRequest) {
         )
       }
     }
+    // رابط صورة داخلي (نسخ منتج مثلًا) → ننسخ الصورة الأصلية بدل تخزين الرابط
+    let imagePathForCreate: string | null = body.imagePath ? String(body.imagePath) : null
+    if (isInternalImageUrl(imagePathForCreate)) {
+      const srcId = parseInt(String(imagePathForCreate).split('/')[3], 10)
+      const src = await db.product.findFirst({
+        where: { id: srcId, tenantId: session.tenantId },
+        select: { imagePath: true },
+      })
+      imagePathForCreate = src?.imagePath ?? null
+    }
     const planCtx = await getPlanContext(session.tenantId)
     const created = await db.product.create({
       data: {
@@ -340,7 +368,7 @@ export async function POST(req: NextRequest) {
               ? guessUnitLabel(name)
               : cleanUnitLabel(body.unitLabel)
             : null,
-        imagePath: body.imagePath ? String(body.imagePath) : null,
+        imagePath: imagePathForCreate,
         branchId: session.branchId ?? (body.branchId ? parseInt(body.branchId, 10) : null),
         collection: body.collection ? String(body.collection).trim() || null : null,
         retailMarginPercent:
