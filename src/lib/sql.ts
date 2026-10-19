@@ -96,10 +96,12 @@ function createSql(): Sql {
       'DATABASE_URL is not reachable at runtime. Add DATABASE_URL as a secret/variable, or bind Hyperdrive as HYPERDRIVE.',
     )
   }
-  // max:1 — طلب Worker ما يمسكش أكتر من سوكت واحد، والـ pooling الحقيقي
-  // عند Hyperdrive على الحافة.
+  // ⚡ 2026-10-19: max:3 (كان 1). مع max:1 كل Promise.all في الراوتات (الداشبورد
+  // والمنتجات والتقارير) كانت بتتنفذ ورا بعض على سوكت واحد = رحلة لأيرلندا لكل
+  // استعلام. دلوقتي لحد 3 استعلامات بالتوازي. Hyperdrive بيعمل الـ pooling الحقيقي
+  // والـ Workers بتسمح بـ 6 اتصالات. للرجوع للسلوك القديم: غيّر الرقم لـ 1.
   return postgres(connectionString, {
-    max: 1,
+    max: 3,
     // انظر شرح الترويسة — أمان مع pooling وأقل كمية CPU ممكنة.
     prepare: false,
     // ⚡ CPU: بدون ده postgres.js بيشغّل استعلام إضافي في *كل* اتصال جديد (pg_type)

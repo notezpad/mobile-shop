@@ -64,15 +64,17 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 🧹 Cleanup duplicates on every poll — أصبحت عبارة DELETE واحدة رخيصة
-    // (ROW_NUMBER) بدل تحميل 500 صف وتجميعهم في الذاكرة.
-    try {
-      const deleted = await cleanupDuplicateNotifications(sql, session.tenantId)
-      if (deleted > 0 && debug) {
-        console.log(`[notifications GET] cleaned up ${deleted} duplicate notifications`)
+    // 🧹 Cleanup duplicates — ⚡ 2026-10-19: بس لما الفحوصات بتشتغل (كل 5 دقايق)،
+    // مش مع كل طلب: كان DELETE إضافي (رحلة كاملة للداتابيز) في كل poll من كل تاب.
+    if (shouldRunChecks) {
+      try {
+        const deleted = await cleanupDuplicateNotifications(sql, session.tenantId)
+        if (deleted > 0 && debug) {
+          console.log(`[notifications GET] cleaned up ${deleted} duplicate notifications`)
+        }
+      } catch (e: any) {
+        if (debug) console.error('[notifications GET] cleanup failed:', e?.message ?? e)
       }
-    } catch (e: any) {
-      if (debug) console.error('[notifications GET] cleanup failed:', e?.message ?? e)
     }
 
     // 🛡️ Wrap the actual list fetch in try/catch — if the Notification table
@@ -84,24 +86,27 @@ export async function GET(req: NextRequest) {
     let dbError: string | undefined
 
     try {
-      notifications = onlyUnread
-        ? await sql`
+      // ⚡ القايمة والعدّ بالتوازي (رحلة واحدة بدل اتنين ورا بعض)
+      const [listRows, cnt] = await Promise.all([
+        onlyUnread
+          ? sql`
             SELECT * FROM "Notification"
             WHERE "tenantId" = ${session.tenantId} AND "isRead" = false
               AND ("userId" IS NULL OR "userId" = ${session.userId})
             ORDER BY "createdAt" DESC
             LIMIT 50`
-        : await sql`
+          : sql`
             SELECT * FROM "Notification"
             WHERE "tenantId" = ${session.tenantId}
               AND ("userId" IS NULL OR "userId" = ${session.userId})
             ORDER BY "createdAt" DESC
-            LIMIT 50`
-
-      const cnt = await sql<{ cnt: number }[]>`
-        SELECT COUNT(*)::int AS cnt FROM "Notification"
-        WHERE "tenantId" = ${session.tenantId} AND "isRead" = false
-          AND ("userId" IS NULL OR "userId" = ${session.userId})`
+            LIMIT 50`,
+        sql<{ cnt: number }[]>`
+          SELECT COUNT(*)::int AS cnt FROM "Notification"
+          WHERE "tenantId" = ${session.tenantId} AND "isRead" = false
+            AND ("userId" IS NULL OR "userId" = ${session.userId})`,
+      ])
+      notifications = listRows as any[]
       unreadCount = Number(cnt[0]?.cnt ?? 0)
     } catch (e: any) {
       dbError = e?.message ?? String(e)
