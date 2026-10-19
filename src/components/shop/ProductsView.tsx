@@ -143,6 +143,11 @@ export function ProductsView() {
   const [products, setProducts] = React.useState<Product[]>([])
   const [categories, setCategories] = React.useState<{ id: number; name: string }[]>([])
   const [loading, setLoading] = React.useState(true)
+  // ⚡ 2026-10-19 (على طريقة نقطة البيع): الـ skeleton في أول تحميل بس. بعد كده القايمة
+  // القديمة تفضل ظاهرة والتحديث بيتم في الخلفية (شريط رفيع) بدل ما الشبكة تفضى كل مرة.
+  const [refreshing, setRefreshing] = React.useState(false)
+  const hasLoadedRef = React.useRef(false)
+  const loadSeqRef = React.useRef(0) // رقم آخر طلب — يتجاهل الردود القديمة المتأخرة
   const [search, setSearch] = React.useState('')
   const [category, setCategory] = React.useState('all')
   const [status, setStatus] = React.useState('all')
@@ -224,7 +229,9 @@ export function ProductsView() {
   }, [])
 
   const loadProducts = React.useCallback(async (p = page) => {
-    setLoading(true)
+    const seq = ++loadSeqRef.current
+    if (hasLoadedRef.current) setRefreshing(true)
+    else setLoading(true)
     try {
       const params = new URLSearchParams()
       if (search.trim()) params.set('search', search.trim())
@@ -235,17 +242,23 @@ export function ProductsView() {
       params.set('page', String(p))
       params.set('limit', String(PAGE_SIZE))
       const res = await api<{ data: Product[]; total: number; totalPages: number }>(`/api/products?${params.toString()}`)
+      if (seq !== loadSeqRef.current) return // وصل رد أحدث — تجاهل ده
       setProducts(res.data)
       setTotal(res.total)
       setTotalPages(res.totalPages)
+      hasLoadedRef.current = true
     } catch (e: any) {
+      if (seq !== loadSeqRef.current) return
       if (e?.message?.includes('لا توجد بيانات محفوظة')) {
         toast.info('أنت غير متصل — افتح المنتجات مرة واحدة وأنت متصل لحفظها')
       } else {
         toast.error(e?.message || t('فشل تحميل المنتجات'))
       }
     } finally {
-      setLoading(false)
+      if (seq === loadSeqRef.current) {
+        setLoading(false)
+        setRefreshing(false)
+      }
     }
   }, [search, category, status, sort, lowOnly, page, PAGE_SIZE])
 
@@ -883,6 +896,9 @@ export function ProductsView() {
       </div>
 
       {/* ═══ المحتوى ═══ */}
+      {refreshing && !loading && (
+        <div aria-hidden className="h-0.5 w-full animate-pulse rounded-full bg-foreground/25" />
+      )}
       {loading ? (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-4 gap-y-5">
           {Array.from({ length: 8 }).map((_, i) => (
