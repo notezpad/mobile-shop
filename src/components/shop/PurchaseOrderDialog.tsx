@@ -258,11 +258,7 @@ export function PurchaseOrderDialog({
     )
     const plain = checked.filter((c) => !c.has).map((c) => c.p)
     const withVariants = checked.filter((c) => c.has).map((c) => c.p)
-    if (plain.length) {
-      setCart((prev) => [...plain.map((p) => ({ product: p, variant: null, cost: p.cost ?? 0, quantity: 1 })), ...prev])
-      // 🆕 2026-10-20: تأكيد بالعدد الحقيقي بدل سكوت (نفس درس «مزامنة 0 عنصر»)
-      toast.success(`اتضاف ${plain.length} ${plain.length === 1 ? 'منتج' : 'منتجات'} للسلة`)
-    }
+    if (plain.length) setCart((prev) => [...plain.map((p) => ({ product: p, variant: null, cost: p.cost ?? 0, quantity: 1 })), ...prev])
     if (withVariants.length) {
       toast.info(`${withVariants.length} منتج ليه ألوان ومقاسات — حدّد الكمية لكل لون/مقاس`)
       await openNextInQueue(withVariants)
@@ -682,11 +678,6 @@ export function PurchaseOrderDialog({
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-700/25 bg-cyan-600/[0.07] px-4 py-3">
                     <p className="text-sm font-medium">
                       في <b className="font-extrabold tabular-nums">{visiblePendingToday.length}</b> منتج جديد اتضاف النهارده ولسه ملهمش أمر شراء
-                      {/* 🆕 2026-10-20: الأسماء نفسها ظاهرة — المستخدم يعرف مين دول من غير ما يفتح حاجة */}
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        {visiblePendingToday.slice(0, 3).map((p) => p.name).join('، ')}
-                        {visiblePendingToday.length > 3 ? ` و${visiblePendingToday.length - 3} غيرهم` : ''}
-                      </span>
                     </p>
                     <Button
                       type="button"

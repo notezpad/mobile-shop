@@ -114,25 +114,6 @@ export function MovementsTab({ movements, meta, branches, isEmployee, userBranch
   const [typeFilter, setTypeFilter] = React.useState<string>('all')
   // 📋 «تحتاج مراجعة»: حركات الموظفين اليدوية اللي المدير لسه ماراجعهاش
   const [reviewOnly, setReviewOnly] = React.useState(false)
-
-  // 🆕 2026-10-20: قارئ سياق — ?review=1 (من إشعار سلامة المخزون / لوحة الفحص)
-  // و ?q= (بحث جاهز) — يتقروا مرة واحدة ويتمسحوا من الـ URL
-  React.useEffect(() => {
-    try {
-      const url = new URL(window.location.href)
-      const sp = url.searchParams
-      const review = sp.get('review') === '1'
-      const q = sp.get('q')
-      if (review) setReviewOnly(true)
-      if (q) setSearch(q)
-      if (review || q) {
-        sp.delete('review')
-        sp.delete('q')
-        window.history.replaceState(null, '', url.pathname + url.search)
-      }
-    } catch { /* ignore */ }
-  }, [])
-
   const [reviewedIds, setReviewedIds] = React.useState<Set<number>>(new Set())
   const [reviewBusy, setReviewBusy] = React.useState(false)
   const [from, setFrom] = React.useState('')

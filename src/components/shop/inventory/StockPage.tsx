@@ -21,7 +21,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { StockTab } from './StockTab'
-import { IntegrityPanel } from './IntegrityPanel'
 import { useInventoryData } from './useInventoryData'
 import { InventoryCrossNav, InventoryStyles, LoadErrorBanner, SectionBoundary, num } from './shared'
 
@@ -154,8 +153,6 @@ export function StockPage() {
                 <FileSpreadsheet className="size-4" />
                 تصدير Excel
               </Button>
-              {/* 🆕 2026-10-20: فحص سلامة المخزون رجع متاح من صفحة المخزون — كان محبوس في مكوّن قديم مش مركّب على أي راوت */}
-              <IntegrityPanel onChanged={reload} />
             </div>
 
             <div>

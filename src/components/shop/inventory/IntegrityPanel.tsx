@@ -8,7 +8,6 @@
  */
 
 import * as React from 'react'
-import { useRouter } from 'next/navigation'
 import { ShieldCheck, ShieldAlert, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
@@ -24,7 +23,6 @@ interface Report {
 }
 
 export function IntegrityPanel({ onChanged }: { onChanged?: () => void }) {
-  const router = useRouter()
   const [open, setOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [report, setReport] = React.useState<Report | null>(null)
@@ -142,20 +140,9 @@ export function IntegrityPanel({ onChanged }: { onChanged?: () => void }) {
                 )}
 
                 {report.reviewCount > 0 && (
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-500/10 p-3 text-sm font-medium text-amber-900 dark:text-amber-200">
-                    <span>{report.reviewCount} حركة يدوية من الموظفين تحتاج مراجعة</span>
-                    {/* 🆕 2026-10-20: بدل التعليمات النصية — زر بيوديك للفلتر جاهز على طول */}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setOpen(false)
-                        router.push('/inventory/movements?review=1')
-                      }}
-                    >
-                      افتح الحركات المحتاجة مراجعة
-                    </Button>
-                  </div>
+                  <p className="rounded-xl bg-amber-500/10 p-3 text-sm font-medium text-amber-900 dark:text-amber-200">
+                    {report.reviewCount} حركة يدوية من الموظفين تحتاج مراجعة — افتح تبويب «الحركات» واختار «تحتاج مراجعة».
+                  </p>
                 )}
               </>
             ) : null}

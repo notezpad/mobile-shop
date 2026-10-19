@@ -1,7 +1,6 @@
 'use client'
 
 import * as React from 'react'
-import { useRouter } from 'next/navigation'
 import { useVocab, foodTerm } from '@/lib/vocab'
 import { commonUnit, formatQtyUnit, unitOf, unitWord } from '@/lib/unit-label'
 import {
@@ -711,7 +710,6 @@ function useMediaQuery(query: string) {
    ──────────────────────────────────────────────────────────────── */
 
 export function POSView() {
-  const router = useRouter()
   const t = useVocab()
   const user = useShopStore((s) => s.user)
   const draftKey = draftKeyFor(user)
@@ -1110,32 +1108,10 @@ export function POSView() {
       next = cur.map((i) => (i.cartKey === cartKey ? { ...i, quantity: q } : i))
     } else {
       if (maxQuantity <= 0) {
-        // 🆕 2026-10-20: بدل توست يسكت — فيه زر «اعمل أمر شراء» يوديك للمشتريات
-        // وأمر شراء جديد مفتوح والصنف في السلة (نفس هاند-أوف المخزون)
         toast.error(
           variantLabel
             ? `الكمية غير متوفرة لهذا اللون/المقاس (${variantLabel})`
-            : 'الكمية غير متوفرة لهذا المنتج',
-          {
-            action: {
-              label: 'اعمل أمر شراء',
-              onClick: () => {
-                try {
-                  sessionStorage.setItem(
-                    'purchasePrefill',
-                    JSON.stringify({
-                      id: product.id,
-                      name: product.name,
-                      barcode: product.barcode ?? null,
-                      cost: 0,
-                      quantity: product.quantity ?? 0,
-                    }),
-                  )
-                } catch { /* sessionStorage غير متاح */ }
-                router.push('/purchases')
-              },
-            },
-          }
+            : 'الكمية غير متوفرة لهذا المنتج'
         )
         return
       }
@@ -1292,17 +1268,10 @@ export function POSView() {
         else if (data.length === 1) target = { product: data[0], variantId: null }
         else if (data.length === 0) {
           playBeep('err')
-          // 🆕 2026-10-20: التوست بقى فيه فعل — «أضف منتج» بيفتح نافذة الإضافة معبّية بالباركود/الاسم المكتوب
           toast.error(
             mode === 'scan'
               ? `الباركود ${code} غير مسجّل`
-              : 'لا يوجد منتج بهذا الاسم أو الباركود',
-            {
-              action: {
-                label: 'أضف منتج',
-                onClick: () => openQuickAddProduct(code),
-              },
-            }
+              : 'لا يوجد منتج بهذا الاسم أو الباركود'
           )
           return
         } else if (mode === 'scan') {
@@ -2075,7 +2044,7 @@ export function POSView() {
               <p className="font-medium">لا يوجد منتج مطابق</p>
               <p className="text-sm text-muted-foreground">جرّب اسم تاني أو أضف المنتج دلوقتي.</p>
             </div>
-            <Button size="sm" variant="subtle" onClick={() => openQuickAddProduct(query.trim() || undefined)}>
+            <Button size="sm" variant="subtle" onClick={() => openQuickAddProduct()}>
               <Plus className="size-4" />
               أضف منتجاً جديداً
             </Button>

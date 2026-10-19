@@ -333,19 +333,6 @@ export function MaintenanceView() {
     setDialogOpen(true)
   }
 
-  // 🆕 2026-10-20: جاي من الداشبورد بـ ?new=1 → افتح أمر صيانة جديد على طول (نفس نمط ?new=1 في المنتجات)
-  React.useEffect(() => {
-    try {
-      const url = new URL(window.location.href)
-      if (url.searchParams.get('new') === '1') {
-        url.searchParams.delete('new')
-        window.history.replaceState(null, '', url.pathname + url.search)
-        setEditing(null)
-        setDialogOpen(true)
-      }
-    } catch { /* ignore */ }
-  }, [])
-
   /* ───── البيانات المشتقة ───── */
 
   const stats = React.useMemo(() => {
