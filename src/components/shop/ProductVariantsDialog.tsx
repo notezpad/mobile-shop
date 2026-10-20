@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Loader2, Plus, Search, Shirt, Sparkles, Trash2, Dices, Wand2 } from 'lucide-react'
+import { ChevronDown, Loader2, Plus, Search, Shirt, Sparkles, Trash2, Dices, Wand2 } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -14,6 +14,8 @@ import { DialogHero, Field, IconBtn, INK_INPUT, InkInput, LockedNote, SectionTit
 import { INK_BTN, INK_BTN_OUTLINE } from './settings-ui'
 import { parseVariantText, type ParsedVariantRow } from '@/lib/variantParser'
 import { generateUniqueEan13 } from '@/lib/barcode'
+import { Swatch } from '@/lib/color-swatch'
+import { compareSizes } from '@/lib/variant-sort'
 
 export interface ProductVariant {
   id: number
@@ -34,6 +36,9 @@ interface Props {
 export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }: Props) {
   const confirm = useConfirm()
   const [vq, setVq] = React.useState('')
+  const [openColors, setOpenColors] = React.useState<Set<string>>(new Set())
+  const [bulkQty, setBulkQty] = React.useState<Record<string, string>>({})
+  const [bulkBusyKey, setBulkBusyKey] = React.useState<string | null>(null)
   const [variants, setVariants] = React.useState<ProductVariant[]>([])
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -235,6 +240,61 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
         [v.size, v.color, v.barcode].some((x) => (x ?? '').toLowerCase().includes(needle))
       )
     : variants
+  const colorGroups = React.useMemo(() => {
+    const map = new Map<string, { key: string; color: string; items: ProductVariant[]; total: number }>()
+    for (const v of shownVariants) {
+      const key = (v.color ?? '').trim()
+      let g = map.get(key)
+      if (!g) {
+        g = { key, color: key, items: [], total: 0 }
+        map.set(key, g)
+      }
+      g.items.push(v)
+      g.total += Math.max(0, v.quantity)
+    }
+    const arr = Array.from(map.values())
+    arr.forEach((g) => g.items.sort(compareSizes))
+    return arr
+  }, [shownVariants])
+
+  // مفتوح تلقائيًا: لون واحد بس، أو لما يكون فيه بحث شغال
+  const autoOpen = colorGroups.length === 1 || needle !== ''
+  const toggleColor = (key: string) =>
+    setOpenColors((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+
+  const applyQtyToColor = async (key: string, items: ProductVariant[]) => {
+    if (!product) return
+    const raw = (bulkQty[key] ?? '').trim()
+    if (raw === '') return
+    const quantity = Math.max(0, parseInt(raw, 10) || 0)
+    const label = key || 'بدون لون'
+    if (!(await confirm({ title: `ضبط كمية ${items.length} متغير في «${label}» على ${quantity}؟` }))) return
+    setBulkBusyKey(key)
+    const ids = new Set<number>()
+    let failCount = 0
+    await withDataBatch(async () => {
+      for (const v of items) {
+        try {
+          await api(`/api/products/${product.id}/variants/${v.id}`, { method: 'PUT', body: { quantity } })
+          ids.add(v.id)
+        } catch {
+          failCount++
+        }
+      }
+    })
+    setVariants((prev) => prev.map((v) => (ids.has(v.id) ? { ...v, quantity } : v)))
+    setBulkBusyKey(null)
+    setBulkQty((p) => ({ ...p, [key]: '' }))
+    if (ids.size) toast.success(`تم ضبط الكمية لـ ${ids.size} متغير`)
+    if (failCount) toast.error(`فشل تحديث ${failCount} متغير`)
+    onChanged?.()
+  }
+
   const missingCount = variants.filter((v) => !v.barcode).length
 
   return (
@@ -431,51 +491,102 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                     <p className="mt-2 text-sm font-bold">لا توجد متغيرات بعد</p>
                   </div>
                 ) : (
-                  <ul className="max-h-[20rem] divide-y overflow-y-auto overscroll-contain rounded-2xl border bg-card">
-                    <li className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_5rem_2.25rem] gap-2 bg-muted px-3 py-2 text-[11px] font-bold text-foreground/70">
-                      <span>المقاس</span>
-                      <span>اللون</span>
-                      <span>الباركود</span>
-                      <span className="text-center">الكمية</span>
-                      <span />
-                    </li>
-                    {shownVariants.map((v) => (
-                      <li
-                        key={v.id}
-                        className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_5rem_2.25rem] items-center gap-2 px-3 py-1.5 text-sm"
-                      >
-                        <span className="truncate font-bold">{v.size ?? '—'}</span>
-                        <span className="truncate font-semibold">{v.color ?? '—'}</span>
-                        <span dir="ltr" className="truncate text-start font-mono text-xs text-foreground/75">
-                          {v.barcode ?? (
-                            <IconBtn
-                              label="توليد باركود"
-                              disabled={generatingId === v.id}
-                              onClick={() => generateForVariant(v.id)}
-                            >
-                              {generatingId === v.id ? <Loader2 className="size-3.5 animate-spin" /> : <Dices className="size-3.5" />}
-                            </IconBtn>
+                  <div className="max-h-[26rem] space-y-2 overflow-y-auto overscroll-contain pb-1">
+                    {colorGroups.map((g) => {
+                      const isOpen = autoOpen || openColors.has(g.key)
+                      const busy = bulkBusyKey === g.key
+                      return (
+                        <div key={g.key || 'none'} className="overflow-hidden rounded-2xl border bg-card">
+                          <button
+                            type="button"
+                            aria-expanded={isOpen}
+                            onClick={() => toggleColor(g.key)}
+                            disabled={autoOpen}
+                            className="flex w-full items-center gap-3 px-3 py-2.5 text-start transition-colors enabled:hover:bg-muted/50"
+                          >
+                            <Swatch name={g.color} className="size-5" />
+                            <span className="min-w-0 flex-1 truncate text-sm font-extrabold">{g.color || 'بدون لون'}</span>
+                            <span className="text-xs font-semibold tabular-nums text-foreground/65">
+                              {g.items.length} مقاس
+                            </span>
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums">
+                              {g.total} قطعة
+                            </span>
+                            {!autoOpen && (
+                              <ChevronDown className={cn('size-4 shrink-0 transition-transform', isOpen && 'rotate-180')} aria-hidden />
+                            )}
+                          </button>
+                          {isOpen && (
+                            <div className="border-t bg-muted/20">
+                              <div className="flex items-center gap-2 px-3 py-2">
+                                <span className="text-xs font-semibold text-foreground/70">ضبط كمية كل المقاسات:</span>
+                                <InkInput
+                                  num
+                                  size="sm"
+                                  type="number"
+                                  min={0}
+                                  aria-label={`كمية موحدة للون ${g.color || 'بدون لون'}`}
+                                  value={bulkQty[g.key] ?? ''}
+                                  onChange={(e) => setBulkQty((p) => ({ ...p, [g.key]: e.target.value }))}
+                                  wrapperClassName="w-20"
+                                  className="text-center"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  disabled={busy || (bulkQty[g.key] ?? '').trim() === ''}
+                                  onClick={() => applyQtyToColor(g.key, g.items)}
+                                  className={cn('h-8 rounded-full px-3 text-xs font-bold', INK_BTN_OUTLINE)}
+                                >
+                                  {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                                  تطبيق
+                                </Button>
+                              </div>
+                              <ul className="divide-y border-t">
+                                {g.items.map((v) => (
+                                  <li
+                                    key={v.id}
+                                    className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.4fr)_5rem_2.25rem] items-center gap-2 bg-card px-3 py-1.5 text-sm"
+                                  >
+                                    <span className="truncate font-bold">{v.size ?? '—'}</span>
+                                    <span dir="ltr" className="truncate text-start font-mono text-xs text-foreground/75">
+                                      {v.barcode ?? (
+                                        <IconBtn
+                                          label="توليد باركود"
+                                          disabled={generatingId === v.id}
+                                          onClick={() => generateForVariant(v.id)}
+                                        >
+                                          {generatingId === v.id ? <Loader2 className="size-3.5 animate-spin" /> : <Dices className="size-3.5" />}
+                                        </IconBtn>
+                                      )}
+                                    </span>
+                                    <InkInput
+                                      num
+                                      size="sm"
+                                      type="number"
+                                      min={0}
+                                      aria-label={`كمية ${v.size ?? ''} ${v.color ?? ''}`}
+                                      value={v.quantity}
+                                      onChange={(e) => updateQty(v.id, parseInt(e.target.value) || 0)}
+                                      className="text-center"
+                                    />
+                                    <IconBtn label="حذف المتغير" danger onClick={() => removeVariant(v.id)}>
+                                      <Trash2 className="size-4" />
+                                    </IconBtn>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           )}
-                        </span>
-                        <InkInput
-                          num
-                          size="sm"
-                          type="number"
-                          min={0}
-                          aria-label={`كمية ${v.size ?? ''} ${v.color ?? ''}`}
-                          value={v.quantity}
-                          onChange={(e) => updateQty(v.id, parseInt(e.target.value) || 0)}
-                          className="text-center"
-                        />
-                        <IconBtn label="حذف المتغير" danger onClick={() => removeVariant(v.id)}>
-                          <Trash2 className="size-4" />
-                        </IconBtn>
-                      </li>
-                    ))}
+                        </div>
+                      )
+                    })}
                     {shownVariants.length === 0 && (
-                      <li className="px-4 py-8 text-center text-sm font-medium text-foreground/65">مفيش متغير بالبحث ده</li>
+                      <p className="rounded-2xl border bg-card px-4 py-8 text-center text-sm font-medium text-foreground/65">
+                        مفيش متغير بالبحث ده
+                      </p>
                     )}
-                  </ul>
+                  </div>
                 )}
               </section>
             </>
