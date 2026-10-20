@@ -14,8 +14,8 @@ import { DialogHero, Field, IconBtn, INK_INPUT, InkInput, LockedNote, SectionTit
 import { INK_BTN, INK_BTN_OUTLINE } from './settings-ui'
 import { parseVariantText, type ParsedVariantRow } from '@/lib/variantParser'
 import { generateUniqueEan13 } from '@/lib/barcode'
-import { Swatch } from '@/lib/color-swatch'
-import { compareSizes } from '@/lib/variant-sort'
+import { Swatch, normAr } from '@/lib/color-swatch'
+import { groupByColor } from '@/lib/variant-sort'
 
 export interface ProductVariant {
   id: number
@@ -36,9 +36,6 @@ interface Props {
 export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }: Props) {
   const confirm = useConfirm()
   const [vq, setVq] = React.useState('')
-  const [openColors, setOpenColors] = React.useState<Set<string>>(new Set())
-  const [bulkQty, setBulkQty] = React.useState<Record<string, string>>({})
-  const [bulkBusyKey, setBulkBusyKey] = React.useState<string | null>(null)
   const [variants, setVariants] = React.useState<ProductVariant[]>([])
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -49,6 +46,10 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
   const [bulkSaving, setBulkSaving] = React.useState(false)
   const [generatingId, setGeneratingId] = React.useState<number | null>(null)
   const [bulkGenerating, setBulkGenerating] = React.useState(false)
+  // أقسام الألوان المفتوحة يدويًا (الافتراضي: مقفولة) + خانة «كمية اللون كله» لكل لون
+  const [openColors, setOpenColors] = React.useState<Set<string>>(() => new Set())
+  const [colorQty, setColorQty] = React.useState<Record<string, string>>({})
+  const [applyingColor, setApplyingColor] = React.useState<string | null>(null)
   const capabilities = useShopStore((s) => s.plan.capabilities)
   const enabled = capabilities.includes('variants')
 
@@ -75,6 +76,14 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
   React.useEffect(() => {
     if (open) load()
   }, [open, load])
+
+  React.useEffect(() => {
+    if (open) {
+      setOpenColors(new Set())
+      setColorQty({})
+      setVq('')
+    }
+  }, [open, product?.id])
 
   const analyzeSmartText = () => {
     if (!smartText.trim()) return
@@ -188,6 +197,59 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
     }
   }
 
+  const toggleColor = (key: string) =>
+    setOpenColors((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+
+  /** ضبط كمية كل مقاسات اللون (اللي ظاهرة وقت الضغط) على رقم واحد — بعد تأكيد، ودفعة تحديث واحدة. */
+  const applyColorQty = async (colorKey: string, items: ProductVariant[]) => {
+    if (!product || items.length === 0) return
+    const raw = (colorQty[colorKey] ?? '').trim()
+    if (raw === '') {
+      toast.error('اكتب الكمية الأول')
+      return
+    }
+    const qty = Math.max(0, parseInt(raw.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))), 10))
+    if (!Number.isFinite(qty)) {
+      toast.error('كمية غير صحيحة')
+      return
+    }
+    const label = colorKey || 'بدون لون'
+    const ok = await confirm({
+      title: `ضبط كمية «${label}» على ${qty}؟`,
+      description: `هتتغيّر كمية ${items.length} مقاس${needle ? ' (نتايج البحث الحالية بس)' : ''} لتبقى ${qty} لكل مقاس.`,
+      confirmText: 'تطبيق',
+      destructive: false,
+    })
+    if (!ok) return
+    setApplyingColor(colorKey)
+    const targets = items.filter((v) => v.quantity !== qty)
+    let okCount = 0
+    let failCount = 0
+    const done = new Set<number>()
+    await withDataBatch(async () => {
+      for (const v of targets) {
+        try {
+          await api(`/api/products/${product.id}/variants/${v.id}`, { method: 'PUT', body: { quantity: qty } })
+          okCount++
+          done.add(v.id)
+        } catch {
+          failCount++
+        }
+      }
+    })
+    setVariants((prev) => prev.map((v) => (done.has(v.id) ? { ...v, quantity: qty } : v)))
+    setApplyingColor(null)
+    if (okCount) toast.success(`اتضبطت كمية ${okCount} مقاس على ${qty}`)
+    else if (!failCount) toast.message('الكميات كانت متضبطة بالفعل')
+    if (failCount) toast.error(`فشل تحديث ${failCount} مقاس`)
+    if (okCount) onChanged?.()
+  }
+
   const generateForVariant = async (id: number) => {
     if (!product) return
     setGeneratingId(id)
@@ -235,66 +297,18 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
   }
 
   const needle = vq.trim().toLowerCase()
+  const needleAr = normAr(vq)
   const shownVariants = needle
     ? variants.filter((v) =>
-        [v.size, v.color, v.barcode].some((x) => (x ?? '').toLowerCase().includes(needle))
+        [v.size, v.color, v.barcode].some((x) => {
+          const t = (x ?? '').toLowerCase()
+          return t.includes(needle) || (needleAr !== '' && normAr(t).includes(needleAr))
+        })
       )
     : variants
-  const colorGroups = React.useMemo(() => {
-    const map = new Map<string, { key: string; color: string; items: ProductVariant[]; total: number }>()
-    for (const v of shownVariants) {
-      const key = (v.color ?? '').trim()
-      let g = map.get(key)
-      if (!g) {
-        g = { key, color: key, items: [], total: 0 }
-        map.set(key, g)
-      }
-      g.items.push(v)
-      g.total += Math.max(0, v.quantity)
-    }
-    const arr = Array.from(map.values())
-    arr.forEach((g) => g.items.sort(compareSizes))
-    return arr
-  }, [shownVariants])
-
-  // مفتوح تلقائيًا: لون واحد بس، أو لما يكون فيه بحث شغال
-  const autoOpen = colorGroups.length === 1 || needle !== ''
-  const toggleColor = (key: string) =>
-    setOpenColors((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-
-  const applyQtyToColor = async (key: string, items: ProductVariant[]) => {
-    if (!product) return
-    const raw = (bulkQty[key] ?? '').trim()
-    if (raw === '') return
-    const quantity = Math.max(0, parseInt(raw, 10) || 0)
-    const label = key || 'بدون لون'
-    if (!(await confirm({ title: `ضبط كمية ${items.length} متغير في «${label}» على ${quantity}؟` }))) return
-    setBulkBusyKey(key)
-    const ids = new Set<number>()
-    let failCount = 0
-    await withDataBatch(async () => {
-      for (const v of items) {
-        try {
-          await api(`/api/products/${product.id}/variants/${v.id}`, { method: 'PUT', body: { quantity } })
-          ids.add(v.id)
-        } catch {
-          failCount++
-        }
-      }
-    })
-    setVariants((prev) => prev.map((v) => (ids.has(v.id) ? { ...v, quantity } : v)))
-    setBulkBusyKey(null)
-    setBulkQty((p) => ({ ...p, [key]: '' }))
-    if (ids.size) toast.success(`تم ضبط الكمية لـ ${ids.size} متغير`)
-    if (failCount) toast.error(`فشل تحديث ${failCount} متغير`)
-    onChanged?.()
-  }
-
+  const groups = React.useMemo(() => groupByColor(shownVariants), [shownVariants])
+  // يفتح لوحده لو فيه لون واحد بس أو البحث شغال
+  const autoOpen = needle !== '' || groups.length === 1
   const missingCount = variants.filter((v) => !v.barcode).length
 
   return (
@@ -491,62 +505,69 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                     <p className="mt-2 text-sm font-bold">لا توجد متغيرات بعد</p>
                   </div>
                 ) : (
-                  <div className="max-h-[26rem] space-y-2 overflow-y-auto overscroll-contain pb-1">
-                    {colorGroups.map((g) => {
-                      const isOpen = autoOpen || openColors.has(g.key)
-                      const busy = bulkBusyKey === g.key
+                  <div className="max-h-[28rem] space-y-2 overflow-y-auto overscroll-contain">
+                    {groups.map((g) => {
+                      const key = g.color
+                      const isOpen = autoOpen || openColors.has(key)
+                      const busy = applyingColor === key
                       return (
-                        <div key={g.key || 'none'} className="overflow-hidden rounded-2xl border bg-card">
+                        <div key={key || '_none'} className="overflow-hidden rounded-2xl border bg-card">
                           <button
                             type="button"
+                            onClick={() => toggleColor(key)}
                             aria-expanded={isOpen}
-                            onClick={() => toggleColor(g.key)}
                             disabled={autoOpen}
-                            className="flex w-full items-center gap-3 px-3 py-2.5 text-start transition-colors enabled:hover:bg-muted/50"
+                            className="flex w-full items-center gap-2.5 px-3 py-2.5 text-start transition-colors enabled:hover:bg-muted/50"
                           >
-                            <Swatch name={g.color} className="size-5" />
-                            <span className="min-w-0 flex-1 truncate text-sm font-extrabold">{g.color || 'بدون لون'}</span>
-                            <span className="text-xs font-semibold tabular-nums text-foreground/65">
-                              {g.items.length} مقاس
+                            <ChevronDown
+                              className={cn('size-4 shrink-0 text-foreground/60 transition-transform', isOpen ? 'rotate-0' : '-rotate-90')}
+                              aria-hidden
+                            />
+                            {key ? <Swatch name={key} className="size-5" /> : null}
+                            <span className="min-w-0 flex-1 truncate text-sm font-extrabold">{key || 'بدون لون'}</span>
+                            <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground/65">
+                              {g.items.length} مقاس · {g.total} قطعة
                             </span>
-                            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums">
-                              {g.total} قطعة
-                            </span>
-                            {!autoOpen && (
-                              <ChevronDown className={cn('size-4 shrink-0 transition-transform', isOpen && 'rotate-180')} aria-hidden />
-                            )}
                           </button>
+
                           {isOpen && (
-                            <div className="border-t bg-muted/20">
-                              <div className="flex items-center gap-2 px-3 py-2">
-                                <span className="text-xs font-semibold text-foreground/70">ضبط كمية كل المقاسات:</span>
+                            <div className="border-t">
+                              <div className="flex items-center gap-2 bg-muted/40 px-3 py-2">
+                                <span className="shrink-0 text-[11px] font-bold text-foreground/70">كمية كل المقاسات</span>
                                 <InkInput
                                   num
                                   size="sm"
                                   type="number"
                                   min={0}
-                                  aria-label={`كمية موحدة للون ${g.color || 'بدون لون'}`}
-                                  value={bulkQty[g.key] ?? ''}
-                                  onChange={(e) => setBulkQty((p) => ({ ...p, [g.key]: e.target.value }))}
+                                  aria-label={`كمية كل مقاسات ${key || 'بدون لون'}`}
+                                  placeholder="0"
                                   wrapperClassName="w-20"
+                                  value={colorQty[key] ?? ''}
+                                  onChange={(e) => setColorQty((p) => ({ ...p, [key]: e.target.value }))}
                                   className="text-center"
                                 />
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  disabled={busy || (bulkQty[g.key] ?? '').trim() === ''}
-                                  onClick={() => applyQtyToColor(g.key, g.items)}
-                                  className={cn('h-8 rounded-full px-3 text-xs font-bold', INK_BTN_OUTLINE)}
+                                  disabled={busy || applyingColor != null}
+                                  onClick={() => applyColorQty(key, g.items)}
+                                  className={cn('h-9 rounded-lg px-3 text-xs font-bold', INK_BTN_OUTLINE)}
                                 >
                                   {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
                                   تطبيق
                                 </Button>
                               </div>
-                              <ul className="divide-y border-t">
+                              <ul className="divide-y">
+                                <li className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_5rem_2.25rem] gap-2 bg-muted/20 px-3 py-1.5 text-[11px] font-bold text-foreground/65">
+                                  <span>المقاس</span>
+                                  <span>الباركود</span>
+                                  <span className="text-center">الكمية</span>
+                                  <span />
+                                </li>
                                 {g.items.map((v) => (
                                   <li
                                     key={v.id}
-                                    className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.4fr)_5rem_2.25rem] items-center gap-2 bg-card px-3 py-1.5 text-sm"
+                                    className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_5rem_2.25rem] items-center gap-2 px-3 py-1.5 text-sm"
                                   >
                                     <span className="truncate font-bold">{v.size ?? '—'}</span>
                                     <span dir="ltr" className="truncate text-start font-mono text-xs text-foreground/75">
@@ -581,7 +602,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                         </div>
                       )
                     })}
-                    {shownVariants.length === 0 && (
+                    {groups.length === 0 && (
                       <p className="rounded-2xl border bg-card px-4 py-8 text-center text-sm font-medium text-foreground/65">
                         مفيش متغير بالبحث ده
                       </p>

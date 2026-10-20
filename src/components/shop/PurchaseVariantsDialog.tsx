@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
 import { DecimalInput, DialogHero, normalizeDigits } from './purchase-dialog-ui'
+import { compareSizes } from '@/lib/variant-sort'
 import { Swatch, normAr } from '@/lib/color-swatch'
 
 export interface PurchaseVariantLite {
@@ -41,25 +42,6 @@ export interface PurchaseVariantsResult {
   qty: Record<number, number>
   /** تكلفة القطعة (واحدة لكل المنتج) — 0 لو showCost=false */
   cost: number
-}
-
-/* ───────────────────────── ترتيب المقاسات ───────────────────────── */
-
-const LETTER_LADDER = ['XS', 'S', 'M', 'L', 'XL', '2XL', 'XXL', '3XL', 'XXXL', '4XL', '5XL']
-
-function sizeRank(a: string): [number, number | string] {
-  const n = Number(normalizeDigits(a))
-  if (Number.isFinite(n) && a.trim() !== '') return [0, n]
-  const i = LETTER_LADDER.indexOf(a.trim().toUpperCase())
-  if (i >= 0) return [1, i]
-  return [2, a]
-}
-function compareSizes(a: string, b: string) {
-  const [ga, va] = sizeRank(a)
-  const [gb, vb] = sizeRank(b)
-  if (ga !== gb) return ga - gb
-  if (typeof va === 'number' && typeof vb === 'number') return va - vb
-  return String(va).localeCompare(String(vb), 'ar')
 }
 
 const labelOf = (v: PurchaseVariantLite) => [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`

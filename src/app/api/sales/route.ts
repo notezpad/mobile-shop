@@ -77,7 +77,9 @@ export async function GET(req: NextRequest) {
     const itemRows = saleIds.length
       ? await sql<any[]>`
           SELECT "id", "saleId", "name", "price", "quantity", "cost",
-                 "unitLabel", "unitQuantity", "pieceLabel", "returnedQty"
+                 "unitLabel", "unitQuantity", "pieceLabel", "returnedQty",
+                 (SELECT NULLIF(concat_ws(' / ', pv."color", pv."size"), '') FROM "ProductVariant" pv
+                  WHERE pv."id" = "SaleItem"."variantId") AS "variantLabel"
           FROM "SaleItem"
           WHERE "saleId" IN ${sql(saleIds)}
           ORDER BY "id" ASC`
@@ -111,6 +113,8 @@ export async function GET(req: NextRequest) {
         unitQuantity: it.unitQuantity ?? null,
         pieceLabel: it.pieceLabel ?? null,
         returnedQty: it.returnedQty ?? 0,
+        // 🎨 اللون/المقاس (للتمييز بين سطور نفس المنتج في المرتجع)
+        variantLabel: it.variantLabel ?? null,
       })),
     }))
 

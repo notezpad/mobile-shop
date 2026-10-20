@@ -51,6 +51,7 @@ import { NoBarcode } from '../NoBarcode'
 import { ProductAvatar } from '../ProductAvatar'
 import { StockHero, TONE, SecLabel, Pill, STOCK_FIELD, STOCK_RING, type StockTone } from './stock-dialog-ui'
 import { num } from './shared'
+import { VariantPickerSection } from './VariantPickerSection'
 import { PurchaseVariantsDialog, type PurchaseVariantLite, type PurchaseVariantsResult } from '../PurchaseVariantsDialog'
 import type { Branch, InventoryProduct } from '../InventoryView'
 
@@ -854,13 +855,13 @@ function AdjustDialog({
           {variants.length > 0 && (
             <section>
               <SecLabel required>اللون / المقاس</SecLabel>
-              <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
-                {variants.map((v) => (
-                  <Pill key={v.id} tone={tone} active={variantId === v.id} onClick={() => setVariantId(v.id)}>
-                    {[v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`} · {v.quantity}
-                  </Pill>
-                ))}
-              </div>
+              <VariantPickerSection
+                variants={variants}
+                variantId={variantId}
+                onPick={setVariantId}
+                tone={tone}
+                dimEmpty={!isIn}
+              />
               <p className="mt-1.5 text-[11px] font-medium text-foreground/60">
                 المنتج ده له ألوان ومقاسات — الحركة بتتسجل على اللون/المقاس المختار، وكمية المنتج بتتحسب من مجموعهم.
               </p>

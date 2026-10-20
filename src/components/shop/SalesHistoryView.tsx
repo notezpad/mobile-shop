@@ -38,6 +38,8 @@ interface SaleItem {
   // 🥬 وحدة المنتج وقت البيع (علبة/كيس/...) — null = قطعة
   pieceLabel?: string | null
   returnedQty?: number
+  /** 🎨 اللون/المقاس لو السطر على variant */
+  variantLabel?: string | null
 }
 interface Sale {
   id: number
@@ -924,7 +926,7 @@ export function SalesHistoryView() {
             productId: (it as any).productId ?? null,
             pieceLabel: it.pieceLabel ?? null,
             unitQuantity: it.unitQuantity ?? null,
-            name: it.name + (it.unitLabel ? ` (${it.unitQuantity}× ${it.unitLabel})` : ''),
+            name: it.name + (it.variantLabel ? ` — ${it.variantLabel}` : '') + (it.unitLabel ? ` (${it.unitQuantity}× ${it.unitLabel})` : ''),
             price: it.price,
             quantity: it.quantity,
             returnedQty: (it as any).returnedQty ?? 0,

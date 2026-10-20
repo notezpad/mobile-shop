@@ -1,7 +1,6 @@
-import * as React from 'react'
 import { cn } from '@/lib/utils'
 
-/* ───────────────────────── عينة اللون ───────────────────────── */
+/** عينات الألوان (اسم اللون بالعربي/الإنجليزي → لون). مشترك بين شاشات المتغيرات. */
 
 export const normAr = (s: string) =>
   s
@@ -56,4 +55,3 @@ export function Swatch({ name, className }: { name: string; className?: string }
     />
   )
 }
-

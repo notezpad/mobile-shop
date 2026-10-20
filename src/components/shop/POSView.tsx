@@ -48,6 +48,7 @@ import { printSale } from '@/lib/print-client'
 import { printThermalReceipt, getStoredPrinterSettings } from '@/lib/thermal-printer'
 import { ProductDialog } from './ProductDialog'
 import { POSVariantPickerDialog } from './POSVariantPickerDialog'
+import { Swatch } from '@/lib/color-swatch'
 
 /* ────────────────────────────────────────────────────────────────
    Types (unchanged business model)
@@ -97,6 +98,41 @@ interface PosVariant {
 
 function variantLabelOf(v: PosVariant): string {
   return [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`
+}
+
+/** زر تغيير اللون/المقاس في سطر السلة — بيعرض الاختيار الحالي وبيفتح دايلوج الخطوتين (بدل select طويل). */
+function VariantChangeButton({
+  current,
+  onClick,
+  className,
+}: {
+  current: PosVariant | null
+  onClick: () => void
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="تغيير اللون / المقاس"
+      className={cn(
+        'flex w-full items-center gap-2 rounded-xl border bg-background px-3 text-start font-bold outline-none transition-colors hover:border-foreground focus-visible:ring-2 focus-visible:ring-primary/20',
+        current ? 'border-border text-foreground' : 'border-dashed border-foreground/50 bg-warning-subtle text-warning-subtle-foreground',
+        className
+      )}
+    >
+      {current?.color ? <Swatch name={current.color} className="size-4" /> : null}
+      <span className="min-w-0 flex-1 truncate">
+        {current ? variantLabelOf(current) : 'اختار اللون/المقاس'}
+      </span>
+      {current ? (
+        <span className="shrink-0 text-[11px] font-semibold tabular-nums text-muted-foreground">
+          متاح {current.quantity}
+        </span>
+      ) : null}
+      <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+    </button>
+  )
 }
 
 interface CartItem {
@@ -776,6 +812,15 @@ export function POSView() {
     setVariantPickerVariants([])
     setVariantPickerUnits([])
   })
+
+  // تغيير اللون/المقاس لسطر موجود في السلة (نفس دايلوج الخطوتين)
+  const [cartVariantEdit, setCartVariantEdit] = React.useState<{
+    cartKey: string
+    productName: string
+    variants: PosVariant[]
+    selectedId: number | null
+  } | null>(null)
+  useBackLayer(cartVariantEdit != null, () => setCartVariantEdit(null))
 
   const searchRef = React.useRef<HTMLInputElement>(null)
   // Caches that keep repeated scans instant (all cleared after a sale).
@@ -2327,24 +2372,18 @@ export function POSView() {
               {open && (
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   {it.availableVariants.length > 0 && (
-                    <select
-                      value={it.variantId ?? ''}
-                      onChange={(e) => {
-                        const vid = e.target.value ? parseInt(e.target.value, 10) : null
-                        updateVariant(it.cartKey, vid ? it.availableVariants.find((v) => v.id === vid) ?? null : null)
-                      }}
-                      className={cn(selectCls, 'h-10 min-w-full rounded-xl text-base')}
-                      aria-label="اللون / المقاس"
-                    >
-                      <option value="" disabled>
-                        اختار اللون/المقاس
-                      </option>
-                      {it.availableVariants.map((v) => (
-                        <option key={v.id} value={v.id} disabled={v.quantity <= 0}>
-                          {variantLabelOf(v)} {v.quantity <= 0 ? '(نفد)' : `(متاح ${v.quantity})`}
-                        </option>
-                      ))}
-                    </select>
+                    <VariantChangeButton
+                      current={it.availableVariants.find((v) => v.id === it.variantId) ?? null}
+                      onClick={() =>
+                        setCartVariantEdit({
+                          cartKey: it.cartKey,
+                          productName: it.product.name,
+                          variants: it.availableVariants,
+                          selectedId: it.variantId,
+                        })
+                      }
+                      className="h-10 text-base min-w-full"
+                    />
                   )}
                   {it.availableUnits.length > 0 && (
                     <select
@@ -2442,27 +2481,18 @@ export function POSView() {
               </div>
 
               {it.availableVariants.length > 0 && (
-                <select
-                  value={it.variantId ?? ''}
-                  onChange={(e) => {
-                    const vid = e.target.value ? parseInt(e.target.value, 10) : null
-                    updateVariant(
-                      it.cartKey,
-                      vid ? it.availableVariants.find((v) => v.id === vid) ?? null : null
-                    )
-                  }}
-                  className={cn(selectCls, 'h-9 rounded-xl text-sm')}
-                  aria-label="اللون / المقاس"
-                >
-                  <option value="" disabled>
-                    اختار اللون/المقاس
-                  </option>
-                  {it.availableVariants.map((v) => (
-                    <option key={v.id} value={v.id} disabled={v.quantity <= 0}>
-                      {variantLabelOf(v)} {v.quantity <= 0 ? '(نفد)' : `(متاح ${v.quantity})`}
-                    </option>
-                  ))}
-                </select>
+                <VariantChangeButton
+                  current={it.availableVariants.find((v) => v.id === it.variantId) ?? null}
+                  onClick={() =>
+                    setCartVariantEdit({
+                      cartKey: it.cartKey,
+                      productName: it.product.name,
+                      variants: it.availableVariants,
+                      selectedId: it.variantId,
+                    })
+                  }
+                  className="h-9 text-sm"
+                />
               )}
 
               <div className="flex items-center gap-2">
@@ -3128,6 +3158,22 @@ export function POSView() {
         productName={variantPickerProduct?.name}
         variants={variantPickerVariants}
         onPick={handleVariantPick}
+      />
+
+      {/* تغيير اللون/المقاس من السلة */}
+      <POSVariantPickerDialog
+        open={cartVariantEdit != null}
+        onOpenChange={(o) => {
+          if (!o) setCartVariantEdit(null)
+        }}
+        productName={cartVariantEdit?.productName}
+        variants={cartVariantEdit?.variants ?? []}
+        selectedId={cartVariantEdit?.selectedId ?? null}
+        onPick={(v) => {
+          if (!cartVariantEdit) return
+          updateVariant(cartVariantEdit.cartKey, v as PosVariant)
+          setCartVariantEdit(null)
+        }}
       />
 
       <ProductDialog
