@@ -2076,13 +2076,9 @@ export function POSView() {
                       viewMode === 'compact'
                         ? 'flex h-full items-center gap-2.5 p-2'
                         : 'flex h-full flex-col gap-2 p-2.5',
-                      viewMode === 'compact' && 'border-s-[3px]'
+                      'border-s-[3px]'
                     )}
-                    style={
-                      viewMode === 'compact'
-                        ? { borderInlineStartColor: `hsl(${hueOf(p.name)} 60% 48%)` }
-                        : undefined
-                    }
+                    style={{ borderInlineStartColor: `hsl(${hueOf(p.name)} 60% 48%)` }}
                   >
                     {badge}
                     <div
