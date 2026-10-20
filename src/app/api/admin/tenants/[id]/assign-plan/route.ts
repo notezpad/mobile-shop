@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireSuperAdmin, authErrorResponse } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -100,6 +101,7 @@ export async function POST(
         include: { plan: true },
       })
 
+      await logAudit({ action: 'subscription.assign_plan', targetType: 'tenant', targetId: tenantId, details: { planId, planCode: targetPlan.code, created: true } }, req)
       return NextResponse.json({
         ok: true,
         created: true,
@@ -129,6 +131,7 @@ export async function POST(
       include: { plan: true },
     })
 
+    await logAudit({ action: 'subscription.assign_plan', targetType: 'tenant', targetId: tenantId, details: { planId, planCode: targetPlan.code, created: false } }, req)
     return NextResponse.json({
       ok: true,
       updated: true,

@@ -149,12 +149,35 @@ export async function createSession(user: {
   })
 }
 
+/**
+ * true لو كلمة مرور الحساب اتغيرت بعد إصدار التوكن ده.
+ * بيفشل مفتوحًا (false) لو العمود لسه مش موجود (قبل تشغيل الـ migration).
+ */
+async function isSessionRevoked(userId: string, iat: number | undefined): Promise<boolean> {
+  if (!iat) return true
+  try {
+    const sql = getSql()
+    const rows = await sql<{ changed: Date | null }[]>`
+      SELECT "passwordChangedAt" AS changed FROM "User" WHERE "id" = ${userId} LIMIT 1`
+    const changed = rows[0]?.changed
+    // هامش ثانية واحدة عشان الجلسة اللي اتصدرت مع تغيير الباسورد نفسه
+    return !!changed && changed.getTime() - 1000 > iat * 1000
+  } catch {
+    return false
+  }
+}
+
 export async function getSession(): Promise<Session | null> {
   const cookieStore = await cookies()
   const token = cookieStore.get('shop_session')?.value
   if (!token) return null
   try {
-    const { payload: decoded } = await jwtVerify(token, getJwtSecret())
+    const { payload: decoded } = await jwtVerify(token, getJwtSecret(), { algorithms: ['HS256'] })
+    // 🛡️ إبطال الجلسات القديمة لحساب SUPER_ADMIN بعد تغيير كلمة المرور
+    // (استعلام واحد خفيف للأدمن فقط — الموظفين/المحلات مش بيتأثروا).
+    if (decoded.role === 'SUPER_ADMIN' && (await isSessionRevoked(decoded.userId as string, decoded.iat))) {
+      return null
+    }
     return {
       userId: decoded.userId as string,
       tenantId: decoded.tenantId as string,
@@ -310,7 +333,10 @@ export async function requireAuth(): Promise<Session> {
   // The super admin bypass for subscription checks still applies, but
   // with the swapped tenantId.
   const cookieStore = await cookies()
-  const impersonateId = cookieStore.get('impersonate_tenant')?.value
+  // 🛡️ SECURITY: الانتحال للـ SUPER_ADMIN فقط. قبل كده أي مستخدم كان يقدر
+  // يضيف كوكي impersonate_tenant بنفسه فيدخل على محل تاني أو يتخطى فحص الاشتراك.
+  const impersonateId =
+    s.role === 'SUPER_ADMIN' ? cookieStore.get('impersonate_tenant')?.value : undefined
 
   if (impersonateId) {
     // Swap the tenantId for this request — all subsequent API calls
@@ -361,7 +387,8 @@ export async function requireAuthIgnoreSubscription(): Promise<Session> {
   if (!s) throw new Error('UNAUTHORIZED')
 
   const cookieStore = await cookies()
-  const impersonateId = cookieStore.get('impersonate_tenant')?.value
+  const impersonateId =
+    s.role === 'SUPER_ADMIN' ? cookieStore.get('impersonate_tenant')?.value : undefined
 
   if (impersonateId) {
     return { ...s, tenantId: impersonateId }
@@ -435,6 +462,8 @@ export async function stopImpersonation() {
 
 /** Returns the impersonated tenant id if any. */
 export async function getImpersonatedTenantId(): Promise<string | null> {
+  const s = await getSession()
+  if (!s || s.role !== 'SUPER_ADMIN') return null
   const cookieStore = await cookies()
   return cookieStore.get('impersonate_tenant')?.value ?? null
 }

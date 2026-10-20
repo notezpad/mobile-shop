@@ -45,8 +45,14 @@
 	//   { "binding": "HYPERDRIVE", "id": "<paste-id-here>" }
 	// ],
 	"vars": {
-		"NODE_ENV": "production"
+		"NODE_ENV": "production",
+		// 🖼️ الرابط العام لـ bucket الصور (بدون / في الآخر). حطّ رابط r2.dev أو الدومين المخصص هنا.
+		"IMAGES_PUBLIC_URL": "https://images.nezampos.com"
 	},
+	// 🖼️ تخزين الصور (R2) — بدل base64 في الداتابيز. الاسم لازم يطابق الـ bucket اللي عملته.
+	"r2_buckets": [
+		{ "binding": "IMAGES", "bucket_name": "nezampos-images" }
+	],
 	"hyperdrive": [
 		{
 			"binding": "HYPERDRIVE",

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireSuperAdmin, authErrorResponse, PLATFORM_TENANT_ID } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -183,6 +184,7 @@ async function __POST(req: NextRequest) {
     } as any,
   })
 
+  await logAudit({ action: 'plan.create', targetType: 'plan', targetId: (plan as any)?.id, details: { code: (plan as any)?.code } }, req)
   return NextResponse.json({ ok: true, plan })
 }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireSuperAdmin, authErrorResponse } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -97,6 +98,7 @@ async function __PUT(
   }
 
   const updated = await db.plan.update({ where: { id: planId }, data })
+  await logAudit({ action: 'plan.update', targetType: 'plan', targetId: planId, details: { fields: Object.keys(data) } }, req)
   return NextResponse.json({ ok: true, plan: updated })
 }
 
@@ -134,6 +136,7 @@ async function __DELETE(
       where: { id: planId },
       data: { isActive: false },
     })
+    await logAudit({ action: 'plan.deactivate', targetType: 'plan', targetId: planId }, _req)
     return NextResponse.json({ ok: true, action: 'deactivated', message: 'تم تعطيل الباقة (canonical — لا يمكن حذفها نهائياً)' })
   }
 
@@ -145,11 +148,13 @@ async function __DELETE(
       where: { id: planId },
       data: { isActive: false },
     })
+    await logAudit({ action: 'plan.deactivate', targetType: 'plan', targetId: planId }, _req)
     return NextResponse.json({ ok: true, action: 'deactivated', message: `تم تعطيل الباقة (${subsCount} اشتراك مرتبط بها — لا يمكن حذفها نهائياً)` })
   }
 
   // Custom plan with no subscriptions → hard delete
   await db.plan.delete({ where: { id: planId } })
+  await logAudit({ action: 'plan.delete', targetType: 'plan', targetId: planId }, _req)
   return NextResponse.json({ ok: true, action: 'deleted', message: 'تم حذف الباقة نهائياً' })
 }
 

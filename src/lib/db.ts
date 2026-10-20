@@ -1,6 +1,7 @@
 // pg-cloudflare MUST be imported before any pg usage so it can monkey-patch
 // Node's net/tls modules for the Cloudflare Workers runtime.
 import 'pg-cloudflare'
+import { applySecurityHeaders } from './security-headers'
 
 import { PrismaClient, type PrismaClientType } from './prisma-wasm'
 import { PrismaPg } from '@prisma/adapter-pg'
@@ -145,6 +146,11 @@ async function disconnectQuietly(client: PrismaClientType | null) {
  * PrismaClient, which is then closed. On Node.js (dev) it's a no-op.
  */
 export async function withDb<T>(fn: () => Promise<T>): Promise<T> {
+  // 🛡️ كل ردود الـ API بتعدّي من هنا — فبنضيف security headers مركزيًا.
+  return applySecurityHeaders(await withDbInner(fn))
+}
+
+async function withDbInner<T>(fn: () => Promise<T>): Promise<T> {
   if (!isProductionRuntime()) return fn()
 
   // Reuse the client the auth layer already opened for this same request

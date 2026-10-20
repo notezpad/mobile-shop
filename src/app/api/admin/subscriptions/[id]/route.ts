@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireSuperAdmin, authErrorResponse } from '@/lib/auth'
 import { computeEndDate, computeAmount } from '@/lib/admin-utils'
+import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -72,6 +73,7 @@ async function __PUT(
       data: { status: 'active' },
     })
 
+    await logAudit({ action: 'subscription.extend', targetType: 'subscription', targetId: subId, details: { tenantId: existing.tenantId, period, amountPaid, paymentMethod } }, req)
     return NextResponse.json({
       ok: true,
       subscription: {
@@ -103,6 +105,7 @@ async function __PUT(
         data: { status: 'active' },
       })
     }
+    await logAudit({ action: 'subscription.status_change', targetType: 'subscription', targetId: subId, details: { tenantId: existing.tenantId, from: existing.status, to: status } }, req)
     return NextResponse.json({ ok: true, subscription: { id: updated.id, status: updated.status } })
   }
 
@@ -136,6 +139,7 @@ async function __DELETE(
     data: { status: 'cancelled' },
   })
 
+  await logAudit({ action: 'subscription.cancel', targetType: 'subscription', targetId: subId, details: { tenantId: existing.tenantId } }, _req)
   return NextResponse.json({ ok: true })
 }
 

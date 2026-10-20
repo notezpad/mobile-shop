@@ -9,6 +9,7 @@ import {
   getProviderStatuses,
 } from '@/lib/tracking/config'
 import { sanitizeId } from '@/lib/tracking/sanitize'
+import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -173,6 +174,7 @@ async function __PUT(req: NextRequest) {
   }
 
   const saved = await saveTrackingConfig(body)
+  await logAudit({ action: 'settings.tracking_update', targetType: 'settings', targetId: 'tracking_config', details: { sections: Object.keys(body) } }, req)
   return NextResponse.json({ ok: true, warnings, statuses: getProviderStatuses(saved) })
 }
 

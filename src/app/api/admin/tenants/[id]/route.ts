@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { hardDeleteTenant } from '@/lib/admin-fake-tenants'
 import { db, withDb } from '@/lib/db'
 import { requireSuperAdmin, authErrorResponse, PLATFORM_TENANT_ID } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -158,6 +159,12 @@ async function __PUT(
     },
   })
 
+  await logAudit({
+    action: data.status !== undefined && data.status !== existing.status ? 'tenant.status_change' : 'tenant.update',
+    targetType: 'tenant',
+    targetId: id,
+    details: { fields: Object.keys(data), statusFrom: existing.status, statusTo: data.status },
+  }, req)
   return NextResponse.json({ ok: true, tenant: updated })
 }
 
@@ -201,6 +208,7 @@ async function __DELETE(
       phone: (existing.ownerPhone || existing.phone || '').trim(),
       userIds: owner.map((u) => u.id),
     })
+    await logAudit({ action: 'tenant.delete_permanent', targetType: 'tenant', targetId: id, details: { shopName: existing.shopName, mode: r.mode } }, req)
     return NextResponse.json({
       ok: true,
       mode: r.mode,
@@ -218,6 +226,7 @@ async function __DELETE(
     data: { status: 'cancelled' },
   })
 
+  await logAudit({ action: 'tenant.cancel', targetType: 'tenant', targetId: id, details: { shopName: existing.shopName } }, req)
   return NextResponse.json({ ok: true })
 }
 

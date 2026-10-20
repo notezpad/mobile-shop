@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireSuperAdmin, authErrorResponse } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +34,7 @@ async function __DELETE(
   }
 
   await db.activationCode.delete({ where: { id: codeId } })
+  await logAudit({ action: 'code.delete', targetType: 'code', targetId: codeId }, _req)
   return NextResponse.json({ ok: true })
 }
 

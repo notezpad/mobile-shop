@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withDb } from '@/lib/db'
 import { requireSuperAdmin, authErrorResponse } from '@/lib/auth'
 import { findInactiveTrials, hardDeleteTenant } from '@/lib/admin-fake-tenants'
+import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +37,7 @@ async function __POST(req: NextRequest) {
     else cancelledOnly++
   }
 
+  await logAudit({ action: 'tenant.purge_fake', targetType: 'tenant', details: { requested: ids.length, deleted, cancelledOnly, skipped } }, req)
   return NextResponse.json({
     ok: true,
     deleted,

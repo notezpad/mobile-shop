@@ -588,6 +588,12 @@ export async function offlineFetch<T = any>(
       return data as T
     } catch (err: any) {
       if (isNetworkError(err)) {
+        // 🛡️ SECURITY (2026-10-20): طلبات auth/admin ما بتتحطش في الـ outbox أبدًا —
+        // كانت كلمة المرور بتتخزن نص صريح في IndexedDB وبتتنفذ بعدين من غير علم
+        // المستخدم، والواجهة كانت بتعرض نجاح كاذب. بنرجّع الخطأ للمستخدم بدل كده.
+        if (/^\/api\/(?:auth|admin)(?:\/|\?|$)/.test(url)) {
+          throw new Error('لا يوجد اتصال بالإنترنت — هذه العملية تحتاج اتصالاً، حاول مرة أخرى عند عودته')
+        }
         // 🛡️ 2026-09-30 (M7): idempotency for queued sales — a network error
         // AFTER the server committed used to keep the outbox entry and re-POST
         // it later, creating a duplicate invoice (double stock/till/debt).

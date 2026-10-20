@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { verifyPassword, hashPassword, createSession } from '@/lib/auth'
+import { extractRequestContext } from '@/lib/tracking/server'
+import { loginKeys, isLoginBlocked, recordLoginFailure, clearLoginFailures } from '@/lib/login-guard'
+import { logAudit } from '@/lib/audit'
+
+// hash وهمي بنفس صيغة PBKDF2 — بنتحقق منه لما الإيميل مش موجود عشان زمن الرد
+// يبقى متقارب (يمنع كشف وجود الإيميل بقياس الزمن).
+const DUMMY_HASH = 'pbkdf2:' + '00'.repeat(16) + ':' + '00'.repeat(32)
+const BAD_CREDENTIALS = { error: 'بيانات الدخول غير صحيحة' }
 
 export const dynamic = 'force-dynamic'
 
@@ -19,25 +27,31 @@ async function __POST(req: NextRequest) {
       )
     }
 
-    const user = await db.user.findUnique({ where: { email } })
-    if (!user) {
+    const keys = await loginKeys(email, extractRequestContext(req.headers).clientIp)
+    if (await isLoginBlocked(keys)) {
       return NextResponse.json(
-        { error: 'بيانات الدخول غير صحيحة' },
-        { status: 401 }
+        { error: 'محاولات دخول كتيرة — حاول مرة أخرى بعد 15 دقيقة' },
+        { status: 429, headers: { 'Retry-After': '900' } }
       )
     }
+
+    const user = await db.user.findUnique({ where: { email } })
+    // دايمًا بنعمل verify (حتى لو المستخدم مش موجود) + نفس الرسالة لكل الفشل
+    const ok = await verifyPassword(password, user?.password ?? DUMMY_HASH)
+    if (!user || !ok) {
+      await recordLoginFailure(keys)
+      return NextResponse.json(BAD_CREDENTIALS, { status: 401 })
+    }
+    // رسالة "الحساب معطل" بعد التأكد من الباسورد بس — عشان ما تكشفش وجود الإيميل
     if (!user.active) {
       return NextResponse.json(
         { error: 'تم تعطيل هذا الحساب — تواصل مع المدير' },
         { status: 403 }
       )
     }
-    const ok = await verifyPassword(password, user.password)
-    if (!ok) {
-      return NextResponse.json(
-        { error: 'بيانات الدخول غير صحيحة' },
-        { status: 401 }
-      )
+    await clearLoginFailures(keys.emailKey)
+    if (user.role === 'SUPER_ADMIN') {
+      await logAudit({ action: 'auth.admin_login', targetType: 'user', targetId: user.id, actor: { id: user.id, email: user.email } }, req)
     }
 
     // 🛡️ 2026-09-27: lazily migrate legacy bcrypt hashes to PBKDF2 the
@@ -121,7 +135,7 @@ async function __POST(req: NextRequest) {
   } catch (e: any) {
     console.error('[login] Unexpected error:', e)
     return NextResponse.json(
-      { error: e?.message || 'خطأ داخلي في الخادم' },
+      { error: 'خطأ داخلي في الخادم — حاول مرة أخرى' },
       { status: 500 }
     )
   }

@@ -6,6 +6,7 @@ import {
   startImpersonation,
   PLATFORM_TENANT_ID,
 } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +32,7 @@ async function __POST(
   }
 
   await startImpersonation(id)
+  await logAudit({ action: 'impersonate.start', targetType: 'tenant', targetId: id, details: { shopName: tenant.shopName } }, _req)
   return NextResponse.json({ ok: true, tenantId: id, shopName: tenant.shopName })
 }
 

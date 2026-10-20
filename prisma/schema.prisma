@@ -209,6 +209,7 @@ model User {
   permissions    String?   // JSON: string[] of module keys; null = يشوف كل الباقة
   canViewProfits Boolean   @default(false) // هل يقدر يشوف الأرباح والتكاليف؟
   lastLoginAt    DateTime?
+  passwordChangedAt DateTime? // يُبطل جلسات SUPER_ADMIN الأقدم منه
   createdAt      DateTime  @default(now())
 
   tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -991,4 +992,30 @@ model SignupAttempt {
   createdAt DateTime @default(now())
 
   @@index([ipHash, createdAt])
+}
+
+// حد محاولات الدخول الفاشلة (مخزّن hash للإيميل/الـ IP فقط)
+model LoginAttempt {
+  id        Int      @id @default(autoincrement())
+  keyHash   String
+  createdAt DateTime @default(now())
+
+  @@index([keyHash, createdAt])
+}
+
+// سجل نشاط الأدمن (Audit Log) — للقراءة فقط من الواجهة، ما فيش تعديل/حذف
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  actorId    String?
+  actorEmail String?
+  action     String   // مثال: tenant.suspend / impersonate.start / auth.password_change
+  targetType String?  // tenant | subscription | plan | code | settings | user
+  targetId   String?
+  details    String?  // JSON صغير — ممنوع فيه أسرار/كلمات مرور
+  ipHash     String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+  @@index([targetId])
 }

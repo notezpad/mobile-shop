@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireSuperAdmin, authErrorResponse, PLATFORM_TENANT_ID } from '@/lib/auth'
 import { randomCode } from '@/lib/admin-utils'
+import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -199,6 +200,7 @@ async function __POST(req: NextRequest) {
     created.push(code)
   }
 
+  await logAudit({ action: 'code.create', targetType: 'code', details: { count: created.length } }, req)
   return NextResponse.json({ ok: true, codes: created, count: created.length })
 }
 
