@@ -45,7 +45,8 @@ async function __GET(
     include: {
       sales: {
         orderBy: { createdAt: 'desc' },
-        include: { items: true, payments: true },
+        // 🎨 variant (لون/مقاس) عشان سطرين من نفس المنتج بمقاسين مختلفين مايبانوش نفس الشكل
+        include: { items: { include: { variant: { select: { color: true, size: true } } } }, payments: true },
       },
       payments: {
         orderBy: { createdAt: 'desc' },
@@ -111,6 +112,7 @@ async function __GET(
         quantity: it.quantity,
         returnedQty: it.returnedQty,
         cost: canViewProfits ? it.cost : null,
+        variantLabel: it.variant ? [it.variant.color, it.variant.size].filter(Boolean).join(' / ') || null : null,
       })),
     })),
     payments: customer.payments.map((p) => ({

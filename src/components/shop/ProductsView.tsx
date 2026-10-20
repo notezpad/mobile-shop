@@ -1113,6 +1113,7 @@ export function ProductsView() {
           if (!v) setSinglePrintProduct(null)
         }}
         products={labelProducts}
+        variantsEnabled={capabilities.includes('variants')}
       />
       <ProductUnitsDialog
         open={!!unitsFor}

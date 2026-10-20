@@ -81,6 +81,8 @@ interface SaleItem {
   price: number
   quantity: number
   cost: number
+  /** 🎨 اللون/المقاس لو السطر على variant */
+  variantLabel?: string | null
 }
 interface Sale {
   id: number
@@ -145,8 +147,11 @@ const num = (n: number) =>
 
 
 /** ملخص أصناف الحركة: أول صنفين + عدّاد الباقي (فواتير الجملة فيها ٣٠–٥٠ صنف) */
-function itemsPreview(items: { name: string; quantity: number }[]): string {
-  const head = items.slice(0, 2).map((it) => `${it.name}×${it.quantity}`).join('، ')
+function itemsPreview(items: { name: string; quantity: number; variantLabel?: string | null }[]): string {
+  const head = items
+    .slice(0, 2)
+    .map((it) => `${it.name}${it.variantLabel ? ` — ${it.variantLabel}` : ''}×${it.quantity}`)
+    .join('، ')
   if (items.length <= 2) return head
   const pieces = items.reduce((n, it) => n + it.quantity, 0)
   return `${head} +${items.length - 2} صنف (${items.length} صنف · ${pieces} قطعة)`

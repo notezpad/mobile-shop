@@ -69,8 +69,11 @@ const splitNo = (s: Sale) => {
   const m = invNo(s).match(/^(.*?)(\d+)$/)
   return m ? { prefix: m[1].replace(/-$/, ''), serial: m[2] } : { prefix: '', serial: invNo(s) }
 }
+/** اسم السطر مع اللون/المقاس لو المنتج له متغيرات: «المنتج — لون / مقاس» */
+const itemTitle = (it: { name: string; variantLabel?: string | null }) =>
+  it.name + (it.variantLabel ? ` — ${it.variantLabel}` : '')
 const preview = (s: Sale) => {
-  const names = s.items.map((i) => i.name)
+  const names = s.items.map((i) => itemTitle(i))
   return names.slice(0, 2).join('، ') + (names.length > 2 ? ` +${names.length - 2}` : '')
 }
 
@@ -305,7 +308,7 @@ export function SalesHistoryView() {
     return sales.filter((s) => {
       const c = calcs.get(s.id)!
       if (q) {
-        const hay = [invNo(s), String(s.id), s.customer?.name, s.customer?.phone, ...s.items.map((i) => i.name)]
+        const hay = [invNo(s), String(s.id), s.customer?.name, s.customer?.phone, ...s.items.map((i) => itemTitle(i))]
           .filter(Boolean).join(' ').toLowerCase()
         if (!hay.includes(q)) return false
       }
@@ -398,7 +401,7 @@ export function SalesHistoryView() {
     id: s.id, invoiceNo: s.invoiceNo, total: s.total, paid: s.paid, status: s.status, createdAt: s.createdAt,
     items: s.items.map((it) => {
       const l = displayLine(it)
-      return { name: it.name + (l.unit ? ` (${l.qty} ${l.unit})` : ''), price: l.price, quantity: l.qty }
+      return { name: itemTitle(it) + (l.unit ? ` (${l.qty} ${l.unit})` : ''), price: l.price, quantity: l.qty }
     }),
     customer: s.customer ? { name: s.customer.name, phone: s.customer.phone } : null,
   })
@@ -1008,7 +1011,7 @@ function Receipt({
   const [itemQ, setItemQ] = React.useState('')
   const bigInvoice = s.items.length > 8
   const needle = itemQ.trim().toLowerCase()
-  const shownItems = needle ? s.items.filter((it) => it.name.toLowerCase().includes(needle)) : s.items
+  const shownItems = needle ? s.items.filter((it) => itemTitle(it).toLowerCase().includes(needle)) : s.items
 
   return (
     <div ref={rootRef} className="animate-in-up scroll-mt-12">
@@ -1068,7 +1071,7 @@ function Receipt({
             return (
               <li key={it.id} className="flex items-baseline gap-2 text-sm">
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">{it.name}</span>
+                  <span className="block truncate font-medium">{itemTitle(it)}</span>
                   <span className="text-[11px] text-zinc-500 dark:text-zinc-400 tabular-nums">
                     {l.qty}{l.unit ? ` ${l.unit}` : ''} × {formatCurrency(l.price)}
                   </span>

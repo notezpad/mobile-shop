@@ -17,12 +17,15 @@
 import * as React from 'react'
 import {
   Barcode as BarcodeIcon,
+  ChevronDown,
   Eye,
   Info,
+  Loader2,
   Minus,
   Package,
   Plus,
   Printer,
+  Shirt,
   SlidersHorizontal,
   Tag,
   Type,
@@ -38,6 +41,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
+import { api } from '@/lib/api'
+import { Swatch } from '@/lib/color-swatch'
+import { groupByColor } from '@/lib/variant-sort'
 import { printBarcodeLabels, renderBarcodeSvg } from '@/lib/print-client'
 import { computeLabelLayout, A4, type LabelLayout } from '@/lib/print'
 import { cn } from '@/lib/utils'
@@ -57,6 +63,43 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   products: LabelProduct[]
+  /** باقة فيها المتغيرات (لون/مقاس): لو true بنجيب متغيرات كل منتج ونطبع ملصق لكل لون/مقاس بباركود المتغير. الافتراضي false = السلوك القديم. */
+  variantsEnabled?: boolean
+}
+
+interface VariantData {
+  id: number
+  size: string | null
+  color: string | null
+  barcode: string | null
+  quantity: number
+}
+
+/** صف طباعة واحد = ملصق واحد (منتج عادي، أو لون/مقاس من منتج له متغيرات). */
+interface LabelRow {
+  /** 'p<id>' للمنتج العادي، 'v<id>' للمتغير */
+  key: string
+  productId: number
+  /** الاسم اللي بيتطبع: «المنتج — لون / مقاس» للمتغير */
+  name: string
+  barcode: string | null
+  price: number
+  size?: string | null
+  color?: string | null
+  /** null = منتج عادي */
+  variantLabel: string | null
+  /** الكمية الافتراضية: ١ للمنتج العادي، ٠ للمتغير (عشان متطبعش ١٥٠ ملصق بالغلط) */
+  defaultQty: number
+}
+
+const variantLabelOf = (v: Pick<VariantData, 'id' | 'color' | 'size'>) =>
+  [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`
+
+interface Entry {
+  product: LabelProduct
+  /** null = منتج من غير متغيرات */
+  groups: { color: string; total: number; rows: LabelRow[]; noBarcode: LabelRow[] }[] | null
+  rows: LabelRow[]
 }
 
 /* ───────────────────────── ثوابت ───────────────────────── */
@@ -118,9 +161,14 @@ const ring = 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:
 
 /* ───────────────────────── الدايلوج ───────────────────────── */
 
-export function PrintLabelsDialog({ open, onOpenChange, products }: Props) {
-  const [qty, setQty] = React.useState<Record<number, number>>({})
-  const [focusId, setFocusId] = React.useState<number | null>(null)
+export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnabled = false }: Props) {
+  const [qty, setQty] = React.useState<Record<string, number>>({})
+  const [focusKey, setFocusKey] = React.useState<string | null>(null)
+  const [openColors, setOpenColors] = React.useState<Record<string, boolean>>({})
+  const [variantsMap, setVariantsMap] = React.useState<Record<number, VariantData[]>>({})
+  const [vState, setVState] = React.useState<{ loading: boolean; failed: number[] }>({ loading: false, failed: [] })
+  // مفتاح ثابت للمنتجات المختارة — `products` نفسه بيتعمل array جديد في كل رندر من الأب
+  const productIdsKey = products.map((p) => p.id).join(',')
   const [mode, setMode] = React.useState<Mode>('sheet')
   const [preset, setPreset] = React.useState<PresetKey>('40x30')
   const [cw, setCw] = React.useState(40)
@@ -140,8 +188,9 @@ export function PrintLabelsDialog({ open, onOpenChange, products }: Props) {
       hydrated.current = false
       return
     }
-    setQty(Object.fromEntries(products.map((p) => [p.id, 1])))
-    setFocusId(products.find((p) => p.barcode)?.id ?? null)
+    setQty({})
+    setFocusKey(null)
+    setOpenColors({})
     setView('sheet')
     setTab('products')
     try {
@@ -160,7 +209,52 @@ export function PrintLabelsDialog({ open, onOpenChange, products }: Props) {
       /* التخزين غير متاح — عادي */
     }
     hydrated.current = true
-  }, [open, products])
+     
+  }, [open, productIdsKey])
+
+  // جلب متغيرات المنتجات المختارة (4 طلبات بالتوازي) — بس لو الباقة فيها المتغيرات
+  React.useEffect(() => {
+    if (!open || !variantsEnabled || !productIdsKey) {
+      setVariantsMap({})
+      setVState({ loading: false, failed: [] })
+      return
+    }
+    let cancelled = false
+    const ids = productIdsKey.split(',').map(Number)
+    setVariantsMap({})
+    setVState({ loading: true, failed: [] })
+    ;(async () => {
+      const out: Record<number, VariantData[]> = {}
+      const failed: number[] = []
+      let next = 0
+      const worker = async () => {
+        while (!cancelled) {
+          const idx = next++
+          if (idx >= ids.length) return
+          const id = ids[idx]
+          try {
+            const d = await api<any[]>(`/api/products/${id}/variants`)
+            out[id] = (Array.isArray(d) ? d : []).map((v) => ({
+              id: v.id,
+              size: v.size ?? null,
+              color: v.color ?? null,
+              barcode: v.barcode ?? null,
+              quantity: v.quantity ?? 0,
+            }))
+          } catch {
+            failed.push(id)
+          }
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(4, ids.length) }, worker))
+      if (cancelled) return
+      setVariantsMap(out)
+      setVState({ loading: false, failed })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, variantsEnabled, productIdsKey])
 
   React.useEffect(() => {
     if (!open || !hydrated.current) return
@@ -172,10 +266,50 @@ export function PrintLabelsDialog({ open, onOpenChange, products }: Props) {
     }
   }, [open, mode, preset, cw, ch, showName, showPrice, showText])
 
-  const withBarcode = products.filter((p) => p.barcode)
-  const withoutBarcode = products.filter((p) => !p.barcode)
-  const qtyOf = (id: number) => qty[id] ?? 1
-  const total = withBarcode.reduce((s, p) => s + qtyOf(p.id), 0)
+  // كل منتج → إمّا صف واحد (منتج عادي)، أو صف لكل لون/مقاس (منتج له متغيرات، مجمّعة بالألوان)
+  const entries: Entry[] = products.map((p) => {
+    const vs = variantsMap[p.id]
+    if (vs && vs.length > 0) {
+      const groups = groupByColor(vs).map((g) => {
+        const rows = g.items.map<LabelRow>((v) => ({
+          key: `v${v.id}`,
+          productId: p.id,
+          name: `${p.name} — ${variantLabelOf(v)}`,
+          barcode: v.barcode ?? null,
+          price: p.price,
+          size: v.size,
+          color: v.color,
+          variantLabel: variantLabelOf(v),
+          defaultQty: 0,
+        }))
+        return { color: g.color, total: g.total, rows: rows.filter((r) => r.barcode), noBarcode: rows.filter((r) => !r.barcode) }
+      })
+      return { product: p, groups, rows: groups.flatMap((g) => [...g.rows, ...g.noBarcode]) }
+    }
+    return {
+      product: p,
+      groups: null,
+      rows: [
+        {
+          key: `p${p.id}`,
+          productId: p.id,
+          name: p.name,
+          barcode: p.barcode,
+          price: p.price,
+          size: p.size,
+          color: p.color,
+          variantLabel: null,
+          defaultQty: 1,
+        },
+      ],
+    }
+  })
+  const allRows = entries.flatMap((e) => e.rows)
+  const withBarcode = allRows.filter((r) => r.barcode)
+  const withoutBarcode = allRows.filter((r) => !r.barcode)
+  const hasVariantRows = allRows.some((r) => r.variantLabel)
+  const qtyOf = (r: LabelRow) => qty[r.key] ?? r.defaultQty
+  const total = withBarcode.reduce((s, r) => s + qtyOf(r), 0)
 
   const labelSize =
     preset === 'custom'
@@ -195,7 +329,8 @@ export function PrintLabelsDialog({ open, onOpenChange, products }: Props) {
   const sheets = mode === 'sheet' && perSheet > 0 ? Math.ceil(total / perSheet) : 0
   const emptySlots = sheets * perSheet - total
 
-  const focus = withBarcode.find((p) => p.id === focusId) ?? withBarcode[0] ?? null
+  const focus =
+    withBarcode.find((r) => r.key === focusKey) ?? withBarcode.find((r) => qtyOf(r) > 0) ?? withBarcode[0] ?? null
 
   const hint = React.useMemo(() => {
     if (mode === 'roll') {
@@ -220,21 +355,44 @@ export function PrintLabelsDialog({ open, onOpenChange, products }: Props) {
 
   const sheetWarn = !!hint && mode === 'sheet'
 
-  const setQ = (id: number, v: number) => setQty((p) => ({ ...p, [id]: clampInt(v, 0, MAX_QTY) }))
-  const setAll = (v: number) => setQty(Object.fromEntries(products.map((p) => [p.id, v])))
+  const setQ = (key: string, v: number) => setQty((p) => ({ ...p, [key]: clampInt(v, 0, MAX_QTY) }))
+  /** نفس الكمية لمجموعة صفوف (لون كامل / منتج كامل) — 0 = إلغاء الاختيار */
+  const setMany = (rows: LabelRow[], v: number) =>
+    setQty((p) => {
+      const next = { ...p }
+      for (const r of rows) next[r.key] = clampInt(v, 0, MAX_QTY)
+      return next
+    })
+  // «الكمية للكل»: المنتجات العادية كلها، أمّا المتغيرات فاللي مختار منها بس (عشان مانطبعش ١٥٠ × ٢٠ بالغلط)
+  const setAll = (v: number) =>
+    setQty((prev) => {
+      const next = { ...prev }
+      for (const r of allRows) {
+        if (r.variantLabel) {
+          if ((prev[r.key] ?? r.defaultQty) > 0) next[r.key] = clampInt(v, 0, MAX_QTY)
+        } else next[r.key] = clampInt(v, 0, MAX_QTY)
+      }
+      return next
+    })
 
   const handlePrint = () => {
-    const items = withBarcode.filter((p) => qtyOf(p.id) > 0)
+    const items = withBarcode.filter((r) => qtyOf(r) > 0)
     if (items.length === 0) {
-      toast.error(withBarcode.length === 0 ? 'مفيش منتجات ليها باركود' : 'حدّد كمية لمنتج واحد على الأقل')
+      toast.error(
+        withBarcode.length === 0
+          ? 'مفيش منتجات ليها باركود'
+          : hasVariantRows
+            ? 'اختار لون/مقاس واحد على الأقل'
+            : 'حدّد كمية لمنتج واحد على الأقل'
+      )
       return
     }
     printBarcodeLabels(
-      items.map((p) => ({
-        name: p.name,
-        barcode: p.barcode as string,
-        price: p.price,
-        quantity: qtyOf(p.id),
+      items.map((r) => ({
+        name: r.name,
+        barcode: r.barcode as string,
+        price: r.price,
+        quantity: qtyOf(r),
       })),
       { showName, showPrice, showBarcodeText: showText, mode, labelSize }
     )
@@ -383,15 +541,28 @@ export function PrintLabelsDialog({ open, onOpenChange, products }: Props) {
                     </p>
                   )}
 
+            {vState.failed.length > 0 && (
+              <div
+                role="status"
+                className="flex items-start gap-2.5 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3.5 text-xs font-medium leading-relaxed text-amber-900 dark:text-amber-200"
+              >
+                <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <span>
+                  <b>مقدرناش نجيب متغيرات {vState.failed.length} منتج</b> (النت أو السيرفر): لو ليهم ألوان/مقاسات هيتطبع
+                  باركود المنتج الأساسي بس. اقفل الدايلوج وافتحه تاني للمحاولة.
+                </span>
+              </div>
+            )}
+
             {withoutBarcode.length > 0 && (
               <div
                 role="status"
                 className="flex items-start gap-2.5 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3.5 text-xs font-medium leading-relaxed text-amber-900 dark:text-amber-200"
               >
                 <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
-                <span title={withoutBarcode.map((p) => p.name).join('، ')}>
-                  <b>{withoutBarcode.length} منتج من غير باركود</b> مش هيتطبع ليهم ملصق:{' '}
-                  {withoutBarcode.slice(0, 3).map((p) => p.name).join('، ')}
+                <span title={withoutBarcode.map((r) => r.name).join('، ')}>
+                  <b>{withoutBarcode.length} {hasVariantRows ? 'صنف' : 'منتج'} من غير باركود</b> مش هيتطبع ليهم ملصق:{' '}
+                  {withoutBarcode.slice(0, 3).map((r) => r.name).join('، ')}
                   {withoutBarcode.length > 3 ? ` و${withoutBarcode.length - 3} آخرين` : ''}. افتح المنتج وولّد باركود الأول.
                 </span>
               </div>
@@ -402,14 +573,20 @@ export function PrintLabelsDialog({ open, onOpenChange, products }: Props) {
               <Title
                 aside={
                   <span className="text-xs font-semibold tabular-nums text-foreground/65">
-                    {withBarcode.length} {ar(withBarcode.length, 'منتج', 'منتجين', 'منتجات', 'منتج')} · {num(total)} {labelsWord(total)}
+                    {entries.filter((e) => e.rows.some((r) => r.barcode)).length}{' '}
+                    {ar(entries.filter((e) => e.rows.some((r) => r.barcode)).length, 'منتج', 'منتجين', 'منتجات', 'منتج')} · {num(total)} {labelsWord(total)}
                   </span>
                 }
               >
                 المنتجات والكميات
               </Title>
 
-              {withBarcode.length === 0 ? (
+              {vState.loading ? (
+                <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed bg-card/60 px-4 py-8 text-sm font-bold text-foreground/70">
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                  بنجيب الألوان والمقاسات…
+                </div>
+              ) : withBarcode.length === 0 ? (
                 <div className="rounded-2xl border border-dashed bg-card/60 px-4 py-8 text-center">
                   <BarcodeIcon className="mx-auto size-6 text-foreground/40" aria-hidden />
                   <p className="mt-2 text-sm font-bold">مفيش منتجات ليها باركود</p>
@@ -419,7 +596,9 @@ export function PrintLabelsDialog({ open, onOpenChange, products }: Props) {
                 <>
                   {withBarcode.length > 1 && (
                     <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
-                      <span className="text-xs font-bold text-foreground/65">الكمية للكل:</span>
+                      <span className="text-xs font-bold text-foreground/65">
+                        {hasVariantRows ? 'نفس الكمية للمختار:' : 'الكمية للكل:'}
+                      </span>
                       {[1, 5, 10, 20].map((n) => (
                         <button
                           key={n}
@@ -437,52 +616,31 @@ export function PrintLabelsDialog({ open, onOpenChange, products }: Props) {
                   )}
 
                   <ul className="space-y-2">
-                    {withBarcode.map((p) => {
-                      const q = qtyOf(p.id)
-                      const chip = sizeChip(p.size)
-                      const isFocus = focus?.id === p.id
-                      return (
-                        <li
-                          key={p.id}
-                          className={cn(
-                            'flex items-center gap-2.5 rounded-2xl border bg-card p-2.5 transition-colors',
-                            isFocus && 'border-primary ring-1 ring-primary/40',
-                            q === 0 && 'opacity-60'
-                          )}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => setFocusId(p.id)}
-                            aria-pressed={isFocus}
-                            title="اعرضه في المعاينة"
-                            className={cn('flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1 text-start', ring)}
-                          >
-                            {chip ? (
-                              <span
-                                className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl text-xs font-extrabold', chip.bg, chip.text)}
-                                title={p.size ?? undefined}
-                              >
-                                {chip.label.length > 4 ? chip.label.slice(0, 4) : chip.label}
-                              </span>
-                            ) : (
-                              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground/50">
-                                <BarcodeIcon className="size-4" aria-hidden />
-                              </span>
-                            )}
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-extrabold leading-snug">{p.name}</span>
-                              <span className="mt-0.5 flex items-center gap-2 text-[11px] font-medium text-foreground/60">
-                                <bdi dir="ltr" className="font-mono tabular-nums">{p.barcode}</bdi>
-                                {showPrice && <span className="tabular-nums">{fmtPrice(p.price)} ج.م</span>}
-                                {p.color && <span className="rounded-md bg-muted px-1.5 py-0.5">{p.color}</span>}
-                                {q === 0 && <span className="font-bold text-foreground/70">مستبعد</span>}
-                              </span>
-                            </span>
-                          </button>
-                          <Qty value={q} onChange={(v) => setQ(p.id, v)} label={`كمية ${p.name}`} />
-                        </li>
-                      )
-                    })}
+                    {entries.map((e) =>
+                      e.groups ? (
+                        <VariantProductCard
+                          key={e.product.id}
+                          entry={e}
+                          qtyOf={qtyOf}
+                          setQ={setQ}
+                          setMany={setMany}
+                          focusKey={focus?.key ?? null}
+                          onFocus={setFocusKey}
+                          openColors={openColors}
+                          onToggleColor={(k, def) => setOpenColors((o) => ({ ...o, [k]: !(o[k] ?? def) }))}
+                        />
+                      ) : e.rows[0].barcode ? (
+                        <PlainRow
+                          key={e.rows[0].key}
+                          r={e.rows[0]}
+                          q={qtyOf(e.rows[0])}
+                          isFocus={focus?.key === e.rows[0].key}
+                          showPrice={showPrice}
+                          onFocus={() => setFocusKey(e.rows[0].key)}
+                          onQty={(v) => setQ(e.rows[0].key, v)}
+                        />
+                      ) : null
+                    )}
                   </ul>
                 </>
               )}
@@ -657,7 +815,7 @@ export function PrintLabelsDialog({ open, onOpenChange, products }: Props) {
             <Button variant="outline" onClick={() => onOpenChange(false)} className="h-11 rounded-xl px-5 font-bold">
               إلغاء
             </Button>
-            <Button onClick={handlePrint} disabled={total === 0} className="h-11 rounded-xl px-6 font-bold">
+            <Button onClick={handlePrint} disabled={total === 0 || vState.loading} className="h-11 rounded-xl px-6 font-bold">
               <Printer className="size-4" />
               طباعة {total > 0 ? `${num(total)} ${labelsWord(total)}` : ''}
             </Button>
@@ -665,6 +823,238 @@ export function PrintLabelsDialog({ open, onOpenChange, products }: Props) {
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/* ───────────────────────── صفوف القايمة ───────────────────────── */
+
+function PlainRow({
+  r, q, isFocus, showPrice, onFocus, onQty,
+}: {
+  r: LabelRow
+  q: number
+  isFocus: boolean
+  showPrice: boolean
+  onFocus: () => void
+  onQty: (v: number) => void
+}) {
+  const chip = sizeChip(r.size)
+  return (
+    <li
+      className={cn(
+        'flex items-center gap-2.5 rounded-2xl border bg-card p-2.5 transition-colors',
+        isFocus && 'border-primary ring-1 ring-primary/40',
+        q === 0 && 'opacity-60'
+      )}
+    >
+      <button
+        type="button"
+        onClick={onFocus}
+        aria-pressed={isFocus}
+        title="اعرضه في المعاينة"
+        className={cn('flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1 text-start', ring)}
+      >
+        {chip ? (
+          <span
+            className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl text-xs font-extrabold', chip.bg, chip.text)}
+            title={r.size ?? undefined}
+          >
+            {chip.label.length > 4 ? chip.label.slice(0, 4) : chip.label}
+          </span>
+        ) : (
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground/50">
+            <BarcodeIcon className="size-4" aria-hidden />
+          </span>
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-extrabold leading-snug">{r.name}</span>
+          <span className="mt-0.5 flex items-center gap-2 text-[11px] font-medium text-foreground/60">
+            <bdi dir="ltr" className="font-mono tabular-nums">{r.barcode}</bdi>
+            {showPrice && <span className="tabular-nums">{fmtPrice(r.price)} ج.م</span>}
+            {r.color && <span className="rounded-md bg-muted px-1.5 py-0.5">{r.color}</span>}
+            {q === 0 && <span className="font-bold text-foreground/70">مستبعد</span>}
+          </span>
+        </span>
+      </button>
+      <Qty value={q} onChange={onQty} label={`كمية ${r.name}`} />
+    </li>
+  )
+}
+
+const QTY_PRESETS = [1, 2, 5, 10]
+
+/** أزرار «اختار الكل / إلغاء» + «نفس الكمية للكل» لمجموعة صفوف (لون أو منتج كامل). */
+function BulkBar({
+  rows, qtyOf, setMany, label,
+}: {
+  rows: LabelRow[]
+  qtyOf: (r: LabelRow) => number
+  setMany: (rows: LabelRow[], v: number) => void
+  label: string
+}) {
+  const selected = rows.filter((r) => qtyOf(r) > 0).length
+  const allOn = rows.length > 0 && selected === rows.length
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => setMany(rows, allOn ? 0 : 1)}
+        className={cn(
+          'h-8 rounded-full border px-3 text-xs font-extrabold transition-colors',
+          ring,
+          allOn ? 'border-primary bg-primary/10 text-foreground' : 'bg-background text-foreground/80 hover:bg-muted'
+        )}
+      >
+        {allOn ? `إلغاء ${label}` : `اختار ${label}`}
+      </button>
+      <span className="ms-1 text-[11px] font-bold text-foreground/60">نفس الكمية:</span>
+      {QTY_PRESETS.map((n) => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => setMany(rows, n)}
+          className={cn(
+            'h-8 min-w-9 rounded-full border bg-background px-2.5 text-xs font-bold tabular-nums text-foreground/80 transition-colors hover:bg-muted',
+            ring
+          )}
+        >
+          <bdi dir="ltr">×{n}</bdi>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** منتج له متغيرات: أقسام ألوان قابلة للطي، جواها مقاسات اللون (مرتبة)، وكل مقاس ليه كميته. */
+function VariantProductCard({
+  entry, qtyOf, setQ, setMany, focusKey, onFocus, openColors, onToggleColor,
+}: {
+  entry: Entry
+  qtyOf: (r: LabelRow) => number
+  setQ: (key: string, v: number) => void
+  setMany: (rows: LabelRow[], v: number) => void
+  focusKey: string | null
+  onFocus: (key: string) => void
+  openColors: Record<string, boolean>
+  onToggleColor: (key: string, defaultOpen: boolean) => void
+}) {
+  const groups = entry.groups ?? []
+  const printable = groups.flatMap((g) => g.rows)
+  const labels = printable.reduce((n, r) => n + qtyOf(r), 0)
+  const picked = printable.filter((r) => qtyOf(r) > 0).length
+
+  return (
+    <li className="overflow-hidden rounded-2xl border bg-card">
+      <div className="space-y-2 p-3">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground/60">
+            <Shirt className="size-4" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-extrabold leading-snug">{entry.product.name}</p>
+            <p className="mt-0.5 text-[11px] font-medium tabular-nums text-foreground/60">
+              {groups.length} {ar(groups.length, 'لون', 'لونين', 'ألوان', 'لون')} · {printable.length} متغير بباركود
+              {picked > 0 ? ` · ${picked} مختار (${num(labels)} ${labelsWord(labels)})` : ''}
+            </p>
+          </div>
+        </div>
+        {printable.length > 1 && (
+          <BulkBar rows={printable} qtyOf={qtyOf} setMany={setMany} label="كل المتغيرات" />
+        )}
+      </div>
+
+      <ul className="divide-y border-t">
+        {groups.map((g) => {
+          const k = `${entry.product.id}:${g.color}`
+          const defOpen = groups.length === 1
+          const isOpen = openColors[k] ?? defOpen
+          const sel = g.rows.filter((r) => qtyOf(r) > 0).length
+          const cnt = g.rows.reduce((n, r) => n + qtyOf(r), 0)
+          return (
+            <li key={k}>
+              <button
+                type="button"
+                onClick={() => onToggleColor(k, defOpen)}
+                aria-expanded={isOpen}
+                className={cn('flex w-full items-center gap-2.5 px-3 py-2.5 text-start transition-colors hover:bg-muted/50', ring)}
+              >
+                {g.color ? <Swatch name={g.color} className="size-4" /> : <span className="size-4 shrink-0" aria-hidden />}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-extrabold leading-tight">{g.color || 'بدون لون'}</span>
+                  <span className="mt-0.5 block text-[11px] font-medium tabular-nums text-foreground/60">
+                    {g.rows.length} {g.rows.length === 1 && !g.rows[0].size ? 'صنف' : 'مقاس'}
+                    {g.noBarcode.length > 0 ? ` · ${g.noBarcode.length} من غير باركود` : ''}
+                  </span>
+                </span>
+                {sel > 0 && (
+                  <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-extrabold tabular-nums leading-none text-primary-foreground">
+                    {sel} · {num(cnt)}
+                  </span>
+                )}
+                <ChevronDown className={cn('size-4 shrink-0 text-foreground/50 transition-transform', isOpen && 'rotate-180')} aria-hidden />
+              </button>
+
+              {isOpen && (
+                <div className="space-y-2.5 bg-muted/20 px-3 pb-3 pt-2.5">
+                  {g.rows.length === 0 ? (
+                    <p className="text-xs font-medium text-foreground/60">مفيش مقاسات ليها باركود في اللون ده.</p>
+                  ) : (
+                    <>
+                      {g.rows.length > 1 && (
+                        <BulkBar rows={g.rows} qtyOf={qtyOf} setMany={setMany} label="كل المقاسات" />
+                      )}
+                      <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                        {g.rows.map((r) => {
+                          const q = qtyOf(r)
+                          const chip = sizeChip(r.size)
+                          const isFocus = focusKey === r.key
+                          return (
+                            <li
+                              key={r.key}
+                              className={cn(
+                                'flex min-w-0 items-center gap-2 rounded-xl border bg-card p-1.5 transition-colors',
+                                isFocus && 'border-primary ring-1 ring-primary/40',
+                                q === 0 && 'opacity-70'
+                              )}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => onFocus(r.key)}
+                                aria-pressed={isFocus}
+                                title="اعرضه في المعاينة"
+                                className={cn('flex min-w-0 flex-1 items-center gap-2 rounded-lg p-0.5 text-start', ring)}
+                              >
+                                <span
+                                  className={cn(
+                                    'flex size-9 shrink-0 items-center justify-center rounded-lg text-xs font-extrabold',
+                                    chip ? chip.bg : 'bg-muted',
+                                    chip ? chip.text : 'text-foreground/50'
+                                  )}
+                                  title={r.size ?? undefined}
+                                >
+                                  {chip ? (chip.label.length > 4 ? chip.label.slice(0, 4) : chip.label) : <BarcodeIcon className="size-4" aria-hidden />}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-xs font-extrabold leading-tight">{r.size || 'بدون مقاس'}</span>
+                                  <bdi dir="ltr" className="block truncate font-mono text-[10px] font-medium tabular-nums text-foreground/55">
+                                    {r.barcode}
+                                  </bdi>
+                                </span>
+                              </button>
+                              <Qty value={q} onChange={(v) => setQ(r.key, v)} label={`كمية ${r.name}`} />
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </li>
   )
 }
 
@@ -892,9 +1282,9 @@ function PreviewPanel({
   view: 'sheet' | 'label'
   onView: (v: 'sheet' | 'label') => void
   layout: LabelLayout
-  products: LabelProduct[]
-  qtyOf: (id: number) => number
-  focus: LabelProduct | null
+  products: LabelRow[]
+  qtyOf: (r: LabelRow) => number
+  focus: LabelRow | null
   showName: boolean
   showPrice: boolean
   showText: boolean
@@ -985,7 +1375,7 @@ function PreviewPanel({
             layout={layout}
             sample={sample}
             svg={svgFor(sample.barcode)}
-            stack={focus ? qtyOf(focus.id) > 1 : false}
+            stack={focus ? qtyOf(focus) > 1 : false}
             showName={showName}
             showPrice={showPrice}
             showText={showText}
@@ -1138,14 +1528,14 @@ function LabelStage({
 /** ورقة A4 كاملة: الخانات بتتملي بالترتيب الفعلي (منتج × كميته) لأول ورقة */
 function SheetStage({
   layout, products, qtyOf, svgFor, showName, showPrice, showText,
-}: FaceProps & { products: LabelProduct[]; qtyOf: (id: number) => number; svgFor: (code: string) => string }) {
+}: FaceProps & { products: LabelRow[]; qtyOf: (r: LabelRow) => number; svgFor: (code: string) => string }) {
   const g = layout.sheet!
   const cells = g.columns * g.rows
 
   const filled = React.useMemo(() => {
     const out: Sample[] = []
     for (const p of products) {
-      const n = qtyOf(p.id)
+      const n = qtyOf(p)
       for (let i = 0; i < n && out.length < cells; i++) {
         out.push({ name: p.name, barcode: p.barcode as string, price: p.price })
       }

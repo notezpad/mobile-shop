@@ -1391,9 +1391,22 @@ export function POSView() {
     setConfirmClear(false)
   }
 
+  /** لو السطر المعدّل (في الموضع idx) بقى بنفس cartKey بتاع سطر تاني موجود → ندمجهم (بنضيف كميته للموجود في حدود المخزون) بدل سطرين بنفس المفتاح. */
+  const mergeDuplicateLine = (list: CartItem[], idx: number): CartItem[] => {
+    const changed = list[idx]
+    if (!changed) return list
+    const dup = list.find((x, j) => j !== idx && x.cartKey === changed.cartKey)
+    if (!dup) return list
+    const rest = list.filter((_, j) => j !== idx)
+    const cap = lineCap(dup, rest)
+    const q = Math.min(dup.quantity + changed.quantity, cap)
+    if (q <= dup.quantity) toast.warning(`وصلت لآخر كمية متاحة من ${dup.product.name}`)
+    return rest.map((x) => (x === dup ? { ...x, quantity: Math.max(dup.quantity, q) } : x))
+  }
+
   const updateUnit = (cartKey: string, unit: PosUnit | null) => {
     setCart((prev) =>
-      prev.map((i) => {
+      mergeDuplicateLine(prev.map((i) => {
         if (i.cartKey !== cartKey) return i
         const newUnitId = unit?.id ?? null
         const newKey = `${i.product.id}-${newUnitId ?? 'x'}-${i.variantId ?? 'x'}`
@@ -1417,13 +1430,19 @@ export function POSView() {
           quantity: Math.min(factor, newMax),
           maxQuantity: newMax,
         }
-      })
+      }), prev.findIndex((x) => x.cartKey === cartKey))
     )
   }
 
   const updateVariant = (cartKey: string, variant: PosVariant | null) => {
-    setCart((prev) =>
-      prev.map((i) => {
+    setCart((prev) => {
+      const idx = prev.findIndex((x) => x.cartKey === cartKey)
+      const cur = prev[idx]
+      if (!cur) return prev
+      const targetKey = `${cur.product.id}-${cur.unitId ?? 'x'}-${variant?.id ?? 'x'}`
+      // نفس المتغير المختار حاليًا → مفيش حاجة تتغيّر
+      if (targetKey === cartKey) return prev
+      return mergeDuplicateLine(prev.map((i) => {
         if (i.cartKey !== cartKey) return i
         const newVariantId = variant?.id ?? null
         const newKey = `${i.product.id}-${i.unitId ?? 'x'}-${newVariantId ?? 'x'}`
@@ -1438,8 +1457,8 @@ export function POSView() {
           quantity: Math.min(i.unitFactor, newMax),
           maxQuantity: newMax,
         }
-      })
-    )
+      }), idx)
+    })
   }
 
   /* ── checkout (logic unchanged) ─────────────────────────────── */
