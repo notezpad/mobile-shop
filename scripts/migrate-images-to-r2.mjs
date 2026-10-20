@@ -49,7 +49,7 @@ function parseDataUrl(v) {
 }
 
 function wrangler(args) {
-  return execFileSync('npx', ['wrangler', ...args], { stdio: ['ignore', 'pipe', 'pipe'] }).toString()
+  return execFileSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['wrangler', ...args], { stdio: ['ignore', 'pipe', 'pipe'] }).toString()
 }
 
 const backup = []
