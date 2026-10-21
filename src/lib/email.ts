@@ -31,38 +31,57 @@ async function sha256(v: string): Promise<string> {
 /**
  * 🎨 تصميم الإيميلات — هوية بصرية احترافية موحّدة لكل رسائل Resend.
  * تصميم بـ جداول (table-based) عشان يتوافق مع Outlook/Gmail/Apple Mail،
- * ألوان محسوبة حسب نوع الرسالة (ترحيب/تجديد/انتهاء)، وزرار دعوة لإجراء (CTA)
- * يودّي المستخدم على المكان الصح في الموقع.
+ * هيدر متدرّج حسب نوع الرسالة (ترحيب/تجديد/انتهاء)، كرت بيانات (المحل/الباقة/التاريخ)
+ * لو المتغيرات متاحة، زرار دعوة لإجراء (CTA)، ودعم الوضع الداكن.
  */
 type EmailKind = TemplateKind | 'admin-test' | string
+type EmailVars = Record<string, string | number | undefined>
 
 const KIND_STYLE: Record<
   string,
-  { icon: string; title: string; from: string; to: string; solid: string; soft: string; cta: string; path: string }
+  {
+    icon: string; title: string; subtitle: string
+    from: string; via: string; to: string; solid: string; dark: string
+    cta: string; path: string
+  }
 > = {
   welcome: {
-    icon: '🎉', title: 'أهلاً بك في نظام المحل',
-    from: '#10b981', to: '#047857', solid: '#059669', soft: '#ecfdf5',
+    icon: '🎉', title: 'أهلاً بيك معانا', subtitle: 'حسابك جاهز وتجربتك المجانية بدأت',
+    from: '#34d399', via: '#10b981', to: '#047857', solid: '#059669', dark: '#065f46',
     cta: 'ابدأ الاستخدام الآن', path: '/login',
   },
   renewal: {
-    icon: '⏰', title: 'تذكير بتجديد الاشتراك',
-    from: '#f59e0b', to: '#d97706', solid: '#d97706', soft: '#fffbeb',
+    icon: '⏰', title: 'اشتراكك قرب يخلّص', subtitle: 'جدّد دلوقتي قبل ما الخدمة تتوقف',
+    from: '#fbbf24', via: '#f59e0b', to: '#b45309', solid: '#d97706', dark: '#92400e',
     cta: 'جدّد الاشتراك الآن', path: '/settings',
   },
   expired: {
-    icon: '⚠️', title: 'انتهى اشتراكك',
-    from: '#ef4444', to: '#dc2626', solid: '#dc2626', soft: '#fef2f2',
+    icon: '⚠️', title: 'اشتراكك انتهى', subtitle: 'جدّد عشان ترجع تستخدم النظام تاني',
+    from: '#f87171', via: '#ef4444', to: '#b91c1c', solid: '#dc2626', dark: '#991b1b',
     cta: 'جدّد الآن', path: '/settings',
   },
 }
 const DEFAULT_STYLE = {
-  icon: '📩', title: `رسالة من ${SITE_NAME_AR}`,
-  from: '#10b981', to: '#047857', solid: '#059669', soft: '#ecfdf5',
+  icon: '📩', title: SITE_NAME_AR, subtitle: 'رسالة آلية من النظام',
+  from: '#34d399', via: '#10b981', to: '#047857', solid: '#059669', dark: '#065f46',
   cta: 'فتح الموقع', path: '/',
 }
 
-function toHtml(body: string, kind: EmailKind, subject: string): string {
+/** صف واحد في كرت البيانات (المحل/الباقة/تاريخ الانتهاء/الأيام المتبقية). */
+function detailRows(vars: EmailVars | undefined): { label: string; value: string }[] {
+  if (!vars) return []
+  const rows: { label: string; value: string }[] = []
+  if (vars.shopName) rows.push({ label: 'المحل', value: String(vars.shopName) })
+  if (vars.planName) rows.push({ label: 'الباقة', value: String(vars.planName) })
+  if (vars.endDate) rows.push({ label: 'تاريخ الانتهاء', value: String(vars.endDate) })
+  if (vars.daysLeft !== undefined && vars.daysLeft !== null && vars.daysLeft !== '') {
+    const n = Number(vars.daysLeft)
+    rows.push({ label: 'الأيام المتبقية', value: Number.isFinite(n) ? `${n} ${n === 1 ? 'يوم' : 'أيام'}` : String(vars.daysLeft) })
+  }
+  return rows
+}
+
+function toHtml(body: string, kind: EmailKind, subject: string, vars?: EmailVars): string {
   const style = KIND_STYLE[kind as string] ?? DEFAULT_STYLE
   const paras = esc(body)
     .split(/\n{2,}/)
@@ -71,61 +90,104 @@ function toHtml(body: string, kind: EmailKind, subject: string): string {
   const preheader = body.replace(/\s+/g, ' ').trim().slice(0, 110)
   const ctaUrl = `${SITE_URL}${style.path}`
   const year = new Date().getFullYear()
+  const rows = detailRows(vars)
+
+  const detailCard = rows.length
+    ? `<tr><td style="padding:4px 32px 4px 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="detail-card" style="background-color:#f9fafb;border:1px solid #eef0ed;border-radius:12px;">
+      ${rows.map((r, i) => `
+      <tr>
+        <td style="padding:${i === 0 ? '14' : '8'}px 18px ${i === rows.length - 1 ? '14' : '8'}px 18px;font-size:13.5px;color:#6b7280;" class="muted-text">${esc(r.label)}</td>
+        <td align="left" style="padding:${i === 0 ? '14' : '8'}px 18px ${i === rows.length - 1 ? '14' : '8'}px 18px;font-size:13.5px;font-weight:bold;color:#111827;text-align:left;" class="body-text">${esc(r.value)}</td>
+      </tr>${i < rows.length - 1 ? `<tr><td colspan="2" style="padding:0 18px;"><div style="border-top:1px solid #eef0ed;line-height:0;font-size:0;" class="divider">&nbsp;</div></td></tr>` : ''}`).join('')}
+    </table>
+  </td></tr>`
+    : ''
 
   return `<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light">
-<meta name="supported-color-schemes" content="light">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
 <title>${esc(subject)}</title>
+<!--[if mso]>
+<style>table,td,div,h1,p,a{font-family:Tahoma,Arial,sans-serif !important;}</style>
+<![endif]-->
+<style>
+  body, table, td { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
+  img { border:0; outline:none; -ms-interpolation-mode:bicubic; }
+  a { -webkit-text-size-adjust:100%; }
+  @media (max-width:600px) {
+    .container { width:100% !important; border-radius:0 !important; }
+    .px { padding-left:22px !important; padding-right:22px !important; }
+    .hero-px { padding:30px 22px 34px 22px !important; }
+  }
+  @media (prefers-color-scheme: dark) {
+    .bg { background-color:#0c1210 !important; }
+    .card { background-color:#151b19 !important; border-color:#242c29 !important; }
+    .body-text { color:#e5e7eb !important; }
+    .muted-text { color:#9aa39e !important; }
+    .divider { border-color:#242c29 !important; }
+    .detail-card { background-color:#10171410 !important; border-color:#242c29 !important; }
+  }
+</style>
 </head>
-<body style="margin:0;padding:0;background-color:#f1f5f4;font-family:Tahoma,Arial,sans-serif;">
+<body class="bg" style="margin:0;padding:0;background-color:#eef1ef;font-family:Tahoma,Arial,sans-serif;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${esc(preheader)}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f4;">
-<tr><td align="center" style="padding:32px 16px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="bg" style="background-color:#eef1ef;">
+<tr><td align="center" style="padding:28px 14px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" class="container" style="width:600px;max-width:600px;">
 
-  <tr><td style="height:6px;line-height:6px;font-size:0;background-color:${style.solid};background-image:linear-gradient(90deg,${style.from},${style.to});">&nbsp;</td></tr>
-
-  <tr><td style="padding:28px 32px 0 32px;text-align:center;">
-    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 14px auto;">
-      <tr><td bgcolor="#059669" style="width:54px;height:54px;border-radius:14px;background-color:#059669;background-image:linear-gradient(135deg,#10b981,#047857);text-align:center;vertical-align:middle;">
-        <span style="font-family:Arial,sans-serif;font-size:26px;font-weight:bold;color:#ffffff;">N</span>
+  <!-- Hero -->
+  <tr><td class="hero-px" style="padding:38px 36px 42px 36px;border-radius:20px 20px 0 0;background-color:${style.solid};background-image:linear-gradient(135deg,${style.from} 0%,${style.via} 45%,${style.to} 100%);text-align:center;">
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 16px auto;">
+      <tr><td style="padding:7px 16px;border-radius:999px;background-color:rgba(255,255,255,.16);">
+        <span style="font-family:Arial,sans-serif;font-size:12.5px;font-weight:bold;color:#ffffff;letter-spacing:.3px;">${SITE_NAME} &nbsp;•&nbsp; ${SITE_NAME_AR}</span>
       </td></tr>
     </table>
-    <div style="font-size:13px;color:#6b7280;">${SITE_NAME}<span style="margin:0 6px;color:#d1d5db;">•</span>${SITE_NAME_AR}</div>
-  </td></tr>
-
-  <tr><td style="padding:22px 32px 4px 32px;text-align:center;">
-    <div style="font-size:36px;line-height:1;margin-bottom:12px;">${style.icon}</div>
-    <div style="font-size:21px;font-weight:bold;color:#111827;">${esc(style.title)}</div>
-  </td></tr>
-
-  <tr><td style="padding:16px 32px 6px 32px;">
-    <div style="font-size:15px;line-height:1.9;color:#374151;text-align:right;direction:rtl;">${paras}</div>
-  </td></tr>
-
-  <tr><td style="padding:10px 32px 6px 32px;text-align:center;">
-    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
-      <tr><td bgcolor="${style.solid}" style="border-radius:10px;background-color:${style.solid};">
-        <a href="${ctaUrl}" style="display:inline-block;padding:13px 36px;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:10px;">${esc(style.cta)}</a>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 18px auto;">
+      <tr><td style="width:76px;height:76px;border-radius:50%;background-color:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);text-align:center;vertical-align:middle;">
+        <span style="font-size:36px;line-height:76px;">${style.icon}</span>
       </td></tr>
     </table>
+    <div style="font-family:Arial,sans-serif;font-size:23px;line-height:1.4;font-weight:bold;color:#ffffff;">${esc(style.title)}</div>
+    <div style="font-size:14px;margin-top:6px;color:rgba(255,255,255,.88);">${esc(style.subtitle)}</div>
   </td></tr>
 
-  <tr><td style="padding:22px 32px 0 32px;">
-    <div style="border-top:1px solid #e5e7eb;line-height:0;font-size:0;">&nbsp;</div>
-  </td></tr>
+  <!-- Card -->
+  <tr><td>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="card" style="background-color:#ffffff;border:1px solid #e7e9e7;border-top:none;border-radius:0 0 20px 20px;">
 
-  <tr><td style="padding:18px 32px 28px 32px;text-align:center;">
-    <div style="font-size:12.5px;color:#9ca3af;line-height:1.9;">
-      لأي استفسار راسلنا على
-      <a href="mailto:${SUPPORT_EMAIL}" style="color:#059669;text-decoration:none;">${SUPPORT_EMAIL}</a>
-      ${WHATSAPP ? `أو واتساب <span dir="ltr">${esc(WHATSAPP)}</span>` : ''}
-      <br>© ${year} ${SITE_NAME} — جميع الحقوق محفوظة
-    </div>
+    <tr><td class="px" style="padding:30px 36px 6px 36px;">
+      <div class="body-text" style="font-size:15px;line-height:1.95;color:#374151;text-align:right;direction:rtl;">${paras}</div>
+    </td></tr>
+
+    ${detailCard}
+
+    <tr><td class="px" style="padding:22px 36px 8px 36px;text-align:center;">
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+        <tr><td bgcolor="${style.solid}" style="border-radius:11px;background-color:${style.solid};background-image:linear-gradient(135deg,${style.via},${style.to});">
+          <a href="${ctaUrl}" style="display:inline-block;padding:15px 42px;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:11px;">${esc(style.cta)} &nbsp;←</a>
+        </td></tr>
+      </table>
+    </td></tr>
+
+    <tr><td class="px" style="padding:26px 36px 0 36px;">
+      <div class="divider" style="border-top:1px solid #eef0ed;line-height:0;font-size:0;">&nbsp;</div>
+    </td></tr>
+
+    <tr><td class="px" style="padding:18px 36px 30px 36px;text-align:center;">
+      <div class="muted-text" style="font-size:12.5px;color:#9ca3af;line-height:1.9;">
+        لأي استفسار راسلنا على
+        <a href="mailto:${SUPPORT_EMAIL}" style="color:${style.dark};text-decoration:none;font-weight:bold;">${SUPPORT_EMAIL}</a>
+        ${WHATSAPP ? `أو واتساب <span dir="ltr">${esc(WHATSAPP)}</span>` : ''}
+        <br>© ${year} ${SITE_NAME} — جميع الحقوق محفوظة
+      </div>
+    </td></tr>
+
+  </table>
   </td></tr>
 
 </table>
