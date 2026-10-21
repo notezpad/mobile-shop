@@ -722,7 +722,7 @@ function useBackLayer(active: boolean, onBack: () => void) {
 
 /** شريط تمرير نحيف وهادي (بدل الافتراضي الغليظ) — للقوائم اللي لازم تفضل بتتمرّر (السلة، لوحة الدفع) */
 const slimScroll =
-  '[scrollbar-width:thin] [scrollbar-color:oklch(0.57_0.18_162/0.35)_transparent] hover:[scrollbar-color:oklch(0.57_0.18_162/0.6)_transparent]'
+  '[scrollbar-width:thin] [scrollbar-color:color-mix(in_oklab,var(--scroll-accent,var(--foreground))_22%,transparent)_transparent] hover:[scrollbar-color:color-mix(in_oklab,var(--scroll-accent,var(--foreground))_40%,transparent)_transparent]'
 
 const selectCls =
   'h-8 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground outline-none transition-colors hover:border-border-strong focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20'

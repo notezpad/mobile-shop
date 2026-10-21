@@ -263,6 +263,8 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           setSubscription({
             expired: Boolean(d?.expired),
             expiringSoon: Boolean(d?.expiringSoon),
+            inGrace: Boolean(d?.inGrace),
+            graceDaysLeft: typeof d?.graceDaysLeft === 'number' ? d.graceDaysLeft : null,
             daysLeft: typeof d?.daysLeft === 'number' ? d.daysLeft : null,
             endDate: d?.endDate ?? null,
             planCode: d?.planCode ?? null,

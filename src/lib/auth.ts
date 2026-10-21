@@ -7,6 +7,7 @@ import { isProductionRuntime, readEnv } from './env'
 // الاشتراك بقى استعلام SQL واحد عبر عميل postgres.js الخفيف (شوف sql.ts).
 // ده بيشيل محرك Prisma wasm من bundle كل المسارات اللي بتستورد auth.
 import { getSql } from './sql'
+import { parseGraceDays, DAY_MS } from './subscription-settings'
 
 function getJwtSecret(): Uint8Array {
   const secret = readEnv('JWT_SECRET')
@@ -238,13 +239,15 @@ export async function requireActiveSubscription(tenantId: string) {
     sub_status: string | null
     start_date: Date | null
     end_date: Date | null
+    grace_days: string | null
   }
   const rows = await sql<Row[]>`
     SELECT t."status" AS tenant_status,
            s."id"        AS sub_id,
            s."status"    AS sub_status,
            s."startDate" AS start_date,
-           s."endDate"   AS end_date
+           s."endDate"   AS end_date,
+           (SELECT pgs."value" FROM "PlatformSetting" pgs WHERE pgs."key" = 'subscriptionGraceDays' LIMIT 1) AS grace_days
     FROM "Tenant" t
     LEFT JOIN LATERAL (
       SELECT s2."id", s2."status", s2."startDate", s2."endDate"
@@ -288,7 +291,15 @@ export async function requireActiveSubscription(tenantId: string) {
   }
 
   const now = new Date()
-  if (latestSub.endDate && latestSub.endDate < now && latestSub.status === 'active') {
+  // ⏳ فترة السماح (إعداد من الأدمن): الاشتراك الـ active اللي خلص لسه شغال لحد endDate + أيام السماح.
+  // الافتراضي 0 يوم = السلوك القديم بالظبط.
+  const graceMs = parseGraceDays(row.grace_days) * DAY_MS
+  const inGrace =
+    latestSub.status === 'active' &&
+    !!latestSub.endDate &&
+    latestSub.endDate < now &&
+    now.getTime() <= latestSub.endDate.getTime() + graceMs
+  if (!inGrace && latestSub.endDate && latestSub.endDate < now && latestSub.status === 'active') {
     // Auto-expire — run both updates (نفس سلوك Promise.all القديم)
     await Promise.all([
       sql`UPDATE "Subscription" SET "status" = 'expired' WHERE "id" = ${latestSub.id}`,
@@ -297,7 +308,7 @@ export async function requireActiveSubscription(tenantId: string) {
     cookieStore.delete('sub_ok')
     throw new Error('SUBSCRIPTION_EXPIRED')
   }
-  if (latestSub.endDate && latestSub.endDate < now) {
+  if (!inGrace && latestSub.endDate && latestSub.endDate < now) {
     throw new Error('SUBSCRIPTION_EXPIRED')
   }
   if (row.tenant_status === 'expired') {

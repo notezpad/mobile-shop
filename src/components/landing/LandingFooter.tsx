@@ -1,7 +1,8 @@
 'use client'
 
 import * as React from 'react'
-import { Store, MessageCircle } from 'lucide-react'
+import { Store, MessageCircle, Facebook, Instagram, Twitter } from 'lucide-react'
+import { useSiteSettings } from '@/lib/use-site-settings'
 
 const PRODUCT_LINKS = [
   { label: 'المزايا', href: '#features' },
@@ -22,6 +23,13 @@ const SUPPORT_LINKS = [
 ]
 
 export function LandingFooter() {
+  const site = useSiteSettings()
+  const socials = [
+    { icon: MessageCircle, label: 'واتساب', href: site.whatsappUrl },
+    { icon: Facebook, label: 'فيسبوك', href: site.facebookUrl },
+    { icon: Instagram, label: 'إنستجرام', href: site.instagramUrl },
+    { icon: Twitter, label: 'إكس', href: site.twitterUrl },
+  ].filter((x) => x.href)
   const handleNav = (href: string) => {
     // If the hash target exists on the current page (landing page only), scroll to it.
     // Otherwise, navigate to the landing page with the hash so it can scroll there.
@@ -44,18 +52,21 @@ export function LandingFooter() {
           {/* Brand */}
           <div className="space-y-4">
             <div className="flex items-center gap-2.5">
-              <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-md shadow-brand-600/30">
-                <Store className="size-5" />
-              </span>
-              <span className="text-base font-bold text-white">نظام المحل</span>
+              {site.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={site.logoUrl} alt={site.platformName} className="size-9 rounded-xl object-contain" />
+              ) : (
+                <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-md shadow-brand-600/30">
+                  <Store className="size-5" />
+                </span>
+              )}
+              <span className="text-base font-bold text-white">{site.platformName}</span>
             </div>
             <p className="text-sm leading-relaxed lg-muted">
               منصة إدارة محلات الموبايل والكمبيوتر، والملابس والأحذية — جملة وقطاعي — من مكان واحد.
             </p>
             <div className="flex items-center gap-2">
-              {[
-                { icon: MessageCircle, label: 'واتساب', href: 'https://wa.me/201010328471' },
-              ].map((s, i) => {
+              {socials.map((s, i) => {
                 const Icon = s.icon
                 const isExternal = s.href.startsWith('http')
                 return (
@@ -83,7 +94,7 @@ export function LandingFooter() {
 
         {/* Bottom bar */}
         <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-center text-xs lg-muted sm:flex-row sm:text-right">
-          <p>© {new Date().getFullYear()} نظام المحل. جميع الحقوق محفوظة.</p>
+          <p>© {new Date().getFullYear()} {site.platformName}. جميع الحقوق محفوظة.</p>
           <p>صُنع للعالم العربي 🌍</p>
         </div>
       </div>

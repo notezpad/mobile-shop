@@ -282,7 +282,9 @@ export function PurchaseVariantsDialog({
         }}
         aria-label={`كمية ${labelOf(v)}`}
         className={cn(
-          'h-7 w-full bg-transparent text-center text-base font-extrabold tabular-nums outline-none placeholder:font-semibold placeholder:text-muted-foreground/40 disabled:cursor-not-allowed',
+          // focus-visible:shadow-none → الحلقة الخضرا العامة (:focus-visible في globals.css) كانت بترسم مربع تاني جوه البلاطة؛
+          // التركيز بتتكفل بيه البلاطة نفسها (focus-within سيان) فمفيش حلقة مزدوجة.
+          'h-7 w-full bg-transparent text-center text-base font-extrabold tabular-nums outline-none focus-visible:shadow-none placeholder:font-semibold placeholder:text-muted-foreground/40 disabled:cursor-not-allowed',
           extraClass,
         )}
       />

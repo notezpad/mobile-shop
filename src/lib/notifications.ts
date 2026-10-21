@@ -28,6 +28,7 @@
  */
 
 import type { Sql } from './sql'
+import { readSubscriptionSettings, DAY_MS } from './subscription-settings'
 
 export interface CreateNotificationInput {
   type?: string
@@ -204,9 +205,12 @@ export async function checkExpiringSubscriptions(sql: Sql, tenantId: string) {
   if (!notifyExpiringSubscription) return
 
   const now = new Date()
-  const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  // ⚙️ أيام التذكير من إعدادات الأدمن (الافتراضي [7] = السلوك القديم)
+  const { reminderDays } = await readSubscriptionSettings(sql)
+  const maxReminder = reminderDays[reminderDays.length - 1]
+  const sevenDaysLater = new Date(now.getTime() + maxReminder * DAY_MS)
 
-  // ─── 1) EXPIRING SOON (≤7 days) ────────────────────
+  // ─── 1) EXPIRING SOON (≤ أكبر يوم تذكير) ────────────────────
   type SubRow = { id: number; endDate: Date; planName: string }
   let expiringSub: SubRow | undefined
   try {
@@ -247,12 +251,16 @@ export async function checkExpiringSubscriptions(sql: Sql, tenantId: string) {
 
   if (expiringSub) {
     try {
+      const daysLeft = Math.ceil((expiringSub.endDate.getTime() - now.getTime()) / DAY_MS)
+      // أقرب عتبة تذكير (أصغر يوم >= الأيام المتبقية). التذكير ده اتبعت قبل كده لو فيه إشعار
+      // اتعمل بعد بداية نافذة العتبة دي (endDate - العتبة).
+      const threshold = reminderDays.find((d) => d >= daysLeft) ?? maxReminder
+      const windowStart = new Date(expiringSub.endDate.getTime() - threshold * DAY_MS)
       const existing = await sql<{ id: number }[]>`
         SELECT "id" FROM "Notification"
-        WHERE "tenantId" = ${tenantId} AND "type" = 'expiring_subscription' AND "createdAt" >= ${dedupSince}
+        WHERE "tenantId" = ${tenantId} AND "type" = 'expiring_subscription' AND "createdAt" >= ${windowStart}
         LIMIT 1`
       if (!existing[0]) {
-        const daysLeft = Math.ceil((expiringSub.endDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
         await createNotification(sql, tenantId, {
           type: 'expiring_subscription',
           title: 'اشتراك ينتهي قريباً',

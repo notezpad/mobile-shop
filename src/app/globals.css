@@ -520,6 +520,18 @@
     box-shadow: 0 0 0 2px var(--background), 0 0 0 3px oklch(0.74 0.16 162 / 0.6);
   }
 
+  /* 🎯 حلقة تركيز مزدوجة (2026-10-21): أي حاوية (غالبًا <label> بحث/كمية) ليها focus-within:ring بترسم
+     حلقة التركيز بتاعتها، والـ input اللي جواها كان بياخد كمان حلقة :focus-visible العامة فوق —
+     فيطلع مربع تاني جوه الأول (أخضر جوه سيان/أصفر). هنا بنشيل حلقة الـ input الداخلي بس؛
+     أي input عليه ring بكلاس صريح (utilities) بيفضل شغال. */
+  [class*="focus-within:ring"] :is(input, textarea, select):focus-visible,
+  [class*="focus-within:shadow"] :is(input, textarea, select):focus-visible,
+  .dark [class*="focus-within:ring"] :is(input, textarea, select):focus-visible,
+  .dark [class*="focus-within:shadow"] :is(input, textarea, select):focus-visible {
+    box-shadow: none;
+    border-radius: inherit;
+  }
+
   /* ⚡ Selection color in dark mode */
   .dark ::selection {
     background: oklch(0.74 0.16 162 / 0.30);
@@ -781,7 +793,8 @@
 
 /* ============================================================
    CUSTOM SCROLLBAR — Refined 2026
-   Hidden by default, appears on hover with emerald gradient
+   Hidden by default, appears on hover. اللون محايد (من لون النص)،
+   وأي دايلوج/حاوية تقدر تحدد لونها بـ --scroll-accent (مثال: [--scroll-accent:var(--primary)]).
    ============================================================ */
 
 /* --- Document-level scrollbar (html) -------------------------------
@@ -792,20 +805,20 @@
 */
 html {
   scrollbar-width: auto;
-  scrollbar-color: oklch(0.57 0.18 162 / 0.55) transparent;
+  scrollbar-color: color-mix(in oklab, var(--scroll-accent, var(--foreground)) 33%, transparent) transparent;
 }
 /* ⚡ Dark mode scrollbar — lighter thumb for dark background */
 .dark html,
 html:has(.dark) {
-  scrollbar-color: oklch(0.74 0.16 162 / 0.5) transparent;
+  scrollbar-color: color-mix(in oklab, var(--scroll-accent, var(--foreground)) 30%, transparent) transparent;
 }
 .dark html::-webkit-scrollbar-thumb,
 html:has(.dark)::-webkit-scrollbar-thumb {
-  background-color: oklch(0.74 0.16 162 / 0.5);
+  background-color: color-mix(in oklab, var(--scroll-accent, var(--foreground)) 30%, transparent);
   background-image: linear-gradient(
     180deg,
-    oklch(0.80 0.14 162 / 0.5),
-    oklch(0.65 0.17 162 / 0.4)
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 30%, transparent),
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 24%, transparent)
   );
 }
 html::-webkit-scrollbar {
@@ -817,11 +830,11 @@ html::-webkit-scrollbar-track {
   background: transparent;
 }
 html::-webkit-scrollbar-thumb {
-  background-color: oklch(0.57 0.18 162 / 0.55);
+  background-color: color-mix(in oklab, var(--scroll-accent, var(--foreground)) 33%, transparent);
   background-image: linear-gradient(
     180deg,
-    oklch(0.65 0.17 162 / 0.6),
-    oklch(0.48 0.16 162 / 0.5)
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 36%, transparent),
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 30%, transparent)
   );
   border-radius: 100px;
   border: 2px solid transparent;
@@ -830,15 +843,15 @@ html::-webkit-scrollbar-thumb {
 html::-webkit-scrollbar-thumb:hover {
   background-image: linear-gradient(
     180deg,
-    oklch(0.65 0.17 162),
-    oklch(0.48 0.16 162)
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 60%, transparent),
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 75%, transparent)
   );
 }
 html::-webkit-scrollbar-thumb:active {
   background-image: linear-gradient(
     180deg,
-    oklch(0.57 0.18 162),
-    oklch(0.40 0.14 162)
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 60%, transparent),
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 75%, transparent)
   );
 }
 
@@ -864,12 +877,12 @@ html::-webkit-scrollbar-thumb:active {
 
   *:hover,
   *:focus-within {
-    scrollbar-color: oklch(0.57 0.18 162 / 0.4) transparent;
+    scrollbar-color: color-mix(in oklab, var(--scroll-accent, var(--foreground)) 24%, transparent) transparent;
   }
   /* ⚡ Dark mode inner scrollbar */
   .dark *:hover,
   .dark *:focus-within {
-    scrollbar-color: oklch(0.74 0.16 162 / 0.35) transparent;
+    scrollbar-color: color-mix(in oklab, var(--scroll-accent, var(--foreground)) 21%, transparent) transparent;
   }
 }
 
@@ -920,25 +933,25 @@ html::-webkit-scrollbar-thumb:active {
     background-image 0.3s ease;
 }
 *:hover::-webkit-scrollbar-thumb {
-  background-color: oklch(0.57 0.18 162 / 0.3);
+  background-color: color-mix(in oklab, var(--scroll-accent, var(--foreground)) 18%, transparent);
   background-image: linear-gradient(
     180deg,
-    oklch(0.65 0.17 162 / 0.4),
-    oklch(0.48 0.16 162 / 0.3)
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 24%, transparent),
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 18%, transparent)
   );
 }
 *:hover::-webkit-scrollbar-thumb:hover {
   background-image: linear-gradient(
     180deg,
-    oklch(0.65 0.17 162),
-    oklch(0.48 0.16 162)
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 60%, transparent),
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 75%, transparent)
   );
 }
 *:hover::-webkit-scrollbar-thumb:active {
   background-image: linear-gradient(
     180deg,
-    oklch(0.57 0.18 162),
-    oklch(0.40 0.14 162)
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 60%, transparent),
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 75%, transparent)
   );
 }
 *::-webkit-scrollbar-corner {

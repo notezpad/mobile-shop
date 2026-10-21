@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { useConfirm } from './ConfirmDialogProvider'
 import { DialogHero, Field, IconBtn, InkInput, LockedNote, SectionTitle } from './product-dialog-ui'
 import { INK_BTN, INK_BTN_OUTLINE } from './settings-ui'
+import { DEFAULT_UNITS, hasDefaultUnit } from '@/lib/default-units'
 
 interface ProductUnit {
   id: number
@@ -29,12 +30,8 @@ interface Props {
   onChanged?: () => void
 }
 
-const DOSE_PRESETS = [
-  { name: 'ربع دستة',  factor: 3  },
-  { name: 'نص دستة',   factor: 6  },
-  { name: 'دستة',      factor: 12 },
-  { name: 'دستة و نص', factor: 18 },
-]
+// مصدر واحد للوحدات التلقائية (نفس اللي بيتنشئ عند حفظ المنتج في api/products) — عشان الاسم ما يختلفش
+const DOSE_PRESETS = DEFAULT_UNITS
 
 export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: Props) {
   const confirm = useConfirm()
@@ -49,7 +46,7 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
   // 🥬 المواد الغذائية: كل الوحدات يدوية (مفيش وحدات تلقائية)
   const presets = DOSE_PRESETS
   const presetsLabel = 'وحدات الدستة تلقائيًا'
-  const presetsHint = 'الوحدات التلقائية: ربع دستة (3) · نص دستة (6) · دستة (12) · دستة ونص (18) — بسعر القطعة × العدد.'
+  const presetsHint = `الوحدات التلقائية: ${DOSE_PRESETS.map((p) => `${p.name} (${p.factor})`).join(' · ')} — بسعر القطعة × العدد.`
   const foodHint = 'ضيف الوحدات يدويًا: الاسم (مثلاً كيس كيلو / علبة) + عدد القطع + السعر.'
 
   const load = React.useCallback(async () => {
@@ -76,12 +73,12 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
   }
 
   const addPresets = async () => {
-    if (!product) return
+    // المواد الغذائية: الوحدات يدوية بس (الباك إند كمان بيستثنيها من الإنشاء التلقائي)
+    if (!product || isFoodVertical) return
     const basePrice = product.price ?? 0
     setBulkSaving(true)
     try {
-      const existingNames = new Set(units.map((u) => u.name))
-      const toAdd = presets.filter((p) => !existingNames.has(p.name))
+      const toAdd = presets.filter((p) => !hasDefaultUnit(units, p))
       if (toAdd.length === 0) {
         toast.info('وحدات الدستة موجودة بالفعل')
         return

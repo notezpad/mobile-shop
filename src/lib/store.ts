@@ -54,6 +54,10 @@ export interface SubscriptionState {
   expired: boolean
   /** True when expired is false AND daysLeft <= 7. */
   expiringSoon: boolean
+  /** True لو الاشتراك خلص لكن لسه في فترة السماح (الخدمة شغالة). */
+  inGrace?: boolean
+  /** أيام السماح المتبقية (لو inGrace). */
+  graceDaysLeft?: number | null
   /** Days remaining in the current subscription (negative if expired). */
   daysLeft: number | null
   /** ISO date string of the subscription's end date, or null. */

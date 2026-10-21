@@ -14,6 +14,7 @@ import {
   MessageCircle,
   Smartphone,
   ScrollText,
+  CalendarClock,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -36,6 +37,8 @@ interface Settings {
   instagramUrl: string
   whatsappUrl: string
   pwaInstallBannerEnabled: string
+  subscriptionGraceDays: string
+  renewalReminderDays: string
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -373,6 +376,51 @@ export function AdminSettingsView() {
               checked={data.pwaInstallBannerEnabled !== 'false'}
               onCheckedChange={(v) => update('pwaInstallBannerEnabled', v ? 'true' : 'false')}
             />
+          </div>
+          <Button onClick={save} disabled={saving} className="gap-1.5">
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+            حفظ الإعدادات
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Subscription settings */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <CalendarClock className="size-4 text-primary" />
+            إعدادات الاشتراك
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>فترة السماح بعد انتهاء الاشتراك (أيام)</Label>
+            <Input
+              type="number"
+              min={0}
+              max={30}
+              value={data.subscriptionGraceDays ?? '0'}
+              onChange={(e) => update('subscriptionGraceDays', e.target.value)}
+              dir="ltr"
+              className="max-w-[140px]"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              خلال هذه المدة يفضل النظام شغّالًا مع تنبيه للمحل. 0 = يتوقف فور انتهاء الاشتراك. الحد الأقصى 30 يومًا.
+              التغيير قد يستغرق حتى 5 دقائق ليظهر.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>أيام تذكير التجديد قبل الانتهاء</Label>
+            <Input
+              value={data.renewalReminderDays ?? '7'}
+              onChange={(e) => update('renewalReminderDays', e.target.value)}
+              dir="ltr"
+              placeholder="7,3,1"
+              className="max-w-[220px]"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              أرقام مفصولة بفواصل (حتى 5)، مثال <span dir="ltr">7,3,1</span> = إشعار قبل الانتهاء بـ 7 أيام ثم 3 ثم يوم.
+            </p>
           </div>
           <Button onClick={save} disabled={saving} className="gap-1.5">
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}

@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuthIgnoreSubscription, authErrorResponse } from '@/lib/auth'
 import { countableSubWhere } from '@/lib/subscription-status'
 import { ALL_MODULES, getPlanContext } from '@/lib/features'
+import { parseGraceDays, parseReminderDays, DAY_MS, GRACE_KEY, REMINDER_KEY } from '@/lib/subscription-settings'
 
 export const dynamic = 'force-dynamic'
 
@@ -86,8 +87,26 @@ async function __GET() {
   const daysLeft = Math.ceil(
     (latestSub.endDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
   )
-  const expired = latestSub.endDate < now || tenant.status === 'expired'
-  const expiringSoon = !expired && daysLeft >= 0 && daysLeft <= 7
+  // ⚙️ إعدادات الأدمن: فترة السماح + أقصى أيام تذكير (الافتراضي: 0 و7 = السلوك القديم)
+  let graceDays = 0
+  let reminderMax = 7
+  try {
+    const rows = await db.platformSetting.findMany({ where: { key: { in: [GRACE_KEY, REMINDER_KEY] } } })
+    const m = new Map(rows.map((r) => [r.key, r.value]))
+    graceDays = parseGraceDays(m.get(GRACE_KEY))
+    reminderMax = Math.max(...parseReminderDays(m.get(REMINDER_KEY)))
+  } catch { /* defaults */ }
+  const inGrace =
+    latestSub.status === 'active' &&
+    latestSub.endDate < now &&
+    now.getTime() <= latestSub.endDate.getTime() + graceDays * DAY_MS &&
+    tenant.status !== 'expired'
+  const graceDaysLeft = inGrace
+    ? Math.max(0, Math.ceil((latestSub.endDate.getTime() + graceDays * DAY_MS - now.getTime()) / DAY_MS))
+    : null
+  const expired = (latestSub.endDate < now && !inGrace) || tenant.status === 'expired'
+  // في فترة السماح بنظهر نفس الكارت (expiringSoon) برسالة مخصوصة بدل ما نقفل
+  const expiringSoon = !expired && (inGrace || (daysLeft >= 0 && daysLeft <= reminderMax))
 
   // 🛡️ Use getPlanContext — automatically force-includes CRITICAL_MODULES
   // (settings, users, finance, expenses, cash, reports) regardless of plan.
@@ -103,6 +122,8 @@ async function __GET() {
     period: latestSub.period,
     expired,
     expiringSoon,
+    inGrace,
+    graceDaysLeft,
     businessType: ctx.businessType,
     enabledModules: ctx.enabledModules,
     capabilities: ctx.capabilities,

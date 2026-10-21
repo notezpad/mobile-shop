@@ -9,23 +9,27 @@ import {
   getSession,
 } from '@/lib/auth'
 import { extractRequestContext } from '@/lib/tracking/server'
+import { validateSubscriptionSetting } from '@/lib/subscription-settings'
 import { loginKeys, isLoginBlocked, recordLoginFailure, clearLoginFailures } from '@/lib/login-guard'
 import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
 const DEFAULTS: Record<string, string> = {
-  platformName: 'منصة إدارة المحلات',
-  supportEmail: 'support@shops-platform.com',
-  supportPhone: '08000000000',
-  websiteUrl: 'https://shops-platform.com',
+  platformName: 'نظام المحل',
+  supportEmail: 'nezampos@gmail.com',
+  supportPhone: '+201010328471',
+  websiteUrl: 'https://nezampos.com',
   logoUrl: '',
   facebookUrl: '',
   twitterUrl: '',
   instagramUrl: '',
-  whatsappUrl: '',
+  whatsappUrl: 'https://wa.me/201010328471',
   // بانر تثبيت التطبيق (PWA) — 'true' = ظاهر لغير المثبّتين، 'false' = مخفي
   pwaInstallBannerEnabled: 'true',
+  // ⚙️ الاشتراك: أيام السماح بعد الانتهاء (0 = بدون) + أيام تذكير التجديد قبل الانتهاء
+  subscriptionGraceDays: '0',
+  renewalReminderDays: '7',
 }
 
 // ── تحقق من القيم قبل الحفظ (يمنع javascript:/data: URLs وقيم ضخمة) ──
@@ -56,6 +60,9 @@ function validateSetting(key: string, v: string): string | null {
     case 'instagramUrl':
     case 'whatsappUrl':
       return isHttpsUrl(v) ? null : `الرابط غير صالح (${key}) — لازم يبدأ بـ https://`
+    case 'subscriptionGraceDays':
+    case 'renewalReminderDays':
+      return validateSubscriptionSetting(key, v)
     case 'pwaInstallBannerEnabled':
       return v === 'true' || v === 'false' ? null : 'قيمة غير صالحة'
     default:

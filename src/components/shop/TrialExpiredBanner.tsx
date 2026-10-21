@@ -78,6 +78,10 @@ export function TrialExpiredBanner() {
           <p className="truncate text-[13px] font-extrabold sm:text-sm">
             {isExpired ? (
               'انتهت فترة التجربة المجانية'
+            ) : subscription.inGrace ? (
+              <>
+                انتهى اشتراكك — فترة سماح <span className="tabular-nums">{subscription.graceDaysLeft ?? 0}</span> يوم متبقي
+              </>
             ) : (
               <>
                 باقتك تنتهي خلال <span className="tabular-nums">{daysLeft}</span> يوم
@@ -92,6 +96,8 @@ export function TrialExpiredBanner() {
                   <span className="hidden sm:inline"> · باقتك السابقة: {subscription.planName}</span>
                 )}
               </>
+            ) : subscription.inGrace ? (
+              'جدّد الآن قبل انتهاء فترة السماح لتجنب توقف الخدمة'
             ) : (
               'جدّد اشتراكك الآن لتجنب انقطاع الخدمة'
             )}
