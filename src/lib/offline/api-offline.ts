@@ -621,6 +621,15 @@ export async function offlineFetch<T = any>(
             'لا يوجد اتصال بالإنترنت — تسوية الرصيد عملية حساسة بتتعمل أونلاين فقط، ولم يتم تسجيلها. حاول مرة أخرى عند عودة الاتصال',
           )
         }
+        // 🛡️ 2026-10-22 (الاستيراد الذكي): استيراد إكسيل أونلاين فقط — الملف
+        // نفسه بيتحلل على السيرفر (مفيش نسخة محلية من المحرك)، وكمان طابور
+        // الأوفلاين بيخزن JSON بس مش ملفات. أي محاولة أوفلاين بترجع رسالة
+        // واضحة بدل نجاح كاذب.
+        if (/^\/api\/products\/import\/(?:analyze|commit)(?:\?|$)/.test(url)) {
+          throw new Error(
+            'لا يوجد اتصال بالإنترنت — استيراد الإكسيل بيتم أونلاين فقط لأن التحليل بيه على السيرفر. اتأكد من الاتصال وجرب تاني',
+          )
+        }
         // 🛡️ 2026-09-30 (M7): idempotency for queued sales — a network error
         // AFTER the server committed used to keep the outbox entry and re-POST
         // it later, creating a duplicate invoice (double stock/till/debt).

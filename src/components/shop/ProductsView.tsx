@@ -22,6 +22,7 @@ import {
   Search,
   Tag,
   Trash2,
+  Wand2,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -57,6 +58,7 @@ import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { ProductDialog, type ProductFormValues } from './ProductDialog'
 import { CategoryManagerDialog } from './CategoryManagerDialog'
+import { ProductImportWizard } from './ProductImportWizard'
 import { PrintLabelsDialog } from './PrintLabelsDialog'
 import { ProductUnitsDialog } from './ProductUnitsDialog'
 import { ProductVariantsDialog } from './ProductVariantsDialog'
@@ -156,6 +158,7 @@ export function ProductsView() {
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [initial, setInitial] = React.useState<Partial<ProductFormValues> | null>(null)
   const [catDialogOpen, setCatDialogOpen] = React.useState(false)
+  const [importOpen, setImportOpen] = React.useState(false)
   const [confirmId, setConfirmId] = React.useState<number | null>(null)
   const [bulkConfirmOpen, setBulkConfirmOpen] = React.useState(false)
   const [selectedIds, setSelectedIds] = React.useState<Set<number>>(new Set())
@@ -715,6 +718,14 @@ export function ProductsView() {
           <Button
             variant="outline"
             className="h-10 flex-1 basis-[calc(50%-4px)] sm:h-10 sm:flex-initial sm:basis-auto"
+            onClick={() => setImportOpen(true)}
+          >
+            <Wand2 className="size-4" />
+            استيراد ذكي
+          </Button>
+          <Button
+            variant="outline"
+            className="h-10 flex-1 basis-[calc(50%-4px)] sm:h-10 sm:flex-initial sm:basis-auto"
             onClick={exportExcel}
             disabled={products.length === 0}
           >
@@ -1104,6 +1115,15 @@ export function ProductsView() {
         onChanged={() => {
           loadCats()
           loadProducts()
+        }}
+      />
+      {/* 🧠 الاستيراد الذكي — المنتجات الافتتاحية من Excel */}
+      <ProductImportWizard
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={() => {
+          loadProducts()
+          loadCats()
         }}
       />
       <PrintLabelsDialog
