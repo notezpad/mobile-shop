@@ -46,17 +46,17 @@ const KIND_STYLE: Record<
   }
 > = {
   welcome: {
-    icon: '🎉', title: 'أهلاً بيك معانا', subtitle: 'حسابك جاهز وتجربتك المجانية بدأت',
+    icon: '🚀', title: 'أهلاً بيك معانا', subtitle: 'حسابك جاهز، وتجربتك المجانية بدأت',
     from: '#34d399', via: '#10b981', to: '#047857', solid: '#059669', dark: '#065f46',
     cta: 'ابدأ الاستخدام الآن', path: '/login',
   },
   renewal: {
-    icon: '⏰', title: 'اشتراكك قرب يخلّص', subtitle: 'جدّد دلوقتي قبل ما الخدمة تتوقف',
+    icon: '⏳', title: 'اشتراكك قرب يخلّص', subtitle: 'جدّد دلوقتي عشان متقفش الخدمة عنك',
     from: '#fbbf24', via: '#f59e0b', to: '#b45309', solid: '#d97706', dark: '#92400e',
     cta: 'جدّد الاشتراك الآن', path: '/settings',
   },
   expired: {
-    icon: '⚠️', title: 'اشتراكك انتهى', subtitle: 'جدّد عشان ترجع تستخدم النظام تاني',
+    icon: '🚨', title: 'اشتراكك انتهى', subtitle: 'جدّد عشان ترجع تستخدم النظام فوراً',
     from: '#f87171', via: '#ef4444', to: '#b91c1c', solid: '#dc2626', dark: '#991b1b',
     cta: 'جدّد الآن', path: '/settings',
   },
@@ -71,8 +71,8 @@ const DEFAULT_STYLE = {
 function detailRows(vars: EmailVars | undefined): { label: string; value: string }[] {
   if (!vars) return []
   const rows: { label: string; value: string }[] = []
-  if (vars.shopName) rows.push({ label: 'المحل', value: String(vars.shopName) })
-  if (vars.planName) rows.push({ label: 'الباقة', value: String(vars.planName) })
+  if (vars.shopName) rows.push({ label: 'اسم المحل', value: String(vars.shopName) })
+  if (vars.planName) rows.push({ label: 'الباقة الحالية', value: String(vars.planName) })
   if (vars.endDate) rows.push({ label: 'تاريخ الانتهاء', value: String(vars.endDate) })
   if (vars.daysLeft !== undefined && vars.daysLeft !== null && vars.daysLeft !== '') {
     const n = Number(vars.daysLeft)
@@ -85,21 +85,25 @@ function toHtml(body: string, kind: EmailKind, subject: string, vars?: EmailVars
   const style = KIND_STYLE[kind as string] ?? DEFAULT_STYLE
   const paras = esc(body)
     .split(/\n{2,}/)
-    .map((p) => `<p style="margin:0 0 14px 0">${p.replace(/\n/g, '<br>')}</p>`)
+    .map((p) => `<p style="margin:0 0 16px 0;font-size:15px;line-height:1.8;color:#374151;">${p.replace(/\n/g, '<br>')}</p>`)
     .join('')
   const preheader = body.replace(/\s+/g, ' ').trim().slice(0, 110)
   const ctaUrl = `${SITE_URL}${style.path}`
   const year = new Date().getFullYear()
   const rows = detailRows(vars)
 
+  // كرت التفاصيل بتصميم Widget احترافي
   const detailCard = rows.length
-    ? `<tr><td style="padding:4px 32px 4px 32px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="detail-card" style="background-color:#f9fafb;border:1px solid #eef0ed;border-radius:12px;">
+    ? `<tr><td style="padding:0 32px 24px 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="detail-card" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;border-right:4px solid ${style.solid};">
+      <tr>
+        <td colspan="2" style="padding:16px 20px 8px 20px;font-size:12px;font-weight:bold;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">تفاصيل الحساب</td>
+      </tr>
       ${rows.map((r, i) => `
       <tr>
-        <td style="padding:${i === 0 ? '14' : '8'}px 18px ${i === rows.length - 1 ? '14' : '8'}px 18px;font-size:13.5px;color:#6b7280;" class="muted-text">${esc(r.label)}</td>
-        <td align="left" style="padding:${i === 0 ? '14' : '8'}px 18px ${i === rows.length - 1 ? '14' : '8'}px 18px;font-size:13.5px;font-weight:bold;color:#111827;text-align:left;" class="body-text">${esc(r.value)}</td>
-      </tr>${i < rows.length - 1 ? `<tr><td colspan="2" style="padding:0 18px;"><div style="border-top:1px solid #eef0ed;line-height:0;font-size:0;" class="divider">&nbsp;</div></td></tr>` : ''}`).join('')}
+        <td style="padding:10px 20px;font-size:14px;color:#64748b;font-weight:600;" class="muted-text">${esc(r.label)}</td>
+        <td align="left" style="padding:10px 20px;font-size:14px;font-weight:800;color:#0f172a;text-align:left;" class="body-text">${esc(r.value)}</td>
+      </tr>${i < rows.length - 1 ? `<tr><td colspan="2" style="padding:0 20px;"><div style="border-top:1px dashed #cbd5e1;line-height:0;font-size:0;" class="divider">&nbsp;</div></td></tr>` : ''}`).join('')}
     </table>
   </td></tr>`
     : ''
@@ -113,7 +117,10 @@ function toHtml(body: string, kind: EmailKind, subject: string, vars?: EmailVars
 <meta name="supported-color-schemes" content="light dark">
 <title>${esc(subject)}</title>
 <!--[if mso]>
-<style>table,td,div,h1,p,a{font-family:Tahoma,Arial,sans-serif !important;}</style>
+<style>
+  table,td,div,h1,p,a{font-family:Tahoma,Arial,sans-serif !important;}
+  .mso-hide { display: none !important; }
+</style>
 <![endif]-->
 <style>
   body, table, td { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
@@ -121,73 +128,79 @@ function toHtml(body: string, kind: EmailKind, subject: string, vars?: EmailVars
   a { -webkit-text-size-adjust:100%; }
   @media (max-width:600px) {
     .container { width:100% !important; border-radius:0 !important; }
-    .px { padding-left:22px !important; padding-right:22px !important; }
-    .hero-px { padding:30px 22px 34px 22px !important; }
+    .px { padding-left:24px !important; padding-right:24px !important; }
+    .hero-px { padding:32px 24px 36px 24px !important; }
+    .cta-btn { width:100% !important; display:block !important; text-align:center !important; padding:16px 0 !important; }
   }
   @media (prefers-color-scheme: dark) {
-    .bg { background-color:#0c1210 !important; }
-    .card { background-color:#151b19 !important; border-color:#242c29 !important; }
-    .body-text { color:#e5e7eb !important; }
-    .muted-text { color:#9aa39e !important; }
-    .divider { border-color:#242c29 !important; }
-    .detail-card { background-color:#10171410 !important; border-color:#242c29 !important; }
+    .bg { background-color:#0f172a !important; }
+    .card { background-color:#1e293b !important; border-color:#334155 !important; }
+    .body-text { color:#f1f5f9 !important; }
+    .muted-text { color:#94a3b8 !important; }
+    .divider { border-color:#334155 !important; }
+    .detail-card { background-color:#0f172a !important; border-color:#334155 !important; border-right-color:${style.from} !important; }
   }
 </style>
 </head>
-<body class="bg" style="margin:0;padding:0;background-color:#eef1ef;font-family:Tahoma,Arial,sans-serif;">
+<body class="bg" style="margin:0;padding:0;background-color:#f1f5f9;font-family:Tahoma,Arial,sans-serif;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${esc(preheader)}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="bg" style="background-color:#eef1ef;">
-<tr><td align="center" style="padding:28px 14px;">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" class="container" style="width:600px;max-width:600px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="bg" style="background-color:#f1f5f9;">
+<tr><td align="center" style="padding:40px 16px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" class="container" style="width:600px;max-width:600px;background-color:#ffffff;border-radius:24px;box-shadow:0 20px 40px -10px rgba(0,0,0,0.08);overflow:hidden;border:1px solid #e2e8f0;">
 
   <!-- Hero -->
-  <tr><td class="hero-px" style="padding:38px 36px 42px 36px;border-radius:20px 20px 0 0;background-color:${style.solid};background-image:linear-gradient(135deg,${style.from} 0%,${style.via} 45%,${style.to} 100%);text-align:center;">
-    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 16px auto;">
-      <tr><td style="padding:7px 16px;border-radius:999px;background-color:rgba(255,255,255,.16);">
-        <span style="font-family:Arial,sans-serif;font-size:12.5px;font-weight:bold;color:#ffffff;letter-spacing:.3px;">${SITE_NAME} &nbsp;•&nbsp; ${SITE_NAME_AR}</span>
+  <tr><td class="hero-px" style="padding:40px 36px 44px 36px;background-color:${style.solid};background-image:linear-gradient(135deg,${style.from} 0%,${style.via} 50%,${style.to} 100%);text-align:center;">
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 20px auto;">
+      <tr><td style="padding:6px 16px;border-radius:999px;background-color:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);">
+        <span style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;color:#ffffff;letter-spacing:.5px;">${SITE_NAME} &nbsp;•&nbsp; ${SITE_NAME_AR}</span>
       </td></tr>
     </table>
-    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 18px auto;">
-      <tr><td style="width:76px;height:76px;border-radius:50%;background-color:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);text-align:center;vertical-align:middle;">
-        <span style="font-size:36px;line-height:76px;">${style.icon}</span>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px auto;">
+      <tr><td style="width:80px;height:80px;border-radius:50%;background-color:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);text-align:center;vertical-align:middle;box-shadow:0 8px 20px rgba(0,0,0,0.15);">
+        <span style="font-size:40px;line-height:80px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.2));">${style.icon}</span>
       </td></tr>
     </table>
-    <div style="font-family:Arial,sans-serif;font-size:23px;line-height:1.4;font-weight:bold;color:#ffffff;">${esc(style.title)}</div>
-    <div style="font-size:14px;margin-top:6px;color:rgba(255,255,255,.88);">${esc(style.subtitle)}</div>
+    <h1 style="font-family:Arial,sans-serif;font-size:26px;line-height:1.3;font-weight:900;color:#ffffff;margin:0 0 8px 0;text-shadow:0 2px 4px rgba(0,0,0,0.1);">${esc(style.title)}</h1>
+    <div style="font-size:15px;font-weight:500;color:rgba(255,255,255,.9);">${esc(style.subtitle)}</div>
   </td></tr>
 
-  <!-- Card -->
-  <tr><td>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="card" style="background-color:#ffffff;border:1px solid #e7e9e7;border-top:none;border-radius:0 0 20px 20px;">
+  <!-- Body Content -->
+  <tr><td class="px" style="padding:36px 36px 10px 36px;">
+    <div class="body-text" style="font-size:15px;line-height:1.8;color:#374151;text-align:right;direction:rtl;">${paras}</div>
+  </td></tr>
 
-    <tr><td class="px" style="padding:30px 36px 6px 36px;">
-      <div class="body-text" style="font-size:15px;line-height:1.95;color:#374151;text-align:right;direction:rtl;">${paras}</div>
-    </td></tr>
+  <!-- Detail Card -->
+  ${detailCard}
 
-    ${detailCard}
+  <!-- CTA Button -->
+  <tr><td class="px" style="padding:16px 36px 36px 36px;text-align:center;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      <tr><td align="center">
+        <table role="presentation" cellpadding="0" cellspacing="0">
+          <tr><td style="border-radius:12px;background-color:${style.solid};background-image:linear-gradient(135deg,${style.via},${style.to});box-shadow:0 8px 20px -6px ${style.solid};">
+            <a href="${ctaUrl}" class="cta-btn" style="display:inline-block;padding:16px 48px;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:12px;border:1px solid rgba(255,255,255,0.1);">
+              ${esc(style.cta)} &nbsp;←
+            </a>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </td></tr>
 
-    <tr><td class="px" style="padding:22px 36px 8px 36px;text-align:center;">
-      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
-        <tr><td bgcolor="${style.solid}" style="border-radius:11px;background-color:${style.solid};background-image:linear-gradient(135deg,${style.via},${style.to});">
-          <a href="${ctaUrl}" style="display:inline-block;padding:15px 42px;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:11px;">${esc(style.cta)} &nbsp;←</a>
-        </td></tr>
-      </table>
-    </td></tr>
+  <!-- Divider -->
+  <tr><td class="px" style="padding:0 36px;">
+    <div class="divider" style="border-top:1px solid #e2e8f0;line-height:0;font-size:0;">&nbsp;</div>
+  </td></tr>
 
-    <tr><td class="px" style="padding:26px 36px 0 36px;">
-      <div class="divider" style="border-top:1px solid #eef0ed;line-height:0;font-size:0;">&nbsp;</div>
-    </td></tr>
-
-    <tr><td class="px" style="padding:18px 36px 30px 36px;text-align:center;">
-      <div class="muted-text" style="font-size:12.5px;color:#9ca3af;line-height:1.9;">
-        لأي استفسار راسلنا على
-        <a href="mailto:${SUPPORT_EMAIL}" style="color:${style.dark};text-decoration:none;font-weight:bold;">${SUPPORT_EMAIL}</a>
-        ${WHATSAPP ? `أو واتساب <span dir="ltr">${esc(WHATSAPP)}</span>` : ''}
-        <br>© ${year} ${SITE_NAME} — جميع الحقوق محفوظة
-      </div>
-    </td></tr>
-
-  </table>
+  <!-- Footer -->
+  <tr><td class="px" style="padding:24px 36px 32px 36px;text-align:center;">
+    <div class="muted-text" style="font-size:13px;color:#64748b;line-height:1.8;">
+      لأي استفسار أو مساعدة، فريق الدعم جاهز ليك دايماً<br>
+      <a href="mailto:${SUPPORT_EMAIL}" style="color:${style.dark};text-decoration:none;font-weight:bold;">${SUPPORT_EMAIL}</a>
+      ${WHATSAPP ? `<br>أو واتساب: <span dir="ltr" style="font-weight:bold;">${esc(WHATSAPP)}</span>` : ''}
+      <br><br>
+      <span style="font-size:12px;color:#94a3b8;">© ${year} ${SITE_NAME} — جميع الحقوق محفوظة</span>
+    </div>
   </td></tr>
 
 </table>
