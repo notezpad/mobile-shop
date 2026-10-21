@@ -49,6 +49,19 @@ function isHttpsUrl(v: string): boolean {
     return false
   }
 }
+const URL_KEYS = new Set(['websiteUrl', 'facebookUrl', 'twitterUrl', 'instagramUrl', 'whatsappUrl'])
+/** يصلّح الروابط تلقائيًا: رقم واتساب → wa.me، ويضيف https:// لو ناقص */
+function normalizeSetting(key: string, raw: unknown): string {
+  let v = String(raw ?? '').trim()
+  if (!URL_KEYS.has(key) || v === '') return v
+  if (key === 'whatsappUrl') {
+    const digits = v.replace(/[\s\-()+]/g, '')
+    if (/^\d{6,15}$/.test(digits)) return `https://wa.me/${digits.replace(/^0+/, '20')}`
+  }
+  if (/^\/\//.test(v)) v = 'https:' + v
+  else if (!/^[a-z][a-z0-9+.-]*:/i.test(v)) v = 'https://' + v.replace(/^\/+/, '')
+  return v
+}
 /** يرجّع رسالة خطأ أو null لو القيمة سليمة */
 function validateSetting(key: string, v: string): string | null {
   if (key === EMAIL_ENABLED_KEY || isTemplateKey(key)) return validateTemplateSetting(key, v)
@@ -166,6 +179,9 @@ async function __PUT(req: NextRequest) {
   }
 
   const allowedKeys = Object.keys(DEFAULTS)
+  for (const key of allowedKeys) {
+    if (body[key] !== undefined) body[key] = normalizeSetting(key, body[key])
+  }
   // تحقق من كل القيم الأول — لو فيه قيمة غلط ما نحفظش حاجة (كل-أو-لا-شيء)
   for (const key of allowedKeys) {
     if (body[key] !== undefined) {
