@@ -3,9 +3,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "postinstall": "prisma generate",
+    "build": "prisma generate && next build",
     "start": "next start",
-    "cf:build": "opennextjs-cloudflare build && node scripts/populate-cache-assets.mjs"
+    "cf:build": "prisma generate && opennextjs-cloudflare build && node scripts/populate-cache-assets.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

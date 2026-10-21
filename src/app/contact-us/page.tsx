@@ -26,7 +26,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { LandingFooter } from '@/components/landing/LandingFooter'
-import { useSiteSettings } from '@/lib/use-site-settings'
 
 /**
  * صفحة "تواصل معنا" — Contact Page
@@ -39,12 +38,13 @@ import { useSiteSettings } from '@/lib/use-site-settings'
  * - ساعات العمل: من 9ص لـ 11م يومياً
  */
 
-// 🔗 القيم (واتساب/إيميل) بتيجي من إعدادات الأدمن عبر useSiteSettings، والافتراضي من lib/site.ts
-const buildContactMethods = (WHATSAPP_NUMBER: string, supportEmail: string) => [
+const WHATSAPP_NUMBER = '201010328471'
+
+const CONTACT_METHODS = [
   {
     icon: MessageCircle,
     title: 'واتساب',
-    value: WHATSAPP_NUMBER,
+    value: '201010328471',
     desc: 'الأسرع للرد — خلال دقائق في ساعات العمل',
     href: `https://wa.me/${WHATSAPP_NUMBER}`,
     color: 'from-emerald-500/20 to-emerald-700/10',
@@ -54,9 +54,9 @@ const buildContactMethods = (WHATSAPP_NUMBER: string, supportEmail: string) => [
   {
     icon: Mail,
     title: 'بريد إلكتروني',
-    value: supportEmail,
+    value: 'nezampos@gmail.com',
     desc: 'للاستفسارات التفصيلية والاقتراحات',
-    href: `mailto:${supportEmail}`,
+    href: 'mailto:nezampos@gmail.com',
     color: 'from-blue-500/20 to-blue-700/10',
     iconColor: 'text-blue-300',
   },
@@ -125,12 +125,6 @@ const stagger = {
 }
 
 export default function ContactPage() {
-  const site = useSiteSettings()
-  const WHATSAPP_NUMBER = site.whatsappNumber
-  const CONTACT_METHODS = React.useMemo(
-    () => buildContactMethods(site.whatsappNumber, site.supportEmail),
-    [site.whatsappNumber, site.supportEmail]
-  )
   const [form, setForm] = React.useState({
     name: '',
     phone: '',

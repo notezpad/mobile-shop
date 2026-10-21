@@ -487,7 +487,7 @@ export default function PricingPage() {
               <MessageCircle className="size-4" />
               واتساب
             </a>
-            <a href="mailto:support@yourdomain.com" className="pg-support-btn pg-support-btn--email">
+            <a href="mailto:nezampos@gmail.com" className="pg-support-btn pg-support-btn--email">
               <Mail className="size-4" />
               بريد إلكتروني
             </a>

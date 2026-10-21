@@ -11,6 +11,7 @@ export const SITE_DESCRIPTION =
 export const OG_IMAGE = `${SITE_URL}/og-image.png`;
 export const WHATSAPP = "+201010328471";
 export const SUPPORT_PHONE = WHATSAPP;
+export const SUPPORT_EMAIL = "nezampos@gmail.com";
 
 export const PAGES = [
   { path: "/", changeFrequency: "weekly", priority: 1 },
