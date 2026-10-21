@@ -14,6 +14,7 @@ import { validateNotificationSetting } from '@/lib/notification-settings'
 import { loginKeys, isLoginBlocked, recordLoginFailure, clearLoginFailures } from '@/lib/login-guard'
 import { logAudit } from '@/lib/audit'
 import { TEMPLATE_DEFAULTS, EMAIL_ENABLED_KEY, validateTemplateSetting, isTemplateKey } from '@/lib/message-templates'
+import { URL_KEYS, normalizeSetting, urlHint } from '@/lib/settings-normalize'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,19 +50,6 @@ function isHttpsUrl(v: string): boolean {
     return false
   }
 }
-const URL_KEYS = new Set(['websiteUrl', 'facebookUrl', 'twitterUrl', 'instagramUrl', 'whatsappUrl'])
-/** يصلّح الروابط تلقائيًا: رقم واتساب → wa.me، ويضيف https:// لو ناقص */
-function normalizeSetting(key: string, raw: unknown): string {
-  let v = String(raw ?? '').trim()
-  if (!URL_KEYS.has(key) || v === '') return v
-  if (key === 'whatsappUrl') {
-    const digits = v.replace(/[\s\-()+]/g, '')
-    if (/^\d{6,15}$/.test(digits)) return `https://wa.me/${digits.replace(/^0+/, '20')}`
-  }
-  if (/^\/\//.test(v)) v = 'https:' + v
-  else if (!/^[a-z][a-z0-9+.-]*:/i.test(v)) v = 'https://' + v.replace(/^\/+/, '')
-  return v
-}
 /** يرجّع رسالة خطأ أو null لو القيمة سليمة */
 function validateSetting(key: string, v: string): string | null {
   if (key === EMAIL_ENABLED_KEY || isTemplateKey(key)) return validateTemplateSetting(key, v)
@@ -80,7 +68,7 @@ function validateSetting(key: string, v: string): string | null {
     case 'twitterUrl':
     case 'instagramUrl':
     case 'whatsappUrl':
-      return isHttpsUrl(v) ? null : `الرابط غير صالح (${key}) — لازم يبدأ بـ https://`
+      return isHttpsUrl(v) ? null : urlHint(key)
     case 'subscriptionGraceDays':
     case 'renewalReminderDays':
       return validateSubscriptionSetting(key, v)
@@ -103,6 +91,8 @@ async function __GET() {
   const rows = await db.platformSetting.findMany()
   const map: Record<string, string> = { ...DEFAULTS }
   for (const r of rows) map[r.key] = r.value
+  // نصلح الروابط المخزنة وقت القراءة كمان — عشان اللوحة ما تعرضش رابط مكسور يوقف أي حفظ بعده
+  for (const k of URL_KEYS) if (map[k] !== undefined) map[k] = normalizeSetting(k, map[k])
   return NextResponse.json(map)
 }
 
