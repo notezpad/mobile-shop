@@ -20,6 +20,7 @@
 
 import { idb, idbAvailable, onOutboxChange, type OutboxEntry } from './idb'
 import { emitDataChanged } from './data-events'
+import { findVariantByBarcode, getVariantsOfProduct, upsertProductVariants } from './variants-index'
 
 /**
  * 🛡️ FIX: global "session is actually gone" signal.
@@ -458,6 +459,7 @@ async function offlineProductsAnswer<T>(url: string): Promise<T | null> {
       for (const p of added) if (!seen.has(p.id)) list.push(p)
     }
     if (list.length === 0) return null
+    const everyone = list
 
     if (status === 'active') list = list.filter((p) => p.active !== false)
     else if (status === 'inactive') list = list.filter((p) => p.active === false)
@@ -471,6 +473,13 @@ async function offlineProductsAnswer<T>(url: string): Promise<T | null> {
       )
     }
 
+    // 🎨 البحث بباركود متغير (مطابقة تامة زي السيرفر) → المنتج صاحبه يظهر ومعاه matchedVariantId
+    const variantHit = q ? await findVariantByBarcode(q) : null
+    if (variantHit && !list.some((p) => p?.id === variantHit.productId)) {
+      const owner = everyone.find((p) => p?.id === variantHit.productId)
+      if (owner && (status === 'all' || (status === 'active') === (owner.active !== false))) list.push(owner)
+    }
+
     // الأحدث أولاً (زي ترتيب السيرفر id desc) — والمضاف أوفلاين على الوش
     list.sort(
       (a, b) =>
@@ -480,7 +489,15 @@ async function offlineProductsAnswer<T>(url: string): Promise<T | null> {
 
     const total = list.length
     const start = (page - 1) * limit
-    const data = list.slice(start, start + limit)
+    const data = list.slice(start, start + limit).map((p) =>
+      variantHit && p?.id === variantHit.productId
+        ? {
+            ...p,
+            matchedVariantId: variantHit.id,
+            matchedVariantLabel: [variantHit.color, variantHit.size].filter(Boolean).join(' / ') || null,
+          }
+        : p
+    )
     return {
       data,
       total,
@@ -715,6 +732,9 @@ async function runGet<T>(
     // لا ننتظر كتابة IndexedDB (بطيئة على الموبايل) — الكاش للأوفلاين فقط
     // 🛡️ v13: درع الأشكال — أي رد قائمة بيتصلّح قبل التخزين قبل الرجوع
     data = normalizeListShape(url, data)
+    // 🎨 متغيرات منتج جت أونلاين → نحدّث فهرس المتغيرات المحلي (أوفلاين + منتجات اتضافت بعد آخر prewarm)
+    const variantsUrl = url.match(/^\/api\/products\/(\d+)\/variants(?:\?|$)/)
+    if (variantsUrl) void upsertProductVariants(Number(variantsUrl[1]), data)
     if (freshMs !== null) {
       // ⚡ v10: اعتمّ الكاش في الميموري للزيارات الجاية (نفس فكرة gcTime)
       if (memCache.size >= MEM_CACHE_MAX) {
@@ -734,6 +754,13 @@ async function runGet<T>(
     // Step 2: network error or 5xx → try cached response (نفس الـ URL بالظبط)
     const cached = await idb.getCached<T>(url)
     if (cached) return normalizeListShape(url, cached.data) as T
+
+    // 🎨 Step 2a: متغيرات منتج من الفهرس المحلي (اتسحب في الـ prewarm) لو الـ URL ده ما اتكاشّاش قبل كده
+    const variantsPath = url.match(/^\/api\/products\/(\d+)\/variants(?:\?|$)/)
+    if (variantsPath) {
+      const local = await getVariantsOfProduct(Number(variantsPath[1]))
+      if (local) return local as unknown as T
+    }
 
     // 🛡️ Step 2b (v5): قوائم المنتجات أوفلاين — من متجر IDB الكامل +
     // المنتجات المضافة محلياً (outbox) — بنفس شكل ظرف السيرفر عشان

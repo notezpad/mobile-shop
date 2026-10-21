@@ -9,6 +9,7 @@
  */
 
 import { idb } from './idb'
+import { prewarmVariants } from './variants-index'
 
 /** The endpoints we pre-cache for offline page loads (IDB layer — طبقة api()). */
 const PRECACHE_ENDPOINTS = [
@@ -219,7 +220,7 @@ export async function prewarmEndpoints(): Promise<number> {
  * Full pre-warm: products + endpoints. Called on app boot when online.
  * Returns { products, endpoints } counts.
  */
-export async function prewarmAll(): Promise<{ products: number; endpoints: number }> {
+export async function prewarmAll(): Promise<{ products: number; endpoints: number; variants?: number }> {
   if (typeof navigator === 'undefined' || navigator.onLine === false) {
     return { products: 0, endpoints: 0 }
   }
@@ -244,14 +245,16 @@ export async function prewarmAll(): Promise<{ products: number; endpoints: numbe
     return { products: 0, endpoints: 0 }
   }
 
-  const [products, endpoints] = await Promise.all([
+  // 🎨 المتغيرات (لون/مقاس) بتتسخّن مع المنتجات: دايلوج اللون/المقاس والملصقات ومسح باركود المتغير أوفلاين
+  const [products, endpoints, variants] = await Promise.all([
     prewarmProducts(),
     prewarmEndpoints(),
+    prewarmVariants(),
   ])
 
   await idb.setMeta('lastPrewarmAt', Date.now())
 
-  return { products, endpoints }
+  return { products, endpoints, variants }
 }
 
 /**
