@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { hashPassword, createSession } from '@/lib/auth'
+import { withSql } from '@/lib/sql'
+import { sendTemplatedEmail, fmtArDate } from '@/lib/email'
 import { runNonBlocking, trackServerEvent, extractRequestContext } from '@/lib/tracking/server'
 import { TRACKING_EVENTS } from '@/lib/tracking/types'
 import { suspiciousSignupReason } from '@/lib/tracking/fake-signup'
@@ -303,6 +305,13 @@ async function __POST(req: NextRequest) {
     const fakeReason = suspiciousSignupReason({ name, email: user.email, phone, shopName })
     if (fakeReason) {
       console.info('[signup] tracking suppressed:', fakeReason)
+    }
+
+    // ✉️ إيميل ترحيب (Non-blocking — فشله ما بيأثرش على التسجيل) — مش للتسجيلات الوهمية
+    if (!fakeReason) {
+      runNonBlocking(() => withSql((sql) => sendTemplatedEmail(sql, 'welcome', user.email, tenant.id, {
+        shopName, ownerName: name, planName: trialPlan.name, endDate: fmtArDate(endDate),
+      })))
     }
 
     if (!fakeReason) runNonBlocking(() => trackServerEvent({

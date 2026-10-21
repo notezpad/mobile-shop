@@ -15,6 +15,7 @@ import {
   Smartphone,
   ScrollText,
   CalendarClock,
+  BellRing,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,8 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
+import { TEMPLATE_KINDS, TEMPLATE_LABELS, TEMPLATE_VARS, TEMPLATE_DEFAULTS, tplKey, EMAIL_ENABLED_KEY } from '@/lib/message-templates'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 
@@ -39,6 +42,8 @@ interface Settings {
   pwaInstallBannerEnabled: string
   subscriptionGraceDays: string
   renewalReminderDays: string
+  notificationRetentionDays: string
+  [key: string]: string
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -175,7 +180,7 @@ export function AdminSettingsView() {
     load()
   }, [load])
 
-  const update = (key: keyof Settings, value: string) => {
+  const update = (key: string, value: string) => {
     setData((prev) => (prev ? { ...prev, [key]: value } : prev))
   }
 
@@ -189,6 +194,19 @@ export function AdminSettingsView() {
       toast.error(e?.message || 'فشل الحفظ')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const [testing, setTesting] = React.useState<string | null>(null)
+  const sendTest = async (kind: string) => {
+    setTesting(kind)
+    try {
+      const r: any = await api('/api/admin/settings/test-email', { method: 'POST', body: { kind } })
+      toast.success(`تم إرسال رسالة تجريبية إلى ${r?.to ?? 'إيميلك'}`)
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل الإرسال')
+    } finally {
+      setTesting(null)
     }
   }
 
@@ -384,6 +402,38 @@ export function AdminSettingsView() {
         </CardContent>
       </Card>
 
+      {/* Notifications settings */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <BellRing className="size-4 text-primary" />
+            الإشعارات الداخلية
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>مدة الاحتفاظ بالإشعارات (أيام)</Label>
+            <Input
+              type="number"
+              min={7}
+              max={365}
+              value={data.notificationRetentionDays ?? '30'}
+              onChange={(e) => update('notificationRetentionDays', e.target.value)}
+              dir="ltr"
+              className="max-w-[140px]"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              الإشعارات الأقدم من المدة دي بتتمسح تلقائيًا لكل المحلات (الحد الأدنى 7 أيام، الافتراضي 30).
+              الحذف بيتم تدريجيًا مع استخدام المحلات للنظام.
+            </p>
+          </div>
+          <Button onClick={save} disabled={saving} className="gap-1.5">
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+            حفظ الإعدادات
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* Subscription settings */}
       <Card>
         <CardHeader className="pb-3">
@@ -422,6 +472,70 @@ export function AdminSettingsView() {
               أرقام مفصولة بفواصل (حتى 5)، مثال <span dir="ltr">7,3,1</span> = إشعار قبل الانتهاء بـ 7 أيام ثم 3 ثم يوم.
             </p>
           </div>
+          <Button onClick={save} disabled={saving} className="gap-1.5">
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+            حفظ الإعدادات
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Email settings */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Mail className="size-4 text-primary" />
+            رسائل الإيميل (Resend)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <Label>إرسال الإيميلات التلقائية</Label>
+              <p className="text-[11px] text-muted-foreground">
+                ترحيب عند التسجيل، تذكير التجديد، وانتهاء الاشتراك. محتاج مفتاح RESEND_API_KEY كـ Secret في الـ Worker.
+              </p>
+            </div>
+            <Switch
+              checked={data[EMAIL_ENABLED_KEY] !== 'false'}
+              onCheckedChange={(v) => update(EMAIL_ENABLED_KEY, v ? 'true' : 'false')}
+            />
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            المتغيرات المتاحة:{' '}
+            {TEMPLATE_VARS.map((v) => (
+              <code key={v} dir="ltr" className="mx-0.5 rounded bg-muted px-1">{`{${v}}`}</code>
+            ))}
+            {' '}— لو مسحت النص بيرجع للنص الافتراضي.
+          </p>
+          {TEMPLATE_KINDS.map((kind) => (
+            <div key={kind} className="space-y-1.5 rounded-lg border p-3">
+              <Label className="font-semibold">{TEMPLATE_LABELS[kind]}</Label>
+              <Input
+                value={data[tplKey(kind, 'subject')] ?? ''}
+                onChange={(e) => update(tplKey(kind, 'subject'), e.target.value.replace(/[\r\n]/g, ' '))}
+                placeholder={TEMPLATE_DEFAULTS[tplKey(kind, 'subject')]}
+                maxLength={150}
+              />
+              <Textarea
+                value={data[tplKey(kind, 'body')] ?? ''}
+                onChange={(e) => update(tplKey(kind, 'body'), e.target.value)}
+                placeholder={TEMPLATE_DEFAULTS[tplKey(kind, 'body')]}
+                rows={6}
+                maxLength={2000}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={testing !== null}
+                onClick={() => sendTest(kind)}
+                className="gap-1.5"
+              >
+                {testing === kind ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
+                إرسال تجربة لإيميلي (احفظ أولًا)
+              </Button>
+            </div>
+          ))}
           <Button onClick={save} disabled={saving} className="gap-1.5">
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
             حفظ الإعدادات

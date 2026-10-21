@@ -9,23 +9,34 @@ import {
   getSession,
 } from '@/lib/auth'
 import { extractRequestContext } from '@/lib/tracking/server'
+import { validateSubscriptionSetting } from '@/lib/subscription-settings'
+import { validateNotificationSetting } from '@/lib/notification-settings'
 import { loginKeys, isLoginBlocked, recordLoginFailure, clearLoginFailures } from '@/lib/login-guard'
 import { logAudit } from '@/lib/audit'
+import { TEMPLATE_DEFAULTS, EMAIL_ENABLED_KEY, validateTemplateSetting, isTemplateKey } from '@/lib/message-templates'
 
 export const dynamic = 'force-dynamic'
 
 const DEFAULTS: Record<string, string> = {
-  platformName: 'منصة إدارة المحلات',
+  platformName: 'نظام المحل',
   supportEmail: 'nezampos@gmail.com',
-  supportPhone: '08000000000',
-  websiteUrl: 'https://shops-platform.com',
+  supportPhone: '+201010328471',
+  websiteUrl: 'https://nezampos.com',
   logoUrl: '',
   facebookUrl: '',
   twitterUrl: '',
   instagramUrl: '',
-  whatsappUrl: '',
+  whatsappUrl: 'https://wa.me/201010328471',
   // بانر تثبيت التطبيق (PWA) — 'true' = ظاهر لغير المثبّتين، 'false' = مخفي
   pwaInstallBannerEnabled: 'true',
+  // ⚙️ الاشتراك: أيام السماح بعد الانتهاء (0 = بدون) + أيام تذكير التجديد قبل الانتهاء
+  subscriptionGraceDays: '0',
+  renewalReminderDays: '7',
+  // 🔔 مدة الاحتفاظ بالإشعارات (أيام) — الأقدم بيتمسح تلقائيًا
+  notificationRetentionDays: '30',
+  // ✉️ الإيميل (Resend): تشغيل/إيقاف + قوالب الرسائل
+  [EMAIL_ENABLED_KEY]: 'true',
+  ...TEMPLATE_DEFAULTS,
 }
 
 // ── تحقق من القيم قبل الحفظ (يمنع javascript:/data: URLs وقيم ضخمة) ──
@@ -40,6 +51,7 @@ function isHttpsUrl(v: string): boolean {
 }
 /** يرجّع رسالة خطأ أو null لو القيمة سليمة */
 function validateSetting(key: string, v: string): string | null {
+  if (key === EMAIL_ENABLED_KEY || isTemplateKey(key)) return validateTemplateSetting(key, v)
   if (v.length > MAX_LEN) return `القيمة طويلة جدًا (${key})`
   if (v === '') return null
   switch (key) {
@@ -56,6 +68,11 @@ function validateSetting(key: string, v: string): string | null {
     case 'instagramUrl':
     case 'whatsappUrl':
       return isHttpsUrl(v) ? null : `الرابط غير صالح (${key}) — لازم يبدأ بـ https://`
+    case 'subscriptionGraceDays':
+    case 'renewalReminderDays':
+      return validateSubscriptionSetting(key, v)
+    case 'notificationRetentionDays':
+      return validateNotificationSetting(key, v)
     case 'pwaInstallBannerEnabled':
       return v === 'true' || v === 'false' ? null : 'قيمة غير صالحة'
     default:

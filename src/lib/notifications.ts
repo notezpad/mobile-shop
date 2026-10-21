@@ -29,6 +29,8 @@
 
 import type { Sql } from './sql'
 import { readSubscriptionSettings, DAY_MS } from './subscription-settings'
+import { sendTemplatedEmail, fmtArDate } from './email'
+import { RETENTION_KEY, parseRetentionDays } from './notification-settings'
 
 export interface CreateNotificationInput {
   type?: string
@@ -190,6 +192,56 @@ export async function checkStockIntegrityAndNotify(sql: Sql, tenantId: string) {
  * Check for expiring / just-expired subscriptions and create notifications
  * (SQL — بنفس النصوص وdedup القديم حرفيًا).
  */
+/** أقصى عدد محاولات فاشلة لنفس الإيميل في نافذة الـ dedup قبل ما نبطّل (بعدها بنسيبه للدعم). */
+const EMAIL_MAX_FAILED_ATTEMPTS = 3
+
+/**
+ * ✉️ بيضمن إن إيميل التذكير/الانتهاء يوصل مرة واحدة في نافذة الـ dedup.
+ * بيتنادى في *كل* دورة فحص: لو مفيش إيميل 'sent' في EmailLog من بداية النافذة (والمحاولات الفاشلة < 3)
+ * بيحاول يبعت. فلو الإرسال اتخطى (الحد اليومي) أو فشل (Resend/شبكة)، بيتعاد في الدورة الجاية
+ * بدل ما الإيميل يضيع للأبد (قبل كده كان بيتبعت مرة واحدة بس لحظة إنشاء الإشعار).
+ * لو جدول EmailLog مش موجود → بنوقف (من غير سجل مفيش طريقة نمنع التكرار) — شغّل المايجريشن.
+ */
+export async function ensureOwnerEmail(
+  sql: Sql, tenantId: string, kind: 'renewal' | 'expired',
+  sub: { endDate: Date; planName: string }, daysLeft: number, since: Date,
+) {
+  try {
+    const rows = await sql<{ status: string; n: number }[]>`
+      SELECT "status", COUNT(*)::int AS n FROM "EmailLog"
+      WHERE "tenantId" = ${tenantId} AND "kind" = ${kind} AND "createdAt" >= ${since}
+      GROUP BY "status"`
+    const sent = rows.find((r) => r.status === 'sent')?.n ?? 0
+    const failed = rows.find((r) => r.status === 'failed')?.n ?? 0
+    if (sent > 0 || failed >= EMAIL_MAX_FAILED_ATTEMPTS) return
+  } catch (e) {
+    console.warn('[ensureOwnerEmail] EmailLog unavailable — email skipped (run the 20261021_email_log migration):', e)
+    return
+  }
+  await emailOwner(sql, tenantId, kind, sub, daysLeft)
+}
+
+/** ✉️ إيميل تذكير/انتهاء للمالك (الاستدعاء من ensureOwnerEmail). ما بيرميش أخطاء. */
+async function emailOwner(
+  sql: Sql, tenantId: string, kind: 'renewal' | 'expired',
+  sub: { endDate: Date; planName: string }, daysLeft: number,
+) {
+  try {
+    const t = await sql<{ shopName: string; ownerEmail: string | null; ownerName: string | null }[]>`
+      SELECT t."shopName", t."ownerEmail",
+        (SELECT u."name" FROM "User" u WHERE u."tenantId" = t."id" AND u."role" = 'ADMIN' ORDER BY u."createdAt" ASC LIMIT 1) AS "ownerName"
+      FROM "Tenant" t WHERE t."id" = ${tenantId} LIMIT 1`
+    const row = t[0]
+    if (!row?.ownerEmail) return
+    await sendTemplatedEmail(sql, kind, row.ownerEmail, tenantId, {
+      shopName: row.shopName, ownerName: row.ownerName ?? row.shopName,
+      planName: sub.planName, daysLeft, endDate: fmtArDate(sub.endDate),
+    })
+  } catch (e) {
+    console.error('[emailOwner] failed:', e)
+  }
+}
+
 export async function checkExpiringSubscriptions(sql: Sql, tenantId: string) {
   // ─── Rate limit: skip if we ran this check recently ───
   if (!shouldRunCheck(tenantId, 'expiring_sub')) return
@@ -269,6 +321,8 @@ export async function checkExpiringSubscriptions(sql: Sql, tenantId: string) {
         })
         console.log(`[checkExpiringSubscriptions] created expiring-soon notification for tenant ${tenantId}, ${daysLeft} days left`)
       }
+      // الإيميل مستقل عن إنشاء الإشعار: بيتحاول (وبيتعاد لو فشل/اتخطى) لحد ما يوصل مرة في نفس نافذة العتبة
+      await ensureOwnerEmail(sql, tenantId, 'renewal', expiringSub, daysLeft, windowStart)
     } catch (e) {
       console.error('[checkExpiringSubscriptions] failed to create expiring notification:', e)
     }
@@ -291,6 +345,7 @@ export async function checkExpiringSubscriptions(sql: Sql, tenantId: string) {
         })
         console.log(`[checkExpiringSubscriptions] created expired notification for tenant ${tenantId}`)
       }
+      await ensureOwnerEmail(sql, tenantId, 'expired', justExpiredSub, 0, dedupSince)
     } catch (e) {
       console.error('[checkExpiringSubscriptions] failed to create expired notification:', e)
     }
@@ -334,5 +389,57 @@ export async function cleanupDuplicateNotifications(
   } catch (e) {
     console.error('[cleanupDuplicateNotifications] failed:', e)
     return 0
+  }
+}
+
+
+/**
+ * 🧹 مسح الإشعارات الأقدم من مدة الاحتفاظ (إعداد الأدمن، الافتراضي 30 يوم).
+ * بتتنادى مع دورة الفحص (كل ~5 دقايق لكل محل) لكن بتشتغل فعليًا في ~10% منها بس —
+ * DELETE واحد على فهرس (tenantId, createdAt) فتكلفتها ضئيلة. بترجّع عدد المحذوف.
+ */
+export async function purgeOldNotifications(sql: Sql, tenantId: string): Promise<number> {
+  if (Math.random() >= 0.1) return 0
+  try {
+    const cfg = await sql<{ value: string }[]>`
+      SELECT "value" FROM "PlatformSetting" WHERE "key" = ${RETENTION_KEY} LIMIT 1`
+    const days = parseRetentionDays(cfg[0]?.value)
+    const cutoff = new Date(Date.now() - days * DAY_MS)
+    const deleted = await sql<{ id: number }[]>`
+      DELETE FROM "Notification"
+      WHERE "tenantId" = ${tenantId} AND "createdAt" < ${cutoff}
+      RETURNING "id"`
+    if (deleted.length > 0) {
+      console.log(`[purgeOldNotifications] deleted ${deleted.length} notifications older than ${days}d for tenant ${tenantId}`)
+    }
+    return deleted.length
+  } catch (e) {
+    console.error('[purgeOldNotifications] failed (ignored):', e)
+    return 0
+  }
+}
+
+/**
+ * 🔔 إشعار «فاتورة جديدة» لمديري المحل (مفتاح notifyNewSales في إعدادات المحل).
+ * جملة SQL واحدة: لو المفتاح مقفول أو مفيش مدير تاني غير البائع → صفر صفوف، ومفيش تكلفة تُذكر.
+ * البائع نفسه ما بيستلمش إشعار على فاتورته (منع الإزعاج).
+ */
+export async function notifyNewSale(
+  sql: Sql,
+  args: { tenantId: string; sellerUserId: string; sellerName: string; invoiceNo: string; total: number }
+): Promise<void> {
+  try {
+    const total = Math.round(args.total * 100) / 100
+    const message = `فاتورة ${args.invoiceNo} بقيمة ${total} جنيه — بواسطة ${args.sellerName || 'موظف'}`
+    await sql`
+      INSERT INTO "Notification" ("tenantId", "userId", "type", "title", "message", "link")
+      SELECT t."id", u."id", 'new_sale', 'فاتورة جديدة', ${message}, '/sales'
+      FROM "Tenant" t
+      JOIN "User" u ON u."tenantId" = t."id" AND u."role" = 'ADMIN' AND u."active" = true
+                    AND u."id" <> ${args.sellerUserId}
+      WHERE t."id" = ${args.tenantId} AND t."notifyNewSales" = true`
+  } catch (e) {
+    // الإشعار مش لازم يفشّل البيع أبدًا
+    console.error('[notifyNewSale] failed (ignored):', e)
   }
 }
