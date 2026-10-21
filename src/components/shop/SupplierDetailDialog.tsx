@@ -52,11 +52,13 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { useShopStore } from '@/lib/store'
+import { cn } from '@/lib/utils'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { DateTimeCell } from './DateTimeCell'
 import { SupplierPaymentDialog } from './SupplierPaymentDialog'
 import { PurchaseOrderDialog } from './PurchaseOrderDialog'
 import { PurchaseReturnDialog } from './PurchaseReturnDialog'
+import { BalanceAdjustDialog } from './BalanceAdjustDialog'
 
 // 🎨 هوية صفحة الموردين (stone + orange) على التاب النشط — نفس بصمة باقي دايلوجات الصفحة
 const TAB_TRIGGER_CLS =
@@ -123,6 +125,8 @@ interface SupplierDetail {
   createdAt: string
   purchaseOrders: PurchaseOrder[]
   payments: Payment[]
+  // 🆕 2026-10-22: قيود الرصيد الافتتاحي والتسويات
+  balanceEntries?: BalanceEntryLite[]
   summary: {
     totalPurchases: number // صافي بعد المرتجعات
     totalReturns: number
@@ -130,6 +134,14 @@ interface SupplierDetail {
     totalDebt: number
     balance: number
   }
+}
+
+interface BalanceEntryLite {
+  id: number
+  delta: number
+  reason: string
+  createdBy: string | null
+  createdAt: string
 }
 
 interface Props {
@@ -158,6 +170,13 @@ type TimelineRow =
       amount: number
       method: string
       note: string | null
+    }
+  | {
+      kind: 'entry'
+      date: string
+      delta: number
+      reason: string
+      createdBy: string | null
     }
 
 
@@ -204,7 +223,10 @@ export function SupplierDetailDialog({
   supplierName: initialName,
 }: Props) {
   const role = useShopStore((s) => s.user?.role)
-  const canCancelPayment = role === 'ADMIN' || role === 'SUPER_ADMIN'
+  // 🛠️ 2026-10-22 (مراجعة): الاسم الواضح للأدمن — canCancelPayment كان بيُستخدم
+  // كمان لزر «تسوية رصيد» (نفس شرط الأدمن) فكان الاسم مضلّلًا.
+  const isAdmin = role === 'ADMIN' || role === 'SUPER_ADMIN'
+  const canCancelPayment = isAdmin
   const [detail, setDetail] = React.useState<SupplierDetail | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [tab, setTab] = React.useState('account')
@@ -213,6 +235,8 @@ export function SupplierDetailDialog({
   const [deletePaymentId, setDeletePaymentId] = React.useState<number | null>(null)
   const [deleting, setDeleting] = React.useState(false)
   const [returnOrderId, setReturnOrderId] = React.useState<number | null>(null)
+  // 🆕 2026-10-22: تسوية الرصيد (أدمن فقط)
+  const [adjustOpen, setAdjustOpen] = React.useState(false)
 
   const load = React.useCallback(async () => {
     if (!supplierId) return
@@ -264,7 +288,15 @@ export function SupplierDetailDialog({
       method: p.method,
       note: p.note,
       }))
-    return [...purchaseRows, ...paymentRows].sort(
+    // 🆕 2026-10-22: قيود الرصيد الافتتاحي والتسويات
+    const entryRows: TimelineRow[] = (detail.balanceEntries ?? []).map((b) => ({
+      kind: 'entry' as const,
+      date: b.createdAt,
+      delta: b.delta,
+      reason: b.reason,
+      createdBy: b.createdBy,
+    }))
+    return [...purchaseRows, ...paymentRows, ...entryRows].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     )
   }, [detail])
@@ -398,6 +430,20 @@ export function SupplierDetailDialog({
                   />
                 </div>
 
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold">سجل الحركات</h3>
+                  {isAdmin && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-lg px-2.5 text-xs"
+                      onClick={() => setAdjustOpen(true)}
+                    >
+                      تسوية رصيد
+                    </Button>
+                  )}
+                </div>
+
                 <Card className="hidden overflow-hidden py-0 md:block">
                   <CardContent className="p-0">
                     <div className="overflow-x-auto" dir="ltr">
@@ -423,6 +469,38 @@ export function SupplierDetailDialog({
                             </TableRow>
                           ) : (
                             timeline.map((row, i) => {
+                              // 🆕 2026-10-22: قيد رصيد افتتاحي / تسوية
+                              if (row.kind === 'entry') {
+                                const isOpening = row.reason.includes('افتتاحي')
+                                return (
+                                  <TableRow key={`b-${i}`}>
+                                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                                      <DateTimeCell date={row.date} />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge
+                                        variant="outline"
+                                        className="bg-violet-500/10 text-violet-700 border-violet-500/30 dark:text-violet-300"
+                                      >
+                                        {isOpening ? 'رصيد افتتاحي' : 'تسوية رصيد'}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-sm">
+                                      <span className="text-muted-foreground">{row.reason}</span>
+                                      {row.createdBy && (
+                                        <span className="text-xs text-muted-foreground/70"> — {row.createdBy}</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className={cn(
+                                      'text-center font-semibold tabular-nums',
+                                      row.delta > 0 ? 'text-destructive' : 'text-success-subtle-foreground',
+                                    )}>
+                                      {row.delta > 0 ? '+' : '−'}{formatCurrency(Math.abs(row.delta))}
+                                    </TableCell>
+                                    <TableCell className="text-center tabular-nums text-muted-foreground">—</TableCell>
+                                  </TableRow>
+                                )
+                              }
                               if (row.kind === 'purchase') {
                                 const itemsText = itemsPreview(row.items)
                                 // 🛡️ علينا = صافي الفاتورة بعد المرتجعات − الصافي المدفوع فعلاً
@@ -524,6 +602,37 @@ export function SupplierDetailDialog({
                     <p className="py-8 text-center text-sm text-muted-foreground">لا توجد حركات</p>
                   ) : (
                     timeline.map((row, i) => {
+                      // 🆕 2026-10-22: قيد رصيد افتتاحي / تسوية (موبايل)
+                      if (row.kind === 'entry') {
+                        const isOpening = row.reason.includes('افتتاحي')
+                        return (
+                          <div key={`mb-${i}`} className="flex items-start gap-3 rounded-lg border border-violet-500/25 bg-violet-500/[0.04] p-3">
+                            <Badge variant="outline" className="mt-0.5 shrink-0 bg-violet-500/10 text-violet-700 border-violet-500/30 dark:text-violet-300">
+                              {isOpening ? 'رصيد افتتاحي' : 'تسوية'}
+                            </Badge>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm text-muted-foreground">{row.reason}</p>
+                              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                <DateTimeCell date={row.date} />
+                                {row.createdBy ? ` · ${row.createdBy}` : ''}
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-left">
+                              <span className={cn(
+                                'inline-block whitespace-nowrap rounded-md px-2 py-1 text-sm font-bold tabular-nums',
+                                row.delta > 0
+                                  ? 'bg-destructive/10 text-destructive'
+                                  : 'bg-success-subtle text-success-subtle-foreground',
+                              )}>
+                                {row.delta > 0 ? '+' : '−'}{formatCurrency(Math.abs(row.delta))}
+                              </span>
+                              <p className="mt-1 text-[10px] text-muted-foreground">
+                                {row.delta > 0 ? 'زاد الرصيد' : 'قلل الرصيد'}
+                              </p>
+                            </div>
+                          </div>
+                        )
+                      }
                       if (row.kind === 'purchase') {
                         const itemsText = itemsPreview(row.items)
                         // 🛡️ علينا = صافي الفاتورة بعد المرتجعات − الصافي المدفوع فعلاً
@@ -877,6 +986,17 @@ export function SupplierDetailDialog({
           onSaved={() => {
             load()
           }}
+        />
+
+        {/* 🆕 2026-10-22: تسوية الرصيد — أدمن فقط (الرصيد الافتتاحي / تصحيح فرق) */}
+        <BalanceAdjustDialog
+          open={adjustOpen}
+          onOpenChange={setAdjustOpen}
+          kind="supplier"
+          refId={supplierId}
+          entityName={detail?.name ?? initialName ?? ''}
+          currentBalance={detail?.balance ?? 0}
+          onSaved={load}
         />
 
         {/* Purchase return (partial / full) nested */}

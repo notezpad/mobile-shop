@@ -50,7 +50,7 @@ import { api } from '@/lib/api'
 import { formatCurrency, formatArabicDate } from '@/lib/format'
 import { useConfirm } from './ConfirmDialogProvider'
 import { CustomerDetailDialog } from './CustomerDetailDialog'
-import { DialogHero as CustomerHero } from './customer-dialog-ui'
+import { DialogHero as CustomerHero, DecimalInput } from './customer-dialog-ui'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { useDataRefresh } from '@/lib/offline/data-events'
@@ -1209,11 +1209,23 @@ function CustomerDialog({ open, onOpenChange, initial, onSaved }: Props) {
   const [name, setName] = React.useState('')
   const [phone, setPhone] = React.useState('')
   const [saving, setSaving] = React.useState(false)
+  // 🛡️ 2026-10-22 (مراجعة): قسم الرصيد الافتتاحي للأدمن فقط — نفس قاعدة
+  // السيرفر (POST بيرفض الافتتاحي من غير أدمن بـ 403). الموظف بيسجل العميل
+  // بدون رصيد، والتعديل بعدها من كشف الحساب بأدمن.
+  const role = useShopStore((s) => s.user?.role)
+  const isAdmin = role === 'ADMIN' || role === 'SUPER_ADMIN'
+  // 🆕 2026-10-22: الرصيد الافتتاحي — دين العميل القديم من النظام/الدفتر اللي كان شغال عليه
+  const [obAmount, setObAmount] = React.useState(0)
+  const [obSide, setObSide] = React.useState<'debt' | 'credit'>('debt')
+  const [obNote, setObNote] = React.useState('')
 
   React.useEffect(() => {
     if (open) {
       setName(initial?.name ?? '')
       setPhone(initial?.phone ?? '')
+      setObAmount(0)
+      setObSide('debt')
+      setObNote('')
     }
   }, [open, initial])
 
@@ -1224,7 +1236,12 @@ function CustomerDialog({ open, onOpenChange, initial, onSaved }: Props) {
     }
     setSaving(true)
     try {
-      const payload = { name: name.trim(), phone: phone.trim() || null }
+      const payload: Record<string, unknown> = { name: name.trim(), phone: phone.trim() || null }
+      // الرصيد الافتتاحي للعميل الجديد بس — التعديل بعدها من كشف الحساب (تسوية رصيد)
+      if (!initial && obAmount > 0) {
+        payload.openingBalance = obSide === 'debt' ? obAmount : -obAmount
+        if (obNote.trim()) payload.openingBalanceNote = obNote.trim()
+      }
       if (initial) {
         await api(`/api/customers/${initial.id}`, {
           method: 'PUT',
@@ -1233,7 +1250,7 @@ function CustomerDialog({ open, onOpenChange, initial, onSaved }: Props) {
         toast.success('تم تحديث العميل')
       } else {
         await api('/api/customers', { method: 'POST', body: payload })
-        toast.success('تمت إضافة العميل')
+        toast.success(obAmount > 0 ? 'تمت إضافة العميل مع رصيده الافتتاحي' : 'تمت إضافة العميل')
       }
       onSaved()
       onOpenChange(false)
@@ -1282,6 +1299,64 @@ function CustomerDialog({ open, onOpenChange, initial, onSaved }: Props) {
               />
             </div>
           </div>
+
+          {/* 🆕 2026-10-22: الرصيد الافتتاحي — للعميل الجديد فقط + أدمن فقط
+              (🛠️ مراجعة: قبل كده كان ظاهر لأي موظف والسيرفر كان بيقبله) */}
+          {!initial && isAdmin && (
+            <div className="space-y-2.5 rounded-2xl border border-sky-500/25 bg-sky-500/[0.05] p-3.5">
+              <div>
+                <Label className="text-sm font-bold text-sky-900 dark:text-sky-200">
+                  الرصيد الافتتاحي <span className="font-normal text-muted-foreground">(اختياري)</span>
+                </Label>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  بتنقل من نظام أو دفتر قديم؟ اكتب رصيد العميل الحالي وهيظهر في كشف حسابه كأول قيد موثّق.
+                </p>
+              </div>
+              <div role="radiogroup" aria-label="نوع الرصيد الافتتاحي" className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={obSide === 'debt'}
+                  onClick={() => setObSide('debt')}
+                  className={cn(
+                    'h-10 rounded-xl border text-xs font-bold transition-colors',
+                    obSide === 'debt'
+                      ? 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300'
+                      : 'bg-background text-foreground/70 hover:bg-muted'
+                  )}
+                >
+                  عليه (دين قديم)
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={obSide === 'credit'}
+                  onClick={() => setObSide('credit')}
+                  className={cn(
+                    'h-10 rounded-xl border text-xs font-bold transition-colors',
+                    obSide === 'credit'
+                      ? 'border-sky-600/40 bg-sky-500/10 text-sky-800 dark:text-sky-300'
+                      : 'bg-background text-foreground/70 hover:bg-muted'
+                  )}
+                >
+                  له رصيد دائن
+                </button>
+              </div>
+              <DecimalInput
+                value={obAmount}
+                onChange={setObAmount}
+                label="قيمة الرصيد الافتتاحي"
+                suffix="جنيه"
+              />
+              <Input
+                id="c-ob-note"
+                value={obNote}
+                onChange={(e) => setObNote(e.target.value)}
+                placeholder="ملاحظة اختيارية — مثال: رصيد من دفتر يناير"
+                className="h-10 rounded-xl text-sm"
+              />
+            </div>
+          )}
         </DialogBody>
 
         <DialogFooter className="flex-row gap-2 border-t bg-muted/30 p-4 sm:justify-between">

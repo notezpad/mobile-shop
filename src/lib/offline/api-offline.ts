@@ -611,6 +611,16 @@ export async function offlineFetch<T = any>(
         if (/^\/api\/(?:auth|admin)(?:\/|\?|$)/.test(url)) {
           throw new Error('لا يوجد اتصال بالإنترنت — هذه العملية تحتاج اتصالاً، حاول مرة أخرى عند عودته')
         }
+        // 🛡️ 2026-10-22 (مراجعة الأرصدة الافتتاحية): تسوية الرصيد أونلاين فقط —
+        // ممنوع تتحط في طابور الأوفلاين. السبب: الطلب بيقول «اضبط الرصيد على X»
+        // والدلتا بتتحسب على السيرفر لحظة التنفيذ؛ لو اتنفذت بعد ما اترجع الاتصال
+        // وكانت حصلت مبيعات/دفعات من جهاز تاني، التسوية بتمسحها بدون أي تنبيه.
+        // السيرفر كمان بيتحقق من expectedBalance كطبقة تانية (409 لو اختلف).
+        if (/^\/api\/balance-entries\/?(\?|$)/.test(url)) {
+          throw new Error(
+            'لا يوجد اتصال بالإنترنت — تسوية الرصيد عملية حساسة بتتعمل أونلاين فقط، ولم يتم تسجيلها. حاول مرة أخرى عند عودة الاتصال',
+          )
+        }
         // 🛡️ 2026-09-30 (M7): idempotency for queued sales — a network error
         // AFTER the server committed used to keep the outbox entry and re-POST
         // it later, creating a duplicate invoice (double stock/till/debt).
@@ -1377,8 +1387,11 @@ async function applyLocalMutation(url: string, method: string, body: any, outbox
     if (path === '/api/sales') await patchSaleAdded(body)
     else if (path === '/api/expenses') await patchExpenseAdded(body)
     else if (path === '/api/cash') await patchCashAdded(body)
-    else if (path === '/api/customers') await patchListAdded('/api/customers', body ? { ...body, id: localId(), balance: 0 } : null)
-    else if (path === '/api/suppliers') await patchListAdded('/api/suppliers', body ? { ...body, id: localId(), balance: 0 } : null)
+    else if (path === '/api/customers') await patchListAdded('/api/customers', body ? { ...body, id: localId(), balance: Number(body.openingBalance) || 0 } : null)
+    else if (path === '/api/suppliers') await patchListAdded('/api/suppliers', body ? { ...body, id: localId(), balance: Number(body.openingBalance) || 0 } : null)
+    // 🛡️ 2026-10-22 (مراجعة): مفيش فرع لـ /api/balance-entries هنا — التسوية
+    // بقت أونلاين فقط (بيرمي خطأ فوق قبل الوصول للطابور أصلاً)، فمفيش
+    // أثر محلي وهمي للرصيد ممكن يضلّ غلط لو التسوية ماتنفذتش أبداً.
     else if (path === '/api/branches') await patchListAdded('/api/branches', body ? { ...body, id: localId(), active: body.active !== false, isMain: body.isMain === true, createdAt: new Date().toISOString() } : null)
     else if (path === '/api/purchase-orders') {
       const rec = await buildLocalPurchaseOrder(body)
@@ -1413,6 +1426,9 @@ function getOperationLabel(url: string, method: string, body: any): string {
     if (m === 'POST') return `إضافة عميل: ${body?.name ?? ''}`
     if (m === 'PUT') return `تعديل عميل: ${body?.name ?? ''}`
     if (m === 'DELETE') return `حذف عميل`
+  }
+  if (url.includes('/balance-entries')) {
+    return body?.kind === 'supplier' ? `تسوية رصيد مورد` : `تسوية رصيد عميل`
   }
   if (url.includes('/suppliers')) {
     if (m === 'POST') return `إضافة مورد: ${body?.name ?? ''}`

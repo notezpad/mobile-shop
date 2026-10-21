@@ -69,6 +69,11 @@ export function resourceTagsForUrl(url: string): DataTag[] {
   if (has('/api/customers')) {
     tags.add('customers')
   }
+  // 🆕 2026-10-22: قيود الرصيد (افتتاحي/تسوية) — بتلمس أرصدة العملاء والموردين معًا
+  if (has('/api/balance-entries')) {
+    tags.add('customers')
+    tags.add('suppliers')
+  }
   // 🛡️ 2026-09-27 (v6): customer payments live at the FLAT route
   // `/api/payments` (see src/app/api/payments/route.ts), not under
   // `/api/customers/.../payments`. The old check above only ever looked

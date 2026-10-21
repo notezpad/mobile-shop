@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, requireModuleWritePermission, featureErrorResponse } from '@/lib/features'
 import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 import { withSql } from '@/lib/sql'
+import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -121,37 +123,114 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  return withDb(async () => {
-    let session
-    try {
-      session = await requireAuth()
-    } catch (e) {
-      const err = authErrorResponse(e)
-      return NextResponse.json(err?.body, { status: err?.status })
-    }
+  // 🛡️ 2026-10-22 (مراجعة): withIdempotency — نفس نمط /api/cash؛ الواجهة
+  // الأوفلاين بتبعت Idempotency-Key مع كل كتابة، وإعادة الإرسال بعد انقطاع
+  // بترجّع الرد الأصلي بدل عميل مكرّر بنفس الرصيد الافتتاحي (دين مضاعف).
+  return withIdempotency(req, () => withDb(() => __POST(req)))
+}
 
-    // saleh-kateb-mowazaf: module 'customers'
-    try { requireModuleWritePermission(session, 'customers') } catch (e) {
-      const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
-    }
+async function __POST(req: NextRequest) {
+  let session
+  try {
+    session = await requireAuth()
+  } catch (e) {
+    const err = authErrorResponse(e)
+    return NextResponse.json(err?.body, { status: err?.status })
+  }
 
-    const body = await req.json().catch(() => null)
-    if (!body?.name || !String(body.name).trim()) {
-      return NextResponse.json({ error: 'الاسم مطلوب' }, { status: 400 })
+  // saleh-kateb-mowazaf: module 'customers'
+  try { requireModuleWritePermission(session, 'customers') } catch (e) {
+    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
+  }
+
+  const body = await req.json().catch(() => null)
+  if (!body?.name || !String(body.name).trim()) {
+    return NextResponse.json({ error: 'الاسم مطلوب' }, { status: 400 })
+  }
+
+  // 🆕 2026-10-22: رصيد افتتاحي — التاجر اللي بينقل من نظام قديم/دفتر يدخل
+  // دين العميل القديم كأول قيد موثّق في كشف حسابه. حركة دفاتر محضة
+  // (BalanceEntry) — مفيش CashEntry لأن الدين القديم مش نقدية.
+  // 🛠️ 2026-10-22 (مراجعة): الافتتاحي بقى أدمن فقط (نفس قاعدة التسوية
+  // بعد الإنشاء) — قبل كده أي موظف عنده صلاحية كتابة كان يقدر يفتح
+  // حساب عميل بأي دين حتى ±999,999,999 بدون أثر في AuditLog.
+  let openingBalance = 0
+  if (body.openingBalance !== undefined && body.openingBalance !== null && String(body.openingBalance).trim() !== '') {
+    openingBalance = Number(body.openingBalance)
+    if (!Number.isFinite(openingBalance)) {
+      return NextResponse.json({ error: 'الرصيد الافتتاحي غير صالح' }, { status: 400 })
     }
-    const created = await db.customer.create({
+    openingBalance = Math.round((openingBalance + Number.EPSILON) * 100) / 100
+    if (Math.abs(openingBalance) > 999999999) {
+      return NextResponse.json({ error: 'الرصيد الافتتاحي خارج النطاق المسموح' }, { status: 400 })
+    }
+    if (Math.abs(openingBalance) >= 0.005 && session.role !== 'ADMIN' && session.role !== 'SUPER_ADMIN') {
+      return NextResponse.json(
+        { error: 'الرصيد الافتتاحي للأدمن فقط — اطلب من مدير المحل إدخاله أو سجّل العميل بدون رصيد' },
+        { status: 403 },
+      )
+    }
+  }
+  const openingNote =
+    body.openingBalanceNote ? String(body.openingBalanceNote).trim().slice(0, 300) : ''
+
+  let created
+  if (Math.abs(openingBalance) < 0.005) {
+    created = await db.customer.create({
       data: {
         tenantId: session.tenantId,
         name: String(body.name).trim(),
         phone: body.phone ? String(body.phone).trim() : null,
       },
     })
-    // ⚡ تفريغ الكاش فوراً — العميل الجديد يظهر في كل القوائم لحظياً
-    await purgeEdgeCache(
-      [PURGE_KEYS.customersDefault, PURGE_KEYS.dashboard(7), PURGE_KEYS.dashboard(14), PURGE_KEYS.dashboard(30)],
-      session.tenantId,
-      2
-    )
-    return NextResponse.json(created, { status: 201 })
-  })
+  } else {
+    // معاملة واحدة: العميل + قيد الافتتاح + سطر تدقيق + ضبط الرصيد — إما الكل أو ولا حاجة
+    created = await db.$transaction(async (tx) => {
+      const c = await tx.customer.create({
+        data: {
+          tenantId: session.tenantId,
+          name: String(body.name).trim(),
+          phone: body.phone ? String(body.phone).trim() : null,
+        },
+      })
+      const reason = openingNote || 'رصيد افتتاحي — ترحيل من النظام القديم'
+      const entry = await tx.balanceEntry.create({
+        data: {
+          tenantId: session.tenantId,
+          kind: 'customer',
+          refId: c.id,
+          delta: openingBalance,
+          reason,
+          createdBy: session.name || session.email || null,
+        },
+      })
+      // 🛠️ تدقيق ذري (fatal) — الافتتاحي حركة مالية مش بتنعمل بدون أثر
+      await logAudit(
+        {
+          action: 'balance.opening',
+          targetType: 'customer',
+          targetId: String(c.id),
+          details: {
+            tenantId: session.tenantId,
+            entryId: entry.id,
+            delta: openingBalance,
+            before: 0,
+            after: openingBalance,
+            reason,
+          },
+          actor: { id: String(session.userId ?? ''), email: session.email },
+        },
+        undefined,
+        { tx, fatal: true },
+      )
+      return tx.customer.update({ where: { id: c.id }, data: { balance: openingBalance } })
+    })
+  }
+  // ⚡ تفريغ الكاش فوراً — العميل الجديد يظهر في كل القوائم لحظياً
+  await purgeEdgeCache(
+    [PURGE_KEYS.customersDefault, PURGE_KEYS.dashboard(7), PURGE_KEYS.dashboard(14), PURGE_KEYS.dashboard(30)],
+    session.tenantId,
+    2
+  )
+  return NextResponse.json(created, { status: 201 })
 }

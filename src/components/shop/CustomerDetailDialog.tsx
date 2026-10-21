@@ -12,6 +12,8 @@ import {
   ShoppingBag,
   Phone,
   HandCoins,
+  Scale,
+  Check,
 } from 'lucide-react'
 import {
   Dialog,
@@ -20,6 +22,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Tabs,
   TabsContent,
@@ -44,8 +48,10 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { formatCurrency } from '@/lib/format'
+import { useShopStore } from '@/lib/store'
 import { DateTimeCell } from './DateTimeCell'
 import { PaymentDialog } from './PaymentDialog'
+import { BalanceAdjustDialog } from './BalanceAdjustDialog'
 
 // 🎨 هوية صفحة العملاء (sky) على التاب النشط — نفس بصمة باقي دايلوجات الصفحة
 const TAB_TRIGGER_CLS =
@@ -101,6 +107,15 @@ interface Payment {
   createdAt: string
 }
 
+// 🆕 2026-10-22: قيود الرصيد الافتتاحي والتسويات
+interface BalanceEntryLite {
+  id: number
+  delta: number
+  reason: string
+  createdBy: string | null
+  createdAt: string
+}
+
 interface CustomerDetail {
   id: number
   name: string
@@ -109,6 +124,7 @@ interface CustomerDetail {
   createdAt: string
   sales: Sale[]
   payments: Payment[]
+  balanceEntries?: BalanceEntryLite[]
   summary: {
     totalPurchases: number
     totalPaid: number
@@ -140,6 +156,13 @@ type TimelineRow =
       amount: number
       method: string
       note: string | null
+    }
+  | {
+      kind: 'entry'
+      date: string
+      delta: number
+      reason: string
+      createdBy: string | null
     }
 
 const num = (n: number) =>
@@ -186,9 +209,9 @@ function StatBox({
 }
 
 /** أيقونة نوع الحركة داخل مربع ملوّن */
-function KindIcon({ kind }: { kind: 'sale' | 'payment' }) {
-  const color = kind === 'sale' ? '#0ea5e9' : '#10b981'
-  const Icon = kind === 'sale' ? ShoppingBag : HandCoins
+function KindIcon({ kind }: { kind: 'sale' | 'payment' | 'entry' }) {
+  const color = kind === 'sale' ? '#0ea5e9' : kind === 'payment' ? '#10b981' : '#8b5cf6'
+  const Icon = kind === 'sale' ? ShoppingBag : kind === 'payment' ? HandCoins : Scale
   return (
     <span
       className="flex size-11 shrink-0 items-center justify-center rounded-2xl"
@@ -237,6 +260,10 @@ export function CustomerDetailDialog({
   const [tab, setTab] = React.useState('account')
   const [payOpen, setPayOpen] = React.useState(false)
   const [deletePaymentId, setDeletePaymentId] = React.useState<number | null>(null)
+  // 🆕 2026-10-22: تسوية الرصيد (أدمن فقط)
+  const [adjustOpen, setAdjustOpen] = React.useState(false)
+  const role = useShopStore((s) => s.user?.role)
+  const isAdmin = role === 'ADMIN' || role === 'SUPER_ADMIN'
   const [deleting, setDeleting] = React.useState(false)
 
   const load = React.useCallback(async () => {
@@ -288,7 +315,15 @@ export function CustomerDetailDialog({
       method: p.method,
       note: p.note,
     }))
-    return [...salesRows, ...paymentRows].sort(
+    // 🆕 2026-10-22: قيود الرصيد الافتتاحي والتسويات — أول القيود الموثقة للحساب
+    const entryRows: TimelineRow[] = (detail.balanceEntries ?? []).map((b) => ({
+      kind: 'entry' as const,
+      date: b.createdAt,
+      delta: b.delta,
+      reason: b.reason,
+      createdBy: b.createdBy,
+    }))
+    return [...salesRows, ...paymentRows, ...entryRows].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     )
   }, [detail])
@@ -437,13 +472,70 @@ export function CustomerDetailDialog({
                 <div className="overflow-hidden rounded-2xl border bg-card">
                   <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2.5">
                     <h3 className="text-sm font-bold">سجل الحركات</h3>
-                    <span className="text-xs text-muted-foreground">{timeline.length} حركة</span>
+                    <div className="flex items-center gap-2">
+                      {isAdmin && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-lg px-2.5 text-xs"
+                          onClick={() => setAdjustOpen(true)}
+                        >
+                          <Scale className="size-3.5" />
+                          تسوية رصيد
+                        </Button>
+                      )}
+                      <span className="text-xs text-muted-foreground">{timeline.length} حركة</span>
+                    </div>
                   </div>
                   {timeline.length === 0 ? (
                     <div className="p-4"><EmptyNote>لا توجد حركات</EmptyNote></div>
                   ) : (
                     <div className="divide-y">
                       {timeline.map((row, i) => {
+                        // 🆕 2026-10-22: قيد رصيد افتتاحي / تسوية — أول القيود الموثقة
+                        if (row.kind === 'entry') {
+                          const isOpening = row.reason.includes('افتتاحي')
+                          return (
+                            <div
+                              key={`b-${i}`}
+                              className="flex items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-muted/40"
+                            >
+                              <KindIcon kind="entry" />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                  <p className="font-semibold leading-tight">{isOpening ? 'رصيد افتتاحي' : 'تسوية رصيد'}</p>
+                                  <Badge
+                                    variant={isOpening ? 'info' : 'secondary'}
+                                    size="sm"
+                                  >
+                                    {isOpening ? 'ترحيل' : 'تسوية'}
+                                  </Badge>
+                                </div>
+                                <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{row.reason}</p>
+                                <p className="mt-1 text-[11px] text-muted-foreground">
+                                  <DateTimeCell date={row.date} />
+                                  {row.createdBy ? ` · ${row.createdBy}` : ''}
+                                </p>
+                              </div>
+                              <div className="shrink-0 text-end">
+                                <p
+                                  className={cn(
+                                    'whitespace-nowrap text-base font-extrabold tabular-nums',
+                                    row.delta > 0
+                                      ? 'text-rose-600 dark:text-rose-400'
+                                      : 'text-emerald-600 dark:text-emerald-400',
+                                  )}
+                                >
+                                  <span className="me-0.5">{row.delta > 0 ? '+' : '−'}</span>
+                                  {num(Math.abs(row.delta))}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {row.delta > 0 ? 'زاد الرصيد' : 'قلل الرصيد'}
+                                </p>
+                              </div>
+                            </div>
+                          )
+                        }
                         if (row.kind === 'sale') {
                           const itemsText = itemsPreview(row.items)
                           const debt = Math.max(0, row.total - row.paid)
@@ -657,6 +749,17 @@ export function CustomerDetailDialog({
           onSaved={() => {
             load()
           }}
+        />
+
+        {/* 🆕 2026-10-22: تسوية الرصيد — أدمن فقط (الرصيد الافتتاحي / تصحيح فرق) */}
+        <BalanceAdjustDialog
+          open={adjustOpen}
+          onOpenChange={setAdjustOpen}
+          kind="customer"
+          refId={customerId}
+          entityName={detail?.name ?? initialName ?? ''}
+          currentBalance={detail?.balance ?? 0}
+          onSaved={load}
         />
 
         {/* Delete confirm */}

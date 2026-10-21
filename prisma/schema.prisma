@@ -1032,3 +1032,42 @@ model EmailLog {
   @@index([createdAt])
   @@index([tenantId, kind, createdAt])
 }
+
+// 🆕 2026-10-22: قيود تعديل الرصيد — الرصيد الافتتاحي عند الترحيل من نظام/دفتر
+// قديم + أي تسوية لاحقة لرصيد عميل أو مورد (بسبب إجباري ومن أدمن).
+// ⚠️ حركة دفاتر محضة — لا تنشئ CashEntry أبداً (الديون القديمة مش نقدية).
+model BalanceEntry {
+  id        Int      @id @default(autoincrement())
+  tenantId  String
+  kind      String   // customer | supplier
+  refId     Int      // customerId أو supplierId
+  delta     Float    // موقّع: + = رصيد زاد (دين على العميل / علينا للمورد)، − = رصيد قلل
+  reason    String   // سبب إجباري — مثال: «رصيد افتتاحي — ترحيل من النظام القديم»
+  createdBy String?  // اسم من نفذ الحركة
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, kind, refId])
+  @@index([tenantId, createdAt])
+}
+
+// 🛠️ 2026-10-22 (مراجعة الأرصدة الافتتاحية): موديل مفاتيح منع التكرار —
+// كان موجود في migration 20261018_idempotency فقط وغايب عن الـ schema،
+// فأي قاعدة جديدة تتبني بـ `prisma db push` كانت تطلع من غير الجدول ده
+// وكل مسار ملفوف بـ withIdempotency (كاش/دفعات/أوامر شراء/تسويات رصيد...)
+// يبوّظ 500 أول ما العميل الأوفلاين يبعت Idempotency-Key.
+// أنواع الأعمدة مطابقة للـ migration بالظبط (BIGSERIAL id، TEXT tenantId).
+model IdempotencyKey {
+  id          BigInt   @id @default(autoincrement())
+  tenantId    String
+  key         String
+  method      String
+  path        String
+  // NULL = لسه بتتنفذ، وإلا كود الرد الأصلي ونصه (لإعادة الإرسال الآمنة)
+  status      Int?
+  body        String?
+  contentType String?
+  createdAt   DateTime @default(now())
+
+  @@unique([tenantId, key], map: "IdempotencyKey_tenant_key_key")
+  @@index([createdAt], map: "IdempotencyKey_createdAt_idx")
+}

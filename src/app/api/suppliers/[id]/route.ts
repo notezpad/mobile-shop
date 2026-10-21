@@ -44,6 +44,14 @@ async function __GET(
     return NextResponse.json({ error: 'المورد غير موجود' }, { status: 404 })
   }
 
+  // 🆕 2026-10-22: قيود الرصيد (الافتتاحي + التسويات) — بيتعرضوا في كشف حساب
+  // المورد كأول قيود موثّقة عند الترحيل من نظام قديم.
+  const balanceEntries = await db.balanceEntry.findMany({
+    where: { tenantId: session.tenantId, kind: 'supplier', refId: sid },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, delta: true, reason: true, createdBy: true, createdAt: true },
+  })
+
   // 🛡️ 2026-09-30: كل الإجماليات بقت صافية ومتطابقة مع الرصيد (المصدر الصحيح):
   //
   //   إجمالي المشتريات (صافي) = Σ فواتير (مكتملة + مرتجعة جزئياً) − قيمة
@@ -120,6 +128,14 @@ async function __GET(
       status: p.status,
       cancelledAt: p.cancelledAt ? p.cancelledAt.toISOString() : null,
       createdAt: p.createdAt.toISOString(),
+    })),
+    // 🆕 2026-10-22: قيود الرصيد الافتتاحي والتسويات (لعرضها في كشف الحساب)
+    balanceEntries: balanceEntries.map((b) => ({
+      id: b.id,
+      delta: b.delta,
+      reason: b.reason,
+      createdBy: b.createdBy,
+      createdAt: b.createdAt.toISOString(),
     })),
     summary: {
       totalPurchases, // صافي بعد المرتجعات

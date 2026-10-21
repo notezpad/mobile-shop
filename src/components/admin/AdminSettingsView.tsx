@@ -174,7 +174,10 @@ function Field({
 function IconInput({
   icon: Icon,
   ...props
-}: { icon: React.ComponentType<{ className?: string }> } & React.ComponentProps<typeof Input>) {
+}: { icon: React.ComponentType<{ className?: string }> } & Omit<React.ComponentProps<typeof Input>, 'icon'>) {
+  // 🛠️ 2026-10-22: Omit 'icon' — Input نفسه فيه icon?: ReactNode فكانت
+  // الخصائص بتتقاطع (ComponentType & ReactNode) ومكوّنات lucide ماكانتش
+  // تقبل التعيين → 7 أخطاء TS2322 في الملف ده. نفس الاستخدام بدون تغيير.
   return (
     <div className="relative group">
       <Icon className="pointer-events-none absolute right-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />

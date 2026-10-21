@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { extractRequestContext } from '@/lib/tracking/server'
+import type { Prisma } from '@prisma/client'
 
 /**
  * 🛡️ 2026-10-20 — Audit Log للأدمن.
@@ -38,7 +39,20 @@ export interface AuditInput {
   actor?: { id?: string | null; email?: string | null }
 }
 
-export async function logAudit(input: AuditInput, req?: { headers: Headers }): Promise<void> {
+/**
+ * 🛠️ 2026-10-22 (مراجعة الأرصدة الافتتاحية): إضافة خيارات التنفيذ:
+ *   - tx: تنفيذ سجل التدقيق **داخل نفس الـ transaction** بتاعة الحركة المالية
+ *     (ذريّة — إما الرصيد والتدقيق معًا أو ولا حاجة).
+ *   - fatal: لو فشل الإدراج يرمي الخطأ بدل ما يبلعه (للمسارات المالية اللي
+ *     التدقيق فيها مش رفاهية — قيد رصيد من غير سطر تدقيق مش مقبول).
+ * الوضع الافتراضي زي ما كان: best-effort لا يكسر العملية الأصلية أبدًا.
+ */
+export async function logAudit(
+  input: AuditInput,
+  req?: { headers: Headers },
+  opts?: { tx?: Prisma.TransactionClient; fatal?: boolean },
+): Promise<void> {
+  const exec = opts?.tx ?? db
   try {
     let actorId = input.actor?.id ?? null
     let actorEmail = input.actor?.email ?? null
@@ -54,11 +68,12 @@ export async function logAudit(input: AuditInput, req?: { headers: Headers }): P
       details = JSON.stringify(scrub(input.details))
       if (details.length > MAX_DETAILS) details = details.slice(0, MAX_DETAILS)
     }
-    await db.$executeRaw`
+    await exec.$executeRaw`
       INSERT INTO "AuditLog" ("actorId","actorEmail","action","targetType","targetId","details","ipHash")
       VALUES (${actorId}, ${actorEmail}, ${input.action}, ${input.targetType ?? null},
               ${input.targetId == null ? null : String(input.targetId)}, ${details}, ${ipHash})`
   } catch (e) {
+    if (opts?.fatal) throw e
     console.error('[audit] failed (ignored):', e)
   }
 }

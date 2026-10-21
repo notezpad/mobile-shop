@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
-import { requireModule, featureErrorResponse } from '@/lib/features'
+import { requireModule, requireModuleWritePermission, featureErrorResponse } from '@/lib/features'
 import { matchEdgeCache, putEdgeCache, purgeCatalogCaches } from '@/lib/edgeCache'
+import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -142,35 +144,112 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  return withDb(async () => {
-    let session
-    try {
-      session = await requireAuth()
-    } catch (e) {
-      const err = authErrorResponse(e)
-      return NextResponse.json(err?.body, { status: err?.status })
-    }
-    try {
-      await requireModule(session, 'suppliers')
-    } catch (e) {
-      const fe = featureErrorResponse(e)
-      if (fe) return NextResponse.json(fe.body, { status: fe.status })
-      throw e
-    }
+  // 🛡️ 2026-10-22 (مراجعة): withIdempotency — نفس نمط /api/cash؛ إعادة إرسال
+  // نفس المفتاح بعد انقطاع بترجّع الرد الأصلي بدل مورد مكرّر بنفس الرصيد.
+  return withIdempotency(req, () => withDb(() => __POST(req)))
+}
 
-    const body = await req.json().catch(() => null)
-    if (!body?.name || !String(body.name).trim()) {
-      return NextResponse.json({ error: 'الاسم مطلوب' }, { status: 400 })
+async function __POST(req: NextRequest) {
+  let session
+  try {
+    session = await requireAuth()
+  } catch (e) {
+    const err = authErrorResponse(e)
+    return NextResponse.json(err?.body, { status: err?.status })
+  }
+  try {
+    // 🛠️ 2026-10-22 (مراجعة): الكتابة هنا كانت بتفحص قراءة الموديول فقط —
+    // موظف قراءة بس كان يقدر ينشئ موردين. بقى فحص كتابة زي /api/customers بالظبط.
+    requireModuleWritePermission(session, 'suppliers')
+  } catch (e) {
+    const fe = featureErrorResponse(e)
+    if (fe) return NextResponse.json(fe.body, { status: fe.status })
+    throw e
+  }
+
+  const body = await req.json().catch(() => null)
+  if (!body?.name || !String(body.name).trim()) {
+    return NextResponse.json({ error: 'الاسم مطلوب' }, { status: 400 })
+  }
+
+  // 🆕 2026-10-22: رصيد افتتاحي — مستحقات المحل القديمة للمورد بتدخل كأول
+  // قيد موثّق في كشف حسابه. حركة دفاتر محضة (BalanceEntry) — مفيش CashEntry.
+  // 🛠️ 2026-10-22 (مراجعة): الافتتاحي أدمن فقط + تدقيق AuditLog إلزامي —
+  // ونفس حماية مسار العملاء: قبل كده POST كان بيكتفى بفحص قراءة الموديول
+  // بدون صلاحية كتابة أصلاً (requireModule فقط بدون requireModuleWritePermission).
+  let openingBalance = 0
+  if (body.openingBalance !== undefined && body.openingBalance !== null && String(body.openingBalance).trim() !== '') {
+    openingBalance = Number(body.openingBalance)
+    if (!Number.isFinite(openingBalance)) {
+      return NextResponse.json({ error: 'الرصيد الافتتاحي غير صالح' }, { status: 400 })
     }
-    const created = await db.supplier.create({
+    openingBalance = Math.round((openingBalance + Number.EPSILON) * 100) / 100
+    if (Math.abs(openingBalance) > 999999999) {
+      return NextResponse.json({ error: 'الرصيد الافتتاحي خارج النطاق المسموح' }, { status: 400 })
+    }
+    if (Math.abs(openingBalance) >= 0.005 && session.role !== 'ADMIN' && session.role !== 'SUPER_ADMIN') {
+      return NextResponse.json(
+        { error: 'الرصيد الافتتاحي للأدمن فقط — اطلب من مدير المحل إدخاله أو سجّل المورد بدون رصيد' },
+        { status: 403 },
+      )
+    }
+  }
+  const openingNote =
+    body.openingBalanceNote ? String(body.openingBalanceNote).trim().slice(0, 300) : ''
+
+  let created
+  if (Math.abs(openingBalance) < 0.005) {
+    created = await db.supplier.create({
       data: {
         tenantId: session.tenantId,
         name: String(body.name).trim(),
         phone: body.phone ? String(body.phone).trim() : null,
       },
     })
-    // ⚡ v9: مسح كاش الكتالوج بعد إضافة مورد
-    await purgeCatalogCaches(session.tenantId, session.branchId)
-    return NextResponse.json(created, { status: 201 })
-  })
+  } else {
+    // معاملة واحدة: المورد + قيد الافتتاح + سطر تدقيق + ضبط الرصيد — إما الكل أو ولا حاجة
+    created = await db.$transaction(async (tx) => {
+      const s = await tx.supplier.create({
+        data: {
+          tenantId: session.tenantId,
+          name: String(body.name).trim(),
+          phone: body.phone ? String(body.phone).trim() : null,
+        },
+      })
+      const reason = openingNote || 'رصيد افتتاحي — ترحيل من النظام القديم'
+      const entry = await tx.balanceEntry.create({
+        data: {
+          tenantId: session.tenantId,
+          kind: 'supplier',
+          refId: s.id,
+          delta: openingBalance,
+          reason,
+          createdBy: session.name || session.email || null,
+        },
+      })
+      // 🛠️ تدقيق ذري (fatal) — الافتتاحي حركة مالية مش بتنعمل بدون أثر
+      await logAudit(
+        {
+          action: 'balance.opening',
+          targetType: 'supplier',
+          targetId: String(s.id),
+          details: {
+            tenantId: session.tenantId,
+            entryId: entry.id,
+            delta: openingBalance,
+            before: 0,
+            after: openingBalance,
+            reason,
+          },
+          actor: { id: String(session.userId ?? ''), email: session.email },
+        },
+        undefined,
+        { tx, fatal: true },
+      )
+      return tx.supplier.update({ where: { id: s.id }, data: { balance: openingBalance } })
+    })
+  }
+  // ⚡ v9: مسح كاش الكتالوج بعد إضافة مورد
+  await purgeCatalogCaches(session.tenantId, session.branchId)
+  return NextResponse.json(created, { status: 201 })
 }

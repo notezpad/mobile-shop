@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useVocab } from '@/lib/vocab'
 import { unitWord } from '@/lib/unit-label'
-import { AlertTriangle, ArrowDown, ArrowDownRight, ArrowUp, ArrowUpRight, CalendarDays, CheckCircle2, ChevronDown, FileText, Inbox, Sparkles } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowDownRight, ArrowUp, ArrowUpRight, CalendarDays, CheckCircle2, ChevronDown, FileText, Inbox, Loader2, Scale, Sparkles } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -147,6 +147,27 @@ export function ReportsView() {
       logo: shopBranding.logoPath || undefined,
     })
     openPrintWindow(html, () => toast.error('الرجاء السماح بالنوافذ المنبثقة'))
+  }
+
+  // 🆕 2026-10-22: تقرير مطابقة يوم الصفر — إثبات مطابقة الأرصدة المنقولة
+  // من النظام/الدفتر القديم (ليك عند العملاء + عليك للموردين + الخزنة).
+  const [dayZeroLoading, setDayZeroLoading] = React.useState(false)
+  const printDayZero = async () => {
+    setDayZeroLoading(true)
+    try {
+      const d = await api<DayZeroData>('/api/reports/day-zero')
+      const html = buildDayZeroHtml(d, {
+        name: shopName,
+        phone: shopBranding.phone || undefined,
+        address: shopBranding.address || undefined,
+        logo: shopBranding.logoPath || undefined,
+      })
+      openPrintWindow(html, () => toast.error('الرجاء السماح بالنوافذ المنبثقة'))
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل تحميل تقرير المطابقة')
+    } finally {
+      setDayZeroLoading(false)
+    }
   }
 
   React.useEffect(() => {
@@ -428,6 +449,19 @@ export function ReportsView() {
                             {formatCurrency(r.cashBalance + r.customersReceivable - r.suppliersPayable)}
                           </span>
                         </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full rounded-xl text-xs font-bold"
+                          onClick={printDayZero}
+                          disabled={dayZeroLoading}
+                        >
+                          {dayZeroLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Scale className="size-3.5" />}
+                          تقرير مطابقة يوم الصفر (طباعة)
+                        </Button>
+                        <p className="text-[11px] leading-relaxed text-muted-foreground">
+                          كشف رسمي بكل أرصدة العملاء والموردين وقت الترحيل من النظام القديم — يطبع ويوقّع عليه صاحب المحل.
+                        </p>
                       </div>
                     </Panel>
 
@@ -1592,4 +1626,176 @@ function escapeHtml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+}
+/* ═══════════════ 🆕 2026-10-22: تقرير مطابقة يوم الصفر ═══════════════ */
+
+interface DayZeroData {
+  generatedAt: string
+  listLimit?: number
+  counts: {
+    customers: number
+    suppliers: number
+    products: number
+    customersWithBalance: number
+    suppliersWithBalance: number
+  }
+  totals: {
+    customerDebt: number
+    customerCredit: number
+    supplierDebt: number
+    supplierCredit: number
+    cashBalance: number
+    netPosition: number
+  }
+  // 🛠️ 2026-10-22 (مراجعة): flags قصّ القوائم — الإجماليات من كل الأرصدة،
+  // لكن الجدول بيعرض أول listLimit (500) فقط → لازم تنبيه واضح على الورقة.
+  customersTruncated?: boolean
+  suppliersTruncated?: boolean
+  customers: { id: number; name: string; phone: string | null; balance: number }[]
+  suppliers: { id: number; name: string; phone: string | null; balance: number }[]
+}
+
+function buildDayZeroHtml(
+  d: DayZeroData,
+  shop?: { name?: string; phone?: string; address?: string; logo?: string }
+): string {
+  const generatedAt = fmtDateTime(new Date(d.generatedAt))
+  // 🛠️ تنبيه القصّ — نفس نص التحذير للطرفين مع الحد الفعلي من السيرفر
+  const listLimit = d.listLimit ?? 500
+  const truncWarn = (truncated?: boolean, total?: number, label = '') =>
+    truncated
+      ? `<div class="warn-box">⚠ تنبيه: ${label} لهم أرصدة أكبر من الحد المعروض (${listLimit} سجل) — الإجماليات أعلاه محسوبة من <b>كل</b> الأرصدة (${total} حساب)، أما الجدول ده فيعرض أكبر ${listModal(listLimit)} حساب بس. اطلب تقرير تفصيلي كامل من كشوف الحسابات.</div>`
+      : ''
+  const listModal = (n: number) => n.toLocaleString('en-US')
+
+  const customerRows = d.customers.length
+    ? d.customers
+        .map(
+          (c, i) => `
+        <tr>
+          <td style="color:${BRAND.sub}">${i + 1}</td>
+          <td style="text-align:right;font-weight:600">${escapeHtml(c.name)}</td>
+          <td dir="ltr">${escapeHtml(c.phone || '—')}</td>
+          <td style="font-weight:700;color:${c.balance > 0 ? BRAND.red : BRAND.primaryDark}">${fmtMoney(c.balance)}</td>
+        </tr>`
+        )
+        .join('')
+    : emptyRow(4, 'مفيش عملاء لهم أرصدة لسه — أضف الرصيد الافتتاحي من شاشة العميل الجديد')
+
+  const supplierRows = d.suppliers.length
+    ? d.suppliers
+        .map(
+          (s, i) => `
+        <tr>
+          <td style="color:${BRAND.sub}">${i + 1}</td>
+          <td style="text-align:right;font-weight:600">${escapeHtml(s.name)}</td>
+          <td dir="ltr">${escapeHtml(s.phone || '—')}</td>
+          <td style="font-weight:700;color:${s.balance > 0 ? BRAND.red : BRAND.primaryDark}">${fmtMoney(s.balance)}</td>
+        </tr>`
+        )
+        .join('')
+    : emptyRow(4, 'مفيش موردين لهم أرصدة لسه — أضف الرصيد الافتتاحي من شاشة المورد الجديد')
+
+  return `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<title>تقرير مطابقة يوم الصفر</title>
+<style>
+${baseDocStyles()}
+  .summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 14px 0 20px; }
+  .summary-card { border: 1px solid ${BRAND.border}; border-radius: 10px; padding: 12px 14px; background: #fafbfa; }
+  .summary-card .lbl { font-size: 11px; color: ${BRAND.sub}; }
+  .summary-card .val { font-size: 18px; font-weight: 800; margin-top: 3px; }
+  .summary-card.hot { background: ${BRAND.primaryLight}; border-color: ${BRAND.primary}; }
+  .section-title { font-size: 15px; font-weight: 800; color: ${BRAND.primaryDark}; margin: 22px 0 8px; padding-bottom: 6px; border-bottom: 2px solid ${BRAND.primaryLight}; }
+  .note-box { border: 1px dashed ${BRAND.border}; border-radius: 10px; background: ${BRAND.amberBg}; padding: 12px 14px; font-size: 12.5px; line-height: 1.9; margin-bottom: 18px; }
+  .warn-box { border: 1.5px solid #d97706; border-radius: 10px; background: #fef3c7; color: #92400e; padding: 10px 14px; font-size: 12.5px; line-height: 1.8; margin: 0 0 10px; font-weight: 700; }
+  .sign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 42px; }
+  .sign-box { text-align: center; font-size: 12px; color: ${BRAND.sub}; }
+  .sign-line { margin-top: 46px; border-top: 1.5px solid ${BRAND.ink}; padding-top: 6px; font-weight: 700; color: ${BRAND.ink}; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="brand-bar"></div>
+  <div class="doc-header">
+    <div class="shop-block">
+      ${shop?.logo ? `<img class="shop-logo" src="${escapeHtml(shop.logo)}" alt="" />` : ''}
+      <div>
+        <div class="shop-name">${escapeHtml(shop?.name || 'المحل')}</div>
+        <div class="shop-meta">
+          ${shop?.phone ? `هاتف: ${escapeHtml(shop.phone)}` : ''}
+          ${shop?.address ? `<br/>${escapeHtml(shop.address)}` : ''}
+        </div>
+      </div>
+    </div>
+    <div class="doc-meta">
+      <div class="doc-title">Nezam POS</div>
+      <div class="doc-no">تقرير مطابقة يوم الصفر</div>
+      <div class="doc-date">اتولّد: ${escapeHtml(generatedAt)}</div>
+    </div>
+  </div>
+
+  <div class="note-box">
+    <b>إقرار ترحيل الأرصدة:</b> الورقة دي بتوثّق أرصدة المحل لحظة الانتقال من النظام/الدفتر القديم
+    إلى نظام Nezam POS — فلوسنا عند العملاء، وفلوسنا للموردين، ورصيد الخزنة.
+    الأرقام دي نقطة البداية الرسمية لأي حسابات جاية، وتمت مطابقتها مع كشوف الحسابات السابقة.
+  </div>
+
+  <div class="summary-grid">
+    <div class="summary-card hot">
+      <div class="lbl">فلوس لينا عند العملاء (ديون)</div>
+      <div class="val" style="color:${BRAND.red}">${fmtMoney(d.totals.customerDebt)}</div>
+      <div class="lbl">${d.counts.customersWithBalance} عميل له رصيد من ${d.counts.customers}</div>
+    </div>
+    <div class="summary-card">
+      <div class="lbl">فلوس علينا للموردين (مستحقات)</div>
+      <div class="val" style="color:${BRAND.amber}">${fmtMoney(d.totals.supplierDebt)}</div>
+      <div class="lbl">${d.counts.suppliersWithBalance} مورد له رصيد من ${d.counts.suppliers}</div>
+    </div>
+    <div class="summary-card">
+      <div class="lbl">رصيد الخزنة الحالي</div>
+      <div class="val" style="color:${BRAND.primaryDark}">${fmtMoney(d.totals.cashBalance)}</div>
+      <div class="lbl">${d.counts.products} منتج مسجل في النظام</div>
+    </div>
+    <div class="summary-card">
+      <div class="lbl">الصافي (كاش + لينا − علينا — شامل الأرصدة الدائنة)</div>
+      <div class="val" style="color:${BRAND.primaryDark}">${fmtMoney(d.totals.netPosition)}</div>
+      <div class="lbl">أرصدة دائنة: عملاء ${fmtMoney(d.totals.customerCredit)} · موردون ${fmtMoney(d.totals.supplierCredit)}</div>
+    </div>
+  </div>
+
+  <div class="section-title">أولًا: أرصدة العملاء (فلوس لينا)</div>
+  ${truncWarn(d.customersTruncated, d.counts.customersWithBalance, 'عدد العملاء')}
+  <table>
+    <thead><tr><th style="width:40px">#</th><th>العميل</th><th style="width:140px">الهاتف</th><th style="width:130px">الرصيد</th></tr></thead>
+    <tbody>${customerRows}</tbody>
+  </table>
+
+  <div class="section-title">ثانيًا: أرصدة الموردين (فلوس علينا)</div>
+  ${truncWarn(d.suppliersTruncated, d.counts.suppliersWithBalance, 'عدد الموردين')}
+  <table>
+    <thead><tr><th style="width:40px">#</th><th>المورد</th><th style="width:140px">الهاتف</th><th style="width:130px">المستحق</th></tr></thead>
+    <tbody>${supplierRows}</tbody>
+  </table>
+
+  <div class="sign-grid">
+    <div class="sign-box">
+      <div class="sign-line">توقيع صاحب المحل</div>
+      <div>بعد مراجعة ومطابقة الأرقام أعلاه</div>
+    </div>
+    <div class="sign-box">
+      <div class="sign-line">توقيع منفّذ الترحيل</div>
+      <div>فريق Nezam POS</div>
+    </div>
+  </div>
+
+  <div class="doc-footer">
+    <div class="thanks">تم الترحيل بأمان — كل أرصدة المحل جوه النظام من أول يوم</div>
+    النظام القديم يفضل محفوظ كأرشيف — النظام الجديد Nezam POS هو مصدر الحقيقة من تاريخ الورقة دي
+  </div>
+</div>
+</body>
+</html>`
 }
