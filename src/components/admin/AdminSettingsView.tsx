@@ -55,6 +55,7 @@ interface Settings {
 const ACTION_LABELS: Record<string, string> = {
   'settings.update': 'تعديل إعدادات المنصة',
   'settings.tracking_update': 'تعديل إعدادات التتبع',
+  'settings.test_email': 'إرسال إيميل تجريبي',
   'auth.password_change': 'تغيير كلمة مرور الأدمن',
   'auth.admin_login': 'تسجيل دخول الأدمن',
   'impersonate.start': 'بدء انتحال محل',
@@ -117,7 +118,7 @@ function SectionCard({
       id={id}
       className={cn('scroll-mt-4 gap-0 overflow-hidden py-0 shadow-sm animate-in-up', className)}
     >
-      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 border-b bg-muted/25 px-4 py-3 sm:px-5">
+      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 border-b bg-muted/25 px-4 py-3 sm:px-5 [.border-b]:pb-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl ring-1 ring-inset', TONES[tone])}>
             <Icon className="size-4" aria-hidden />
@@ -297,7 +298,7 @@ function AuditLogCard() {
             <div className="min-w-0 flex-1 space-y-0.5">
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
                 <span className="text-[12.5px] font-bold">{ACTION_LABELS[it.action] ?? it.action}</span>
-                <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground" dir="ltr">
+                <span className="text-[10.5px] tabular-nums text-muted-foreground">
                   {new Date(it.createdAt).toLocaleString('ar-EG')}
                 </span>
               </div>
@@ -630,7 +631,8 @@ export function AdminSettingsView() {
           tone="c1"
           title="إعدادات الاشتراك"
           desc="فترة السماح وتذكيرات التجديد"
-          className="xl:col-span-5"
+          className="xl:col-span-6"
+          bodyClassName="grid grid-cols-1 content-start gap-4 space-y-0 md:grid-cols-2"
         >
           <Field
             label="فترة السماح بعد انتهاء الاشتراك (أيام)"
@@ -670,7 +672,7 @@ export function AdminSettingsView() {
           tone="c2"
           title="الإشعارات الداخلية"
           desc="مدة الاحتفاظ بالإشعارات"
-          className="xl:col-span-4"
+          className="xl:col-span-3"
         >
           <Field
             label="مدة الاحتفاظ (أيام)"
