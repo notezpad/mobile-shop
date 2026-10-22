@@ -35,6 +35,8 @@ interface ClosePreview {
   products: number
   pieces: number
   value: number
+  /** 🧠 هل الموسم التاني مقفول برضه؟ (تحذير ذكي داخل المعالج) */
+  otherSeasonClosed?: boolean
 }
 
 interface OpenItem {
@@ -50,10 +52,13 @@ export function SeasonWizard({
   open,
   onOpenChange,
   onChanged,
+  initialTab = 'close',
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
   onChanged: () => void
+  /** 🧠 التبويب المبدئي — بانر الفلتر الذكي بيفتحه على «فتح موسم» مباشرة */
+  initialTab?: 'close' | 'open'
 }) {
   const [tab, setTab] = React.useState<'close' | 'open'>('close')
   const [season, setSeason] = React.useState<Season>('SUMMER')
@@ -71,6 +76,11 @@ export function SeasonWizard({
   }, [])
 
   // تحميل الملخص/القايمة كل ما التبويب أو الموسم يتغير (والدايلوج بيتفتح)
+  React.useEffect(() => {
+    if (!open) return
+    setTab(initialTab)
+  }, [open, initialTab])
+
   React.useEffect(() => {
     if (!open) return
     reset()
@@ -265,6 +275,12 @@ export function SeasonWizard({
                   <Info className="mt-0.5 size-3.5 shrink-0" />
                   الأصناف دي هتختفي من نقطة البيع وتبقى «في المخزن الداخلي» — وأصناف «طوال السنة» مش هتتأثر خالص
                 </p>
+                {closePreview.otherSeasonClosed && (
+                  <p className="flex items-start gap-1.5 rounded-xl bg-sky-500/10 p-2.5 text-xs font-bold text-sky-700 dark:text-sky-400">
+                    <Snowflake className="mt-0.5 size-3.5 shrink-0" />
+                    الموسم التاني مقفول برضه — لو قفلت {closePreview.label} كمان، العرض الافتراضي هيبقى على «طوال السنة» بس
+                  </p>
+                )}
                 <Button
                   className="w-full"
                   size="lg"

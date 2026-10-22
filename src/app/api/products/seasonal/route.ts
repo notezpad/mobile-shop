@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { purgeCatalogCaches, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
@@ -10,6 +11,7 @@ import {
   WAREHOUSE_OUT,
   canUseSeasonal,
   isSeasonValue,
+  parseClosedSeasons,
   roundQty,
   type SeasonValue,
 } from '@/lib/seasonal'
@@ -19,6 +21,7 @@ export const dynamic = 'force-dynamic'
 /**
  * 👕 2026-10-22 — «المخزن الداخلي» للمواسم (باقات الملابس فقط).
  *
+ * GET  /api/products/seasonal?mode=state               → حالة المواسم المقفولة + إحصايات النايم لكل موسم
  * GET  /api/products/seasonal?season=SUMMER            → ملخص إغلاق الموسم (كم منتج/قطعة/قيمة)
  * GET  /api/products/seasonal?mode=open&season=WINTER  → قائمة أصناف الموسم النايمة في المخزن (لفتحه)
  * POST /api/products/seasonal { action:'close', season:'SUMMER' }
@@ -80,6 +83,33 @@ async function __GET(req: NextRequest) {
   }
   return withSql(async (sql: Sql) => {
     const { searchParams } = new URL(req.url)
+
+    // 🧠 حالة المواسم — بتغذي الفلتر الذكي في شاشة المنتجات (الشغال الآن)
+    if (searchParams.get('mode') === 'state') {
+      const trows = await sql<{ closedSeasons: string | null }[]>`
+        SELECT "closedSeasons" FROM "Tenant" WHERE "id" = ${s.tenantId} LIMIT 1`
+      const closed = parseClosedSeasons(trows[0]?.closedSeasons)
+      // إحصايات النايم في المخزن لكل موسم (للبانر الذكي)
+      const stats = await sql<{ season: string; products: number; pieces: number; value: number }[]>`
+        SELECT "season", COUNT(*)::int AS products,
+               COALESCE(SUM("quantity" - "displayQty"), 0)::float8 AS pieces,
+               COALESCE(SUM(("quantity" - "displayQty") * "cost"), 0)::float8 AS value
+        FROM "Product"
+        WHERE "tenantId" = ${s.tenantId} AND "active" = true
+          AND "season" IN ('SUMMER', 'WINTER')
+          AND ("quantity" - "displayQty") > 0
+        GROUP BY "season"`
+      const bySeason: Record<string, { products: number; pieces: number; value: number }> = {}
+      for (const r of stats) bySeason[r.season] = { products: r.products, pieces: roundQty(r.pieces), value: roundQty(r.value) }
+      return NextResponse.json({
+        closedSeasons: closed,
+        seasons: {
+          SUMMER: bySeason.SUMMER ?? { products: 0, pieces: 0, value: 0 },
+          WINTER: bySeason.WINTER ?? { products: 0, pieces: 0, value: 0 },
+        },
+      })
+    }
+
     const mode = searchParams.get('mode') === 'open' ? 'open' : 'close'
     const season = seasonOf(searchParams.get('season'))
     if (!season) {
@@ -89,6 +119,12 @@ async function __GET(req: NextRequest) {
       )
     }
     const label = SEASON_LABELS[season]
+
+    // 🧠 للملخص الذكي: هل الموسم التاني مقفول برضه؟ (تحذير جوا المعالج)
+    const trows = await sql<{ closedSeasons: string | null }[]>`
+      SELECT "closedSeasons" FROM "Tenant" WHERE "id" = ${s.tenantId} LIMIT 1`
+    const closedNow = parseClosedSeasons(trows[0]?.closedSeasons)
+    const otherSeasonClosed = closedNow.includes(season === 'SUMMER' ? 'WINTER' : 'SUMMER')
 
     if (mode === 'open') {
       // أصناف الموسم اللي عليها مخزون في المخزن الداخلي (المعروض أقل من الإجمالي)
@@ -121,7 +157,7 @@ async function __GET(req: NextRequest) {
       FROM "Product"
       WHERE "tenantId" = ${s.tenantId} AND "active" = true AND "season" = ${season}
         AND "displayQty" > 0`
-    return NextResponse.json({ season, label, ...rows[0] })
+    return NextResponse.json({ season, label, otherSeasonClosed, ...rows[0] })
   })
 }
 
@@ -163,6 +199,18 @@ async function __POST(req: NextRequest) {
     products: number
     pieces: number
     moved: { id: number; name: string; qty: number }[]
+  }
+  /** 🧠 تحديث حالة «المواسم المقفولة» على المحل — جوه نفس المعاملة (قفل صف المحل ضد تزامن الإغلاق/الفتح) */
+  const syncClosedSeasons = async (tx: Prisma.TransactionClient, season: SeasonValue, closing: boolean) => {
+    const rows = await tx.$queryRaw<{ closedSeasons: string | null }[]>`
+      SELECT "closedSeasons" FROM "Tenant" WHERE "id" = ${s.tenantId} FOR UPDATE`
+    const current = parseClosedSeasons(rows[0]?.closedSeasons)
+    const next = closing
+      ? current.includes(season) ? current : [...current, season]
+      : current.filter((x) => x !== season)
+    if (JSON.stringify(next) === JSON.stringify(current)) return
+    await tx.$executeRaw`
+      UPDATE "Tenant" SET "closedSeasons" = ${JSON.stringify(next)} WHERE "id" = ${s.tenantId}`
   }
   try {
     result = await db.$transaction(
@@ -215,6 +263,8 @@ async function __POST(req: NextRequest) {
           pieces += qty
           moved.push({ id: p.id, name: p.name, qty })
         }
+        // 🧠 الفلتر الذكي: الموسم بقى «مقفول» — العرض الافتراضي هيعرض الموسم المفتوح بس
+        await syncClosedSeasons(tx, season, true)
         return { action, label, products: moved.length, pieces: roundQty(pieces), moved }
       }
 
@@ -302,6 +352,8 @@ async function __POST(req: NextRequest) {
         pieces += qty
         opened.push({ id: p.id, name: p.name, qty })
       }
+      // 🧠 الفلتر الذكي: في أي فتح (حتى جزئي) الموسم بيرجع «شغال» — بيرجع يظهر في العرض الافتراضي
+      await syncClosedSeasons(tx, season, false)
       return { action, label, products: opened.length, pieces: roundQty(pieces), moved: opened }
     },
     { timeout: 60_000, maxWait: 15_000 },

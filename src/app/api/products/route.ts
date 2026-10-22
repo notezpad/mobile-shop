@@ -10,7 +10,7 @@ import { runNonBlocking, trackServerEvent, extractRequestContext } from '@/lib/t
 import { TRACKING_EVENTS } from '@/lib/tracking/types'
 import { withSql, type Sql } from '@/lib/sql'
 import { isInternalImageUrl } from '@/lib/product-image'
-import { isSeasonValue } from '@/lib/seasonal'
+import { isSeasonValue, parseClosedSeasons } from '@/lib/seasonal'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,6 +66,13 @@ export async function ensureCategory(
  * صنف عليه مخزون إجمالي بس كله في المخزن الداخلي (displayQty=0) مبيظهرش
  * في شبكة الكاشير — بيتلقي بالبحث/الباركود بس. المنتجات نافدة الكمية (0)
  * بتفضل ظاهرة زي ما هي (نفس السلوك القديم).
+ *
+ * 🧠 الفلتر الذكي للمواسم (2026-10-22 — view=active):
+ * لما التاجر يقفل موسم (مثلاً الصيف) أصنافه بتختفي من العرض الافتراضي خالص —
+ * بيتنفذ الاستبعاد في الـ SQL نفسه (مش في المتصفح): صفوف أقل من الداتابيز،
+ * JSON أصغر في الشبكة، ورسم أقل — توفير CPU حقيقي في أكتر endpoint اتعب في النظام.
+ * opt-in: بيتطبق بس لما الواجهة تبعت view=active (باقات الملابس) —
+ * صفر تغيير في سلوك أي عميل تاني، والفلتر اليدوي (season=) بيتغلب عليه دايماً.
  */
 function isSleepingSql(sql: Sql) {
   return sql`("quantity" > 0 AND "displayQty" <= 0)`
@@ -83,6 +90,7 @@ function buildWhere(
   season = '',
   loc = '',
   hideSleeping = false,
+  closedSeasons: string[] = [],
 ) {
   const parts = [sql`"tenantId" = ${tenantId}`]
   if (status === 'active') parts.push(sql`AND "active" = true`)
@@ -107,8 +115,12 @@ function buildWhere(
     parts.push(sql`AND "category" = ${category}`)
   }
   // 👕 فلتر الموسم (فاشون) — ALL_YEAR / SUMMER / WINTER
+  // (الفلتر اليدوي بيتغلب على الاستبعاد الذكي — التاجر عايز يشوف الموسم المقفول بإيده؟ يلاقيه)
   if (season === 'SUMMER' || season === 'WINTER' || season === 'ALL_YEAR') {
     parts.push(sql`AND "season" = ${season}`)
+  } else if (closedSeasons.length > 0) {
+    // 🧠 view=active: استبعاد أصناف المواسم المقفولة من العرض الافتراضي (SQL مباشر)
+    parts.push(sql`AND ("season" IS NULL OR "season" NOT IN ${sql(closedSeasons)})`)
   }
   // 👕 فلتر الموقع: display = اللي عليه معروض، warehouse = النايم في المخزن الداخلي
   if (loc === 'warehouse') {
@@ -169,6 +181,8 @@ export async function GET(req: NextRequest) {
     const posFlag = searchParams.get('pos') === '1'
     const seasonParam = searchParams.get('season')?.trim() || ''
     const locParam = searchParams.get('loc')?.trim() || ''
+    // 🧠 الفلتر الذكي للمواسم — opt-in من الواجهة (فاشون)
+    const viewParam = searchParams.get('view')?.trim() || ''
 
     // ── كاش الحافة (نفس المفاتيح والشروط القديمة حرفيًا) ──
     const invCacheable =
@@ -177,7 +191,8 @@ export async function GET(req: NextRequest) {
       !category &&
       status === 'all' &&
       sortKey === 'newest' &&
-      !lowOnly
+      !lowOnly &&
+      !viewParam
     const invQuery = `branch=${session.branchId ?? 0}&inv=1&page=${page}`
     if (invCacheable) {
       const invHit = await matchEdgeCache('/api/products', invQuery, session.tenantId, canViewProfits ? '4' : '4n')
@@ -190,6 +205,7 @@ export async function GET(req: NextRequest) {
       !branchIdParam &&
       !seasonParam &&
       !locParam &&
+      !viewParam &&
       !posFlag &&
       status === 'active' &&
       !searchParams.has('page') &&
@@ -203,6 +219,15 @@ export async function GET(req: NextRequest) {
     }
 
     const orderBy = buildOrderBy(sql, sortKey)
+
+    // 🧠 حالة المواسم المقفولة — بنقرأها فقط لما الفلتر الذكي مطلوب (صفر تكلفة على باقي الطلبات)
+    let closedSeasons: string[] = []
+    if (viewParam === 'active' && !seasonParam) {
+      const trows = await sql<{ closedSeasons: string | null }[]>`
+        SELECT "closedSeasons" FROM "Tenant" WHERE "id" = ${session.tenantId} LIMIT 1`
+      closedSeasons = parseClosedSeasons(trows[0]?.closedSeasons)
+    }
+
     const where = buildWhere(
       sql, session.tenantId, status,
       Boolean(session.branchId), session.branchId, branchIdParam,
@@ -210,6 +235,7 @@ export async function GET(req: NextRequest) {
       seasonParam, locParam,
       // 👕 الشبكة (بدون بحث) بتخفي النايم — مع البحث بيظهر عادي بالبادج
       posFlag && !search,
+      closedSeasons,
     )
 
     // ⚡ v10: في وضع slim (شاشة المخزون) plan context والتسعير مش محتاجين

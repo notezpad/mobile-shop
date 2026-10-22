@@ -64,7 +64,8 @@ import { ProductUnitsDialog } from './ProductUnitsDialog'
 import { ProductVariantsDialog } from './ProductVariantsDialog'
 import { CollectionDiscountDialog } from './CollectionDiscountDialog'
 import { SeasonWizard } from './SeasonWizard'
-import { Package, Percent, Warehouse } from 'lucide-react'
+import { Package, Percent, Warehouse, Snowflake, Sun, PackageOpen } from 'lucide-react'
+import { num } from './inventory/shared'
 import { Barcode } from './Barcode'
 import { NoBarcode } from './NoBarcode'
 import { useShopStore } from '@/lib/store'
@@ -175,10 +176,22 @@ export function ProductsView() {
   const [variantsFor, setVariantsFor] = React.useState<{id:number;name:string}|null>(null)
   const [collectionDlg, setCollectionDlg] = React.useState(false)
   // 👕 المواسم (فاشون): فلتر الموسم + فلتر المخزن الداخلي + المعالج
+  // 🧠 «الشغال الآن» = الفلتر الذكي: يستبعد أصناف المواسم المقفولة (جوه الـ SQL) —
+  // قفلت الصيف؟ العرض الافتراضي يبقى على الشتوي و«طوال السنة» بس،
+  // والتاجر يقدر يختار أي موسم بإيده من الشيبس (يدوي بيتغلب على الذكي).
   const isFashion = useShopStore((s) => s.plan.businessType) === 'fashion'
-  const [seasonFilter, setSeasonFilter] = React.useState<'all' | 'SUMMER' | 'WINTER' | 'ALL_YEAR'>('all')
+  const [seasonFilter, setSeasonFilter] = React.useState<'active' | 'all' | 'SUMMER' | 'WINTER' | 'ALL_YEAR'>('all')
+  const seasonTouchedRef = React.useRef(false)
+  const seasonFilterRef = React.useRef(seasonFilter)
+  seasonFilterRef.current = seasonFilter
   const [locFilter, setLocFilter] = React.useState<'all' | 'warehouse'>('all')
   const [seasonOpen, setSeasonOpen] = React.useState(false)
+  const [seasonWizardTab, setSeasonWizardTab] = React.useState<'close' | 'open'>('close')
+  // 🧠 حالة المواسم المقفولة + إحصايات النايم (للبانر الذكي)
+  const [seasonState, setSeasonState] = React.useState<{
+    closedSeasons: ('SUMMER' | 'WINTER')[]
+    seasons: Record<string, { products: number; pieces: number; value: number }>
+  } | null>(null)
   const t = useVocab()
   const capabilities = useShopStore((st) => st.plan.capabilities)
   // 🔒 RBAC: التكلفة والهامش للمدير أو لمن عنده صلاحية الأرباح بس
@@ -240,6 +253,28 @@ export function ProductsView() {
     }
   }, [])
 
+  // 🧠 حالة المواسم — بتغذي الفلتر الذكي والبانر (فاشون فقط)
+  const loadSeasonState = React.useCallback(async () => {
+    if (!isFashion) return
+    try {
+      const res = await api<{
+        closedSeasons: ('SUMMER' | 'WINTER')[]
+        seasons: Record<string, { products: number; pieces: number; value: number }>
+      }>('/api/products/seasonal?mode=state')
+      setSeasonState(res)
+      // الفلتر الذكي: فيه موسم مقفول والتاجر مختارش فلتر يدوي؟ اعرض الشغال بس
+      if ((res.closedSeasons?.length ?? 0) > 0 && seasonFilterRef.current === 'all' && !seasonTouchedRef.current) {
+        setSeasonFilter('active')
+      }
+    } catch {
+      /* ignore — البانر مجرد تحسين، مش شرط للعمل */
+    }
+  }, [isFashion])
+
+  React.useEffect(() => {
+    loadSeasonState()
+  }, [loadSeasonState])
+
   const loadProducts = React.useCallback(async (p = page) => {
     const seq = ++loadSeqRef.current
     if (hasLoadedRef.current) setRefreshing(true)
@@ -251,8 +286,9 @@ export function ProductsView() {
       params.set('status', status)
       if (sort !== 'newest') params.set('sort', sort)
       if (lowOnly) params.set('stock', 'low')
-      // 👕 فلاتر الموسم/المخزن الداخلي
-      if (seasonFilter !== 'all') params.set('season', seasonFilter)
+      // 👕 فلاتر الموسم/المخزن الداخلي — 🧠 «الشغال الآن» = استبعاد المواسم المقفولة في الـ SQL نفسه
+      if (seasonFilter === 'active') params.set('view', 'active')
+      else if (seasonFilter !== 'all') params.set('season', seasonFilter)
       if (locFilter !== 'all') params.set('loc', locFilter)
       params.set('page', String(p))
       params.set('limit', String(PAGE_SIZE))
@@ -942,7 +978,69 @@ export function ProductsView() {
         </div>
       </div>
 
-      {/* 👕 شريط المواسم — فاشون فقط: فلتر الموقع + فلتر الموسم */}
+      {/* 👕 شريط المواسم — فاشون فقط: 🧠 بانر ذكي + فلتر الموقع + فلتر الموسم */}
+      {isFashion && (seasonState?.closedSeasons.length ?? 0) > 0 && (
+        <div className="space-y-2">
+          {seasonState!.closedSeasons.map((cs) => {
+            const stat = seasonState!.seasons[cs] ?? { products: 0, pieces: 0, value: 0 }
+            const isSummer = cs === 'SUMMER'
+            const Icon = isSummer ? Sun : Snowflake
+            const bothClosed = seasonState!.closedSeasons.length === 2
+            const openLabel = bothClosed
+              ? 'العرض الافتراضي على «طوال السنة» بس — وكل المواسم الموسمية في المخزن'
+              : isSummer
+                ? 'العرض الافتراضي بقى على الشتوي و«طوال السنة» بس'
+                : 'العرض الافتراضي بقى على الصيفي و«طوال السنة» بس'
+            return (
+              <div
+                key={cs}
+                className={cn(
+                  'flex flex-wrap items-center gap-2 rounded-2xl border p-2.5',
+                  isSummer ? 'border-amber-500/30 bg-amber-500/[0.06]' : 'border-sky-500/30 bg-sky-500/[0.06]',
+                )}
+              >
+                <span
+                  className={cn(
+                    'flex size-8 shrink-0 items-center justify-center rounded-lg',
+                    isSummer ? 'bg-amber-500/15 text-amber-600' : 'bg-sky-500/15 text-sky-600',
+                  )}
+                >
+                  <Icon className="size-4" />
+                </span>
+                <p className="min-w-0 flex-1 text-xs font-bold leading-5">
+                  موسم {isSummer ? 'الصيف مقفول' : 'الشتاء مقفول'} — {openLabel}
+                  <span className="block text-[11px] font-medium text-muted-foreground">
+                    {num(stat.pieces)} قطعة نايمة في المخزن الداخلي بقيمة {formatCurrency(Math.round(stat.value))} بالتكلفة
+                  </span>
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 shrink-0 text-xs"
+                  onClick={() => {
+                    seasonTouchedRef.current = true
+                    setSeasonFilter(cs)
+                  }}
+                >
+                  عرض أصنافه
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 shrink-0 text-xs"
+                  onClick={() => {
+                    setSeasonWizardTab('open')
+                    setSeasonOpen(true)
+                  }}
+                >
+                  <PackageOpen className="size-3.5" />
+                  فتح الموسم
+                </Button>
+              </div>
+            )
+          })}
+        </div>
+      )}
       {isFashion && (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/[0.04] p-2">
           <span className="flex items-center gap-1.5 px-1 text-xs font-extrabold text-amber-700 dark:text-amber-400">
@@ -973,6 +1071,7 @@ export function ProductsView() {
           <div role="group" aria-label="الموسم" className="flex flex-wrap rounded-xl bg-muted/60 p-1">
             {(
               [
+                ['active', 'الشغال الآن'],
                 ['all', 'كل المواسم'],
                 ['SUMMER', 'صيفي'],
                 ['WINTER', 'شتوي'],
@@ -983,12 +1082,18 @@ export function ProductsView() {
                 key={v}
                 type="button"
                 aria-pressed={seasonFilter === v}
-                onClick={() => setSeasonFilter(v)}
+                onClick={() => {
+                  seasonTouchedRef.current = true
+                  setSeasonFilter(v)
+                }}
                 className={cn(
-                  'h-7 rounded-lg px-2.5 text-xs font-bold transition-colors',
+                  'flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-colors',
                   seasonFilter === v ? 'bg-foreground text-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
+                {v === 'active' && (seasonState?.closedSeasons.length ?? 0) > 0 && (
+                  <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+                )}
                 {label}
               </button>
             ))}
@@ -1226,8 +1331,12 @@ export function ProductsView() {
       {isFashion && (
         <SeasonWizard
           open={seasonOpen}
+          initialTab={seasonWizardTab}
           onOpenChange={setSeasonOpen}
-          onChanged={() => loadProducts()}
+          onChanged={() => {
+            loadProducts()
+            loadSeasonState()
+          }}
         />
       )}
       <PrintLabelsDialog

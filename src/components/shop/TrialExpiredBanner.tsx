@@ -21,29 +21,101 @@ import { useShopStore } from '@/lib/store'
  *     pointer-events-none — فالكارت بيظهر فوق المحتوى كطبقة عائمة أنيقة
  *     بدون ما ياخد أي ارتفاع من تدفق الصفحة.
  *
- * Behavior (2026-09-13, unchanged):
+ * Behavior:
  *   - When `subscription.expired` is true → prominent red gradient card
  *     with "اشترك الآن" CTA. NOT dismissible (business need) — but it
  *     floats at the bottom so it never blocks the work area.
  *   - When `subscription.expiringSoon` is true (≤7 days left) → softer
  *     amber gradient card with "جدّد الآن" CTA + dismiss button.
- *   - Dismiss is per-render (session state), resets when state changes.
+ *
+ * 🧠 Persistent dismissal (2026-10-22 — fix: البانر كان بيرجع يظهر مع كل
+ *   refresh لأن القفل كان React state في الميموري بس):
+ *   - القفل بيتحفظ في localStorage بمفتاح لكل محل (`tenantId`) ومعاه
+ *     «توقيع حالة التنبيه»: تاريخ انتهاء الاشتراك + المتبقي (أيام العرض
+ *     أو أيام السماح).
+ *   - نفس الحالة (نفس اليوم مثلًا): مقفول نهائيًا حتى بعد refresh أو فتح
+ *     تاب جديد — دي الشكوى اللي ااتصلحت.
+ *   - لما الحالة تتغير فعليًا (المتبقي نزل يوم، دخول فترة السماح، انتهاء،
+ *     أو تجديد غيّر تاريخ الانتهاء) → التوقيع بيتغير والتنبيه يرجع يظهر
+ *     مرة واحدة — فالتذكير التجاري شغال من غير إزعاج متكرر.
+ *   - `dismissed` بيبدأ `null` (لسه منقراش من localStorage) وبنرجّع null
+ *     مؤقتًا عشان مفيش وميض «يظهر لحظة ويختفي» بعد الـ refresh.
  *
  * Sibling of `OfflineIndicator` in the same floating container.
  */
+/** مفتاح التخزين لكل محل — الحالة مش مشتركة بين المحلات على نفس المتصفح. */
+const DISMISS_STORAGE_PREFIX = 'nezam:sub-banner-dismissed:'
+
+/**
+ * توقيع «حالة التنبيه» الحالية: تاريخ الانتهاء + المتبقي.
+ * أي تغيير حقيقي في الحالة (يوم جديد / سماح / تجديد) = توقيع مختلف.
+ */
+function reminderSignature(s: {
+  endDate: string | null
+  inGrace?: boolean
+  graceDaysLeft?: number | null
+  daysLeft: number | null
+}): string {
+  const bucket = s.inGrace
+    ? `grace:${s.graceDaysLeft ?? 'x'}`
+    : `soon:${s.daysLeft ?? 'x'}`
+  return `${s.endDate ?? 'none'}|${bucket}`
+}
+
 export function TrialExpiredBanner() {
   const subscription = useShopStore((s) => s.subscription)
-  const [dismissed, setDismissed] = React.useState(false)
+  const tenantId = useShopStore((s) => s.user?.tenantId ?? null)
+  // null = لسه منقراش من localStorage (بنرجّع null مؤقتًا لمنع الوميض)
+  const [dismissed, setDismissed] = React.useState<boolean | null>(null)
 
-  // Reset dismissed when subscription state changes from expired→active
+  // التنبيه قابل للقفل فقط في حالة «قريب من الانتهاء/سماح» (الأحمر مش قابل)
+  const dismissible = !subscription.expired && subscription.expiringSoon === true
+  const signature = React.useMemo(
+    () => (dismissible ? reminderSignature(subscription) : null),
+    [dismissible, subscription],
+  )
+
+  // اقرأ القفل المحفوظ كل ما يتغير التوقيع أو المحل
   React.useEffect(() => {
-    if (!subscription.expired && !subscription.expiringSoon) {
+    if (!signature) {
+      setDismissed(null)
+      return
+    }
+    try {
+      const raw = window.localStorage.getItem(
+        DISMISS_STORAGE_PREFIX + (tenantId ?? 'anon'),
+      )
+      if (!raw) {
+        setDismissed(false)
+        return
+      }
+      const saved = JSON.parse(raw) as { sig?: string }
+      setDismissed(saved?.sig === signature)
+    } catch {
+      // بيانات تالفة أو تخزين غير متاح — نعتبرها غير مقفولة
       setDismissed(false)
     }
-  }, [subscription.expired, subscription.expiringSoon])
+  }, [signature, tenantId])
+
+  function handleDismiss() {
+    if (!signature) return
+    try {
+      window.localStorage.setItem(
+        DISMISS_STORAGE_PREFIX + (tenantId ?? 'anon'),
+        JSON.stringify({ sig: signature, at: Date.now() }),
+      )
+    } catch {
+      // التخزين غير متاح (وضع خاص/ممتلئ) — القفل في الميموري يكفي للجلسة
+    }
+    setDismissed(true)
+  }
 
   // Don't render anything if subscription is healthy or banner was dismissed
   if (dismissed) return null
+  // لسه منقراش القفل المحفوظ؟ بنستنى نتيجة القراءة بدل ما نظهر البانر
+  // لحظة ونخفيه (وميض بعد الـ refresh) — الكارت الأحمر (غير القابل للقفل)
+  // مش متأثر لأن dismissed بيفضل null فيه.
+  if (dismissed === null && dismissible) return null
   if (!subscription.expired && !subscription.expiringSoon) return null
 
   const isExpired = subscription.expired
@@ -128,10 +200,10 @@ export function TrialExpiredBanner() {
           )}
         </Link>
 
-        {/* Dismiss — only for expiring-soon, not for expired */}
+        {/* Dismiss — only for expiring-soon, not for expired (persisted) */}
         {!isExpired && (
           <button
-            onClick={() => setDismissed(true)}
+            onClick={handleDismiss}
             aria-label="إغلاق التنبيه"
             className="flex size-8 shrink-0 items-center justify-center rounded-xl text-white/80 transition-colors hover:bg-white/20 hover:text-white active:scale-90"
           >

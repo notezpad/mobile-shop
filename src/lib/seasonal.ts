@@ -28,6 +28,24 @@ export function isSeasonValue(v: unknown): v is SeasonValue {
   return typeof v === 'string' && (SEASON_VALUES as readonly string[]).includes(v)
 }
 
+/**
+ * 🧠 قراءة حالة «المواسم المقفولة» المحفوظة على المحل (Tenant.closedSeasons JSON).
+ * أي قيمة غريبة/تالفة بترجع قائمة فاضية — والقائمة بتقبل SUMMER/WINTER فقط
+ * («طوال السنة» مالوش إغلاق أصلاً).
+ */
+export function parseClosedSeasons(raw: unknown): SeasonValue[] {
+  let arr: unknown = raw
+  if (typeof raw === 'string') {
+    try {
+      arr = JSON.parse(raw)
+    } catch {
+      return []
+    }
+  }
+  if (!Array.isArray(arr)) return []
+  return [...new Set(arr.filter(isSeasonValue).filter((s) => s !== 'ALL_YEAR'))]
+}
+
 /** الميزة متاحة لباقات الملابس فقط (فيرتك fashion) */
 export function canUseSeasonal(businessType: string | null | undefined): boolean {
   return businessType === 'fashion'

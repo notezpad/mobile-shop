@@ -41,6 +41,11 @@ model Tenant {
   defaultRetailMarginPercent  Float   @default(20)
   // شكل بطاقة المنتج في صفحة المنتجات: 'auto' | 'image' | 'compact'
   productCardStyle            String  @default("auto")
+  // 👕 المواسم المقفولة (باقات الملابس فقط) — JSON array لأسماء مواسم مقفولة
+  // مثال: '["SUMMER"]' = الصيف مقفول في المخزن الداخلي.
+  // بيتحدث فقط من معالج المواسم (POST /api/products/seasonal) — بيدخل الفلتر
+  // الذكي: عرض المنتجات الافتراضي (view=active) يستبعد أصناف المواسم المقفولة.
+  closedSeasons               String  @default("[]")
   status                 String    @default("active")
   ownerEmail             String?
   ownerPhone             String?
