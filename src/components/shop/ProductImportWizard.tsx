@@ -292,7 +292,7 @@ export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={close}>
-      <DialogContent className="flex max-h-[92vh] w-[min(96vw,880px)] max-w-[880px] flex-col overflow-hidden p-0 sm:rounded-2xl">
+      <DialogContent className="flex max-h-[92vh] w-[min(96vw,880px)] max-w-[880px] flex-col sm:max-w-[880px] overflow-hidden p-0 sm:rounded-2xl">
         {/* الترويسة */}
         <div className="flex items-center gap-3 border-b bg-gradient-to-l from-violet-50 to-sky-50 px-4 py-3 sm:px-5">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-md shadow-violet-600/30">
@@ -301,7 +301,7 @@ export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-base font-extrabold sm:text-lg">الاستيراد الذكي — المنتجات الافتتاحية من Excel</h2>
             <p className="truncate text-xs text-muted-foreground sm:text-[13px]">
-              ارفع شيت المنتجات القديمة — النظام بيفهم الأعمدة لوحده ويصلح الأخطاء قبل التنفيذ
+              ارفع شيت المنتجات القديمة — النظام بيفهم الأعمدة لوحده
             </p>
           </div>
           <button

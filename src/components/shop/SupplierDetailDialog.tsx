@@ -62,9 +62,14 @@ import { BalanceAdjustDialog } from './BalanceAdjustDialog'
 
 // 🎨 هوية صفحة الموردين (stone + orange) على التاب النشط — نفس بصمة باقي دايلوجات الصفحة
 const TAB_TRIGGER_CLS =
-  'flex-1 rounded-lg ' +
-  'data-[state=active]:border-orange-200 data-[state=active]:bg-orange-50 data-[state=active]:text-orange-800 ' +
-  'dark:data-[state=active]:border-orange-500/30 dark:data-[state=active]:bg-orange-500/15 dark:data-[state=active]:text-orange-300'
+  'group h-11 flex-1 gap-2 rounded-none border-0 border-b-2 border-transparent bg-transparent px-3 text-sm font-bold text-muted-foreground shadow-none ' +
+  'hover:text-foreground ' +
+  'data-[state=active]:border-orange-600 data-[state=active]:bg-orange-500/[0.06] data-[state=active]:text-orange-700 data-[state=active]:shadow-none ' +
+  'dark:data-[state=active]:border-orange-400 dark:data-[state=active]:bg-orange-500/10 dark:data-[state=active]:text-orange-300'
+
+const TAB_COUNT_CLS =
+  'rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-black leading-none tabular-nums text-muted-foreground ' +
+  'group-data-[state=active]:bg-orange-600 group-data-[state=active]:text-white'
 
 const METHOD_LABELS: Record<string, string> = {
   cash: 'كاش',
@@ -387,18 +392,23 @@ export function SupplierDetailDialog({
             </p>
           ) : (
             <Tabs value={tab} onValueChange={setTab} className="w-full">
-              <TabsList className="sticky top-0 z-10 mb-3 h-11 w-full rounded-xl border bg-muted/60 p-1 backdrop-blur">
+              <TabsList className="sticky top-0 z-20 -mx-4 mb-4 flex h-auto w-[calc(100%+2rem)] items-stretch gap-0 rounded-none border-b bg-background p-0 px-4 pt-2 sm:-mx-6 sm:w-[calc(100%+3rem)] sm:px-6">
                 <TabsTrigger value="account" className={TAB_TRIGGER_CLS}>
                   <Receipt className="size-4" />
                   كشف حساب
+                  <span className={TAB_COUNT_CLS}>{timeline.length}</span>
                 </TabsTrigger>
                 <TabsTrigger value="orders" className={TAB_TRIGGER_CLS}>
                   <ClipboardList className="size-4" />
                   أوامر الشراء
+                  <span className={TAB_COUNT_CLS}>{detail.purchaseOrders.length}</span>
                 </TabsTrigger>
                 <TabsTrigger value="payments" className={TAB_TRIGGER_CLS}>
                   <Wallet className="size-4" />
                   الدفعات
+                  <span className={TAB_COUNT_CLS}>
+                    {detail.payments.filter((p) => p.status !== 'cancelled').length}
+                  </span>
                 </TabsTrigger>
               </TabsList>
 
@@ -431,7 +441,12 @@ export function SupplierDetailDialog({
                 </div>
 
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-bold">سجل الحركات</h3>
+                  <h3 className="flex items-center gap-2 text-sm font-extrabold">
+                    سجل الحركات
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
+                      {timeline.length}
+                    </span>
+                  </h3>
                   {isAdmin && (
                     <Button
                       variant="outline"
@@ -446,15 +461,15 @@ export function SupplierDetailDialog({
 
                 <Card className="hidden overflow-hidden py-0 md:block">
                   <CardContent className="p-0">
-                    <div className="overflow-x-auto" dir="ltr">
-                      <Table>
+                    <div>
+                      <Table className="min-w-[860px]">
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="w-52">التاريخ</TableHead>
-                            <TableHead className="w-20">النوع</TableHead>
+                            <TableHead className="w-56">التاريخ</TableHead>
+                            <TableHead className="w-32">النوع</TableHead>
                             <TableHead>التفاصيل</TableHead>
-                            <TableHead className="w-28 text-center">علينا</TableHead>
-                            <TableHead className="w-28 text-center">دفعنا</TableHead>
+                            <TableHead className="w-32 text-center">علينا</TableHead>
+                            <TableHead className="w-32 text-center">دفعنا</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -485,7 +500,7 @@ export function SupplierDetailDialog({
                                         {isOpening ? 'رصيد افتتاحي' : 'تسوية رصيد'}
                                       </Badge>
                                     </TableCell>
-                                    <TableCell className="text-sm">
+                                    <TableCell className="whitespace-normal break-words py-3 text-sm">
                                       <span className="text-muted-foreground">{row.reason}</span>
                                       {row.createdBy && (
                                         <span className="text-xs text-muted-foreground/70"> — {row.createdBy}</span>
@@ -522,29 +537,30 @@ export function SupplierDetailDialog({
                                         شراء
                                       </Badge>
                                     </TableCell>
-                                    <TableCell className="text-sm">
-                                      <span className="font-medium">
-                                        {row.orderNo ?? `#${row.orderId}`}
-                                      </span>
-                                      <span className="text-muted-foreground">
-                                        {' '}
-                                        — {itemsText}
-                                      </span>
-                                      {row.paid > 0 && (
-                                        <span className="text-xs text-success-subtle-foreground">
-                                          {' '}
-                                          (دفعنا كاش: {formatCurrency(row.paid)})
-                                        </span>
-                                      )}
-                                      {row.returnedValue > 0 && (
-                                        <span className="text-xs text-info-subtle-foreground">
-                                          {' '}
-                                          (مرتجع: {formatCurrency(row.returnedValue)})
-                                        </span>
-                                      )}
+                                    <TableCell className="whitespace-normal break-words py-3 text-sm">
+                                      <div className="min-w-0 space-y-1">
+                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                          <span dir="ltr" className="inline-block font-extrabold tabular-nums">
+                                            {row.orderNo ?? `#${row.orderId}`}
+                                          </span>
+                                          {row.paid > 0 && (
+                                            <span className="rounded-md bg-success-subtle px-1.5 py-0.5 text-[11px] font-bold text-success-subtle-foreground">
+                                              دفعنا كاش: {formatCurrency(row.paid)}
+                                            </span>
+                                          )}
+                                          {row.returnedValue > 0 && (
+                                            <span className="rounded-md bg-info-subtle px-1.5 py-0.5 text-[11px] font-bold text-info-subtle-foreground">
+                                              مرتجع: {formatCurrency(row.returnedValue)}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="line-clamp-2 break-words text-xs leading-5 text-muted-foreground">
+                                          {itemsText}
+                                        </p>
+                                      </div>
                                     </TableCell>
-                                    <TableCell className="text-center font-semibold tabular-nums text-destructive">
-                                      {formatCurrency(debt)}
+                                    <TableCell className="text-center font-bold tabular-nums text-destructive">
+                                      {debt > 0 ? formatCurrency(debt) : <span className="font-medium text-muted-foreground">—</span>}
                                     </TableCell>
                                     <TableCell className="text-center tabular-nums text-muted-foreground">
                                       —
@@ -566,7 +582,7 @@ export function SupplierDetailDialog({
                                       دفعة
                                     </Badge>
                                   </TableCell>
-                                  <TableCell className="text-sm">
+                                  <TableCell className="whitespace-normal break-words py-3 text-sm">
                                     <span
                                       className={`inline-block rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${methodBadgeClass(
                                         row.method
@@ -710,12 +726,12 @@ export function SupplierDetailDialog({
                 </div>
                 <Card className="hidden overflow-hidden py-0 md:block">
                   <CardContent className="p-0">
-                    <div className="overflow-x-auto" dir="ltr">
-                      <Table>
+                    <div>
+                      <Table className="min-w-[860px]">
                         <TableHeader>
                           <TableRow>
                             <TableHead>الأمر</TableHead>
-                            <TableHead className="w-52">التاريخ</TableHead>
+                            <TableHead className="w-56">التاريخ</TableHead>
                             <TableHead className="w-28 text-center">عدد الأصناف</TableHead>
                             <TableHead className="w-28 text-center">الإجمالي</TableHead>
                             <TableHead className="w-28 text-center">المدفوع</TableHead>
@@ -856,11 +872,11 @@ export function SupplierDetailDialog({
                 </div>
                 <Card className="hidden overflow-hidden py-0 md:block">
                   <CardContent className="p-0">
-                    <div className="overflow-x-auto" dir="ltr">
-                      <Table>
+                    <div>
+                      <Table className="min-w-[760px]">
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="w-52">التاريخ</TableHead>
+                            <TableHead className="w-56">التاريخ</TableHead>
                             <TableHead className="w-28 text-center">المبلغ</TableHead>
                             <TableHead className="w-28 text-center">الطريقة</TableHead>
                             <TableHead>ملاحظات</TableHead>
@@ -895,7 +911,7 @@ export function SupplierDetailDialog({
                                     {METHOD_LABELS[p.method] || p.method}
                                   </span>
                                 </TableCell>
-                                <TableCell className="text-sm text-muted-foreground">
+                                <TableCell className="whitespace-normal break-words py-3 text-sm text-muted-foreground">
                                   {p.status === 'cancelled' && (
                                     <Badge variant="outline" className="me-2 border-destructive/40 text-destructive">
                                       ملغية
@@ -1050,7 +1066,7 @@ export function SupplierDetailDialog({
         </AlertDialog>
 
         {/* 🛡️ 2026-09-13: Close button (replaces the X icon we removed). */}
-        <div className="flex justify-end border-t px-6 py-3">
+        <div className="flex shrink-0 justify-end border-t bg-muted/30 px-4 py-3 sm:px-6">
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             إغلاق
           </Button>

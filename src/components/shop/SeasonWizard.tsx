@@ -15,8 +15,6 @@ import * as React from 'react'
 import { Snowflake, Sun, Warehouse, PackageOpen, Loader2, CheckCircle2, ArrowLeftRight, Info } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
@@ -151,7 +149,7 @@ export function SeasonWizard({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl font-black">
             <span className="flex size-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
@@ -302,37 +300,94 @@ export function SeasonWizard({
                   </p>
                 ) : (
                   <>
-                    <ScrollArea className="h-64 rounded-xl border">
-                      <div className="divide-y">
-                        {openItems.map((it) => (
-                          <div key={it.id} className="flex items-center gap-2 p-2.5">
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-bold">{it.name}</p>
-                              <p className="text-[11px] text-muted-foreground">
-                                في المخزن: {num(it.warehouseQty)}
-                                {it.variantCount > 0 ? ' · بمقاسات — بيتفتح كامل' : ''}
+                    <div className="max-h-[22rem] space-y-2 overflow-y-auto overscroll-contain rounded-2xl border bg-muted/30 p-2 [scrollbar-width:thin]">
+                      {openItems.map((it) => {
+                        const hasVariants = it.variantCount > 0
+                        const value = Math.max(0, Math.min(Number(qtys[it.id]) || 0, it.warehouseQty))
+                        const setQty = (n: number) =>
+                          setQtys((prev) => ({ ...prev, [it.id]: Math.max(0, Math.min(n, it.warehouseQty)) }))
+                        const isAll = value === it.warehouseQty
+                        return (
+                          <div
+                            key={it.id}
+                            className={cn(
+                              'flex w-full items-center gap-3 rounded-xl border bg-background p-3 shadow-sm transition-colors',
+                              value > 0 ? 'border-brand-600/40' : 'border-border opacity-80'
+                            )}
+                          >
+                            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600">
+                              <PackageOpen className="size-5" />
+                            </span>
+
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <p className="truncate text-sm font-extrabold leading-tight" title={it.name}>
+                                {it.name}
                               </p>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-bold text-muted-foreground">
+                                  <Warehouse className="size-3" />
+                                  في المخزن
+                                  <b className="tabular-nums text-foreground">{num(it.warehouseQty)}</b>
+                                </span>
+                                {hasVariants && (
+                                  <span className="inline-flex items-center rounded-md bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-bold text-sky-700 dark:text-sky-400">
+                                    بمقاسات · بيتفتح كامل
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={it.warehouseQty}
-                              step={1}
-                              value={String(qtys[it.id] ?? 0)}
-                              disabled={it.variantCount > 0}
-                              onChange={(e) =>
-                                setQtys((prev) => ({
-                                  ...prev,
-                                  [it.id]: Math.max(0, Math.min(Number(e.target.value) || 0, it.warehouseQty)),
-                                }))
-                              }
-                              aria-label={`الكمية المعروضة من ${it.name}`}
-                              className="h-9 w-24 text-center font-bold tabular-nums"
-                            />
+
+                            {hasVariants ? (
+                              <div className="flex h-10 min-w-16 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 px-3 text-sm font-black tabular-nums text-emerald-700 dark:text-emerald-400">
+                                {num(it.warehouseQty)}
+                              </div>
+                            ) : (
+                              <div className="flex shrink-0 flex-col items-center gap-1">
+                                <div className="flex items-center overflow-hidden rounded-lg border bg-background">
+                                  <button
+                                    type="button"
+                                    aria-label="زوّد"
+                                    onClick={() => setQty(value + 1)}
+                                    disabled={value >= it.warehouseQty}
+                                    className="flex size-9 items-center justify-center text-lg font-black hover:bg-muted disabled:opacity-30"
+                                  >
+                                    +
+                                  </button>
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min={0}
+                                    max={it.warehouseQty}
+                                    step={1}
+                                    value={String(value)}
+                                    onFocus={(e) => e.currentTarget.select()}
+                                    onChange={(e) => setQty(Number(e.target.value) || 0)}
+                                    aria-label={`الكمية المعروضة من ${it.name}`}
+                                    className="h-9 w-14 border-x bg-transparent text-center text-base font-black tabular-nums outline-none focus:bg-brand-600/5 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    aria-label="قلّل"
+                                    onClick={() => setQty(value - 1)}
+                                    disabled={value <= 0}
+                                    className="flex size-9 items-center justify-center text-lg font-black hover:bg-muted disabled:opacity-30"
+                                  >
+                                    −
+                                  </button>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setQty(isAll ? 0 : it.warehouseQty)}
+                                  className="text-[11px] font-bold text-brand-600 hover:underline"
+                                >
+                                  {isAll ? 'صفّر' : 'الكل'}
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
+                        )
+                      })}
+                    </div>
                     <Button className="w-full" size="lg" disabled={busy || openSelectedPieces <= 0} onClick={openSeason}>
                       <PackageOpen className="size-4" />
                       إرجاع {num(openSelectedPieces)} قطعة للعرض

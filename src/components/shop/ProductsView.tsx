@@ -64,7 +64,7 @@ import { ProductUnitsDialog } from './ProductUnitsDialog'
 import { ProductVariantsDialog } from './ProductVariantsDialog'
 import { CollectionDiscountDialog } from './CollectionDiscountDialog'
 import { SeasonWizard } from './SeasonWizard'
-import { Package, Percent, Warehouse, Snowflake, Sun, PackageOpen } from 'lucide-react'
+import { Package, Percent, Warehouse, Snowflake, Sun, PackageOpen, Lock, RotateCcw } from 'lucide-react'
 import { num } from './inventory/shared'
 import { Barcode } from './Barcode'
 import { NoBarcode } from './NoBarcode'
@@ -1011,128 +1011,200 @@ export function ProductsView() {
         </div>
       </div>
 
-      {/* 👕 شريط المواسم — فاشون فقط: 🧠 بانر ذكي + فلتر الموقع + فلتر الموسم */}
-      {isFashion && (seasonState?.closedSeasons.length ?? 0) > 0 && (
-        <div className="space-y-2">
-          {seasonState!.closedSeasons.map((cs) => {
-            const stat = seasonState!.seasons[cs] ?? { products: 0, pieces: 0, value: 0 }
-            const isSummer = cs === 'SUMMER'
-            const Icon = isSummer ? Sun : Snowflake
-            const bothClosed = seasonState!.closedSeasons.length === 2
-            const openLabel = bothClosed
-              ? 'العرض الافتراضي على «طوال السنة» بس — وكل المواسم الموسمية في المخزن'
-              : isSummer
-                ? 'العرض الافتراضي بقى على الشتوي و«طوال السنة» بس'
-                : 'العرض الافتراضي بقى على الصيفي و«طوال السنة» بس'
-            return (
-              <div
-                key={cs}
-                className={cn(
-                  'flex flex-wrap items-center gap-2 rounded-2xl border p-2.5',
-                  isSummer ? 'border-amber-500/30 bg-amber-500/[0.06]' : 'border-sky-500/30 bg-sky-500/[0.06]',
-                )}
-              >
-                <span
+      {/* 👕 شريط المواسم — فاشون فقط: كارت واحد موحّد = حالة المواسم المقفولة (فوق) + فلاتر الموقع والموسم (تحت) */}
+      {isFashion && (() => {
+        const closed = seasonState?.closedSeasons ?? []
+        const warehousePieces = closed.reduce((sum, cs) => sum + (seasonState?.seasons[cs]?.pieces ?? 0), 0)
+        const defaultSeason = closed.length > 0 ? 'active' : 'all'
+        const isDirty = seasonFilter !== defaultSeason || locFilter !== 'all'
+        const bothClosed = closed.length === 2
+        const segBtn = (active: boolean) =>
+          cn(
+            'flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold transition-all',
+            active
+              ? 'bg-foreground text-background shadow-sm'
+              : 'text-muted-foreground hover:bg-background hover:text-foreground'
+          )
+        return (
+          <section
+            aria-label="المواسم والمخزن الداخلي"
+            className="overflow-hidden rounded-2xl border bg-card shadow-sm"
+          >
+            {/* ── حالة المواسم المقفولة ── */}
+            {closed.map((cs) => {
+              const stat = seasonState!.seasons[cs] ?? { products: 0, pieces: 0, value: 0 }
+              const isSummer = cs === 'SUMMER'
+              const Icon = isSummer ? Sun : Snowflake
+              const shown = bothClosed
+                ? 'المعروض: طوال السنة بس'
+                : isSummer
+                  ? 'المعروض: شتوي + طوال السنة'
+                  : 'المعروض: صيفي + طوال السنة'
+              return (
+                <div
+                  key={cs}
                   className={cn(
-                    'flex size-8 shrink-0 items-center justify-center rounded-lg',
-                    isSummer ? 'bg-amber-500/15 text-amber-600' : 'bg-sky-500/15 text-sky-600',
+                    'relative flex flex-wrap items-center gap-x-3 gap-y-2 border-b py-3 pe-3 ps-4',
+                    isSummer
+                      ? 'bg-gradient-to-l from-transparent to-amber-500/[0.07]'
+                      : 'bg-gradient-to-l from-transparent to-sky-500/[0.07]'
                   )}
                 >
-                  <Icon className="size-4" />
-                </span>
-                <p className="min-w-0 flex-1 text-xs font-bold leading-5">
-                  موسم {isSummer ? 'الصيف مقفول' : 'الشتاء مقفول'} — {openLabel}
-                  <span className="block text-[11px] font-medium text-muted-foreground">
-                    {num(stat.pieces)} قطعة نايمة في المخزن الداخلي بقيمة {formatCurrency(Math.round(stat.value))} بالتكلفة
+                  <span
+                    aria-hidden
+                    className={cn('absolute inset-y-0 start-0 w-1', isSummer ? 'bg-amber-500' : 'bg-sky-500')}
+                  />
+                  <span
+                    className={cn(
+                      'flex size-10 shrink-0 items-center justify-center rounded-xl',
+                      isSummer ? 'bg-amber-500/15 text-amber-600' : 'bg-sky-500/15 text-sky-600'
+                    )}
+                  >
+                    <Icon className="size-5" />
                   </span>
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 shrink-0 text-xs"
-                  onClick={() => {
-                    seasonTouchedRef.current = true
-                    setSeasonFilter(cs)
-                  }}
-                >
-                  عرض أصنافه
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 shrink-0 text-xs"
-                  onClick={() => {
-                    setSeasonWizardTab('open')
-                    setSeasonOpen(true)
-                  }}
-                >
-                  <PackageOpen className="size-3.5" />
-                  فتح الموسم
-                </Button>
+                  <div className="min-w-0 flex-1 basis-56 space-y-1">
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-extrabold">
+                      <Lock className="size-3.5 text-muted-foreground" />
+                      موسم {isSummer ? 'الصيف' : 'الشتاء'} مقفول
+                      <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-bold text-muted-foreground">
+                        {shown}
+                      </span>
+                    </p>
+                    <p className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
+                      <span className="rounded-md bg-background px-1.5 py-0.5 ring-1 ring-border">
+                        <b className="tabular-nums text-foreground">{num(stat.pieces)}</b> قطعة نايمة
+                      </span>
+                      <span className="rounded-md bg-background px-1.5 py-0.5 ring-1 ring-border">
+                        <b className="tabular-nums text-foreground">{num(stat.products)}</b> صنف
+                      </span>
+                      <span className="rounded-md bg-background px-1.5 py-0.5 ring-1 ring-border">
+                        <b className="tabular-nums text-foreground">{formatCurrency(Math.round(stat.value))}</b> بالتكلفة
+                      </span>
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs font-bold"
+                      onClick={() => {
+                        seasonTouchedRef.current = true
+                        setSeasonFilter(cs)
+                      }}
+                    >
+                      عرض أصنافه
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-8 gap-1.5 text-xs font-bold"
+                      onClick={() => {
+                        setSeasonWizardTab('open')
+                        setSeasonOpen(true)
+                      }}
+                    >
+                      <PackageOpen className="size-3.5" />
+                      فتح الموسم
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* ── فلاتر الموقع والموسم ── */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 bg-muted/30 p-2.5">
+              <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <span className="hidden shrink-0 items-center gap-1 text-[11px] font-extrabold text-muted-foreground md:flex">
+                  <Warehouse className="size-3.5" />
+                  الموقع
+                </span>
+                <div role="group" aria-label="الموقع" className="flex shrink-0 rounded-xl bg-muted/70 p-1">
+                  {(
+                    [
+                      ['all', 'الكل'],
+                      ['warehouse', 'في المخزن الداخلي'],
+                    ] as const
+                  ).map(([v, label]) => (
+                    <button
+                      key={v}
+                      type="button"
+                      aria-pressed={locFilter === v}
+                      onClick={() => setLocFilter(v)}
+                      className={segBtn(locFilter === v)}
+                    >
+                      {label}
+                      {v === 'warehouse' && warehousePieces > 0 && (
+                        <span
+                          className={cn(
+                            'rounded-full px-1.5 text-[10px] font-black tabular-nums',
+                            locFilter === v ? 'bg-background/20' : 'bg-foreground/10'
+                          )}
+                        >
+                          {num(warehousePieces)}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
-            )
-          })}
-        </div>
-      )}
-      {isFashion && (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/[0.04] p-2">
-          <span className="flex items-center gap-1.5 px-1 text-xs font-extrabold text-amber-700 dark:text-amber-400">
-            <Warehouse className="size-3.5" />
-            الموقع والمواسم
-          </span>
-          <div role="group" aria-label="الموقع" className="flex rounded-xl bg-muted/60 p-1">
-            {(
-              [
-                ['all', 'الكل'],
-                ['warehouse', 'في المخزن الداخلي'],
-              ] as const
-            ).map(([v, label]) => (
-              <button
-                key={v}
-                type="button"
-                aria-pressed={locFilter === v}
-                onClick={() => setLocFilter(v)}
-                className={cn(
-                  'h-7 rounded-lg px-2.5 text-xs font-bold transition-colors',
-                  locFilter === v ? 'bg-foreground text-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div role="group" aria-label="الموسم" className="flex flex-wrap rounded-xl bg-muted/60 p-1">
-            {(
-              [
-                ['active', 'الشغال الآن'],
-                ['all', 'كل المواسم'],
-                ['SUMMER', 'صيفي'],
-                ['WINTER', 'شتوي'],
-                ['ALL_YEAR', 'طوال السنة'],
-              ] as const
-            ).map(([v, label]) => (
-              <button
-                key={v}
-                type="button"
-                aria-pressed={seasonFilter === v}
-                onClick={() => {
-                  seasonTouchedRef.current = true
-                  setSeasonFilter(v)
-                }}
-                className={cn(
-                  'flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-colors',
-                  seasonFilter === v ? 'bg-foreground text-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                {v === 'active' && (seasonState?.closedSeasons.length ?? 0) > 0 && (
-                  <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
-                )}
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+
+              <span aria-hidden className="hidden h-6 w-px bg-border lg:block" />
+
+              <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <span className="hidden shrink-0 items-center gap-1 text-[11px] font-extrabold text-muted-foreground md:flex">
+                  <Sun className="size-3.5" />
+                  الموسم
+                </span>
+                <div role="group" aria-label="الموسم" className="flex shrink-0 rounded-xl bg-muted/70 p-1">
+                  {(
+                    [
+                      ['active', 'الشغال الآن'],
+                      ['all', 'كل المواسم'],
+                      ['SUMMER', 'صيفي'],
+                      ['WINTER', 'شتوي'],
+                      ['ALL_YEAR', 'طوال السنة'],
+                    ] as const
+                  ).map(([v, label]) => {
+                    const isClosed = (v === 'SUMMER' || v === 'WINTER') && closed.includes(v)
+                    return (
+                      <button
+                        key={v}
+                        type="button"
+                        aria-pressed={seasonFilter === v}
+                        onClick={() => {
+                          seasonTouchedRef.current = true
+                          setSeasonFilter(v)
+                        }}
+                        className={segBtn(seasonFilter === v)}
+                      >
+                        {v === 'active' && closed.length > 0 && (
+                          <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+                        )}
+                        {label}
+                        {isClosed && <Lock aria-label="مقفول" className="size-3 opacity-60" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {isDirty && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    seasonTouchedRef.current = false
+                    setSeasonFilter(defaultSeason)
+                    setLocFilter('all')
+                  }}
+                  className="ms-auto flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                >
+                  <RotateCcw className="size-3.5" />
+                  رجّع الافتراضي
+                </button>
+              )}
+            </div>
+          </section>
+        )
+      })()}
 
       {/* ═══ المحتوى ═══ */}
       {refreshing && !loading && (
