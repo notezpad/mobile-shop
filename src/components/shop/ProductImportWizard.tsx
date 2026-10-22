@@ -25,7 +25,10 @@ import {
   CircleSlash,
   Download,
   FileSpreadsheet,
+  ChevronLeft,
+  ChevronRight,
   Loader2,
+  Search,
   ShieldCheck,
   Sparkles,
   Table2,
@@ -140,6 +143,9 @@ interface Props {
   onImported: () => void
 }
 
+/** عدد صفوف المراجعة في الصفحة الواحدة */
+const REVIEW_PAGE_SIZE = 50
+
 export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
   const [step, setStep] = React.useState(1)
   const [file, setFile] = React.useState<File | null>(null)
@@ -149,6 +155,10 @@ export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
   const [remapping, setRemapping] = React.useState(false)
   const [mergeMode, setMergeMode] = React.useState<MergeMode>('add')
   const [filter, setFilter] = React.useState<'all' | 'ok' | 'fixed' | 'warn' | 'error'>('all')
+  // 📄 مراجعة الصفوف: بحث + ترقيم صفحات (الشيت ممكن يوصل 2000 صف — مش هنرسمهم كلهم)
+  const [q, setQ] = React.useState('')
+  const [page, setPage] = React.useState(0)
+  const tableScrollRef = React.useRef<HTMLDivElement>(null)
   const [committing, setCommitting] = React.useState(false)
   const [commitResult, setCommitResult] = React.useState<CommitResponse | null>(null)
   const [dragging, setDragging] = React.useState(false)
@@ -162,9 +172,32 @@ export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
     return Math.max(0, stats.totalRows - stats.errors - stats.blank - stats.duplicatesInFile)
   }, [stats])
 
+  const filteredRows = React.useMemo(() => {
+    const rows = analysis?.validation.rows ?? []
+    const needle = q.trim().toLowerCase()
+    return rows.filter((r) => {
+      if (filter !== 'all' && r.status !== filter) return false
+      if (!needle) return true
+      return (
+        (r.name ?? '').toLowerCase().includes(needle) ||
+        (r.barcode ?? '').toLowerCase().includes(needle) ||
+        String(r.idx) === needle
+      )
+    })
+  }, [analysis, filter, q])
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / REVIEW_PAGE_SIZE))
+  const safePage = Math.min(page, totalPages - 1)
+  const pageRows = React.useMemo(
+    () => filteredRows.slice(safePage * REVIEW_PAGE_SIZE, (safePage + 1) * REVIEW_PAGE_SIZE),
+    [filteredRows, safePage],
+  )
+  // أي تغيير في الفلتر/البحث/التحليل يرجّع لأول صفحة، وتغيير الصفحة يرجّع السكرول لفوق
+  React.useEffect(() => { setPage(0) }, [filter, q, analysis])
+  React.useEffect(() => { tableScrollRef.current?.scrollTo({ top: 0 }) }, [safePage, filter, q])
+
   const reset = React.useCallback(() => {
     setStep(1); setFile(null); setBusy(false); setError(null); setAnalysis(null)
-    setRemapping(false); setMergeMode('add'); setFilter('all'); setCommitting(false)
+    setRemapping(false); setMergeMode('add'); setFilter('all'); setQ(''); setPage(0); setCommitting(false)
     setCommitResult(null); setDragging(false)
     idemKeyRef.current = ''
   }, [])
@@ -292,7 +325,17 @@ export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={close}>
-      <DialogContent className="flex max-h-[92vh] w-[min(96vw,880px)] max-w-[880px] flex-col sm:max-w-[880px] overflow-hidden p-0 sm:rounded-2xl">
+      <DialogContent
+        className={cn(
+          'flex max-h-[92vh] flex-col overflow-hidden p-0 transition-[width,max-width] duration-200 sm:rounded-2xl',
+          // المراجعة: ارتفاع ثابت → الجدول بياخد المتاح وسياسة الدمج تفضل ظاهرة تحته دايمًا
+          step === 3 && 'h-[min(92vh,780px)]',
+          // الخطوتان 1 و4 (رفع/نتيجة) محتواهم خفيف → عرض متوسط؛ 2 و3 فيهم جداول → عرض أكبر
+          step === 2 || step === 3
+            ? 'w-[min(96vw,880px)] max-w-[880px] sm:max-w-[880px]'
+            : 'w-[min(96vw,680px)] max-w-[680px] sm:max-w-[680px]',
+        )}
+      >
         {/* الترويسة */}
         <div className="flex items-center gap-3 border-b bg-gradient-to-l from-violet-50 to-sky-50 px-4 py-3 sm:px-5">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-md shadow-violet-600/30">
@@ -343,7 +386,7 @@ export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
         </div>
 
         {/* المحتوى */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+        <div className={cn('min-h-0 flex-1 px-4 py-4 sm:px-5', step === 3 ? 'flex flex-col overflow-hidden' : 'overflow-y-auto')}>
           {error && (
             <div className="mb-3 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -533,9 +576,9 @@ export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
 
           {/* ═══ ③ المراجعة ═══ */}
           {step === 3 && analysis && (
-            <div className="space-y-3">
-              {/* عدادات الحالة */}
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <div className="flex min-h-0 flex-1 flex-col gap-3">
+              {/* عدادات الحالة (بتشتغل كفلاتر) */}
+              <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-5">
                 <StatusCard n={stats!.ok} label="سليم" cls="text-emerald-700 bg-emerald-50 border-emerald-200" onClick={() => setFilter('ok')} active={filter === 'ok'} />
                 <StatusCard n={stats!.fixed} label="هيتصلحوا تلقائياً" cls="text-amber-700 bg-amber-50 border-amber-200" onClick={() => setFilter('fixed')} active={filter === 'fixed'} />
                 <StatusCard n={stats!.warn} label="تنبيهات" cls="text-orange-700 bg-orange-50 border-orange-200" onClick={() => setFilter('warn')} active={filter === 'warn'} />
@@ -545,22 +588,62 @@ export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
 
               {/* تحذيرات عامة */}
               {stats!.existsInDb > 0 && (
-                <p className="rounded-lg bg-sky-50 px-3 py-2 text-[13px] text-sky-900">
+                <p className="shrink-0 rounded-lg bg-sky-50 px-3 py-1.5 text-[12px] leading-5 text-sky-900">
                   <b>{stats!.existsInDb}</b> منتج موجودين أصلًا في نظامك (بالباركود أو الاسم) — اختار تحت هنعمل معاهم إيه. ولو في منتهم موقوف، هيرجع يشتغل تلقائيًا عند الدمج.
                 </p>
               )}
               {stats!.duplicatesInFile > 0 && (
-                <p className="rounded-lg bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+                <p className="shrink-0 rounded-lg bg-amber-50 px-3 py-1.5 text-[12px] leading-5 text-amber-900">
                   <b>{stats!.duplicatesInFile}</b> صفوف مكررة داخل الملف — كمياتهم هتتجمع تلقائياً مع أول صف لنفس المنتج.
                 </p>
               )}
 
-              {/* جدول الصفوف */}
-              <div className="max-h-[40vh] overflow-y-auto rounded-xl border">
+              {/* شريط البحث + الترقيم */}
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <div className="relative min-w-40 flex-1">
+                  <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    placeholder="ابحث بالاسم أو الباركود أو رقم الصف…"
+                    aria-label="بحث في صفوف المراجعة"
+                    className="h-9 w-full rounded-lg border bg-background ps-8 pe-3 text-[13px] outline-none transition-shadow placeholder:text-muted-foreground focus:ring-2 focus:ring-violet-400/50"
+                  />
+                </div>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {filteredRows.length === 0
+                    ? 'لا توجد صفوف'
+                    : `${safePage * REVIEW_PAGE_SIZE + 1}–${Math.min((safePage + 1) * REVIEW_PAGE_SIZE, filteredRows.length)} من ${filteredRows.length}`}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setPage(safePage - 1)}
+                    disabled={safePage <= 0}
+                    aria-label="الصفحة السابقة"
+                    className="flex size-9 items-center justify-center rounded-lg border bg-background hover:bg-muted disabled:opacity-40"
+                  >
+                    <ChevronRight className="size-4" />
+                  </button>
+                  <span className="min-w-14 text-center text-xs font-bold tabular-nums">{safePage + 1} / {totalPages}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPage(safePage + 1)}
+                    disabled={safePage >= totalPages - 1}
+                    aria-label="الصفحة التالية"
+                    className="flex size-9 items-center justify-center rounded-lg border bg-background hover:bg-muted disabled:opacity-40"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* جدول الصفوف: بياخد المساحة المتاحة ويسكرول لوحده */}
+              <div ref={tableScrollRef} className="min-h-[140px] flex-1 overflow-y-auto overscroll-contain rounded-xl border">
                 <table className="w-full text-[13px]">
                   <thead className="sticky top-0 z-10 bg-muted shadow-[0_1px_0_0_var(--border)]">
                     <tr className="text-start text-xs text-muted-foreground">
-                      <th className="px-2 py-2 text-start font-bold">#</th>
+                      <th className="w-12 px-2 py-2 text-start font-bold">#</th>
                       <th className="px-2 py-2 text-start font-bold">المنتج</th>
                       <th className="px-2 py-2 text-start font-bold">الكمية</th>
                       <th className="hidden px-2 py-2 text-start font-bold sm:table-cell">التكلفة</th>
@@ -569,23 +652,21 @@ export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {analysis.validation.rows
-                      .filter((r) => filter === 'all' ? true : r.status === filter)
-                      .slice(0, 150)
-                      .map((r) => <ReviewRow key={r.idx} row={r} />)}
+                    {pageRows.map((r) => <ReviewRow key={r.idx} row={r} />)}
+                    {pageRows.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                          مفيش صفوف مطابقة — غيّر الفلتر أو البحث
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
-                {analysis.validation.rows.length > 150 && (
-                  <p className="border-t bg-muted/30 px-3 py-1.5 text-center text-xs text-muted-foreground">
-                    عرض أول 150 صف — الباقي بيتفحص بنفس الطريقة عند التنفيذ
-                  </p>
-                )}
               </div>
 
-              {/* سياسة الموجود */}
-              <div className="rounded-xl border bg-card p-3">
-                <p className="mb-2 text-[13px] font-bold">لو المنتج موجود أصلًا في النظام (بالباركود أو الاسم):</p>
-                <p className="mb-2 text-[11px] text-muted-foreground">المنتج الموقوف اللي هيندمج بيرجع يشتغل تلقائيًا — علشان الكمية متروحش لمنتج مخفي.</p>
+              {/* سياسة الموجود — ثابتة تحت الجدول وظاهرة دايمًا */}
+              <div className="shrink-0 rounded-xl border bg-card p-2.5">
+                <p className="mb-1.5 text-[13px] font-bold">لو المنتج موجود أصلًا في النظام (بالباركود أو الاسم):</p>
                 <RadioGroup value={mergeMode} onValueChange={(v) => { setMergeMode(v as MergeMode); scheduleRevalidate(undefined, v as MergeMode) }} className="grid gap-2 sm:grid-cols-3">
                   <MergeOption value="add" title="دمج الكمية" desc="كمية الشيت هتتضاف على المخزون الحالي" recommended />
                   <MergeOption value="update" title="دمج + تحديث سعر" desc="الكمية تتضاف + السعر والتكلفة يتحدثوا من الشيت" />
@@ -720,7 +801,7 @@ function MergeOption({ value, title, desc, recommended }: { value: string; title
   )
 }
 
-function ReviewRow({ row }: { row: ParsedRow }) {
+const ReviewRow = React.memo(function ReviewRow({ row }: { row: ParsedRow }) {
   const meta = STATUS_META[row.status] ?? STATUS_META.blank
   const notes = [
     ...row.errors.map((e) => ({ text: e, cls: 'text-red-700' })),
@@ -750,4 +831,4 @@ function ReviewRow({ row }: { row: ParsedRow }) {
       </td>
     </tr>
   )
-}
+})
