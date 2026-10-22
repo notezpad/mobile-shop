@@ -180,7 +180,20 @@ export function ProductsView() {
   // قفلت الصيف؟ العرض الافتراضي يبقى على الشتوي و«طوال السنة» بس،
   // والتاجر يقدر يختار أي موسم بإيده من الشيبس (يدوي بيتغلب على الذكي).
   const isFashion = useShopStore((s) => s.plan.businessType) === 'fashion'
-  const [seasonFilter, setSeasonFilter] = React.useState<'active' | 'all' | 'SUMMER' | 'WINTER' | 'ALL_YEAR'>('all')
+  // 🧠 هل الباقة الحقيقية وصلت من السيرفر؟ (DEFAULT_PLAN بيقول 'electronics'
+  // لأول لحظات الـ refresh — من غير البوابة دي منطق المواسم بيشتغل بالغلط
+  // كإلكترونيات ويفسد الكاش والفلتر قبل ما بيانات المحل توصل)
+  const planLoaded = useShopStore((s) => s.planLoaded)
+  // 🧠 الكاش المحفوظ في المتصفح: آخر حالة مواسم مقفولة معروفة — بنبدأ بيه
+  // على طول (بدون انتظار نداء الحالة) عشان أول طلب منتجات بعد الـ refresh
+  // يشتغل بـ view=active من الثانية صفر: مفيش «كل المنتجات يظهروا
+  // ثواني ويتصفوا بعدين». (السيرفر بيفضل هو مصدر الحقيقة — ولو الكاش
+  // كان قديم، تصحيح الانحراف في loadSeasonState بيرجّع الأمور لصحها.)
+  const seasonClosedCache = useShopStore((s) => s.seasonClosedCache)
+  const setSeasonClosedCache = useShopStore((s) => s.setSeasonClosedCache)
+  const [seasonFilter, setSeasonFilter] = React.useState<'active' | 'all' | 'SUMMER' | 'WINTER' | 'ALL_YEAR'>(
+    () => (seasonClosedCache.closedSeasons.length > 0 ? 'active' : 'all'),
+  )
   const seasonTouchedRef = React.useRef(false)
   const seasonFilterRef = React.useRef(seasonFilter)
   seasonFilterRef.current = seasonFilter
@@ -253,23 +266,43 @@ export function ProductsView() {
     }
   }, [])
 
-  // 🧠 حالة المواسم — بتغذي الفلتر الذكي والبانر (فاشون فقط)
+  // 🧠 حالة المواسم — بتغذي الفلتر الذكي والبانر (فاشون فقط) + بتحدّث الكاش
   const loadSeasonState = React.useCallback(async () => {
-    if (!isFashion) return
+    // ⏳ مستنيين الباقة الحقيقية الأول — ممنوع أي منطق مواسم وقت الـ boot
+    if (!planLoaded) return
+    if (!isFashion) {
+      // مش فاشون؟ الفلتر الذكي مالوش لازمة — نظف أي بقايا فلتر من كاش قديم
+      // (جلسة محل فاشون على نفس المتصفح مثلًا) وفضّي الكاش للجلسة الجاية
+      if (seasonFilterRef.current === 'active' && !seasonTouchedRef.current) {
+        setSeasonFilter('all')
+      }
+      setSeasonClosedCache(useShopStore.getState().user?.tenantId ?? null, [])
+      return
+    }
     try {
       const res = await api<{
         closedSeasons: ('SUMMER' | 'WINTER')[]
         seasons: Record<string, { products: number; pieces: number; value: number }>
       }>('/api/products/seasonal?mode=state')
       setSeasonState(res)
-      // الفلتر الذكي: فيه موسم مقفول والتاجر مختارش فلتر يدوي؟ اعرض الشغال بس
-      if ((res.closedSeasons?.length ?? 0) > 0 && seasonFilterRef.current === 'all' && !seasonTouchedRef.current) {
+      // 💾 احفظ الحالة في المتصفح — الـ refresh الجاي يبدأ صح من أول طلب
+      setSeasonClosedCache(
+        useShopStore.getState().user?.tenantId ?? null,
+        res.closedSeasons ?? [],
+      )
+      // تصحيح الانحراف: الكاش المحفوظ ممكن يكون أقدم من الواقع
+      // (اتقفل/اتفتح موسم من جهاز تاني مثلًا) — بس لو التاجر ملمسش الشيبس بإيده
+      if (seasonTouchedRef.current) return
+      const fresh = res.closedSeasons ?? []
+      if (fresh.length > 0 && seasonFilterRef.current === 'all') {
         setSeasonFilter('active')
+      } else if (fresh.length === 0 && seasonFilterRef.current === 'active') {
+        setSeasonFilter('all')
       }
     } catch {
       /* ignore — البانر مجرد تحسين، مش شرط للعمل */
     }
-  }, [isFashion])
+  }, [isFashion, planLoaded, setSeasonClosedCache])
 
   React.useEffect(() => {
     loadSeasonState()

@@ -156,6 +156,13 @@ interface ShopState {
   setUser: (u: AuthUser | null) => void
   plan: PlanContext
   setPlan: (p: Partial<PlanContext>) => void
+  /**
+   * 🧠 هل وصلت بيانات الباقة الحقيقية من السيرفر بعد آخر boot؟
+   * DEFAULT_PLAN بيقول 'electronics' — فقبل ما /api/subscription يرجع،
+   * أي منطق بيعتمد على businessType لازم يستنى (غير كده باقات الملابس
+   * بتتتعامل كإلكترونيات لأول لحظات الـ refresh وتفسد الفلتر الذكي).
+   */
+  planLoaded: boolean
   /** Shortcut لتحديث enabledModules فقط داخل plan بدون لمس باقي الحقول. */
   setEnabledModules: (modules: string[]) => void
   /** Shortcut لتحديث capabilities فقط داخل plan بدون لمس باقي الحقول. */
@@ -177,6 +184,17 @@ interface ShopState {
   transfersDraft: TransfersDraft
   setTransfersDraft: (d: Partial<TransfersDraft>) => void
   clearTransfersDraft: () => void
+
+  // ── Season closed cache (fashion) ──
+  /**
+   * 👕 آخر حالة مواسم مقفولة معروفة للمحل (من /api/products/seasonal).
+   * بتتحفظ في المتصفح عشان أول تحميل لصفحة المنتجات بعد الـ refresh يبعت
+   * view=active من أول طلب — بدل ما كل المنتجات يظهروا ثواني في البداية
+   * ويتصفوا لما حالة المواسم توصل (وميض التحميل).
+   * (tenantId جواه للمطابقة — نفس نمط الـ drafts)
+   */
+  seasonClosedCache: { tenantId: string | null; closedSeasons: ('SUMMER' | 'WINTER')[] }
+  setSeasonClosedCache: (tenantId: string | null, closedSeasons: ('SUMMER' | 'WINTER')[]) => void
 }
 
 const DEFAULT_SUBSCRIPTION: SubscriptionState = {
@@ -205,6 +223,11 @@ const DEFAULT_TRANSFERS_DRAFT: TransfersDraft = {
   updatedAt: null,
 }
 
+const DEFAULT_SEASON_CLOSED_CACHE: { tenantId: string | null; closedSeasons: ('SUMMER' | 'WINTER')[] } = {
+  tenantId: null,
+  closedSeasons: [],
+}
+
 export const useShopStore = create<ShopState>()(
   persist(
     (set) => ({
@@ -217,7 +240,8 @@ export const useShopStore = create<ShopState>()(
       user: null,
       setUser: (u) => set({ user: u }),
       plan: DEFAULT_PLAN,
-      setPlan: (p) => set((s) => ({ plan: { ...s.plan, ...p } })),
+      planLoaded: false,
+      setPlan: (p) => set((s) => ({ plan: { ...s.plan, ...p }, planLoaded: true })),
       setEnabledModules: (modules) =>
         set((s) => ({ plan: { ...s.plan, enabledModules: modules } })),
       setCapabilities: (capabilities) =>
@@ -255,6 +279,7 @@ export const useShopStore = create<ShopState>()(
           user: null,
           activeView: 'dashboard',
           plan: DEFAULT_PLAN,
+          planLoaded: false,
           subscription: DEFAULT_SUBSCRIPTION,
         })
         // 🛡️ PWA (2026-10-07): الخروج لازم يمسح نسخة السيشن المحفوظة
@@ -283,15 +308,21 @@ export const useShopStore = create<ShopState>()(
           transfersDraft: { ...s.transfersDraft, ...d, updatedAt: Date.now() },
         })),
       clearTransfersDraft: () => set({ transfersDraft: DEFAULT_TRANSFERS_DRAFT }),
+
+      // ── Season closed cache (persisted) ──
+      seasonClosedCache: DEFAULT_SEASON_CLOSED_CACHE,
+      setSeasonClosedCache: (tenantId, closedSeasons) =>
+        set({ seasonClosedCache: { tenantId, closedSeasons } }),
     }),
     {
       name: 'shop-store-v1', // localStorage key
       storage: createJSONStorage(() => localStorage),
-      // 🛡️ Only persist the drafts — not the user session, subscription,
-      // or plan (those come fresh from the API on every page load).
+      // 🛡️ Only persist the drafts + season cache — not the user session,
+      // subscription, or plan (those come fresh from the API on every page load).
       partialize: (state) => ({
         stocktakeDraft: state.stocktakeDraft,
         transfersDraft: state.transfersDraft,
+        seasonClosedCache: state.seasonClosedCache,
       }),
       version: 1,
     },
