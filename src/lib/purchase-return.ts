@@ -267,11 +267,12 @@ export async function performPurchaseReturn(
         // نفس الـ variant (شرط ذري: مايروحش تحت الصفر)، وكمية المنتج بتتحسب
         // من مجموع الـ variants — مش بنخصم من Product.quantity مباشرة وإلا
         // أول مزامنة هتمسح الخصم.
-        const vOut = await tx.productVariant.updateMany({
-          where: { id: it.variantId, productId: it.productId, quantity: { gte: qty } },
-          data: { quantity: { decrement: qty } },
-        })
-        if (vOut.count !== 1) {
+        const vOut = await tx.$executeRaw`
+          UPDATE "ProductVariant"
+          SET "quantity" = "quantity" - ${qty},
+              "displayQty" = GREATEST(0, "displayQty" - LEAST(${qty}, "displayQty"))
+          WHERE "id" = ${it.variantId} AND "productId" = ${it.productId} AND "quantity" >= ${qty}`
+        if (vOut !== 1) {
           const v2 = await tx.productVariant.findUnique({
             where: { id: it.variantId },
             select: { quantity: true },
@@ -283,11 +284,12 @@ export async function performPurchaseReturn(
         }
         await syncProductQuantityFromVariants(tx, it.productId)
       } else {
-        const out = await tx.product.updateMany({
-          where: { id: it.productId, tenantId, quantity: { gte: qty } },
-          data: { quantity: { decrement: qty } },
-        })
-        if (out.count !== 1) {
+        const out = await tx.$executeRaw`
+          UPDATE "Product"
+          SET "quantity" = "quantity" - ${qty},
+              "displayQty" = GREATEST(0, "displayQty" - LEAST(${qty}, "displayQty"))
+          WHERE "id" = ${it.productId} AND "tenantId" = ${tenantId} AND "quantity" >= ${qty}`
+        if (out !== 1) {
           const cur2 = await tx.product.findUnique({
             where: { id: it.productId },
             select: { quantity: true },

@@ -35,6 +35,10 @@ export interface InventoryStats {
   pendingTransfers: number
   draftStocktakes: number
   pendingTotal: number
+  // 👕 المخزن الداخلي (فاشون): القطع النايمة وقيمتها + عدد الأصناف المتخزنة
+  warehousePieces: number
+  warehouseValue: number | null
+  warehouseItems: number
 }
 
 /**
@@ -235,6 +239,12 @@ export function useInventoryData(): InventoryData {
     const totalValuePrice = products.reduce((s, p) => s + p.quantity * p.price, 0)
     const pendingTransfers = transfers.filter((t) => t.status === 'pending').length
     const draftStocktakes = stocktakes.filter((s) => s.status === 'draft').length
+    // 👕 المخزن الداخلي: اللي معروضه أقل من إجماليه (الباقي في الكراتين)
+    const stored = products.filter((p) => (p.displayQty ?? p.quantity) < p.quantity)
+    const warehousePieces = stored.reduce((s, p) => s + (p.quantity - (p.displayQty ?? p.quantity)), 0)
+    const warehouseValue = canSeeCost
+      ? stored.reduce((s, p) => s + (p.quantity - (p.displayQty ?? p.quantity)) * (p.cost ?? 0), 0)
+      : null
     return {
       totalItems,
       lowStock,
@@ -248,6 +258,9 @@ export function useInventoryData(): InventoryData {
       pendingTransfers,
       draftStocktakes,
       pendingTotal: pendingTransfers + draftStocktakes,
+      warehousePieces: Math.round(warehousePieces * 1000) / 1000,
+      warehouseValue: warehouseValue === null ? null : Math.round(warehouseValue * 100) / 100,
+      warehouseItems: stored.length,
     }
   }, [products, transfers, stocktakes])
 

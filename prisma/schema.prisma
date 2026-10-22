@@ -251,6 +251,13 @@ model Product {
   // Unit-Based Dynamic Pricing: per-product override of the tenant's default
   // retail margin %. null = fall back to Tenant.defaultRetailMarginPercent.
   retailMarginPercent Float?
+  // 👕 2026-10-22 (المخزن الداخلي — فاشون فقط): تقسيمة الموقع جوّه المنتج نفسه
+  //   الإجمالي (quantity) = المعروض (displayQty) + في المخزن الداخلي (مشتق)
+  // الموسم: ALL_YEAR (افتراضي — مش بيتأثر بإغلاق الموسم) / SUMMER / WINTER.
+  // بتتسجل فقط للمحلات الـ businessType بتاعها 'fashion' (تتقص في الـ API
+  // — نفس أسلوب soldByWeight الغذائي). للحالات كلها: 0 <= displayQty <= quantity.
+  season     String @default("ALL_YEAR")
+  displayQty Float  @default(0)
   imagePath   String?
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -304,6 +311,9 @@ model ProductVariant {
   // 🏬 2026-10-18: فريد جوه المنتج (index) وجوه نفس الفرع (trigger) — migration 20261018
   barcode   String?
   quantity  Int      @default(0)
+  // 👕 2026-10-22 (المخزن الداخلي): الكمية المعروضة من هذا اللون/المقاس —
+  // الباقي (quantity - displayQty) في المخزن الداخلي. 0 <= displayQty <= quantity.
+  displayQty Int     @default(0)
   createdAt DateTime @default(now())
 
   product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -783,7 +793,7 @@ model StockMovement {
   needsReview Boolean   @default(false)
   reviewedAt  DateTime?
   reviewedBy  String?
-  type      String // in | out | adjust | sale | return | transfer_in | transfer_out | stocktake
+  type      String // in | out | adjust | sale | return | transfer_in | transfer_out | stocktake | warehouse_in | warehouse_out
   // 🥬 2026-10-12: Float — حركات بالوزن (بيع 1.65 كيلو / جرد -0.5)
   quantity  Float // signed: + increases, - decreases
   refType   String? // sale | transfer | stocktake | manual

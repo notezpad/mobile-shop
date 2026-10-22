@@ -37,6 +37,7 @@ type VariantRow = {
   color: string | null
   barcode: string | null
   quantity: number
+  displayQty: number
   createdAt: Date
 }
 
@@ -70,7 +71,7 @@ export async function GET(
     if (!prod[0]) return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
 
     const variants = await sql<VariantRow[]>`
-      SELECT "id", "productId", "size", "color", "barcode", "quantity", "createdAt"
+      SELECT "id", "productId", "size", "color", "barcode", "quantity", "displayQty", "createdAt"
       FROM "ProductVariant"
       WHERE "productId" = ${pid}
       ORDER BY "id" ASC`
@@ -135,8 +136,9 @@ async function __POST(
     if (taken) return NextResponse.json({ error: 'الباركود مستخدم بالفعل' }, { status: 400 })
   }
   try {
+    // 👕 الرصيد الافتتاحي للمقاس بيدخل معروضاً بالكامل
     const created = await db.productVariant.create({
-      data: { productId: pid, size, color, barcode, quantity },
+      data: { productId: pid, size, color, barcode, quantity, displayQty: quantity },
     })
     // Keep Product.quantity as the sum of all its variants from here on.
     await syncProductQuantityFromVariants(db, pid)

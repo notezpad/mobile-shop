@@ -6,6 +6,7 @@ import { getPlanContext, requireModuleWritePermission, featureErrorResponse } fr
 import { ensureCategory } from '../route'
 import { isInternalImageUrl } from '@/lib/product-image'
 import { purgeCatalogCaches } from '@/lib/edgeCache'
+import { displayAfterTotalChange, isSeasonValue } from '@/lib/seasonal'
 
 export const dynamic = 'force-dynamic'
 
@@ -133,6 +134,8 @@ export async function PUT(
     // 🥬 2026-10-12: بيع بالوزن — للمحلات الغذائية فقط. أي tenant تاني
     // بيبعت الحقل ده بنفسه؟ بنتجاهله (حماية السيرفر).
     const canSetWeight = planCtxPatch.businessType === 'food'
+    // 👕 2026-10-22: الموسم/المعروض — لباقات الملابس فقط (نفس أسلوب البيع بالوزن)
+    const canSetSeason = planCtxPatch.businessType === 'fashion'
 
     const updated = await db.$transaction(async (tx) => {
       const row = await tx.product.update({
@@ -199,6 +202,21 @@ export async function PUT(
                   : Number(body.retailMarginPercent))
               : existing.retailMarginPercent
             : null,
+          // 👕 الموسم — فاشون فقط، قيم صحيحة بس، وإلا نسيب القديم
+          season: canSetSeason
+            ? body.season !== undefined && isSeasonValue(body.season)
+              ? body.season
+              : existing.season
+            : existing.season,
+          // 👕 المعروض — فاشون فقط وللمنتجات من غير مقاسات (اللي بمقاسات بتتقسم
+          // على مستوى اللون/المقاس من نافذة الألوان والمقاسات وحركات المخزون).
+          // لو الكمية الإجمالية اتغيرت بدون إرسال displayQty: الزيادة تروح للعرض
+          // والنقص من المعروض الأول (0 <= displayQty <= quantity دايمًا).
+          displayQty: canSetSeason
+            ? body.displayQty !== undefined && !qtyChanged
+              ? Math.max(0, Math.min(Number(body.displayQty) || 0, newQty))
+              : displayAfterTotalChange(existing.quantity, existing.displayQty, newQty)
+            : existing.displayQty,
         },
       })
       // 🛡️ 2026-09-30 (X9): تغيير الكمية من شاشة المنتج بيتوثق كحركة 'adjust'

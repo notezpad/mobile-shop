@@ -226,12 +226,14 @@ export async function performSaleReturn(
       }
       // 🛡️ Atomic stock claim for the replacement — no negative stock, no
       // check-then-write race like the old code.
+      // 👕 displayQty: الخصم من المعروض الأول والباقي من المخزن الداخلي (بيعة عادية).
       if (exVariant) {
-        const vOut = await tx.productVariant.updateMany({
-          where: { id: exVariant.id, productId: pid, quantity: { gte: qty } },
-          data: { quantity: { decrement: qty } },
-        })
-        if (vOut.count !== 1) {
+        const vOut = await tx.$executeRaw`
+          UPDATE "ProductVariant"
+          SET "quantity" = "quantity" - ${qty},
+              "displayQty" = GREATEST(0, "displayQty" - LEAST(${qty}, "displayQty"))
+          WHERE "id" = ${exVariant.id} AND "productId" = ${pid} AND "quantity" >= ${qty}`
+        if (vOut !== 1) {
           throw new SaleReturnError(
             `مخزون "${p.name}" (${exLabel}) غير كافي للاستبدال (المطلوب ${qty})`,
             409,
@@ -239,11 +241,12 @@ export async function performSaleReturn(
         }
         await syncProductQuantityFromVariants(tx, pid)
       } else {
-        const out = await tx.product.updateMany({
-          where: { id: pid, tenantId, quantity: { gte: qty } },
-          data: { quantity: { decrement: qty } },
-        })
-        if (out.count !== 1) {
+        const out = await tx.$executeRaw`
+          UPDATE "Product"
+          SET "quantity" = "quantity" - ${qty},
+              "displayQty" = GREATEST(0, "displayQty" - LEAST(${qty}, "displayQty"))
+          WHERE "id" = ${pid} AND "tenantId" = ${tenantId} AND "quantity" >= ${qty}`
+        if (out !== 1) {
           throw new SaleReturnError(
             `مخزون "${p.name}" غير كافي للاستبدال (المطلوب ${qty})`,
             409,
@@ -376,24 +379,30 @@ export async function performSaleReturn(
       if (it.variantId) {
         // Restore the variant's own stock (deductStock decremented it), then
         // re-sync the parent product's aggregate.
+        // 👕 المرتجع بيرجع على الرف (معروض) — زي ما بيخرج من الشنطة للعرض.
         await tx.productVariant.updateMany({
           where: { id: it.variantId, productId: it.productId },
-          data: { quantity: { increment: qty } },
+          data: { quantity: { increment: qty }, displayQty: { increment: qty } },
         })
         const allVariants = await tx.productVariant.findMany({
           where: { productId: it.productId },
-          select: { quantity: true },
+          select: { quantity: true, displayQty: true },
         })
         const variantSum = allVariants.reduce((s, v) => s + v.quantity, 0)
+        const displaySum = allVariants.reduce((s, v) => s + v.displayQty, 0)
         await tx.product.update({
           where: { id: it.productId },
-          data: { quantity: variantSum, ...(costReweight(cur, qty, it.cost) ?? {}) },
+          data: {
+            quantity: variantSum,
+            displayQty: Math.min(displaySum, variantSum),
+            ...(costReweight(cur, qty, it.cost) ?? {}),
+          },
         })
       } else {
         const patch = costReweight(cur, qty, it.cost)
         await tx.product.update({
           where: { id: it.productId },
-          data: { quantity: { increment: qty }, ...(patch ?? {}) },
+          data: { quantity: { increment: qty }, displayQty: { increment: qty }, ...(patch ?? {}) },
         })
       }
     }

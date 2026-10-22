@@ -15,6 +15,8 @@ import {
   MapPin,
   User,
   X,
+  Warehouse,
+  PackageOpen,
   type LucideIcon,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -78,6 +80,9 @@ const TYPE_LABELS: Record<string, string> = {
   transfer_in: 'تحويل وارد',
   transfer_out: 'تحويل صادر',
   stocktake: 'تسوية جرد',
+  // 👕 المواسم — حركة موقع مش حركة مال
+  warehouse_in: 'نقل للمخزن الداخلي',
+  warehouse_out: 'نقل للعرض',
 }
 
 const TYPE_META: Record<string, { icon: LucideIcon; color: string }> = {
@@ -90,6 +95,9 @@ const TYPE_META: Record<string, { icon: LucideIcon; color: string }> = {
   transfer_in: { icon: ArrowLeftRight, color: '#14b8a6' },
   transfer_out: { icon: ArrowLeftRight, color: '#f97316' },
   stocktake: { icon: ClipboardCheck, color: '#6366f1' },
+  // 👕 المواسم — بنفس عيلة التحويلات (موجبة الاتنين)
+  warehouse_in: { icon: Warehouse, color: '#7c3aed' },
+  warehouse_out: { icon: PackageOpen, color: '#0d9488' },
 }
 const metaOf = (t: string) => TYPE_META[t] ?? { icon: ArrowUpDown, color: '#64748b' }
 

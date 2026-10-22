@@ -185,7 +185,26 @@ export function StockPage() {
                     {noData ? '—' : `+${num(Math.round(stats.expectedProfit ?? 0))}`} جنيه
                   </dd>
                 </div>
+                {/* 👕 المخزن الداخلي — الفلوس النايمة في الكراتين (فاشون) */}
+                {stats.warehouseItems > 0 && (
+                  <div>
+                    <dt className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Warehouse className="size-3" />
+                      في المخزن الداخلي
+                    </dt>
+                    <dd className="text-[15px] font-bold tabular-nums text-violet-600 dark:text-violet-400">
+                      {num(stats.warehousePieces)} قطعة · {num(Math.round(stats.warehouseValue ?? 0))} جنيه
+                    </dd>
+                  </div>
+                )}
               </dl>
+            )}
+            {/* 👕 من غير صلاحية التكلفة: بنعرض القطع بس من غير قيمة */}
+            {!stats.canSeeCost && stats.warehouseItems > 0 && (
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
+                <Warehouse className="size-3.5" />
+                في المخزن الداخلي: {num(stats.warehousePieces)} قطعة ({num(stats.warehouseItems)} صنف)
+              </p>
             )}
           </div>
 

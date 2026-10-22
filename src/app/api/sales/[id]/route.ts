@@ -161,23 +161,25 @@ async function __DELETE(
         if (it.productId == null) continue
 
         if (it.variantId && it.variant) {
+          // 👕 المرتجع بيرجع معروض (زي مرتجع البيع الجزئي)
           await tx.productVariant.update({
             where: { id: it.variantId },
-            data: { quantity: { increment: restoreQty } },
+            data: { quantity: { increment: restoreQty }, displayQty: { increment: restoreQty } },
           })
           const allVariants = await tx.productVariant.findMany({
             where: { productId: it.productId },
-            select: { quantity: true },
+            select: { quantity: true, displayQty: true },
           })
           const variantSum = allVariants.reduce((s, v) => s + v.quantity, 0)
+          const displaySum = allVariants.reduce((s, v) => s + v.displayQty, 0)
           await tx.product.update({
             where: { id: it.productId },
-            data: { quantity: variantSum },
+            data: { quantity: variantSum, displayQty: Math.min(displaySum, variantSum) },
           })
         } else {
           await tx.product.update({
             where: { id: it.productId },
-            data: { quantity: { increment: restoreQty } },
+            data: { quantity: { increment: restoreQty }, displayQty: { increment: restoreQty } },
           })
         }
         await tx.stockMovement.create({

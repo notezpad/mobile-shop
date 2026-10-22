@@ -63,7 +63,8 @@ import { PrintLabelsDialog } from './PrintLabelsDialog'
 import { ProductUnitsDialog } from './ProductUnitsDialog'
 import { ProductVariantsDialog } from './ProductVariantsDialog'
 import { CollectionDiscountDialog } from './CollectionDiscountDialog'
-import { Package, Percent } from 'lucide-react'
+import { SeasonWizard } from './SeasonWizard'
+import { Package, Percent, Warehouse } from 'lucide-react'
 import { Barcode } from './Barcode'
 import { NoBarcode } from './NoBarcode'
 import { useShopStore } from '@/lib/store'
@@ -88,6 +89,9 @@ interface Product {
   soldQuantity?: number
   retailMarginPercent?: number | null
   dynamicRetailPrice?: number | null
+  // 👕 الموسم + المعروض (فاشون فقط — القيم الافتراضية لباقي المحلات)
+  season?: 'ALL_YEAR' | 'SUMMER' | 'WINTER' | null
+  displayQty?: number
 }
 
 // 🛡️ 2026-10-05: smart product deletion with RESPONSE-LOSS protection.
@@ -170,6 +174,11 @@ export function ProductsView() {
   const [unitsFor, setUnitsFor] = React.useState<{id:number;name:string;price:number}|null>(null)
   const [variantsFor, setVariantsFor] = React.useState<{id:number;name:string}|null>(null)
   const [collectionDlg, setCollectionDlg] = React.useState(false)
+  // 👕 المواسم (فاشون): فلتر الموسم + فلتر المخزن الداخلي + المعالج
+  const isFashion = useShopStore((s) => s.plan.businessType) === 'fashion'
+  const [seasonFilter, setSeasonFilter] = React.useState<'all' | 'SUMMER' | 'WINTER' | 'ALL_YEAR'>('all')
+  const [locFilter, setLocFilter] = React.useState<'all' | 'warehouse'>('all')
+  const [seasonOpen, setSeasonOpen] = React.useState(false)
   const t = useVocab()
   const capabilities = useShopStore((st) => st.plan.capabilities)
   // 🔒 RBAC: التكلفة والهامش للمدير أو لمن عنده صلاحية الأرباح بس
@@ -242,6 +251,9 @@ export function ProductsView() {
       params.set('status', status)
       if (sort !== 'newest') params.set('sort', sort)
       if (lowOnly) params.set('stock', 'low')
+      // 👕 فلاتر الموسم/المخزن الداخلي
+      if (seasonFilter !== 'all') params.set('season', seasonFilter)
+      if (locFilter !== 'all') params.set('loc', locFilter)
       params.set('page', String(p))
       params.set('limit', String(PAGE_SIZE))
       const res = await api<{ data: Product[]; total: number; totalPages: number }>(`/api/products?${params.toString()}`)
@@ -263,7 +275,7 @@ export function ProductsView() {
         setRefreshing(false)
       }
     }
-  }, [search, category, status, sort, lowOnly, page, PAGE_SIZE])
+  }, [search, category, status, sort, lowOnly, seasonFilter, locFilter, page, PAGE_SIZE])
 
   React.useEffect(() => {
     loadCats()
@@ -272,7 +284,7 @@ export function ProductsView() {
   // Reset to page 1 when filters change
   React.useEffect(() => {
     setPage(1)
-  }, [search, category, status, sort, lowOnly])
+  }, [search, category, status, sort, lowOnly, seasonFilter, locFilter])
 
   React.useEffect(() => {
     // ⚡ v10: الديباونس للتايبينج/تغيير الفلاتر بس — أول تحميل بالوضع
@@ -329,6 +341,9 @@ export function ProductsView() {
       // 🥬 لازم يتمرروا، وإلا تعديل أي منتج بالوزن كان هيرجّعه «قطعة» ويمسح وحدته
       soldByWeight: p.soldByWeight === true,
       unitLabel: p.unitLabel ?? null,
+      // 👕 الموسم والمعروض (فاشون)
+      season: (p as any).season ?? 'ALL_YEAR',
+      displayQty: (p as any).displayQty ?? p.quantity,
     })
     setDialogOpen(true)
   }
@@ -607,6 +622,9 @@ export function ProductsView() {
         { header: 'الكمية المتاحة', key: 'quantity', format: 'int' },
         { header: 'الحد الأدنى', key: 'minQuantity', format: 'int' },
         { header: 'الكمية المباعة', key: 'soldQuantity', format: 'int' },
+        // 👕 أعمدة المواسم — فاشون
+        ...(isFashion ? [{ header: 'الموسم', key: 'season', format: 'text' as const }] : []),
+        ...(isFashion ? [{ header: 'المعروض', key: 'displayQty', format: 'int' as const }] : []),
       ],
       rows: products.map((p) => ({
         name: p.name,
@@ -623,6 +641,9 @@ export function ProductsView() {
         quantity: p.quantity,
         minQuantity: p.minQuantity,
         soldQuantity: p.soldQuantity ?? 0,
+        // 👕 الموسم بالعربي + المعروض
+        ...(isFashion ? { season: p.season === 'SUMMER' ? 'صيفي' : p.season === 'WINTER' ? 'شتوي' : 'طوال السنة' } : {}),
+        ...(isFashion ? { displayQty: p.displayQty ?? p.quantity } : {}),
       })),
       totals: {
         name: 'الإجمالي',
@@ -640,12 +661,14 @@ export function ProductsView() {
     ? [singlePrintProduct]
     : products.filter((p) => selectedIds.has(p.id))
 
-  const hasFilters = search.trim() !== '' || category !== 'all' || status !== 'all' || lowOnly
+  const hasFilters = search.trim() !== '' || category !== 'all' || status !== 'all' || lowOnly || seasonFilter !== 'all' || locFilter !== 'all'
   const clearFilters = () => {
     setSearch('')
     setCategory('all')
     setStatus('all')
     setLowOnly(false)
+    setSeasonFilter('all')
+    setLocFilter('all')
   }
   const lowOnPage = products.filter((p) => p.active && p.quantity <= p.minQuantity).length
   const allSelected = products.length > 0 && selectedIds.size === products.length
@@ -742,6 +765,17 @@ export function ProductsView() {
             >
               <Percent className="size-4" />
               خصم كوليكشن
+            </Button>
+          )}
+          {/* 👕 المواسم والمخزن الداخلي — لباقات الملابس فقط */}
+          {isFashion && (
+            <Button
+              variant="outline"
+              className="h-10 flex-1 basis-[calc(50%-4px)] border-amber-500/40 text-amber-700 hover:bg-amber-500/10 sm:h-10 sm:flex-initial sm:basis-auto dark:text-amber-400"
+              onClick={() => setSeasonOpen(true)}
+            >
+              <Warehouse className="size-4" />
+              المواسم
             </Button>
           )}
 
@@ -908,6 +942,60 @@ export function ProductsView() {
         </div>
       </div>
 
+      {/* 👕 شريط المواسم — فاشون فقط: فلتر الموقع + فلتر الموسم */}
+      {isFashion && (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/[0.04] p-2">
+          <span className="flex items-center gap-1.5 px-1 text-xs font-extrabold text-amber-700 dark:text-amber-400">
+            <Warehouse className="size-3.5" />
+            الموقع والمواسم
+          </span>
+          <div role="group" aria-label="الموقع" className="flex rounded-xl bg-muted/60 p-1">
+            {(
+              [
+                ['all', 'الكل'],
+                ['warehouse', 'في المخزن الداخلي'],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={locFilter === v}
+                onClick={() => setLocFilter(v)}
+                className={cn(
+                  'h-7 rounded-lg px-2.5 text-xs font-bold transition-colors',
+                  locFilter === v ? 'bg-foreground text-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div role="group" aria-label="الموسم" className="flex flex-wrap rounded-xl bg-muted/60 p-1">
+            {(
+              [
+                ['all', 'كل المواسم'],
+                ['SUMMER', 'صيفي'],
+                ['WINTER', 'شتوي'],
+                ['ALL_YEAR', 'طوال السنة'],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={seasonFilter === v}
+                onClick={() => setSeasonFilter(v)}
+                className={cn(
+                  'h-7 rounded-lg px-2.5 text-xs font-bold transition-colors',
+                  seasonFilter === v ? 'bg-foreground text-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ═══ المحتوى ═══ */}
       {refreshing && !loading && (
         <div aria-hidden className="h-0.5 w-full animate-pulse rounded-full bg-foreground/25" />
@@ -1056,6 +1144,12 @@ export function ProductsView() {
                               <p className="mt-1 text-[10px] text-muted-foreground">
                                 {ui.label} · الحد الأدنى {p.minQuantity}
                               </p>
+                              {/* 👕 تقسيمة المعروض/المخزن الداخلي — بس لما فيه حاجة متخزنة */}
+                              {(p.displayQty ?? p.quantity) < p.quantity && (
+                                <p className="mt-0.5 text-[10px] font-bold text-amber-700 tabular-nums dark:text-amber-400">
+                                  معروض {p.displayQty ?? p.quantity} · مخزن داخلي {Math.round((p.quantity - (p.displayQty ?? p.quantity)) * 1000) / 1000}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </TableCell>
@@ -1128,6 +1222,14 @@ export function ProductsView() {
           loadCats()
         }}
       />
+      {/* 👕 المواسم والمخزن الداخلي — فاشون */}
+      {isFashion && (
+        <SeasonWizard
+          open={seasonOpen}
+          onOpenChange={setSeasonOpen}
+          onChanged={() => loadProducts()}
+        />
+      )}
       <PrintLabelsDialog
         open={labelsDialogOpen}
         onOpenChange={(v) => {
@@ -1457,6 +1559,16 @@ function ProductTag({
               ) : (
                 <span className="text-muted-foreground">بدون تصنيف</span>
               )}
+              {/* 👕 بادج الموسم — بس للمواسم الحقيقية (طوال السنة مش بيتعرض) */}
+              {p.season === 'SUMMER' && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-extrabold text-amber-700 dark:text-amber-400">☀ صيفي</span>
+              )}
+              {p.season === 'WINTER' && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-extrabold text-sky-700 dark:text-sky-400">❄ شتوي</span>
+              )}
+              {(p.displayQty ?? p.quantity) <= 0 && p.quantity > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-extrabold text-violet-700 dark:text-violet-400">📦 في المخزن</span>
+              )}
             </div>
           </div>
           )}
@@ -1482,6 +1594,12 @@ function ProductTag({
             <div>
               <p className="text-[10px] font-medium text-muted-foreground">المخزون</p>
               <p className={cn('text-2xl font-extrabold leading-none tabular-nums', ui.text)}>{p.quantity}{p.unitLabel && <span className="ms-1 text-[10px] font-semibold text-muted-foreground">{unitWord(p.quantity, p.unitLabel)}</span>}</p>
+              {/* 👕 تقسيمة المعروض/المخزن الداخلي */}
+              {(p.displayQty ?? p.quantity) < p.quantity && (
+                <p className="mt-1 text-[11px] font-bold text-amber-700 tabular-nums dark:text-amber-400">
+                  معروض {p.displayQty ?? p.quantity} · مخزن {Math.round((p.quantity - (p.displayQty ?? p.quantity)) * 1000) / 1000}
+                </p>
+              )}
             </div>
             <div className="text-end">
               <span className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-extrabold', ui.chip)}>{ui.label}</span>

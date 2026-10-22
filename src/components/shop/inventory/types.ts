@@ -28,6 +28,9 @@ export interface InventoryProduct {
   soldByWeight?: boolean
   // 🥬 وحدة المنتج (علبة/كيس/...) — null = قطعة
   unitLabel?: string | null
+  // 👕 الموسم + المعروض (فاشون) — المعروض ≤ الإجمالي
+  season?: 'ALL_YEAR' | 'SUMMER' | 'WINTER' | null
+  displayQty?: number
 }
 
 export interface Movement {

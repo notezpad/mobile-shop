@@ -43,7 +43,12 @@ async function __PUT(
   if (body.size !== undefined) data.size = body.size ? String(body.size).trim() : null
   if (body.color !== undefined) data.color = body.color ? String(body.color).trim() : null
   if (body.barcode !== undefined) data.barcode = body.barcode ? String(body.barcode).trim() : null
-  if (body.quantity !== undefined) data.quantity = parseInt(body.quantity, 10) || 0
+  if (body.quantity !== undefined) {
+    data.quantity = parseInt(body.quantity, 10) || 0
+    // 👕 التعديل اليدوي لكمية المقاس = البضاعة دي على الرف (معروضة بالكامل) —
+    // التقسيمة الدقيقة بيتظبطها إغلاق/فتح الموسم وحركات المخزون بعد كده
+    data.displayQty = data.quantity
+  }
 
   if (data.barcode) {
     // 🏬 2026-10-18: باركود المقاس فريد جوه نفس (المحل + الفرع) — فحص برسالة واضحة

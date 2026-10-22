@@ -69,6 +69,8 @@ interface ProductLite {
   soldByWeight?: boolean
   // 🥬 2026-10-12: وحدة المنتج (علبة/كيس/برطمان...) — null = قطعة
   unitLabel?: string | null
+  // 👕 المعروض (فاشون) — 0 مع وجود مخزون = الصنف كله في المخزن الداخلي (بادج 📦)
+  displayQty?: number
 }
 
 function piecePrice(product: ProductLite): number {
@@ -435,6 +437,23 @@ function StockBadge({ quantity, weight, unit }: { quantity: number; weight?: boo
     </span>
   )
 }
+
+/**
+ * 👕 بادج «من المخزن الداخلي» — بيتظهر جنب الصنف اللي كله في الكراتين
+ * (displayQty=0 ومخزون إجمالي موجود): بيتبيع عادي من الباركود/البحث،
+ * والبادج بيبلغ الكاشير إنه هيدخل يجيبها من المخزن.
+ */
+function WarehouseBadge() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-violet-500/15 px-2 py-0.5 text-[length:var(--fs-2xs,0.6875rem)] font-extrabold text-violet-700 dark:text-violet-300">
+      📦 من المخزن الداخلي
+    </span>
+  )
+}
+
+/** الصنف ده كله في المخزن الداخلي؟ (معروض=0 ومخزون موجود) */
+const isFromWarehouse = (p: { quantity: number; displayQty?: number }) =>
+  p.quantity > 1e-9 && (p.displayQty ?? p.quantity) <= 1e-9
 
 /** أقصى كمية مسموحة للسطر = المخزون الفعلي ناقص اللي في الأسطر التانية لنفس المنتج/المقاس. */
 function lineCap(i: CartItem, list: CartItem[]): number {
@@ -2175,6 +2194,7 @@ export function POSView() {
                       {viewMode === 'compact' && (
                         <div className="mt-1 flex items-center gap-1.5">
                           <StockBadge quantity={p.quantity} weight={p.soldByWeight} unit={p.unitLabel} />
+                          {isFromWarehouse(p) && <WarehouseBadge />}
                           {p.soldByWeight && (
                             <span className="shrink-0 rounded-full bg-brand-600/15 px-1.5 py-0.5 text-[length:var(--fs-2xs,0.6875rem)] font-bold text-brand-700 dark:text-brand-300">
                               بالكيلو
@@ -2203,7 +2223,7 @@ export function POSView() {
                             <span className="text-[11px] font-bold text-muted-foreground"> / كيلو</span>
                           )}
                         </span>
-                        <StockBadge quantity={p.quantity} weight={p.soldByWeight} unit={p.unitLabel} />
+                        {isFromWarehouse(p) ? <WarehouseBadge /> : <StockBadge quantity={p.quantity} weight={p.soldByWeight} unit={p.unitLabel} />}
                       </div>
                     )}
                   </button>
@@ -2369,6 +2389,7 @@ export function POSView() {
                 >
                   <span className="flex items-center gap-1">
                     <span className="truncate text-sm font-bold">{it.product.name}</span>
+                    {isFromWarehouse(it.product) && <WarehouseBadge />}
                     <ChevronDown className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
                   </span>
                   <span
@@ -2470,7 +2491,10 @@ export function POSView() {
                   className="size-10 text-base"
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold leading-tight">{it.product.name}</p>
+                  <p className="flex items-center gap-1.5 truncate text-sm font-bold leading-tight">
+                    {it.product.name}
+                    {isFromWarehouse(it.product) && <WarehouseBadge />}
+                  </p>
                   <p
                     className={cn(
                       'mt-0.5 flex items-center gap-1 text-xs tabular-nums',

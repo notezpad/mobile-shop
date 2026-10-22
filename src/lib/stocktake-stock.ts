@@ -31,16 +31,19 @@ export async function applyStocktakeDiff(
   if (it.variantId != null) {
     const cur = await tx.productVariant.findFirst({
       where: { id: it.variantId, productId: it.productId },
-      select: { quantity: true },
+      select: { quantity: true, displayQty: true },
     })
     if (!cur) return // اللون/المقاس اتمسح بعد العدّ — مفيش مخزون نعدّله
     const next = Math.max(0, Math.round(cur.quantity + it.diff))
-    await tx.productVariant.update({ where: { id: it.variantId }, data: { quantity: next } })
+    // 👕 المعروض بيفضل زي ما هو (الفارق بيتقيد في المخزن الداخلي/العرض حسب اتجاهه)
+    const nextDisplay = Math.min(cur.displayQty, next)
+    await tx.productVariant.update({ where: { id: it.variantId }, data: { quantity: next, displayQty: nextDisplay } })
     await syncProductQuantityFromVariants(tx, it.productId)
   } else {
-    const cur = await tx.product.findUnique({ where: { id: it.productId }, select: { quantity: true } })
+    const cur = await tx.product.findUnique({ where: { id: it.productId }, select: { quantity: true, displayQty: true } })
     const next = Math.max(0, Math.round(((cur?.quantity ?? 0) + it.diff) * 1000) / 1000)
-    await tx.product.update({ where: { id: it.productId }, data: { quantity: next } })
+    const nextDisplay = Math.min(cur?.displayQty ?? 0, next)
+    await tx.product.update({ where: { id: it.productId }, data: { quantity: next, displayQty: nextDisplay } })
   }
 
   await tx.stockMovement.create({

@@ -10,6 +10,7 @@ import { runNonBlocking, trackServerEvent, extractRequestContext } from '@/lib/t
 import { TRACKING_EVENTS } from '@/lib/tracking/types'
 import { withSql, type Sql } from '@/lib/sql'
 import { isInternalImageUrl } from '@/lib/product-image'
+import { isSeasonValue } from '@/lib/seasonal'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +36,7 @@ export const dynamic = 'force-dynamic'
 function productCols(sql: Sql) {
   return sql`"id", "tenantId", "branchId", "name", "category", "barcode", "price", "cost",
     "quantity", "minQuantity", "soldByWeight", "unitLabel", "retailMarginPercent",
-    "active", "createdAt", "collection",
+    "active", "createdAt", "collection", "season", "displayQty",
     CASE WHEN "imagePath" IS NULL THEN NULL
          WHEN substr("imagePath", 1, 5) = 'data:'
            THEN '/api/products/' || "id"::text || '/image?v=' || pg_column_size("imagePath")::text
@@ -60,6 +61,16 @@ export async function ensureCategory(
 
 /** يبني شرط الـ WHERE المشترك (نفس where القديم حرفيًا) — مصفوفة fragments
  * (postgres.js 3.4: المصفوفة بتتربط بمسافات، فالـ AND جزء من كل شرط). */
+/**
+ * 👕 قاعدة «النايم في المخزن» لنقطة البيع (pos=1 بدون بحث):
+ * صنف عليه مخزون إجمالي بس كله في المخزن الداخلي (displayQty=0) مبيظهرش
+ * في شبكة الكاشير — بيتلقي بالبحث/الباركود بس. المنتجات نافدة الكمية (0)
+ * بتفضل ظاهرة زي ما هي (نفس السلوك القديم).
+ */
+function isSleepingSql(sql: Sql) {
+  return sql`("quantity" > 0 AND "displayQty" <= 0)`
+}
+
 function buildWhere(
   sql: Sql,
   tenantId: string,
@@ -69,6 +80,9 @@ function buildWhere(
   branchIdParam: string | null,
   search: string,
   category: string,
+  season = '',
+  loc = '',
+  hideSleeping = false,
 ) {
   const parts = [sql`"tenantId" = ${tenantId}`]
   if (status === 'active') parts.push(sql`AND "active" = true`)
@@ -91,6 +105,20 @@ function buildWhere(
   }
   if (category && category !== 'all') {
     parts.push(sql`AND "category" = ${category}`)
+  }
+  // 👕 فلتر الموسم (فاشون) — ALL_YEAR / SUMMER / WINTER
+  if (season === 'SUMMER' || season === 'WINTER' || season === 'ALL_YEAR') {
+    parts.push(sql`AND "season" = ${season}`)
+  }
+  // 👕 فلتر الموقع: display = اللي عليه معروض، warehouse = النايم في المخزن الداخلي
+  if (loc === 'warehouse') {
+    parts.push(sql`AND ${isSleepingSql(sql)}`)
+  } else if (loc === 'display') {
+    parts.push(sql`AND ("displayQty" > 0 OR "quantity" <= 0)`)
+  }
+  // 👕 شبكة نقطة البيع (بدون بحث): المخفي النايم في المخزن
+  if (hideSleeping) {
+    parts.push(sql`AND NOT ${isSleepingSql(sql)}`)
   }
   return parts
 }
@@ -137,6 +165,10 @@ export async function GET(req: NextRequest) {
     const sortKey = searchParams.get('sort') || 'newest'
     const lowOnly = searchParams.get('stock') === 'low'
     const metaSlim = searchParams.get('meta') === 'slim'
+    // 👕 الموسم/الموقع (فاشون) + إخفاء النايم في شبكة نقطة البيع
+    const posFlag = searchParams.get('pos') === '1'
+    const seasonParam = searchParams.get('season')?.trim() || ''
+    const locParam = searchParams.get('loc')?.trim() || ''
 
     // ── كاش الحافة (نفس المفاتيح والشروط القديمة حرفيًا) ──
     const invCacheable =
@@ -156,6 +188,9 @@ export async function GET(req: NextRequest) {
       !search &&
       !category &&
       !branchIdParam &&
+      !seasonParam &&
+      !locParam &&
+      !posFlag &&
       status === 'active' &&
       !searchParams.has('page') &&
       !searchParams.has('limit') &&
@@ -172,6 +207,9 @@ export async function GET(req: NextRequest) {
       sql, session.tenantId, status,
       Boolean(session.branchId), session.branchId, branchIdParam,
       search, category,
+      seasonParam, locParam,
+      // 👕 الشبكة (بدون بحث) بتخفي النايم — مع البحث بيظهر عادي بالبادج
+      posFlag && !search,
     )
 
     // ⚡ v10: في وضع slim (شاشة المخزون) plan context والتسعير مش محتاجين
@@ -371,6 +409,21 @@ export async function POST(req: NextRequest) {
         imagePath: imagePathForCreate,
         branchId: session.branchId ?? (body.branchId ? parseInt(body.branchId, 10) : null),
         collection: body.collection ? String(body.collection).trim() || null : null,
+        // 👕 الموسم (فاشون فقط — الافتراضي طوال السنة) + المعروض (افتراضي: كل الكمية)
+        season:
+          planCtx.businessType === 'fashion' && body.season && isSeasonValue(body.season)
+            ? String(body.season)
+            : 'ALL_YEAR',
+        displayQty:
+          planCtx.businessType === 'fashion' && body.displayQty !== undefined
+            ? Math.max(
+                0,
+                Math.min(
+                  Math.round((Number(body.displayQty) || 0) * 1000) / 1000,
+                  Math.round((Number(body.quantity ?? 0) || 0) * 1000) / 1000,
+                ),
+              )
+            : Math.round((Number(body.quantity ?? 0) || 0) * 1000) / 1000,
         retailMarginPercent:
           planCtx.capabilities.includes('dynamic_retail_pricing') &&
           body.retailMarginPercent !== undefined &&

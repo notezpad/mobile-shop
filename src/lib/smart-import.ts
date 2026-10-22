@@ -31,6 +31,8 @@ export const IMPORT_FIELDS = [
   'category',
   'unit',
   'minQuantity',
+  'season',
+  'displayQty',
 ] as const
 
 export type ImportField = (typeof IMPORT_FIELDS)[number]
@@ -44,6 +46,8 @@ export const FIELD_LABELS: Record<ImportField, string> = {
   category: 'التصنيف',
   unit: 'وحدة القياس',
   minQuantity: 'حد التنبيه',
+  season: 'الموسم (صيفي/شتوي)',
+  displayQty: 'الكمية المعروضة',
 }
 
 export const FIELD_REQUIRED: Partial<Record<ImportField, boolean>> = { name: true }
@@ -86,6 +90,15 @@ const FIELD_ALIASES: Record<ImportField, string[]> = {
   minQuantity: [
     'حد التنبيه', 'الحد الادنى', 'الحد الأدنى', 'حد الطلب', 'التنبيه',
     'ادنى كمية', 'min', 'minimum', 'min quantity', 'reorder',
+  ],
+  // 👕 الموسم/المعروض — أعمدة فاشون اختيارية (باقي المحلات مش هتشوفها أصلاً)
+  season: [
+    'الموسم', 'موسم', 'موسم المنتج', 'صيفي شتوي', 'الموسم البياعي',
+    'season', 'product season',
+  ],
+  displayQty: [
+    'المعروض', 'الكمية المعروضة', 'كمية العرض', 'المعرض', 'معروض',
+    'على الرف', 'displayed', 'display qty', 'display quantity', 'displayed qty',
   ],
 }
 
@@ -518,6 +531,10 @@ export interface ParsedRow {
   category: string | null
   unit: string | null
   minQuantity: number | null
+  /** 👕 الموسم (فاشون) — null = العمود مش موجود/فاضي → ALL_YEAR */
+  season: 'SUMMER' | 'WINTER' | 'ALL_YEAR' | null
+  /** 👕 الكمية المعروضة (فاشون) — null = العمود مش موجود → كل الكمية معروضة */
+  displayQty: number | null
   /** ملاحظات الإصلاح التلقائي */
   fixes: string[]
   errors: string[]
@@ -560,6 +577,25 @@ export interface ValidateOptions {
 function getCell(row: string[], col: number | undefined): string {
   if (col === undefined || col < 0 || col >= row.length) return ''
   return row[col] ?? ''
+}
+
+/**
+ * 👕 فهم الموسم بأي صيغة: صيفي/صيف/summer → SUMMER، شتوي/شتا/شتاء/winter → WINTER،
+ * طوال السنة/كل المواسم/all year → ALL_YEAR. أي كلمة تانية → null (بنصلحها).
+ */
+export function normalizeSeasonCell(raw: string): 'SUMMER' | 'WINTER' | 'ALL_YEAR' | null {
+  const t = raw.replace(INVISIBLE_RE, '').trim()
+  if (!t) return null
+  const n = t
+    .replace(/[ً-ْٰ]/g, '') // التشكيل
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .toLowerCase()
+  if (/(^|\W)(صيفي|صيف|صيفيه|summer)(\W|$)/.test(n)) return 'SUMMER'
+  if (/(^|\W)(شتوي|شتا|شتاء|شتويه|winter)(\W|$)/.test(n)) return 'WINTER'
+  if (/(طوال السنه|طوال العام|كل المواسم|كل السنه|دائم|all year|all season|year ?round|permanent)/.test(n)) return 'ALL_YEAR'
+  return null
 }
 
 /**
@@ -614,7 +650,7 @@ export function validateRows(
     if (name && isTotalsRowLabel(name)) {
       rows.push({
         idx, status: 'blank', name, barcode: null, quantity: 0, cost: null, price: null,
-        category: null, unit: null, minQuantity: null,
+        category: null, unit: null, minQuantity: null, season: null, displayQty: null,
         fixes: [`صف «${name}» ده صف الإجمالي بتاع التصدير — اتشال تلقائيًا (مش منتج)`],
         errors: [], warnings: [], mergedInto: null, existsInDb: null,
       })
@@ -700,6 +736,40 @@ export function validateRows(
       } else if (mRes.kind === 'error') warnings.push(`حد التنبيه: ${mRes.error} — هيتسجل الافتراضي (1)`)
     }
 
+    // ── 👕 الموسم والمعروض (أعمدة فاشون — اختيارية) ──
+    let season: ParsedRow['season'] = null
+    if (mapping.season !== undefined) {
+      const sRaw = cleanCellText(getCell(raw, mapping.season))
+      if (sRaw) {
+        const sNorm = normalizeSeasonCell(sRaw)
+        if (sNorm) {
+          season = sNorm
+          if (sNorm === 'SUMMER' && !/صيفي/i.test(sRaw)) fixes.push(`الموسم «${sRaw}» — اتُفهم صيفي`)
+          else if (sNorm === 'WINTER' && !/شت/i.test(sRaw)) fixes.push(`الموسم «${sRaw}» — اتُفهم شتوي`)
+        } else {
+          season = 'ALL_YEAR'
+          warnings.push(`الموسم «${sRaw}» مش معروف — هيتسجل «طوال السنة» (الصحيح: صيفي / شتوي / طوال السنة)`)
+        }
+      }
+    }
+    let displayQty: number | null = null
+    if (mapping.displayQty !== undefined) {
+      const dRes = parseSmartNumber(getCell(raw, mapping.displayQty))
+      if (dRes.kind === 'ok' && dRes.value != null) {
+        displayQty = dRes.value
+        if (dRes.fixNote) fixes.push(`المعروض: ${dRes.fixNote}`)
+        if (displayQty < 0) {
+          displayQty = 0
+          warnings.push('المعروض سالب — اتظبط على 0 (كل الكمية في المخزن الداخلي)')
+        } else if (displayQty > quantity) {
+          displayQty = quantity
+          fixes.push('المعروض أكبر من الكمية — اتظبط على الكمية كلها')
+        }
+      } else if (dRes.kind === 'error') {
+        warnings.push(`المعروض: ${dRes.error} — هيتسجل كل الكمية معروضة`)
+      }
+    }
+
     // ── التكرار داخل الملف ──
     let mergedInto: number | null = null
     if (name && !errors.length) {
@@ -734,6 +804,7 @@ export function validateRows(
 
     const row: ParsedRow = {
       idx, status, name, barcode, quantity, cost, price, category, unit, minQuantity,
+      season, displayQty,
       fixes, errors, warnings, mergedInto, existsInDb: null,
     }
     rows.push(row)
@@ -777,8 +848,8 @@ export function validateRows(
 function emptyRow(idx: number, status: RowStatus): ParsedRow {
   return {
     idx, status, name: '', barcode: null, quantity: 0, cost: null, price: null,
-    category: null, unit: null, minQuantity: null, fixes: [], errors: [],
-    warnings: [], mergedInto: null, existsInDb: null,
+    category: null, unit: null, minQuantity: null, season: null, displayQty: null,
+    fixes: [], errors: [], warnings: [], mergedInto: null, existsInDb: null,
   }
 }
 

@@ -11,6 +11,9 @@
 --      🎨 2026-10-18: المنتج اللي له ألوان/مقاسات بيدخل مخزونه على الـ variant
 --      (variantId إجباري للسطر)، وكمية المنتج بتتحسب = مجموع الـ variants.
 --      قبل كده الكمية كانت بتتضاف على المنتج بس فتتمسح عند أول بيعة.
+--      👕 2026-10-22: البضاعة الواردة بتتزود في displayQty كمان (تروح للعرض
+--      أولاً) — بدونها كل استلام شراء كان هيدخل «المخزن الداخلي» ويختفي
+--      من شبكة نقطة البيع لو الصنف نايم.
 --   4) حركة مخزون (type='in') لكل صنف
 --   5) رصيد المورد (total - paid) بالإشارة الصحيحة
 --   6) قيد الخزنة (source='purchase'، amount سالب) بطريقة الدفع
@@ -119,18 +122,27 @@ BEGIN
 
     IF it."variantId" IS NOT NULL THEN
       -- المخزون يدخل على المقاس/اللون نفسه، وكمية المنتج = مجموع كل مقاساته
+      -- 👕 2026-10-22: البضاعة الواردة بتتعلق على الرف (المعروض) أولاً —
+      --    نفس قاعدة المرتجعات ورصيد الافتتاحي: الزيادة تروح للعرض.
+      --    لو الموسم مقفول والصنف نايم، صاحب المحل ينقله للمخزن من شاشة المنتج
+      --    أو يقفل الموسم تاني — الإضافة العشوائية للمخزن الداخلي بتحجب البيع.
       UPDATE "ProductVariant"
-         SET "quantity" = "quantity" + it."quantity"::int
+         SET "quantity" = "quantity" + it."quantity"::int,
+             "displayQty" = "displayQty" + it."quantity"::int
        WHERE "id" = it."variantId";
 
       UPDATE "Product"
          SET "quantity" = (SELECT COALESCE(SUM(v."quantity"), 0)
                              FROM "ProductVariant" v WHERE v."productId" = it."productId"),
+             "displayQty" = (SELECT COALESCE(SUM(v."displayQty"), 0)
+                               FROM "ProductVariant" v WHERE v."productId" = it."productId"),
              "cost" = GREATEST(v_avgCost, 0)
        WHERE "id" = it."productId";
     ELSE
+      -- 👕 2026-10-22: نفس قاعدة العرض أولاً للمنتج العادي
       UPDATE "Product"
       SET "quantity" = "quantity" + it."quantity",
+          "displayQty" = "displayQty" + it."quantity",
           "cost" = GREATEST(v_avgCost, 0)
       WHERE "id" = it."productId";
     END IF;

@@ -284,24 +284,27 @@ async function __POST(req: NextRequest) {
     const result = await db.$transaction(async (tx) => {
       if (variant) {
         // 🎨 الحركة على الـ variant نفسه (شرط ذري للخصم) + كمية المنتج = مجموعهم
+        // 👕 displayQty: الزيادة بتروح للعرض، والخصم من المعروض الأول — نفس الـ UPDATE الذري
         if (delta < 0) {
-          const r = await tx.productVariant.updateMany({
-            where: { id: variant.id, productId, quantity: { gte: Math.abs(delta) } },
-            data: { quantity: { increment: delta } },
-          })
-          if (r.count !== 1) throw new Error('INSUFFICIENT_STOCK')
+          const r = await tx.$executeRaw`
+            UPDATE "ProductVariant"
+            SET "quantity" = "quantity" - ${Math.abs(delta)},
+                "displayQty" = GREATEST(0, "displayQty" - LEAST(${Math.abs(delta)}, "displayQty"))
+            WHERE "id" = ${variant.id} AND "productId" = ${productId} AND "quantity" >= ${Math.abs(delta)}`
+          if (r !== 1) throw new Error('INSUFFICIENT_STOCK')
         } else {
-          await tx.productVariant.update({ where: { id: variant.id }, data: { quantity: { increment: delta } } })
+          await tx.productVariant.update({ where: { id: variant.id }, data: { quantity: { increment: delta }, displayQty: { increment: delta } } })
         }
         await syncProductQuantityFromVariants(tx, productId)
       } else if (delta < 0) {
-        const r = await tx.product.updateMany({
-          where: { id: productId, tenantId: s.tenantId, quantity: { gte: Math.abs(delta) } },
-          data: { quantity: { increment: delta } },
-        })
-        if (r.count !== 1) throw new Error('INSUFFICIENT_STOCK')
+        const r = await tx.$executeRaw`
+          UPDATE "Product"
+          SET "quantity" = "quantity" - ${Math.abs(delta)},
+              "displayQty" = GREATEST(0, "displayQty" - LEAST(${Math.abs(delta)}, "displayQty"))
+          WHERE "id" = ${productId} AND "tenantId" = ${s.tenantId} AND "quantity" >= ${Math.abs(delta)}`
+        if (r !== 1) throw new Error('INSUFFICIENT_STOCK')
       } else {
-        await tx.product.update({ where: { id: productId }, data: { quantity: { increment: delta } } })
+        await tx.product.update({ where: { id: productId }, data: { quantity: { increment: delta }, displayQty: { increment: delta } } })
       }
 
       // الخسارة أولاً: مصروف غير نقدي عشان نربط الحركة بيه (refId)

@@ -42,6 +42,9 @@ export interface ProductFormValues {
   soldByWeight?: boolean
   // 🥬 2026-10-12: وحدة المنتج (علبة/كيس/برطمان...) — null = قطعة
   unitLabel?: string | null
+  // 👕 الموسم + المعروض (فاشون فقط) — المعروض ≤ الكمية
+  season?: 'ALL_YEAR' | 'SUMMER' | 'WINTER'
+  displayQty?: number
 }
 
 interface Props {
@@ -80,11 +83,17 @@ export function ProductDialog({
   // Unit-Based Dynamic Pricing: per-product override of the tenant's default
   // retail margin %. Empty string = "use the tenant default".
   const [retailMarginPercent, setRetailMarginPercent] = React.useState<string>('')
+  // 👕 الموسم والمعروض (فاشون فقط) + عدد المقاسات (اللي بمقاسات مفيش خانة معروض هنا)
+  const [season, setSeason] = React.useState<'ALL_YEAR' | 'SUMMER' | 'WINTER'>('ALL_YEAR')
+  const [displayQty, setDisplayQty] = React.useState('')
+  const [variantCount, setVariantCount] = React.useState<number | null>(null)
   const [dirty, setDirty] = React.useState(false)
   const fileRef = React.useRef<HTMLInputElement>(null)
   const capabilities = useShopStore((s) => s.plan.capabilities)
   // 🥬 2026-10-12: توoggle البيع بالوزن بيظهر للمحلات الغذائية بس
   const isFoodVertical = useShopStore((s) => s.plan.businessType) === 'food'
+  // 👕 2026-10-22: الموسم/المعروض بيظهروا لباقات الملابس فقط
+  const isFashionVertical = useShopStore((s) => s.plan.businessType) === 'fashion'
   const t = useVocab()
   const { onOpenChange: handleOpenChange } = useUnsavedConfirm({
     dirty,
@@ -117,6 +126,22 @@ export function ProductDialog({
         initial?.retailMarginPercent != null ? String(initial.retailMarginPercent) : ''
       )
       fetch('/api/branches').then(r => r.ok ? r.json() : []).then(setBranches).catch(() => setBranches([]))
+      // 👕 الموسم والمعروض (فاشون) — المعروض الافتراضي = كل الكمية
+      setSeason((initial as any)?.season ?? 'ALL_YEAR')
+      setDisplayQty(
+        initial?.id
+          ? String((initial as any)?.displayQty ?? initial?.quantity ?? 0)
+          : String(initial?.quantity ?? 0)
+      )
+      // عدد المقاسات: المنتج اللي له ألوان/مقاسات المعروض بيتقسم على مستوى المقاس
+      if (initial?.id && isFashionVertical) {
+        fetch(`/api/products/${initial.id}/variants`)
+          .then((r) => (r.ok ? r.json() : []))
+          .then((vs: unknown[]) => setVariantCount(Array.isArray(vs) ? vs.length : 0))
+          .catch(() => setVariantCount(0))
+      } else {
+        setVariantCount(0)
+      }
     }
   }, [open, initial])
 
@@ -164,6 +189,19 @@ export function ProductDialog({
         // 🛡️ 2026-10-03: باقة احترافية فقط — لو مش pro نسيب الحقل خارج الطلب
         ...(capabilities.includes('dynamic_retail_pricing')
           ? { retailMarginPercent: retailMarginPercent.trim() !== '' ? parseFloat(retailMarginPercent) : null }
+          : {}),
+        // 👕 الموسم والمعروض — فاشون فقط (والسيرفر بيتحقق برضه)
+        ...(isFashionVertical
+          ? {
+              season,
+              displayQty: Math.max(
+                0,
+                Math.min(
+                  Math.round((parseFloat(displayQty) || 0) * 1000) / 1000,
+                  Math.round((parseFloat(quantity) || 0) * 1000) / 1000,
+                ),
+              ),
+            }
           : {}),
       }
       if (initial?.id) {
@@ -531,6 +569,69 @@ export function ProductDialog({
                   onChange={(e) => edit(setMinQuantity)(e.target.value)}
                 />
               </Field>
+
+              {/* 👕 الموسم — فاشون فقط (الافتراضي طوال السنة) */}
+              {isFashionVertical && (
+                <Field
+                  label="الموسم"
+                  htmlFor="p-season"
+                  hint="صنف «طوال السنة» مابيتأثرش بإغلاق الموسم ويفضل ظاهر في نقطة البيع"
+                >
+                  <div role="group" aria-label="الموسم" className="flex rounded-xl bg-muted/60 p-1">
+                    {(
+                      [
+                        ['ALL_YEAR', 'طوال السنة'],
+                        ['SUMMER', '☀ صيفي'],
+                        ['WINTER', '❄ شتوي'],
+                      ] as const
+                    ).map(([v, label]) => (
+                      <button
+                        key={v}
+                        id={v === season ? 'p-season' : undefined}
+                        type="button"
+                        aria-pressed={season === v}
+                        onClick={() => edit(setSeason)(v)}
+                        className={cn(
+                          'h-8 flex-1 rounded-lg text-xs font-bold transition-colors',
+                          season === v
+                            ? v === 'SUMMER'
+                              ? 'bg-amber-500 text-white shadow-sm'
+                              : v === 'WINTER'
+                                ? 'bg-sky-600 text-white shadow-sm'
+                                : 'bg-foreground text-background shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+              )}
+
+              {/* 👕 المعروض — فاشون، وللمنتجات من غير مقاسات فقط */}
+              {isFashionVertical && variantCount === 0 && (
+                <Field
+                  label="المعروض على الرف"
+                  htmlFor="p-display"
+                  hint="الباقي بيدخل المخزن الداخلي — مش بيظهر في نقطة البيع لحد ما تطلعه"
+                >
+                  <InkInput
+                    id="p-display"
+                    num
+                    type="number"
+                    min={0}
+                    max={Math.round((parseFloat(quantity) || 0) * 1000) / 1000}
+                    value={displayQty}
+                    onChange={(e) => edit(setDisplayQty)(e.target.value)}
+                  />
+                </Field>
+              )}
+              {isFashionVertical && variantCount != null && variantCount > 0 && (
+                <p className="col-span-full rounded-xl bg-muted/50 px-3 py-2 text-[11px] text-muted-foreground">
+                  المنتج ده له ألوان ومقاسات — تقسيمة المعروض/المخزن الداخلي بتتظبط من «الألوان والمقاسات» وزر «المواسم»
+                </p>
+              )}
             </div>
           </section>
 

@@ -249,6 +249,12 @@ async function __POST(req: NextRequest) {
                   quantity: Math.round(qty * 1000) / 1000,
                   minQuantity: row.minQuantity !== null ? Math.round(row.minQuantity * 100) / 100 || 1 : 1,
                   soldByWeight: false,
+                  // 👕 الموسم والمعروض — فاشون بس، والمعروض محصور بين 0 والكمية
+                  season: businessType === 'fashion' && row.season ? row.season : 'ALL_YEAR',
+                  displayQty:
+                    businessType === 'fashion' && row.displayQty !== null
+                      ? Math.max(0, Math.min(row.displayQty, Math.round(qty * 1000) / 1000))
+                      : Math.round(qty * 1000) / 1000,
                   unitLabel:
                     businessType === 'food'
                       ? row.unit

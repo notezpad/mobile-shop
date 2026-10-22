@@ -100,20 +100,24 @@ export async function applyTransferItem(tx: Tx, ctx: TransferCtx, line: Transfer
       select: { id: true, color: true, size: true, barcode: true },
     })
     if (!srcVariant) throw new TransferStockError('لون/مقاس غير صالح')
-    const dec = await tx.productVariant.updateMany({
-      where: { id: srcVariant.id, productId: src.id, quantity: { gte: qty } },
-      data: { quantity: { decrement: qty } },
-    })
-    if (dec.count !== 1) {
+    // 👕 الخصم من المعروض الأول والباقي من المخزن الداخلي
+    const dec = await tx.$executeRaw`
+      UPDATE "ProductVariant"
+      SET "quantity" = "quantity" - ${qty},
+          "displayQty" = GREATEST(0, "displayQty" - LEAST(${qty}, "displayQty"))
+      WHERE "id" = ${srcVariant.id} AND "productId" = ${src.id} AND "quantity" >= ${qty}`
+    if (dec !== 1) {
       throw new TransferStockError(`الكمية غير متوفرة (${src.name} — ${labelOf(srcVariant)})`, 409)
     }
     await syncProductQuantityFromVariants(tx, src.id)
   } else {
-    const dec = await tx.product.updateMany({
-      where: { id: src.id, tenantId, quantity: { gte: qty } },
-      data: { quantity: { decrement: qty } },
-    })
-    if (dec.count !== 1) throw new TransferStockError(`الكمية غير متوفرة (${src.name})`, 409)
+    // 👕 الخصم من المعروض الأول والباقي من المخزن الداخلي
+    const dec = await tx.$executeRaw`
+      UPDATE "Product"
+      SET "quantity" = "quantity" - ${qty},
+          "displayQty" = GREATEST(0, "displayQty" - LEAST(${qty}, "displayQty"))
+      WHERE "id" = ${src.id} AND "tenantId" = ${tenantId} AND "quantity" >= ${qty}`
+    if (dec !== 1) throw new TransferStockError(`الكمية غير متوفرة (${src.name})`, 409)
   }
   const label = srcVariant ? labelOf(srcVariant) : null
 
@@ -157,6 +161,7 @@ export async function applyTransferItem(tx: Tx, ctx: TransferCtx, line: Transfer
         soldByWeight: src.soldByWeight,
         unitLabel: src.unitLabel,
         retailMarginPercent: src.retailMarginPercent,
+        season: src.season, // 👕 الموسم بيتنقل مع النسخة
       },
     })
   } else if (!dest.barcode && src.barcode) {
@@ -208,11 +213,12 @@ export async function applyTransferItem(tx: Tx, ctx: TransferCtx, line: Transfer
         data: { productId: dest.id, color: srcVariant.color, size: srcVariant.size, barcode: vBarcode, quantity: 0 },
       })
     }
-    await tx.productVariant.update({ where: { id: dv.id }, data: { quantity: { increment: qty } } })
+    // 👕 البضاعة الواصلة بتتعمل معروضة (زي الشراء) — والتقسيمة بقت حاجة الحركة تظبطها
+    await tx.productVariant.update({ where: { id: dv.id }, data: { quantity: { increment: qty }, displayQty: { increment: qty } } })
     await syncProductQuantityFromVariants(tx, dest.id)
     destVariantId = dv.id
   } else {
-    await tx.product.update({ where: { id: dest.id }, data: { quantity: { increment: qty } } })
+    await tx.product.update({ where: { id: dest.id }, data: { quantity: { increment: qty }, displayQty: { increment: qty } } })
   }
 
   await tx.stockMovement.create({
