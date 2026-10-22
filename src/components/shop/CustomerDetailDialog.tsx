@@ -55,9 +55,14 @@ import { BalanceAdjustDialog } from './BalanceAdjustDialog'
 
 // 🎨 هوية صفحة العملاء (sky) على التاب النشط — نفس بصمة باقي دايلوجات الصفحة
 const TAB_TRIGGER_CLS =
-  'rounded-lg ' +
-  'data-[state=active]:border-sky-200 data-[state=active]:bg-sky-50 data-[state=active]:text-sky-800 ' +
-  'dark:data-[state=active]:border-sky-500/30 dark:data-[state=active]:bg-sky-500/15 dark:data-[state=active]:text-sky-300'
+  'group h-11 flex-1 gap-2 rounded-none border-0 border-b-2 border-transparent bg-transparent px-3 text-sm font-bold text-muted-foreground shadow-none ' +
+  'hover:text-foreground ' +
+  'data-[state=active]:border-sky-600 data-[state=active]:bg-sky-500/[0.06] data-[state=active]:text-sky-700 data-[state=active]:shadow-none ' +
+  'dark:data-[state=active]:border-sky-400 dark:data-[state=active]:bg-sky-500/10 dark:data-[state=active]:text-sky-300'
+
+const TAB_COUNT_CLS =
+  'rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-black leading-none tabular-nums text-muted-foreground ' +
+  'group-data-[state=active]:bg-sky-600 group-data-[state=active]:text-white'
 
 const METHOD_LABELS: Record<string, string> = {
   cash: 'كاش',
@@ -417,7 +422,7 @@ export function CustomerDetailDialog({
         {/* 🛡️ 2026-09-15: Added relative + z-[1] to ensure content stays
             above background page elements (fixes "items inside each other"
             visual bug where background table text bleeds through). */}
-        <div className="relative z-[1] min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background px-4 pb-6 pt-4 sm:px-6">
+        <div className="relative z-[1] min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background px-4 pb-6 pt-0 sm:px-6">
           {loading ? (
             <div className="space-y-3 py-2">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -430,18 +435,21 @@ export function CustomerDetailDialog({
             </p>
           ) : (
             <Tabs value={tab} onValueChange={setTab} className="w-full">
-              <TabsList className="sticky top-0 z-10 mb-4 h-11 w-full rounded-xl border bg-muted/60 p-1 backdrop-blur">
+              <TabsList className="sticky top-0 z-20 -mx-4 mb-4 flex h-auto w-[calc(100%+2rem)] items-stretch gap-0 rounded-none border-b bg-background p-0 px-4 pt-3 sm:-mx-6 sm:w-[calc(100%+3rem)] sm:px-6">
                 <TabsTrigger value="account" className={TAB_TRIGGER_CLS}>
                   <Receipt className="size-4" />
                   كشف حساب
+                  <span className={TAB_COUNT_CLS}>{timeline.length}</span>
                 </TabsTrigger>
                 <TabsTrigger value="sales" className={TAB_TRIGGER_CLS}>
                   <ShoppingBag className="size-4" />
                   المبيعات
+                  <span className={TAB_COUNT_CLS}>{detail.sales.length}</span>
                 </TabsTrigger>
                 <TabsTrigger value="payments" className={TAB_TRIGGER_CLS}>
                   <Wallet className="size-4" />
                   الدفعات
+                  <span className={TAB_COUNT_CLS}>{detail.payments.length}</span>
                 </TabsTrigger>
               </TabsList>
 

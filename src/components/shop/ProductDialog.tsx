@@ -83,9 +83,11 @@ export function ProductDialog({
   // Unit-Based Dynamic Pricing: per-product override of the tenant's default
   // retail margin %. Empty string = "use the tenant default".
   const [retailMarginPercent, setRetailMarginPercent] = React.useState<string>('')
-  // 👕 الموسم والمعروض (فاشون فقط) + عدد المقاسات (اللي بمقاسات مفيش خانة معروض هنا)
+  // 👕 الموسم (فاشون فقط) + عدد المقاسات
+  // 🧹 2026-10-23: خانة «المعروض على الرف» اتشالت من الفورم — كانت بيلخبطوا
+  // (افتراضي 0 → الكمية كلها بتدخل المخزن الداخلي والصنف مبيظهرش في الكاشير).
+  // بقى: كل الكمية بتدخل معروضة، والمخزن الداخلي للموسم بس (زر «المواسم»).
   const [season, setSeason] = React.useState<'ALL_YEAR' | 'SUMMER' | 'WINTER'>('ALL_YEAR')
-  const [displayQty, setDisplayQty] = React.useState('')
   const [variantCount, setVariantCount] = React.useState<number | null>(null)
   const [dirty, setDirty] = React.useState(false)
   const fileRef = React.useRef<HTMLInputElement>(null)
@@ -126,13 +128,8 @@ export function ProductDialog({
         initial?.retailMarginPercent != null ? String(initial.retailMarginPercent) : ''
       )
       fetch('/api/branches').then(r => r.ok ? r.json() : []).then(setBranches).catch(() => setBranches([]))
-      // 👕 الموسم والمعروض (فاشون) — المعروض الافتراضي = كل الكمية
+      // 👕 الموسم (فاشون) — المعروض مش من الفورم تاني (كل الكمية معروضة افتراضيًا)
       setSeason((initial as any)?.season ?? 'ALL_YEAR')
-      setDisplayQty(
-        initial?.id
-          ? String((initial as any)?.displayQty ?? initial?.quantity ?? 0)
-          : String(initial?.quantity ?? 0)
-      )
       // عدد المقاسات: المنتج اللي له ألوان/مقاسات المعروض بيتقسم على مستوى المقاس
       if (initial?.id && isFashionVertical) {
         fetch(`/api/products/${initial.id}/variants`)
@@ -190,19 +187,11 @@ export function ProductDialog({
         ...(capabilities.includes('dynamic_retail_pricing')
           ? { retailMarginPercent: retailMarginPercent.trim() !== '' ? parseFloat(retailMarginPercent) : null }
           : {}),
-        // 👕 الموسم والمعروض — فاشون فقط (والسيرفر بيتحقق برضه)
-        ...(isFashionVertical
-          ? {
-              season,
-              displayQty: Math.max(
-                0,
-                Math.min(
-                  Math.round((parseFloat(displayQty) || 0) * 1000) / 1000,
-                  Math.round((parseFloat(quantity) || 0) * 1000) / 1000,
-                ),
-              ),
-            }
-          : {}),
+        // 👕 الموسم — فاشون فقط (والسيرفر بيتحقق برضه).
+        // 🧹 2026-10-23: مبنبعتش displayQty خالص — السيرفر هو اللي بيظبطها:
+        // إضافة → الكمية كلها معروضة، تعديل → الزيادة تروح للعرض والنقص من المعروض
+        // الأول (displayAfterTotalChange) فتقسيمة الموسم المقفول مش بتتبوظ.
+        ...(isFashionVertical ? { season } : {}),
       }
       if (initial?.id) {
         await api(`/api/products/${initial.id}`, { method: 'PUT', body: payload })
@@ -609,24 +598,6 @@ export function ProductDialog({
                 </Field>
               )}
 
-              {/* 👕 المعروض — فاشون، وللمنتجات من غير مقاسات فقط */}
-              {isFashionVertical && variantCount === 0 && (
-                <Field
-                  label="المعروض على الرف"
-                  htmlFor="p-display"
-                  hint="الباقي بيدخل المخزن الداخلي — مش بيظهر في نقطة البيع لحد ما تطلعه"
-                >
-                  <InkInput
-                    id="p-display"
-                    num
-                    type="number"
-                    min={0}
-                    max={Math.round((parseFloat(quantity) || 0) * 1000) / 1000}
-                    value={displayQty}
-                    onChange={(e) => edit(setDisplayQty)(e.target.value)}
-                  />
-                </Field>
-              )}
               {isFashionVertical && variantCount != null && variantCount > 0 && (
                 <p className="col-span-full rounded-xl bg-muted/50 px-3 py-2 text-[11px] text-muted-foreground">
                   المنتج ده له ألوان ومقاسات — تقسيمة المعروض/المخزن الداخلي بتتظبط من «الألوان والمقاسات» وزر «المواسم»
