@@ -98,6 +98,36 @@ const INVISIBLE_RE = /[\u200B-\u200F\u202A-\u202E\u2066-\u2069\u00A0\uFEFF]/g
 /** تشكيل + تطويل */
 const TASHKEEL_RE = /[\u0610-\u061A\u064B-\u065F\u0670\u0640]/g
 
+/**
+ * 🧾 2026-10-22 (جولة التصدير→الاستيراد): ملفات التصدير بتكتب '-' في خلايا
+ * الباركود/التصنيف الفاضية عشان الشيت يبقى مقروء في الطباعة. المحرك ده كان
+ * بياخدها كقيم حقيقية → باركود '-' مزيف، تصنيف اسمه '-'، وخطأ كاذب
+ * «نفس الباركود مستخدم لمنتجين». دلوقتي أي قيمة من دي بتتعامل كفاضية.
+ */
+const PLACEHOLDER_VALUES = new Set(['-', '–', '—', '_', '.', '..', 'لا يوجد', 'مفيش', 'فاضي', 'none', 'null', 'nil', 'n/a', 'na'])
+
+export function isPlaceholderText(v: unknown): boolean {
+  const s = cleanCellText(v).toLowerCase()
+  if (!s) return true
+  // شرطات ونجوم ونقط متكررة: «---» «***» «___»
+  if (/^[-–—_.*•·]+$/.test(s)) return true
+  return PLACEHOLDER_VALUES.has(s)
+}
+
+/**
+ * 🧾 صف الإجمالي: ملفات التصدير بتنتهي بصف «الإجمالي» بجمع الكميات —
+ * لو اترفعت للنظام كان هيتعمل منتج اسمه «الإجمالي» بمخزون = مجموع الشيت!
+ * (اتأكدنا من ده في اختبار الجولة الكاملة). دلوقتي بيكتشف ويشال تلقائيًا.
+ */
+export function isTotalsRowLabel(name: string): boolean {
+  const nk = normalizeKey(name)
+  if (!nk) return false
+  if (nk === 'الاجمالي' || nk.startsWith('اجمالي')) return true
+  if (nk === 'المجموع' || nk === 'مجموع' || nk === 'الجمع') return true
+  if (nk === 'total' || nk === 'totals' || nk === 'grandtotal' || nk === 'sum') return true
+  return false
+}
+
 /** تنظيف عرضي: مسافات/حروف مخفية — بيستخدم كـ«إصلاح تلقائي» للقيم نفسها */
 export function cleanCellText(v: unknown): string {
   if (v == null) return ''
@@ -495,7 +525,7 @@ export interface ParsedRow {
   /** صف مكرر داخل الملف — كميته بتتجمع على الصف ده */
   mergedInto: number | null
   /** المنتج موجود أصلًا في القاعدة (بالباركود أو بالاسم بعد التطبيع) */
-  existsInDb: { id: number; name: string; byBarcode: boolean } | null
+  existsInDb: { id: number; name: string; byBarcode: boolean; active: boolean } | null
 }
 
 export interface ImportStats {
@@ -579,12 +609,29 @@ export function validateRows(
       fixes.push('تنظيف مسافات/حروف مخفية في الاسم')
     }
 
+    // ── 🧾 صف الإجمالي (آخر صف في ملفات التصدير) ──
+    // بيتشال تلقائيًا قبل أي فحص — مش بيتسجل كمنتج ولا بيدخل في التكرارات
+    if (name && isTotalsRowLabel(name)) {
+      rows.push({
+        idx, status: 'blank', name, barcode: null, quantity: 0, cost: null, price: null,
+        category: null, unit: null, minQuantity: null,
+        fixes: [`صف «${name}» ده صف الإجمالي بتاع التصدير — اتشال تلقائيًا (مش منتج)`],
+        errors: [], warnings: [], mergedInto: null, existsInDb: null,
+      })
+      return
+    }
+
     // ── الباركود ──
     let barcode: string | null = null
     const bcRaw = cleanCellText(getCell(raw, mapping.barcode))
     if (bcRaw) {
       let bc: string | null = bcRaw.replace(INVISIBLE_RE, '').trim()
       if (bc !== bcRaw) fixes.push('تنظيف الباركود من حروف مخفية')
+      // 🧾 «-» و«لا يوجد» و«---» = منتج بدون باركود (شكل التصدير للخلية الفاضية)
+      if (bc && isPlaceholderText(bc)) {
+        bc = null
+        fixes.push('الباركود كان فاضي مكتوب فيه شرطة — اتعامل معاه كمنتج بدون باركود')
+      }
       // 6221036.0 → 6221036 (إكسيل بيحوّل الأرقام الطويلة لكسر عشري)
       if (bc && /^\d+\.0+$/.test(bc)) {
         bc = bc.split('.')[0]
@@ -638,8 +685,12 @@ export function validateRows(
     }
 
     // ── التصنيف والوحدة وحد التنبيه ──
-    const category = cleanCellText(getCell(raw, mapping.category)) || null
-    const unit = cleanCellText(getCell(raw, mapping.unit)) || null
+    // 🧾 «-» في التصنيف/الوحدة (شكل التصدير للفاضي) مش تصنيف حقيقي
+    const catRaw = cleanCellText(getCell(raw, mapping.category))
+    if (catRaw && isPlaceholderText(catRaw)) fixes.push('التصنيف كان فاضي مكتوب فيه شرطة — اتشال')
+    const category = !catRaw || isPlaceholderText(catRaw) ? null : catRaw
+    const unitRaw = cleanCellText(getCell(raw, mapping.unit))
+    const unit = !unitRaw || isPlaceholderText(unitRaw) ? null : unitRaw
     let minQuantity: number | null = null
     if (mapping.minQuantity !== undefined) {
       const mRes = parseSmartNumber(getCell(raw, mapping.minQuantity))

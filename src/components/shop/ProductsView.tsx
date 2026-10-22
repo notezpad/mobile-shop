@@ -610,8 +610,10 @@ export function ProductsView() {
       ],
       rows: products.map((p) => ({
         name: p.name,
-        category: p.category || '-',
-        barcode: p.barcode || '-',
+        // 🧾 2026-10-22: فاضيين مش «-» — علشان ملف التصدير يرجع يستورد في
+        // الاستيراد الذكي من غير شرطات تتفسّر كباركود/تصنيف حقيقي
+        category: p.category || '',
+        barcode: p.barcode || '',
         price: p.price,
         // Unit-Based Dynamic Pricing: the price actually charged for the
         // "Piece / قطعة" unit — cost+margin when enabled, else same as

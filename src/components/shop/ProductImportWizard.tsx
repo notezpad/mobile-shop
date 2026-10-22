@@ -545,7 +545,7 @@ export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
               {/* تحذيرات عامة */}
               {stats!.existsInDb > 0 && (
                 <p className="rounded-lg bg-sky-50 px-3 py-2 text-[13px] text-sky-900">
-                  <b>{stats!.existsInDb}</b> منتج موجودين أصلًا في نظامك (بالباركود أو الاسم) — اختار تحت هنعمل معاهم إيه.
+                  <b>{stats!.existsInDb}</b> منتج موجودين أصلًا في نظامك (بالباركود أو الاسم) — اختار تحت هنعمل معاهم إيه. ولو في منتهم موقوف، هيرجع يشتغل تلقائيًا عند الدمج.
                 </p>
               )}
               {stats!.duplicatesInFile > 0 && (
@@ -584,6 +584,7 @@ export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
               {/* سياسة الموجود */}
               <div className="rounded-xl border bg-card p-3">
                 <p className="mb-2 text-[13px] font-bold">لو المنتج موجود أصلًا في النظام (بالباركود أو الاسم):</p>
+                <p className="mb-2 text-[11px] text-muted-foreground">المنتج الموقوف اللي هيندمج بيرجع يشتغل تلقائيًا — علشان الكمية متروحش لمنتج مخفي.</p>
                 <RadioGroup value={mergeMode} onValueChange={(v) => { setMergeMode(v as MergeMode); scheduleRevalidate(undefined, v as MergeMode) }} className="grid gap-2 sm:grid-cols-3">
                   <MergeOption value="add" title="دمج الكمية" desc="كمية الشيت هتتضاف على المخزون الحالي" recommended />
                   <MergeOption value="update" title="دمج + تحديث سعر" desc="الكمية تتضاف + السعر والتكلفة يتحدثوا من الشيت" />
@@ -731,7 +732,9 @@ function ReviewRow({ row }: { row: ParsedRow }) {
       <td className="max-w-[220px] px-2 py-2">
         <span className="block truncate font-bold">{row.name || <span className="text-muted-foreground">— بدون اسم —</span>}</span>
         {row.existsInDb && (
-          <span className="mt-0.5 block text-[11px] text-sky-700">موجود بالنظام: «{row.existsInDb.name}»</span>
+          <span className="mt-0.5 block text-[11px] text-sky-700">
+            موجود بالنظام: «{row.existsInDb.name}»{!row.existsInDb.active && <span className="font-bold text-orange-700"> (موقوف — هيترجّع يشتغل عند الدمج)</span>}
+          </span>
         )}
         {notes.slice(0, 2).map((n, i) => (
           <span key={i} className={cn('mt-0.5 block text-[11px] leading-snug', n.cls)}>{n.text}</span>
