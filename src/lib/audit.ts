@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { getSql } from '@/lib/sql'
 import { getSession } from '@/lib/auth'
 import { extractRequestContext } from '@/lib/tracking/server'
 import type { Prisma } from '@prisma/client'
@@ -52,7 +52,6 @@ export async function logAudit(
   req?: { headers: Headers },
   opts?: { tx?: Prisma.TransactionClient; fatal?: boolean },
 ): Promise<void> {
-  const exec = opts?.tx ?? db
   try {
     let actorId = input.actor?.id ?? null
     let actorEmail = input.actor?.email ?? null
@@ -68,10 +67,22 @@ export async function logAudit(
       details = JSON.stringify(scrub(input.details))
       if (details.length > MAX_DETAILS) details = details.slice(0, MAX_DETAILS)
     }
-    await exec.$executeRaw`
-      INSERT INTO "AuditLog" ("actorId","actorEmail","action","targetType","targetId","details","ipHash")
-      VALUES (${actorId}, ${actorEmail}, ${input.action}, ${input.targetType ?? null},
-              ${input.targetId == null ? null : String(input.targetId)}, ${details}, ${ipHash})`
+    const targetId = input.targetId == null ? null : String(input.targetId)
+    if (opts?.tx) {
+      // داخل transaction بتاعة Prisma (مسارات الأرصدة المالية) — نفس السلوك القديم بالظبط
+      await opts.tx.$executeRaw`
+        INSERT INTO "AuditLog" ("actorId","actorEmail","action","targetType","targetId","details","ipHash")
+        VALUES (${actorId}, ${actorEmail}, ${input.action}, ${input.targetType ?? null},
+                ${targetId}, ${details}, ${ipHash})`
+    } else {
+      // ⚡ تقليل CPU: الوضع العادي (best-effort) بقى postgres.js — كان db.$executeRaw
+      // (Prisma) فكل عملية متدقَّقة بتبني PrismaClient + محرك WASM لمجرد INSERT واحد.
+      const sql = getSql()
+      await sql`
+        INSERT INTO "AuditLog" ("actorId","actorEmail","action","targetType","targetId","details","ipHash")
+        VALUES (${actorId}::text, ${actorEmail}::text, ${input.action}::text, ${input.targetType ?? null}::text,
+                ${targetId}::text, ${details}::text, ${ipHash}::text)`
+    }
   } catch (e) {
     if (opts?.fatal) throw e
     console.error('[audit] failed (ignored):', e)
