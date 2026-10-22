@@ -77,22 +77,22 @@ async function __POST(req: NextRequest) {
     const sql = await getSql()
     const barcodes = [...new Set(rows.filter((r) => r.barcode && r.status !== 'error').map((r) => r.barcode as string))]
     const names = [...new Set(rows.filter((r) => r.name && r.status !== 'error').map((r) => r.name.trim().toLowerCase()))]
-    const dbByBarcode = new Map<string, { id: number; name: string; branchId: number | null; price: number; cost: number }>()
-    const dbByName = new Map<string, { id: number; name: string; branchId: number | null; price: number; cost: number }>()
+    const dbByBarcode = new Map<string, { id: number; name: string; branchId: number | null; price: number; cost: number; active: boolean }>()
+    const dbByName = new Map<string, { id: number; name: string; branchId: number | null; price: number; cost: number; active: boolean }>()
     const branchCond = branchId == null ? sql`"branchId" IS NULL` : sql`"branchId" = ${branchId}`
     if (barcodes.length) {
-      const rws = await sql<{ id: number; name: string; branchId: number | null; price: number; cost: number; barcode: string }[]>`
-        SELECT "id", "name", "branchId", "price", "cost", "barcode" FROM "Product"
+      const rws = await sql<{ id: number; name: string; branchId: number | null; price: number; cost: number; active: boolean; barcode: string }[]>`
+        SELECT "id", "name", "branchId", "price", "cost", "active", "barcode" FROM "Product"
         WHERE "tenantId" = ${session.tenantId} AND ${branchCond} AND "barcode" IN ${sql(barcodes)}`
-      for (const r of rws) if (r.barcode) dbByBarcode.set(r.barcode, { id: Number(r.id), name: r.name, branchId: r.branchId, price: r.price, cost: r.cost })
+      for (const r of rws) if (r.barcode) dbByBarcode.set(r.barcode, { id: Number(r.id), name: r.name, branchId: r.branchId, price: r.price, cost: r.cost, active: r.active })
     }
     if (names.length) {
-      const rws = await sql<{ id: number; name: string; branchId: number | null; price: number; cost: number }[]>`
-        SELECT "id", "name", "branchId", "price", "cost" FROM "Product"
+      const rws = await sql<{ id: number; name: string; branchId: number | null; price: number; cost: number; active: boolean }[]>`
+        SELECT "id", "name", "branchId", "price", "cost", "active" FROM "Product"
         WHERE "tenantId" = ${session.tenantId} AND lower(btrim("name")) IN ${sql(names)}`
       for (const r of rws) {
         const k = r.name.trim().toLowerCase()
-        if (!dbByName.has(k)) dbByName.set(k, { id: Number(r.id), name: r.name, branchId: r.branchId, price: r.price, cost: r.cost })
+        if (!dbByName.has(k)) dbByName.set(k, { id: Number(r.id), name: r.name, branchId: r.branchId, price: r.price, cost: r.cost, active: r.active })
       }
     }
 
@@ -113,7 +113,7 @@ async function __POST(req: NextRequest) {
     // ── 4) بناء خطة التنفيذ ──
     const importable = importableRows(rows)
     const creates: { row: ParsedRow; qty: number }[] = []
-    const merges = new Map<number, { name: string; qty: number; setPrice: number | null; setCost: number | null; branchId: number | null; idx: number }>()
+    const merges = new Map<number, { name: string; qty: number; setPrice: number | null; setCost: number | null; branchId: number | null; idx: number; wasInactive?: boolean }>()
     const results: RowResult[] = []
 
     for (const row of importable) {
@@ -126,18 +126,18 @@ async function __POST(req: NextRequest) {
 
       if (existing) {
         if (mergeMode === 'skip') {
-          results.push({ idx: row.idx, name: row.name, status: 'skipped', message: 'موجود بالفعل — تم التخطي حسب اختيارك' })
+          results.push({ idx: row.idx, name: row.name, status: 'skipped', message: existing.active ? 'موجود بالفعل — تم التخطي حسب اختيارك' : 'المنتج موجود بس موقوف — اتخطى حسب اختيارك وما اتلمسش' })
           for (const d of dupRows) results.push({ idx: d.idx, name: d.name, status: 'skipped', message: 'صف مكرر — اتحسب جوه الصف الأصلي المتخطى' })
           continue
         }
-        const m = merges.get(existing.id) ?? { name: existing.name, qty: 0, setPrice: null, setCost: null, branchId: existing.branchId, idx: row.idx }
+        const m = merges.get(existing.id) ?? { name: existing.name, qty: 0, setPrice: null, setCost: null, branchId: existing.branchId, idx: row.idx, wasInactive: !existing.active }
         m.qty = Math.round((m.qty + qty) * 1000) / 1000
         if (mergeMode === 'update') {
           if (row.price !== null) m.setPrice = row.price
           if (row.cost !== null) m.setCost = row.cost
         }
         merges.set(existing.id, m)
-        results.push({ idx: row.idx, name: row.name, status: 'merged', message: `اتدمج مع «${existing.name}» (+${qty})` })
+        results.push({ idx: row.idx, name: row.name, status: 'merged', message: `اتدمج مع «${existing.name}» (+${qty})${existing.active ? '' : ' — والمنتج كان موقوف فاترجّع يشتغل'}` })
         for (const d of dupRows) results.push({ idx: d.idx, name: d.name, status: 'merged', message: `صف مكرر — كمته اتضافت على «${existing.name}»` })
         continue
       }
@@ -180,6 +180,9 @@ async function __POST(req: NextRequest) {
                 where: { id },
                 data: {
                   quantity: { increment: m.qty },
+                  // 🧾 المنتج الموقوف اللي راجع في الاستيراد — بيرجع يشتغل
+                  // (بدل ما الكمية تتحقّق في منتج مخفي مش ظاهر في القايمة)
+                  ...(m.wasInactive ? { active: true } : {}),
                   ...(m.setPrice !== null ? { price: m.setPrice } : {}),
                   ...(m.setCost !== null ? { cost: m.setCost } : {}),
                 },

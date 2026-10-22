@@ -34,8 +34,8 @@ async function findDbDuplicates(
   tenantId: string,
   branchId: number | null,
   items: { name: string; barcode: string | null }[],
-): Promise<Map<string, { id: number; name: string; byBarcode: boolean }>> {
-  const res = new Map<string, { id: number; name: string; byBarcode: boolean }>()
+): Promise<Map<string, { id: number; name: string; byBarcode: boolean; active: boolean }>> {
+  const res = new Map<string, { id: number; name: string; byBarcode: boolean; active: boolean }>()
   const barcodes = [...new Set(items.map((i) => i.barcode).filter((b): b is string => !!b))]
   const names = [...new Set(items.map((i) => i.name.trim().toLowerCase()).filter(Boolean))]
   if (!barcodes.length && !names.length) return res
@@ -44,22 +44,22 @@ async function findDbDuplicates(
   const branchCond = branchId == null ? sql`"branchId" IS NULL` : sql`"branchId" = ${branchId}`
 
   if (barcodes.length) {
-    const rows = await sql<{ id: number; name: string; barcode: string }[]>`
-      SELECT "id", "name", "barcode" FROM "Product"
+    const rows = await sql<{ id: number; name: string; barcode: string; active: boolean }[]>`
+      SELECT "id", "name", "barcode", "active" FROM "Product"
       WHERE "tenantId" = ${tenantId} AND ${branchCond} AND "barcode" IN ${sql(barcodes)}`
     for (const r of rows) {
-      if (r.barcode) res.set(r.barcode, { id: Number(r.id), name: r.name, byBarcode: true })
+      if (r.barcode) res.set(r.barcode, { id: Number(r.id), name: r.name, byBarcode: true, active: r.active })
     }
   }
   if (names.length) {
     // بالاسم: مطابقة تامة بعد lowercase/trim — الباركود هو المطابقة القوية
-    const rows = await sql<{ id: number; name: string }[]>`
-      SELECT "id", "name" FROM "Product"
+    const rows = await sql<{ id: number; name: string; active: boolean }[]>`
+      SELECT "id", "name", "active" FROM "Product"
       WHERE "tenantId" = ${tenantId}
         AND lower(btrim("name")) IN ${sql(names)}`
     for (const r of rows) {
       const key = r.name.trim().toLowerCase()
-      if (!res.has(key)) res.set(key, { id: Number(r.id), name: r.name, byBarcode: false })
+      if (!res.has(key)) res.set(key, { id: Number(r.id), name: r.name, byBarcode: false, active: r.active })
     }
   }
   return res
@@ -159,11 +159,19 @@ export async function POST(req: NextRequest) {
         existsCount++
         const how = hit.byBarcode ? 'بنفس الباركود' : 'بنفس الاسم'
         if (mergeMode === 'skip') {
-          r.warnings.push(`المنتج موجود بالفعل (${how}: «${hit.name}») — هيتخطى حسب اختيارك`)
+          r.warnings.push(
+            hit.active
+              ? `المنتج موجود بالفعل (${how}: «${hit.name}») — هيتخطى حسب اختيارك`
+              : `المنتج موجود بس موقوف (${how}: «${hit.name}») — هيتخطى حسب اختيارك وهيفضل موقوف`,
+          )
           if (r.status === 'ok' || r.status === 'fixed') r.status = 'warn'
         } else {
           const extra = mergeMode === 'update' ? ' + هيتحدّث سعره وتكلفته من الشيت' : ''
-          r.warnings.push(`المنتج موجود بالفعل (${how}: «${hit.name}») — كميته هتتضاف على الموجود${extra}`)
+          r.warnings.push(
+            hit.active
+              ? `المنتج موجود بالفعل (${how}: «${hit.name}») — كميته هتتضاف على الموجود${extra}`
+              : `المنتج موجود بس موقوف (${how}: «${hit.name}») — عند التنفيذ هيترجع يشتغل تلقائيًا وكمية الشيت هتتضاف على الموجود${extra}`,
+          )
           if (r.status === 'ok' || r.status === 'fixed') r.status = 'warn'
         }
       }
