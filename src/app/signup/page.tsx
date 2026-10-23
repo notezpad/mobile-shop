@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { trackEvent, getAttributionForServer } from "@/lib/tracking/client";
 import { TRACKING_EVENTS } from "@/lib/tracking/types";
+import LoginShowcase from "@/components/login/LoginShowcase";
 
 type PlanMetaEntry = {
   name: string
@@ -109,14 +110,6 @@ const PLAN_META: Record<string, PlanMetaEntry> = {
   },
 }
 
-const BENEFITS = [
-  'تجربة مجانية 14 يوم بكل المزايا',
-  'بدون بطاقة ائتمان مطلوبة',
-  'إعداد في أقل من دقيقتين',
-  'بياناتك محفوظة وآمنة بالكامل',
-  'ألغِ في أي وقت بدون أي التزام',
-]
-
 function planPriceLabel(p: { priceMonthly: number; priceYearly: number }): string {
   return p.priceMonthly > 0
     ? `${p.priceMonthly.toLocaleString('en-US')} EGP`
@@ -133,8 +126,8 @@ function getPasswordStrength(pwd: string): { score: 0 | 1 | 2 | 3; label: string
   if (/[^A-Za-z0-9]/.test(pwd)) score++
   const finalScore = Math.min(3, Math.floor(score / 2)) as 0 | 1 | 2 | 3
   const labels = ['ضعيفة', 'متوسطة', 'جيدة', 'قوية']
-  const colors = ['text-red-500', 'text-amber-500', 'text-blue-500', 'text-emerald-500']
-  const bgs = ['bg-red-500', 'bg-amber-500', 'bg-blue-500', 'bg-emerald-500']
+  const colors = ['text-red-500', 'text-amber-500', 'text-teal-500', 'text-emerald-500']
+  const bgs = ['bg-red-500', 'bg-amber-500', 'bg-teal-500', 'bg-emerald-500']
   return { score: finalScore, label: labels[finalScore], color: colors[finalScore], bg: bgs[finalScore] }
 }
 
@@ -165,31 +158,31 @@ const PLAN_TYPE_META: Record<
     label: 'موبايلات وكمبيوتر',
     sub: 'محلات الموبايل والإلكترونيات',
     icon: Smartphone,
-    grad: 'from-sky-500 via-blue-600 to-indigo-600',
-    glow: 'shadow-[0_10px_28px_-8px_rgba(37,99,235,0.65)]',
-    tint: 'border-sky-200 bg-gradient-to-br from-sky-50 to-indigo-50 dark:border-sky-900 dark:from-sky-950/50 dark:to-indigo-950/30',
-    soft: 'bg-sky-50 dark:bg-sky-950/30',
-    text: 'text-sky-600 dark:text-sky-400',
+    grad: 'from-[#0fbf86] to-[#00875f]',
+    glow: 'shadow-[0_10px_28px_-8px_rgba(0,160,116,0.6)]',
+    tint: 'border-[#00c98b]/35 bg-[#effcf7] dark:border-emerald-900 dark:bg-emerald-950/30',
+    soft: 'bg-[#e3f9f0] dark:bg-emerald-950/30',
+    text: 'text-[#00835a] dark:text-emerald-400',
   },
   fashion: {
     label: 'ملابس وأحذية',
     sub: 'محلات الملابس والأحذية',
     icon: Shirt,
-    grad: 'from-red-600 to-red-700',
-    glow: 'shadow-[0_10px_28px_-8px_rgba(220,38,38,0.6)]',
-    tint: 'border-orange-200 bg-gradient-to-br from-orange-50 to-red-50 dark:border-orange-900 dark:from-orange-950/50 dark:to-red-950/30',
-    soft: 'bg-red-50 dark:bg-red-950/30',
-    text: 'text-red-700 dark:text-red-400',
+    grad: 'from-[#0fbf86] to-[#00875f]',
+    glow: 'shadow-[0_10px_28px_-8px_rgba(0,160,116,0.6)]',
+    tint: 'border-[#00c98b]/35 bg-[#effcf7] dark:border-emerald-900 dark:bg-emerald-950/30',
+    soft: 'bg-[#e3f9f0] dark:bg-emerald-950/30',
+    text: 'text-[#00835a] dark:text-emerald-400',
   },
   other: {
     label: 'باقات أخرى',
     sub: 'باقات إضافية',
     icon: Sparkles,
-    grad: 'from-emerald-500 via-emerald-600 to-teal-600',
-    glow: 'shadow-[0_10px_28px_-8px_rgba(5,150,105,0.65)]',
-    tint: 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 dark:border-emerald-900 dark:from-emerald-950/50 dark:to-teal-950/30',
-    soft: 'bg-emerald-50 dark:bg-emerald-950/30',
-    text: 'text-emerald-700 dark:text-emerald-400',
+    grad: 'from-[#0fbf86] to-[#00875f]',
+    glow: 'shadow-[0_10px_28px_-8px_rgba(0,160,116,0.6)]',
+    tint: 'border-[#00c98b]/35 bg-[#effcf7] dark:border-emerald-900 dark:bg-emerald-950/30',
+    soft: 'bg-[#e3f9f0] dark:bg-emerald-950/30',
+    text: 'text-[#00835a] dark:text-emerald-400',
   },
 }
 
@@ -301,7 +294,7 @@ function PlanChooser({
       {types.length > 1 && (
         <div className={cn('space-y-2.5', hideOnMobile)}>
           <div className="flex items-center gap-2">
-            <span className="grid size-6 place-items-center rounded-full bg-primary text-[11px] font-black text-primary-foreground">1</span>
+            <span className="grid size-6 place-items-center rounded-full bg-[#00c98b] text-[11px] font-black text-[#04261b]">1</span>
             <p className="text-sm font-extrabold leading-tight text-foreground">إيه نوع نشاطك؟</p>
           </div>
           <div
@@ -330,7 +323,7 @@ function PlanChooser({
                   <span
                     className={cn(
                       'absolute end-2 top-2 grid size-5 place-items-center rounded-full transition-all',
-                      sel ? 'scale-100 bg-white text-emerald-600 shadow' : 'scale-90 border-2 border-current/25 opacity-40',
+                      sel ? 'scale-100 bg-white text-[#00875f] shadow' : 'scale-90 border-2 border-current/25 opacity-40',
                     )}
                   >
                     {sel && <Check className="size-3" strokeWidth={3.5} />}
@@ -356,7 +349,7 @@ function PlanChooser({
         <div className={cn('space-y-2.5', hideOnMobile)}>
           {types.length > 1 && (
             <div className="flex items-center gap-2">
-              <span className="grid size-6 place-items-center rounded-full bg-primary text-[11px] font-black text-primary-foreground">2</span>
+              <span className="grid size-6 place-items-center rounded-full bg-[#00c98b] text-[11px] font-black text-[#04261b]">2</span>
               <p className="text-sm font-extrabold text-foreground">اختار المستوى</p>
             </div>
           )}
@@ -379,7 +372,7 @@ function PlanChooser({
                     'su-lvl relative flex flex-col gap-1.5 overflow-hidden rounded-2xl border-2 p-3 text-right transition-all duration-300 active:scale-[0.97]',
                     sel
                       ? cn('scale-[1.02] border-transparent bg-gradient-to-br text-white', tm.grad, tm.glow)
-                      : 'border-border bg-card hover:border-foreground/30',
+                      : 'border-border bg-card hover:border-[#00c98b]/60',
                   )}
                 >
                   <span className="relative flex items-center justify-between gap-2">
@@ -387,7 +380,7 @@ function PlanChooser({
                     <span
                       className={cn(
                         'grid size-5 shrink-0 place-items-center rounded-full border-2 transition-all',
-                        sel ? 'border-transparent bg-white text-emerald-600' : 'border-border',
+                        sel ? 'border-transparent bg-white text-[#00875f]' : 'border-border',
                       )}
                     >
                       {sel && <Check className="size-3" strokeWidth={3.5} />}
@@ -477,6 +470,17 @@ function PlanChooser({
 
 
 const SIGNUP_CSS = `
+.su-side input[data-slot="input"]:focus-visible{border-color:#00c98b !important;box-shadow:0 0 0 3px rgba(0,201,139,.25) !important}
+.su-side input:-webkit-autofill,
+.su-side input:-webkit-autofill:hover,
+.su-side input:-webkit-autofill:focus{
+  -webkit-box-shadow:0 0 0 1000px #effcf7 inset !important;
+  box-shadow:0 0 0 1000px #effcf7 inset !important;
+  -webkit-text-fill-color:#0b2a20 !important;
+  caret-color:#0b2a20;
+  border-color:rgba(0,201,139,.45);
+  transition:background-color 9999s ease-out 0s;
+}
 .su-invite-d{display:none}
 @media (min-width:1024px){
   /* ScaleWrapper بيصغّر الصفحة على الشاشات ≤1536px وبيظبط --app-h على الارتفاع المعدّل،
@@ -485,8 +489,10 @@ const SIGNUP_CSS = `
   main .su-side{height:var(--app-h,100vh)}
   main .su-side{align-items:flex-start;padding:16px 24px}
   main .su-wrap{max-width:580px;margin-block:auto}
-  main .su-card{display:flex;flex-direction:column;gap:12px;padding:20px}
+  main .su-card{display:flex;flex-direction:column;padding:0}
   main .su-card>*{margin:0}
+  main .su-body{display:flex;flex-direction:column;gap:12px;padding:20px}
+  main .su-body>*{margin:0}
   main .su-title{display:flex;align-items:center;justify-content:space-between;gap:12px}
   main .su-chips{margin-top:0}
   main .su-form{display:grid;grid-template-columns:1fr 1fr;gap:24px 12px;align-items:start}
@@ -509,7 +515,8 @@ const SIGNUP_CSS = `
 }
 @media (min-width:1024px) and (max-height:760px){
   main .su-side{padding-block:8px}
-  main .su-card{padding:14px;gap:10px}
+  main .su-body{padding:14px;gap:10px}
+  main .su-hd{padding-block:12px}
   main .su-form{gap:16px 8px}
   main .su-fld{gap:12px}
   main .su-copy{display:none}
@@ -798,7 +805,7 @@ function SignupContent() {
             })
           }
         } catch { /* التتبع لا يوقف التسجيل أبداً */ }
-        toast.success(`تم إنشاء محلك «${shopName.trim()}» — تجربة 14 يوم 🎉`)
+        toast.success(`تم إنشاء محلك «${shopName.trim()}» — تجربة 14 يوم`)
         try { sessionStorage.setItem('welcome_contact', JSON.stringify({ phone: normalizeEgyptPhoneClient(phone) ?? phone.trim(), email: email.trim().toLowerCase() })) } catch { /* ignore */ }
         // 🎁 2026-10-23: مفيش شاشة «ضيف أول منتج» — المحل بيتفتح ببيانات تجريبية، فندخل لوحة التحكم على طول
         router.push('/dashboard')
@@ -817,7 +824,7 @@ function SignupContent() {
       <style dangerouslySetInnerHTML={{ __html: SIGNUP_CSS }} />
 
       {/* ─── Form side ─── */}
-      <div className="su-side min-h-dvh lg:h-screen lg:overflow-y-auto flex items-start justify-center py-4 px-3 sm:px-4 sm:py-5 bg-muted/30">
+      <div className="su-side min-h-dvh lg:h-screen lg:overflow-y-auto flex items-start justify-center py-4 px-3 sm:px-4 sm:py-5 bg-[#f7fbf9]">
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -825,34 +832,60 @@ function SignupContent() {
           className="su-wrap w-full max-w-md"
         >
           {/* Card wrapper */}
-          <div className="su-card bg-card rounded-2xl border border-border shadow-lg shadow-black/5 p-4 sm:p-5 space-y-4">
+          <div className="su-card bg-card rounded-2xl border border-border shadow-lg shadow-black/5 overflow-clip">
 
-            {/* شريط علوي مضغوط: الشعار + رابط الدخول */}
-            <div className="flex items-center justify-between">
-              <Link href="/" className="inline-flex items-center gap-2 group">
-                <div className="size-8 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center shadow-sm shadow-brand-500/25 group-hover:scale-105 transition-transform">
-                  <Sparkles className="size-3.5 text-white" />
+            {/* الهيدر — شريط التذكرة (نفس أسلوب صفحة الدخول) */}
+            <header className="su-hd relative px-4 pt-4 pb-4 sm:px-5 sm:pt-5 bg-gradient-to-b from-[#e3f9f0] via-[#f1fcf8] to-card border-b-2 border-dashed border-[#00c98b]/35">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  backgroundImage: "radial-gradient(rgba(0,148,106,.26) 1px, transparent 1.4px)",
+                  backgroundSize: "14px 14px",
+                  WebkitMaskImage: "radial-gradient(ellipse 60% 70% at 0% 0%, #000, transparent 75%)",
+                  maskImage: "radial-gradient(ellipse 60% 70% at 0% 0%, #000, transparent 75%)",
+                }}
+              />
+              <span aria-hidden className="absolute -bottom-2.5 -left-2.5 size-5 rounded-full border border-border bg-[#f7fbf9]" />
+              <span aria-hidden className="absolute -bottom-2.5 -right-2.5 size-5 rounded-full border border-border bg-[#f7fbf9]" />
+
+              <div className="relative space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <Link href="/" className="inline-flex items-center gap-2.5 group" aria-label="Nezam POS">
+                    <img
+                      src="/logo.svg" alt="" width={38} height={38}
+                      className="size-[38px] rounded-xl shadow-md shadow-[#00c98b]/35 ring-2 ring-white transition-transform group-hover:scale-105 group-hover:-rotate-3"
+                    />
+                    <div className="leading-none">
+                      <p dir="ltr" className="text-[17px] font-black tracking-tight text-foreground text-right">
+                        Nezam <span className="text-[#00946a]">POS</span>
+                      </p>
+                      <p className="mt-1 text-[10.5px] font-medium text-muted-foreground">نظام المحل</p>
+                    </div>
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[#00c98b]/35 bg-white/80 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-[#00c98b] hover:bg-white"
+                  >
+                    لديك حساب؟ <span className="font-extrabold text-[#00946a]">دخول</span>
+                  </Link>
                 </div>
-                <span className="text-sm font-bold text-foreground">نظام المحل</span>
-              </Link>
-              <p className="text-sm sm:text-base text-muted-foreground">
-                لديك حساب؟{' '}
-                <Link href="/login" className="-m-1 p-1 text-base sm:text-lg font-bold text-primary hover:underline">دخول</Link>
-              </p>
-            </div>
 
-            {/* العنوان + ٣ نقاط ثقة في سطر واحد — الفورم يبدأ فوراً بعدها */}
-            <div className="su-title">
-              <h1 className="text-xl font-extrabold leading-tight tracking-tight text-foreground">أنشئ حسابك 🚀</h1>
-              <ul className="su-chips mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] font-medium text-muted-foreground">
-                {['14 يوم مجاناً', 'بدون بطاقة', 'جاهز في دقيقتين'].map((t) => (
-                  <li key={t} className="inline-flex items-center gap-1">
-                    <Check className="size-3 text-emerald-500" strokeWidth={3} />
-                    {t}
-                  </li>
-                ))}
-              </ul>
-            </div>
+                <div className="su-title">
+                  <h1 className="text-[1.6rem] font-extrabold leading-tight tracking-tight text-foreground">أنشئ حسابك</h1>
+                  <ul className="su-chips mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] font-medium text-muted-foreground">
+                    {['14 يوم مجاناً', 'بدون بطاقة', 'جاهز في دقيقتين'].map((x) => (
+                      <li key={x} className="inline-flex items-center gap-1">
+                        <Check className="size-3 text-[#00946a]" strokeWidth={3} />
+                        {x}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </header>
+
+            <div className="su-body p-4 sm:p-5 space-y-4">
 
             {/* Form */}
             <form onSubmit={handleSubmit} noValidate className="su-form min-w-0 space-y-4">
@@ -986,16 +1019,16 @@ function SignupContent() {
               {/* الموافقة ضمنية عند الضغط — بدل Checkbox إجباري كان بيوقف ناس كتير */}
               <p className="su-span text-center text-[11px] leading-relaxed text-muted-foreground">
                 بالضغط على «إنشاء الحساب» أنت توافق على{' '}
-                <Link href="/terms-and-conditions" className="font-semibold text-primary hover:underline">الشروط</Link>
+                <Link href="/terms-and-conditions" className="font-semibold text-[#00946a] hover:underline">الشروط</Link>
                 {' '}و{' '}
-                <Link href="/privacy-policy" className="font-semibold text-primary hover:underline">الخصوصية</Link>
+                <Link href="/privacy-policy" className="font-semibold text-[#00946a] hover:underline">الخصوصية</Link>
                 {' '}— تجربة 14 يوم مجانية بدون بطاقة.
               </p>
 
               {/* موبايل: الزر ثابت أسفل الشاشة (فوق الكيبورد) عشان محدّش يضيعه بالسكرول */}
               <div className="su-cta su-span sticky bottom-0 z-10 -mx-4 border-t bg-card/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur max-lg:rounded-b-2xl sm:-mx-5 sm:px-5 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
               <Button type="submit" variant="gradient" size="lg"
-                className="w-full gap-2 shadow-lg shadow-brand-500/20 h-12 lg:h-10 text-sm font-semibold"
+                className="w-full gap-2 !bg-none !bg-[#00c98b] hover:!bg-[#00b87e] !text-[#04261b] shadow-lg shadow-[#00c98b]/30 h-12 lg:h-10 text-sm font-bold"
                 disabled={loading}>
                 {loading
                   ? <><Loader2 className="size-4 animate-spin" />جاري الإنشاء...</>
@@ -1007,170 +1040,16 @@ function SignupContent() {
 
             <p className="su-copy text-center text-[10px] text-muted-foreground/50">© 2026 نظام المحل</p>
 
+            </div>
           </div>
         </motion.div>
       </div>
 
       {/* ─── Visual side ─── */}
-      <div
-        className="relative hidden lg:flex flex-col justify-center overflow-hidden"
-        style={{ background: 'linear-gradient(145deg, #0d0f1a 0%, #111827 50%, #0a0e1a 100%)' }}
-      >
-        {/* Ambient blobs */}
-        <div
-          className="pointer-events-none absolute -top-32 -right-32 size-[480px] rounded-full opacity-25"
-          style={{ background: 'radial-gradient(circle, #4f46e5 0%, transparent 70%)', filter: 'blur(80px)' }}
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute -bottom-40 -left-20 size-[420px] rounded-full opacity-20"
-          style={{ background: 'radial-gradient(circle, #0ea5e9 0%, transparent 70%)', filter: 'blur(90px)' }}
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute top-1/2 left-1/3 size-[300px] rounded-full opacity-10"
-          style={{ background: 'radial-gradient(circle, #8b5cf6 0%, transparent 70%)', filter: 'blur(70px)' }}
-          aria-hidden
-        />
-
-        {/* Dot grid */}
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.08) 1px, transparent 0)',
-            backgroundSize: '28px 28px',
-            maskImage: 'radial-gradient(ellipse 80% 70% at 50% 30%, black, transparent)',
-            WebkitMaskImage: 'radial-gradient(ellipse 80% 70% at 50% 30%, black, transparent)',
-          }}
-          aria-hidden
-        />
-
-        {/* Content */}
-        <div className="relative z-10 flex flex-col gap-8 p-12 text-white max-w-lg mx-auto w-full">
-
-          {/* Header */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="space-y-3"
-          >
-            <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-semibold text-indigo-300">
-              <div className="size-1.5 rounded-full bg-indigo-400 animate-pulse" />
-              منصة SaaS · ملابس وأحذية · موبايل وكمبيوتر
-            </div>
-            <h2 className="text-3xl font-bold leading-snug">
-              أدِر محلك بالكامل
-              <br />
-              <span style={{
-                background: 'linear-gradient(120deg, #818cf8, #60a5fa, #34d399)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}>
-                من مكان واحد
-              </span>
-            </h2>
-            <p className="text-sm text-white/60 leading-relaxed">
-              نظام متكامل للمبيعات، المخزون، العملاء، والتقارير — كل حاجة في لوحة واحدة.
-            </p>
-          </motion.div>
-
-          {/* Mock dashboard card */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, delay: 0.15 }}
-            className="rounded-2xl border border-white/10 overflow-hidden"
-            style={{ background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)' }}
-          >
-            {/* Card header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/8" style={{ borderBottomColor: 'rgba(255,255,255,0.08)' }}>
-              <span className="text-xs font-semibold text-white/70">📊 لوحة المبيعات — اليوم</span>
-              <span className="text-[10px] text-white/40">مباشر</span>
-            </div>
-            {/* Stats row */}
-            <div className="grid grid-cols-3 divide-x divide-x-reverse" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-              {[
-                { label: 'إجمالي المبيعات', value: '12,450', unit: 'ج', color: '#34d399' },
-                { label: 'الفواتير', value: '38', unit: '', color: '#60a5fa' },
-                { label: 'أصناف نفذت', value: '3', unit: '', color: '#f87171' },
-              ].map((s, i) => (
-                <div key={i} className="px-3 py-3 text-center" style={{ borderColor: 'rgba(255,255,255,0.06)', borderRightWidth: i > 0 ? 1 : 0 }}>
-                  <p className="text-lg font-bold" style={{ color: s.color }}>{s.value}<span className="text-xs mr-0.5">{s.unit}</span></p>
-                  <p className="text-[10px] text-white/40 mt-0.5">{s.label}</p>
-                </div>
-              ))}
-            </div>
-            {/* Mini chart bars */}
-            <div className="px-4 py-3">
-              <div className="flex items-end gap-1 h-10">
-                {[40, 65, 45, 80, 55, 90, 70, 85, 60, 95, 75, 88].map((h, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 rounded-sm opacity-70"
-                    style={{
-                      height: `${h}%`,
-                      background: i === 11
-                        ? 'linear-gradient(to top, #34d399, #6ee7b7)'
-                        : 'rgba(99,102,241,0.4)',
-                    }}
-                  />
-                ))}
-              </div>
-              <p className="text-[10px] text-white/30 mt-1.5 text-center">آخر 12 ساعة</p>
-            </div>
-          </motion.div>
-
-          {/* Benefits */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-            className="grid grid-cols-2 gap-2"
-          >
-            {BENEFITS.map((b, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.35 + i * 0.06 }}
-                className="flex items-center gap-2 text-xs text-white/75"
-              >
-                <div className="size-4 rounded-full shrink-0 flex items-center justify-center" style={{ background: 'rgba(99,102,241,0.2)' }}>
-                  <Check className="size-2.5 text-indigo-300" />
-                </div>
-                {b}
-              </motion.div>
-            ))}
-          </motion.div>
-
-          {/* Stats row */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.6 }}
-            className="flex items-center gap-0 rounded-2xl border border-white/8 divide-x divide-x-reverse overflow-hidden"
-            style={{ borderColor: 'rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)' }}
-          >
-            {[
-              { value: '14 يوم', label: 'تجربة مجانية', icon: '🎁' },
-              { value: 'بدون بطاقة', label: 'ائتمان مطلوبة', icon: '💳' },
-              { value: 'أوفلاين', label: 'يعمل بدون إنترنت', icon: '📶' },
-            ].map((s, i) => (
-              <div
-                key={i}
-                className="flex-1 text-center py-3.5 px-2"
-                style={{ borderColor: 'rgba(255,255,255,0.08)', borderRightWidth: i > 0 ? 1 : 0 }}
-              >
-                <p className="text-base font-bold text-white">{s.icon} {s.value}</p>
-                <p className="text-[10px] text-white/40 mt-0.5">{s.label}</p>
-              </div>
-            ))}
-          </motion.div>
-
-        </div>
-      </div>
+      <LoginShowcase
+        title={["ابدأ بأول فاتورة", "النهارده."]}
+        sub="إعداد في أقل من دقيقتين، و14 يوم تجربة بكل المزايا، وبياناتك محفوظة وآمنة."
+      />
     </main>
   )
 }
@@ -1179,8 +1058,8 @@ export default function SignupPage() {
   return (
     <React.Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-[#0a0a0f]">
-          <Loader2 className="size-8 animate-spin text-white/50" />
+        <div className="flex min-h-screen items-center justify-center bg-[#f7fbf9]">
+          <Loader2 className="size-8 animate-spin text-[#00c98b]" />
         </div>
       }
     >
