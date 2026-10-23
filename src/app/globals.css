@@ -7423,3 +7423,406 @@ html[data-hg-boot] body::after {
 .pr-toc-item svg, .tr-toc-item svg, .ck-toc-item svg, .rf-toc-item svg { color: #00946a; }
 .ab-egypt-chip svg { color: #00946a; }
 .pr-toc-header svg, .tr-toc-header svg, .ck-toc-header svg, .rf-toc-header svg { color: #00946a; }
+
+/* ╔══════════════════════════════════════════════════════════════════════════╗
+   ║  PAGES V2.1 FIX — 2026-10-23                                              ║
+   ║  إصلاح لخبطة العناصر في صفحات الفوتر بعد التحويل للاستايل الفاتح:          ║
+   ║  1) الكلمات المميزة (lg-grad-text) كانت بجراديانت نعناعي فاتح متصمم        ║
+   ║     للخلفية الداكنة القديمة → كانت بتختفي على الفاتح وبتبان باهتة على      ║
+   ║     البانرات الخضراء. دلوقتي: أخضر واضح على الفاتح + دهبي على الأخضر.      ║
+   ║  2) عنوان قسم الأسئلة في اتصل بنا (.ct-section-title) كان لسه أبيض.        ║
+   ║  3) كارت الـ CTA في "من نحن" كان أخضر فوق أخضر (طبقتين نفس اللون).         ║
+   ║  4) الأزرار جوه البانرات الخضراء: أساسي أبيض + واتساب زجاجي شفاف.          ║
+   ║  5) لينك "الصفحة الرئيسية" في فوتر CTA كان أخضر على أخضر.                  ║
+   ║  6) أيقونات "قيمنا" في "من نحن" اتوحّدت (الـ TSX اتعدل) + عمق للبانر.      ║
+   ║  البلوك ده آخر الملف → بيكسب في الـ cascade.                               ║
+   ╚══════════════════════════════════════════════════════════════════════════╝ */
+
+/* ── 1) الكلمة المميزة على الخلفيات الفاتحة: جراديانت أخضر مقروء ──────────── */
+.co-page .lg-grad-text {
+  background: linear-gradient(120deg, #00c98b, #00946a 55%, #00694c);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── 2) الكلمة المميزة جوه البانرات/الأقسام الخضراء: دهبي زي اللاندنج ────── */
+.co-page .ab-cta .lg-grad-text,
+.co-page .ct-cta .lg-grad-text,
+.co-page .pr-contact-banner .lg-grad-text,
+.co-page .ck-contact-banner .lg-grad-text,
+.co-page .rf-cta-banner .lg-grad-text,
+.co-page .tr-acceptance .lg-grad-text,
+.co-page .gd-cta .lg-grad-text,
+.co-page .gd-miniplan .lg-grad-text {
+  background: linear-gradient(120deg, #fff6c2, #ffe27a 55%, #ffd25e);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── 3) عنوان قسم الأسئلة الشائعة (اتصل بنا) كان أبيض من الاستايل القديم ─── */
+.co-page .ct-section-title { color: #0b2a20; }
+
+/* ── 4) كارت الـ CTA في "من نحن": زجاجي فوق البانر الأخضر بدل أخضر على أخضر ─ */
+.co-page .ab-cta {
+  position: relative;
+  overflow: hidden;
+}
+.co-page .ab-cta::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 55% 70% at 85% 0%, rgba(25, 224, 162, 0.28), transparent 70%);
+  pointer-events: none;
+}
+.co-page .ab-cta-inner,
+.co-page .ct-cta-inner {
+  position: relative;
+  z-index: 1;
+}
+.co-page .ab-cta-inner {
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 20px 44px -26px rgba(0, 45, 32, 0.55);
+}
+
+/* ── 5) أزرار البانرات الخضراء: أساسي أبيض واضح + واتساب زجاجي ────────────── */
+.co-page .ab-cta .ab-btn-primary,
+.co-page .ct-cta .ab-btn-primary {
+  background: #ffffff;
+  color: #00694c;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 14px 30px -12px rgba(0, 40, 28, 0.55);
+}
+.co-page .ab-cta .ab-btn-primary:hover,
+.co-page .ct-cta .ab-btn-primary:hover {
+  background: #f0fbf6;
+  color: #004d37;
+  transform: translateY(-2px);
+}
+.co-page .ab-cta .ab-btn-whatsapp,
+.co-page .ct-cta .ab-btn-whatsapp,
+.co-page .pr-contact-banner .ab-btn-whatsapp,
+.co-page .ck-contact-banner .ab-btn-whatsapp,
+.co-page .rf-cta-banner .ab-btn-whatsapp {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.co-page .ab-cta .ab-btn-whatsapp:hover,
+.co-page .ct-cta .ab-btn-whatsapp:hover,
+.co-page .pr-contact-banner .ab-btn-whatsapp:hover,
+.co-page .ck-contact-banner .ab-btn-whatsapp:hover,
+.co-page .rf-cta-banner .ab-btn-whatsapp:hover {
+  background: rgba(255, 255, 255, 0.26);
+  color: #fff;
+}
+
+/* ── 6) لينك "الصفحة الرئيسية" جوه CTA: أبيض مسطّر بدل أخضر على أخضر ──────── */
+.co-page .ab-cta .ab-link,
+.co-page .ct-cta .ab-link {
+  color: #ffffff;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.55);
+  text-underline-offset: 3px;
+}
+.co-page .ab-cta .ab-link:hover,
+.co-page .ct-cta .ab-link:hover {
+  color: #ffe27a;
+  text-decoration-color: #ffe27a;
+}
+
+/* ── 7) توحيد أيقونات "قيمنا" (من نحن) على هوية البراند الخضراء ───────────── */
+.co-page .ab-mission-icon-1,
+.co-page .ab-mission-icon-2,
+.co-page .ab-mission-icon-3 {
+  background: linear-gradient(135deg, #19e0a2, #00946a);
+  box-shadow: 0 6px 16px -6px rgba(0, 148, 106, 0.5);
+}
+
+/* نهاية بلوك PAGES V2.1 FIX */
+
+/* ╔══════════════════════════════════════════════════════════════════════════╗
+   ║  PAGES V2.2 FIX — 2026-10-23                                              ║
+   ║  مراجعة شاملة للصفحات الفرعية بعد شكوى المستخدم (المحتوى مخفي / لخبطة):     ║
+   ║  1) الشروط والأحكام: نصوص الأقسام (tr-para / tr-bullet) فضلوا أبيض على      ║
+   ║     أبيض بعد تحويل الخلفية للفاتح → المحتوى كان مخفي بالكامل.              ║
+   ║  2) اتصل بنا: عنوان "ساعات العمل" كان أبيض على كارت أبيض + خيارات القائمة   ║
+   ║     الداكنة + hover الأسئلة الشائعة.                                       ║
+   ║  3) lp-eyebrow: كانت من غير أي قاعدة CSS (بتظهر نص سادة) → بقت pill.       ║
+   ║  4) الأسعار (pg-*): الصفحة اتحولت جذرها للفاتح مع V2 لكن مكوناتها الداكنة   ║
+   ║     ماتتحولتش → صفحة نصها داكن على فاتح. اكتمل التحويل هنا.                ║
+   ║  5) الدفع (co-* الخاصة بـ checkout) + callback (cb-*): نفس المشكلة.        ║
+   ║  ⚠️ كل التعديلات هنا CSS فقط — مفيش أي تغيير في محتوى الصفحات (TSX سليم).   ║
+   ║  البلوك ده آخر الملف → بيكسب في الـ cascade بنفس الـ specificity.          ║
+   ╚══════════════════════════════════════════════════════════════════════════╝ */
+
+/* ── 1) الشروط والأحكام: نصوص الأقسام كانت مخفية (أبيض على أبيض) ─────────── */
+.tr-para { color: #37514a; }
+.tr-bullet { color: #37514a; }
+
+/* ── 2) اتصل بنا: ساعات العمل + القوائم + الأسئلة ────────────────────────── */
+.ct-hours-header { color: #0b2a20; }
+.ct-hours-header h3 { color: #0b2a20; }
+.ct-hours-header svg { color: #00946a; }
+.ct-field-select option { background: #ffffff; color: #0b2a20; }
+.ct-faq-question:hover { color: #00694c; }
+.ct-faq-chevron { color: #8aa79c; }
+.ct-faq-question:hover .ct-faq-chevron { color: #00946a; }
+
+/* ── 3) lp-eyebrow: قاعدة أساسية موحدة (كانت ناقصة تماماً) ───────────────── */
+.lp-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: rgba(0, 201, 139, 0.10);
+  border: 1px solid rgba(0, 201, 139, 0.30);
+  color: #00694c;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+/* ── 4) صفحة الأسعار (pg-*) — إكمال التحويل للهوية الفاتحة V2 ────────────── */
+.co-page h1.text-white { color: #0b2a20; }
+
+/* مبدل شهري/سنوي */
+.pg-toggle {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.14);
+  box-shadow: 0 8px 24px rgba(0, 60, 40, 0.10);
+}
+.pg-toggle-btn { color: #5b7a6e; }
+.pg-toggle-save-badge { background: #00946a; color: #ffffff; }
+
+/* كروت الباقات: من الزجاج الداكن لكارت أبيض بنفس هوية PAGES V2 */
+.pg-card,
+.pg-card-trial,
+.pg-card-basic,
+.pg-card-pro,
+.pg-card-contractor {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 20px 44px -28px rgba(0, 60, 40, 0.28);
+}
+.pg-card:hover,
+.pg-card-basic:hover,
+.pg-card-trial:hover {
+  border-color: rgba(0, 201, 139, 0.35);
+  box-shadow: 0 24px 50px -24px rgba(0, 148, 106, 0.35);
+}
+.pg-card-pro {
+  background: linear-gradient(180deg, #fffef9, #fff7e6);
+  border: 1.5px solid rgba(217, 119, 6, 0.45);
+  box-shadow: 0 20px 50px -20px rgba(217, 119, 6, 0.30);
+}
+.pg-card-pro:hover {
+  border-color: rgba(217, 119, 6, 0.65);
+  box-shadow: 0 30px 70px -24px rgba(217, 119, 6, 0.40);
+}
+.pg-card-contractor {
+  background: linear-gradient(180deg, #fefeff, #f5f1ff);
+  border: 1.5px solid rgba(124, 58, 237, 0.40);
+  box-shadow: 0 20px 50px -20px rgba(124, 58, 237, 0.28);
+}
+.pg-card-contractor:hover {
+  border-color: rgba(124, 58, 237, 0.60);
+  box-shadow: 0 30px 70px -24px rgba(124, 58, 237, 0.35);
+}
+.pg-card-badge.current {
+  background: rgba(0, 201, 139, 0.12);
+  border: 1px solid rgba(0, 201, 139, 0.35);
+  color: #00694c;
+}
+.pg-card-name { color: #0b2a20; }
+.pg-card-desc { color: #5b7a6e; }
+.pg-card-currency { color: #0b2a20; }
+.pg-card-price { color: #0b2a20; }
+.pg-card-period { color: #8aa79c; }
+.pg-card-note { color: #8aa79c; }
+.pg-card-features-title {
+  color: #0b2a20;
+  border-top: 1px solid rgba(0, 87, 63, 0.08);
+}
+.pg-card-feature { color: #37514a; }
+.pg-card-feature.ok i {
+  background: rgba(0, 201, 139, 0.12);
+  color: #00946a;
+  border: 1px solid rgba(0, 201, 139, 0.30);
+}
+.pg-card-feature.no { color: #8aa79c; }
+.pg-card-feature.no i {
+  background: rgba(0, 87, 63, 0.06);
+  color: #b7c6bf;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+}
+.pg-card-cta.trial {
+  background: #f1f5f3;
+  color: #37514a;
+  border-color: rgba(0, 87, 63, 0.14);
+}
+.pg-card-cta.trial:hover { background: #effcf7; }
+.pg-card-cta.current {
+  background: rgba(0, 201, 139, 0.10);
+  color: #00694c;
+  border-color: rgba(0, 201, 139, 0.30);
+}
+.pg-card-trial-hint { color: #5b7a6e; }
+.pg-card-trial-hint svg { color: #d97706; }
+
+/* كارت الدعم السفلي */
+.pg-support-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.pg-support-text h4 { color: #0b2a20; }
+.pg-support-text p { color: #5b7a6e; }
+.pg-support-icon { align-items: center; }
+.pg-support-btn--email {
+  background: #f1f5f3;
+  color: #0b2a20;
+  border: 1px solid rgba(0, 87, 63, 0.14);
+}
+.pg-support-btn--email:hover { background: #effcf7; }
+
+/* ── 5) صفحة الدفع (checkout) — مكوناتها الخاصة من co-* ──────────────────── */
+/* الملاحظة: co-topbar / co-container / co-logo / co-back مشمولة في PAGES V2 */
+
+/* ستيبر الخطوات */
+.co-step {
+  background: #ffffff;
+  color: #5b7a6e;
+  border: 1px solid rgba(0, 87, 63, 0.12);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05);
+}
+.co-step.active {
+  background: rgba(0, 201, 139, 0.10);
+  color: #00694c;
+  border-color: rgba(0, 201, 139, 0.35);
+}
+.co-step-num {
+  background: rgba(0, 87, 63, 0.07);
+  color: #5b7a6e;
+}
+.co-step.active .co-step-num {
+  background: linear-gradient(135deg, #19e0a2, #00946a);
+  color: #ffffff;
+}
+.co-step-line { background: rgba(0, 87, 63, 0.10); }
+.co-step-line.active { background: linear-gradient(90deg, #00b47f, #00946a); }
+
+/* كارت ملخص الطلب (شمال) */
+.co-summary-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 20px 44px -28px rgba(0, 60, 40, 0.28);
+}
+.co-summary-eyebrow { color: #00946a; letter-spacing: 0; }
+.co-summary-card h2 { color: #0b2a20; }
+.co-plan-box {
+  background: #f7fbf9;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+}
+.co-plan-name { color: #0b2a20; }
+.co-plan-desc { color: #5b7a6e; }
+.co-plan-cycle { color: #00946a; }
+.co-price-box {
+  background: #f7fbf9;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+}
+.co-price-label { color: #5b7a6e; }
+.co-price-currency { color: #0b2a20; }
+.co-price-amount { color: #0b2a20; }
+.co-price-cycle { color: #5b7a6e; }
+.co-price-equiv { color: #5b7a6e; }
+.co-features-title {
+  color: #0b2a20;
+  border-top: 1px solid rgba(0, 87, 63, 0.08);
+}
+.co-features li { color: #37514a; }
+.co-features li i { color: #00946a; }
+.co-guarantee {
+  background: rgba(0, 201, 139, 0.08);
+  border: 1px solid rgba(0, 201, 139, 0.25);
+}
+.co-guarantee i { color: #00946a; }
+.co-guarantee strong { color: #0b2a20; }
+.co-guarantee span { color: #5b7a6e; }
+.co-trust-item {
+  background: #f7fbf9;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  color: #37514a;
+}
+.co-trust-item i { color: #00946a; }
+
+/* كارت فورم البيانات (يمين) */
+.co-form-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 24px 50px -28px rgba(0, 60, 40, 0.30);
+}
+.co-form-eyebrow { color: #00946a; letter-spacing: 0; }
+.co-form-card h1 { color: #0b2a20; }
+.co-form-header p { color: #5b7a6e; }
+.co-field label { color: #0b2a20; }
+.co-field input {
+  background: #fbfdfc;
+  border: 1px solid rgba(0, 87, 63, 0.16);
+  color: #0b2a20;
+}
+.co-field input::placeholder { color: #8aa79c; }
+.co-field input:focus {
+  border-color: #00c98b;
+  box-shadow: 0 0 0 3px rgba(0, 201, 139, 0.18);
+}
+.co-input-icon { color: #8aa79c; }
+.co-auth-notice {
+  background: rgba(217, 119, 6, 0.07);
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  color: #7a4d0b;
+}
+.co-auth-notice a { color: #92400e; }
+.co-paymob-badge {
+  background: rgba(0, 201, 139, 0.07);
+  border: 1px solid rgba(0, 201, 139, 0.22);
+}
+.co-paymob-text strong { color: #0b2a20; }
+.co-paymob-text span { color: #5b7a6e; }
+.co-disclaimer { color: #5b7a6e; }
+.co-disclaimer a { color: #00946a; }
+
+/* حالة "الباقة غير موجودة" — بتظهر على خلفية بيضاء بدون غلاف co-page */
+.flex.min-h-screen.flex-col.items-center.justify-center > p.text-white { color: #0b2a20; }
+.flex.min-h-screen.flex-col.items-center.justify-center > .co-back {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.16);
+  color: #0b2a20;
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.06);
+}
+.flex.min-h-screen.flex-col.items-center.justify-center > .co-back:hover {
+  background: #effcf7;
+  color: #00694c;
+}
+
+/* ── 6) صفحة حالة الدفع (callback) cb-* ──────────────────────────────────── */
+.cb-status-title { color: #0b2a20; }
+.cb-status-msg { color: #5b7a6e; }
+.cb-btn--secondary {
+  background: #ffffff;
+  color: #37514a;
+  border-color: rgba(0, 87, 63, 0.14);
+}
+.cb-btn--secondary:hover {
+  background: #effcf7;
+  color: #00694c;
+}
+
+/* نهاية بلوك PAGES V2.2 FIX */

@@ -1474,3 +1474,300 @@
     transition: none;
   }
 }
+
+/* ╔══════════════════════════════════════════════════════════════════════════╗
+   ║  GD LIGHT V2 — 2026-10-23                                                 ║
+   ║  إكمال تحويل دليل الاستخدام للهوية الفاتحة الخضراء V2:                     ║
+   ║  جذر الصفحة (co-page) اتحول للفاتح مع PAGES V2 لكن طبقة gd-* فضلت داكنة    ║
+   ║  → الصفحة كانت خليطة داكن/فاتح. البلوك ده بيكمّل التحويل بنفس نظام         ║
+   ║  PAGES V2 (كروت بيضا + حدود زمردية + نصوص داكنة + أخضر #00946a).           ║
+   ║  ملاحظة: إطار gd-shot (شكل المتصفح الداكن) متعمّد — فريم لقطات الشاشة.     ║
+   ╚══════════════════════════════════════════════════════════════════════════╝ */
+
+/* ── الهيرو: من الكارت الداكن لكارت فاتح بنفس روح PAGES V2 ── */
+.gd-hero {
+  background:
+    radial-gradient(1200px 400px at 85% -10%, rgba(0, 201, 139, 0.10), transparent 60%),
+    radial-gradient(800px 300px at 10% 110%, rgba(0, 201, 139, 0.06), transparent 60%),
+    #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 24px 50px -30px rgba(0, 60, 40, 0.30);
+}
+.gd-hero-kicker {
+  color: #00694c;
+  background: rgba(0, 201, 139, 0.10);
+  border: 1px solid rgba(0, 201, 139, 0.30);
+}
+.gd-hero-title { color: #0b2a20; }
+.gd-hero-sub { color: #5b7a6e; }
+.gd-btn-ghost {
+  color: #0b2a20;
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.16);
+}
+.gd-btn-ghost:hover { background: #effcf7; }
+.gd-stat {
+  color: #37514a;
+  background: #f7fbf9;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+}
+.gd-stat svg { color: #00946a; }
+
+/* ── شريط روابط الأقسام: زجاج أبيض ── */
+.gd-anchorbar {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 10px 30px -18px rgba(0, 60, 40, 0.35);
+}
+.gd-anchor { color: #37514a; }
+.gd-anchor:hover {
+  color: #00694c;
+  background: #effcf7;
+}
+
+/* ── البطاقات العامة (ERP) ── */
+.gd-erp-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.gd-erp-card.is-accent {
+  background: linear-gradient(150deg, rgba(0, 201, 139, 0.08), rgba(0, 201, 139, 0.02));
+  border-color: rgba(0, 201, 139, 0.30);
+}
+.gd-erp-icon {
+  background: rgba(0, 201, 139, 0.10);
+  color: #00946a;
+}
+.gd-erp-card.is-accent .gd-erp-icon {
+  background: rgba(0, 201, 139, 0.14);
+  color: #00694c;
+}
+.gd-erp-card h3 { color: #0b2a20; }
+.gd-erp-card p { color: #37514a; }
+.gd-erp-list { color: #37514a; }
+.gd-erp-list .dot { color: #00946a; }
+
+/* ── الباقات ── */
+.gd-plan {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.gd-plan:hover { border-color: rgba(0, 201, 139, 0.40); }
+.gd-plan.is-pro {
+  background: linear-gradient(170deg, #fffef9, #fff7e6);
+  border-color: rgba(217, 119, 6, 0.40);
+}
+.gd-plan-icon {
+  background: rgba(0, 201, 139, 0.10);
+  color: #00946a;
+}
+.gd-plan.is-pro .gd-plan-icon {
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+}
+.gd-plan-name { color: #0b2a20; }
+.gd-plan-forwho { color: #00946a; }
+.gd-plan.is-pro .gd-plan-forwho { color: #b45309; }
+.gd-plan-price b { color: #0b2a20; }
+.gd-plan-price span { color: #8aa79c; }
+.gd-plan-price .yearly { color: #8aa79c; }
+.gd-plan-features { border-top: 1px dashed rgba(0, 87, 63, 0.14); }
+.gd-plan-features span { color: #37514a; }
+.gd-plan-features .check { color: #00946a; }
+.gd-plan.is-pro .gd-plan-features .check { color: #d97706; }
+
+/* ── جدول المقارنة ── */
+.gd-table-wrap {
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  background: #ffffff;
+  background-image: linear-gradient(to left, rgba(0, 87, 63, 0.08), transparent 32px);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.gd-table th,
+.gd-table td {
+  border-bottom: 1px solid rgba(0, 87, 63, 0.07);
+  color: #37514a;
+}
+.gd-table th {
+  color: #0b2a20;
+  background: #f7fbf9;
+}
+.gd-table td:first-child,
+.gd-table th:first-child { color: #0b2a20; }
+.gd-table tr.is-highlight td {
+  background: rgba(0, 201, 139, 0.07);
+  color: #00694c;
+}
+.gd-table .yes { color: #00946a; }
+.gd-table .no { color: #b7c6bf; }
+@media (max-width: 640px) {
+  .gd-table td:first-child,
+  .gd-table th:first-child {
+    background: #ffffff;
+    box-shadow: 1px 0 0 rgba(0, 87, 63, 0.08);
+  }
+}
+
+/* ── الكنوز (الميزات الذكية) ── */
+.gd-gem {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.gd-gem-badge {
+  color: #00694c;
+  background: rgba(0, 201, 139, 0.10);
+  border: 1px solid rgba(0, 201, 139, 0.30);
+}
+.gd-gem-title { color: #0b2a20; }
+.gd-gem p { color: #37514a; }
+
+/* ── خطوات الجولة ── */
+.gd-step {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.gd-step-title { color: #0b2a20; }
+.gd-step p { color: #37514a; }
+.gd-tip {
+  color: #92400e;
+  background: rgba(217, 119, 6, 0.08);
+  border: 1px solid rgba(217, 119, 6, 0.28);
+}
+
+/* ── الأسئلة الشائعة ── */
+.gd-faq details {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05);
+}
+.gd-faq details[open] { border-color: rgba(0, 201, 139, 0.40); }
+.gd-faq summary { color: #0b2a20; }
+.gd-faq summary .chev { color: #00946a; }
+.gd-faq .gd-faq-a { color: #37514a; }
+
+/* ── CTA النهائي: بانر أخضر قوي زي CTA اللاندنج ── */
+.gd-cta {
+  background:
+    radial-gradient(600px 200px at 50% 0%, rgba(255, 255, 255, 0.12), transparent 70%),
+    linear-gradient(135deg, #00805b 0%, #00946a 60%, #00b47f 100%);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 24px 50px -24px rgba(0, 87, 63, 0.60);
+}
+.gd-cta h2 { color: #ffffff; }
+.gd-cta p { color: rgba(255, 255, 255, 0.88); }
+.gd-cta-note { color: rgba(255, 255, 255, 0.75) !important; }
+.gd-cta .gd-btn-ghost {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+.gd-cta .gd-btn-ghost:hover { background: rgba(255, 255, 255, 0.20); }
+
+/* ── البداية السريعة (4 خطوات) ── */
+.gd-qs-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.gd-qs-card:hover {
+  border-color: rgba(0, 201, 139, 0.45);
+  background: #fbfdfc;
+}
+.gd-qs-icon {
+  color: #00946a;
+  background: rgba(0, 201, 139, 0.10);
+  border: 1px solid rgba(0, 201, 139, 0.25);
+}
+.gd-qs-card h3 { color: #0b2a20; }
+.gd-qs-card p { color: #5b7a6e; }
+.gd-qs-link { color: #00946a; }
+
+/* ── شرائح الجولة + المشغّل ── */
+.gd-chip {
+  color: #37514a;
+  background: #f7fbf9;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+}
+.gd-chip:hover {
+  color: #00694c;
+  border-color: rgba(0, 201, 139, 0.40);
+}
+.gd-chip-num {
+  color: #5b7a6e;
+  background: rgba(0, 87, 63, 0.08);
+}
+.gd-panel {
+  background:
+    radial-gradient(700px 260px at 90% -10%, rgba(0, 201, 139, 0.07), transparent 60%),
+    #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 20px 44px -28px rgba(0, 60, 40, 0.28);
+}
+.gd-panel-title { color: #0b2a20; }
+.gd-panel-line { color: #00946a; }
+.gd-panel-count {
+  color: #5b7a6e;
+  background: #f7fbf9;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+}
+.gd-progress { background: rgba(0, 87, 63, 0.08); }
+.gd-progress i { background: linear-gradient(90deg, #00946a, #19e0a2); }
+.gd-panel-dots i { background: rgba(0, 87, 63, 0.15); }
+.gd-panel-dots i.done { background: rgba(0, 148, 106, 0.50); }
+.gd-panel-dots i.on { background: linear-gradient(90deg, #00946a, #19e0a2); }
+
+/* ── الشرح المطوي + أزرار التنقل ── */
+.gd-details {
+  background: #f7fbf9;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+}
+.gd-details summary { color: #0b2a20; }
+.gd-details summary svg:first-child { color: #00946a; }
+.gd-details summary .chev { color: #5b7a6e; }
+.gd-details-body p { color: #37514a; }
+.gd-panel-nav { border-top: 1px solid rgba(0, 87, 63, 0.08); }
+.gd-nav-btn {
+  color: #0b2a20;
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.14);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05);
+}
+.gd-nav-btn:hover:not(:disabled) {
+  background: #effcf7;
+  border-color: rgba(0, 201, 139, 0.40);
+}
+
+/* ── أكورديون الميزات الذكية ── */
+.gd-gemacc {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.gd-gem-line { color: #37514a; }
+.gd-gemacc summary .chev { color: #5b7a6e; }
+.gd-gemacc-body p { color: #37514a; }
+
+/* ── نقاط قسم الملابس ── */
+.gd-point {
+  color: #37514a;
+  background: #f7fbf9;
+  border: 1px solid rgba(0, 87, 63, 0.08);
+}
+.gd-point svg { color: #00946a; }
+
+/* ── شريط الباقات المختصر ── */
+.gd-miniplan {
+  background:
+    radial-gradient(600px 240px at 12% 120%, rgba(0, 201, 139, 0.08), transparent 60%),
+    #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.12);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 20px 44px -28px rgba(0, 60, 40, 0.28);
+}
+.gd-miniplan-text h2 { color: #0b2a20; }
+.gd-miniplan-text p { color: #5b7a6e; }
+
+/* نهاية بلوك GD LIGHT V2 */
