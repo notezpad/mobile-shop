@@ -800,7 +800,8 @@ function SignupContent() {
         } catch { /* التتبع لا يوقف التسجيل أبداً */ }
         toast.success(`تم إنشاء محلك «${shopName.trim()}» — تجربة 14 يوم 🎉`)
         try { sessionStorage.setItem('welcome_contact', JSON.stringify({ phone: normalizeEgyptPhoneClient(phone) ?? phone.trim(), email: email.trim().toLowerCase() })) } catch { /* ignore */ }
-        router.push('/welcome')
+        // 🎁 2026-10-23: مفيش شاشة «ضيف أول منتج» — المحل بيتفتح ببيانات تجريبية، فندخل لوحة التحكم على طول
+        router.push('/dashboard')
         router.refresh()
       } else { toast.error(data?.error ?? 'فشل إنشاء الحساب') }
     } catch (err: any) {

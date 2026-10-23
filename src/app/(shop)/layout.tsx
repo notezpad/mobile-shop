@@ -11,6 +11,7 @@ import { NotificationBell } from '@/components/shop/NotificationBell'
 import { PWAInstallPrompt } from '@/components/shop/PWAInstallPrompt'
 import { OfflineIndicator } from '@/components/shop/OfflineIndicator'
 import { TrialExpiredBanner } from '@/components/shop/TrialExpiredBanner'
+import { DemoDataBanner } from '@/components/shop/DemoDataBanner'
 import { RoleBadge } from '@/components/shop/RoleBadge'
 import { useOfflineReady } from '@/lib/offline/use-offline'
 import { scheduleIdleWarmup } from '@/lib/view-preload'
@@ -346,6 +347,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
             : 'pb-[calc(env(safe-area-inset-bottom)+0.75rem)]'
         }`}
       >
+        <DemoDataBanner />
         <TrialExpiredBanner />
         <OfflineIndicator />
       </div>

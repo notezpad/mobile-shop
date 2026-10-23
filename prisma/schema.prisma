@@ -73,6 +73,7 @@ model Tenant {
   supplierPayments  SupplierPayment[]
   expenses          Expense[]
   notifications     Notification[]
+  demoRecords       DemoRecord[]
 
   // Notification preferences
   notifyLowStock            Boolean @default(true)
@@ -1051,6 +1052,19 @@ model EmailLog {
 // 🆕 2026-10-22: قيود تعديل الرصيد — الرصيد الافتتاحي عند الترحيل من نظام/دفتر
 // قديم + أي تسوية لاحقة لرصيد عميل أو مورد (بسبب إجباري ومن أدمن).
 // ⚠️ حركة دفاتر محضة — لا تنشئ CashEntry أبداً (الديون القديمة مش نقدية).
+// 🎁 2026-10-23: تسجيل الصفوف التجريبية (بيانات أول دخول) — الدوال في prisma/sql/demo-data-v1.sql
+model DemoRecord {
+  id       BigInt @id @default(autoincrement())
+  tenantId String
+  tbl      String
+  rowId    String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, tbl, rowId], map: "DemoRecord_tenant_tbl_row_key")
+  @@index([tenantId])
+}
+
 model BalanceEntry {
   id        Int      @id @default(autoincrement())
   tenantId  String

@@ -3,6 +3,8 @@ import { db, withDb } from '@/lib/db'
 import { hashPassword, createSession } from '@/lib/auth'
 import { withSql } from '@/lib/sql'
 import { sendTemplatedEmail, fmtArDate } from '@/lib/email'
+import { getPlanContext } from '@/lib/features'
+import { seedDemoData } from '@/lib/demo-data'
 import { runNonBlocking, trackServerEvent, extractRequestContext } from '@/lib/tracking/server'
 import { TRACKING_EVENTS } from '@/lib/tracking/types'
 import { suspiciousSignupReason } from '@/lib/tracking/fake-signup'
@@ -305,6 +307,27 @@ async function __POST(req: NextRequest) {
     const fakeReason = suspiciousSignupReason({ name, email: user.email, phone, shopName })
     if (fakeReason) {
       console.info('[signup] tracking suppressed:', fakeReason)
+    }
+
+    // 🎁 بيانات تجريبية: المحل الجديد بيتفتح ومعاه منتجات/عملاء/موردين/مبيعات/
+    // مصروفات/فرع حسب نشاط الباقة — بدل لوحة تحكم فاضية. استدعاء SQL واحد (~50ms).
+    // fail-open: أي فشل (أو الـ SQL لسه ما اتركبش) ما يأثرش على التسجيل أبداً.
+    // مش بنزرعها للتسجيلات الوهمية الواضحة (بريد مؤقت/أرقام متكررة).
+    if (!fakeReason) {
+      try {
+        const planCtx = await getPlanContext(tenant.id)
+        await withSql((sql) => seedDemoData(sql, {
+          tenantId: tenant.id,
+          userId: user.id,
+          vertical: planCtx.businessType,
+          modules: planCtx.enabledModules,
+          capabilities: planCtx.capabilities,
+          limits: planCtx.limits,
+          demoUserEmail: `demo-${tenant.id}@demo.invalid`,
+        }))
+      } catch (e) {
+        console.error('[signup] demo data skipped (non-fatal):', e)
+      }
     }
 
     // ✉️ إيميل ترحيب (Non-blocking — فشله ما بيأثرش على التسجيل) — مش للتسجيلات الوهمية

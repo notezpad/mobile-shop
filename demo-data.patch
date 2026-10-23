@@ -1,0 +1,140 @@
+--- a/prisma/schema.prisma	2026-10-22 10:50:20.000000000 +0300
++++ b/prisma/schema.prisma	2026-10-23 12:33:23.545931304 +0300
+@@ -73,6 +73,7 @@
+   supplierPayments  SupplierPayment[]
+   expenses          Expense[]
+   notifications     Notification[]
++  demoRecords       DemoRecord[]
+ 
+   // Notification preferences
+   notifyLowStock            Boolean @default(true)
+@@ -1051,6 +1052,19 @@
+ // 🆕 2026-10-22: قيود تعديل الرصيد — الرصيد الافتتاحي عند الترحيل من نظام/دفتر
+ // قديم + أي تسوية لاحقة لرصيد عميل أو مورد (بسبب إجباري ومن أدمن).
+ // ⚠️ حركة دفاتر محضة — لا تنشئ CashEntry أبداً (الديون القديمة مش نقدية).
++// 🎁 2026-10-23: تسجيل الصفوف التجريبية (بيانات أول دخول) — الدوال في prisma/sql/demo-data-v1.sql
++model DemoRecord {
++  id       BigInt @id @default(autoincrement())
++  tenantId String
++  tbl      String
++  rowId    String
++
++  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
++
++  @@unique([tenantId, tbl, rowId], map: "DemoRecord_tenant_tbl_row_key")
++  @@index([tenantId])
++}
++
+ model BalanceEntry {
+   id        Int      @id @default(autoincrement())
+   tenantId  String
+--- a/src/app/api/auth/signup/route.ts	2026-10-21 11:21:00.000000000 +0300
++++ b/src/app/api/auth/signup/route.ts	2026-10-23 12:33:23.546307704 +0300
+@@ -3,6 +3,8 @@
+ import { hashPassword, createSession } from '@/lib/auth'
+ import { withSql } from '@/lib/sql'
+ import { sendTemplatedEmail, fmtArDate } from '@/lib/email'
++import { getPlanContext } from '@/lib/features'
++import { seedDemoData } from '@/lib/demo-data'
+ import { runNonBlocking, trackServerEvent, extractRequestContext } from '@/lib/tracking/server'
+ import { TRACKING_EVENTS } from '@/lib/tracking/types'
+ import { suspiciousSignupReason } from '@/lib/tracking/fake-signup'
+@@ -307,6 +309,27 @@
+       console.info('[signup] tracking suppressed:', fakeReason)
+     }
+ 
++    // 🎁 بيانات تجريبية: المحل الجديد بيتفتح ومعاه منتجات/عملاء/موردين/مبيعات/
++    // مصروفات/فرع حسب نشاط الباقة — بدل لوحة تحكم فاضية. استدعاء SQL واحد (~50ms).
++    // fail-open: أي فشل (أو الـ SQL لسه ما اتركبش) ما يأثرش على التسجيل أبداً.
++    // مش بنزرعها للتسجيلات الوهمية الواضحة (بريد مؤقت/أرقام متكررة).
++    if (!fakeReason) {
++      try {
++        const planCtx = await getPlanContext(tenant.id)
++        await withSql((sql) => seedDemoData(sql, {
++          tenantId: tenant.id,
++          userId: user.id,
++          vertical: planCtx.businessType,
++          modules: planCtx.enabledModules,
++          capabilities: planCtx.capabilities,
++          limits: planCtx.limits,
++          demoUserEmail: `demo-${tenant.id}@demo.invalid`,
++        }))
++      } catch (e) {
++        console.error('[signup] demo data skipped (non-fatal):', e)
++      }
++    }
++
+     // ✉️ إيميل ترحيب (Non-blocking — فشله ما بيأثرش على التسجيل) — مش للتسجيلات الوهمية
+     if (!fakeReason) {
+       runNonBlocking(() => withSql((sql) => sendTemplatedEmail(sql, 'welcome', user.email, tenant.id, {
+--- a/src/app/(shop)/layout.tsx	2026-10-21 11:20:48.000000000 +0300
++++ b/src/app/(shop)/layout.tsx	2026-10-23 12:33:23.546517472 +0300
+@@ -11,6 +11,7 @@
+ import { PWAInstallPrompt } from '@/components/shop/PWAInstallPrompt'
+ import { OfflineIndicator } from '@/components/shop/OfflineIndicator'
+ import { TrialExpiredBanner } from '@/components/shop/TrialExpiredBanner'
++import { DemoDataBanner } from '@/components/shop/DemoDataBanner'
+ import { RoleBadge } from '@/components/shop/RoleBadge'
+ import { useOfflineReady } from '@/lib/offline/use-offline'
+ import { scheduleIdleWarmup } from '@/lib/view-preload'
+@@ -346,6 +347,7 @@
+             : 'pb-[calc(env(safe-area-inset-bottom)+0.75rem)]'
+         }`}
+       >
++        <DemoDataBanner />
+         <TrialExpiredBanner />
+         <OfflineIndicator />
+       </div>
+--- a/src/lib/admin-fake-tenants.ts	2026-10-21 11:20:48.000000000 +0300
++++ b/src/lib/admin-fake-tenants.ts	2026-10-23 12:33:23.546661536 +0300
+@@ -18,9 +18,37 @@
+   }
+ }
+ 
++/**
++ * 🎁 محلات كل بياناتها «تجريبية» (seed_demo_data) ولا شغل فعلي — بقت عندها
++ * منتجات/مبيعات فمعيار «صفر منتجات» وحده كان هيفلتها من قائمة التنظيف.
++ * بنسأل دالة SQL (demo-data-v1.sql) — لو لسه ما اتركبتش نرجّع [] بهدوء.
++ */
++async function demoOnlyTenantIds(): Promise<string[]> {
++  try {
++    const rows = await db.$queryRaw<{ id: string }[]>`SELECT "id" FROM demo_only_tenant_ids()`
++    return rows.map((r) => r.id)
++  } catch {
++    return []
++  }
++}
++
+ export async function findInactiveTrials(ids?: string[], take = 400) {
++  const demoOnly = (await demoOnlyTenantIds()).filter((id) => !ids || ids.includes(id))
++  const base = inactiveTrialWhere(ids ? { id: { in: ids, not: PLATFORM_TENANT_ID } } : {})
++  const where = demoOnly.length
++    ? {
++        OR: [
++          base,
++          {
++            id: { in: demoOnly, not: PLATFORM_TENANT_ID },
++            createdAt: { lt: new Date(Date.now() - FAKE_MIN_AGE_MS) },
++            subscriptions: { none: { amountPaid: { gt: 0 } } },
++          },
++        ],
++      }
++    : base
+   const rows = await db.tenant.findMany({
+-    where: inactiveTrialWhere(ids ? { id: { in: ids, not: PLATFORM_TENANT_ID } } : {}) as any,
++    where: where as any,
+     orderBy: { createdAt: 'desc' },
+     take,
+     select: {
+--- a/src/app/signup/page.tsx	2026-10-21 11:20:48.000000000 +0300
++++ b/src/app/signup/page.tsx	2026-10-23 12:40:09.362762546 +0300
+@@ -800,7 +800,8 @@
+         } catch { /* التتبع لا يوقف التسجيل أبداً */ }
+         toast.success(`تم إنشاء محلك «${shopName.trim()}» — تجربة 14 يوم 🎉`)
+         try { sessionStorage.setItem('welcome_contact', JSON.stringify({ phone: normalizeEgyptPhoneClient(phone) ?? phone.trim(), email: email.trim().toLowerCase() })) } catch { /* ignore */ }
+-        router.push('/welcome')
++        // 🎁 2026-10-23: مفيش شاشة «ضيف أول منتج» — المحل بيتفتح ببيانات تجريبية، فندخل لوحة التحكم على طول
++        router.push('/dashboard')
+         router.refresh()
+       } else { toast.error(data?.error ?? 'فشل إنشاء الحساب') }
+     } catch (err: any) {

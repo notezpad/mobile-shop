@@ -5,9 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Sparkles, Eye, EyeOff, Lock, Mail, ShieldCheck,
-  Loader2, AlertCircle, ArrowRight, TrendingUp,
-  Store, Boxes, Wallet, Check, Zap, Users, BarChart3, WifiOff,
+  CalendarDays, Eye, EyeOff, Lock, Mail, ShieldCheck,
+  Loader2, AlertCircle, ArrowRight, Check, WifiOff, UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,22 +17,9 @@ import { getOfflineUser, saveAuthSnapshot, type AuthUser } from "@/lib/auth-clie
 import { useShopStore } from "@/lib/store";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import LoginShowcase from "@/components/login/LoginShowcase";
 
 type LoginError = { message: string; hint?: string };
-
-const FEATURES = [
-  { icon: TrendingUp, label: "لوحة معلومات", desc: "مؤشرات لحظية",   color: "#818cf8" },
-  { icon: Store,      label: "نقطة بيع",     desc: "باركود + فواتير", color: "#34d399" },
-  { icon: Boxes,      label: "مخزون ذكي",    desc: "تنبيهات + جرد",  color: "#60a5fa" },
-  { icon: Wallet,     label: "إدارة مالية",  desc: "خزنة + محافظ",   color: "#f59e0b" },
-];
-
-const RECENT_TXS = [
-  { name: "فاتورة #1042",  amount: "+850",  time: "منذ 4 د",  color: "#34d399" },
-  { name: "إرجاع #1041",   amount: "-120",  time: "منذ 11 د", color: "#f87171" },
-  { name: "فاتورة #1040",  amount: "+1,200",time: "منذ 18 د", color: "#34d399" },
-  { name: "فاتورة #1039",  amount: "+350",  time: "منذ 30 د", color: "#34d399" },
-];
 
 export default function LoginPage() {
   const router = useRouter();
@@ -51,6 +37,13 @@ export default function LoginPage() {
   // إنترنت — بدل رسالة فشل ميتة.
   const [online,   setOnline]   = React.useState(true);
   const [savedUser, setSavedUser] = React.useState<AuthUser | null>(null);
+  // تاريخ اليوم — بيتحط بعد التحميل عشان نتجنب اختلاف السيرفر والمتصفح
+  const [today, setToday] = React.useState("");
+  React.useEffect(() => {
+    try {
+      setToday(new Date().toLocaleDateString("ar-EG-u-nu-latn", { day: "numeric", month: "long" }));
+    } catch { /* ignore */ }
+  }, []);
 
   React.useEffect(() => {
     const updateOnline = () => setOnline(navigator.onLine);
@@ -102,7 +95,7 @@ export default function LoginPage() {
         // 🛡️ PWA: احفظ نسخة السيشن فوراً عند نجاح الدخول — أول تذكرة
         // لدخول أوفلاين ناجح بعدها في أي وقت.
         void saveAuthSnapshot(data.user as AuthUser);
-        toast.success(`أهلاً بك ${data.user.name ?? ""} 👋`);
+        toast.success(`أهلاً بك ${data.user.name ?? ""}`);
         router.push(data.user.role === "SUPER_ADMIN" ? "/" : "/dashboard");
         router.refresh();
       } else {
@@ -119,39 +112,74 @@ export default function LoginPage() {
     <main className="lgn-main min-h-dvh grid lg:h-screen lg:grid-cols-2 bg-background lg:overflow-hidden">
       {/* ScaleWrapper بيصغّر الصفحة على الشاشات ≤1536px وبيظبط --app-h، بس lg:h-screen
           ما بتتأثرش بيه → الهيرو كان بيتقص من تحت. نخلي الارتفاع يتبع --app-h على الديسكتوب. */}
-      <style dangerouslySetInnerHTML={{ __html: '@media (min-width:1024px){.lgn-main,.lgn-side{height:var(--app-h,100vh)}}' }} />
+      <style dangerouslySetInnerHTML={{ __html: `@media (min-width:1024px){.lgn-main,.lgn-side{height:var(--app-h,100vh)}}
+.lgn-side input:-webkit-autofill,
+.lgn-side input:-webkit-autofill:hover,
+.lgn-side input:-webkit-autofill:focus{
+  -webkit-box-shadow:0 0 0 1000px #effcf7 inset !important;
+  box-shadow:0 0 0 1000px #effcf7 inset !important;
+  -webkit-text-fill-color:#0b2a20 !important;
+  caret-color:#0b2a20;
+  border-color:rgba(0,201,139,.45);
+  transition:background-color 9999s ease-out 0s;
+}` }} />
 
       {/* ─── Form side ─── */}
-      <div className="lgn-side min-h-dvh lg:h-screen lg:overflow-y-auto flex items-center justify-center py-6 px-4 bg-muted/30">
+      <div className="lgn-side min-h-dvh lg:h-screen lg:overflow-y-auto flex items-center justify-center py-6 px-4 bg-[#f7fbf9]">
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
           className="w-full max-w-sm"
         >
-          <div className="bg-card rounded-2xl border border-border shadow-lg shadow-black/5 p-6 space-y-5">
+          <div className="bg-card rounded-2xl border border-border shadow-lg shadow-black/5 p-6 space-y-5 overflow-hidden">
 
-            {/* Brand + header */}
-            <div className="space-y-4">
-              <Link href="/" className="inline-flex items-center gap-2.5 group">
-                <div className="size-9 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center shadow-md shadow-brand-500/25 group-hover:scale-105 transition-transform">
-                  <Sparkles className="size-4 text-white" />
-                </div>
+            {/* Brand + header — شريط التذكرة */}
+            <header className="relative -mx-6 -mt-6 px-6 pt-6 pb-7 bg-gradient-to-b from-[#e3f9f0] via-[#f1fcf8] to-card border-b-2 border-dashed border-[#00c98b]/35">
+              {/* نقط ناعمة في الركن */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  backgroundImage: "radial-gradient(rgba(0,148,106,.26) 1px, transparent 1.4px)",
+                  backgroundSize: "14px 14px",
+                  WebkitMaskImage: "radial-gradient(ellipse 60% 70% at 0% 0%, #000, transparent 75%)",
+                  maskImage: "radial-gradient(ellipse 60% 70% at 0% 0%, #000, transparent 75%)",
+                }}
+              />
+              {/* خروم التذكرة */}
+              <span aria-hidden className="absolute -bottom-2.5 -left-2.5 size-5 rounded-full border border-border bg-[#f7fbf9]" />
+              <span aria-hidden className="absolute -bottom-2.5 -right-2.5 size-5 rounded-full border border-border bg-[#f7fbf9]" />
+
+              <div className="relative space-y-5">
+                {/* اللوجو الحقيقي للموقع */}
+                <Link href="/" className="inline-flex items-center gap-3 group" aria-label="Nezam POS">
+                  <img
+                    src="/logo.svg" alt="" width={46} height={46}
+                    className="size-[46px] rounded-[15px] shadow-lg shadow-[#00c98b]/35 ring-2 ring-white transition-transform group-hover:scale-105 group-hover:-rotate-3"
+                  />
+                  <div className="leading-none">
+                    <p dir="ltr" className="text-[19px] font-black tracking-tight text-foreground text-right">
+                      Nezam <span className="text-[#00946a]">POS</span>
+                    </p>
+                    <p className="mt-1.5 text-[11px] font-medium text-muted-foreground">نظام المحل — مبيعات ومخزون وحسابات</p>
+                  </div>
+                </Link>
+
                 <div>
-                  <p className="text-sm font-bold leading-tight text-foreground">نظام المحل</p>
-                  <p className="text-[10px] text-muted-foreground leading-tight">منصة إدارة المحلات</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <h1 className="text-[1.75rem] font-extrabold leading-tight tracking-tight text-foreground">أهلاً بعودتك</h1>
+                    {today && (
+                      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#00c98b]/30 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-[#00694c]">
+                        <CalendarDays className="size-3.5" />
+                        {today}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">مبيعاتك ومخزونك وخزنتك مستنيينك.</p>
                 </div>
-              </Link>
-
-              <div>
-                <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 mb-2.5">
-                  <ShieldCheck className="size-3 text-emerald-600 dark:text-emerald-400" />
-                  <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">دخول آمن ومشفّر</span>
-                </div>
-                <h1 className="text-2xl font-bold tracking-tight text-foreground">أهلاً بعودتك 👋</h1>
-                <p className="text-sm text-muted-foreground mt-0.5">سجّل الدخول للوصول إلى لوحة التحكم</p>
               </div>
-            </div>
+            </header>
 
             {/* 🛡️ PWA: بطاقة الدخول بالحساب المحفوظ أوفلاين */}
             {!online && savedUser && (
@@ -214,24 +242,24 @@ export default function LoginPage() {
             </AnimatePresence>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} noValidate className="space-y-3">
-              <Field label="البريد الإلكتروني" required>
+            <form onSubmit={handleSubmit} noValidate className="space-y-4">
+              <Field label="البريد الإلكتروني" required className="space-y-2.5">
                 <Input
                   type="email" placeholder="name@example.com"
                   icon={<Mail className="size-4" />}
                   value={email} onChange={(e: any) => { setEmail(e.target.value); setError(null) }}
-                  autoComplete="email" dir="ltr" className="text-left"
+                  autoComplete="email" dir="ltr" className="text-left focus-visible:!border-[#00c98b] focus-visible:!ring-[#00c98b]/25 h-11"
                   disabled={loading} required inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false}
                 />
               </Field>
 
-              <Field label="كلمة المرور" required>
+              <Field label="كلمة المرور" required className="space-y-2.5">
                 <div className="relative">
                   <Input
                     type={showPass ? "text" : "password"} placeholder="••••••••"
                     icon={<Lock className="size-4" />}
                     value={password} onChange={(e: any) => { setPassword(e.target.value); setError(null) }}
-                    autoComplete="current-password" dir="ltr" className="text-left pl-10"
+                    autoComplete="current-password" dir="ltr" className="text-left pl-10 focus-visible:!border-[#00c98b] focus-visible:!ring-[#00c98b]/25 h-11"
                     disabled={loading} required
                   />
                   <button type="button" onClick={() => setShowPass(!showPass)}
@@ -250,22 +278,22 @@ export default function LoginPage() {
                     className={cn(
                       "size-4 rounded border-2 flex items-center justify-center transition-all cursor-pointer",
                       remember
-                        ? "bg-primary border-primary"
-                        : "border-border bg-background hover:border-primary/50"
+                        ? "bg-[#00c98b] border-[#00c98b]"
+                        : "border-border bg-background hover:border-[#00c98b]/60"
                     )}
                   >
-                    {remember && <Check className="size-2.5 text-primary-foreground" strokeWidth={3} />}
+                    {remember && <Check className="size-2.5 text-white" strokeWidth={3.5} />}
                   </div>
                   <Label className="text-xs font-normal cursor-pointer text-muted-foreground">تذكّرني</Label>
                 </label>
                 <Link href="/forgot-password"
-                  className="text-xs text-muted-foreground hover:text-primary transition-colors hover:underline">
+                  className="text-xs text-muted-foreground hover:text-[#00946a] transition-colors hover:underline">
                   نسيت كلمة المرور؟
                 </Link>
               </div>
 
               <Button type="submit" variant="gradient" size="lg"
-                className="w-full gap-2 shadow-lg shadow-brand-500/20 h-10 text-sm font-semibold mt-1"
+                className="w-full gap-2 !bg-none !bg-[#00c98b] hover:!bg-[#00b87e] !text-[#04261b] shadow-lg shadow-[#00c98b]/30 h-10 text-sm font-bold mt-1"
                 disabled={loading}>
                 {loading
                   ? <><Loader2 className="size-4 animate-spin" />جاري الدخول...</>
@@ -285,13 +313,16 @@ export default function LoginPage() {
             </div>
 
             {/* Signup CTA */}
-            <Link href="/signup" className="block">
-              <div className="flex items-center justify-between rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary/3 px-4 py-3 transition-all group">
-                <div>
-                  <p className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">أنشئ محلك مجاناً 🚀</p>
-                  <p className="text-[11px] text-muted-foreground">تجربة 14 يوم بدون بطاقة ائتمان</p>
+            <Link href="/signup" className="block group">
+              <div className="flex items-center gap-3 rounded-xl border border-[#00c98b]/35 bg-[#effcf7] px-3.5 py-3 transition-all group-hover:border-[#00c98b] group-hover:bg-white group-hover:shadow-md group-hover:shadow-[#00c98b]/15">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#19e0a2] to-[#00c98b] text-white shadow-md shadow-[#00c98b]/30 transition-transform group-hover:scale-105">
+                  <UserPlus className="size-5" />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-foreground">إنشاء حساب جديد</p>
+                  <p className="text-[11px] text-muted-foreground">جرّب 14 يوم مجاناً بدون بطاقة ائتمان</p>
                 </div>
-                <ArrowRight className="size-4 text-muted-foreground group-hover:text-primary rtl:rotate-180 transition-colors" />
+                <ArrowRight className="size-4 shrink-0 text-[#00946a] rtl:rotate-180 transition-transform rtl:group-hover:-translate-x-1" />
               </div>
             </Link>
 
@@ -301,139 +332,7 @@ export default function LoginPage() {
       </div>
 
       {/* ─── Visual side ─── */}
-      <div
-        className="relative hidden lg:flex flex-col justify-center overflow-hidden"
-        style={{ background: "linear-gradient(145deg, #0d0f1a 0%, #111827 50%, #0a0e1a 100%)" }}
-      >
-        {/* Ambient blobs */}
-        <div className="pointer-events-none absolute -top-24 -left-24 size-[420px] rounded-full opacity-20"
-          style={{ background: "radial-gradient(circle, #6366f1 0%, transparent 70%)", filter: "blur(80px)" }} aria-hidden />
-        <div className="pointer-events-none absolute -bottom-32 -right-16 size-[380px] rounded-full opacity-15"
-          style={{ background: "radial-gradient(circle, #059669 0%, transparent 70%)", filter: "blur(90px)" }} aria-hidden />
-        <div className="pointer-events-none absolute top-1/2 right-1/3 size-[260px] rounded-full opacity-10"
-          style={{ background: "radial-gradient(circle, #7c3aed 0%, transparent 70%)", filter: "blur(70px)" }} aria-hidden />
-
-        {/* Dot grid */}
-        <div className="pointer-events-none absolute inset-0" style={{
-          backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.07) 1px, transparent 0)",
-          backgroundSize: "28px 28px",
-          maskImage: "radial-gradient(ellipse 80% 70% at 50% 40%, black, transparent)",
-          WebkitMaskImage: "radial-gradient(ellipse 80% 70% at 50% 40%, black, transparent)",
-        }} aria-hidden />
-
-        <div className="relative z-10 flex flex-col gap-7 p-12 text-white max-w-lg mx-auto w-full">
-
-          {/* Header */}
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-semibold text-indigo-300">
-              <Zap className="size-3 fill-indigo-400 text-indigo-400" />
-              نظام ERP متكامل للمحلات
-            </div>
-            <h2 className="text-3xl font-bold leading-snug">
-              كل بياناتك في
-              <br />
-              <span style={{
-                background: "linear-gradient(120deg, #818cf8, #60a5fa, #34d399)",
-                WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
-              }}>مكان واحد آمن</span>
-            </h2>
-            <p className="text-sm text-white/60 leading-relaxed">
-              مبيعات، مخزون، عملاء، مالية، وتقارير — كل حاجة محفوظة وجاهزة لما تسجّل دخولك.
-            </p>
-          </motion.div>
-
-          {/* Mini dashboard card */}
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.15 }}
-            className="rounded-2xl border overflow-hidden"
-            style={{ borderColor: "rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", backdropFilter: "blur(12px)" }}>
-            {/* Card header */}
-            <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-              <div className="flex items-center gap-2">
-                <BarChart3 className="size-3.5 text-indigo-400" />
-                <span className="text-xs font-semibold text-white/70">آخر المعاملات</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-[10px] text-white/40">مباشر</span>
-              </div>
-            </div>
-            {/* Transactions list */}
-            <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
-              {RECENT_TXS.map((tx, i) => (
-                <motion.div key={i}
-                  initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3, delay: 0.25 + i * 0.07 }}
-                  className="flex items-center justify-between px-4 py-2.5">
-                  <div className="flex items-center gap-2.5">
-                    <div className="size-7 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ background: tx.color + "15" }}>
-                      <Store className="size-3.5" style={{ color: tx.color }} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-white/90">{tx.name}</p>
-                      <p className="text-[10px] text-white/40">{tx.time}</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-bold tabular-nums" style={{ color: tx.color }}>{tx.amount} ج</span>
-                </motion.div>
-              ))}
-            </div>
-            {/* Summary row */}
-            <div className="grid grid-cols-3 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-              {[
-                { label: "إجمالي اليوم", value: "12,450 ج", color: "#34d399" },
-                { label: "عدد الفواتير", value: "38",        color: "#60a5fa" },
-                { label: "متوسط الفاتورة", value: "328 ج",   color: "#818cf8" },
-              ].map((s, i) => (
-                <div key={i} className="text-center py-2.5 px-2"
-                  style={{ borderRightWidth: i > 0 ? 1 : 0, borderColor: "rgba(255,255,255,0.08)" }}>
-                  <p className="text-sm font-bold" style={{ color: s.color }}>{s.value}</p>
-                  <p className="text-[10px] text-white/40 mt-0.5">{s.label}</p>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Feature grid */}
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4, delay: 0.35 }}
-            className="grid grid-cols-2 gap-2">
-            {FEATURES.map((f, i) => (
-              <motion.div key={i}
-                initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.4 + i * 0.07 }}
-                className="flex items-center gap-2.5 rounded-xl px-3 py-2.5"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                <div className="size-7 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ background: f.color + "18" }}>
-                  <f.icon className="size-3.5" style={{ color: f.color }} />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-white/90">{f.label}</p>
-                  <p className="text-[10px] text-white/45">{f.desc}</p>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-
-          {/* Stats row */}
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.6 }}
-            className="flex items-center rounded-2xl overflow-hidden border"
-            style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>
-            {[
-              { value: "14 يوم", label: "تجربة مجانية",     icon: "🎁" },
-              { value: "بدون بطاقة", label: "ائتمان مطلوبة", icon: "💳" },
-              { value: "أوفلاين", label: "يعمل بدون إنترنت", icon: "📶" },
-            ].map((s, i) => (
-              <div key={i} className="flex-1 text-center py-3"
-                style={{ borderRightWidth: i > 0 ? 1 : 0, borderColor: "rgba(255,255,255,0.08)" }}>
-                <p className="text-sm font-bold text-white">{s.icon} {s.value}</p>
-                <p className="text-[10px] text-white/40 mt-0.5">{s.label}</p>
-              </div>
-            ))}
-          </motion.div>
-
-        </div>
-      </div>
+      <LoginShowcase />
     </main>
   );
 }

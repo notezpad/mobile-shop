@@ -18,9 +18,37 @@ export function inactiveTrialWhere(extra: Record<string, unknown> = {}) {
   }
 }
 
+/**
+ * 🎁 محلات كل بياناتها «تجريبية» (seed_demo_data) ولا شغل فعلي — بقت عندها
+ * منتجات/مبيعات فمعيار «صفر منتجات» وحده كان هيفلتها من قائمة التنظيف.
+ * بنسأل دالة SQL (demo-data-v1.sql) — لو لسه ما اتركبتش نرجّع [] بهدوء.
+ */
+async function demoOnlyTenantIds(): Promise<string[]> {
+  try {
+    const rows = await db.$queryRaw<{ id: string }[]>`SELECT "id" FROM demo_only_tenant_ids()`
+    return rows.map((r) => r.id)
+  } catch {
+    return []
+  }
+}
+
 export async function findInactiveTrials(ids?: string[], take = 400) {
+  const demoOnly = (await demoOnlyTenantIds()).filter((id) => !ids || ids.includes(id))
+  const base = inactiveTrialWhere(ids ? { id: { in: ids, not: PLATFORM_TENANT_ID } } : {})
+  const where = demoOnly.length
+    ? {
+        OR: [
+          base,
+          {
+            id: { in: demoOnly, not: PLATFORM_TENANT_ID },
+            createdAt: { lt: new Date(Date.now() - FAKE_MIN_AGE_MS) },
+            subscriptions: { none: { amountPaid: { gt: 0 } } },
+          },
+        ],
+      }
+    : base
   const rows = await db.tenant.findMany({
-    where: inactiveTrialWhere(ids ? { id: { in: ids, not: PLATFORM_TENANT_ID } } : {}) as any,
+    where: where as any,
     orderBy: { createdAt: 'desc' },
     take,
     select: {
