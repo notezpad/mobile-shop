@@ -47,7 +47,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
         <div className="mb-5 flex flex-col items-center gap-3 text-center sm:mb-9 sm:gap-3.5">
           <motion.div
             custom={0}
-            initial="hidden"
+            initial={false}
             animate="visible"
             variants={fadeUp}
             className="glass-pill inline-flex h-auto min-h-10 max-w-full items-center gap-2 rounded-full px-4 py-2 text-xs font-bold text-white sm:px-5 sm:text-sm"
@@ -56,7 +56,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
             <span className="leading-snug">نظام إدارة محلات التجزئة والجملة</span>
           </motion.div>
 
-          <motion.div custom={1} initial="hidden" animate="visible" variants={fadeUp} className="flex flex-col items-center gap-1.5">
+          <motion.div custom={1} initial={false} animate="visible" variants={fadeUp} className="flex flex-col items-center gap-1.5">
             <span className="text-xs font-bold text-white sm:hidden">اختر نشاط محلك</span>
             <VerticalSwitch label="اختر نشاط محلك" />
           </motion.div>
@@ -89,7 +89,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
 
             <motion.div
               custom={4}
-              initial="hidden"
+              initial={false}
               animate="visible"
               variants={fadeUp}
               className="flex w-full flex-col items-stretch gap-3 pt-1 sm:w-auto sm:flex-row sm:items-center sm:justify-start sm:pt-2"
@@ -115,7 +115,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
 
             <motion.div
               custom={5}
-              initial="hidden"
+              initial={false}
               animate="visible"
               variants={fadeUp}
               className="grid w-full max-w-xl grid-cols-3 overflow-hidden rounded-2xl border border-white/70 bg-white shadow-[0_20px_40px_-16px_rgba(0,40,28,0.55)]"
