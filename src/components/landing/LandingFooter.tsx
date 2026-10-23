@@ -13,11 +13,14 @@ const COMPANY_LINKS = [
   { label: 'من نحن', href: '/about-us' },
   { label: 'سياسة الكوكيز', href: '/cookies-policy' },
   { label: 'تواصل معنا', href: '/contact-us' },
+  // بتظهر هنا في الجوال بس (sm:hidden)؛ على الشاشات الأكبر مكانها الأصلي تحت "الدعم"
+  { label: 'الشروط والأحكام', href: '/terms-and-conditions', mobileOnly: true },
 ]
 const SUPPORT_LINKS = [
   { label: 'سياسة الاسترجاع', href: '/refund-policy' },
   { label: 'الأسئلة الشائعة', href: '/#faq' },
-  { label: 'الشروط والأحكام', href: '/terms-and-conditions' },
+  // بتتخفي في الجوال بس (نفس الرابط ظاهر فوق تحت "الشركة")؛ وترجع تبان من sm فأعلى
+  { label: 'الشروط والأحكام', href: '/terms-and-conditions', hiddenOnMobile: true },
   { label: 'سياسة الخصوصية', href: '/privacy-policy' },
 ]
 
@@ -113,6 +116,8 @@ export function LandingFooter() {
           <p>صُنع للعالم العربي 🌍</p>
         </div>
       </div>
+      {/* مسافة تحت عشان الزر الثابت ما يغطيش آخر الصفحة على الموبايل — جوه الفوتر عشان الخلفية تفضل خضراء بدون فراغ أبيض */}
+      <div className="h-20 md:hidden" aria-hidden />
     </footer>
   )
 }
@@ -145,7 +150,13 @@ function FooterLinkColumn({
   )
 }
 
-function FooterColumn({ title, links }: { title: string; links: { label: string; href: string }[] }) {
+function FooterColumn({
+  title,
+  links,
+}: {
+  title: string
+  links: { label: string; href: string; mobileOnly?: boolean; hiddenOnMobile?: boolean }[]
+}) {
   return (
     <div>
       <h4 className="mb-4 text-sm font-extrabold text-white">{title}</h4>
@@ -153,8 +164,9 @@ function FooterColumn({ title, links }: { title: string; links: { label: string;
         {links.map((l) => {
           const isInternal = l.href.startsWith('/')
           const isHash = l.href.startsWith('#')
+          const visibilityClass = l.mobileOnly ? 'sm:hidden' : l.hiddenOnMobile ? 'hidden sm:list-item' : ''
           return (
-            <li key={l.label}>
+            <li key={l.label} className={visibilityClass}>
               {isInternal ? (
                 <a href={l.href} className="text-sm lg-muted transition-colors hover:text-white hover:underline">
                   {l.label}

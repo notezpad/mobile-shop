@@ -1,7 +1,17 @@
 'use client'
 
 import * as React from 'react'
-import { Menu, LogIn } from 'lucide-react'
+import {
+  Menu,
+  LogIn,
+  Sparkles,
+  Users,
+  Tag,
+  ShieldCheck,
+  MessageCircleQuestion,
+  ArrowLeft,
+  MessageCircle,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -10,20 +20,24 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import type { AuthMode } from './AuthModal'
-import { SITE_NAME, SITE_NAME_AR } from '@/lib/site'
+import { SITE_NAME, SITE_NAME_AR, WHATSAPP } from '@/lib/site'
 
 interface NavItem {
   label: string
   href: string
+  hint: string
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { label: 'المزايا', href: '#features' },
-  { label: 'لمن النظام', href: '#who-for' },
-  { label: 'الأسعار', href: '#pricing' },
-  { label: 'ليه تثق فينا', href: '#trust' },
-  { label: 'الأسئلة الشائعة', href: '#faq' },
+const NAV_ITEMS: { item: NavItem; Icon: React.ElementType }[] = [
+  { item: { label: 'المزايا', href: '#features', hint: 'كل ما يقدّمه النظام' }, Icon: Sparkles },
+  { item: { label: 'لمن النظام', href: '#who-for', hint: 'محلات الملابس والأحذية وغيرها' }, Icon: Users },
+  { item: { label: 'الأسعار', href: '#pricing', hint: 'باقات واضحة بدون رسوم خفية' }, Icon: Tag },
+  { item: { label: 'ليه تثق فينا', href: '#trust', hint: 'أمان وسرعة ودعم حقيقي' }, Icon: ShieldCheck },
+  { item: { label: 'الأسئلة الشائعة', href: '#faq', hint: 'إجابات في دقيقة' }, Icon: MessageCircleQuestion },
 ]
+
+// أرقام عربية-هندية لفهارس عناصر القائمة
+const INDEX_NUMERALS = ['٠١', '٠٢', '٠٣', '٠٤', '٠٥']
 
 interface LandingHeaderProps {
   onOpenAuth: (mode: AuthMode) => void
@@ -62,7 +76,9 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
           <a href="#top" className="group flex items-center gap-3">
             <img
               src="/logo.svg" alt="Nezam POS" width={42} height={42}
-              className="size-[42px] rounded-[14px] shadow-lg shadow-[#00402a]/40 ring-2 ring-white/90 transition-transform duration-300 group-hover:-rotate-3 group-hover:scale-105"
+              draggable={false}
+              className="size-[42px] select-none rounded-[14px] shadow-lg shadow-[#00402a]/40 ring-2 ring-white/90 transition-transform duration-300 group-hover:-rotate-3 group-hover:scale-105"
+              style={{ WebkitUserDrag: 'none' } as React.CSSProperties}
             />
             <span className="flex flex-col leading-tight">
               <span dir="ltr" className="text-right text-[17px] font-black text-white">{SITE_NAME}</span>
@@ -72,7 +88,7 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
 
           {/* Desktop nav */}
           <nav className="hidden items-center gap-1 lg:flex">
-            {NAV_ITEMS.map((item) => (
+            {NAV_ITEMS.map(({ item }) => (
               <button
                 key={item.href}
                 onClick={() => handleNav(item.href)}
@@ -107,57 +123,98 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
           <div className="lg:hidden">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="القائمة" className="text-white hover:bg-white/15 hover:text-white">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="القائمة"
+                  className="relative size-10 rounded-2xl text-white ring-1 ring-white/25 transition-all hover:bg-white/15 hover:ring-white/50"
+                >
                   <Menu className="size-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="lg-head-green w-[300px] border-l border-white/15 !bg-[#007650] p-0 text-white">
+
+              {/* ===== القائمة الجانبية — لوح زجاجي زمردي ===== */}
+              <SheetContent
+                side="right"
+                className="nz-drawer w-[86vw] max-w-[360px] border-l border-white/10 !bg-transparent p-0 text-white sm:w-[360px]"
+              >
                 <SheetTitle className="sr-only">القائمة الرئيسية</SheetTitle>
-                <div className="flex h-full flex-col">
-                  {/* Mobile header */}
-                  <div className="flex items-center gap-2.5 border-b border-white/10 bg-[#005639] px-5 py-5 text-white">
-                    <img src="/logo.svg" alt="" width={36} height={36} className="size-9 rounded-xl ring-2 ring-white" />
-                    <span className="flex flex-col leading-tight">
-                      <span dir="ltr" className="text-base font-black">{SITE_NAME}</span>
-                      <span className="text-xs font-semibold text-white/80">{SITE_NAME_AR}</span>
-                    </span>
+                <div className="nz-drawer-surface relative flex h-full flex-col overflow-hidden">
+                  {/* هالة ضوء علوية */}
+                  <div className="pointer-events-none absolute -top-28 left-1/2 h-56 w-72 -translate-x-1/2 rounded-full bg-[#00c98b]/25 blur-3xl" aria-hidden />
+
+                  {/* ترويسة اللوح */}
+                  <div className="relative px-5 pb-4 pt-6">
+                    <div className="nz-glass-card flex items-center gap-3 px-4 py-3.5">
+                      <img
+                        src="/logo.svg" alt="" width={38} height={38}
+                        draggable={false}
+                        className="size-[38px] select-none rounded-[12px] shadow-md shadow-black/40 ring-2 ring-white/85"
+                        style={{ WebkitUserDrag: 'none' } as React.CSSProperties}
+                      />
+                      <div className="flex min-w-0 flex-col leading-tight">
+                        <span dir="ltr" className="text-right text-[15px] font-black text-white">{SITE_NAME}</span>
+                        <span className="text-right text-[11px] font-semibold text-white/65">{SITE_NAME_AR}</span>
+                      </div>
+                      <span className="nz-gold-chip mr-auto shrink-0">تجربة مجانية</span>
+                    </div>
                   </div>
 
-                  {/* Mobile nav links */}
-                  <nav className="flex flex-col gap-1 p-4">
-                    {NAV_ITEMS.map((item) => (
+                  {/* روابط القائمة */}
+                  <nav className="relative flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 pb-2 pt-1" aria-label="روابط الصفحة">
+                    {NAV_ITEMS.map(({ item, Icon }, i) => (
                       <button
                         key={item.href}
                         onClick={() => handleNav(item.href)}
-                        className="rounded-lg px-4 py-3.5 text-right text-base font-bold text-white/90 transition-colors hover:bg-white/15 hover:text-white"
+                        style={{ '--i': i } as React.CSSProperties}
+                        className="nz-menu-item group"
                       >
-                        {item.label}
+                        <span className="nz-item-index" aria-hidden>{INDEX_NUMERALS[i]}</span>
+                        <span className="nz-item-icon" aria-hidden>
+                          <Icon className="size-[18px]" />
+                        </span>
+                        <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-right">
+                          <span className="text-[15px] font-extrabold leading-none text-white">{item.label}</span>
+                          <span className="text-[11px] font-medium leading-none text-white/55">{item.hint}</span>
+                        </span>
+                        <ArrowLeft className="nz-item-arrow size-4 shrink-0" aria-hidden />
                       </button>
                     ))}
                   </nav>
 
-                  {/* Mobile CTAs */}
-                  <div className="mt-auto space-y-2.5 border-t border-white/10 p-4">
-                    <Button
-                      variant="outline"
-                      className="h-11 w-full gap-1.5 rounded-xl border-white/50 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-                      onClick={() => {
-                        setMobileOpen(false)
-                        onOpenAuth('login')
-                      }}
-                    >
-                      <LogIn className="size-4" />
-                      تسجيل الدخول
-                    </Button>
-                    <Button
-                      className="h-11 w-full gap-1.5 rounded-xl bg-white font-extrabold text-[#005639] shadow-md hover:bg-[#eafaf1]"
+                  {/* أزرار الحساب */}
+                  <div className="relative space-y-2.5 border-t border-white/10 bg-black/20 p-4 backdrop-blur-md">
+                    <button
                       onClick={() => {
                         setMobileOpen(false)
                         onOpenAuth('signup')
                       }}
+                      className="nz-cta-primary group"
                     >
-                      ابدأ مجاناً
-                    </Button>
+                      <span>ابدأ مجاناً</span>
+                      <ArrowLeft className="size-4 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMobileOpen(false)
+                        onOpenAuth('login')
+                      }}
+                      className="nz-cta-ghost"
+                    >
+                      <LogIn className="size-4" aria-hidden />
+                      <span>تسجيل الدخول</span>
+                    </button>
+
+                    {/* دعم مباشر واتساب */}
+                    <a
+                      href={`https://wa.me/${WHATSAPP.replace(/[^0-9]/g, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="nz-support-link"
+                    >
+                      <MessageCircle className="size-4" aria-hidden />
+                      <span>دعم مباشر على واتساب</span>
+                    </a>
                   </div>
                 </div>
               </SheetContent>

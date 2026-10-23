@@ -134,8 +134,6 @@ function LandingInner() {
         </main>
 
         <LandingFooter />
-        {/* مسافة تحت عشان الزر الثابت ما يغطيش آخر الصفحة على الموبايل */}
-        <div className="h-20 md:hidden" aria-hidden />
       </div>
       <StickyMobileCTA onClick={() => openAuth('signup')} />
     </>
