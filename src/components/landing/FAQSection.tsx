@@ -70,7 +70,7 @@ export function FAQSection() {
 
   return (
     <section id="faq" className="landing-light relative scroll-mt-24 border-t border-[#00573f]/12 py-8 sm:py-24">
-      <div className="relative mx-auto max-w-3xl px-2.5 sm:px-6 lg:px-8">
+      <div className="relative mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mx-auto mb-5 max-w-2xl text-center sm:mb-12">
           <motion.span

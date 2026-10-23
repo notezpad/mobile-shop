@@ -35,7 +35,7 @@ export function ComparisonSection({ onOpenAuth }: ComparisonSectionProps) {
 
   return (
     <section className="landing-light relative py-8 sm:py-24">
-      <div className="relative mx-auto max-w-5xl px-2.5 sm:px-6 lg:px-8">
+      <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-14">
           <motion.span
             initial={false}

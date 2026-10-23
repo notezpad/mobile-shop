@@ -7926,7 +7926,8 @@ html[data-hg-boot] body::after {
   -webkit-mask-image: linear-gradient(to bottom, transparent 55%, #000 95%);
           mask-image: linear-gradient(to bottom, transparent 55%, #000 95%);
 }
-.nz-drawer .nz-drawer-surface > * { position: relative; z-index: 1; }
+/* ⚠️ لا تطبّق relative على العناصر absolute (هالة الضوء) وإلا تدخل في التخطيط وتدفع القائمة للأسفل */
+.nz-drawer .nz-drawer-surface > *:not(.absolute) { position: relative; z-index: 1; }
 
 /* كارت زجاجي عام */
 .nz-glass-card {
@@ -8047,4 +8048,103 @@ html[data-hg-boot] body::after {
 @media (prefers-reduced-motion: reduce) {
   .nz-menu-item { animation: none; opacity: 1; }
   .nz-menu-item:hover, .nz-cta-primary:hover { transform: none; }
+}
+
+/* زر إغلاق القائمة (داخل كارت الترويسة) */
+.nz-close-btn {
+  display: grid; place-items: center;
+  width: 2rem; height: 2rem; flex-shrink: 0;
+  border-radius: 0.7rem;
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.nz-close-btn:hover, .nz-close-btn:focus-visible { background: rgba(255, 255, 255, 0.18); color: #fff; outline: none; }
+
+/* تدرج خفيف أسفل القائمة كإشارة للتمرير + مسافة كافية للعنصر الأخير */
+.nz-nav-scroll {
+  padding-bottom: 1.5rem;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
+          mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
+}
+
+/* شاشات ضيقة جداً (≤360px): إخفاء الشارة والفهرس لإعطاء النص مساحة */
+@media (max-width: 360px) {
+  .nz-chip-hide-xs { display: none; }
+  .nz-item-index { display: none; }
+  .nz-menu-item { gap: 0.6rem; padding-inline: 0.7rem; }
+}
+
+/* شاشات قصيرة (≤700px ارتفاع): ضغط المسافات عشان تظهر العناصر كلها */
+@media (max-height: 700px) {
+  .nz-drawer-head { padding-top: 1rem; padding-bottom: 0.6rem; }
+  .nz-drawer-head .nz-glass-card { padding-top: 0.55rem; padding-bottom: 0.55rem; }
+  .nz-menu-item { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+  .nz-item-icon { width: 2rem; height: 2rem; }
+  .nz-drawer-foot { padding: 0.75rem 1rem; }
+  .nz-cta-primary, .nz-cta-ghost { height: 2.6rem; }
+}
+
+/* ============================================================
+   زر / بطاقة "العرض التوضيحي" (ديسكتوب + جوال)
+   ============================================================ */
+.nz-demo-play {
+  position: relative;
+  display: grid; place-items: center;
+  width: 1.5rem; height: 1.5rem; flex-shrink: 0;
+  border-radius: 999px;
+  color: #3a2a00;
+  background: linear-gradient(135deg, #fff1a8, #ffc93c);
+  box-shadow: 0 0 14px rgba(255, 201, 60, 0.55);
+}
+.nz-demo-play svg { margin-inline-start: 1px; } /* مثلث التشغيل يفضل لليمين زي أي مشغل */
+.nz-demo-play::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  border: 2px solid rgba(255, 201, 60, 0.7);
+  animation: nzDemoPing 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+.nz-demo-play-lg { width: 2.25rem; height: 2.25rem; }
+@keyframes nzDemoPing {
+  0% { transform: scale(1); opacity: 0.9; }
+  80%, 100% { transform: scale(1.9); opacity: 0; }
+}
+
+/* ديسكتوب: كبسولة في شريط التنقل */
+.nz-demo-pill {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  border-radius: 999px;
+  padding: 0.3rem 0.9rem 0.3rem 0.7rem;
+  font-size: 0.875rem; font-weight: 800; white-space: nowrap;
+  color: #ffe27a;
+  background: rgba(255, 226, 122, 0.1);
+  border: 1px solid rgba(255, 226, 122, 0.4);
+  transition: background 0.25s ease, border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+}
+.nz-demo-pill:hover {
+  background: rgba(255, 226, 122, 0.2);
+  border-color: rgba(255, 226, 122, 0.75);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px -10px rgba(255, 201, 60, 0.7);
+}
+
+/* جوال: بطاقة مميزة أعلى قائمة الروابط */
+.nz-demo-card {
+  display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0;
+  border-radius: 1rem;
+  padding: 0.7rem 0.85rem;
+  text-align: right;
+  background: linear-gradient(135deg, rgba(255, 226, 122, 0.2), rgba(255, 201, 60, 0.06) 70%);
+  border: 1px solid rgba(255, 226, 122, 0.5);
+  box-shadow: 0 14px 30px -18px rgba(255, 201, 60, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  transition: transform 0.25s ease, border-color 0.25s ease;
+}
+.nz-demo-card:hover, .nz-demo-card:active { border-color: rgba(255, 226, 122, 0.85); transform: translateY(-1px); }
+
+@media (max-height: 700px) {
+  .nz-demo-card { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+  .nz-demo-play-lg { width: 2rem; height: 2rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nz-demo-play::after { animation: none; display: none; }
 }

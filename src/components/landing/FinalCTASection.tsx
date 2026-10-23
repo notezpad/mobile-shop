@@ -50,7 +50,7 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
         فاتورة جديدة · 128 ج
       </motion.div>
 
-      <div className="relative mx-auto max-w-3xl px-2.5 text-center sm:px-6 lg:px-8">
+      <div className="relative mx-auto max-w-3xl px-4 text-center sm:px-6 lg:px-8">
         {/* بادج علوي */}
         <motion.span
           initial={false}

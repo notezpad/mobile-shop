@@ -40,7 +40,7 @@ const TRUST_POINTS = [
 export function TrustSection() {
   return (
     <section id="trust" className="landing-light is-alt relative scroll-mt-24 py-8 sm:py-24">
-      <div className="relative mx-auto max-w-7xl px-2.5 sm:px-6 lg:px-8">
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mx-auto mb-5 max-w-2xl text-center sm:mb-16">
           <motion.span
@@ -74,7 +74,7 @@ export function TrustSection() {
         </div>
 
         {/* Trust grid */}
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
           {TRUST_POINTS.map((t, i) => {
             const Icon = t.icon
             return (
@@ -84,10 +84,10 @@ export function TrustSection() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-60px' }}
                 transition={{ duration: 0.45, delay: i * 0.06 }}
-                className="glass-card group flex flex-row items-start gap-3 rounded-2xl p-3 sm:flex-col sm:gap-4 sm:p-7"
+                className="glass-card group flex flex-col gap-3 rounded-2xl p-6 sm:gap-4 sm:p-7"
               >
                 <div className="flex shrink-0 items-center justify-between gap-3">
-                  <span className="landing-tile size-10 transition-transform sm:size-12 duration-300 group-hover:scale-110 group-hover:-rotate-3">
+                  <span className="landing-tile size-11 transition-transform duration-300 sm:size-12 group-hover:scale-110 group-hover:-rotate-3">
                     <Icon className="size-5.5" />
                   </span>
                   <span
@@ -99,8 +99,8 @@ export function TrustSection() {
                   </span>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-[15px] font-extrabold leading-snug text-[#0b2a20] sm:text-xl">{t.title}</h3>
-                <p className="mt-0.5 text-[13px] leading-relaxed lg-muted sm:-mt-2 sm:text-base">{t.body}</p>
+                  <h3 className="text-base font-extrabold leading-snug text-[#0b2a20] sm:text-xl">{t.title}</h3>
+                <p className="text-sm leading-relaxed lg-muted sm:-mt-2 sm:text-base">{t.body}</p>
                 </div>
               </motion.div>
             )

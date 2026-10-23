@@ -91,7 +91,7 @@ function LandingInner() {
           <HeroSection onOpenAuth={openAuth} />
 
           {/* Stats bar — كارت أبيض عايم بيعدّي على أسفل الهيرو الأخضر */}
-          <section className="relative z-10 -mt-12 px-2.5 pb-2 sm:-mt-20 sm:px-6 lg:px-8">
+          <section className="relative z-10 -mt-12 px-4 pb-2 sm:-mt-20 sm:px-6 lg:px-8">
             <div className="mx-auto grid max-w-7xl grid-cols-2 divide-x divide-x-reverse divide-[#00573f]/10 overflow-hidden rounded-2xl border border-white/80 bg-white sm:rounded-3xl shadow-[0_30px_60px_-24px_rgba(0,40,28,0.7)] lg:grid-cols-4">
               {STATS.map((s, i) => {
                 const Icon = s.icon

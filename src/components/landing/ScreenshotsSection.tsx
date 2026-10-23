@@ -67,7 +67,7 @@ export function ScreenshotsSection() {
       id="screenshots"
       className="landing-light relative scroll-mt-24 border-y border-[#00573f]/12 py-8 sm:py-24"
     >
-      <div className="relative mx-auto max-w-7xl px-2.5 sm:px-6 lg:px-8">
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mx-auto mb-5 max-w-2xl text-center sm:mb-16">
           <motion.span
@@ -84,7 +84,7 @@ export function ScreenshotsSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mt-4 font-black text-[#0b2a20] sm:text-4xl lg:text-5xl"
+            className="mt-2.5 text-[1.6rem] font-black text-[#0b2a20] sm:mt-4 sm:text-4xl lg:text-5xl"
             style={{ lineHeight: 1.25 }}
           >
             شاهد المنصة من الداخل
@@ -119,17 +119,17 @@ export function ScreenshotsSection() {
         ) : (
         <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="w-full">
           <div className="flex justify-center">
-            <TabsList className="glass-pill flex h-auto flex-wrap gap-1 rounded-xl p-1.5 [&_[data-state=active]]:bg-[#00c98b]/12 [&_[data-state=active]]:text-[#0b2a20] [&_button]:text-[#5b7a6e]">
+            <TabsList className="glass-pill grid h-auto w-full grid-cols-2 gap-1 rounded-xl p-1.5 sm:flex sm:w-auto sm:flex-wrap [&_[data-state=active]]:bg-[#00c98b]/12 [&_[data-state=active]]:text-[#0b2a20] [&_button]:text-[#5b7a6e]">
               {TABS.map((t) => {
                 const Icon = t.icon
                 return (
                   <TabsTrigger
                     key={t.key}
                     value={t.key}
-                    className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs sm:text-sm"
+                    className="flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs sm:text-sm"
                   >
                     <Icon className="size-4" />
-                    <span className="hidden sm:inline">{t.label}</span>
+                    <span>{t.label}</span>
                   </TabsTrigger>
                 )
               })}

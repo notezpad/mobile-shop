@@ -93,7 +93,7 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
 
   return (
     <section id="pricing" className="landing-light relative scroll-mt-24 border-y border-[#00573f]/12 py-8 sm:py-24">
-      <div className="relative mx-auto max-w-6xl px-2.5 sm:px-6 lg:px-8">
+      <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mx-auto mb-5 max-w-2xl text-center sm:mb-12">
           <motion.span
@@ -166,7 +166,7 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="mx-auto grid max-w-6xl grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4"
+            className="mx-auto grid max-w-6xl grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4"
           >
             {!loaded
               ? [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[420px] rounded-2xl" />)
@@ -227,7 +227,7 @@ function PlanCard({
       viewport={{ once: true, margin: '-60px' }}
       transition={{ duration: 0.45, delay: index * 0.08 }}
       className={
-        'relative flex flex-col rounded-2xl p-3.5 transition-all duration-300 sm:p-6 ' +
+        'relative flex flex-col rounded-2xl p-6 transition-all duration-300 ' +
         (plan.isPro
           ? 'glass-panel-strong shadow-xl shadow-brand-600/10'
           : 'glass-card') +
@@ -252,11 +252,11 @@ function PlanCard({
         <h3 className={'text-lg font-extrabold ' + (plan.isPro ? 'text-[#00946a]' : 'text-[#0b2a20]')}>
           باقة {plan.name}
         </h3>
-        <p className="mt-1 text-xs lg-muted lp-hide-sm">{plan.description}</p>
+        <p className="mt-1 text-xs lg-muted">{plan.description}</p>
       </div>
 
       <div className="mb-1 flex items-end gap-1">
-        <span className="text-3xl font-black text-[#0b2a20] sm:text-4xl">{priceDisplay}</span>
+        <span className="text-4xl font-black text-[#0b2a20]">{priceDisplay}</span>
         <span className="mb-1 text-xs lg-muted">{periodLabel}</span>
       </div>
       {yearly && savings > 0 && (
@@ -268,7 +268,7 @@ function PlanCard({
       <Button
         onClick={() => onOpenAuth('signup')}
         className={
-          'mb-3 mt-1 h-11 w-full gap-1.5 rounded-xl text-sm font-bold ' +
+          'mb-4 mt-2 h-11 w-full gap-1.5 rounded-xl text-sm font-bold ' +
           (plan.isPro
             ? 'bg-gradient-to-l from-brand-500 to-brand-700 text-white shadow-md shadow-brand-600/30 hover:from-brand-400 hover:to-brand-600'
             : 'border border-[#00573f]/12 bg-[#effcf7] text-[#0b2a20] hover:bg-[#00c98b]/12')
@@ -278,7 +278,7 @@ function PlanCard({
         ابدأ تجربتك المجانية
       </Button>
 
-      <ul className="mt-auto grid grid-cols-2 gap-x-2 gap-y-2 sm:block sm:space-y-2.5">
+      <ul className="mt-auto space-y-2.5">
         {plan.features.map((f) => (
           <li key={f} className="flex items-start gap-2 text-xs">
             <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-[#00946a]">
@@ -289,7 +289,7 @@ function PlanCard({
         ))}
       </ul>
 
-      <div className="lp-hide-sm mt-4 flex flex-wrap gap-1.5 border-t border-[#00573f]/12 pt-3 text-[10px] lg-muted">
+      <div className="mt-4 flex flex-wrap gap-1.5 border-t border-[#00573f]/12 pt-3 text-[10px] lg-muted">
         <span className="rounded-full bg-[#effcf7] px-2.5 py-1 font-semibold">{plan.maxUsers} مستخدم</span>
         <span className="rounded-full bg-[#effcf7] px-2.5 py-1 font-semibold">{plan.maxProducts.toLocaleString('ar-EG')} منتج</span>
         <span className="rounded-full bg-[#effcf7] px-2.5 py-1 font-semibold">{plan.maxBranches} فرع</span>

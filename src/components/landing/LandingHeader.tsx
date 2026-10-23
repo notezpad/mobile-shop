@@ -11,10 +11,13 @@ import {
   MessageCircleQuestion,
   ArrowLeft,
   MessageCircle,
+  X,
+  Play,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetTitle,
   SheetTrigger,
@@ -30,11 +33,14 @@ interface NavItem {
 
 const NAV_ITEMS: { item: NavItem; Icon: React.ElementType }[] = [
   { item: { label: 'المزايا', href: '#features', hint: 'كل ما يقدّمه النظام' }, Icon: Sparkles },
-  { item: { label: 'لمن النظام', href: '#who-for', hint: 'محلات الملابس والأحذية وغيرها' }, Icon: Users },
-  { item: { label: 'الأسعار', href: '#pricing', hint: 'باقات واضحة بدون رسوم خفية' }, Icon: Tag },
+  { item: { label: 'لمن النظام', href: '#who-for', hint: 'ملابس وأحذية وغيرها' }, Icon: Users },
+  { item: { label: 'الأسعار', href: '#pricing', hint: 'باقات بدون رسوم خفية' }, Icon: Tag },
   { item: { label: 'ليه تثق فينا', href: '#trust', hint: 'أمان وسرعة ودعم حقيقي' }, Icon: ShieldCheck },
   { item: { label: 'الأسئلة الشائعة', href: '#faq', hint: 'إجابات في دقيقة' }, Icon: MessageCircleQuestion },
 ]
+
+// قسم الفيديو التعريفي (نفس الـ anchor اللي بيستخدمه زر الهيرو)
+const DEMO_HREF = '#screenshots'
 
 // أرقام عربية-هندية لفهارس عناصر القائمة
 const INDEX_NUMERALS = ['٠١', '٠٢', '٠٣', '٠٤', '٠٥']
@@ -71,7 +77,7 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
           (scrolled ? 'lgh-nav' : 'border-b border-transparent bg-transparent')
         }
       >
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-2.5 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           {/* Logo */}
           <a href="#top" className="group flex items-center gap-3">
             <img
@@ -97,6 +103,18 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
                 {item.label}
               </button>
             ))}
+            {/* زر العرض التوضيحي — ينزل على قسم الفيديو (#screenshots) */}
+            <button
+              onClick={() => handleNav(DEMO_HREF)}
+              className="nz-demo-pill ms-2"
+              aria-label="شاهد العرض التوضيحي"
+            >
+              <span className="nz-demo-play" aria-hidden>
+                <Play className="size-3 fill-current" />
+              </span>
+              <span className="xl:hidden">فيديو</span>
+              <span className="hidden xl:inline">العرض التوضيحي</span>
+            </button>
           </nav>
 
           {/* Desktop CTAs */}
@@ -136,6 +154,7 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
               {/* ===== القائمة الجانبية — لوح زجاجي زمردي ===== */}
               <SheetContent
                 side="right"
+                showCloseButton={false}
                 className="nz-drawer w-[86vw] max-w-[360px] border-l border-white/10 !bg-transparent p-0 text-white sm:w-[360px]"
               >
                 <SheetTitle className="sr-only">القائمة الرئيسية</SheetTitle>
@@ -144,7 +163,7 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
                   <div className="pointer-events-none absolute -top-28 left-1/2 h-56 w-72 -translate-x-1/2 rounded-full bg-[#00c98b]/25 blur-3xl" aria-hidden />
 
                   {/* ترويسة اللوح */}
-                  <div className="relative px-5 pb-4 pt-6">
+                  <div className="nz-drawer-head relative px-5 pb-4 pt-6">
                     <div className="nz-glass-card flex items-center gap-3 px-4 py-3.5">
                       <img
                         src="/logo.svg" alt="" width={38} height={38}
@@ -153,15 +172,36 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
                         style={{ WebkitUserDrag: 'none' } as React.CSSProperties}
                       />
                       <div className="flex min-w-0 flex-col leading-tight">
-                        <span dir="ltr" className="text-right text-[15px] font-black text-white">{SITE_NAME}</span>
-                        <span className="text-right text-[11px] font-semibold text-white/65">{SITE_NAME_AR}</span>
+                        <span dir="ltr" className="whitespace-nowrap text-right text-[15px] font-black text-white">{SITE_NAME}</span>
+                        <span className="whitespace-nowrap text-right text-[11px] font-semibold text-white/65">{SITE_NAME_AR}</span>
                       </div>
-                      <span className="nz-gold-chip mr-auto shrink-0">تجربة مجانية</span>
+                      <div className="mr-auto flex shrink-0 items-center gap-2">
+                        <span className="nz-gold-chip nz-chip-hide-xs">تجربة مجانية</span>
+                        <SheetClose className="nz-close-btn" aria-label="إغلاق القائمة">
+                          <X className="size-4" aria-hidden />
+                        </SheetClose>
+                      </div>
                     </div>
                   </div>
 
                   {/* روابط القائمة */}
-                  <nav className="relative flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 pb-2 pt-1" aria-label="روابط الصفحة">
+                  <nav className="nz-nav-scroll relative flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 pt-1" aria-label="روابط الصفحة">
+                    {/* بطاقة العرض التوضيحي المميزة */}
+                    <button
+                      onClick={() => handleNav(DEMO_HREF)}
+                      className="nz-demo-card group"
+                      aria-label="شاهد العرض التوضيحي"
+                    >
+                      <span className="nz-demo-play nz-demo-play-lg" aria-hidden>
+                        <Play className="size-4 fill-current" />
+                      </span>
+                      <span className="flex min-w-0 flex-1 flex-col items-start gap-1 text-right">
+                        <span className="max-w-full truncate text-[15px] font-extrabold leading-tight text-white">شاهد العرض التوضيحي</span>
+                        <span className="max-w-full truncate text-[11px] font-medium leading-tight text-[#ffe27a]/80">شرح النظام بالكامل في فيديو</span>
+                      </span>
+                      <ArrowLeft className="size-4 shrink-0 text-[#ffe27a] transition-transform duration-300 group-hover:-translate-x-1" aria-hidden />
+                    </button>
+
                     {NAV_ITEMS.map(({ item, Icon }, i) => (
                       <button
                         key={item.href}
@@ -173,9 +213,9 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
                         <span className="nz-item-icon" aria-hidden>
                           <Icon className="size-[18px]" />
                         </span>
-                        <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-right">
-                          <span className="text-[15px] font-extrabold leading-none text-white">{item.label}</span>
-                          <span className="text-[11px] font-medium leading-none text-white/55">{item.hint}</span>
+                        <span className="flex min-w-0 flex-1 flex-col items-start gap-1 text-right">
+                          <span className="max-w-full truncate text-[15px] font-extrabold leading-tight text-white">{item.label}</span>
+                          <span className="nz-item-hint max-w-full truncate text-[11px] font-medium leading-tight text-white/55">{item.hint}</span>
                         </span>
                         <ArrowLeft className="nz-item-arrow size-4 shrink-0" aria-hidden />
                       </button>
@@ -183,7 +223,7 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
                   </nav>
 
                   {/* أزرار الحساب */}
-                  <div className="relative space-y-2.5 border-t border-white/10 bg-black/20 p-4 backdrop-blur-md">
+                  <div className="nz-drawer-foot relative space-y-2.5 border-t border-white/10 bg-black/20 p-4 backdrop-blur-md">
                     <button
                       onClick={() => {
                         setMobileOpen(false)

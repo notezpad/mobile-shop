@@ -42,7 +42,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
     <section id="top" className="landing-green relative overflow-hidden pb-20 pt-3 sm:pb-32 sm:pt-8 lg:pt-10">
       <div className="lgh-ledger" aria-hidden />
 
-      <div className="relative mx-auto max-w-7xl px-2.5 sm:px-6 lg:px-8">
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Top badge + vertical switcher */}
         <div className="mb-5 flex flex-col items-center gap-3 text-center sm:mb-9 sm:gap-3.5">
           <motion.div

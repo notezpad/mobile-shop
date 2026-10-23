@@ -65,10 +65,10 @@ export function LandingFooter() {
 
   return (
     <footer className="lg-foot-green relative">
-      <div className="relative mx-auto max-w-7xl px-2.5 py-9 sm:px-6 sm:py-12 lg:px-8 lg:py-16">
-        <div className="grid grid-cols-3 gap-x-3 gap-y-7 sm:grid-cols-2 sm:gap-10 lg:grid-cols-4">
+      <div className="relative mx-auto max-w-7xl px-4 py-9 sm:px-6 sm:py-12 lg:px-8 lg:py-16">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-2 sm:gap-10 lg:grid-cols-4">
           {/* Brand */}
-          <div className="col-span-3 space-y-3 sm:col-span-1 sm:space-y-4">
+          <div className="col-span-2 space-y-3 sm:col-span-1 sm:space-y-4">
             <div className="flex items-center gap-2.5">
               {site.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
