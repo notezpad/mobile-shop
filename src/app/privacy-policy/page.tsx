@@ -25,6 +25,7 @@ import {
   UserCheck,
 } from 'lucide-react'
 import { LandingFooter } from '@/components/landing/LandingFooter'
+import { inline, numbered, isSubhead, subheadText } from '@/components/policy/policy-text'
 
 /**
  * صفحة "سياسة الخصوصية" — Privacy Policy
@@ -482,20 +483,18 @@ export default function PrivacyPage() {
                   <div className="pr-section-icon">
                     <Icon className="size-5" />
                   </div>
-                  <h2 className="pr-section-title">{section.title}</h2>
+                  <h2 className="pr-section-title">{numbered(section.title)}</h2>
                 </div>
                 <div className="pr-section-body">
                   {section.content.map((para, i) => {
                     if (para === '') return <div key={i} className="pr-spacer" />
-                    if (para.startsWith('**')) {
-                      // Sub-heading
-                      const cleaned = para.replace(/\*\*/g, '')
-                      return <p key={i} className="pr-subhead">{cleaned}</p>
+                    if (isSubhead(para)) {
+                      return <p key={i} className="pr-subhead">{numbered(subheadText(para))}</p>
                     }
                     if (para.startsWith('•')) {
-                      return <p key={i} className="pr-bullet">{para}</p>
+                      return <p key={i} className="pr-bullet">{inline(para)}</p>
                     }
-                    return <p key={i} className="pr-para">{para}</p>
+                    return <p key={i} className="pr-para">{inline(para)}</p>
                   })}
                 </div>
               </motion.section>

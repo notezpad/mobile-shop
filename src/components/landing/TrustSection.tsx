@@ -39,10 +39,10 @@ const TRUST_POINTS = [
 
 export function TrustSection() {
   return (
-    <section id="trust" className="landing-light is-alt relative scroll-mt-24 py-12 sm:py-24">
-      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <section id="trust" className="landing-light is-alt relative scroll-mt-24 py-8 sm:py-24">
+      <div className="relative mx-auto max-w-7xl px-2.5 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-16">
+        <div className="mx-auto mb-5 max-w-2xl text-center sm:mb-16">
           <motion.span
             initial={false}
             whileInView={{ opacity: 1, y: 0 }}
@@ -57,7 +57,7 @@ export function TrustSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mt-4 font-black text-[#0b2a20] sm:text-4xl lg:text-5xl"
+            className="mt-3 text-[1.45rem] font-black text-[#0b2a20] sm:mt-4 sm:text-4xl lg:text-5xl"
             style={{ lineHeight: 1.25 }}
           >
             مفيش مخاطرة عليك، وإحنا واخدين بالنا من ده
@@ -67,14 +67,14 @@ export function TrustSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="mx-auto mt-4 max-w-2xl text-base leading-relaxed lg-muted sm:text-lg"
+            className="mx-auto mt-2 max-w-2xl text-[14px] leading-relaxed lg-muted sm:mt-4 sm:text-lg"
           >
             نظام المحل منتج جديد وبيتطوّر بسرعة — وده معناه إننا بنسمع كل ملاحظة منك وبننفذها بسرعة. دي وعودنا الملموسة ليك:
           </motion.p>
         </div>
 
         {/* Trust grid */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
           {TRUST_POINTS.map((t, i) => {
             const Icon = t.icon
             return (
@@ -84,22 +84,24 @@ export function TrustSection() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-60px' }}
                 transition={{ duration: 0.45, delay: i * 0.06 }}
-                className="glass-card group flex flex-col gap-4 rounded-2xl p-7"
+                className="glass-card group flex flex-row items-start gap-3 rounded-2xl p-3 sm:flex-col sm:gap-4 sm:p-7"
               >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="landing-tile size-12 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3">
+                <div className="flex shrink-0 items-center justify-between gap-3">
+                  <span className="landing-tile size-10 transition-transform sm:size-12 duration-300 group-hover:scale-110 group-hover:-rotate-3">
                     <Icon className="size-5.5" />
                   </span>
                   <span
                     aria-hidden
-                    className="font-black text-[#00c98b]/12 transition-colors duration-300 group-hover:text-[#00c98b]/25"
+                    className="hidden font-black sm:block text-[#00c98b]/12 transition-colors duration-300 group-hover:text-[#00c98b]/25"
                     style={{ fontSize: '2.6rem', lineHeight: 1 }}
                   >
                     {String(i + 1).padStart(2, '0')}
                   </span>
                 </div>
-                <h3 className="text-lg font-extrabold leading-snug text-[#0b2a20] sm:text-xl">{t.title}</h3>
-                <p className="-mt-2 text-sm leading-relaxed lg-muted sm:text-base">{t.body}</p>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-[15px] font-extrabold leading-snug text-[#0b2a20] sm:text-xl">{t.title}</h3>
+                <p className="mt-0.5 text-[13px] leading-relaxed lg-muted sm:-mt-2 sm:text-base">{t.body}</p>
+                </div>
               </motion.div>
             )
           })}

@@ -15,6 +15,7 @@ import { toast } from 'sonner'
 import { getMe } from '@/lib/auth-client'
 import { trackEvent } from '@/lib/tracking/client'
 import { TRACKING_EVENTS } from '@/lib/tracking/types'
+import { planFeatureItems } from '@/lib/plan-features'
 
 interface Plan {
   id: number
@@ -248,42 +249,7 @@ export default function PricingPage() {
       : `${yearly}  سنوياً · وفّر ${saving} `
   }
 
-  const planFeaturesForCard = (plan: Plan): { ok: boolean; label: string }[] => {
-    if (plan.code === 'trial') {
-      return [
-        { ok: true, label: `حتى ${plan.maxProducts || 50} منتج` },
-        { ok: true, label: `حتى ${plan.maxUsers || 1} مستخدم` },
-        { ok: true, label: 'كل ميزات نقطة البيع' },
-        { ok: true, label: 'كل ميزات المخزون' },
-        { ok: false, label: 'تقارير متقدمة' },
-        { ok: false, label: 'بيع بالجملة' },
-      ]
-    }
-    if (plan.code.endsWith('-basic')) {
-      return [
-        { ok: true, label: `حتى ${plan.maxProducts} منتج` },
-        { ok: true, label: `حتى ${plan.maxUsers} مستخدم` },
-        { ok: true, label: `حتى ${plan.maxBranches} فرع` },
-        { ok: true, label: 'كل ميزات نقطة البيع' },
-        { ok: true, label: 'إدارة المخزون والعملاء' },
-        { ok: true, label: 'المعاملات المالية والالمعاملات المالية' },
-        { ok: false, label: 'تقارير متقدمة' },
-        { ok: false, label: 'بيع بالجملة' },
-      ]
-    }
-    if (plan.code.endsWith('-pro')) {
-      return [
-        { ok: true, label: `حتى ${plan.maxProducts} منتج` },
-        { ok: true, label: `حتى ${plan.maxUsers} مستخدم` },
-        { ok: true, label: `حتى ${plan.maxBranches} فروع` },
-        { ok: true, label: 'كل ميزات الباقة الأساسية' },
-        { ok: true, label: 'تقارير متقدمة + Excel' },
-        { ok: true, label: 'بيع بالجملة (وحدات وقسم)' },
-        { ok: true, label: 'كل الميزات مُفعّلة' },
-      ]
-    }
-    return []
-  }
+  const planFeaturesForCard = (plan: Plan): { ok: boolean; label: string }[] => planFeatureItems(plan)
 
   // ── Plan code → meta lookup (with safe fallback) ─────────
   const getPlanMeta = (plan: Plan) => {

@@ -69,10 +69,10 @@ export function FAQSection() {
   const faqs = [...VERTICAL_FAQS[vertical], ...COMMON_FAQS]
 
   return (
-    <section id="faq" className="landing-light relative scroll-mt-24 border-t border-[#00573f]/12 py-12 sm:py-24">
-      <div className="relative mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+    <section id="faq" className="landing-light relative scroll-mt-24 border-t border-[#00573f]/12 py-8 sm:py-24">
+      <div className="relative mx-auto max-w-3xl px-2.5 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">
+        <div className="mx-auto mb-5 max-w-2xl text-center sm:mb-12">
           <motion.span
             initial={false}
             whileInView={{ opacity: 1, y: 0 }}
@@ -87,7 +87,7 @@ export function FAQSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mt-4 font-black text-[#0b2a20]"
+            className="mt-2.5 font-black text-[#0b2a20] sm:mt-4"
             style={{ fontSize: 'clamp(1.6rem, 3.4vw, 2.9rem)', lineHeight: 1.2 }}
           >
             عندك سؤال؟ عندنا الإجابة
@@ -101,7 +101,7 @@ export function FAQSection() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.4 }}
-            className="glass-card overflow-hidden rounded-2xl px-6 sm:px-7"
+            className="glass-card overflow-hidden rounded-2xl px-3.5 sm:px-7"
           >
             <Accordion type="single" collapsible className="w-full">
               {faqs.map((item, i) => (
@@ -110,10 +110,10 @@ export function FAQSection() {
                   value={`item-${i}`}
                   className={'border-[#00573f]/12 ' + (i === faqs.length - 1 ? 'border-b-0' : '')}
                 >
-                  <AccordionTrigger className="text-right text-base font-bold text-[#0b2a20] hover:no-underline sm:text-lg">
+                  <AccordionTrigger className="py-3.5 text-right text-[15px] font-bold leading-snug text-[#0b2a20] hover:no-underline sm:py-4 sm:text-lg">
                     {item.q}
                   </AccordionTrigger>
-                  <AccordionContent className="text-right text-base leading-relaxed lg-muted">
+                  <AccordionContent className="text-right text-sm leading-relaxed sm:text-base lg-muted">
                     {item.a}
                   </AccordionContent>
                 </AccordionItem>

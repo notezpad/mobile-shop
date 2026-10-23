@@ -20,6 +20,7 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import { LandingFooter } from '@/components/landing/LandingFooter'
+import { inline, numbered, isSubhead, subheadText } from '@/components/policy/policy-text'
 
 /**
  * صفحة "سياسة الكوكيز" — Cookie Policy
@@ -441,14 +442,13 @@ export default function CookiesPage() {
                   <div className="ck-section-card-icon">
                     <Icon className="size-5" />
                   </div>
-                  <h2 className="ck-section-card-title">{section.title}</h2>
+                  <h2 className="ck-section-card-title">{numbered(section.title)}</h2>
                 </div>
                 <div className="ck-section-card-body">
                   {section.content.map((para, i) => {
                     if (para === '') return <div key={i} className="ck-spacer" />
-                    if (para.startsWith('**')) {
-                      const cleaned = para.replace(/\*\*/g, '')
-                      return <p key={i} className="ck-subhead">{cleaned}</p>
+                    if (isSubhead(para)) {
+                      return <p key={i} className="ck-subhead">{numbered(subheadText(para))}</p>
                     }
                     if (para.startsWith('•')) {
                       // Check if it has a markdown link
@@ -458,18 +458,18 @@ export default function CookiesPage() {
                         const after = para.slice((linkMatch.index ?? 0) + linkMatch[0].length)
                         return (
                           <p key={i} className="ck-bullet">
-                            {before}
+                            {inline(before)}
                             <a href={linkMatch[2]} target="_blank" rel="noopener noreferrer" className="ck-link">
                               {linkMatch[1]}
                               <ExternalLink className="size-3" />
                             </a>
-                            {after}
+                            {inline(after)}
                           </p>
                         )
                       }
-                      return <p key={i} className="ck-bullet">{para}</p>
+                      return <p key={i} className="ck-bullet">{inline(para)}</p>
                     }
-                    return <p key={i} className="ck-para">{para}</p>
+                    return <p key={i} className="ck-para">{inline(para)}</p>
                   })}
                 </div>
               </motion.section>

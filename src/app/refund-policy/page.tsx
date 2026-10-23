@@ -22,6 +22,7 @@ import {
   HelpCircle,
 } from 'lucide-react'
 import { LandingFooter } from '@/components/landing/LandingFooter'
+import { inline, numbered, isSubhead, subheadText } from '@/components/policy/policy-text'
 
 /**
  * صفحة "سياسة الاسترجاع" — Refund Policy
@@ -490,19 +491,18 @@ export default function RefundPage() {
                   <div className="rf-section-card-icon">
                     <Icon className="size-5" />
                   </div>
-                  <h2 className="rf-section-card-title">{section.title}</h2>
+                  <h2 className="rf-section-card-title">{numbered(section.title)}</h2>
                 </div>
                 <div className="rf-section-card-body">
                   {section.content.map((para, i) => {
                     if (para === '') return <div key={i} className="rf-spacer" />
-                    if (para.startsWith('**')) {
-                      const cleaned = para.replace(/\*\*/g, '')
-                      return <p key={i} className="rf-subhead">{cleaned}</p>
+                    if (isSubhead(para)) {
+                      return <p key={i} className="rf-subhead">{numbered(subheadText(para))}</p>
                     }
                     if (para.startsWith('•')) {
-                      return <p key={i} className="rf-bullet">{para}</p>
+                      return <p key={i} className="rf-bullet">{inline(para)}</p>
                     }
-                    return <p key={i} className="rf-para">{para}</p>
+                    return <p key={i} className="rf-para">{inline(para)}</p>
                   })}
                 </div>
               </motion.section>

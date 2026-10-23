@@ -7103,12 +7103,12 @@ html[data-hg-boot] body::after {
 }
 
 /* 3-هـ) أقسام المحتوى (الكروت الكبيرة) */
-.pr-section, .tr-section, .ck-section, .rf-section, .ck-section-card, .rf-section-card {
+.pr-section, .tr-section, .ck-section, .ck-section-card, .rf-section-card {
   background: #ffffff;
   border: 1px solid rgba(0, 87, 63, 0.10);
   box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 20px 44px -28px rgba(0, 60, 40, 0.28);
 }
-.pr-section:hover, .tr-section:hover, .ck-section:hover, .rf-section:hover {
+.pr-section:hover, .tr-section:hover, .ck-section:hover {
   background: #ffffff;
   border-color: rgba(0, 201, 139, 0.35);
 }
@@ -7393,6 +7393,14 @@ html[data-hg-boot] body::after {
 .ck-link:hover { color: #00694c; }
 
 /* ── 8) PAGES V2 ─ سياسة الاسترجاع (rf-*) ───────────────────────────────── */
+/* .rf-section مجرد wrapper للسيكشن (مش كارت) — بدون خلفية/بوردر/ظل */
+.rf-section, .rf-section:hover {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.rf-process-grid { align-items: stretch; padding-top: 14px; }
+.rf-process-card { height: 100%; }
 .rf-process-card {
   background: #ffffff;
   border: 1px solid rgba(0, 87, 63, 0.10);
@@ -7826,3 +7834,56 @@ html[data-hg-boot] body::after {
 }
 
 /* نهاية بلوك PAGES V2.2 FIX */
+
+/* ── صفحات السياسات: نص عريض داخل الفقرات + ترقيم العناوين ─────────────── */
+.pol-strong { font-weight: 800; color: #0b2a20; }
+.pol-num { unicode-bidi: isolate; }
+
+/* ============================================================
+   LANDING — MOBILE RAIL (سلايدر أفقي بدل الكروت العمودية)
+   تحت 640px بس. الكروت جنب بعض مع لمحة من الكارت اللي بعده
+   عشان الزائر يعرف إنه يسحب. فوق 640px الـ grid العادي شغال.
+   عرض الكارت بيتحكم فيه --rail-w من الـ className.
+   ============================================================ */
+@media (max-width: 639.98px) {
+  .lp-rail {
+    --rail-w: 84%;
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 0.625rem;
+    margin-inline: -0.625rem;
+    padding: 4px 0.625rem 14px;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .lp-rail::-webkit-scrollbar { display: none; }
+  .lp-rail > * {
+    flex: 0 0 var(--rail-w);
+    min-width: 0;
+    scroll-snap-align: start;
+  }
+  .lp-rail > .glass-card:hover { transform: none; }
+}
+@media (max-width: 639.98px) {
+  .landing-light .glass-card::before { height: 2px; }
+}
+
+/* العناصر العايمة في الـ CTA الأخير للديسكتوب الكبير بس — كانت بتظهر على الجوال
+   لأن display في .float-chip كان بيغلب كلاس hidden بتاع Tailwind. */
+@media (max-width: 1279.98px) {
+  .float-chip { display: none !important; }
+}
+
+/* إخفاء عنصر على الجوال (display في .lg-tag كان بيغلب كلاس Tailwind) */
+@media (max-width: 639.98px) {
+  .lp-hide-sm { display: none !important; }
+}
+
+/* صناديق المشكلة/الحل: بدون إطار وخلفية على الجوال عشان الكارت يقصر */
+@media (max-width: 639.98px) {
+  .lp-flat { border: 0 !important; background: none !important; padding: 0 !important; border-top: 1px dashed rgba(0,87,63,.14) !important; padding-top: .5rem !important; }
+}

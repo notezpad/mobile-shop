@@ -57,7 +57,7 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
           (scrolled ? 'lgh-nav' : 'border-b border-transparent bg-transparent')
         }
       >
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-2.5 sm:px-6 lg:px-8">
           {/* Logo */}
           <a href="#top" className="group flex items-center gap-3">
             <img

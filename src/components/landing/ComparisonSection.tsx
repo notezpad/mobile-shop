@@ -34,8 +34,8 @@ export function ComparisonSection({ onOpenAuth }: ComparisonSectionProps) {
   const rows = ROWS_BY_VERTICAL[vertical]
 
   return (
-    <section className="landing-light relative py-12 sm:py-24">
-      <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+    <section className="landing-light relative py-8 sm:py-24">
+      <div className="relative mx-auto max-w-5xl px-2.5 sm:px-6 lg:px-8">
         <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-14">
           <motion.span
             initial={false}
@@ -51,7 +51,7 @@ export function ComparisonSection({ onOpenAuth }: ComparisonSectionProps) {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mt-4 font-black text-[#0b2a20]"
+            className="mt-2.5 font-black text-[#0b2a20] sm:mt-4"
             style={{ fontSize: 'clamp(1.6rem, 3.4vw, 2.9rem)', lineHeight: 1.2 }}
           >
             الدفاتر والإكسل مقابل نظام المحل
@@ -61,7 +61,7 @@ export function ComparisonSection({ onOpenAuth }: ComparisonSectionProps) {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="mx-auto mt-4 max-w-xl text-lg leading-[1.7] lg-muted"
+            className="mx-auto mt-2 max-w-xl text-[15px] leading-[1.7] sm:mt-4 sm:text-lg lg-muted"
           >
             شوف الفرق بنفسك بين الطريقة اليدوية القديمة وإدارة {meta.label} عبر نظام سحابي حديث
           </motion.p>

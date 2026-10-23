@@ -18,7 +18,7 @@ const GUARANTEES = [
 
 export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
   return (
-    <section className="landing-green relative overflow-hidden py-16 sm:py-28">
+    <section className="landing-green relative overflow-hidden py-10 sm:py-28">
       <div className="lgh-ledger" aria-hidden />
 
       {/* توهجات ناعمة للخلفية */}
@@ -50,7 +50,7 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
         فاتورة جديدة · 128 ج
       </motion.div>
 
-      <div className="relative mx-auto max-w-3xl px-4 text-center sm:px-6 lg:px-8">
+      <div className="relative mx-auto max-w-3xl px-2.5 text-center sm:px-6 lg:px-8">
         {/* بادج علوي */}
         <motion.span
           initial={false}
@@ -79,7 +79,7 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-80px' }}
           transition={{ duration: 0.5, delay: 0.12 }}
-          className="mx-auto mt-4 max-w-xl text-lg leading-relaxed lg-muted sm:text-xl"
+          className="mx-auto mt-2 max-w-xl text-[15px] leading-relaxed sm:mt-4 lg-muted sm:text-xl"
         >
           كن من أوائل المحلات اللي بتجرب النظام وتستمتع بميزاته كاملة مجاناً لمدة 14 يوم.
         </motion.p>
@@ -89,12 +89,12 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-80px' }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="mt-9 flex justify-center"
+          className="mt-6 flex justify-center sm:mt-9"
         >
           <Button
             size="lg"
             onClick={() => onOpenAuth('signup')}
-            className="cta-shine h-14 gap-2.5 rounded-2xl bg-white px-10 text-lg font-extrabold text-[#00573f] shadow-2xl shadow-[#00301f]/40 transition-transform hover:-translate-y-0.5 hover:bg-[#effcf7] focus-visible:ring-4 focus-visible:ring-white/40"
+            className="cta-shine h-13 w-full gap-2 rounded-2xl bg-white px-4 text-base sm:h-14 sm:w-auto sm:gap-2.5 sm:px-10 sm:text-lg font-extrabold text-[#00573f] shadow-2xl shadow-[#00301f]/40 transition-transform hover:-translate-y-0.5 hover:bg-[#effcf7] focus-visible:ring-4 focus-visible:ring-white/40"
           >
             <Rocket className="size-5" />
             ابدأ تجربتك المجانية لمدة 14 يوم
@@ -107,7 +107,7 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-80px' }}
           transition={{ duration: 0.5, delay: 0.28 }}
-          className="mt-7 flex flex-wrap items-center justify-center gap-2.5"
+          className="mt-5 flex flex-wrap items-center justify-center gap-2 sm:mt-7 sm:gap-2.5"
         >
           {GUARANTEES.map((g) => (
             <span key={g.label} className="cta-chip">

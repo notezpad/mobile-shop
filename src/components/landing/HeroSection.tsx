@@ -39,10 +39,10 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
   }
 
   return (
-    <section id="top" className="landing-green relative overflow-hidden pb-24 pt-5 sm:pb-32 sm:pt-8 lg:pt-10">
+    <section id="top" className="landing-green relative overflow-hidden pb-20 pt-3 sm:pb-32 sm:pt-8 lg:pt-10">
       <div className="lgh-ledger" aria-hidden />
 
-      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="relative mx-auto max-w-7xl px-2.5 sm:px-6 lg:px-8">
         {/* Top badge + vertical switcher */}
         <div className="mb-5 flex flex-col items-center gap-3 text-center sm:mb-9 sm:gap-3.5">
           <motion.div
@@ -63,8 +63,8 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
         </div>
 
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-8">
-          {/* Right column (text) — centered (V3) */}
-          <div className="flex flex-col items-center gap-4 text-center sm:gap-5">
+          {/* Right column (text) — aligned to the start (right in RTL) */}
+          <div className="flex flex-col items-start gap-4 text-start sm:gap-5">
             <AnimatePresence mode="wait">
               <motion.div
                 key={vertical + '-title'}
@@ -80,7 +80,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                 >
                   {meta.heroTitle}
                 </h1>
-                <p className="mx-auto mt-3 max-w-xl text-base leading-relaxed lg-muted sm:mt-5 sm:text-lg lg:text-xl">
+                <p className="mt-2.5 max-w-xl text-[15px] leading-relaxed lg-muted sm:mt-5 sm:text-lg lg:text-xl">
                   {meta.heroSubtitle}
                 </p>
               </motion.div>
@@ -92,12 +92,12 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
               initial="hidden"
               animate="visible"
               variants={fadeUp}
-              className="flex w-full flex-col items-center gap-3 pt-1 sm:w-auto sm:flex-row sm:justify-center sm:pt-2"
+              className="flex w-full flex-col items-stretch gap-3 pt-1 sm:w-auto sm:flex-row sm:items-center sm:justify-start sm:pt-2"
             >
               <Button
                 size="lg"
                 onClick={() => onOpenAuth('signup')}
-                className="h-14 w-full gap-2 rounded-xl bg-white px-8 text-lg font-extrabold text-[#00573f] shadow-xl shadow-[#00402c]/30 transition-transform hover:-translate-y-0.5 hover:bg-[#effcf7] sm:w-auto"
+                className="h-12 w-full gap-2 rounded-xl bg-white px-6 text-base sm:h-14 sm:px-8 sm:text-lg font-extrabold text-[#00573f] shadow-xl shadow-[#00402c]/30 transition-transform hover:-translate-y-0.5 hover:bg-[#effcf7] sm:w-auto"
               >
                 <Rocket className="size-5" />
                 ابدأ تجربتك المجانية
@@ -106,7 +106,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                 size="lg"
                 variant="outline"
                 onClick={scrollToScreenshots}
-                className="h-14 gap-2 rounded-xl border-white/50 bg-white/10 px-7 text-lg font-semibold text-white hover:bg-white/20 hover:text-white"
+                className="h-12 gap-2 rounded-xl border-white/50 bg-white/10 px-6 text-base sm:h-14 sm:px-7 sm:text-lg font-semibold text-white hover:bg-white/20 hover:text-white"
               >
                 <PlayCircle className="size-5" />
                 شاهد العرض التوضيحي
@@ -118,7 +118,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
               initial="hidden"
               animate="visible"
               variants={fadeUp}
-              className="mx-auto grid w-full max-w-xl grid-cols-3 overflow-hidden rounded-2xl border border-white/70 bg-white shadow-[0_20px_40px_-16px_rgba(0,40,28,0.55)]"
+              className="grid w-full max-w-xl grid-cols-3 overflow-hidden rounded-2xl border border-white/70 bg-white shadow-[0_20px_40px_-16px_rgba(0,40,28,0.55)]"
             >
               {[
                 { icon: Gift, b: '14 يوم', c: 'مجاناً' },
@@ -147,10 +147,10 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.35, delay: 0.05 }}
-                className="mx-auto max-w-xl space-y-2.5"
+                className="w-full max-w-xl space-y-2.5"
               >
                 {meta.heroBullets.map((t) => (
-                  <li key={t} className="flex items-center justify-center gap-2.5 text-sm sm:text-base">
+                  <li key={t} className="flex items-center justify-start gap-2.5 text-sm sm:text-base">
                     <span className="grid size-5.5 shrink-0 place-items-center rounded-full bg-white text-[#00946a] shadow-md shadow-[#00402c]/25 ring-1 ring-black/5">
                       <Check className="size-3.5" strokeWidth={3} />
                     </span>

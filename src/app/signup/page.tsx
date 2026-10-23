@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { trackEvent, getAttributionForServer } from "@/lib/tracking/client";
 import { TRACKING_EVENTS } from "@/lib/tracking/types";
 import LoginShowcase from "@/components/login/LoginShowcase";
+import { planBenefitItems, branchesLabel, usersLabel, productsLabel } from "@/lib/plan-features";
 
 type PlanMetaEntry = {
   name: string
@@ -45,6 +46,8 @@ type PlanMetaEntry = {
   badgeClass: string
   desc: string
   price: string
+  /** حدود الباقة الحقيقية من الداتابيز (لو متاحة) */
+  limits?: { branches?: number; users?: number; products?: number }
 }
 
 // 🛡️ 2026-10-10 FIX: شكل الباقة القادمة من الداتابيز (عبر /api/plans/public)
@@ -55,6 +58,9 @@ interface ApiPlan {
   priceMonthly: number
   priceYearly: number
   businessType?: string
+  maxBranches?: number
+  maxUsers?: number
+  maxProducts?: number
 }
 
 // ⚠️ PLAN_META هنا للشكل فقط (أيقونة/ألوان/وصف) — أي باقة تظهر فعلياً
@@ -208,37 +214,74 @@ function planFeatures(desc: string): string[] {
     .slice(0, 4)
 }
 
-function PlanChooser({
+const priceNum = (p: string) => p.replace(/\s*EGP\s*/i, '')
+
+/** يقسّم وصف الباقة ("POS، مخزون + تقارير") لنقاط تتعرض كقائمة مميزات */
+function planChecklist(desc: string): string[] {
+  return desc
+    .split(/[،,+]/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 6)
+}
+
+/** شريط التقدّم: الخطوة 1 من 2 */
+function StepBar({ step }: { step: 1 | 2 }) {
+  return (
+    <div
+      className="flex items-center gap-3"
+      role="progressbar"
+      aria-valuemin={1}
+      aria-valuemax={2}
+      aria-valuenow={step}
+      aria-label={`الخطوة ${step} من 2`}
+    >
+      <span className="shrink-0 text-xs font-bold tabular-nums text-muted-foreground">الخطوة {step} من 2</span>
+      <span className="grid flex-1 grid-cols-2 gap-1.5" aria-hidden>
+        <span className="h-1.5 rounded-full bg-[#00c98b]" />
+        <span className={cn('h-1.5 rounded-full transition-colors duration-300', step === 2 ? 'bg-[#00c98b]' : 'bg-muted')} />
+      </span>
+    </div>
+  )
+}
+
+/* ═══════════ الخطوة ١: شاشة اختيار النشاط + الباقة ═══════════
+ * النشاط (مربعين) ثم الباقة (كارتين جنب بعض بالسعر والمميزات). الضغط على
+ * أي كارت = اختيار + انتقال فوري لفورم التسجيل (الخطوة ٢). مفيش باقة
+ * "مختارة مسبقاً" في أول زيارة → الزائر لازم يشوف الاتنين ويقرر. */
+function PlanStep({
   entries,
   selected,
-  onSelect,
+  chosen,
+  onPickType,
+  onChoose,
   loading,
-  error,
-  startCollapsed,
 }: {
   entries: PlanEntry[]
   selected: string
-  onSelect: (code: string) => void
+  chosen: boolean
+  onPickType: (type: string) => void
+  onChoose: (code: string) => void
   loading?: boolean
-  error?: string
-  /** الباقة جاية من الرابط (?plan=…) → على الموبايل نطوي الاختيار في سطر واحد + «تغيير» */
-  startCollapsed?: boolean
 }) {
-  const [open, setOpen] = React.useState(false)
   if (loading) {
     return (
-      <div className="space-y-2" aria-busy="true">
-        <div className="h-4 w-28 animate-pulse rounded bg-muted" />
+      <div className="space-y-3" aria-busy="true">
+        <div className="h-5 w-32 animate-pulse rounded bg-muted" />
         <div className="grid grid-cols-2 gap-2.5">
-          <div className="h-[96px] animate-pulse rounded-2xl bg-muted" />
-          <div className="h-[96px] animate-pulse rounded-2xl bg-muted" />
+          <div className="h-[104px] animate-pulse rounded-2xl bg-muted" />
+          <div className="h-[104px] animate-pulse rounded-2xl bg-muted" />
+        </div>
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          <div className="h-[220px] animate-pulse rounded-2xl bg-muted" />
+          <div className="h-[220px] animate-pulse rounded-2xl bg-muted" />
         </div>
       </div>
     )
   }
   if (entries.length === 0) {
     return (
-      <p className="rounded-xl border bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
+      <p className="rounded-xl border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
         لا توجد باقات متاحة حالياً — تواصل معنا.
       </p>
     )
@@ -248,59 +291,46 @@ function PlanChooser({
   const types = order.filter((t) => entries.some((e) => e.type === t))
   const current = entries.find((e) => e.code === selected) ?? entries[0]
   const curType = current.type
-  const levels = entries.filter((e) => e.type === curType)
+  const levels = entries
+    .filter((e) => e.type === curType)
+    .sort((a, b) => (parseInt(priceNum(a.meta.price).replace(/\D/g, ''), 10) || 0) - (parseInt(priceNum(b.meta.price).replace(/\D/g, ''), 10) || 0))
   const tm = PLAN_TYPE_META[curType]
 
-  // لما المستخدم يغيّر النشاط نحاول نحافظ على نفس المستوى (أساسي/احترافي)
-  const pickType = (t: string) => {
-    if (t === curType) return
-    const group = entries.filter((e) => e.type === t)
-    const sameLevel = group.find((e) => planLevel(e) === planLevel(current))
-    onSelect((sameLevel ?? group[0]).code)
+  // المميزات الرسمية (نفس صفحة الأسعار). لو الباقة بكود غير معروف نرجع لوصفها من الداتابيز.
+  const featsOf = (e: PlanEntry, i: number): string[] => {
+    const official = planBenefitItems(e.code).filter((x) => x.ok).map((x) => x.label)
+    if (official.length > 0) return official
+    const clean = (x: PlanEntry) => planChecklist(x.meta.desc || '').filter((f) => !/^فروع?$/.test(f))
+    const own = clean(e)
+    if (i === 0) return own
+    const prev = clean(levels[i - 1])
+    const extra = own.filter((f) => !prev.includes(f))
+    if (own.some((f) => f.startsWith('كل '))) return own
+    const lvl = planLevel(levels[i - 1])
+    return [`كل مميزات ${lvl.startsWith('ال') ? lvl : 'ال' + lvl}`, ...(extra.length ? extra : own)]
   }
 
-  // موبايل فقط: مطوي لو الباقة جاية من الرابط ولسه المستخدم ما ضغطش «تغيير».
-  // الديسكتوب بيفضل زي ما هو (العمودين ظاهرين).
-  const collapsed = !!startCollapsed && !open
-  const hideOnMobile = collapsed ? 'max-lg:hidden' : ''
+  // حدود الباقة (من الداتابيز): الفروع دايماً، والمستخدمين/المنتجات لو بتختلف بين الباقتين
+  const limitRows = (e: PlanEntry): string[] => {
+    const l = e.meta.limits
+    if (!l) return []
+    const rows: string[] = []
+    if (typeof l.branches === 'number') rows.push(branchesLabel(l.branches))
+    const differs = (k: 'users' | 'products') => new Set(levels.map((x) => x.meta.limits?.[k])).size > 1
+    if (typeof l.users === 'number' && differs('users')) rows.push(usersLabel(l.users))
+    if (typeof l.products === 'number' && differs('products')) rows.push(productsLabel(l.products))
+    return rows
+  }
 
   return (
-    <div className="su-plan su-span min-w-0 max-w-full space-y-3.5">
-      {/* موبايل: ملخص في سطر واحد بدل الخطوتين — الخانات تبدأ من أول الشاشة تقريباً */}
-      {collapsed && (
-        <div className={cn('flex w-full min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2.5 lg:hidden', tm.tint)}>
-          <span className={cn('grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-br text-white shadow-sm', tm.grad)}>
-            <Check className="size-4" strokeWidth={3.5} />
-          </span>
-          <div className="min-w-0 flex-1 space-y-0.5">
-            <p className="truncate text-[13px] font-extrabold leading-tight text-foreground">
-              {tm.label} — {planLevel(current)}
-            </p>
-            <p className="text-[11px] font-bold leading-tight text-foreground/70">
-              <span className={cn('font-black tabular-nums', tm.text)}>
-                {current.meta.price.replace(/\s*EGP\s*/i, '')} جنيه/شهر
-              </span>
-              {' '}بعد 14 يوم مجاناً
-            </p>
-          </div>
-          <button type="button" onClick={() => setOpen(true)}
-            className="-my-1 shrink-0 rounded-lg px-3 py-2 text-sm font-bold text-primary hover:bg-primary/10">
-            تغيير
-          </button>
-        </div>
-      )}
-
-      {/* ١) نوع النشاط */}
+    <div className="space-y-4 sm:space-y-5">
       {types.length > 1 && (
-        <div className={cn('space-y-2.5', hideOnMobile)}>
-          <div className="flex items-center gap-2">
-            <span className="grid size-6 place-items-center rounded-full bg-[#00c98b] text-[11px] font-black text-[#04261b]">1</span>
-            <p className="text-sm font-extrabold leading-tight text-foreground">إيه نوع نشاطك؟</p>
-          </div>
+        <section className="space-y-2.5" aria-labelledby="su-q-type">
+          <h2 id="su-q-type" className="text-[15px] font-extrabold text-foreground">إيه نوع محلك؟</h2>
           <div
             className={cn('grid gap-2.5', types.length > 2 ? 'grid-cols-3' : 'grid-cols-2')}
             role="radiogroup"
-            aria-label="نوع النشاط"
+            aria-labelledby="su-q-type"
           >
             {types.map((t) => {
               const m = PLAN_TYPE_META[t]
@@ -312,152 +342,126 @@ function PlanChooser({
                   type="button"
                   role="radio"
                   aria-checked={sel}
-                  onClick={() => pickType(t)}
+                  onClick={() => onPickType(t)}
                   className={cn(
-                    'su-act relative flex min-h-[100px] flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl border-2 px-2 py-3 text-center transition-all duration-300 active:scale-[0.97]',
+                    'relative flex min-h-[88px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 px-2 py-2.5 text-center sm:min-h-[104px] sm:gap-2 sm:py-3 transition-all duration-200 active:scale-[0.97]',
                     sel
-                      ? cn('scale-[1.02] border-transparent bg-gradient-to-br text-white', m.grad, m.glow)
-                      : cn('text-foreground hover:-translate-y-0.5', m.tint),
+                      ? cn('border-transparent bg-gradient-to-br text-white', m.grad, m.glow)
+                      : 'border-border bg-card text-foreground hover:border-[#00c98b]',
                   )}
                 >
                   <span
                     className={cn(
-                      'absolute end-2 top-2 grid size-5 place-items-center rounded-full transition-all',
-                      sel ? 'scale-100 bg-white text-[#00875f] shadow' : 'scale-90 border-2 border-current/25 opacity-40',
+                      'absolute end-2 top-2 grid size-5 place-items-center rounded-full border-2',
+                      sel ? 'border-transparent bg-white text-[#00875f]' : 'border-foreground/30',
                     )}
+                    aria-hidden
                   >
                     {sel && <Check className="size-3" strokeWidth={3.5} />}
                   </span>
-                  <span
-                    className={cn(
-                      'su-act-ic relative grid size-12 place-items-center rounded-2xl',
-                      sel ? 'bg-black/15' : cn('bg-white/70 dark:bg-white/10', m.text),
-                    )}
-                  >
+                  <span className={cn('grid size-10 place-items-center rounded-2xl sm:size-12', sel ? 'bg-black/15' : cn('bg-[#e3f9f0]', m.text))}>
                     <Icon className="size-6" strokeWidth={1.9} />
                   </span>
-                  <span className="relative text-[13px] font-extrabold leading-tight">{m.label}</span>
+                  <span className="text-[13px] font-extrabold leading-tight">{m.label}</span>
                 </button>
               )
             })}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* ٢) المستوى (أساسي / احترافي) */}
-      {levels.length > 0 && (
-        <div className={cn('space-y-2.5', hideOnMobile)}>
-          {types.length > 1 && (
-            <div className="flex items-center gap-2">
-              <span className="grid size-6 place-items-center rounded-full bg-[#00c98b] text-[11px] font-black text-[#04261b]">2</span>
-              <p className="text-sm font-extrabold text-foreground">اختار المستوى</p>
-            </div>
-          )}
-          <div
-            className={cn('grid gap-2.5', levels.length === 1 ? 'grid-cols-1' : 'grid-cols-2')}
-            role="radiogroup"
-            aria-label="مستوى الباقة"
-          >
-            {levels.map((e) => {
-              const sel = e.code === current.code
-              const feats = planFeatures(e.meta.desc || '')
-              return (
-                <button
-                  key={e.code}
-                  type="button"
-                  role="radio"
-                  aria-checked={sel}
-                  onClick={() => onSelect(e.code)}
-                  className={cn(
-                    'su-lvl relative flex flex-col gap-1.5 overflow-hidden rounded-2xl border-2 p-3 text-right transition-all duration-300 active:scale-[0.97]',
-                    sel
-                      ? cn('scale-[1.02] border-transparent bg-gradient-to-br text-white', tm.grad, tm.glow)
-                      : 'border-border bg-card hover:border-[#00c98b]/60',
-                  )}
-                >
-                  <span className="relative flex items-center justify-between gap-2">
-                    <span className={cn('text-sm font-extrabold', sel ? 'text-white' : 'text-foreground')}>{planLevel(e)}</span>
-                    <span
-                      className={cn(
-                        'grid size-5 shrink-0 place-items-center rounded-full border-2 transition-all',
-                        sel ? 'border-transparent bg-white text-[#00875f]' : 'border-border',
-                      )}
-                    >
-                      {sel && <Check className="size-3" strokeWidth={3.5} />}
-                    </span>
-                  </span>
-                  <span className="relative flex items-baseline gap-1">
-                    <span className={cn('text-lg font-black leading-none tabular-nums', sel ? 'text-white' : tm.text)}>
-                      {e.meta.price.replace(/\s*EGP\s*/i, '')}
-                    </span>
-                    <span className={cn('text-[10px] font-bold', sel ? 'text-white' : 'text-muted-foreground')}>جنيه</span>
-                  </span>
-                  {feats.length > 0 && (
-                    <span className="relative flex flex-wrap gap-1">
-                      {feats.map((f) => (
-                        <span
-                          key={f}
-                          className={cn(
-                            'rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-none',
-                            sel ? 'bg-black/25 text-white' : cn('text-foreground/70', tm.soft),
-                          )}
-                        >
-                          {f}
-                        </span>
-                      ))}
+      <section className="space-y-2.5" aria-labelledby="su-q-lvl">
+        <h2 id="su-q-lvl" className="text-[15px] font-extrabold text-foreground">اختار الباقة المناسبة</h2>
+        <div className={cn('grid gap-2.5 sm:gap-3', levels.length > 1 && 'grid-cols-2')}>
+          {levels.map((e, i) => {
+            const picked = chosen && e.code === current.code
+            const feats = featsOf(e, i)
+            const limits = limitRows(e)
+            return (
+              <button
+                key={e.code}
+                type="button"
+                onClick={() => onChoose(e.code)}
+                aria-label={`${planLevel(e)} — ${priceNum(e.meta.price)} جنيه في الشهر — ابدأ التجربة المجانية`}
+                className={cn(
+                  'group flex min-w-0 flex-col gap-2.5 rounded-2xl border-2 p-3 text-right transition-all duration-200 active:scale-[0.98] sm:gap-3 sm:p-4',
+                  picked
+                    ? 'border-[#00c98b] bg-[#effcf7] ring-2 ring-[#00c98b]/30'
+                    : 'border-border bg-card hover:border-[#00c98b] hover:shadow-md',
+                )}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="text-base font-extrabold text-foreground">{planLevel(e)}</span>
+                  {picked && (
+                    <span className="grid size-5 place-items-center rounded-full bg-[#00c98b] text-white" aria-hidden>
+                      <Check className="size-3" strokeWidth={3.5} />
                     </span>
                   )}
-                </button>
-              )
-            })}
-          </div>
+                </span>
+                <span className="flex items-baseline gap-1.5">
+                  <span className={cn('text-2xl font-black leading-none tabular-nums sm:text-3xl', tm.text)}>{priceNum(e.meta.price)}</span>
+                  <span className="text-xs font-bold text-muted-foreground">جنيه / شهر</span>
+                </span>
+                {(limits.length > 0 || feats.length > 0) && (
+                  <ul className="space-y-1.5 text-[12px] leading-snug text-foreground/80 sm:text-[13px]">
+                    {limits.map((f) => (
+                      <li key={'lim-' + f} className="flex items-start gap-1.5 font-extrabold text-foreground">
+                        <Store className="mt-0.5 size-3.5 shrink-0 text-[#00946a]" aria-hidden />
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                    {feats.map((f, fi) => (
+                      <li key={f} className={cn('flex items-start gap-1.5', fi >= 4 && 'max-sm:hidden')}>
+                        <Check className="mt-0.5 size-3.5 shrink-0 text-[#00946a]" strokeWidth={3} aria-hidden />
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <span className="mt-auto inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[#00c98b] text-sm font-extrabold text-[#04261b] shadow-md shadow-[#00c98b]/25 transition-colors group-hover:bg-[#00b87e]">
+                  <span className="sm:hidden">ابدأ مجاناً</span>
+                  <span className="max-sm:hidden">ابدأ التجربة المجانية</span>
+                  <ArrowRight className="size-4 rtl:rotate-180" aria-hidden />
+                </span>
+              </button>
+            )
+          })}
         </div>
-      )}
+      </section>
 
-      {/* ٣) تأكيد صريح — سطرين: الاختيار + التجربة والسعر */}
-      <div
-        className={cn(
-          'su-strip flex w-full min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2.5 max-lg:hidden',
-          tm.tint,
-        )}
-      >
-        <span
-          className={cn(
-            'grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-br text-white shadow-sm',
-            tm.grad,
-          )}
-        >
+      <p className="text-center text-xs text-muted-foreground">14 يوم تجربة مجانية بكل المزايا — بدون بطاقة ائتمان</p>
+    </div>
+  )
+}
+
+/** ملخص الاختيار أعلى الفورم (الخطوة ٢) + زر رجوع واضح */
+function PlanSummary({ entry, onBack, error }: { entry: PlanEntry; onBack: () => void; error?: string }) {
+  const tm = PLAN_TYPE_META[entry.type]
+  return (
+    <div className="su-span space-y-1.5">
+      <div className={cn('flex w-full min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2.5', tm.tint)}>
+        <span className={cn('grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br text-white shadow-sm', tm.grad)}>
           <Check className="size-4" strokeWidth={3.5} />
         </span>
-        <div className="min-w-0 flex-1 space-y-1">
+        <div className="min-w-0 flex-1 space-y-0.5">
           <p className="truncate text-[13px] font-extrabold leading-tight text-foreground">
-            {tm.label} — {planLevel(current)}
+            {tm.label} — {planLevel(entry)}
           </p>
-          <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] font-bold leading-tight">
-            <span
-              className={cn(
-                'rounded-full bg-gradient-to-br px-2 py-[3px] text-[10.5px] font-extrabold text-white',
-                tm.grad,
-              )}
-            >
-              14 يوم مجاناً
-            </span>
-            <span className="text-foreground/60">ثم</span>
-            <span className={cn('font-black tabular-nums', tm.text)}>
-              {current.meta.price.replace(/\s*EGP\s*/i, '')} جنيه/شهر
-            </span>
+          <p className="text-[11.5px] font-bold leading-tight text-foreground/70">
+            14 يوم مجاناً ثم{' '}
+            <span className={cn('font-black tabular-nums', tm.text)}>{priceNum(entry.meta.price)} جنيه/شهر</span>
           </p>
         </div>
-      </div>
-
-      {startCollapsed && open && (
-        <button type="button" onClick={() => setOpen(false)}
-          className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-primary/40 bg-primary/5 text-sm font-bold text-primary lg:hidden">
-          <Check className="size-4" strokeWidth={3} />
-          تم
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="رجوع لاختيار الباقة"
+          className="inline-flex h-10 shrink-0 items-center gap-1 rounded-lg border border-[#00c98b]/50 bg-white px-3 text-[13px] font-bold text-[#00694c] transition-colors hover:bg-[#effcf7]"
+        >
+          <ArrowRight className="size-4" aria-hidden />
+          رجوع
         </button>
-      )}
-
+      </div>
       {error && (
         <p className="flex items-center gap-1 text-xs text-destructive">
           <AlertCircle className="size-3 shrink-0" />
@@ -467,7 +471,6 @@ function PlanChooser({
     </div>
   )
 }
-
 
 const SIGNUP_CSS = `
 .su-side input[data-slot="input"]:focus-visible{border-color:#00c98b !important;box-shadow:0 0 0 3px rgba(0,201,139,.25) !important}
@@ -503,13 +506,6 @@ const SIGNUP_CSS = `
   main .su-form input[data-slot="input"]{height:40px}
   main .su-invite-btn{display:none}
   main .su-invite-d{display:flex}
-  /* اختيار الباقة: عمودين (النشاط | المستوى) */
-  main .su-plan{display:grid;grid-template-columns:1fr 1fr;column-gap:16px;row-gap:0;align-items:start}
-  main .su-plan>*{margin:0}
-  main .su-act{min-height:104px;padding-block:8px;gap:6px}
-  main .su-act-ic{width:40px;height:40px}
-  main .su-lvl{padding:10px;gap:4px}
-  main .su-strip{grid-column:1/-1;margin-top:12px;padding-block:8px}
   /* زر الإنشاء: عادي (مش ثابت أسفل الشاشة) */
   main .su-cta{position:static;margin:0;padding:0;border:0;background:transparent;backdrop-filter:none;border-radius:0}
 }
@@ -706,6 +702,7 @@ function SignupContent() {
           badgeClass: fb?.badgeClass ?? 'bg-muted text-foreground',
           desc: fb?.desc ?? p.description ?? '',
           price: planPriceLabel(p),
+          limits: { branches: p.maxBranches, users: p.maxUsers, products: p.maxProducts },
         },
       }
     })
@@ -723,6 +720,36 @@ function SignupContent() {
   const [showInvite, setShowInvite] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [errors, setErrors] = React.useState<SignupError[]>([])
+
+  // ─── خطوتين: 1) اختيار النشاط والباقة  2) فورم التسجيل ───
+  // لو الباقة جاية من الرابط (?plan=…) نبدأ من الخطوة 2 مباشرة.
+  const [step, setStep] = React.useState<1 | 2>(planFromUrl ? 2 : 1)
+  const [levelChosen, setLevelChosen] = React.useState<boolean>(!!planFromUrl)
+  const pushedRef = React.useRef(false)
+
+  // باقة الرابط مش مفعّلة → ارجع لاختيار الباقة
+  React.useEffect(() => {
+    if (apiPlans && planFromUrl && !apiPlans.some((p) => p.code === planFromUrl)) {
+      setStep(1)
+      setLevelChosen(false)
+    }
+  }, [apiPlans, planFromUrl])
+
+  // زر الرجوع في المتصفح/الموبايل يرجّع للخطوة 1 بدل ما يخرج من الصفحة
+  React.useEffect(() => {
+    const onPop = (e: PopStateEvent) => setStep(e.state?.signupStep === 2 ? 2 : 1)
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  // عند تغيّر الخطوة: ارجع لأول الصفحة، وعلى الديسكتوب ركّز على أول حقل
+  React.useEffect(() => {
+    window.scrollTo({ top: 0 })
+    document.querySelector('.su-side')?.scrollTo({ top: 0 })
+    if (step === 2 && window.matchMedia('(min-width: 1024px)').matches) {
+      requestAnimationFrame(() => document.getElementById('su-shop')?.focus({ preventScroll: true }))
+    }
+  }, [step])
 
   // ─── إيميل: اقتراح الدومين أثناء الكتابة + تصحيح الأخطاء الشائعة ───
   const emailLower = email.trim().toLowerCase()
@@ -749,6 +776,38 @@ function SignupContent() {
   const clearFieldError = (field: string) =>
     setErrors((prev) => prev.filter((e) => e.field !== field))
   const getFieldError = (field: string) => errors.find((e) => e.field === field)?.message
+
+  const planEntries = React.useMemo<PlanEntry[]>(
+    () => pickerEntries.map((e) => ({
+      ...e,
+      type: planType(e.code, apiPlans?.find((p) => p.code === e.code)?.businessType),
+    })),
+    [pickerEntries, apiPlans],
+  )
+  const currentEntry = planEntries.find((e) => e.code === selectedPlan) ?? planEntries[0]
+
+  const pickPlanType = (t: string) => {
+    const group = planEntries.filter((e) => e.type === t)
+    if (group.length === 0) return
+    const sameLevel = currentEntry ? group.find((e) => planLevel(e) === planLevel(currentEntry)) : undefined
+    setSelectedPlan((sameLevel ?? group[0]).code)
+    setLevelChosen(false)
+    clearFieldError('plan')
+  }
+  const choosePlan = (code: string) => {
+    setSelectedPlan(code)
+    setLevelChosen(true)
+    clearFieldError('plan')
+    // تأخير بسيط عشان المستخدم يشوف الكارت اتحدد قبل الانتقال
+    window.setTimeout(() => {
+      try { window.history.pushState({ signupStep: 2 }, ''); pushedRef.current = true } catch { /* ignore */ }
+      setStep(2)
+    }, 160)
+  }
+  const backToPlans = () => {
+    if (pushedRef.current) window.history.back()
+    else setStep(1)
+  }
 
   const validate = (): boolean => {
     const newErrors: SignupError[] = []
@@ -872,40 +931,58 @@ function SignupContent() {
                 </div>
 
                 <div className="su-title">
-                  <h1 className="text-[1.6rem] font-extrabold leading-tight tracking-tight text-foreground">أنشئ حسابك</h1>
-                  <ul className="su-chips mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] font-medium text-muted-foreground">
-                    {['14 يوم مجاناً', 'بدون بطاقة', 'جاهز في دقيقتين'].map((x) => (
-                      <li key={x} className="inline-flex items-center gap-1">
-                        <Check className="size-3 text-[#00946a]" strokeWidth={3} />
-                        {x}
-                      </li>
-                    ))}
-                  </ul>
+                  <div>
+                    <h1 className="text-[1.6rem] font-extrabold leading-tight tracking-tight text-foreground">
+                      {step === 1 ? 'ابدأ تجربتك المجانية' : 'أنشئ حسابك'}
+                    </h1>
+                    {step === 1 && (
+                      <p className="mt-1 text-[12.5px] text-muted-foreground max-sm:hidden">اختار نشاطك والباقة، وبعدها بيانات الحساب في خطوة واحدة.</p>
+                    )}
+                  </div>
+                  {step === 2 && (
+                    <ul className="su-chips mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] font-medium text-muted-foreground">
+                      {['14 يوم مجاناً', 'بدون بطاقة', 'جاهز في دقيقتين'].map((x) => (
+                        <li key={x} className="inline-flex items-center gap-1">
+                          <Check className="size-3 text-[#00946a]" strokeWidth={3} />
+                          {x}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </div>
             </header>
 
             <div className="su-body p-4 sm:p-5 space-y-4">
 
+            <StepBar step={step} />
+
+            {step === 1 ? (
+              <motion.div key="step-1" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+                <PlanStep
+                  loading={plansLoading && planEntries.length === 0}
+                  entries={planEntries}
+                  selected={selectedPlan}
+                  chosen={levelChosen}
+                  onPickType={pickPlanType}
+                  onChoose={choosePlan}
+                />
+              </motion.div>
+            ) : (
+            <motion.div key="step-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
             {/* Form */}
             <form onSubmit={handleSubmit} noValidate className="su-form min-w-0 space-y-4">
               {/* اختيار النشاط + المستوى — ظاهر دايماً وأول حاجة في الفورم (مفيش "تغيير" مخفي) */}
-              <PlanChooser
-                loading={plansLoading && pickerEntries.length === 0}
-                entries={pickerEntries.map((e) => ({
-                  ...e,
-                  type: planType(e.code, apiPlans?.find((p) => p.code === e.code)?.businessType),
-                }))}
-                selected={selectedPlan}
-                onSelect={(code) => { setSelectedPlan(code); clearFieldError('plan') }}
-                error={getFieldError('plan')}
-                startCollapsed={!!planFromUrl && pickerEntries.some((e) => e.code === planFromUrl)}
-              />
+              {currentEntry ? (
+                <PlanSummary entry={currentEntry} onBack={backToPlans} error={getFieldError('plan')} />
+              ) : plansLoading ? (
+                <div className="su-span h-[58px] animate-pulse rounded-xl bg-muted" aria-busy="true" />
+              ) : null}
 
               {/* Row 1: اسم المحل + اسم المسؤول */}
               <div className="su-span grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3">
                 <Field className="su-fld space-y-2.5" label="اسم المحل" required error={getFieldError('shopName')}>
-                  <Input type="text" placeholder="مثال: النور للموبايلات" icon={<Store className="size-4" />}
+                  <Input id="su-shop" type="text" placeholder="مثال: النور للموبايلات" icon={<Store className="size-4" />}
                     value={shopName} onChange={(e: any) => { setShopName(e.target.value); clearFieldError('shopName') }}
                     disabled={loading} required autoComplete="organization" enterKeyHint="next" className="h-11 lg:h-10" />
                 </Field>
@@ -1037,6 +1114,8 @@ function SignupContent() {
               </Button>
               </div>
             </form>
+            </motion.div>
+            )}
 
             <p className="su-copy text-center text-[10px] text-muted-foreground/50">© 2026 نظام المحل</p>
 

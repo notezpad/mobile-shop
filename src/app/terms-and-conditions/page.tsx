@@ -20,6 +20,7 @@ import {
   Calendar,
 } from 'lucide-react'
 import { LandingFooter } from '@/components/landing/LandingFooter'
+import { inline, numbered } from '@/components/policy/policy-text'
 
 /**
  * صفحة "الشروط والأحكام" — Terms of Service
@@ -318,12 +319,12 @@ export default function TermsPage() {
                   <div className="tr-section-icon">
                     <Icon className="size-5" />
                   </div>
-                  <h2 className="tr-section-title">{section.title}</h2>
+                  <h2 className="tr-section-title">{numbered(section.title)}</h2>
                 </div>
                 <div className="tr-section-body">
                   {section.content.map((para, i) => (
                     <p key={i} className={para.startsWith('•') ? 'tr-bullet' : 'tr-para'}>
-                      {para}
+                      {inline(para)}
                     </p>
                   ))}
                 </div>

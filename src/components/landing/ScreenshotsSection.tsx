@@ -65,11 +65,11 @@ export function ScreenshotsSection() {
   return (
     <section
       id="screenshots"
-      className="landing-light relative scroll-mt-24 border-y border-[#00573f]/12 py-12 sm:py-24"
+      className="landing-light relative scroll-mt-24 border-y border-[#00573f]/12 py-8 sm:py-24"
     >
-      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="relative mx-auto max-w-7xl px-2.5 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-16">
+        <div className="mx-auto mb-5 max-w-2xl text-center sm:mb-16">
           <motion.span
             initial={false}
             whileInView={{ opacity: 1, y: 0 }}
@@ -94,7 +94,7 @@ export function ScreenshotsSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="mx-auto mt-4 max-w-xl text-lg leading-relaxed lg-muted"
+            className="mx-auto mt-2 max-w-xl text-[15px] leading-relaxed sm:mt-4 sm:text-lg lg-muted"
           >
             جولة سريعة جوه النظام — لوحة المعلومات، نقطة البيع، المنتجات، والعملاء
           </motion.p>
@@ -150,7 +150,7 @@ export function ScreenshotsSection() {
                   <BrowserFrame>{renderMockup(t.key)}</BrowserFrame>
 
                   {/* Highlights below */}
-                  <div className="mx-auto mt-8 grid max-w-3xl grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="mt-4 grid max-w-3xl grid-cols-1 gap-1.5 sm:mx-auto sm:mt-8 sm:grid-cols-3 sm:gap-3">
                     {HIGHLIGHTS[t.key].map((h, i) => (
                       <motion.div
                         key={h}
