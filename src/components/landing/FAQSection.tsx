@@ -69,7 +69,7 @@ export function FAQSection() {
   const faqs = [...VERTICAL_FAQS[vertical], ...COMMON_FAQS]
 
   return (
-    <section id="faq" className="landing-dark relative scroll-mt-24 border-t border-white/5 py-12 sm:py-24">
+    <section id="faq" className="landing-light relative scroll-mt-24 border-t border-[#00573f]/12 py-12 sm:py-24">
       <div className="relative mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">
@@ -87,7 +87,7 @@ export function FAQSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mt-4 font-black tracking-tight text-white"
+            className="mt-4 font-black text-[#0b2a20]"
             style={{ fontSize: 'clamp(1.6rem, 3.4vw, 2.9rem)', lineHeight: 1.2 }}
           >
             عندك سؤال؟ عندنا الإجابة
@@ -108,9 +108,9 @@ export function FAQSection() {
                 <AccordionItem
                   key={i}
                   value={`item-${i}`}
-                  className={'border-white/10 ' + (i === faqs.length - 1 ? 'border-b-0' : '')}
+                  className={'border-[#00573f]/12 ' + (i === faqs.length - 1 ? 'border-b-0' : '')}
                 >
-                  <AccordionTrigger className="text-right text-base font-bold text-white hover:no-underline sm:text-lg">
+                  <AccordionTrigger className="text-right text-base font-bold text-[#0b2a20] hover:no-underline sm:text-lg">
                     {item.q}
                   </AccordionTrigger>
                   <AccordionContent className="text-right text-base leading-relaxed lg-muted">

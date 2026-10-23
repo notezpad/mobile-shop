@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Cairo, IBM_Plex_Sans_Arabic } from "next/font/google";
+import { Cairo, IBM_Plex_Sans_Arabic, Alexandria } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
@@ -24,6 +24,15 @@ const brandFont = IBM_Plex_Sans_Arabic({
 
 const cairo = Cairo({
   variable: "--font-cairo",
+  subsets: ["arabic", "latin"],
+  display: "swap",
+});
+
+// 🎨 خط صفحة الهبوط (Landing) — Alexandria: عناوين أكسر وأنضف من Cairo،
+// بيدعم أوزان كاملة (100-900) فالكلمة font-black بتطلع حقيقية مش مزيّفة.
+// متطبقش على التطبيق نفسه — اللاندنج بس (شوف قاعدة .landing-* في globals.css).
+const landingFont = Alexandria({
+  variable: "--font-landing",
   subsets: ["arabic", "latin"],
   display: "swap",
 });
@@ -220,7 +229,7 @@ export default async function RootLayout({
         />
       </head>
       <body
-        className={`${cairo.variable} ${brandFont.variable} font-cairo antialiased bg-background text-foreground`}
+        className={`${cairo.variable} ${brandFont.variable} ${landingFont.variable} font-cairo antialiased bg-background text-foreground`}
         suppressHydrationWarning
       >
         <Providers>

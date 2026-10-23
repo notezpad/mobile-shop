@@ -39,7 +39,7 @@ const TRUST_POINTS = [
 
 export function TrustSection() {
   return (
-    <section id="trust" className="landing-dark relative scroll-mt-24 py-12 sm:py-24">
+    <section id="trust" className="landing-light is-alt relative scroll-mt-24 py-12 sm:py-24">
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-16">
@@ -48,7 +48,7 @@ export function TrustSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.4 }}
-            className="glass-pill inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-brand-300"
+            className="glass-pill inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-[#00946a]"
           >
             ليه تثق فينا
           </motion.span>
@@ -57,7 +57,8 @@ export function TrustSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mt-4 text-3xl font-extrabold tracking-tight text-white sm:text-4xl lg:text-5xl"
+            className="mt-4 font-black text-[#0b2a20] sm:text-4xl lg:text-5xl"
+            style={{ lineHeight: 1.25 }}
           >
             مفيش مخاطرة عليك، وإحنا واخدين بالنا من ده
           </motion.h2>
@@ -66,7 +67,7 @@ export function TrustSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="mt-4 text-base lg-muted sm:text-lg"
+            className="mx-auto mt-4 max-w-2xl text-base leading-relaxed lg-muted sm:text-lg"
           >
             نظام المحل منتج جديد وبيتطوّر بسرعة — وده معناه إننا بنسمع كل ملاحظة منك وبننفذها بسرعة. دي وعودنا الملموسة ليك:
           </motion.p>
@@ -83,13 +84,22 @@ export function TrustSection() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-60px' }}
                 transition={{ duration: 0.45, delay: i * 0.06 }}
-                className="glass-card flex flex-col gap-3 rounded-2xl p-6"
+                className="glass-card group flex flex-col gap-4 rounded-2xl p-7"
               >
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-500/15 ring-1 ring-inset ring-brand-400/20">
-                  <Icon className="size-5 text-brand-300" />
-                </span>
-                <h3 className="text-sm font-bold text-white sm:text-base">{t.title}</h3>
-                <p className="text-xs leading-relaxed lg-muted sm:text-sm">{t.body}</p>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="landing-tile size-12 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3">
+                    <Icon className="size-5.5" />
+                  </span>
+                  <span
+                    aria-hidden
+                    className="font-black text-[#00c98b]/12 transition-colors duration-300 group-hover:text-[#00c98b]/25"
+                    style={{ fontSize: '2.6rem', lineHeight: 1 }}
+                  >
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+                </div>
+                <h3 className="text-lg font-extrabold leading-snug text-[#0b2a20] sm:text-xl">{t.title}</h3>
+                <p className="-mt-2 text-sm leading-relaxed lg-muted sm:text-base">{t.body}</p>
               </motion.div>
             )
           })}

@@ -6,6 +6,9 @@ import {
   Rocket,
   PlayCircle,
   TrendingUp,
+  Gift,
+  CreditCard,
+  Zap,
 } from 'lucide-react'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -36,33 +39,32 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
   }
 
   return (
-    <section id="top" className="landing-dark relative overflow-hidden pb-12 pt-6 sm:pb-28 sm:pt-14 lg:pt-16">
-      <div className="lg-aurora" aria-hidden />
-      <div className="lg-grid-mask" aria-hidden />
+    <section id="top" className="landing-green relative overflow-hidden pb-24 pt-5 sm:pb-32 sm:pt-8 lg:pt-10">
+      <div className="lgh-ledger" aria-hidden />
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Top badge + vertical switcher */}
-        <div className="mb-6 flex flex-col items-center gap-3 text-center sm:mb-14 sm:gap-4">
+        <div className="mb-5 flex flex-col items-center gap-3 text-center sm:mb-9 sm:gap-3.5">
           <motion.div
             custom={0}
             initial="hidden"
             animate="visible"
             variants={fadeUp}
-            className="glass-pill inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold text-brand-300 sm:px-4 sm:py-1.5 sm:text-sm"
+            className="glass-pill inline-flex h-10 items-center gap-2 rounded-full px-4 text-xs font-bold text-white sm:px-5 sm:text-sm"
           >
             <span className="lg-dot" />
-            <span className="sm:hidden">نظام إدارة محلات التجزئة والجملة</span>
-            <span className="hidden sm:inline">منصة SaaS واحدة لإدارة محلات التجزئة والجملة في الدول العربية</span>
+            <span>نظام إدارة محلات التجزئة والجملة</span>
           </motion.div>
 
-          <motion.div custom={1} initial="hidden" animate="visible" variants={fadeUp}>
-            <VerticalSwitch />
+          <motion.div custom={1} initial="hidden" animate="visible" variants={fadeUp} className="flex flex-col items-center gap-1.5">
+            <span className="text-xs font-bold text-white sm:hidden">اختر نشاط محلك</span>
+            <VerticalSwitch label="اختر نشاط محلك" />
           </motion.div>
         </div>
 
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-8">
-          {/* Right column (text) — appears first in RTL */}
-          <div className="flex flex-col items-start gap-4 text-right sm:gap-5">
+          {/* Right column (text) — centered (V3) */}
+          <div className="flex flex-col items-center gap-4 text-center sm:gap-5">
             <AnimatePresence mode="wait">
               <motion.div
                 key={vertical + '-title'}
@@ -73,12 +75,12 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                 className="w-full"
               >
                 <h1
-                  className="font-black leading-[1.15] tracking-tight text-white"
-                  style={{ fontSize: 'clamp(1.9rem, 4.6vw, 4.2rem)', letterSpacing: '-0.5px' }}
+                  className="lgh-title font-black leading-[1.18] text-white"
+                  style={{ fontSize: 'clamp(1.7rem, 2.9vw, 2.7rem)', textWrap: 'balance' }}
                 >
                   {meta.heroTitle}
                 </h1>
-                <p className="mt-3 max-w-xl text-base lg-muted sm:mt-5 sm:text-xl">
+                <p className="mx-auto mt-3 max-w-xl text-base leading-relaxed lg-muted sm:mt-5 sm:text-lg lg:text-xl">
                   {meta.heroSubtitle}
                 </p>
               </motion.div>
@@ -90,12 +92,12 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
               initial="hidden"
               animate="visible"
               variants={fadeUp}
-              className="flex w-full flex-col gap-3 pt-1 sm:w-auto sm:flex-row sm:items-center sm:pt-2"
+              className="flex w-full flex-col items-center gap-3 pt-1 sm:w-auto sm:flex-row sm:justify-center sm:pt-2"
             >
               <Button
                 size="lg"
                 onClick={() => onOpenAuth('signup')}
-                className="h-14 w-full gap-2 rounded-xl bg-gradient-to-l from-brand-500 to-brand-700 px-8 sm:w-auto text-lg font-extrabold text-white shadow-lg shadow-brand-600/30 transition-transform hover:-translate-y-0.5 hover:from-brand-400 hover:to-brand-600"
+                className="h-14 w-full gap-2 rounded-xl bg-white px-8 text-lg font-extrabold text-[#00573f] shadow-xl shadow-[#00402c]/30 transition-transform hover:-translate-y-0.5 hover:bg-[#effcf7] sm:w-auto"
               >
                 <Rocket className="size-5" />
                 ابدأ تجربتك المجانية
@@ -104,7 +106,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                 size="lg"
                 variant="outline"
                 onClick={scrollToScreenshots}
-                className="h-14 gap-2 rounded-xl border-white/12 bg-white/5 px-7 text-lg font-semibold text-white hover:bg-white/10 hover:text-white"
+                className="h-14 gap-2 rounded-xl border-white/50 bg-white/10 px-7 text-lg font-semibold text-white hover:bg-white/20 hover:text-white"
               >
                 <PlayCircle className="size-5" />
                 شاهد العرض التوضيحي
@@ -116,20 +118,26 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
               initial="hidden"
               animate="visible"
               variants={fadeUp}
-              className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-1 text-xs lg-muted sm:text-sm"
+              className="mx-auto grid w-full max-w-xl grid-cols-3 overflow-hidden rounded-2xl border border-white/70 bg-white shadow-[0_20px_40px_-16px_rgba(0,40,28,0.55)]"
             >
-              <span className="flex items-center gap-1">
-                <Check className="size-3.5 text-brand-400" />
-                14 يوم مجاناً
-              </span>
-              <span className="flex items-center gap-1">
-                <Check className="size-3.5 text-brand-400" />
-                بدون بطاقة ائتمان
-              </span>
-              <span className="flex items-center gap-1">
-                <Check className="size-3.5 text-brand-400" />
-                إعداد في دقيقتين
-              </span>
+              {[
+                { icon: Gift, b: '14 يوم', c: 'مجاناً' },
+                { icon: CreditCard, b: 'بدون بطاقة', c: 'ائتمان' },
+                { icon: Zap, b: 'دقيقتين', c: 'إعداد سريع' },
+              ].map((g, i) => (
+                <div
+                  key={g.b}
+                  className={'flex items-center gap-2 px-2.5 py-3 transition-colors hover:bg-[#effcf7] sm:gap-2.5 sm:px-3.5 ' + (i > 0 ? 'border-s border-[#00573f]/10' : '')}
+                >
+                  <span className="landing-tile size-8 shrink-0 sm:size-9">
+                    <g.icon className="size-4 sm:size-[18px]" />
+                  </span>
+                  <p className="grid min-w-0 leading-tight">
+                    <b className="truncate text-[12px] font-extrabold text-[#0b2a20] sm:text-sm">{g.b}</b>
+                    <span className="truncate text-[10px] text-[#5b7a6e] sm:text-xs">{g.c}</span>
+                  </p>
+                </div>
+              ))}
             </motion.div>
 
             <AnimatePresence mode="wait">
@@ -139,14 +147,14 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.35, delay: 0.05 }}
-                className="space-y-2.5"
+                className="mx-auto max-w-xl space-y-2.5"
               >
                 {meta.heroBullets.map((t) => (
-                  <li key={t} className="flex items-center gap-2 text-sm sm:text-base">
-                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-500/20 text-brand-300">
-                      <Check className="size-3.5" />
+                  <li key={t} className="flex items-center justify-center gap-2.5 text-sm sm:text-base">
+                    <span className="grid size-5.5 shrink-0 place-items-center rounded-full bg-white text-[#00946a] shadow-md shadow-[#00402c]/25 ring-1 ring-black/5">
+                      <Check className="size-3.5" strokeWidth={3} />
                     </span>
-                    <span className="text-white/90">{t}</span>
+                    <span className="font-semibold text-white drop-shadow-sm">{t}</span>
                   </li>
                 ))}
               </motion.ul>
@@ -172,48 +180,48 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                 <motion.div
                   animate={{ y: [0, -8, 0] }}
                   transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-                  className="glass-panel-strong absolute -top-4 right-0 z-20 flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white shadow-lg sm:right-4"
+                  className="absolute -top-4 right-0 z-20 flex items-center gap-1.5 rounded-xl border border-[#00c98b]/25 bg-white px-3 py-2 text-xs font-bold text-[#0b2a20] shadow-xl shadow-[#00402c]/25 sm:right-4"
                 >
-                  <TrendingUp className="size-4 text-brand-300" />
-                  +{meta.mockStats[0].value}  اليوم
+                  <TrendingUp className="size-4 text-[#00946a]" />
+                  +{meta.mockStats[0].value} اليوم
                 </motion.div>
 
                 <motion.div
                   animate={{ y: [0, 8, 0] }}
                   transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
-                  className="glass-panel-strong absolute -bottom-4 left-0 z-20 flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white shadow-lg sm:left-4"
+                  className="absolute -bottom-4 left-0 z-20 flex items-center gap-1.5 rounded-xl border border-[#00c98b]/25 bg-white px-3 py-2 text-xs font-bold text-[#0b2a20] shadow-xl shadow-[#00402c]/25 sm:left-4"
                 >
-                  <meta.icon className="size-4 text-amber-300" />
+                  <meta.icon className="size-4 text-[#00946a]" />
                   {meta.label}
                 </motion.div>
 
                 {/* Browser frame */}
-                <div className="glass-panel relative overflow-hidden rounded-2xl shadow-2xl">
+                <div className="relative overflow-hidden rounded-2xl border-2 border-white bg-white shadow-[0_30px_60px_-20px_rgba(0,40,28,0.6)]">
                   {/* Top bar */}
-                  <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.03] px-4 py-3">
+                  <div className="flex items-center gap-2 border-b border-[#00c98b]/20 bg-[#effcf7] px-4 py-3">
                     <div className="flex gap-1.5">
                       <span className="size-3 rounded-full bg-red-400/70" />
                       <span className="size-3 rounded-full bg-amber-400/70" />
-                      <span className="size-3 rounded-full bg-brand-400/70" />
+                      <span className="size-3 rounded-full bg-[#00c98b]/80" />
                     </div>
                     <div
-                      className="mx-auto flex items-center gap-1.5 rounded-md bg-black/20 px-3 py-1 text-[10px] text-white/60"
+                      className="mx-auto flex items-center gap-1.5 rounded-md border border-[#00c98b]/20 bg-white px-3 py-1 text-[10px] text-[#5b7a6e]"
                       dir="ltr"
                     >
-                      <span className="size-2 rounded-full bg-brand-400" />
+                      <span className="size-2 rounded-full bg-[#00c98b]" />
                       nezampos.com/dashboard
                     </div>
                   </div>
 
                   {/* Inner dashboard */}
-                  <div className="space-y-3 p-3 sm:p-4">
+                  <div className="space-y-3 bg-[#f7fbf9] p-3 sm:p-4">
                     {/* Header row */}
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs text-white/50">لوحة المعلومات</p>
-                        <p className="text-sm font-bold text-white">{meta.mockShopName}</p>
+                        <p className="text-xs text-[#5b7a6e]">لوحة المعلومات</p>
+                        <p className="text-sm font-bold text-[#0b2a20]">{meta.mockShopName}</p>
                       </div>
-                      <div className="flex items-center gap-1 rounded-md bg-brand-500/15 px-2 py-1 text-[10px] font-medium text-brand-300">
+                      <div className="flex items-center gap-1 rounded-md bg-[#00c98b]/15 px-2 py-1 text-[10px] font-bold text-[#00694c]">
                         <TrendingUp className="size-3" />
                         +12.5%
                       </div>
@@ -222,21 +230,20 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                     {/* Mini stat cards */}
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                       {meta.mockStats.map((s) => (
-                        <div key={s.label} className="glass-card rounded-lg p-2.5">
-                          <div className="mb-1 flex size-6 items-center justify-center rounded bg-white/10 text-white">
+                        <div key={s.label} className="rounded-lg border border-[#00c98b]/20 bg-white p-2.5 shadow-sm">
+                          <div className="mb-1 flex size-6 items-center justify-center rounded-md bg-gradient-to-br from-[#19e0a2] to-[#00c98b] text-white">
                             <s.icon className="size-3.5" />
                           </div>
-                          <p className="text-[9px] text-white/50">{s.label}</p>
-                          <p className="text-sm font-bold text-white">{s.value}</p>
+                          <p className="text-[9px] text-[#5b7a6e]">{s.label}</p>
+                          <p className="text-sm font-extrabold text-[#0b2a20]">{s.value}</p>
                         </div>
                       ))}
                     </div>
 
                     {/* Mini bar chart */}
-                    <div className="glass-card rounded-lg p-3">
+                    <div className="rounded-lg border border-[#00c98b]/20 bg-white p-3 shadow-sm">
                       <div className="mb-2 flex items-center justify-between">
-                        <p className="text-[11px] font-semibold text-white">مبيعات الأسبوع</p>
-                        <span className="text-[10px] text-white/50"></span>
+                        <p className="text-[11px] font-bold text-[#0b2a20]">مبيعات الأسبوع</p>
                       </div>
                       <div className="flex h-24 items-end justify-between gap-1.5">
                         {[
@@ -248,37 +255,20 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                           { d: 'خ', v: 95 },
                           { d: 'ج', v: 88 },
                         ].map((bar, i) => (
-                          <div key={i} className="flex flex-1 flex-col items-center gap-1">
+                          <div
+                              key={i}
+                              className="flex h-full flex-1 flex-col items-center justify-end gap-1"
+                            >
                             <div
-                              className="w-full rounded-t bg-gradient-to-t from-brand-600/70 to-brand-400"
+                              className="w-full rounded-t-md bg-gradient-to-t from-[#00946a] to-[#19e0a2] shadow-[0_2px_8px_-2px_rgba(0,148,106,0.5)] transition-transform duration-300 hover:scale-x-105"
                               style={{ height: `${bar.v}%` }}
                             />
-                            <span className="text-[9px] text-white/40">{bar.d}</span>
+                            <span className="text-[9px] text-[#5b7a6e]">{bar.d}</span>
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    {/* Mini table */}
-                    <div className="glass-card overflow-hidden rounded-lg">
-                      <div className="grid grid-cols-3 bg-white/5 px-3 py-2 text-[10px] font-semibold text-white/50">
-                        <span>{meta.mockTableTitle}</span>
-                        <span className="text-center">العدد</span>
-                        <span className="text-left">القيمة</span>
-                      </div>
-                      {meta.mockTableRows.map((r, i) => (
-                        <div
-                          key={i}
-                          className="grid grid-cols-3 border-t border-white/10 px-3 py-2 text-[11px] text-white/90"
-                        >
-                          <span className="truncate">{r.n}</span>
-                          <span className="text-center text-white/50">{r.q}</span>
-                          <span className="text-left font-semibold text-brand-300">
-                            {r.p} 
-                          </span>
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 </div>
               </motion.div>

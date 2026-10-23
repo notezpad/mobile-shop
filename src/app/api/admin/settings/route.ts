@@ -26,6 +26,7 @@ const DEFAULTS: Record<string, string> = {
   logoUrl: '',
   facebookUrl: '',
   twitterUrl: '',
+  telegramUrl: '',
   instagramUrl: '',
   whatsappUrl: 'https://wa.me/201010328471',
   // بانر تثبيت التطبيق (PWA) — 'true' = ظاهر لغير المثبّتين، 'false' = مخفي
@@ -66,6 +67,7 @@ function validateSetting(key: string, v: string): string | null {
     case 'websiteUrl':
     case 'facebookUrl':
     case 'twitterUrl':
+    case 'telegramUrl':
     case 'instagramUrl':
     case 'whatsappUrl':
       return isHttpsUrl(v) ? null : urlHint(key)

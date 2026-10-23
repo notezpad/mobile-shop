@@ -6,7 +6,7 @@
  * الأرقام اللي تبدأ بصفر = مصر (كود 20). رقم من دولة تانية؟ اكتبه بكود الدولة.
  * ملف نقي (من غير imports) عشان يتعمله اختبار مباشر.
  */
-export const URL_KEYS = new Set(['websiteUrl', 'facebookUrl', 'twitterUrl', 'instagramUrl', 'whatsappUrl'])
+export const URL_KEYS = new Set(['websiteUrl', 'facebookUrl', 'twitterUrl', 'telegramUrl', 'instagramUrl', 'whatsappUrl'])
 export const NUMERIC_KEYS = new Set(['supportPhone', 'subscriptionGraceDays', 'renewalReminderDays', 'notificationRetentionDays'])
 const EGYPT_CODE = '20'
 

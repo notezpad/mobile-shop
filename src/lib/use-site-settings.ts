@@ -16,6 +16,7 @@ export interface SiteSettings {
   logoUrl: string
   facebookUrl: string
   twitterUrl: string
+  telegramUrl: string
   instagramUrl: string
   whatsappUrl: string
   /** أرقام فقط بصيغة دولية (للروابط wa.me) */
@@ -32,6 +33,7 @@ const DEFAULTS: SiteSettings = {
   logoUrl: '',
   facebookUrl: '',
   twitterUrl: '',
+  telegramUrl: '',
   instagramUrl: '',
   whatsappUrl: `https://wa.me/${DEFAULT_WA}`,
   whatsappNumber: DEFAULT_WA,

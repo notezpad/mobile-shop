@@ -24,7 +24,7 @@ export function StickyMobileCTA({ onClick }: { onClick: () => void }) {
   return (
     <div
       aria-hidden={!show}
-      className={`fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#0b1020]/95 px-4 pt-2.5 backdrop-blur transition-transform duration-300 md:hidden ${
+      className={`fixed inset-x-0 bottom-0 z-50 border-t border-[#00573f]/15 bg-white/95 shadow-[0_-12px_30px_-12px_rgba(0,60,40,0.25)] px-4 pt-2.5 backdrop-blur transition-transform duration-300 md:hidden ${
         show ? 'translate-y-0' : 'translate-y-full'
       }`}
       style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}

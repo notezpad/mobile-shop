@@ -77,7 +77,7 @@ export const VERTICAL_META: Record<
     tagline: 'صيانة · نقطة بيع · محافظ إلكترونية',
     heroTitle: (
       <>
-        أدِر محل الموبايل والكمبيوتر
+        أدر محل الموبايل والكمبيوتر
         <br />
         <span className="lg-grad-text">من مكان واحد</span>
       </>
@@ -170,7 +170,7 @@ export const VERTICAL_META: Record<
     tagline: 'جملة ونصف جملة · كوليكشنات · مقاسات وألوان',
     heroTitle: (
       <>
-        أدِر محل الملابس والأحذية
+        أدر محل الملابس والأحذية
         <br />
         <span className="lg-grad-text">جملة وقطاعي</span>
       </>

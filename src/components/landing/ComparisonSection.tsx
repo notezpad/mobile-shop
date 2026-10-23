@@ -34,7 +34,7 @@ export function ComparisonSection({ onOpenAuth }: ComparisonSectionProps) {
   const rows = ROWS_BY_VERTICAL[vertical]
 
   return (
-    <section className="landing-dark relative py-12 sm:py-24">
+    <section className="landing-light relative py-12 sm:py-24">
       <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-14">
           <motion.span
@@ -51,7 +51,7 @@ export function ComparisonSection({ onOpenAuth }: ComparisonSectionProps) {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mt-4 font-black tracking-tight text-white"
+            className="mt-4 font-black text-[#0b2a20]"
             style={{ fontSize: 'clamp(1.6rem, 3.4vw, 2.9rem)', lineHeight: 1.2 }}
           >
             الدفاتر والإكسل مقابل نظام المحل
@@ -77,11 +77,11 @@ export function ComparisonSection({ onOpenAuth }: ComparisonSectionProps) {
             className="glass-card overflow-hidden rounded-2xl"
           >
             {/* Header row — desktop/tablet table header only */}
-            <div className="hidden border-b border-white/10 bg-white/[0.03] px-7 py-4 text-sm font-bold sm:grid sm:grid-cols-3">
+            <div className="hidden border-b border-[#00573f]/12 bg-[#effcf7] px-7 py-4 text-sm font-bold sm:grid sm:grid-cols-3">
               <span className="lg-muted">المهمة</span>
-              <span className="text-center text-white/50">الطريقة اليدوية</span>
+              <span className="text-center text-[#5b7a6e]">الطريقة اليدوية</span>
               <span className="flex justify-center">
-                <span className="glass-pill rounded-full bg-brand-500/15 px-3 py-1 text-center text-brand-300 ring-1 ring-inset ring-brand-400/30">
+                <span className="glass-pill rounded-full bg-brand-500/15 px-3 py-1 text-center text-[#00946a] ring-1 ring-inset ring-brand-400/30">
                   نظام المحل
                 </span>
               </span>
@@ -91,32 +91,32 @@ export function ComparisonSection({ onOpenAuth }: ComparisonSectionProps) {
               <div
                 key={r.task}
                 className={
-                  'px-5 py-5 transition-colors hover:bg-white/[0.02] sm:grid sm:grid-cols-3 sm:items-stretch sm:gap-2.5 sm:px-7 sm:py-4 ' +
-                  (i !== rows.length - 1 ? 'border-b border-white/5' : '')
+                  'px-5 py-5 transition-colors hover:bg-[#effcf7] sm:grid sm:grid-cols-3 sm:items-stretch sm:gap-2.5 sm:px-7 sm:py-4 ' +
+                  (i !== rows.length - 1 ? 'border-b border-[#00573f]/12' : '')
                 }
               >
                 {/* Task title — always visible, own line on mobile */}
-                <span className="flex items-center text-base font-bold text-white sm:text-sm">
+                <span className="flex items-center text-base font-bold text-[#0b2a20] sm:text-sm">
                   {r.task}
                 </span>
 
                 {/* Mobile: labeled stacked rows. Desktop: plain table cells (labels hidden via sm:hidden). */}
                 <div className="mt-3 flex flex-col gap-2 sm:mt-0 sm:contents">
-                  <span className="flex items-start gap-2 rounded-lg bg-white/[0.03] px-3 py-2.5 text-sm text-white/50 sm:rounded-none sm:bg-transparent sm:py-1 sm:text-base">
+                  <span className="flex items-start gap-2 rounded-lg bg-[#effcf7] px-3 py-2.5 text-sm text-[#5b7a6e] sm:rounded-none sm:bg-transparent sm:py-1 sm:text-base">
                     <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-red-500/10">
-                      <X className="size-3 text-red-400/80" />
+                      <X className="size-3 text-red-600/80" />
                     </span>
                     <span className="flex-1">
-                      <span className="ms-1 font-semibold text-white/40 sm:hidden">يدوي: </span>
+                      <span className="ms-1 font-semibold text-[#5b7a6e] sm:hidden">يدوي: </span>
                       {r.manual}
                     </span>
                   </span>
-                  <span className="flex items-start gap-2 rounded-lg bg-brand-500/[0.07] px-3.5 py-2.5 text-sm text-white/90 ring-1 ring-inset ring-brand-400/15 sm:text-base">
+                  <span className="flex items-start gap-2 rounded-lg bg-brand-500/[0.07] px-3.5 py-2.5 text-sm text-[#0b2a20]/80 ring-1 ring-inset ring-brand-400/15 sm:text-base">
                     <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-500/20">
-                      <Check className="size-3 text-brand-300" />
+                      <Check className="size-3 text-[#00946a]" />
                     </span>
                     <span className="flex-1">
-                      <span className="ms-1 font-semibold text-brand-300/70 sm:hidden">نظام المحل: </span>
+                      <span className="ms-1 font-semibold text-[#00946a]/70 sm:hidden">نظام المحل: </span>
                       {r.system}
                     </span>
                   </span>
@@ -134,7 +134,7 @@ export function ComparisonSection({ onOpenAuth }: ComparisonSectionProps) {
           className="glass-panel mt-8 flex flex-col items-center gap-4 rounded-2xl p-7 text-center sm:flex-row sm:justify-between sm:text-right"
         >
           <p className="text-base lg-muted sm:text-lg">
-            <span className="font-bold text-white">الخلاصة؟</span> نظام المحل بيوفّر عليك ساعات من
+            <span className="font-bold text-[#0b2a20]">الخلاصة؟</span> نظام المحل بيوفّر عليك ساعات من
             الحساب اليدوي كل أسبوع، ويحميك من أخطاء مكلفة في الجرد والتسعير.
           </p>
           <Button

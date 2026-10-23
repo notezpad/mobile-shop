@@ -18,11 +18,12 @@ const PUBLIC_KEYS = [
   'logoUrl',
   'facebookUrl',
   'twitterUrl',
+  'telegramUrl',
   'instagramUrl',
   'whatsappUrl',
 ] as const
 
-const URL_KEYS = new Set(['websiteUrl', 'facebookUrl', 'twitterUrl', 'instagramUrl', 'whatsappUrl'])
+const URL_KEYS = new Set(['websiteUrl', 'facebookUrl', 'twitterUrl', 'telegramUrl', 'instagramUrl', 'whatsappUrl'])
 
 function isSafe(key: string, v: string): boolean {
   if (v.length > 300) return false

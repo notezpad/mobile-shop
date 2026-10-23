@@ -84,15 +84,15 @@ function LandingInner() {
 
   return (
     <>
-      <div className="landing-dark flex min-h-screen flex-col">
+      <div className="landing-light flex min-h-screen flex-col">
         <LandingHeader onOpenAuth={openAuth} />
 
         <main className="flex-1">
           <HeroSection onOpenAuth={openAuth} />
 
-          {/* Stats bar */}
-          <section className="landing-dark relative border-y border-white/5 py-2">
-            <div className="relative mx-auto grid max-w-7xl grid-cols-2 divide-x divide-x-reverse divide-white/10 px-4 sm:px-6 lg:grid-cols-4 lg:px-8">
+          {/* Stats bar — كارت أبيض عايم بيعدّي على أسفل الهيرو الأخضر */}
+          <section className="relative z-10 -mt-14 px-4 pb-2 sm:-mt-20 sm:px-6 lg:px-8">
+            <div className="mx-auto grid max-w-7xl grid-cols-2 divide-x divide-x-reverse divide-[#00573f]/10 overflow-hidden rounded-3xl border border-white/80 bg-white shadow-[0_30px_60px_-24px_rgba(0,40,28,0.7)] lg:grid-cols-4">
               {STATS.map((s, i) => {
                 const Icon = s.icon
                 return (
@@ -101,14 +101,14 @@ function LandingInner() {
                     initial={false}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, delay: i * 0.06 }}
-                    className="flex items-center justify-center gap-3 py-6 sm:py-8"
+                    className="flex items-center justify-center gap-3 px-2 py-5 transition-colors hover:bg-[#effcf7] sm:py-7 [&:nth-child(n+3)]:border-t [&:nth-child(n+3)]:border-[#00573f]/10 lg:[&:nth-child(n+3)]:border-t-0"
                   >
-                    <Icon className="size-7 text-brand-400" />
+                    <span className="landing-tile size-11 shrink-0">
+                      <Icon className="size-5" />
+                    </span>
                     <div className="text-right">
-                      <p className="text-sm font-extrabold text-white sm:text-base">
-                        {s.headline}
-                      </p>
-                      <p className="text-[11px] lg-muted sm:text-xs">{s.label}</p>
+                      <p className="text-sm font-extrabold text-[#0b2a20] sm:text-base">{s.headline}</p>
+                      <p className="text-[11px] text-[#5b7a6e] sm:text-xs">{s.label}</p>
                     </div>
                   </motion.div>
                 )

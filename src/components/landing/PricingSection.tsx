@@ -92,7 +92,7 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
   const allVisiblePlans = [...activeVerticalPlans, ...otherVerticalPlans]
 
   return (
-    <section id="pricing" className="landing-dark relative scroll-mt-24 border-y border-white/5 py-12 sm:py-24">
+    <section id="pricing" className="landing-light relative scroll-mt-24 border-y border-[#00573f]/12 py-12 sm:py-24">
       <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-12">
@@ -110,7 +110,7 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mt-4 font-black tracking-tight text-white"
+            className="mt-4 font-black text-[#0b2a20]"
             style={{ fontSize: 'clamp(1.6rem, 3.4vw, 2.9rem)', lineHeight: 1.2 }}
           >
             باقات تناسب كل حجم محل
@@ -128,7 +128,7 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
 
         {/* Billing toggle */}
         <div className="mb-10 flex items-center justify-center gap-3">
-          <span className={'text-sm font-medium transition-colors ' + (!yearly ? 'text-white' : 'lg-muted')}>
+          <span className={'text-sm font-medium transition-colors ' + (!yearly ? 'text-[#0b2a20]' : 'lg-muted')}>
             شهري
           </span>
           <button
@@ -138,7 +138,7 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
             onClick={() => setYearly((v) => !v)}
             className={
               'relative h-7 w-12 rounded-full transition-colors ' +
-              (yearly ? 'bg-gradient-to-l from-brand-500 to-brand-700' : 'bg-white/15')
+              (yearly ? 'bg-gradient-to-l from-brand-500 to-brand-700' : 'bg-[#00c98b]/12')
             }
           >
             <span
@@ -149,10 +149,10 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
             />
           </button>
           <div className="flex items-center gap-2">
-            <span className={'text-sm font-medium transition-colors ' + (yearly ? 'text-white' : 'lg-muted')}>
+            <span className={'text-sm font-medium transition-colors ' + (yearly ? 'text-[#0b2a20]' : 'lg-muted')}>
               سنوي
             </span>
-            <span className="rounded-full bg-brand-500/15 px-2 py-0.5 text-[10px] font-bold text-brand-300">
+            <span className="rounded-full bg-brand-500/15 px-2 py-0.5 text-[10px] font-bold text-[#00946a]">
               وفّر شهرين
             </span>
           </div>
@@ -172,8 +172,8 @@ export function PricingSection({ onOpenAuth }: PricingSectionProps) {
               ? [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[420px] rounded-2xl" />)
               : allVisiblePlans.length === 0
                 ? (
-                  <div className="col-span-full rounded-2xl border border-white/10 bg-white/5 px-6 py-12 text-center">
-                    <p className="text-lg font-bold text-white">لا توجد باقات متاحة حالياً</p>
+                  <div className="col-span-full rounded-2xl border border-[#00573f]/12 bg-[#effcf7] px-6 py-12 text-center">
+                    <p className="text-lg font-bold text-[#0b2a20]">لا توجد باقات متاحة حالياً</p>
                     <p className="mt-2 text-sm lg-muted">يرجى التواصل معنا لمعرفة تفاصيل الاشتراك المتاح.</p>
                   </div>
                 )
@@ -237,11 +237,11 @@ function PlanCard({
     >
       {/* Vertical badge (top-right) */}
       <div className="mb-3 flex items-center justify-between gap-2">
-        <span className="rounded-md bg-white/5 px-2 py-1 text-[10px] font-bold text-white/70">
+        <span className="lg-tag px-2.5 py-1 text-[10px]">
           {verticalLabel}
         </span>
         {plan.isPro && (
-          <span className="flex items-center gap-1 rounded-full bg-gradient-to-l from-brand-500 to-brand-700 px-2.5 py-1 text-[10px] font-bold text-white shadow-md">
+          <span className="flex items-center gap-1 rounded-full bg-gradient-to-l from-brand-500 to-brand-700 px-3 py-1 text-[10px] font-bold text-white shadow-md shadow-brand-600/40">
             <Star className="size-3 fill-current" />
             الأكثر طلباً
           </span>
@@ -249,18 +249,18 @@ function PlanCard({
       </div>
 
       <div className="mb-3">
-        <h3 className={'text-lg font-extrabold ' + (plan.isPro ? 'text-brand-300' : 'text-white')}>
+        <h3 className={'text-lg font-extrabold ' + (plan.isPro ? 'text-[#00946a]' : 'text-[#0b2a20]')}>
           باقة {plan.name}
         </h3>
         <p className="mt-1 text-xs lg-muted">{plan.description}</p>
       </div>
 
       <div className="mb-1 flex items-end gap-1">
-        <span className="text-4xl font-black tracking-tight text-white">{priceDisplay}</span>
+        <span className="text-4xl font-black text-[#0b2a20]">{priceDisplay}</span>
         <span className="mb-1 text-xs lg-muted">{periodLabel}</span>
       </div>
       {yearly && savings > 0 && (
-        <p className="mb-3 text-[11px] font-semibold text-brand-300">
+        <p className="mb-3 text-[11px] font-semibold text-[#00946a]">
           يوفّر {savings.toLocaleString('ar-EG', { maximumFractionDigits: 0 })} سنوياً
         </p>
       )}
@@ -268,10 +268,10 @@ function PlanCard({
       <Button
         onClick={() => onOpenAuth('signup')}
         className={
-          'mb-4 mt-2 h-11 w-full gap-1.5 rounded-xl text-sm font-bold text-white ' +
+          'mb-4 mt-2 h-11 w-full gap-1.5 rounded-xl text-sm font-bold ' +
           (plan.isPro
-            ? 'bg-gradient-to-l from-brand-500 to-brand-700 shadow-md shadow-brand-600/30 hover:from-brand-400 hover:to-brand-600'
-            : 'border border-white/15 bg-white/5 hover:bg-white/10')
+            ? 'bg-gradient-to-l from-brand-500 to-brand-700 text-white shadow-md shadow-brand-600/30 hover:from-brand-400 hover:to-brand-600'
+            : 'border border-[#00573f]/12 bg-[#effcf7] text-[#0b2a20] hover:bg-[#00c98b]/12')
         }
       >
         <Sparkles className="size-4" />
@@ -281,18 +281,18 @@ function PlanCard({
       <ul className="mt-auto space-y-2.5">
         {plan.features.map((f) => (
           <li key={f} className="flex items-start gap-2 text-xs">
-            <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-300">
+            <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-[#00946a]">
               <Check className="size-3" />
             </span>
-            <span className="text-white/85">{f}</span>
+            <span className="text-[#0b2a20]/80">{f}</span>
           </li>
         ))}
       </ul>
 
-      <div className="mt-4 flex flex-wrap gap-1.5 border-t border-white/10 pt-3 text-[10px] lg-muted">
-        <span className="rounded-md bg-white/5 px-2 py-0.5">{plan.maxUsers} مستخدم</span>
-        <span className="rounded-md bg-white/5 px-2 py-0.5">{plan.maxProducts.toLocaleString('ar-EG')} منتج</span>
-        <span className="rounded-md bg-white/5 px-2 py-0.5">{plan.maxBranches} فرع</span>
+      <div className="mt-4 flex flex-wrap gap-1.5 border-t border-[#00573f]/12 pt-3 text-[10px] lg-muted">
+        <span className="rounded-full bg-[#effcf7] px-2.5 py-1 font-semibold">{plan.maxUsers} مستخدم</span>
+        <span className="rounded-full bg-[#effcf7] px-2.5 py-1 font-semibold">{plan.maxProducts.toLocaleString('ar-EG')} منتج</span>
+        <span className="rounded-full bg-[#effcf7] px-2.5 py-1 font-semibold">{plan.maxBranches} فرع</span>
       </div>
     </motion.div>
   )

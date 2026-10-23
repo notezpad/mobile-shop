@@ -20,6 +20,15 @@ import {
 
 type TabKey = 'dashboard' | 'pos' | 'products' | 'customers'
 
+// ════════════════════════════════════════════════════════════════════
+// 🎬 الفيديو التعريفي — لما الفيديو يجهز:
+//   1) حط ملف الفيديو في مجلد  public  باسم  demo-video.mp4
+//   2) خلي الثابت ده كده:  const DEMO_VIDEO_URL = '/demo-video.mp4'
+// وهيظهر المشغل تلقائياً مكان المعاينات (والزرار "شاهد العرض التوضيحي"
+// في الهيرو بينزل على نفس القسم). لو سيبته فاضي، المعاينات بتفضل شغالة.
+// ════════════════════════════════════════════════════════════════════
+const DEMO_VIDEO_URL = ''
+
 const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'dashboard', label: 'لوحة المعلومات', icon: LayoutDashboard },
   { key: 'pos', label: 'نقطة البيع', icon: ShoppingCart },
@@ -56,7 +65,7 @@ export function ScreenshotsSection() {
   return (
     <section
       id="screenshots"
-      className="landing-dark relative scroll-mt-24 border-y border-white/5 py-12 sm:py-24"
+      className="landing-light relative scroll-mt-24 border-y border-[#00573f]/12 py-12 sm:py-24"
     >
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
@@ -66,25 +75,51 @@ export function ScreenshotsSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.4 }}
-            className="glass-pill inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-brand-300"
+            className="glass-pill inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-[#00946a]"
           >
-            لمحة
+            العرض التوضيحي
           </motion.span>
           <motion.h2
             initial={false}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mt-4 text-3xl font-extrabold tracking-tight text-white sm:text-4xl lg:text-5xl"
+            className="mt-4 font-black text-[#0b2a20] sm:text-4xl lg:text-5xl"
+            style={{ lineHeight: 1.25 }}
           >
             شاهد المنصة من الداخل
           </motion.h2>
+          <motion.p
+            initial={false}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="mx-auto mt-4 max-w-xl text-lg leading-relaxed lg-muted"
+          >
+            جولة سريعة جوه النظام — لوحة المعلومات، نقطة البيع، المنتجات، والعملاء
+          </motion.p>
         </div>
 
-        {/* Tabs */}
+        {/* 🎬 لو الفيديو متاح → مشغل الفيديو بدل المعاينات */}
+        {DEMO_VIDEO_URL ? (
+          <motion.div
+            initial={false}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-60px' }}
+            transition={{ duration: 0.5 }}
+            className="mx-auto max-w-4xl"
+          >
+            <div className="video-frame">
+              <video src={DEMO_VIDEO_URL} controls preload="metadata" playsInline />
+            </div>
+            <p className="mt-4 text-center text-sm lg-muted">
+              عرض كامل لكل خطوة: من إضافة المنتج لطباعة الفاتورة ومتابعة الأرباح
+            </p>
+          </motion.div>
+        ) : (
         <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="w-full">
           <div className="flex justify-center">
-            <TabsList className="glass-pill flex h-auto flex-wrap gap-1 rounded-xl p-1.5 [&_[data-state=active]]:bg-white/15 [&_[data-state=active]]:text-white [&_button]:text-white/60">
+            <TabsList className="glass-pill flex h-auto flex-wrap gap-1 rounded-xl p-1.5 [&_[data-state=active]]:bg-[#00c98b]/12 [&_[data-state=active]]:text-[#0b2a20] [&_button]:text-[#5b7a6e]">
               {TABS.map((t) => {
                 const Icon = t.icon
                 return (
@@ -124,8 +159,8 @@ export function ScreenshotsSection() {
                         transition={{ duration: 0.3, delay: i * 0.08 }}
                         className="glass-card flex items-start gap-2 rounded-lg p-3 text-sm"
                       >
-                        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-brand-400" />
-                        <span className="text-white/90">{h}</span>
+                        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#00946a]" />
+                        <span className="text-[#0b2a20]/80">{h}</span>
                       </motion.div>
                     ))}
                   </div>
@@ -134,6 +169,7 @@ export function ScreenshotsSection() {
             </TabsContent>
           ))}
         </Tabs>
+        )}
       </div>
     </section>
   )
@@ -142,7 +178,7 @@ export function ScreenshotsSection() {
 /* ---------------- Browser frame wrapper ---------------- */
 function BrowserFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-card shadow-2xl shadow-black/40 ring-1 ring-white/5">
+    <div className="overflow-hidden rounded-2xl border border-[#00573f]/12 bg-card shadow-2xl shadow-[#00402c]/20">
       <div className="flex items-center gap-2 border-b bg-muted/60 px-4 py-3">
         <div className="flex gap-1.5">
           <span className="size-3 rounded-full bg-destructive" />

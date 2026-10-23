@@ -6573,3 +6573,853 @@ html[data-hg-boot] body::after {
   animation: hg-spin .7s linear infinite;
 }
 @keyframes hg-spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   HERO GREEN — نفس هوية صفحة تسجيل الدخول (أخضر فاقع + خطوط
+   دفتر حسابات + نقط + حلقات) بدل الخلفية الغامقة.
+   ============================================================ */
+.landing-green {
+  --g: #00c98b; --g-dark: #00946a; --g-deep: #00573f;
+  --ink: #0b2a20; --muted: #5b7a6e;
+  --lg-fg: #fff;
+  --lg-fg-muted-2: rgba(255, 255, 255, 0.92);
+  position: relative;
+  isolation: isolate;
+  color: #fff;
+  font-size: 1.0625rem;
+  background:
+    radial-gradient(ellipse 55% 40% at 88% 38%, rgba(255, 255, 255, 0.22) 0%, transparent 65%),
+    radial-gradient(ellipse 55% 40% at 0% 100%, rgba(0, 60, 40, 0.38) 0%, transparent 70%),
+    linear-gradient(170deg, #00ad7c 0%, #00996e 48%, #007552 100%);
+}
+/* حلقات بتطلع ناحية المعاينة */
+.landing-green::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: repeating-radial-gradient(circle at 24% 62%, transparent 0 54px, rgba(255, 255, 255, 0.09) 54px 56px);
+  -webkit-mask-image: radial-gradient(circle at 24% 62%, #000 0%, transparent 70%);
+          mask-image: radial-gradient(circle at 24% 62%, #000 0%, transparent 70%);
+}
+/* نقط نصفية في الركن */
+.landing-green::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(rgba(255, 255, 255, 0.28) 1.3px, transparent 1.6px) 0 0 / 18px 18px;
+  -webkit-mask-image: radial-gradient(ellipse 45% 35% at 100% 40%, #000, transparent 75%);
+          mask-image: radial-gradient(ellipse 45% 35% at 100% 40%, #000, transparent 75%);
+}
+.lgh-ledger {
+  position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background-image: repeating-linear-gradient(to bottom, transparent 0 35px, rgba(255, 255, 255, 0.07) 35px 36px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 35%, transparent 90%);
+          mask-image: linear-gradient(to bottom, transparent 0%, #000 35%, transparent 90%);
+}
+.landing-green .lg-muted { color: var(--lg-fg-muted-2); }
+.landing-green .glass-pill {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+/* كلمة التمييز في العنوان: ذهبي هادي بدل الأخضر اللي كان هيختفي */
+.landing-green .lg-grad-text {
+  background: linear-gradient(120deg, #fff6c2, #ffe27a 55%, #ffd25e);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.landing-green .lgh-title { text-shadow: 0 2px 18px rgba(0, 60, 40, 0.25); }
+
+/* الهيدر الأخضر: نفس لون أعلى الهيرو عشان يبان قطعة واحدة */
+.lg-head-green {
+  --lg-fg-muted-2: rgba(255, 255, 255, 0.92);
+  background: #00ad7c;
+  color: #fff;
+}
+.lg-head-green .lgh-nav {
+  background: rgba(0, 122, 87, 0.97);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 10px 30px -12px rgba(0, 50, 34, 0.55);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* أيقونات السوشيال في الفوتر */
+.soc-btn {
+  --c: #25d366;
+  position: relative; display: grid; place-items: center;
+  width: 2.6rem; height: 2.6rem; border-radius: 0.9rem;
+  color: var(--c);
+  background: color-mix(in srgb, var(--c) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c) 30%, transparent);
+  transition: transform 0.25s ease, background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+}
+.soc-btn svg { width: 1.2rem; height: 1.2rem; fill: currentColor; }
+.soc-btn:hover {
+  color: #fff; background: var(--c); transform: translateY(-3px);
+  box-shadow: 0 12px 24px -8px color-mix(in srgb, var(--c) 75%, transparent);
+}
+.soc-btn:focus-visible { outline: 2px solid var(--c); outline-offset: 3px; }
+
+/* ============================================================
+   LANDING LIGHT — باقي أقسام الصفحة الرئيسية بنفس هوية الهيرو
+   (خلفية فاتحة مخضّرة + كروت بيضاء بخط أخضر علوي + أخضر فاقع)
+   ============================================================ */
+.landing-light {
+  color-scheme: light;
+  font-size: 1.0625rem;
+  --lg-fg: #0b2a20;
+  --lg-fg-muted-2: #5b7a6e;
+  --lg-surface: #ffffff;
+  --lg-surface-2: #f7fbf9;
+  --lg-border: rgba(0, 87, 63, 0.12);
+  --lg-border-strong: rgba(0, 148, 106, 0.4);
+  background: #f7fbf9;
+  color: #0b2a20;
+}
+.landing-light.is-alt { background: #ffffff; }
+.landing-light .lg-muted { color: #5b7a6e; }
+.landing-light .glass-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.12);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.04), 0 12px 30px -18px rgba(0, 60, 40, 0.2);
+}
+.landing-light .glass-card:hover {
+  border-color: rgba(0, 201, 139, 0.55);
+  box-shadow: 0 24px 46px -22px rgba(0, 120, 86, 0.38);
+}
+.landing-light .glass-panel { background: #fff; border: 1px solid rgba(0, 87, 63, 0.12); }
+.landing-light .glass-panel-strong {
+  background: linear-gradient(160deg, #effcf7, #ffffff 60%);
+  border: 2px solid #00c98b;
+  box-shadow: 0 26px 54px -24px rgba(0, 148, 106, 0.6);
+}
+.landing-light .glass-pill { background: #effcf7; border-color: rgba(0, 201, 139, 0.4); }
+.landing-light .lg-eyebrow { color: #00946a; }
+.landing-light .lg-eyebrow::before,
+.landing-light .lg-eyebrow::after { background: #00946a; }
+.landing-light .lg-dot { background: #00c98b; }
+.landing-light .lg-grad-text {
+  background: linear-gradient(120deg, #00c98b, #00946a 55%, #00694c);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+/* الفوتر: أخضر غامق هادي بدل الأسود */
+.lg-foot-green {
+  --lg-fg-muted-2: rgba(255, 255, 255, 0.82);
+  color: #fff;
+  background:
+    radial-gradient(ellipse 50% 60% at 100% 0%, rgba(25, 224, 162, 0.22), transparent 70%),
+    linear-gradient(180deg, #00694c 0%, #004d37 100%);
+}
+.lg-foot-green .soc-btn { background: #fff; border-color: #fff; }
+.lg-foot-green .soc-btn:hover { background: var(--c); }
+
+/* ============================================================
+   أولوية أعلى للمناطق الخضراء (هيرو / هيدر / CTA / فوتر) فوق
+   قواعد .landing-light لأن الصفحة كلها ملفوفة بيها.
+   ============================================================ */
+.landing-light .landing-green .lg-muted,
+.landing-light .lg-head-green .lg-muted,
+.landing-light .lg-foot-green .lg-muted {
+  color: rgba(255, 255, 255, 0.92);
+}
+.landing-light .landing-green .glass-pill,
+.landing-light .lg-head-green .glass-pill {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+.landing-light .landing-green .lg-grad-text {
+  background: linear-gradient(120deg, #fff6c2, #ffe27a 55%, #ffd25e);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.landing-light .landing-green .lg-dot,
+.landing-light .lg-head-green .lg-dot { background: #fff; }
+
+/* ╔══════════════════════════════════════════════════════════════════════════╗
+   ║  LANDING V2 — 2026-10-23                                                  ║
+   ║  تحديث شامل: خط اللاندنج + إصلاح تباعد الحروف العربي + نظام كروت جديد     ║
+   ║  + أيقونات موحدة + تصميم CTA جديد. البلوك ده آخر الملف فبيكسب في الأولوية. ║
+   ╚══════════════════════════════════════════════════════════════════════════╝ */
+
+/* ── 1) خط اللاندنج: Alexandria (أوضح وأحدث) — Cairo بديل احتياطي ── */
+.landing-light,
+.landing-green,
+.lg-head-green,
+.lg-foot-green {
+  font-family: var(--font-landing), var(--font-cairo), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0;
+}
+
+/* ── 2) إصلاح مهم: العربي مبيتحملش letter-spacing سالب ──
+   tracking-tight و letterSpacing السالب بيفصلوا الحروف المتصلة
+   وبيبوظوا شكل الكلمة العربية. بنلغيه داخل اللاندنج كله. */
+.landing-light h1, .landing-light h2, .landing-light h3, .landing-light h4,
+.landing-green h1, .landing-green h2, .landing-green h3, .landing-green h4,
+.landing-light [class*="tracking-tight"],
+.landing-green [class*="tracking-tight"] {
+  letter-spacing: 0 !important;
+}
+
+/* ── 3) الـ Eyebrow (العنوان الصغير فوق عناوين الأقسام) ──
+   كان فيه uppercase + letter-spacing: 1.5px — ده للاتيني مش العربي
+   وبيفكك الحروف. بقا pill ناعم بخط عربي سليم. */
+.landing-light .lg-eyebrow,
+.landing-green .lg-eyebrow {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.85rem;
+  font-weight: 800;
+  gap: 0.625rem;
+}
+.landing-light .lg-eyebrow::before,
+.landing-light .lg-eyebrow::after,
+.landing-green .lg-eyebrow::before,
+.landing-green .lg-eyebrow::after {
+  width: 22px;
+  height: 2px;
+  border-radius: 2px;
+  opacity: 0.45;
+}
+
+/* ── 4) الكارت الجديد (V2) ──
+   بدل المستطيل الأبيض المسطح + الخط الأخضر الرفيع:
+   سطح بتدرج خفيف، ظل طبقتين ناعم، خط علوي متدرج داخلي،
+   توهج داخلي بيظهر مع الهوفر، وحدود بتضيء بالأخضر. */
+.landing-light .glass-card {
+  background: linear-gradient(180deg, #ffffff 0%, #fbfefd 100%);
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  border-radius: 1.25rem;
+  box-shadow:
+    0 1px 2px rgba(0, 60, 40, 0.05),
+    0 20px 44px -26px rgba(0, 60, 40, 0.22);
+  transition: border-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+}
+.landing-light .glass-card::before {
+  inset-inline: 1.5rem;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(to left, transparent, rgba(0, 201, 139, 0.65), transparent);
+  opacity: 0.65;
+  transition: opacity 0.3s ease;
+}
+.landing-light .glass-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(480px 220px at 88% -12%, rgba(0, 201, 139, 0.12), transparent 62%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.landing-light .glass-card:hover {
+  transform: translateY(-5px);
+  border-color: rgba(0, 201, 139, 0.50);
+  box-shadow:
+    0 2px 4px rgba(0, 60, 40, 0.05),
+    0 32px 60px -26px rgba(0, 130, 94, 0.40);
+}
+.landing-light .glass-card:hover::before { opacity: 1; }
+.landing-light .glass-card:hover::after { opacity: 1; }
+
+/* ── 5) تايل الأيقونة الموحد — بدل الألوان العشوائية ──
+   نفس تايل الهيرو: تدرج أخضر + لمعة داخلية + ظل ملون. */
+.landing-tile {
+  display: grid;
+  place-items: center;
+  border-radius: 0.95rem;
+  color: #ffffff;
+  background: linear-gradient(135deg, #1ce3a5 0%, #00b47f 100%);
+  box-shadow:
+    0 10px 20px -8px rgba(0, 180, 127, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+/* نسخة أغمق للتنويع البسيط جوه نفس العيلة */
+.landing-tile.is-deep {
+  background: linear-gradient(135deg, #00c98b 0%, #00815d 100%);
+  box-shadow:
+    0 10px 20px -8px rgba(0, 129, 93, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+/* النيون فسكشن "لمن النظام" — تايل غامق كبير */
+.landing-tile.is-xl {
+  border-radius: 1.15rem;
+}
+
+/* ── 6) زرار الـ CTA بتأثير اللمعة (Shine) ── */
+.cta-shine {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.cta-shine::after {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  width: 34%;
+  inset-inline-start: -55%;
+  background: linear-gradient(105deg, transparent 0%, rgba(255, 255, 255, 0.55) 50%, transparent 100%);
+  transform: skewX(-18deg);
+  animation: cta-shine-move 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes cta-shine-move {
+  0%       { inset-inline-start: -55%; }
+  52%      { inset-inline-start: 135%; }
+  100%     { inset-inline-start: 135%; }
+}
+
+/* ── 7) شيشات الضمانات في الـ CTA الأخير ── */
+.cta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.8125rem;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: background 0.25s ease, transform 0.25s ease;
+}
+.cta-chip:hover { background: rgba(255, 255, 255, 0.22); transform: translateY(-2px); }
+.cta-chip .chip-ic {
+  display: grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 9999px;
+  background: #ffffff;
+  color: #00946a;
+  flex-shrink: 0;
+}
+
+/* ── 8) كارت عايم على الخلفية الخضراء (لعناصر الـ CTA والهيرو) ── */
+.float-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(0, 201, 139, 0.28);
+  background: #ffffff;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #0b2a20;
+  box-shadow: 0 18px 36px -14px rgba(0, 40, 28, 0.45);
+}
+
+/* ── 9) إطار الفيديو (العرض التوضيحي) ── */
+.video-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  border: 1px solid rgba(0, 87, 63, 0.12);
+  background: #0b2a20;
+  box-shadow:
+    0 2px 4px rgba(0, 60, 40, 0.06),
+    0 40px 80px -32px rgba(0, 60, 40, 0.45);
+}
+.video-frame video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: #0b2a20;
+}
+
+/* ── 10) تحسين البادجات الصغيرة (شيلات الأسعار والوسوم) ── */
+.landing-light .lg-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  border: 1px solid rgba(0, 201, 139, 0.35);
+  background: linear-gradient(180deg, #effcf7, #e6faf3);
+  color: #00946a;
+  font-weight: 800;
+}
+
+/* ── 11) الفوتر: روابط أنضف ── */
+.lg-foot-green a, .lg-foot-green button {
+  letter-spacing: 0;
+}
+
+/* ── 12) تحسين اختيار النص بلون البراند ── */
+.landing-light ::selection,
+.landing-green ::selection {
+  background: rgba(0, 201, 139, 0.28);
+}
+/* ╔══════════════════════════════════════════════════════════════════════════╗
+   ║  LANDING V3 + PAGES V2 — 2026-10-23                                         ║
+   ║  1) توسيع عرض اللاندنج درجة (بطلب المستخدم)                                  ║
+   ║  2) صفحات الفوتر (الخصوصية / من نحن / اتصل بنا / الشروط / الكوكيز / الاسترجاع) ║
+   ║     تتحول من الاستايل الداكن القديم إلى هوية V2 الفاتحة الخضراء —            ║
+   ║     نفس خط اللاندنج + نفس الكروت + نفس الألوان.                              ║
+   ║  البلوك ده آخر الملف → بيكسب في الـ cascade بنفس الـ specificity.            ║
+   ╚══════════════════════════════════════════════════════════════════════════╝ */
+
+/* ── 1) LANDING V3: توسيع العرض ──────────────────────────────────────────── */
+.landing-light .max-w-7xl { max-width: 1400px; }
+.landing-light .max-w-6xl { max-width: 1300px; }
+.landing-light .max-w-5xl { max-width: 1210px; }
+
+/* ── 2) PAGES V2 ─ الهيكل المشترك (co-*) ─────────────────────────────────── */
+.co-page {
+  color-scheme: light;
+  font-family: var(--font-landing), var(--font-cairo), ui-sans-serif, system-ui, sans-serif;
+  font-size: 1rem;
+  letter-spacing: 0;
+  background:
+    radial-gradient(ellipse 60% 38% at 50% 0%, rgba(0, 201, 139, 0.08), transparent 70%),
+    #f7fbf9;
+  color: #0b2a20;
+}
+.co-page h1, .co-page h2, .co-page h3, .co-page h4 { letter-spacing: 0; }
+.co-page ::selection { background: rgba(0, 201, 139, 0.25); }
+
+/* زخارف الخلفية */
+.co-bg-glow {
+  background: radial-gradient(ellipse, rgba(0, 201, 139, 0.10) 0%, transparent 70%);
+}
+.co-bg-grid {
+  background-image: radial-gradient(circle at 1px 1px, rgba(0, 87, 63, 0.10) 1px, transparent 0);
+}
+
+/* الهيدر الأخضر — نفس هوية هيدر اللاندنج V2 */
+.co-topbar {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, #00805b 0%, #00694c 100%);
+  box-shadow: 0 10px 30px -14px rgba(0, 50, 34, 0.5);
+}
+.co-topbar-inner { max-width: 1360px; }
+.co-logo { color: #fff; }
+.co-logo-icon {
+  background: #ffffff url('/logo.svg') center / 100% no-repeat;
+  border-radius: 11px;
+  box-shadow: 0 4px 14px rgba(0, 40, 28, 0.35), 0 0 0 2px rgba(255, 255, 255, 0.92);
+}
+.co-logo-icon svg { display: none; }
+.co-back {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  color: #fff;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.co-back:hover { background: rgba(255, 255, 255, 0.22); color: #fff; }
+
+/* كونتينر الصفحات أعرض درجة */
+.co-container { max-width: 1360px; }
+
+/* ── 3) PAGES V2 ─ أنماط مشتركة بيتكرروا في كل الصفحات ──────────────────── */
+
+/* 3-أ) الهيرو: eyebrow pill + عنوان + وصف */
+.pr-hero, .ab-hero, .ct-hero, .tr-hero, .ck-hero, .rf-hero { background: transparent; }
+
+.pr-hero-eyebrow, .ab-hero-eyebrow, .ct-hero-eyebrow, .tr-hero-eyebrow,
+.ck-hero-eyebrow, .rf-hero-eyebrow, .ct-form-eyebrow,
+.ab-section-eyebrow, .ct-section-eyebrow, .ck-section-eyebrow, .rf-section-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: rgba(0, 201, 139, 0.10);
+  border: 1px solid rgba(0, 201, 139, 0.30);
+  color: #00694c;
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.pr-hero-title, .ab-hero-title, .ct-hero-title, .tr-hero-title,
+.ck-hero-title, .rf-hero-title {
+  color: #0b2a20;
+  letter-spacing: 0;
+  font-size: clamp(1.9rem, 4vw, 2.9rem);
+}
+
+.pr-hero-subtitle, .ab-hero-subtitle, .ct-hero-subtitle, .tr-hero-subtitle,
+.ck-hero-subtitle, .rf-hero-subtitle, .ab-section-desc, .ct-section-desc,
+.rf-section-desc, .ct-col-desc, .ct-form-desc {
+  color: #5b7a6e;
+}
+
+/* 3-ب) كروت الميتا (آخر تحديث / عدد الأقسام / التشفير) */
+.pr-meta-card, .tr-meta-card, .ck-meta-card, .rf-meta-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.pr-meta-card svg, .tr-meta-card svg, .ck-meta-card svg, .rf-meta-card svg { color: #00946a; }
+.pr-meta-label, .tr-meta-label, .ck-meta-label, .rf-meta-label { color: #5b7a6e; }
+.pr-meta-value, .tr-meta-value, .ck-meta-value, .rf-meta-value { color: #0b2a20; }
+
+/* 3-ج) ملخص هل/لا (الخصوصية + الكوكيز) */
+.pr-summary-card, .ck-summary-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.pr-summary-do, .ck-summary-do {
+  background: linear-gradient(180deg, #ffffff, #f2fdf8);
+  border-color: rgba(0, 201, 139, 0.35);
+}
+.pr-summary-dont, .ck-summary-dont {
+  background: linear-gradient(180deg, #ffffff, #fef5f4);
+  border-color: rgba(220, 38, 38, 0.22);
+}
+.pr-summary-header, .ck-summary-header { color: #0b2a20; }
+.pr-summary-do .pr-summary-header, .ck-summary-do .ck-summary-header { color: #00694c; }
+.pr-summary-dont .pr-summary-header, .ck-summary-dont .ck-summary-header { color: #b91c1c; }
+.pr-summary-card li, .ck-summary-card li { color: #37514a; }
+.pr-summary-bullet-do, .ck-bullet-do {
+  background: #00946a; color: #fff;
+}
+.pr-summary-bullet-dont, .ck-bullet-dont {
+  background: #dc2626; color: #fff;
+}
+
+/* 3-د) فهرس المحتويات */
+.pr-toc, .tr-toc, .ck-toc, .rf-toc {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.pr-toc-header, .tr-toc-header, .ck-toc-header, .rf-toc-header { color: #0b2a20; }
+.pr-toc-header svg, .tr-toc-header svg, .ck-toc-header svg, .rf-toc-header svg { color: #00946a; }
+.pr-toc-item, .tr-toc-item, .ck-toc-item, .rf-toc-item {
+  background: #f7fbf9;
+  border: 1px solid rgba(0, 87, 63, 0.08);
+  color: #37514a;
+}
+.pr-toc-item svg, .tr-toc-item svg, .ck-toc-item svg, .rf-toc-item svg { color: #00946a; }
+.pr-toc-item:hover, .tr-toc-item:hover, .ck-toc-item:hover, .rf-toc-item:hover {
+  background: #effcf7;
+  border-color: rgba(0, 201, 139, 0.45);
+  color: #00694c;
+}
+
+/* 3-هـ) أقسام المحتوى (الكروت الكبيرة) */
+.pr-section, .tr-section, .ck-section, .rf-section, .ck-section-card, .rf-section-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 20px 44px -28px rgba(0, 60, 40, 0.28);
+}
+.pr-section:hover, .tr-section:hover, .ck-section:hover, .rf-section:hover {
+  background: #ffffff;
+  border-color: rgba(0, 201, 139, 0.35);
+}
+.pr-section-icon, .tr-section-icon, .ck-section-icon, .rf-section-icon,
+.ck-section-card-icon, .rf-section-card-icon {
+  background: linear-gradient(135deg, #19e0a2, #00c98b);
+  color: #fff;
+  box-shadow: 0 6px 16px -6px rgba(0, 148, 106, 0.55);
+}
+.pr-section-title, .tr-section-title, .ck-section-title, .rf-section-title,
+.ck-section-card-title, .rf-section-card-title {
+  color: #0b2a20;
+}
+.pr-section-body, .tr-section-body, .ck-section-card-body, .rf-section-card-body {
+  color: #37514a;
+}
+.pr-subhead, .ck-subhead, .rf-subhead { color: #0b2a20; }
+.pr-bullet, .ck-bullet, .rf-bullet, .pr-para, .ck-para, .rf-para { color: #37514a; }
+
+/* 3-و) بانر التواصل الختامي — أخضر قوي زي CTA اللاندنج */
+.pr-contact-banner, .ck-contact-banner, .rf-cta-banner {
+  background: linear-gradient(135deg, #00805b 0%, #00946a 60%, #00b47f 100%);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 24px 50px -24px rgba(0, 87, 63, 0.6);
+}
+.pr-contact-icon, .ck-contact-icon, .rf-cta-icon {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.pr-contact-title, .ck-contact-title, .rf-cta-title { color: #fff; }
+.pr-contact-desc, .ck-contact-desc, .rf-cta-desc { color: rgba(255, 255, 255, 0.88); }
+
+/* 3-ز) كروت روابط CTA الأخيرة */
+.pr-cta-card, .tr-cta-card, .ck-cta-card, .rf-cta-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.pr-cta-card:hover, .tr-cta-card:hover, .ck-cta-card:hover, .rf-cta-card:hover {
+  border-color: rgba(0, 201, 139, 0.5);
+  box-shadow: 0 20px 44px -22px rgba(0, 148, 106, 0.4);
+}
+.pr-cta-card h3, .tr-cta-card h3, .ck-cta-card h3, .rf-cta-card h3 { color: #0b2a20; }
+.pr-cta-card p, .tr-cta-card p, .ck-cta-card p, .rf-cta-card p { color: #5b7a6e; }
+.pr-cta-card svg, .tr-cta-card svg, .ck-cta-card svg, .rf-cta-card svg { color: #00946a; }
+.pr-cta-arrow, .tr-cta-arrow, .ck-cta-arrow, .rf-cta-arrow { color: #00946a; }
+
+/* 3-ح) زر الواتساب المشترك */
+.ab-btn-whatsapp {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 10px 24px -10px rgba(22, 163, 74, 0.6);
+}
+.ab-btn-whatsapp:hover { background: linear-gradient(135deg, #16a34a, #15803d); color: #fff; }
+
+/* ── 4) PAGES V2 ─ صفحة "من نحن" (ab-*) ─────────────────────────────────── */
+.ab-btn-primary {
+  background: linear-gradient(135deg, #00b47f, #00946a);
+  color: #fff;
+  box-shadow: 0 10px 26px -10px rgba(0, 148, 106, 0.6);
+}
+.ab-btn-primary:hover { background: linear-gradient(135deg, #00946a, #00694c); color: #fff; }
+.ab-btn-secondary {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.18);
+  color: #00694c;
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05);
+}
+.ab-btn-secondary:hover { background: #effcf7; border-color: rgba(0, 201, 139, 0.5); color: #00694c; }
+.ab-link { color: #00946a; }
+.ab-link:hover { color: #00694c; }
+
+.ab-stats-grid { margin-top: 0; }
+.ab-stat-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.ab-stat-card:hover {
+  background: #effcf7;
+  border-color: rgba(0, 201, 139, 0.45);
+}
+.ab-stat-icon {
+  background: linear-gradient(135deg, rgba(25, 224, 162, 0.18), rgba(0, 201, 139, 0.10));
+  color: #00946a;
+  border: 1px solid rgba(0, 201, 139, 0.25);
+}
+.ab-stat-value { color: #0b2a20; }
+.ab-stat-label { color: #5b7a6e; }
+
+.ab-section-header h2, .ab-section-title { color: #0b2a20; }
+
+.ab-mission-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.ab-mission-card-accent {
+  background: linear-gradient(180deg, #ffffff, #f0fbf6);
+  border-color: rgba(0, 201, 139, 0.45);
+}
+.ab-mission-card h3 { color: #0b2a20; }
+.ab-mission-card p { color: #37514a; }
+.ab-mission-icon { color: #fff; }
+.ab-mission-icon-1 { background: linear-gradient(135deg, #19e0a2, #00946a); }
+.ab-mission-icon-2 { background: linear-gradient(135deg, #38bdf8, #0284c7); }
+.ab-mission-icon-3 { background: linear-gradient(135deg, #fbbf24, #d97706); }
+.ab-mission-icon svg { color: #fff; }
+
+.ab-feature-card, .ab-value-card, .ab-tech-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.ab-feature-card:hover, .ab-value-card:hover, .ab-tech-card:hover {
+  border-color: rgba(0, 201, 139, 0.45);
+}
+.ab-feature-icon, .ab-value-icon, .ab-tech-icon {
+  background: linear-gradient(135deg, rgba(25, 224, 162, 0.16), rgba(0, 201, 139, 0.08));
+  color: #00946a;
+  border: 1px solid rgba(0, 201, 139, 0.25);
+}
+.ab-feature-title, .ab-value-title, .ab-tech-name { color: #0b2a20; }
+.ab-feature-desc, .ab-value-desc, .ab-tech-desc { color: #5b7a6e; }
+
+/* بانر مصر — دافي خفيف (رملي) فوق الخلفية الفاتحة */
+.ab-egypt-banner {
+  background: linear-gradient(135deg, #fffdf6 0%, #fdf6e7 100%);
+  border: 1px solid rgba(217, 119, 6, 0.22);
+  box-shadow: 0 16px 36px -24px rgba(180, 120, 20, 0.35);
+}
+.ab-egypt-title { color: #0b2a20; }
+.ab-egypt-desc { color: #5b7a6e; }
+.ab-egypt-features svg { color: #00946a; }
+.ab-egypt-chip {
+  background: #ffffff;
+  border: 1px solid rgba(217, 119, 6, 0.30);
+  color: #92400e;
+}
+
+.ab-cta, .ab-cta-inner, .ct-cta-inner {
+  background: linear-gradient(135deg, #00805b 0%, #00946a 60%, #00b47f 100%);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 24px 50px -24px rgba(0, 87, 63, 0.6);
+}
+.ab-cta-title, .ct-cta-title { color: #fff; }
+.ab-cta-desc, .ct-cta-desc { color: rgba(255, 255, 255, 0.88); }
+.ab-cta-footnote { color: rgba(255, 255, 255, 0.75); }
+
+/* ── 5) PAGES V2 ─ صفحة "اتصل بنا" (ct-*) ───────────────────────────────── */
+.ct-response-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.ct-response-icon {
+  background: linear-gradient(135deg, rgba(25, 224, 162, 0.16), rgba(0, 201, 139, 0.08));
+  color: #00946a;
+  border: 1px solid rgba(0, 201, 139, 0.25);
+}
+.ct-response-label { color: #5b7a6e; }
+.ct-response-value { color: #0b2a20; }
+
+.ct-col-title, .ct-form-title, .ct-form-header { color: #0b2a20; }
+
+.ct-method-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05);
+}
+.ct-method-card:hover {
+  background: #effcf7;
+  border-color: rgba(0, 201, 139, 0.45);
+}
+.ct-method-icon {
+  background: linear-gradient(135deg, rgba(25, 224, 162, 0.14), rgba(0, 201, 139, 0.07));
+  border: 1px solid rgba(0, 201, 139, 0.25);
+  color: #00946a;
+}
+.ct-method-title { color: #0b2a20; }
+.ct-method-value { color: #00694c; }
+.ct-method-desc { color: #5b7a6e; }
+.ct-method-badge {
+  background: rgba(0, 201, 139, 0.12);
+  border: 1px solid rgba(0, 201, 139, 0.30);
+  color: #00694c;
+}
+.ct-method-arrow { color: #00946a; }
+
+/* فورم التواصل */
+.ct-form-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 24px 50px -28px rgba(0, 60, 40, 0.3);
+}
+.ct-field-label { color: #0b2a20; }
+.ct-field-input, .ct-field-select, .ct-field-textarea {
+  background: #fbfdfc;
+  border: 1px solid rgba(0, 87, 63, 0.16);
+  color: #0b2a20;
+}
+.ct-field-input::placeholder, .ct-field-textarea::placeholder { color: #8aa79c; }
+.ct-field-input:focus, .ct-field-select:focus, .ct-field-textarea:focus {
+  background: #fff;
+  border-color: #00c98b;
+  box-shadow: 0 0 0 3px rgba(0, 201, 139, 0.18);
+  outline: none;
+}
+.ct-required { color: #dc2626; }
+.ct-submit-btn {
+  background: linear-gradient(135deg, #00b47f, #00946a);
+  color: #fff;
+  box-shadow: 0 12px 28px -10px rgba(0, 148, 106, 0.6);
+}
+.ct-submit-btn:hover { background: linear-gradient(135deg, #00946a, #00694c); color: #fff; }
+.ct-submit-btn:disabled { opacity: 0.6; }
+.ct-spinner { border-color: rgba(255, 255, 255, 0.35); border-top-color: #fff; }
+.ct-form-footnote { color: #5b7a6e; }
+
+/* مواعيد العمل */
+.ct-hours-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.ct-hours-day { color: #0b2a20; }
+.ct-hours-time { color: #00694c; }
+.ct-hours-row { border-bottom: 1px solid rgba(0, 87, 63, 0.07); }
+.ct-hours-note { color: #5b7a6e; }
+
+/* الأسئلة الشائعة */
+.ct-faq-question { color: #0b2a20; background: #f7fbf9; }
+.ct-faq-answer { color: #37514a; background: #f7fbf9; }
+
+.ct-cta-icon {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* ── 6) PAGES V2 ─ الشروط والأحكام (tr-*) ───────────────────────────────── */
+.tr-acceptance {
+  background: linear-gradient(135deg, rgba(0, 201, 139, 0.10), rgba(0, 201, 139, 0.04));
+  border: 1px solid rgba(0, 201, 139, 0.35);
+}
+.tr-acceptance-icon {
+  background: linear-gradient(135deg, #19e0a2, #00c98b);
+  color: #fff;
+}
+.tr-acceptance-title { color: #00694c; }
+.tr-acceptance-desc { color: #37514a; }
+
+/* ── 7) PAGES V2 ─ سياسة الكوكيز (ck-*) ─────────────────────────────────── */
+.ck-type-badge-green {
+  background: rgba(0, 201, 139, 0.12);
+  border: 1px solid rgba(0, 201, 139, 0.35);
+  color: #00694c;
+}
+.ck-type-badge-amber {
+  background: rgba(217, 119, 6, 0.10);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  color: #92400e;
+}
+.ck-type-badge-red {
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.30);
+  color: #b91c1c;
+}
+.ck-type-title, .ck-type-header { color: #0b2a20; }
+.ck-type-desc { color: #37514a; }
+.ck-examples-title { color: #0b2a20; }
+.ck-example-row {
+  background: #f7fbf9;
+  border: 1px solid rgba(0, 87, 63, 0.07);
+}
+.ck-example-name { color: #0b2a20; }
+.ck-example-purpose { color: #5b7a6e; }
+.ck-example-duration { color: #00694c; }
+.ck-link { color: #00946a; text-decoration: underline; text-decoration-color: rgba(0, 148, 106, 0.4); }
+.ck-link:hover { color: #00694c; }
+
+/* ── 8) PAGES V2 ─ سياسة الاسترجاع (rf-*) ───────────────────────────────── */
+.rf-process-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+}
+.rf-process-icon {
+  background: linear-gradient(135deg, rgba(25, 224, 162, 0.16), rgba(0, 201, 139, 0.08));
+  color: #00946a;
+  border: 1px solid rgba(0, 201, 139, 0.25);
+}
+.rf-process-step-num {
+  background: linear-gradient(135deg, #19e0a2, #00946a);
+  color: #fff;
+  box-shadow: 0 6px 16px -6px rgba(0, 148, 106, 0.55);
+}
+.rf-process-title { color: #0b2a20; }
+.rf-process-desc { color: #5b7a6e; }
+.rf-scenario-title { color: #0b2a20; }
+.rf-scenario-desc { color: #37514a; }
+
+/* نهاية بلوك PAGES V2 */
+
+/* ── 9) PAGES V2 ─ تعويضات nested (نفس specificity للقواعد القديمة) ─────── */
+.pr-summary-header h3, .ck-summary-header h3 { color: #0b2a20; }
+.pr-summary-do .pr-summary-header h3, .ck-summary-do .ck-summary-header h3 { color: #00694c; }
+.pr-summary-dont .pr-summary-header h3, .ck-summary-dont .ck-summary-header h3 { color: #b91c1c; }
+.pr-toc-header h2, .tr-toc-header h2, .ck-toc-header h2, .rf-toc-header h2 { color: #0b2a20; }
+.pr-toc-item svg, .tr-toc-item svg, .ck-toc-item svg, .rf-toc-item svg { color: #00946a; }
+.ab-egypt-chip svg { color: #00946a; }
+.pr-toc-header svg, .tr-toc-header svg, .ck-toc-header svg, .rf-toc-header svg { color: #00946a; }

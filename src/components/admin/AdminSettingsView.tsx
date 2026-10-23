@@ -43,6 +43,7 @@ interface Settings {
   logoUrl: string
   facebookUrl: string
   twitterUrl: string
+  telegramUrl: string
   instagramUrl: string
   whatsappUrl: string
   pwaInstallBannerEnabled: string
@@ -629,6 +630,15 @@ export function AdminSettingsView() {
                 value={data.twitterUrl}
                 onChange={(e) => update('twitterUrl', e.target.value)}
                 dir="ltr"
+              />
+            </Field>
+            <Field label="تليجرام">
+              <IconInput
+                icon={MessageCircle}
+                value={data.telegramUrl ?? ''}
+                onChange={(e) => update('telegramUrl', e.target.value)}
+                dir="ltr"
+                placeholder="https://t.me/..."
               />
             </Field>
             <Field label="إنستجرام">

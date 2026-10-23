@@ -10,7 +10,7 @@ export function WhoForSection() {
   const meta = VERTICAL_META[vertical]
 
   return (
-    <section id="who-for" className="landing-dark relative scroll-mt-24 border-y border-white/5 py-12 sm:py-24">
+    <section id="who-for" className="landing-light is-alt relative scroll-mt-24 border-y border-[#00573f]/12 py-12 sm:py-24">
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-16">
           <motion.span
@@ -27,7 +27,7 @@ export function WhoForSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="mt-4 font-black tracking-tight text-white"
+            className="mt-4 font-black text-[#0b2a20]"
             style={{ fontSize: 'clamp(1.6rem, 3.4vw, 2.9rem)', lineHeight: 1.2 }}
           >
             مصمم لكل من يدير {meta.label}
@@ -59,28 +59,33 @@ export function WhoForSection() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-60px' }}
                 transition={{ duration: 0.45, delay: i * 0.06 }}
-                className="glass-card rounded-2xl p-7"
+                className="glass-card group rounded-2xl p-7"
               >
-                <h3 className="text-xl font-extrabold text-white">{p.title}</h3>
-
-                <div className="mt-5 rounded-xl border border-amber-500/15 bg-amber-500/[0.04] p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-amber-300">
-                      <TriangleAlert className="size-3.5" />
-                    </span>
-                    <p className="text-sm font-bold text-amber-300">المشكلة</p>
-                  </div>
-                  <p className="mt-2 text-base leading-relaxed lg-muted">{p.problem}</p>
+                <div className="mb-4 flex items-center gap-3">
+                  <span className="landing-tile is-deep size-11 shrink-0 text-base font-black transition-transform duration-300 group-hover:scale-110">
+                    {i + 1}
+                  </span>
+                  <h3 className="text-xl font-extrabold text-[#0b2a20]">{p.title}</h3>
                 </div>
 
-                <div className="mt-3 rounded-xl border border-brand-500/15 bg-brand-500/[0.04] p-4">
+                <div className="rounded-xl border border-amber-500/20 bg-gradient-to-bl from-amber-500/[0.07] to-amber-500/[0.02] p-4">
                   <div className="flex items-center gap-2">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-400/15 text-brand-300">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-amber-600">
+                      <TriangleAlert className="size-3.5" />
+                    </span>
+                    <p className="text-sm font-extrabold text-amber-600">المشكلة</p>
+                  </div>
+                  <p className="mt-2 text-base leading-relaxed text-[#0b2a20]/70">{p.problem}</p>
+                </div>
+
+                <div className="mt-3 rounded-xl border border-brand-500/20 bg-gradient-to-bl from-brand-500/[0.08] to-brand-500/[0.02] p-4">
+                  <div className="flex items-center gap-2">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-500/20 text-[#00946a]">
                       <Lightbulb className="size-3.5" />
                     </span>
-                    <p className="text-sm font-bold text-brand-300">الحل</p>
+                    <p className="text-sm font-extrabold text-[#00946a]">الحل</p>
                   </div>
-                  <p className="mt-2 text-base leading-relaxed text-white/85">{p.solution}</p>
+                  <p className="mt-2 text-base leading-relaxed text-[#0b2a20]/80">{p.solution}</p>
                 </div>
               </motion.div>
             ))}
