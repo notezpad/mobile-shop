@@ -38,7 +38,25 @@ export async function GET() {
     const err = authErrorResponse(e)
     return NextResponse.json(err?.body, { status: err?.status })
   }
-  const status = await withSql((sql) => getDemoStatus(sql, session.tenantId))
+  let status = await withSql((sql) => getDemoStatus(sql, session.tenantId))
+  // 🔁 الباقة اتغيّرت لنشاط تاني (مثلاً الأدمن حوّل المحل لباقة المواد الغذائية
+  // المخفية بعد التسجيل) والبيانات لسه تجريبية بالكامل → نبدّلها بنشاط الباقة الجديد.
+  // لو العميل بدأ شغل فعلي (فواتير حقيقية) مابنلمسش حاجة.
+  if (status.active && status.vertical && !status.hasRealSales) {
+    const ctx = await getPlanContext(session.tenantId)
+    if (ctx.businessType !== status.vertical) {
+      status = await withSql(async (sql) => {
+        await purgeDemoData(sql, session.tenantId)
+        await seedDemoData(sql, {
+          tenantId: session.tenantId, userId: session.userId, vertical: ctx.businessType,
+          modules: ctx.enabledModules, capabilities: ctx.capabilities, limits: ctx.limits,
+          demoUserEmail: `demo-${session.tenantId}@demo.invalid`,
+        })
+        return getDemoStatus(sql, session.tenantId)
+      })
+      await purgeCaches(session.tenantId, session.branchId ?? null)
+    }
+  }
   const res = NextResponse.json(status)
   res.headers.set('Cache-Control', 'no-store')
   return res

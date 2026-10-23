@@ -409,6 +409,8 @@ export async function purgeDemoData(sql: Sql, tenantId: string) {
 
 export interface DemoStatus {
   active: boolean
+  /** نشاط البيانات التجريبية الحالية (علامة _meta) */
+  vertical: string | null
   counts: { products: number; customers: number; suppliers: number; sales: number }
   /** المحل فيه فواتير حقيقية (مش تجريبية) — الواجهة بتحذّر قبل المسح */
   hasRealSales: boolean
@@ -418,7 +420,7 @@ export interface DemoStatus {
 
 export async function getDemoStatus(sql: Sql, tenantId: string): Promise<DemoStatus> {
   const empty: DemoStatus = {
-    active: false, counts: { products: 0, customers: 0, suppliers: 0, sales: 0 },
+    active: false, vertical: null, counts: { products: 0, customers: 0, suppliers: 0, sales: 0 },
     hasRealSales: false, canSeed: false,
   }
   try {
@@ -428,7 +430,8 @@ export async function getDemoStatus(sql: Sql, tenantId: string): Promise<DemoSta
         COUNT(*) FILTER (WHERE d."tbl" = 'Customer')::int AS customers,
         COUNT(*) FILTER (WHERE d."tbl" = 'Supplier')::int AS suppliers,
         COUNT(*) FILTER (WHERE d."tbl" = 'Sale')::int     AS sales,
-        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE d."tbl" <> '_meta')::int AS total,
+        MAX(d."rowId") FILTER (WHERE d."tbl" = '_meta') AS vertical,
         EXISTS (
           SELECT 1 FROM "Sale" s
           WHERE s."tenantId" = ${tenantId}
@@ -447,6 +450,7 @@ export async function getDemoStatus(sql: Sql, tenantId: string): Promise<DemoSta
     if (!r) return empty
     return {
       active: Number(r.total) > 0,
+      vertical: r.vertical ?? null,
       counts: { products: r.products, customers: r.customers, suppliers: r.suppliers, sales: r.sales },
       hasRealSales: !!r.hasRealSales,
       canSeed: !!r.canSeed,

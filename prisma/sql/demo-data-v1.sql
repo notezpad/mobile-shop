@@ -345,6 +345,8 @@ BEGIN
     UNION ALL SELECT 'Category',         "id"::text FROM "Category"         WHERE "tenantId" = v_tid
     UNION ALL SELECT 'User',             "id"       FROM "User"             WHERE "tenantId" = v_tid AND "id" <> v_uid AND "active" = false
   ) x;
+  -- علامة نشاط البيانات التجريبية (لو الباقة اتغيّرت لنشاط تاني نعيد الزرع)
+  INSERT INTO "DemoRecord" ("tenantId", "tbl", "rowId") VALUES (v_tid, '_meta', COALESCE(payload->>'vertical', ''));
 
   RETURN jsonb_build_object('ok', true, 'counts', jsonb_build_object(
     'products', n_prod, 'customers', n_cust, 'suppliers', n_supp,
