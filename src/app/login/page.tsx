@@ -125,17 +125,17 @@ export default function LoginPage() {
 }` }} />
 
       {/* ─── Form side ─── */}
-      <div className="lgn-side min-h-dvh lg:h-screen lg:overflow-y-auto flex items-center justify-center py-6 px-4 bg-[#f7fbf9]">
+      <div className="lgn-side min-h-dvh lg:h-screen lg:overflow-y-auto flex items-center justify-center py-3 px-4 sm:py-6 bg-[#f7fbf9]">
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
           className="w-full max-w-sm"
         >
-          <div className="bg-card rounded-2xl border border-border shadow-lg shadow-black/5 p-6 space-y-5 overflow-hidden">
+          <div className="bg-card rounded-2xl border border-border shadow-lg shadow-black/5 p-4 space-y-3 sm:p-6 sm:space-y-5 overflow-hidden">
 
             {/* Brand + header — شريط التذكرة */}
-            <header className="relative -mx-6 -mt-6 px-6 pt-6 pb-7 bg-gradient-to-b from-[#e3f9f0] via-[#f1fcf8] to-card border-b-2 border-dashed border-[#00c98b]/35">
+            <header className="relative -mx-4 -mt-4 px-4 pt-4 pb-4 sm:-mx-6 sm:-mt-6 sm:px-6 sm:pt-6 sm:pb-7 bg-gradient-to-b from-[#e3f9f0] via-[#f1fcf8] to-card border-b-2 border-dashed border-[#00c98b]/35">
               {/* نقط ناعمة في الركن */}
               <div
                 aria-hidden
@@ -151,12 +151,12 @@ export default function LoginPage() {
               <span aria-hidden className="absolute -bottom-2.5 -left-2.5 size-5 rounded-full border border-border bg-[#f7fbf9]" />
               <span aria-hidden className="absolute -bottom-2.5 -right-2.5 size-5 rounded-full border border-border bg-[#f7fbf9]" />
 
-              <div className="relative space-y-5">
+              <div className="relative space-y-3 sm:space-y-5">
                 {/* اللوجو الحقيقي للموقع */}
                 <Link href="/" className="inline-flex items-center gap-3 group" aria-label="Nezam POS">
                   <img
                     src="/logo.svg" alt="" width={46} height={46}
-                    className="size-[46px] rounded-[15px] shadow-lg shadow-[#00c98b]/35 ring-2 ring-white transition-transform group-hover:scale-105 group-hover:-rotate-3"
+                    className="size-[38px] sm:size-[46px] rounded-[15px] shadow-lg shadow-[#00c98b]/35 ring-2 ring-white transition-transform group-hover:scale-105 group-hover:-rotate-3"
                   />
                   <div className="leading-none">
                     <p dir="ltr" className="text-[19px] font-black tracking-tight text-foreground text-right">
@@ -168,7 +168,7 @@ export default function LoginPage() {
 
                 <div>
                   <div className="flex items-center justify-between gap-3">
-                    <h1 className="text-[1.75rem] font-extrabold leading-tight tracking-tight text-foreground">أهلاً بعودتك</h1>
+                    <h1 className="text-[1.4rem] sm:text-[1.75rem] font-extrabold leading-tight tracking-tight text-foreground">أهلاً بعودتك</h1>
                     {today && (
                       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#00c98b]/30 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-[#00694c]">
                         <CalendarDays className="size-3.5" />
@@ -176,7 +176,7 @@ export default function LoginPage() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">مبيعاتك ومخزونك وخزنتك مستنيينك.</p>
+                  <p className="mt-1 hidden text-[13px] leading-relaxed text-muted-foreground sm:block">مبيعاتك ومخزونك وخزنتك مستنيينك.</p>
                 </div>
               </div>
             </header>
@@ -242,24 +242,24 @@ export default function LoginPage() {
             </AnimatePresence>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} noValidate className="space-y-4">
-              <Field label="البريد الإلكتروني" required className="space-y-2.5">
+            <form onSubmit={handleSubmit} noValidate className="space-y-3 sm:space-y-4">
+              <Field label="البريد الإلكتروني" required className="space-y-1.5 sm:space-y-2.5">
                 <Input
                   type="email" placeholder="name@example.com"
                   icon={<Mail className="size-4" />}
                   value={email} onChange={(e: any) => { setEmail(e.target.value); setError(null) }}
-                  autoComplete="email" dir="ltr" className="text-left focus-visible:!border-[#00c98b] focus-visible:!ring-[#00c98b]/25 h-11"
+                  autoComplete="email" dir="ltr" className="text-left focus-visible:!border-[#00c98b] focus-visible:!ring-[#00c98b]/25 h-10 sm:h-11"
                   disabled={loading} required inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false}
                 />
               </Field>
 
-              <Field label="كلمة المرور" required className="space-y-2.5">
+              <Field label="كلمة المرور" required className="space-y-1.5 sm:space-y-2.5">
                 <div className="relative">
                   <Input
                     type={showPass ? "text" : "password"} placeholder="••••••••"
                     icon={<Lock className="size-4" />}
                     value={password} onChange={(e: any) => { setPassword(e.target.value); setError(null) }}
-                    autoComplete="current-password" dir="ltr" className="text-left pl-10 focus-visible:!border-[#00c98b] focus-visible:!ring-[#00c98b]/25 h-11"
+                    autoComplete="current-password" dir="ltr" className="text-left pl-10 focus-visible:!border-[#00c98b] focus-visible:!ring-[#00c98b]/25 h-10 sm:h-11"
                     disabled={loading} required
                   />
                   <button type="button" onClick={() => setShowPass(!showPass)}
@@ -314,8 +314,8 @@ export default function LoginPage() {
 
             {/* Signup CTA */}
             <Link href="/signup" className="block group">
-              <div className="flex items-center gap-3 rounded-xl border border-[#00c98b]/35 bg-[#effcf7] px-3.5 py-3 transition-all group-hover:border-[#00c98b] group-hover:bg-white group-hover:shadow-md group-hover:shadow-[#00c98b]/15">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#19e0a2] to-[#00c98b] text-white shadow-md shadow-[#00c98b]/30 transition-transform group-hover:scale-105">
+              <div className="flex items-center gap-3 rounded-xl border border-[#00c98b]/35 bg-[#effcf7] px-3.5 py-2 sm:py-3 transition-all group-hover:border-[#00c98b] group-hover:bg-white group-hover:shadow-md group-hover:shadow-[#00c98b]/15">
+                <span className="flex size-9 sm:size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#19e0a2] to-[#00c98b] text-white shadow-md shadow-[#00c98b]/30 transition-transform group-hover:scale-105">
                   <UserPlus className="size-5" />
                 </span>
                 <div className="flex-1 min-w-0">
@@ -326,7 +326,7 @@ export default function LoginPage() {
               </div>
             </Link>
 
-            <p className="text-center text-[10px] text-muted-foreground/40">© 2026 نظام المحل</p>
+            <p className="hidden text-center text-[10px] text-muted-foreground/40 sm:block">© 2026 نظام المحل</p>
           </div>
         </motion.div>
       </div>

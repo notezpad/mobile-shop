@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles,
@@ -344,7 +345,7 @@ function PlanStep({
                   aria-checked={sel}
                   onClick={() => onPickType(t)}
                   className={cn(
-                    'relative flex min-h-[88px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 px-2 py-2.5 text-center sm:min-h-[104px] sm:gap-2 sm:py-3 transition-all duration-200 active:scale-[0.97]',
+                    'relative flex min-h-[78px] flex-col items-center justify-center gap-1 rounded-2xl border-2 px-2 py-2 text-center sm:min-h-[104px] sm:gap-2 sm:py-3 transition-all duration-200 active:scale-[0.97]',
                     sel
                       ? cn('border-transparent bg-gradient-to-br text-white', m.grad, m.glow)
                       : 'border-border bg-card text-foreground hover:border-[#00c98b]',
@@ -718,6 +719,9 @@ function SignupContent() {
   const [inviteCode, setInviteCode] = React.useState('')
   const [showPass, setShowPass] = React.useState(false)
   const [showInvite, setShowInvite] = React.useState(false)
+  // بوابة زر الإنشاء الثابت على الموبايل (بتتحط في body عشان fixed يشتغل صح بره أي transform)
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => { setMounted(true) }, [])
   const [loading, setLoading] = React.useState(false)
   const [errors, setErrors] = React.useState<SignupError[]>([])
 
@@ -883,7 +887,7 @@ function SignupContent() {
       <style dangerouslySetInnerHTML={{ __html: SIGNUP_CSS }} />
 
       {/* ─── Form side ─── */}
-      <div className="su-side min-h-dvh lg:h-screen lg:overflow-y-auto flex items-start justify-center py-4 px-3 sm:px-4 sm:py-5 bg-[#f7fbf9]">
+      <div className="su-side min-h-dvh lg:h-screen lg:overflow-y-auto flex items-start justify-center py-3 px-3 sm:px-4 sm:py-5 bg-[#f7fbf9]">
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -908,7 +912,7 @@ function SignupContent() {
               <span aria-hidden className="absolute -bottom-2.5 -left-2.5 size-5 rounded-full border border-border bg-[#f7fbf9]" />
               <span aria-hidden className="absolute -bottom-2.5 -right-2.5 size-5 rounded-full border border-border bg-[#f7fbf9]" />
 
-              <div className="relative space-y-3">
+              <div className="relative space-y-2.5 sm:space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <Link href="/" className="inline-flex items-center gap-2.5 group" aria-label="Nezam POS">
                     <img
@@ -932,7 +936,7 @@ function SignupContent() {
 
                 <div className="su-title">
                   <div>
-                    <h1 className="text-[1.6rem] font-extrabold leading-tight tracking-tight text-foreground">
+                    <h1 className="text-[1.35rem] sm:text-[1.6rem] font-extrabold leading-tight tracking-tight text-foreground">
                       {step === 1 ? 'ابدأ تجربتك المجانية' : 'أنشئ حسابك'}
                     </h1>
                     {step === 1 && (
@@ -940,7 +944,7 @@ function SignupContent() {
                     )}
                   </div>
                   {step === 2 && (
-                    <ul className="su-chips mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] font-medium text-muted-foreground">
+                    <ul className="su-chips mt-2 flex flex-wrap max-sm:hidden gap-x-3 gap-y-1 text-[11.5px] font-medium text-muted-foreground">
                       {['14 يوم مجاناً', 'بدون بطاقة', 'جاهز في دقيقتين'].map((x) => (
                         <li key={x} className="inline-flex items-center gap-1">
                           <Check className="size-3 text-[#00946a]" strokeWidth={3} />
@@ -953,7 +957,7 @@ function SignupContent() {
               </div>
             </header>
 
-            <div className="su-body p-4 sm:p-5 space-y-4">
+            <div className={cn("su-body p-4 sm:p-5 space-y-3 sm:space-y-4", step === 2 && "max-lg:pb-24")}>
 
             <StepBar step={step} />
 
@@ -971,7 +975,7 @@ function SignupContent() {
             ) : (
             <motion.div key="step-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
             {/* Form */}
-            <form onSubmit={handleSubmit} noValidate className="su-form min-w-0 space-y-4">
+            <form id="su-form" onSubmit={handleSubmit} noValidate className="su-form min-w-0 space-y-3 sm:space-y-4">
               {/* اختيار النشاط + المستوى — ظاهر دايماً وأول حاجة في الفورم (مفيش "تغيير" مخفي) */}
               {currentEntry ? (
                 <PlanSummary entry={currentEntry} onBack={backToPlans} error={getFieldError('plan')} />
@@ -980,22 +984,22 @@ function SignupContent() {
               ) : null}
 
               {/* Row 1: اسم المحل + اسم المسؤول */}
-              <div className="su-span grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3">
-                <Field className="su-fld space-y-2.5" label="اسم المحل" required error={getFieldError('shopName')}>
+              <div className="su-span grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3">
+                <Field className="su-fld space-y-1.5 sm:space-y-2.5" label="اسم المحل" required error={getFieldError('shopName')}>
                   <Input id="su-shop" type="text" placeholder="مثال: النور للموبايلات" icon={<Store className="size-4" />}
                     value={shopName} onChange={(e: any) => { setShopName(e.target.value); clearFieldError('shopName') }}
-                    disabled={loading} required autoComplete="organization" enterKeyHint="next" className="h-11 lg:h-10" />
+                    disabled={loading} required autoComplete="organization" enterKeyHint="next" className="h-10 lg:h-10" />
                 </Field>
-                <Field className="su-fld space-y-2.5" label="اسم المسؤول" required error={getFieldError('name')}>
+                <Field className="su-fld space-y-1.5 sm:space-y-2.5" label="اسم المسؤول" required error={getFieldError('name')}>
                   <Input type="text" placeholder="مثال: أحمد محمد" icon={<User className="size-4" />}
                     value={name} onChange={(e: any) => { setName(e.target.value); clearFieldError('name') }}
-                    disabled={loading} required autoComplete="name" enterKeyHint="next" className="h-11 lg:h-10" />
+                    disabled={loading} required autoComplete="name" enterKeyHint="next" className="h-10 lg:h-10" />
                 </Field>
               </div>
 
               {/* Row 2: البريد + الهاتف */}
-              <div className="su-span grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3">
-                <Field className="su-fld space-y-2.5" label="البريد الإلكتروني" required error={getFieldError('email')}>
+              <div className="su-span grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3">
+                <Field className="su-fld space-y-1.5 sm:space-y-2.5" label="البريد الإلكتروني" required error={getFieldError('email')}>
                   <div className="relative">
                     <Input type="text" placeholder="example@gmail.com" icon={<Mail className="size-4" />}
                       value={email}
@@ -1009,7 +1013,7 @@ function SignupContent() {
                         else if (e.key === 'Enter' && emailActiveIdx >= 0) { e.preventDefault(); pickEmail(emailSuggestions[emailActiveIdx]) }
                         else if (e.key === 'Escape') { setEmailActiveIdx(-1); (e.target as HTMLElement).blur() }
                       }}
-                      dir="ltr" className="text-left h-11 lg:h-10" disabled={loading} required autoComplete="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next"
+                      dir="ltr" className="text-left h-10 lg:h-10" disabled={loading} required autoComplete="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next"
                       role="combobox" aria-expanded={emailSuggestions.length > 0} aria-autocomplete="list" />
                     {/* قائمة الاقتراحات: عائمة فوق المحتوى (absolute) → ما بتطوّلش الفورم */}
                     {emailSuggestions.length > 0 && (
@@ -1041,20 +1045,20 @@ function SignupContent() {
                     </button>
                   )}
                 </Field>
-                <Field className="su-fld space-y-2.5" label="رقم الموبايل" required error={getFieldError('phone')}>
+                <Field className="su-fld space-y-1.5 sm:space-y-2.5" label="رقم الموبايل" required error={getFieldError('phone')}>
                   <Input type="tel" placeholder="01012345678" icon={<Smartphone className="size-4" />}
                     value={phone} onChange={(e: any) => { setPhone(e.target.value); clearFieldError('phone') }}
-                    dir="ltr" className="text-left h-11 lg:h-10" disabled={loading} required autoComplete="tel" inputMode="tel" enterKeyHint="next" />
+                    dir="ltr" className="text-left h-10 lg:h-10" disabled={loading} required autoComplete="tel" inputMode="tel" enterKeyHint="next" />
                 </Field>
               </div>
 
               {/* كلمة المرور */}
-              <Field className="su-fld space-y-2.5" label="كلمة المرور" required error={getFieldError('password')} hint="الحد الأدنى 6 أحرف">
+              <Field className="su-fld space-y-1.5 sm:space-y-2.5" label="كلمة المرور" required error={getFieldError('password')} hint="الحد الأدنى 6 أحرف">
                 <div className="relative">
                   <Input type={showPass ? 'text' : 'password'} placeholder="••••••"
                     icon={<Lock className="size-4" />} value={password}
                     onChange={(e: any) => { setPassword(e.target.value); clearFieldError('password') }}
-                    dir="ltr" className="text-left pl-10 h-11 lg:h-10" disabled={loading} required minLength={6} autoComplete="new-password" autoCapitalize="none" enterKeyHint="done" />
+                    dir="ltr" className="text-left pl-10 h-10 lg:h-10" disabled={loading} required minLength={6} autoComplete="new-password" autoCapitalize="none" enterKeyHint="done" />
                   <button type="button" onClick={() => setShowPass(!showPass)}
                     className="absolute inset-y-0 left-0 flex w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
                     tabIndex={-1} aria-label={showPass ? 'إخفاء' : 'إظهار'}>
@@ -1077,7 +1081,7 @@ function SignupContent() {
               {!showInvite ? (
                 <>
                 <button type="button" onClick={() => setShowInvite(true)}
-                  className="su-invite-btn text-[11px] text-muted-foreground hover:text-primary transition-colors underline-offset-2 hover:underline">
+                  className="su-invite-btn hidden text-[11px] text-muted-foreground hover:text-primary transition-colors underline-offset-2 hover:underline">
                   + عندك كود دعوة؟
                 </button>
                 {/* ديسكتوب فقط (CSS): كود الدعوة ظاهر دايماً جنب كلمة المرور */}
@@ -1087,7 +1091,7 @@ function SignupContent() {
                 </Field>
                 </>
               ) : (
-                <Field className="su-fld space-y-2.5" label="كود الدعوة (اختياري)">
+                <Field className="su-fld space-y-1.5 sm:space-y-2.5" label="كود الدعوة (اختياري)">
                   <Input type="text" placeholder="اكتب كود الدعوة" value={inviteCode}
                     onChange={(e: any) => setInviteCode(e.target.value)} disabled={loading} autoFocus />
                 </Field>
@@ -1102,10 +1106,10 @@ function SignupContent() {
                 {' '}— تجربة 14 يوم مجانية بدون بطاقة.
               </p>
 
-              {/* موبايل: الزر ثابت أسفل الشاشة (فوق الكيبورد) عشان محدّش يضيعه بالسكرول */}
-              <div className="su-cta su-span sticky bottom-0 z-10 -mx-4 border-t bg-card/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur max-lg:rounded-b-2xl sm:-mx-5 sm:px-5 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
+              {/* ديسكتوب: زر الإنشاء داخل الفورم (على الموبايل بيتعرض ثابت من البوابة تحت) */}
+              <div className="su-cta su-span max-lg:hidden">
               <Button type="submit" variant="gradient" size="lg"
-                className="w-full gap-2 !bg-none !bg-[#00c98b] hover:!bg-[#00b87e] !text-[#04261b] shadow-lg shadow-[#00c98b]/30 h-12 lg:h-10 text-sm font-bold"
+                className="w-full gap-2 !bg-none !bg-[#00c98b] hover:!bg-[#00b87e] !text-[#04261b] shadow-lg shadow-[#00c98b]/30 h-11 lg:h-10 text-sm font-bold"
                 disabled={loading}>
                 {loading
                   ? <><Loader2 className="size-4 animate-spin" />جاري الإنشاء...</>
@@ -1114,10 +1118,27 @@ function SignupContent() {
               </Button>
               </div>
             </form>
+            {/* موبايل: زر الإنشاء ثابت أسفل الشاشة دايماً (fixed في body — مش بينزل مع الصفحة) */}
+            {mounted && createPortal(
+              <div
+                className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/95 px-4 pt-2.5 shadow-[0_-10px_28px_-12px_rgba(0,60,40,0.25)] backdrop-blur lg:hidden"
+                style={{ paddingBottom: 'calc(0.6rem + env(safe-area-inset-bottom, 0px))' }}
+              >
+                <Button type="submit" form="su-form" variant="gradient" size="lg"
+                  className="w-full gap-2 !bg-none !bg-[#00c98b] hover:!bg-[#00b87e] !text-[#04261b] shadow-lg shadow-[#00c98b]/30 h-11 text-sm font-bold"
+                  disabled={loading}>
+                  {loading
+                    ? <><Loader2 className="size-4 animate-spin" />جاري الإنشاء...</>
+                    : <><ShieldCheck className="size-4" />إنشاء الحساب وبدء التجربة<ArrowRight className="size-4 rtl:rotate-180" /></>
+                  }
+                </Button>
+              </div>,
+              document.body,
+            )}
             </motion.div>
             )}
 
-            <p className="su-copy text-center text-[10px] text-muted-foreground/50">© 2026 نظام المحل</p>
+            <p className="su-copy max-sm:hidden text-center text-[10px] text-muted-foreground/50">© 2026 نظام المحل</p>
 
             </div>
           </div>

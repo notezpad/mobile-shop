@@ -65,7 +65,7 @@ export function ScreenshotsSection() {
   return (
     <section
       id="screenshots"
-      className="landing-light relative scroll-mt-24 border-y border-[#00573f]/12 py-8 sm:py-24"
+      className="landing-light relative scroll-mt-24 overflow-x-clip border-y border-[#00573f]/12 py-8 sm:py-24"
     >
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
@@ -119,7 +119,7 @@ export function ScreenshotsSection() {
         ) : (
         <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="w-full">
           <div className="flex justify-center">
-            <TabsList className="glass-pill grid h-auto w-full grid-cols-2 gap-1 rounded-xl p-1.5 sm:flex sm:w-auto sm:flex-wrap [&_[data-state=active]]:bg-[#00c98b]/12 [&_[data-state=active]]:text-[#0b2a20] [&_button]:text-[#5b7a6e]">
+            <TabsList className="glass-pill !grid h-auto !w-full !grid-cols-2 gap-1 rounded-xl p-1.5 sm:!flex sm:!w-auto sm:flex-wrap [&_[data-state=active]]:bg-[#00c98b]/12 [&_[data-state=active]]:text-[#0b2a20] [&_button]:text-[#5b7a6e]">
               {TABS.map((t) => {
                 const Icon = t.icon
                 return (
