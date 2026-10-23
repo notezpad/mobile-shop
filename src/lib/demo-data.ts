@@ -381,7 +381,7 @@ export function buildDemoPayload(opts: DemoOptions): DemoPayload {
 
 export type SeedResult =
   | { ok: true; counts: Record<string, number | boolean> }
-  | { ok: false; skipped: string }
+  | { ok: false; skipped: string; detail?: string }
 
 /** يزرع البيانات التجريبية. fail-open: أي خطأ يرجّع {ok:false} ومايرميش exception. */
 export async function seedDemoData(sql: Sql, opts: DemoOptions): Promise<SeedResult> {
@@ -392,7 +392,7 @@ export async function seedDemoData(sql: Sql, opts: DemoOptions): Promise<SeedRes
     return (rows[0]?.r ?? { ok: false, skipped: 'no_result' }) as SeedResult
   } catch (e) {
     console.error('[demo-data] seed failed (non-fatal):', e)
-    return { ok: false, skipped: 'error' }
+    return { ok: false, skipped: 'error', detail: String((e as Error)?.message ?? e).slice(0, 300) }
   }
 }
 

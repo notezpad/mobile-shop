@@ -86,7 +86,7 @@ export async function POST() {
     const msg = result.skipped === 'tenant_not_empty'
       ? 'المحل فيه بيانات بالفعل — البيانات التجريبية بتتحمّل على المحل الفاضي بس'
       : 'تعذّر تحميل البيانات التجريبية'
-    return NextResponse.json({ error: msg, reason: result.skipped }, { status: 409 })
+    return NextResponse.json({ error: msg, reason: result.skipped, detail: result.detail }, { status: 409 })
   }
   await purgeCaches(session.tenantId, session.branchId ?? null)
   return NextResponse.json(result)

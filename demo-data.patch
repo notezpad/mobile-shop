@@ -126,11 +126,11 @@
      orderBy: { createdAt: 'desc' },
      take,
      select: {
---- a/src/app/signup/page.tsx	2026-10-21 11:20:48.000000000 +0300
-+++ b/src/app/signup/page.tsx	2026-10-23 12:40:09.362762546 +0300
-@@ -800,7 +800,8 @@
+--- a/src/app/signup/page.tsx	2026-10-23 13:02:26.921594088 +0300
++++ b/src/app/signup/page.tsx	2026-10-23 13:02:26.970190766 +0300
+@@ -807,7 +807,8 @@
          } catch { /* التتبع لا يوقف التسجيل أبداً */ }
-         toast.success(`تم إنشاء محلك «${shopName.trim()}» — تجربة 14 يوم 🎉`)
+         toast.success(`تم إنشاء محلك «${shopName.trim()}» — تجربة 14 يوم`)
          try { sessionStorage.setItem('welcome_contact', JSON.stringify({ phone: normalizeEgyptPhoneClient(phone) ?? phone.trim(), email: email.trim().toLowerCase() })) } catch { /* ignore */ }
 -        router.push('/welcome')
 +        // 🎁 2026-10-23: مفيش شاشة «ضيف أول منتج» — المحل بيتفتح ببيانات تجريبية، فندخل لوحة التحكم على طول

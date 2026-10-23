@@ -79,7 +79,10 @@ export function DemoDataBanner() {
     try {
       const r = await fetch('/api/demo', { method: 'POST' })
       const j = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(j?.error || 'تعذّر التحميل')
+      if (!r.ok) {
+        if (j?.detail || j?.reason) console.error('[demo] seed failed:', j.reason, j.detail)
+        throw new Error(`${j?.error || 'تعذّر التحميل'}${j?.reason ? ` (${j.reason})` : ''}`)
+      }
       toast.success('تم تحميل بيانات تجريبية — استكشف النظام براحتك')
       setTimeout(finish, 600)
     } catch (e: any) {
