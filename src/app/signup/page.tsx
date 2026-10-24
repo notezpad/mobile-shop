@@ -324,9 +324,9 @@ function PlanStep({
   }
 
   return (
-    <div className="space-y-4 sm:space-y-5">
+    <div className="space-y-3 sm:space-y-5">
       {types.length > 1 && (
-        <section className="space-y-2.5" aria-labelledby="su-q-type">
+        <section className="space-y-2" aria-labelledby="su-q-type">
           <h2 id="su-q-type" className="text-[15px] font-extrabold text-foreground">إيه نوع محلك؟</h2>
           <div
             className={cn('grid gap-2.5', types.length > 2 ? 'grid-cols-3' : 'grid-cols-2')}
@@ -345,7 +345,7 @@ function PlanStep({
                   aria-checked={sel}
                   onClick={() => onPickType(t)}
                   className={cn(
-                    'relative flex min-h-[78px] flex-col items-center justify-center gap-1 rounded-2xl border-2 px-2 py-2 text-center sm:min-h-[104px] sm:gap-2 sm:py-3 transition-all duration-200 active:scale-[0.97]',
+                    'relative flex min-h-[66px] flex-col items-center justify-center gap-0.5 rounded-2xl border-2 px-2 py-1.5 text-center sm:min-h-[104px] sm:gap-2 sm:py-3 transition-all duration-200 active:scale-[0.97]',
                     sel
                       ? cn('border-transparent bg-gradient-to-br text-white', m.grad, m.glow)
                       : 'border-border bg-card text-foreground hover:border-[#00c98b]',
@@ -360,8 +360,8 @@ function PlanStep({
                   >
                     {sel && <Check className="size-3" strokeWidth={3.5} />}
                   </span>
-                  <span className={cn('grid size-10 place-items-center rounded-2xl sm:size-12', sel ? 'bg-black/15' : cn('bg-[#e3f9f0]', m.text))}>
-                    <Icon className="size-6" strokeWidth={1.9} />
+                  <span className={cn('grid size-8 place-items-center rounded-xl sm:size-12 sm:rounded-2xl', sel ? 'bg-black/15' : cn('bg-[#e3f9f0]', m.text))}>
+                    <Icon className="size-5 sm:size-6" strokeWidth={1.9} />
                   </span>
                   <span className="text-[13px] font-extrabold leading-tight">{m.label}</span>
                 </button>
@@ -371,9 +371,16 @@ function PlanStep({
         </section>
       )}
 
-      <section className="space-y-2.5" aria-labelledby="su-q-lvl">
+      <section className="space-y-2" aria-labelledby="su-q-lvl">
         <h2 id="su-q-lvl" className="text-[15px] font-extrabold text-foreground">اختار الباقة المناسبة</h2>
-        <div className={cn('grid gap-2.5 sm:gap-3', levels.length > 1 && 'grid-cols-2')}>
+        <div
+          className={cn(
+            // موبايل: سلايدر أفقي (كارت كبير + لمحة من اللي بعده) — من sm: شبكة عمودين زي ما كانت
+            levels.length > 1
+              ? 'flex snap-x snap-mandatory gap-2.5 overflow-x-auto overscroll-x-contain scroll-px-3 -mx-3 px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-3 sm:overflow-visible sm:px-0 sm:pb-0'
+              : 'grid gap-2.5 sm:gap-3',
+          )}
+        >
           {levels.map((e, i) => {
             const picked = chosen && e.code === current.code
             const feats = featsOf(e, i)
@@ -385,7 +392,8 @@ function PlanStep({
                 onClick={() => onChoose(e.code)}
                 aria-label={`${planLevel(e)} — ${priceNum(e.meta.price)} جنيه في الشهر — ابدأ التجربة المجانية`}
                 className={cn(
-                  'group flex min-w-0 flex-col gap-2.5 rounded-2xl border-2 p-3 text-right transition-all duration-200 active:scale-[0.98] sm:gap-3 sm:p-4',
+                  levels.length > 1 && 'max-sm:w-[84%] max-sm:shrink-0 max-sm:snap-start',
+                  'group flex min-w-0 flex-col gap-2 rounded-2xl border-2 p-3 text-right transition-all duration-200 active:scale-[0.98] sm:gap-3 sm:p-4',
                   picked
                     ? 'border-[#00c98b] bg-[#effcf7] ring-2 ring-[#00c98b]/30'
                     : 'border-border bg-card hover:border-[#00c98b] hover:shadow-md',
@@ -404,7 +412,7 @@ function PlanStep({
                   <span className="text-xs font-bold text-muted-foreground">جنيه / شهر</span>
                 </span>
                 {(limits.length > 0 || feats.length > 0) && (
-                  <ul className="space-y-1.5 text-[12px] leading-snug text-foreground/80 sm:text-[13px]">
+                  <ul className="space-y-1 text-[11.5px] leading-tight text-foreground/80 sm:space-y-1.5 sm:text-[13px] sm:leading-snug">
                     {limits.map((f) => (
                       <li key={'lim-' + f} className="flex items-start gap-1.5 font-extrabold text-foreground">
                         <Store className="mt-0.5 size-3.5 shrink-0 text-[#00946a]" aria-hidden />
@@ -419,7 +427,7 @@ function PlanStep({
                     ))}
                   </ul>
                 )}
-                <span className="mt-auto inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[#00c98b] text-sm font-extrabold text-[#04261b] shadow-md shadow-[#00c98b]/25 transition-colors group-hover:bg-[#00b87e]">
+                <span className="mt-auto inline-flex h-10 items-center justify-center gap-1.5 rounded-xl sm:h-11 bg-[#00c98b] text-sm font-extrabold text-[#04261b] shadow-md shadow-[#00c98b]/25 transition-colors group-hover:bg-[#00b87e]">
                   <span className="sm:hidden">ابدأ مجاناً</span>
                   <span className="max-sm:hidden">ابدأ التجربة المجانية</span>
                   <ArrowRight className="size-4 rtl:rotate-180" aria-hidden />
@@ -887,7 +895,7 @@ function SignupContent() {
       <style dangerouslySetInnerHTML={{ __html: SIGNUP_CSS }} />
 
       {/* ─── Form side ─── */}
-      <div className="su-side min-h-dvh lg:h-screen lg:overflow-y-auto flex items-start justify-center py-3 px-3 sm:px-4 sm:py-5 bg-[#f7fbf9]">
+      <div className="su-side min-h-dvh lg:h-screen lg:overflow-y-auto flex items-start justify-center py-2 px-3 sm:px-4 sm:py-5 bg-[#f7fbf9]">
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -898,7 +906,7 @@ function SignupContent() {
           <div className="su-card bg-card rounded-2xl border border-border shadow-lg shadow-black/5 overflow-clip">
 
             {/* الهيدر — شريط التذكرة (نفس أسلوب صفحة الدخول) */}
-            <header className="su-hd relative px-4 pt-4 pb-4 sm:px-5 sm:pt-5 bg-gradient-to-b from-[#e3f9f0] via-[#f1fcf8] to-card border-b-2 border-dashed border-[#00c98b]/35">
+            <header className="su-hd relative px-4 pt-3.5 pb-3.5 sm:px-5 sm:pt-5 sm:pb-4 bg-gradient-to-b from-[#e3f9f0] via-[#f1fcf8] to-card border-b-2 border-dashed border-[#00c98b]/35">
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-0"
@@ -928,9 +936,9 @@ function SignupContent() {
                   </Link>
                   <Link
                     href="/login"
-                    className="inline-flex items-center gap-1.5 rounded-full border border-[#00c98b]/35 bg-white/80 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-[#00c98b] hover:bg-white"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[#00c98b]/35 bg-white/80 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-[#00c98b] hover:bg-white"
                   >
-                    لديك حساب؟ <span className="font-extrabold text-[#00946a]">دخول</span>
+                    <span className="max-[380px]:hidden">لديك حساب؟</span> <span className="font-extrabold text-[#00946a]">دخول</span>
                   </Link>
                 </div>
 
@@ -957,7 +965,7 @@ function SignupContent() {
               </div>
             </header>
 
-            <div className={cn("su-body p-4 sm:p-5 space-y-3 sm:space-y-4", step === 2 && "max-lg:pb-24")}>
+            <div className={cn("su-body p-3 sm:p-5 space-y-2.5 sm:space-y-4", step === 2 && "max-lg:pb-24")}>
 
             <StepBar step={step} />
 
