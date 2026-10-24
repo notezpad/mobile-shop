@@ -246,6 +246,63 @@ function StepBar({ step }: { step: 1 | 2 }) {
   )
 }
 
+/** سلايدر أفقي لكروت الباقات على الموبايل: الكارت النشط واضح + نقاط تنقّل (من sm: بيرجع شبكة عمودين). */
+function PlanRail({ children, labels }: { children: React.ReactElement<{ className?: string }>[]; labels: string[] }) {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const [idx, setIdx] = React.useState(0)
+
+  const onScroll = React.useCallback(() => {
+    const el = ref.current
+    const first = el?.children[0] as HTMLElement | undefined
+    if (!el || !first) return
+    const step = first.offsetWidth + 10 // عرض الكارت + gap-2.5
+    // scrollLeft سالب في RTL → نستخدم القيمة المطلقة
+    setIdx(Math.max(0, Math.min(children.length - 1, Math.round(Math.abs(el.scrollLeft) / step))))
+  }, [children.length])
+
+  const goTo = (i: number) => {
+    const el = ref.current?.children[i] as HTMLElement | undefined
+    el?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' })
+  }
+
+  return (
+    <div>
+      <div
+        ref={ref}
+        onScroll={onScroll}
+        className="flex snap-x snap-mandatory gap-2.5 overflow-x-auto overscroll-x-contain scroll-px-3 -mx-3 px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-3 sm:overflow-visible sm:px-0 sm:pb-0"
+      >
+        {React.Children.map(children, (child, i) =>
+          React.cloneElement(child, {
+            className: cn(
+              child.props.className,
+              'max-sm:transition-all max-sm:duration-300',
+              i !== idx && 'max-sm:scale-[0.96] max-sm:opacity-70',
+            ),
+          }),
+        )}
+      </div>
+      {/* نقاط التنقل — موبايل فقط */}
+      <div className="mt-2 flex items-center justify-center gap-1.5 sm:hidden" role="tablist" aria-label="الباقات">
+        {labels.map((l, i) => (
+          <button
+            key={l}
+            type="button"
+            role="tab"
+            aria-selected={i === idx}
+            aria-label={l}
+            onClick={() => goTo(i)}
+            className={cn(
+              'h-1.5 rounded-full transition-all duration-300',
+              i === idx ? 'w-6 bg-[#00c98b]' : 'w-1.5 bg-foreground/25',
+            )}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /* ═══════════ الخطوة ١: شاشة اختيار النشاط + الباقة ═══════════
  * النشاط (مربعين) ثم الباقة (كارتين جنب بعض بالسعر والمميزات). الضغط على
  * أي كارت = اختيار + انتقال فوري لفورم التسجيل (الخطوة ٢). مفيش باقة
@@ -323,6 +380,61 @@ function PlanStep({
     return rows
   }
 
+  const cards = levels.map((e, i) => {
+              const picked = chosen && e.code === current.code
+              const feats = featsOf(e, i)
+              const limits = limitRows(e)
+              return (
+                <button
+                  key={e.code}
+                  type="button"
+                  onClick={() => onChoose(e.code)}
+                  aria-label={`${planLevel(e)} — ${priceNum(e.meta.price)} جنيه في الشهر — ابدأ التجربة المجانية`}
+                  className={cn(
+                    levels.length > 1 && 'max-sm:w-[84%] max-sm:shrink-0 max-sm:snap-start',
+                    'group flex min-w-0 flex-col gap-2 rounded-2xl border-2 p-3 text-right transition-all duration-200 active:scale-[0.98] sm:gap-3 sm:p-4',
+                    picked
+                      ? 'border-[#00c98b] bg-[#effcf7] ring-2 ring-[#00c98b]/30'
+                      : 'border-border bg-card hover:border-[#00c98b] hover:shadow-md',
+                  )}
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="text-base font-extrabold text-foreground">{planLevel(e)}</span>
+                    {picked && (
+                      <span className="grid size-5 place-items-center rounded-full bg-[#00c98b] text-white" aria-hidden>
+                        <Check className="size-3" strokeWidth={3.5} />
+                      </span>
+                    )}
+                  </span>
+                  <span className="flex items-baseline gap-1.5">
+                    <span className={cn('text-2xl font-black leading-none tabular-nums sm:text-3xl', tm.text)}>{priceNum(e.meta.price)}</span>
+                    <span className="text-xs font-bold text-muted-foreground">جنيه / شهر</span>
+                  </span>
+                  {(limits.length > 0 || feats.length > 0) && (
+                    <ul className="space-y-1 text-[11.5px] leading-tight text-foreground/80 sm:space-y-1.5 sm:text-[13px] sm:leading-snug">
+                      {limits.map((f) => (
+                        <li key={'lim-' + f} className="flex items-start gap-1.5 font-extrabold text-foreground">
+                          <Store className="mt-0.5 size-3.5 shrink-0 text-[#00946a]" aria-hidden />
+                          <span>{f}</span>
+                        </li>
+                      ))}
+                      {feats.map((f, fi) => (
+                        <li key={f} className={cn('flex items-start gap-1.5', fi >= 4 && 'max-sm:hidden')}>
+                          <Check className="mt-0.5 size-3.5 shrink-0 text-[#00946a]" strokeWidth={3} aria-hidden />
+                          <span>{f}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <span className="mt-auto inline-flex h-10 items-center justify-center gap-1.5 rounded-xl sm:h-11 bg-[#00c98b] text-sm font-extrabold text-[#04261b] shadow-md shadow-[#00c98b]/25 transition-colors group-hover:bg-[#00b87e]">
+                    <span className="sm:hidden">ابدأ مجاناً</span>
+                    <span className="max-sm:hidden">ابدأ التجربة المجانية</span>
+                    <ArrowRight className="size-4 rtl:rotate-180" aria-hidden />
+                  </span>
+                </button>
+              )
+            })
+
   return (
     <div className="space-y-3 sm:space-y-5">
       {types.length > 1 && (
@@ -373,69 +485,11 @@ function PlanStep({
 
       <section className="space-y-2" aria-labelledby="su-q-lvl">
         <h2 id="su-q-lvl" className="text-[15px] font-extrabold text-foreground">اختار الباقة المناسبة</h2>
-        <div
-          className={cn(
-            // موبايل: سلايدر أفقي (كارت كبير + لمحة من اللي بعده) — من sm: شبكة عمودين زي ما كانت
-            levels.length > 1
-              ? 'flex snap-x snap-mandatory gap-2.5 overflow-x-auto overscroll-x-contain scroll-px-3 -mx-3 px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-3 sm:overflow-visible sm:px-0 sm:pb-0'
-              : 'grid gap-2.5 sm:gap-3',
-          )}
-        >
-          {levels.map((e, i) => {
-            const picked = chosen && e.code === current.code
-            const feats = featsOf(e, i)
-            const limits = limitRows(e)
-            return (
-              <button
-                key={e.code}
-                type="button"
-                onClick={() => onChoose(e.code)}
-                aria-label={`${planLevel(e)} — ${priceNum(e.meta.price)} جنيه في الشهر — ابدأ التجربة المجانية`}
-                className={cn(
-                  levels.length > 1 && 'max-sm:w-[84%] max-sm:shrink-0 max-sm:snap-start',
-                  'group flex min-w-0 flex-col gap-2 rounded-2xl border-2 p-3 text-right transition-all duration-200 active:scale-[0.98] sm:gap-3 sm:p-4',
-                  picked
-                    ? 'border-[#00c98b] bg-[#effcf7] ring-2 ring-[#00c98b]/30'
-                    : 'border-border bg-card hover:border-[#00c98b] hover:shadow-md',
-                )}
-              >
-                <span className="flex items-center justify-between gap-2">
-                  <span className="text-base font-extrabold text-foreground">{planLevel(e)}</span>
-                  {picked && (
-                    <span className="grid size-5 place-items-center rounded-full bg-[#00c98b] text-white" aria-hidden>
-                      <Check className="size-3" strokeWidth={3.5} />
-                    </span>
-                  )}
-                </span>
-                <span className="flex items-baseline gap-1.5">
-                  <span className={cn('text-2xl font-black leading-none tabular-nums sm:text-3xl', tm.text)}>{priceNum(e.meta.price)}</span>
-                  <span className="text-xs font-bold text-muted-foreground">جنيه / شهر</span>
-                </span>
-                {(limits.length > 0 || feats.length > 0) && (
-                  <ul className="space-y-1 text-[11.5px] leading-tight text-foreground/80 sm:space-y-1.5 sm:text-[13px] sm:leading-snug">
-                    {limits.map((f) => (
-                      <li key={'lim-' + f} className="flex items-start gap-1.5 font-extrabold text-foreground">
-                        <Store className="mt-0.5 size-3.5 shrink-0 text-[#00946a]" aria-hidden />
-                        <span>{f}</span>
-                      </li>
-                    ))}
-                    {feats.map((f, fi) => (
-                      <li key={f} className={cn('flex items-start gap-1.5', fi >= 4 && 'max-sm:hidden')}>
-                        <Check className="mt-0.5 size-3.5 shrink-0 text-[#00946a]" strokeWidth={3} aria-hidden />
-                        <span>{f}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <span className="mt-auto inline-flex h-10 items-center justify-center gap-1.5 rounded-xl sm:h-11 bg-[#00c98b] text-sm font-extrabold text-[#04261b] shadow-md shadow-[#00c98b]/25 transition-colors group-hover:bg-[#00b87e]">
-                  <span className="sm:hidden">ابدأ مجاناً</span>
-                  <span className="max-sm:hidden">ابدأ التجربة المجانية</span>
-                  <ArrowRight className="size-4 rtl:rotate-180" aria-hidden />
-                </span>
-              </button>
-            )
-          })}
-        </div>
+        {levels.length > 1 ? (
+          <PlanRail labels={levels.map(planLevel)}>{cards}</PlanRail>
+        ) : (
+          <div className="grid gap-2.5 sm:gap-3">{cards}</div>
+        )}
       </section>
 
       <p className="text-center text-xs text-muted-foreground">14 يوم تجربة مجانية بكل المزايا — بدون بطاقة ائتمان</p>
