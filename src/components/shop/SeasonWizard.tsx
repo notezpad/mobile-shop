@@ -149,15 +149,15 @@ export function SeasonWizard({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="p-4 sm:max-w-xl sm:p-6">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl font-black">
+          <DialogTitle className="flex items-center gap-2 text-lg font-black sm:text-xl">
             <span className="flex size-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
               <Warehouse className="size-5" />
             </span>
             المواسم والمخزن الداخلي
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs leading-5 sm:text-sm">
             النقل بين العرض والمخزن الداخلي حركة موقع مش حركة مال — مفيش شراء ولا بيع ولا كاش
           </DialogDescription>
         </DialogHeader>
@@ -280,7 +280,7 @@ export function SeasonWizard({
                   </p>
                 )}
                 <Button
-                  className="w-full"
+                  className="h-auto min-h-10 w-full whitespace-normal py-2 text-center leading-snug"
                   size="lg"
                   disabled={closePreview.products === 0 || busy}
                   onClick={closeSeason}
@@ -300,7 +300,7 @@ export function SeasonWizard({
                   </p>
                 ) : (
                   <>
-                    <div className="max-h-[22rem] space-y-2 overflow-y-auto overscroll-contain rounded-2xl border bg-muted/30 p-2 [scrollbar-width:thin]">
+                    <div className="max-h-[50dvh] space-y-2 overflow-y-auto sm:max-h-[22rem] overscroll-contain rounded-2xl border bg-muted/30 p-1.5 [scrollbar-width:thin] sm:p-2">
                       {openItems.map((it) => {
                         const hasVariants = it.variantCount > 0
                         const value = Math.max(0, Math.min(Number(qtys[it.id]) || 0, it.warehouseQty))
@@ -311,7 +311,7 @@ export function SeasonWizard({
                           <div
                             key={it.id}
                             className={cn(
-                              'flex w-full items-center gap-3 rounded-xl border bg-background p-3 shadow-sm transition-colors',
+                              'flex w-full flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-background p-2.5 shadow-sm transition-colors sm:flex-nowrap sm:p-3',
                               value > 0 ? 'border-brand-600/40' : 'border-border opacity-80'
                             )}
                           >
@@ -319,7 +319,7 @@ export function SeasonWizard({
                               <PackageOpen className="size-5" />
                             </span>
 
-                            <div className="min-w-0 flex-1 space-y-1">
+                            <div className="min-w-0 flex-1 basis-0 space-y-1 max-sm:basis-[calc(100%-3.5rem)]">
                               <p className="truncate text-sm font-extrabold leading-tight" title={it.name}>
                                 {it.name}
                               </p>
@@ -338,11 +338,11 @@ export function SeasonWizard({
                             </div>
 
                             {hasVariants ? (
-                              <div className="flex h-10 min-w-16 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 px-3 text-sm font-black tabular-nums text-emerald-700 dark:text-emerald-400">
+                              <div className="flex h-10 min-w-16 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 px-3 max-sm:w-full text-sm font-black tabular-nums text-emerald-700 dark:text-emerald-400">
                                 {num(it.warehouseQty)}
                               </div>
                             ) : (
-                              <div className="flex shrink-0 flex-col items-center gap-1">
+                              <div className="flex shrink-0 items-center gap-2 max-sm:w-full max-sm:justify-between sm:flex-col sm:gap-1">
                                 <div className="flex items-center overflow-hidden rounded-lg border bg-background">
                                   <button
                                     type="button"
@@ -388,7 +388,7 @@ export function SeasonWizard({
                         )
                       })}
                     </div>
-                    <Button className="w-full" size="lg" disabled={busy || openSelectedPieces <= 0} onClick={openSeason}>
+                    <Button className="h-auto min-h-10 w-full whitespace-normal py-2 text-center leading-snug" size="lg" disabled={busy || openSelectedPieces <= 0} onClick={openSeason}>
                       <PackageOpen className="size-4" />
                       إرجاع {num(openSelectedPieces)} قطعة للعرض
                     </Button>

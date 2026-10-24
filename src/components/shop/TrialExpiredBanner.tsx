@@ -135,10 +135,10 @@ export function TrialExpiredBanner() {
       {/* لمعة علوية رفيعة — إحساس جودة بدون مبالغة */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/30" />
 
-      <div className="flex items-center gap-3 p-3">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 p-2.5 sm:flex-nowrap sm:gap-3 sm:p-3">
         {/* Icon — بنبضة خفيفة في حالة الانتهاء لجذب الانتباه بهدوء */}
         <div
-          className={`flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/15 ${
+          className={`flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/15 sm:size-10 ${
             isExpired ? 'animate-pulse' : ''
           }`}
         >
@@ -146,8 +146,8 @@ export function TrialExpiredBanner() {
         </div>
 
         {/* Text */}
-        <div className="min-w-0 flex-1 leading-tight">
-          <p className="truncate text-[13px] font-extrabold sm:text-sm">
+        <div className="min-w-0 flex-1 basis-0 leading-snug sm:leading-tight">
+          <p className="text-[13px] font-extrabold sm:truncate sm:text-sm">
             {isExpired ? (
               'انتهت فترة التجربة المجانية'
             ) : subscription.inGrace ? (
@@ -160,7 +160,7 @@ export function TrialExpiredBanner() {
               </>
             )}
           </p>
-          <p className="truncate text-[11px] font-medium text-white/85 sm:text-xs">
+          <p className="mt-0.5 line-clamp-2 text-[11px] font-medium text-white/85 sm:mt-0 sm:truncate sm:text-xs">
             {isExpired ? (
               <>
                 النظام لا يزال متاحاً — اشترك الآن للمتابعة بدون انقطاع
@@ -179,7 +179,7 @@ export function TrialExpiredBanner() {
         {/* CTA — primary */}
         <Link
           href="/pricing"
-          className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-white px-3 text-xs font-extrabold shadow-sm transition-all hover:brightness-95 active:scale-95 sm:px-4 sm:text-sm ${
+          className={`inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-white px-3 text-xs font-extrabold max-sm:order-last max-sm:w-full shadow-sm transition-all hover:brightness-95 active:scale-95 sm:px-4 sm:text-sm ${
             isExpired
               ? 'text-red-700 shadow-red-950/20'
               : 'text-amber-700 shadow-amber-950/20'
@@ -188,14 +188,12 @@ export function TrialExpiredBanner() {
           {isExpired ? (
             <>
               <CreditCard className="size-4" />
-              <span className="hidden sm:inline">اشترك الآن</span>
-              <span className="sm:hidden">اشترك</span>
+              <span>اشترك الآن</span>
             </>
           ) : (
             <>
               <Sparkles className="size-4" />
-              <span className="hidden sm:inline">جدّد الآن</span>
-              <span className="sm:hidden">جدّد</span>
+              <span>جدّد الآن</span>
             </>
           )}
         </Link>
@@ -205,7 +203,7 @@ export function TrialExpiredBanner() {
           <button
             onClick={handleDismiss}
             aria-label="إغلاق التنبيه"
-            className="flex size-8 shrink-0 items-center justify-center rounded-xl text-white/80 transition-colors hover:bg-white/20 hover:text-white active:scale-90"
+            className="flex size-7 shrink-0 items-center justify-center rounded-xl text-white/80 sm:size-8 transition-colors hover:bg-white/20 hover:text-white active:scale-90"
           >
             <X className="size-4" />
           </button>

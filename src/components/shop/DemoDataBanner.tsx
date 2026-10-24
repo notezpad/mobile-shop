@@ -101,19 +101,19 @@ export function DemoDataBanner() {
     try { if (!status!.active) localStorage.setItem(OFFER_KEY + tenantId, '1') } catch { /* ignore */ }
   }
 
-  const card = 'pointer-events-auto flex w-full max-w-xl items-center gap-3 rounded-2xl border bg-card/95 p-3 shadow-lg backdrop-blur-md'
+  const card = 'pointer-events-auto flex w-full max-w-xl flex-wrap items-center gap-x-2.5 gap-y-2 rounded-2xl border bg-card/95 p-2.5 shadow-lg backdrop-blur-md sm:flex-nowrap sm:gap-3 sm:p-3'
 
   if (status.active) {
     return (
       <div className={card} role="status">
         <FlaskConical className="size-5 shrink-0 text-violet-500" />
-        <p className="min-w-0 flex-1 text-xs leading-5 text-muted-foreground">
+        <p className="min-w-0 flex-1 basis-0 text-xs leading-5 text-muted-foreground">
           <b className="text-foreground">بتشوف بيانات تجريبية</b> — جرّب النظام براحتك، ولما تخلص امسحها وابدأ شغلك الحقيقي.
         </p>
-        <Button size="sm" variant="outline" disabled={busy} onClick={purge}>
+        <Button size="sm" variant="outline" className="whitespace-nowrap max-sm:order-last max-sm:w-full" disabled={busy} onClick={purge}>
           {busy ? <Loader2 className="size-4 animate-spin" /> : 'امسحها'}
         </Button>
-        <button type="button" aria-label="إغلاق" className="text-muted-foreground" onClick={closeForSession}>
+        <button type="button" aria-label="إغلاق" className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted" onClick={closeForSession}>
           <X className="size-4" />
         </button>
       </div>
@@ -124,13 +124,13 @@ export function DemoDataBanner() {
     return (
       <div className={card} role="status">
         <FlaskConical className="size-5 shrink-0 text-violet-500" />
-        <p className="min-w-0 flex-1 text-xs leading-5 text-muted-foreground">
+        <p className="min-w-0 flex-1 basis-0 text-xs leading-5 text-muted-foreground">
           <b className="text-foreground">محلك لسه فاضي.</b> عايز تجرّب النظام ببيانات تجريبية (منتجات وفواتير وعملاء)؟ تقدر تمسحها بضغطة.
         </p>
-        <Button size="sm" disabled={busy} onClick={seed}>
+        <Button size="sm" className="whitespace-nowrap max-sm:order-last max-sm:w-full" disabled={busy} onClick={seed}>
           {busy ? <Loader2 className="size-4 animate-spin" /> : 'حمّل بيانات تجريبية'}
         </Button>
-        <button type="button" aria-label="لا شكراً" className="text-muted-foreground" onClick={dismiss}>
+        <button type="button" aria-label="لا شكراً" className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted" onClick={dismiss}>
           <X className="size-4" />
         </button>
       </div>

@@ -342,8 +342,8 @@ export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
             <Wand2 className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-base font-extrabold sm:text-lg">الاستيراد الذكي — المنتجات الافتتاحية من Excel</h2>
-            <p className="truncate text-xs text-muted-foreground sm:text-[13px]">
+            <h2 className="text-[15px] font-extrabold leading-snug sm:truncate sm:text-lg">الاستيراد الذكي — المنتجات الافتتاحية من Excel</h2>
+            <p className="text-[11px] leading-snug text-muted-foreground sm:truncate sm:text-[13px]">
               ارفع شيت المنتجات القديمة — النظام بيفهم الأعمدة لوحده
             </p>
           </div>
@@ -578,7 +578,7 @@ export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
           {step === 3 && analysis && (
             <div className="flex min-h-0 flex-1 flex-col gap-3">
               {/* عدادات الحالة (بتشتغل كفلاتر) */}
-              <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-5">
+              <div className="grid shrink-0 grid-cols-2 gap-2 max-sm:[&>button:last-child]:col-span-2 sm:grid-cols-5">
                 <StatusCard n={stats!.ok} label="سليم" cls="text-emerald-700 bg-emerald-50 border-emerald-200" onClick={() => setFilter('ok')} active={filter === 'ok'} />
                 <StatusCard n={stats!.fixed} label="هيتصلحوا تلقائياً" cls="text-amber-700 bg-amber-50 border-amber-200" onClick={() => setFilter('fixed')} active={filter === 'fixed'} />
                 <StatusCard n={stats!.warn} label="تنبيهات" cls="text-orange-700 bg-orange-50 border-orange-200" onClick={() => setFilter('warn')} active={filter === 'warn'} />
@@ -732,7 +732,7 @@ export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
 
         {/* التذييل — أزرار التنقل */}
         {step < 4 && (
-          <div className="flex items-center justify-between gap-2 border-t bg-muted/30 px-4 py-3 sm:px-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-4 py-3 sm:flex-nowrap sm:px-5">
             <Button variant="outline" onClick={() => (step === 1 ? close(false) : setStep(step - 1))} disabled={busy || committing} className="h-10">
               {step === 1 ? 'إلغاء' : 'السابق'}
             </Button>
@@ -743,12 +743,12 @@ export function ProductImportWizard({ open, onOpenChange, onImported }: Props) {
                 </span>
               )}
               {step === 2 ? (
-                <Button onClick={() => setStep(3)} disabled={!canProceed || busy} className="h-10 min-w-36">
+                <Button onClick={() => setStep(3)} disabled={!canProceed || busy} className="h-10 min-w-32 sm:min-w-36">
                   {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
                   راجع البيانات
                 </Button>
               ) : step === 3 ? (
-                <Button onClick={commit} disabled={committing || importableCount === 0} className="h-10 min-w-40">
+                <Button onClick={commit} disabled={committing || importableCount === 0} className="h-10 min-w-36 sm:min-w-40">
                   {committing ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
                   تنفيذ الاستيراد ({importableCount})
                 </Button>

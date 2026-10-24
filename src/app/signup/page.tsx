@@ -536,8 +536,17 @@ function PlanSummary({ entry, onBack, error }: { entry: PlanEntry; onBack: () =>
 }
 
 const SIGNUP_CSS = `
-/* علامة "حقل مطلوب": نقطة خضراء صغيرة بدل النجمة الحمراء (كود الدعوة الاختياري مستثنى) */
-.su-fld:not(.su-opt) label::after{content:"";display:inline-block;width:5px;height:5px;margin-inline-start:6px;border-radius:9999px;background:#00c98b;vertical-align:middle;position:relative;top:-1px}
+/* علامة "حقل مطلوب": نقطة خضراء بهالة ناعمة، وبتتحول لعلامة ✓ أول ما الحقل يتملّى صح (كود الدعوة الاختياري مستثنى) */
+.su-fld:not(.su-opt) label{display:inline-flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.01em;transition:color .2s ease}
+.su-fld:not(.su-opt):focus-within label{color:#00a574}
+.su-fld:not(.su-opt) label::after{content:"";flex-shrink:0;display:inline-grid;place-items:center;width:6px;height:6px;border-radius:9999px;
+  background:radial-gradient(circle at 30% 30%,#6af2c4,#00c98b 60%,#00a574);
+  box-shadow:0 0 0 3px rgba(0,201,139,.16);
+  font:800 9px/1 system-ui,sans-serif;color:#fff;
+  transition:width .25s cubic-bezier(.34,1.56,.64,1),height .25s cubic-bezier(.34,1.56,.64,1),box-shadow .25s ease}
+.su-fld:not(.su-opt):focus-within label::after{box-shadow:0 0 0 4px rgba(0,201,139,.28)}
+.su-fld:not(.su-opt):has(input:not(:placeholder-shown):valid) label::after{content:"\\2713";width:15px;height:15px;box-shadow:0 2px 6px -1px rgba(0,201,139,.55)}
+@media (prefers-reduced-motion:reduce){.su-fld label,.su-fld label::after{transition:none !important}}
 .nz-trial-badge{display:none}
 @media (max-width:639.98px){
 .nz-trial-badge{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;
@@ -548,6 +557,9 @@ const SIGNUP_CSS = `
   transform:rotate(-2deg)}
 }
 .su-side input[data-slot="input"]:focus-visible{border-color:#00c98b !important;box-shadow:0 0 0 3px rgba(0,201,139,.25) !important}
+/* حجم الـ placeholder: أصغر من النص المكتوب (16px بتفضل عشان iOS ما يعملش zoom) */
+.su-side input::placeholder,.su-side textarea::placeholder{font-size:14px;font-weight:400;opacity:.6}
+@media (min-width:640px){.su-side input::placeholder,.su-side textarea::placeholder{font-size:13.5px}}
 .su-side input:-webkit-autofill,
 .su-side input:-webkit-autofill:hover,
 .su-side input:-webkit-autofill:focus{
@@ -1021,7 +1033,7 @@ function SignupContent() {
                     href="/login"
                     className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[#00c98b]/35 bg-white/80 px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-[#00c98b] hover:bg-white"
                   >
-                    <span className="max-[380px]:hidden">لديك حساب؟</span> <span className="font-extrabold text-[#00946a]">دخول</span>
+                    <span className="max-[380px]:hidden">لديك حساب؟</span> <span className="font-extrabold text-[#00946a]">تسجيل دخول</span>
                   </Link>
                 </div>
 
