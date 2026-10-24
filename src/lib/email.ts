@@ -14,7 +14,7 @@ import { SITE_URL, SITE_NAME, SITE_NAME_AR, SUPPORT_EMAIL, WHATSAPP } from './si
 const DEFAULT_FROM = 'Nezam POS <noreply@mail.nezampos.com>'
 const DAILY_CAP = 90 // الخطة المجانية = 100/يوم (هامش أمان 10)
 const LOW_PRIORITY_CAP = 60
-const HIGH_PRIORITY_KINDS = new Set(['renewal', 'expired'])
+const HIGH_PRIORITY_KINDS = new Set(['renewal', 'expired', 'password-reset'])
 const SEND_TIMEOUT_MS = 10_000
 const REPLY_TO_FALLBACK = SUPPORT_EMAIL
 
@@ -47,6 +47,11 @@ const KIND_STYLE: Record<
     from: '#fbbf24', via: '#f59e0b', to: '#b45309', solid: '#d97706', dark: '#92400e',
     cta: 'جدّد الاشتراك الآن', path: '/settings',
   },
+  'password-reset': {
+    icon: '🔑', title: 'استعادة كلمة المرور', subtitle: 'اضغط على الزر وعيّن كلمة مرور جديدة',
+    from: '#34d399', via: '#10b981', to: '#047857', solid: '#059669', dark: '#065f46',
+    cta: 'تعيين كلمة مرور جديدة', path: '/forgot-password',
+  },
   expired: {
     icon: '🚨', title: 'اشتراكك انتهى', subtitle: 'جدّد عشان ترجع تستخدم النظام فوراً',
     from: '#f87171', via: '#ef4444', to: '#b91c1c', solid: '#dc2626', dark: '#991b1b',
@@ -72,7 +77,7 @@ function detailRows(vars: EmailVars | undefined): { label: string; value: string
   return rows
 }
 
-function toHtml(body: string, kind: EmailKind, subject: string, vars?: EmailVars): string {
+function toHtml(body: string, kind: EmailKind, subject: string, vars?: EmailVars, ctaUrlOverride?: string): string {
   const style = KIND_STYLE[kind as string] ?? DEFAULT_STYLE
   // زيادة حجم الخط، سماكة الخط، والمسافات بين السطور
   const paras = esc(body)
@@ -80,7 +85,7 @@ function toHtml(body: string, kind: EmailKind, subject: string, vars?: EmailVars
     .map((p) => `<p style="margin:0 0 22px 0;font-size:17px;line-height:1.9;color:#1e293b;font-weight:500;">${p.replace(/\n/g, '<br>')}</p>`)
     .join('')
   const preheader = body.replace(/\s+/g, ' ').trim().slice(0, 110)
-  const ctaUrl = `${SITE_URL}${style.path}`
+  const ctaUrl = ctaUrlOverride ? esc(ctaUrlOverride) : `${SITE_URL}${style.path}`
   const year = new Date().getFullYear()
   const rows = detailRows(vars)
 
@@ -215,7 +220,7 @@ async function logEmail(
 
 export async function sendEmail(
   sql: Sql,
-  opts: { to: string; subject: string; text: string; kind: string; tenantId?: string | null; replyTo?: string },
+  opts: { to: string; subject: string; text: string; kind: string; tenantId?: string | null; replyTo?: string; ctaUrl?: string },
 ): Promise<SendResult> {
   try {
     const key = readEnv('RESEND_API_KEY')
@@ -245,8 +250,9 @@ export async function sendEmail(
           from: readEnv('EMAIL_FROM') || DEFAULT_FROM,
           to: [to],
           subject: opts.subject.replace(/[\r\n]+/g, ' ').trim().slice(0, 200),
-          text: opts.text,
-          html: toHtml(opts.text, opts.kind, opts.subject),
+          // النسخة النصية بتشيل الرابط صراحةً (للعملاء اللي مابيعرضوش HTML)
+          text: opts.ctaUrl ? `${opts.text}\n\n${opts.ctaUrl}` : opts.text,
+          html: toHtml(opts.text, opts.kind, opts.subject, undefined, opts.ctaUrl),
           reply_to: opts.replyTo || REPLY_TO_FALLBACK,
         }),
       })

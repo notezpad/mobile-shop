@@ -1031,6 +1031,13 @@ export function ProductsView() {
             className="overflow-hidden rounded-2xl border bg-card shadow-sm"
           >
             {/* ── حالة المواسم المقفولة ── */}
+            {bothClosed && (
+              <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2 text-xs font-extrabold text-muted-foreground">
+                <Lock className="size-3.5 shrink-0" />
+                الموسمان مقفولان — المعروض في نقطة البيع: طوال السنة بس
+              </div>
+            )}
+            <div className={cn(bothClosed && 'sm:grid sm:grid-cols-2 sm:[&>div:first-child]:border-e')}>
             {closed.map((cs) => {
               const stat = seasonState!.seasons[cs] ?? { products: 0, pieces: 0, value: 0 }
               const isSummer = cs === 'SUMMER'
@@ -1066,9 +1073,11 @@ export function ProductsView() {
                     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-extrabold">
                       <Lock className="size-3.5 text-muted-foreground" />
                       موسم {isSummer ? 'الصيف' : 'الشتاء'} مقفول
-                      <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-bold text-muted-foreground">
-                        {shown}
-                      </span>
+                      {!bothClosed && (
+                        <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-bold text-muted-foreground">
+                          {shown}
+                        </span>
+                      )}
                     </p>
                     <p className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
                       <span className="rounded-md bg-background px-1.5 py-0.5 ring-1 ring-border">
@@ -1109,6 +1118,7 @@ export function ProductsView() {
                 </div>
               )
             })}
+            </div>
 
             {/* ── فلاتر الموقع والموسم ── */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 bg-muted/30 p-2.5">

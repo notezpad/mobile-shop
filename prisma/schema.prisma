@@ -220,6 +220,7 @@ model User {
 
   tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   branch Branch? @relation(fields: [branchId], references: [id])
+  passwordResetTokens PasswordResetToken[]
 
   @@index([branchId])
 }
@@ -1017,6 +1018,20 @@ model LoginAttempt {
   createdAt DateTime @default(now())
 
   @@index([keyHash, createdAt])
+}
+
+// 🔑 2026-10-24: توكنات استعادة كلمة المرور — بنخزّن SHA-256 للتوكن بس، صلاحية 30 دقيقة، مرة واحدة
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, usedAt])
 }
 
 // سجل نشاط الأدمن (Audit Log) — للقراءة فقط من الواجهة، ما فيش تعديل/حذف

@@ -803,14 +803,20 @@
    unreliable for the document scrollbar because the html element is
    rarely the direct hover target (its children are).
 */
-html {
-  scrollbar-width: auto;
-  scrollbar-color: color-mix(in oklab, var(--scroll-accent, var(--foreground)) 33%, transparent) transparent;
-}
-/* ⚡ Dark mode scrollbar — lighter thumb for dark background */
-.dark html,
-html:has(.dark) {
-  scrollbar-color: color-mix(in oklab, var(--scroll-accent, var(--foreground)) 30%, transparent) transparent;
+/* 🎨 2026-10-24: كروم/إيدج (121+) بيتجاهل ::-webkit-scrollbar بالكامل لو
+   scrollbar-width/scrollbar-color متحددين → كان بيرسم الشريط الأصلي بأسهم ▲▼
+   وإبهام غامق وسميك. فالخصائص القياسية بقت للمتصفحات اللي ملهاش
+   ::-webkit-scrollbar (Firefox) بس، وكروم/سفاري بياخدوا التصميم المخصص تحت. */
+@supports not selector(::-webkit-scrollbar) {
+  html {
+    scrollbar-width: auto;
+    scrollbar-color: color-mix(in oklab, var(--scroll-accent, var(--foreground)) 33%, transparent) transparent;
+  }
+  /* ⚡ Dark mode scrollbar — lighter thumb for dark background */
+  .dark html,
+  html:has(.dark) {
+    scrollbar-color: color-mix(in oklab, var(--scroll-accent, var(--foreground)) 30%, transparent) transparent;
+  }
 }
 .dark html::-webkit-scrollbar-thumb,
 html:has(.dark)::-webkit-scrollbar-thumb {
@@ -843,15 +849,15 @@ html::-webkit-scrollbar-thumb {
 html::-webkit-scrollbar-thumb:hover {
   background-image: linear-gradient(
     180deg,
-    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 60%, transparent),
-    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 75%, transparent)
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 38%, transparent),
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 46%, transparent)
   );
 }
 html::-webkit-scrollbar-thumb:active {
   background-image: linear-gradient(
     180deg,
-    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 60%, transparent),
-    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 75%, transparent)
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 38%, transparent),
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 46%, transparent)
   );
 }
 
@@ -860,6 +866,7 @@ html::-webkit-scrollbar-thumb:active {
    them. Unlayered, this `transition` shorthand silently kills every
    Tailwind transition in the app (unlayered > @layer in the cascade). */
 @layer base {
+  @supports not selector(::-webkit-scrollbar) {
   * {
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
@@ -884,6 +891,7 @@ html::-webkit-scrollbar-thumb:active {
   .dark *:focus-within {
     scrollbar-color: color-mix(in oklab, var(--scroll-accent, var(--foreground)) 21%, transparent) transparent;
   }
+  } /* /@supports not selector(::-webkit-scrollbar) */
 }
 
 /* ⚡ PERF FIX v8 (2026-10-06): دايلوجات لحظية على الجوال.
@@ -915,9 +923,16 @@ html::-webkit-scrollbar-thumb:active {
 }
 
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   background: transparent;
+}
+/* بدون أسهم ▲▼ */
+*::-webkit-scrollbar-button,
+html::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }
 *::-webkit-scrollbar-track {
   background: transparent;
@@ -943,15 +958,15 @@ html::-webkit-scrollbar-thumb:active {
 *:hover::-webkit-scrollbar-thumb:hover {
   background-image: linear-gradient(
     180deg,
-    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 60%, transparent),
-    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 75%, transparent)
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 38%, transparent),
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 46%, transparent)
   );
 }
 *:hover::-webkit-scrollbar-thumb:active {
   background-image: linear-gradient(
     180deg,
-    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 60%, transparent),
-    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 75%, transparent)
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 38%, transparent),
+    color-mix(in oklab, var(--scroll-accent, var(--foreground)) 46%, transparent)
   );
 }
 *::-webkit-scrollbar-corner {

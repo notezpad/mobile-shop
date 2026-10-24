@@ -243,7 +243,7 @@ export default function LoginPage() {
 
             {/* Form */}
             <form onSubmit={handleSubmit} noValidate className="space-y-3 sm:space-y-4">
-              <Field label="البريد الإلكتروني" required className="space-y-1.5 sm:space-y-2.5">
+              <Field label="البريد الإلكتروني" className="space-y-1.5 sm:space-y-2.5">
                 <Input
                   type="email" placeholder="name@example.com"
                   icon={<Mail className="size-4" />}
@@ -253,7 +253,7 @@ export default function LoginPage() {
                 />
               </Field>
 
-              <Field label="كلمة المرور" required className="space-y-1.5 sm:space-y-2.5">
+              <Field label="كلمة المرور" className="space-y-1.5 sm:space-y-2.5">
                 <div className="relative">
                   <Input
                     type={showPass ? "text" : "password"} placeholder="••••••••"
@@ -287,7 +287,7 @@ export default function LoginPage() {
                   <Label className="text-xs font-normal cursor-pointer text-muted-foreground">تذكّرني</Label>
                 </label>
                 <Link href="/forgot-password"
-                  className="text-xs text-muted-foreground hover:text-[#00946a] transition-colors hover:underline">
+                  className="text-xs font-bold text-[#00946a] transition-colors hover:text-[#00694c] hover:underline">
                   نسيت كلمة المرور؟
                 </Link>
               </div>
@@ -320,7 +320,7 @@ export default function LoginPage() {
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-foreground">إنشاء حساب جديد</p>
-                  <p className="text-[11px] text-muted-foreground">جرّب 14 يوم مجاناً بدون بطاقة ائتمان</p>
+                  <p className="text-[11px] leading-snug text-muted-foreground text-balance">جرّب 14 يوم مجاناً بدون بطاقة ائتمان</p>
                 </div>
                 <ArrowRight className="size-4 shrink-0 text-[#00946a] rtl:rotate-180 transition-transform rtl:group-hover:-translate-x-1" />
               </div>
