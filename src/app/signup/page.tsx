@@ -283,7 +283,7 @@ function PlanRail({ children, labels }: { children: React.ReactElement<{ classNa
         )}
       </div>
       {/* نقاط التنقل — موبايل فقط */}
-      <div className="mt-2 flex items-center justify-center gap-1.5 sm:hidden" role="tablist" aria-label="الباقات">
+      <div className="mt-1.5 flex items-center justify-center gap-1.5 sm:hidden" role="tablist" aria-label="الباقات">
         {labels.map((l, i) => (
           <button
             key={l}
@@ -392,7 +392,7 @@ function PlanStep({
                   aria-label={`${planLevel(e)} — ${priceNum(e.meta.price)} جنيه في الشهر — ابدأ التجربة المجانية`}
                   className={cn(
                     levels.length > 1 && 'max-sm:w-[84%] max-sm:shrink-0 max-sm:snap-start',
-                    'group flex min-w-0 flex-col gap-2 rounded-2xl border-2 p-3 text-right transition-all duration-200 active:scale-[0.98] sm:gap-3 sm:p-4',
+                    'group flex min-w-0 flex-col gap-1.5 rounded-2xl border-2 p-2.5 text-right transition-all duration-200 active:scale-[0.98] sm:gap-3 sm:p-4',
                     picked
                       ? 'border-[#00c98b] bg-[#effcf7] ring-2 ring-[#00c98b]/30'
                       : 'border-border bg-card hover:border-[#00c98b] hover:shadow-md',
@@ -407,11 +407,11 @@ function PlanStep({
                     )}
                   </span>
                   <span className="flex items-baseline gap-1.5">
-                    <span className={cn('text-2xl font-black leading-none tabular-nums sm:text-3xl', tm.text)}>{priceNum(e.meta.price)}</span>
+                    <span className={cn('text-[1.4rem] font-black leading-none tabular-nums sm:text-3xl', tm.text)}>{priceNum(e.meta.price)}</span>
                     <span className="text-xs font-bold text-muted-foreground">جنيه / شهر</span>
                   </span>
                   {(limits.length > 0 || feats.length > 0) && (
-                    <ul className="space-y-1 text-[11.5px] leading-tight text-foreground/80 sm:space-y-1.5 sm:text-[13px] sm:leading-snug">
+                    <ul className="space-y-0.5 text-[11.5px] leading-tight text-foreground/80 sm:space-y-1.5 sm:text-[13px] sm:leading-snug">
                       {limits.map((f) => (
                         <li key={'lim-' + f} className="flex items-start gap-1.5 font-extrabold text-foreground">
                           <Store className="mt-0.5 size-3.5 shrink-0 text-[#00946a]" aria-hidden />
@@ -426,7 +426,7 @@ function PlanStep({
                       ))}
                     </ul>
                   )}
-                  <span className="mt-auto inline-flex h-10 items-center justify-center gap-1.5 rounded-xl sm:h-11 bg-[#00c98b] text-sm font-extrabold text-[#04261b] shadow-md shadow-[#00c98b]/25 transition-colors group-hover:bg-[#00b87e]">
+                  <span className="mt-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-xl sm:h-11 bg-[#00c98b] text-sm font-extrabold text-[#04261b] shadow-md shadow-[#00c98b]/25 transition-colors group-hover:bg-[#00b87e]">
                     <span className="sm:hidden">ابدأ مجاناً</span>
                     <span className="max-sm:hidden">ابدأ التجربة المجانية</span>
                     <ArrowRight className="size-4 rtl:rotate-180" aria-hidden />
@@ -436,10 +436,10 @@ function PlanStep({
             })
 
   return (
-    <div className="space-y-3 sm:space-y-5">
+    <div className="space-y-2.5 sm:space-y-5">
       {types.length > 1 && (
         <section className="space-y-2" aria-labelledby="su-q-type">
-          <h2 id="su-q-type" className="text-[15px] font-extrabold text-foreground">إيه نوع محلك؟</h2>
+          <h2 id="su-q-type" className="text-sm font-extrabold text-foreground sm:text-[15px]">إيه نوع محلك؟</h2>
           <div
             className={cn('grid gap-2.5', types.length > 2 ? 'grid-cols-3' : 'grid-cols-2')}
             role="radiogroup"
@@ -457,7 +457,7 @@ function PlanStep({
                   aria-checked={sel}
                   onClick={() => onPickType(t)}
                   className={cn(
-                    'relative flex min-h-[66px] flex-col items-center justify-center gap-0.5 rounded-2xl border-2 px-2 py-1.5 text-center sm:min-h-[104px] sm:gap-2 sm:py-3 transition-all duration-200 active:scale-[0.97]',
+                    'relative flex min-h-[54px] flex-col items-center justify-center gap-0.5 rounded-2xl border-2 px-2 py-1 text-center sm:min-h-[104px] sm:gap-2 sm:py-3 transition-all duration-200 active:scale-[0.97]',
                     sel
                       ? cn('border-transparent bg-gradient-to-br text-white', m.grad, m.glow)
                       : 'border-border bg-card text-foreground hover:border-[#00c98b]',
@@ -472,8 +472,8 @@ function PlanStep({
                   >
                     {sel && <Check className="size-3" strokeWidth={3.5} />}
                   </span>
-                  <span className={cn('grid size-8 place-items-center rounded-xl sm:size-12 sm:rounded-2xl', sel ? 'bg-black/15' : cn('bg-[#e3f9f0]', m.text))}>
-                    <Icon className="size-5 sm:size-6" strokeWidth={1.9} />
+                  <span className={cn('grid size-7 place-items-center rounded-lg sm:size-12 sm:rounded-2xl', sel ? 'bg-black/15' : cn('bg-[#e3f9f0]', m.text))}>
+                    <Icon className="size-4 sm:size-6" strokeWidth={1.9} />
                   </span>
                   <span className="text-[13px] font-extrabold leading-tight">{m.label}</span>
                 </button>
@@ -484,7 +484,7 @@ function PlanStep({
       )}
 
       <section className="space-y-2" aria-labelledby="su-q-lvl">
-        <h2 id="su-q-lvl" className="text-[15px] font-extrabold text-foreground">اختار الباقة المناسبة</h2>
+        <h2 id="su-q-lvl" className="text-sm font-extrabold text-foreground sm:text-[15px]">اختار الباقة المناسبة</h2>
         {levels.length > 1 ? (
           <PlanRail labels={levels.map(planLevel)}>{cards}</PlanRail>
         ) : (
@@ -492,7 +492,7 @@ function PlanStep({
         )}
       </section>
 
-      <p className="text-center text-xs text-muted-foreground">14 يوم تجربة مجانية بكل المزايا — بدون بطاقة ائتمان</p>
+      <p className="text-center text-xs text-muted-foreground max-sm:hidden">14 يوم تجربة مجانية بكل المزايا — بدون بطاقة ائتمان</p>
     </div>
   )
 }
@@ -949,7 +949,7 @@ function SignupContent() {
       <style dangerouslySetInnerHTML={{ __html: SIGNUP_CSS }} />
 
       {/* ─── Form side ─── */}
-      <div className="su-side min-h-dvh lg:h-screen lg:overflow-y-auto flex items-start justify-center py-2 px-3 sm:px-4 sm:py-5 bg-[#f7fbf9]">
+      <div className="su-side min-h-dvh lg:h-screen lg:overflow-y-auto flex items-start justify-center py-1.5 px-3 sm:px-4 sm:py-5 bg-[#f7fbf9]">
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -960,7 +960,7 @@ function SignupContent() {
           <div className="su-card bg-card rounded-2xl border border-border shadow-lg shadow-black/5 overflow-clip">
 
             {/* الهيدر — شريط التذكرة (نفس أسلوب صفحة الدخول) */}
-            <header className="su-hd relative px-4 pt-3.5 pb-3.5 sm:px-5 sm:pt-5 sm:pb-4 bg-gradient-to-b from-[#e3f9f0] via-[#f1fcf8] to-card border-b-2 border-dashed border-[#00c98b]/35">
+            <header className="su-hd relative px-4 pt-3 pb-3 sm:px-5 sm:pt-5 sm:pb-4 bg-gradient-to-b from-[#e3f9f0] via-[#f1fcf8] to-card border-b-2 border-dashed border-[#00c98b]/35">
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-0"
@@ -974,12 +974,12 @@ function SignupContent() {
               <span aria-hidden className="absolute -bottom-2.5 -left-2.5 size-5 rounded-full border border-border bg-[#f7fbf9]" />
               <span aria-hidden className="absolute -bottom-2.5 -right-2.5 size-5 rounded-full border border-border bg-[#f7fbf9]" />
 
-              <div className="relative space-y-2.5 sm:space-y-3">
+              <div className="relative space-y-2 sm:space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <Link href="/" className="inline-flex items-center gap-2.5 group" aria-label="Nezam POS">
                     <img
                       src="/logo.svg" alt="" width={38} height={38}
-                      className="size-[38px] rounded-xl shadow-md shadow-[#00c98b]/35 ring-2 ring-white transition-transform group-hover:scale-105 group-hover:-rotate-3"
+                      className="size-8 sm:size-[38px] rounded-xl shadow-md shadow-[#00c98b]/35 ring-2 ring-white transition-transform group-hover:scale-105 group-hover:-rotate-3"
                     />
                     <div className="leading-none">
                       <p dir="ltr" className="text-[17px] font-black tracking-tight text-foreground text-right">
@@ -998,9 +998,15 @@ function SignupContent() {
 
                 <div className="su-title">
                   <div>
-                    <h1 className="text-[1.35rem] sm:text-[1.6rem] font-extrabold leading-tight tracking-tight text-foreground">
+                    <h1 className="text-[1.25rem] sm:text-[1.6rem] font-extrabold leading-tight tracking-tight text-foreground">
                       {step === 1 ? 'ابدأ تجربتك المجانية' : 'أنشئ حسابك'}
                     </h1>
+                    {step === 1 && (
+                      <p className="mt-0.5 flex items-center gap-1 text-[11.5px] font-bold text-[#00694c] sm:hidden">
+                        <Check className="size-3 shrink-0" strokeWidth={3} aria-hidden />
+                        14 يوم مجاناً بكل المزايا — بدون بطاقة ائتمان
+                      </p>
+                    )}
                     {step === 1 && (
                       <p className="mt-1 text-[12.5px] text-muted-foreground max-sm:hidden">اختار نشاطك والباقة، وبعدها بيانات الحساب في خطوة واحدة.</p>
                     )}
@@ -1019,7 +1025,7 @@ function SignupContent() {
               </div>
             </header>
 
-            <div className={cn("su-body p-3 sm:p-5 space-y-2.5 sm:space-y-4", step === 2 && "max-lg:pb-24")}>
+            <div className={cn("su-body p-2.5 sm:p-5 space-y-2 sm:space-y-4", step === 2 && "max-lg:pb-24")}>
 
             <StepBar step={step} />
 
