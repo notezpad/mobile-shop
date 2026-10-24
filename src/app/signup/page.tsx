@@ -560,6 +560,13 @@ const SIGNUP_CSS = `
 /* حجم الـ placeholder: أصغر من النص المكتوب (16px بتفضل عشان iOS ما يعملش zoom) */
 .su-side input::placeholder,.su-side textarea::placeholder{font-size:14px;font-weight:400;opacity:.6}
 @media (min-width:640px){.su-side input::placeholder,.su-side textarea::placeholder{font-size:13.5px}}
+/* 📱 تصغير بسيط (نص درجة) للعناصر على الجوال — خط الحقل نفسه بيفضل 16px عشان iOS ما يعملش zoom */
+@media (max-width:639.98px){
+.su-side .su-fld label{font-size:12.5px}
+.su-side input[data-slot="input"]{height:34px}
+.su-side input::placeholder,.su-side textarea::placeholder{font-size:13.5px}
+.su-side h1{font-size:1.2rem}
+}
 .su-side input:-webkit-autofill,
 .su-side input:-webkit-autofill:hover,
 .su-side input:-webkit-autofill:focus{
