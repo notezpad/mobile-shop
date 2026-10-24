@@ -1062,7 +1062,7 @@ export function ProductsView() {
                   >
                     <Icon className="size-5" />
                   </span>
-                  <div className="min-w-0 flex-1 basis-56 space-y-1">
+                  <div className="min-w-0 flex-1 basis-0 space-y-1 sm:basis-56">
                     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-extrabold">
                       <Lock className="size-3.5 text-muted-foreground" />
                       موسم {isSummer ? 'الصيف' : 'الشتاء'} مقفول
@@ -1082,11 +1082,11 @@ export function ProductsView() {
                       </span>
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2 max-sm:w-full">
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-8 text-xs font-bold"
+                      className="h-8 text-xs font-bold max-sm:flex-1 max-sm:bg-muted/60"
                       onClick={() => {
                         seasonTouchedRef.current = true
                         setSeasonFilter(cs)
@@ -1096,7 +1096,7 @@ export function ProductsView() {
                     </Button>
                     <Button
                       size="sm"
-                      className="h-8 gap-1.5 text-xs font-bold"
+                      className="h-8 gap-1.5 text-xs font-bold max-sm:flex-1"
                       onClick={() => {
                         setSeasonWizardTab('open')
                         setSeasonOpen(true)
@@ -1112,12 +1112,12 @@ export function ProductsView() {
 
             {/* ── فلاتر الموقع والموسم ── */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 bg-muted/30 p-2.5">
-              <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto max-sm:w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <span className="hidden shrink-0 items-center gap-1 text-[11px] font-extrabold text-muted-foreground md:flex">
                   <Warehouse className="size-3.5" />
                   الموقع
                 </span>
-                <div role="group" aria-label="الموقع" className="flex shrink-0 rounded-xl bg-muted/70 p-1">
+                <div role="group" aria-label="الموقع" className="flex min-w-0 rounded-xl bg-muted/70 p-1 max-sm:flex-wrap sm:shrink-0">
                   {(
                     [
                       ['all', 'الكل'],
@@ -1149,12 +1149,12 @@ export function ProductsView() {
 
               <span aria-hidden className="hidden h-6 w-px bg-border lg:block" />
 
-              <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto max-sm:w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <span className="hidden shrink-0 items-center gap-1 text-[11px] font-extrabold text-muted-foreground md:flex">
                   <Sun className="size-3.5" />
                   الموسم
                 </span>
-                <div role="group" aria-label="الموسم" className="flex shrink-0 rounded-xl bg-muted/70 p-1">
+                <div role="group" aria-label="الموسم" className="flex min-w-0 rounded-xl bg-muted/70 p-1 max-sm:flex-wrap sm:shrink-0">
                   {(
                     [
                       ['active', 'الشغال الآن'],
