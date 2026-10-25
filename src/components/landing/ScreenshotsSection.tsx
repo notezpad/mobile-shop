@@ -27,7 +27,7 @@ type TabKey = 'dashboard' | 'pos' | 'products' | 'customers'
 // وهيظهر المشغل تلقائياً مكان المعاينات (والزرار "شاهد العرض التوضيحي"
 // في الهيرو بينزل على نفس القسم). لو سيبته فاضي، المعاينات بتفضل شغالة.
 // ════════════════════════════════════════════════════════════════════
-const DEMO_VIDEO_URL = ''
+const DEMO_VIDEO_URL = '/demo-video.mp4'
 
 const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'dashboard', label: 'لوحة المعلومات', icon: LayoutDashboard },
