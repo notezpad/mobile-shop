@@ -196,7 +196,7 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
                         <Play className="size-4 fill-current" />
                       </span>
                       <span className="flex min-w-0 flex-1 flex-col items-start gap-1 text-right">
-                        <span className="max-w-full truncate text-[15px] font-extrabold leading-tight text-white">شاهد العرض التوضيحي</span>
+                        <span className="max-w-full text-[14px] font-extrabold leading-snug text-white">شاهد العرض التوضيحي</span>
                         <span className="max-w-full text-[11px] font-medium leading-snug text-[#ffe27a]/80">شرح النظام بالكامل في فيديو</span>
                       </span>
                       <ArrowLeft className="size-4 shrink-0 text-[#ffe27a] transition-transform duration-300 group-hover:-translate-x-1" aria-hidden />

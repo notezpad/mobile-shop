@@ -16,18 +16,90 @@ import {
   CheckCircle2,
   Phone,
   ArrowLeftRight,
+  Play,
 } from 'lucide-react'
 
 type TabKey = 'dashboard' | 'pos' | 'products' | 'customers'
 
 // ════════════════════════════════════════════════════════════════════
-// 🎬 الفيديو التعريفي — لما الفيديو يجهز:
-//   1) حط ملف الفيديو في مجلد  public  باسم  demo-video.mp4
-//   2) خلي الثابت ده كده:  const DEMO_VIDEO_URL = 'https://video.nezampos.com/demo-video.mp4'
-// وهيظهر المشغل تلقائياً مكان المعاينات (والزرار "شاهد العرض التوضيحي"
-// في الهيرو بينزل على نفس القسم). لو سيبته فاضي، المعاينات بتفضل شغالة.
+// 🎬 فيديوهات العرض التوضيحي — لإضافة فيديو جديد: ضيف عنصر في المصفوفة تحت وبس.
+//   - فيديو واحد  → مشغل عادي زي ما كان (من غير أي عناصر زيادة).
+//   - أكتر من فيديو → نفس المشغل + شريط اختيار تحته. بيتحمّل الفيديو المختار بس
+//     (preload="metadata") فمفيش تقل على الصفحة مهما زاد العدد.
+//   - poster (اختياري): صورة غلاف للفيديو في مجلد public، مثال '/video-posters/new.jpg'.
+//   - لو المصفوفة فاضية، المعاينات (الـ Tabs) هي اللي بتظهر.
 // ════════════════════════════════════════════════════════════════════
-const DEMO_VIDEO_URL = 'https://video.nezampos.com/demo-video.mp4'
+type DemoVideo = { id: string; title: string; desc: string; src: string; duration?: string; poster?: string }
+
+const DEMO_VIDEOS: DemoVideo[] = [
+  {
+    id: 'full-tour',
+    title: 'الجولة الكاملة',
+    desc: 'عرض كامل لكل خطوة: من إضافة المنتج لطباعة الفاتورة ومتابعة الأرباح',
+    src: 'https://video.nezampos.com/demo-video.mp4',
+  },
+  // {
+  //   id: 'new-features',
+  //   title: 'ميزات NezamPOS الجديدة',
+  //   desc: 'وصف قصير يظهر تحت الفيديو',
+  //   src: 'https://video.nezampos.com/اسم-الملف.mp4',
+  //   duration: '7:07',
+  // },
+]
+
+function DemoVideoPlayer() {
+  const [active, setActive] = React.useState(0)
+  const current = DEMO_VIDEOS[active] ?? DEMO_VIDEOS[0]
+  const multi = DEMO_VIDEOS.length > 1
+
+  return (
+    <div className="mx-auto max-w-4xl">
+      <div className="video-frame">
+        {/* key = remount عند التبديل: الفيديو القديم بيقف والجديد بيحمّل metadata بس */}
+        <video key={current.id} src={current.src} poster={current.poster} controls preload="metadata" playsInline />
+      </div>
+      <p className="mt-4 text-center text-sm lg-muted">{current.desc}</p>
+
+      {multi && (
+        <div
+          aria-label="اختار الفيديو"
+          className="mt-5 flex snap-x gap-3 overflow-x-auto pb-1 sm:grid sm:overflow-visible"
+          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}
+        >
+          {DEMO_VIDEOS.map((v, i) => {
+            const on = i === active
+            return (
+              <button
+                key={v.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setActive(i)}
+                className={`flex min-w-[210px] shrink-0 snap-start items-center gap-3 rounded-2xl border p-3 text-right transition-colors sm:min-w-0 ${
+                  on
+                    ? 'border-[#00c98b] bg-[#00c98b]/10 shadow-sm'
+                    : 'border-[#00573f]/12 bg-white/60 hover:border-[#00c98b]/50'
+                }`}
+              >
+                <span
+                  className={`flex size-9 shrink-0 items-center justify-center rounded-full ${
+                    on ? 'bg-[#00c98b] text-white' : 'bg-[#00573f]/10 text-[#00946a]'
+                  }`}
+                  aria-hidden
+                >
+                  <Play className="size-4 fill-current" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold leading-snug text-[#0b2a20]">{v.title}</span>
+                  {v.duration && <span className="block text-xs lg-muted">{v.duration}</span>}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
 
 const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'dashboard', label: 'لوحة المعلومات', icon: LayoutDashboard },
@@ -100,21 +172,15 @@ export function ScreenshotsSection() {
           </motion.p>
         </div>
 
-        {/* 🎬 لو الفيديو متاح → مشغل الفيديو بدل المعاينات */}
-        {DEMO_VIDEO_URL ? (
+        {/* 🎬 لو في فيديو واحد أو أكتر → المشغل بدل المعاينات */}
+        {DEMO_VIDEOS.length > 0 ? (
           <motion.div
             initial={false}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-60px' }}
             transition={{ duration: 0.5 }}
-            className="mx-auto max-w-4xl"
           >
-            <div className="video-frame">
-              <video src={DEMO_VIDEO_URL} controls preload="metadata" playsInline />
-            </div>
-            <p className="mt-4 text-center text-sm lg-muted">
-              عرض كامل لكل خطوة: من إضافة المنتج لطباعة الفاتورة ومتابعة الأرباح
-            </p>
+            <DemoVideoPlayer />
           </motion.div>
         ) : (
         <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="w-full">
