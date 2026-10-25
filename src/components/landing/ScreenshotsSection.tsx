@@ -23,11 +23,11 @@ type TabKey = 'dashboard' | 'pos' | 'products' | 'customers'
 // ════════════════════════════════════════════════════════════════════
 // 🎬 الفيديو التعريفي — لما الفيديو يجهز:
 //   1) حط ملف الفيديو في مجلد  public  باسم  demo-video.mp4
-//   2) خلي الثابت ده كده:  const DEMO_VIDEO_URL = '/demo-video.mp4'
+//   2) خلي الثابت ده كده:  const DEMO_VIDEO_URL = 'https://video.nezampos.com/demo-video.mp4'
 // وهيظهر المشغل تلقائياً مكان المعاينات (والزرار "شاهد العرض التوضيحي"
 // في الهيرو بينزل على نفس القسم). لو سيبته فاضي، المعاينات بتفضل شغالة.
 // ════════════════════════════════════════════════════════════════════
-const DEMO_VIDEO_URL = '/demo-video.mp4'
+const DEMO_VIDEO_URL = 'https://video.nezampos.com/demo-video.mp4'
 
 const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'dashboard', label: 'لوحة المعلومات', icon: LayoutDashboard },
