@@ -73,8 +73,12 @@ export const CAPABILITIES_META: { key: string; label: string; desc: string }[] =
     label: 'الأشكال/المقاسات (Variants)',
     desc: 'إدارة منتجات بأشكال أو مقاسات متعددة (ألوان/مقاسات) + المساعد الذكي — متاحة في كل باقات الملابس.',
   },
-  { key: 'returns_exchange', label: 'المرتجعات والاستبدال', desc: 'تسجيل مرتجعات واستبدال الفواتير' },
-  { key: 'loyalty', label: 'نقاط الولاء', desc: 'تجميع واستبدال نقاط ولاء العملاء' },
+  {
+    key: 'dynamic_retail_pricing',
+    label: 'التسعير الديناميكي للقطعة',
+    desc: 'سعر القطعة = التكلفة + هامش % — لباقات الموبايلات والملابس الاحترافية (مش بتشتغل في الغذائية).',
+  },
+  // ملاحظة: المرتجعات/الاستبدال متاحة لكل الباقات دايماً، ونقاط الولاء متوقفة — فشلنا التوجلين.
 ]
 
 export const MODULES_META: { key: string; label: string; desc: string; electronicsOnly?: boolean }[] = [

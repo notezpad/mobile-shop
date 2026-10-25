@@ -1035,6 +1035,11 @@ export function SuperAdminApp() {
   );
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [expiringCount, setExpiringCount] = React.useState(0);
+  // ⬆️ عند التنقل بين صفحات الأدمن نرجع لأول الصفحة (الـ scroll هنا جوه div مش الـ window)
+  const contentScrollRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    contentScrollRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [active]);
   const user = useShopStore((s) => s.user);
 
   // Fetch expiring count for sidebar badge
@@ -1187,7 +1192,7 @@ export function SuperAdminApp() {
           onChange={setActive}
         />
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-6">
+        <div ref={contentScrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-6">
           <AnimatePresence mode="wait">
             <motion.div
               key={active}

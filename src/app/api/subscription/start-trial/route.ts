@@ -68,7 +68,7 @@ async function __POST(req: NextRequest) {
 
   // ── Look up the plan ──
   const plan = await db.plan.findUnique({ where: { code: planCode } })
-  if (!plan || !plan.isActive) {
+  if (!plan || !plan.isActive || plan.visibility === 'hidden') {
     return NextResponse.json({ error: 'الباقة غير متاحة' }, { status: 404 })
   }
   // 🛡️ Reject zero-price plans — user must pick a real paid plan

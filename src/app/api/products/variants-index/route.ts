@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(err?.body, { status: err?.status })
     }
     try {
-      requireModule(session, 'products')
+      await requireModule(session, 'products')
     } catch (e) {
       const fe = featureErrorResponse(e)
       if (fe) return NextResponse.json(fe.body, { status: fe.status })

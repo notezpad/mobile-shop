@@ -19,7 +19,7 @@ const PLANS = [
     name: 'احترافية - ملابس وأحذية',
     description: 'سلاسل المحلات وتجار الجملة — فروع، بيع بالكرتونة/الدستة + خصم الكوليكشن، والمقاسات والألوان متاحة برضه (البيع بالقطعة شغال).',
     priceMonthly: 699, priceYearly: 6990, maxUsers: 10, maxProducts: 10000, maxBranches: 5,
-    capabilities: ['variants', 'collections', 'multi_unit', 'returns_exchange', 'dynamic_retail_pricing', 'seasonal_warehouse'],
+    capabilities: ['variants', 'collections', 'multi_unit', 'returns_exchange', 'dynamic_retail_pricing'],
     sortOrder: 40,
   },
 ]

@@ -60,6 +60,14 @@ async function __POST(req: NextRequest) {
     }),
   ])
   if (!plan) return NextResponse.json({ error: 'الباقة غير متاحة' }, { status: 404 })
+  // 🔒 الباقة المخفية مش متاحة للدفع الذاتي — إلا لو المحل عليها فعلاً (تجديد لباقة اتخصصت له من الأدمن)
+  if (plan.visibility === 'hidden') {
+    const hasPlan = await db.subscription.findFirst({
+      where: { tenantId: session.tenantId, planId: plan.id },
+      select: { id: true },
+    })
+    if (!hasPlan) return NextResponse.json({ error: 'الباقة غير متاحة' }, { status: 404 })
+  }
   if (!tenant) return NextResponse.json({ error: 'المحل غير موجود' }, { status: 404 })
 
   const amount = period === 'yearly' ? plan.priceYearly : plan.priceMonthly

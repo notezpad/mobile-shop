@@ -269,6 +269,10 @@ export function enforceVerticalRules(
   // enforceVerticalRules مش بتضيفه هنا عشان custom plans تقدر تتحكم فيه.
   if (planCode === 'electronics-basic' || planCode === 'fashion-basic') {
     capSet.delete('dynamic_retail_pricing')
+    // 🛡️ وحدات البيع بالجملة (multi_unit) — للباقات الاحترافية بس (موبايل + ملابس).
+    // نشيلها من الأساسية حتى لو الداتابيز فيها غلط (يمنع أي bypass عبر API مباشرة).
+    // الغذائية مش متأثرة: multi_unit عندها إجباري لوحدات الكيلو/الكيس/الطبق.
+    capSet.delete('multi_unit')
   }
   // For electronics plans we don't strip anything else — the canonical seed
   // has the right modules and we don't want to override admin customizations.

@@ -166,6 +166,7 @@ export function SettingsView() {
   const capabilities = useShopStore((s) => s.plan.capabilities)
   const hasFinance = enabledModules.includes('finance')
   const hasWholesale = capabilities.includes('multi_unit')
+  const isFoodShop = useShopStore((s) => s.plan.businessType) === 'food'
 
   const refreshSubscription = React.useCallback(() => {
     return api<any>('/api/subscription')
@@ -182,7 +183,7 @@ export function SettingsView() {
         })
         if (Array.isArray(d?.enabledModules)) {
           setPlan({
-            businessType: d.businessType === 'fashion' ? 'fashion' : 'electronics',
+            businessType: d.businessType === 'fashion' ? 'fashion' : d.businessType === 'food' ? 'food' : 'electronics',
             enabledModules: d.enabledModules,
             capabilities: Array.isArray(d.capabilities) ? d.capabilities : [],
           })
@@ -605,7 +606,7 @@ export function SettingsView() {
         </div>
 
         {/* ═════════ التسعير التلقائي ═════════ */}
-        {hasWholesale && (
+        {hasWholesale && !isFoodShop && (
           <Panel
             tag="06 / Pricing"
             title="تسعير القطعة التلقائي"

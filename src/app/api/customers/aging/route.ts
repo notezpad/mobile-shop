@@ -30,7 +30,7 @@ export async function GET() {
   }
 
   // saleh-mowazaf: module 'customers'
-  try { requireModule(session, 'customers') } catch (e) {
+  try { await requireModule(session, 'customers') } catch (e) {
     const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 

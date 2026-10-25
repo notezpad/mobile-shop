@@ -104,8 +104,13 @@ export function ReportsView() {
   const tv = useVocab()
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
+  // ✅ فصل المالية (جسر الأرباح/صافي الربح/المركز المالي/الديون) تقرير عام لكل الباقات —
+  // موديول `finance` معناه فودافون كاش/إنستاباي بس، فمش شرط لظهور الفصل ده.
+  const hasFinance = true
+  // 🔒 المعاملات المالية (فودافون كاش/فوري/انستاباي) والصيانة = موبايلات وكمبيوتر بس
   const enabledModules = useShopStore((s) => s.plan.enabledModules)
-  const hasFinance = enabledModules.includes('finance')
+  const hasFinanceTx = enabledModules.includes('finance')
+  const hasMaintenance = enabledModules.includes('maintenance')
   const [from, setFrom] = React.useState(() => rangeFor('month')[0])
   const [to, setTo] = React.useState(() => rangeFor('month')[1])
   const [branchId, setBranchId] = React.useState<string>('all')
@@ -145,7 +150,7 @@ export function ReportsView() {
       phone: shopBranding.phone || undefined,
       address: shopBranding.address || undefined,
       logo: shopBranding.logoPath || undefined,
-    })
+    }, { finance: hasFinanceTx, maintenance: hasMaintenance })
     openPrintWindow(html, () => toast.error('الرجاء السماح بالنوافذ المنبثقة'))
   }
 
@@ -427,11 +432,11 @@ export function ReportsView() {
               {hasFinance && r.canViewProfits !== false && (
                 <Chapter id="ch-finance" n="04" title="المالية" hint="من هامش البيع لحد الصافي، وإيه اللي ليك وعليك">
                   <div className="grid gap-4 lg:grid-cols-2">
-                    <Panel title="جسر الأرباح" hint={`هامش المبيعات + الصيانة (${num(r.maintenanceCount)} أمر) − المصروفات`} className="lg:col-span-2">
+                    <Panel title="جسر الأرباح" hint={hasMaintenance ? `هامش المبيعات + الصيانة (${num(r.maintenanceCount)} أمر) − المصروفات` : 'هامش المبيعات − المصروفات'} className="lg:col-span-2">
                       <Waterfall
                         steps={[
                           { label: 'هامش المبيعات', v: r.totalProfit ?? 0 },
-                          { label: 'إيراد الصيانة', v: r.maintenanceRevenue ?? 0 },
+                          ...(hasMaintenance ? [{ label: 'إيراد الصيانة', v: r.maintenanceRevenue ?? 0 }] : []),
                           { label: 'المصروفات', v: -(r.totalExpenses ?? 0) },
                           { label: 'الصافي', v: r.netProfit ?? 0, total: true },
                         ]}
@@ -465,6 +470,7 @@ export function ReportsView() {
                       </div>
                     </Panel>
 
+                    {hasFinanceTx && (
                     <Panel title="حركة الخزنة" hint="وارد مقابل صادر في الفترة">
                       <ShareList
                         items={[
@@ -475,6 +481,7 @@ export function ReportsView() {
                       />
                       <p className="mt-4 border-t pt-3 text-[11px] text-muted-foreground">الصافي: <b className="text-foreground">{formatCurrency(r.financeIn - r.financeOut)}</b></p>
                     </Panel>
+                    )}
 
                     <Panel title="المصروفات حسب التصنيف" className="lg:col-span-2">
                       {r.expensesByCategory.length > 0 ? (
@@ -1419,7 +1426,8 @@ function buildReportHtml(
   r: Report,
   from: string,
   to: string,
-  shop?: { name?: string; phone?: string; address?: string; logo?: string }
+  shop?: { name?: string; phone?: string; address?: string; logo?: string },
+  flags: { finance: boolean; maintenance: boolean } = { finance: true, maintenance: true }
 ): string {
   const range = `${from || 'بداية النشاط'}  ←  ${to || 'الآن'}`
   const generatedAt = fmtDateTime(new Date())
@@ -1476,7 +1484,7 @@ function buildReportHtml(
     ? r.expensesByCategory
         .map((e) => `<tr><td style="text-align:right;font-weight:600">${escapeHtml(e.category)}</td><td style="font-weight:700;color:${BRAND.red}">${fmtMoney(e.amount)}</td></tr>`)
         .join('')
-    : emptyRow(2, 'لا توجد المعاملات المالية مسجلة في هذه الفترة')
+    : emptyRow(2, 'لا توجد مصروفات مسجلة في هذه الفترة')
 
   const categoryBars = r.categoryBreakdown.length
     ? r.categoryBreakdown.map((c) => barRow(escapeHtml(c.category), c.total, maxCategory, fmtMoney(c.total))).join('')
@@ -1555,8 +1563,8 @@ function buildReportHtml(
       ${canProfit ? kpi('صافي الربح', fmtMoney(r.netProfit ?? 0) + ' ', true) : kpi('رصيد الخزنة', fmtMoney(r.cashBalance) + ' ', true)}
       ${kpi('عدد الفواتير', formatNumber(r.salesCount ?? 0))}
       ${kpi('متوسط الفاتورة', fmtMoney(r.avgOrderValue) + ' ')}
-      ${kpi('إيراد الصيانة', fmtMoney(r.maintenanceRevenue) + ' ')}
-      ${kpi('إجمالي الالمعاملات المالية', fmtMoney(r.totalExpenses) + ' ')}
+      ${flags.maintenance ? kpi('إيراد الصيانة', fmtMoney(r.maintenanceRevenue) + ' ') : ''}
+      ${kpi('إجمالي المصروفات', fmtMoney(r.totalExpenses) + ' ')}
       ${canProfit ? kpi('رصيد الخزنة', fmtMoney(r.cashBalance) + ' ', true) : ''}
       ${kpi('إجمالي المشتريات', fmtMoney(r.totalPurchases) + ' ')}
     </div>
@@ -1577,7 +1585,7 @@ function buildReportHtml(
     <div class="two-col">
       ${section('طرق الدفع (المقبوضات)', `<div style="padding-top:2px">${methodBars}</div>`)}
       ${section(
-        'الالمعاملات المالية حسب التصنيف',
+        'المصروفات حسب التصنيف',
         `<table><thead><tr><th>التصنيف</th><th>المبلغ</th></tr></thead><tbody>${expenseRows}</tbody></table>`
       )}
     </div>
@@ -1593,13 +1601,13 @@ function buildReportHtml(
       `<div class="two-col">
         <div class="formula-box">
           ${canProfit ? `<div class="formula-row"><span>هامش ربح المبيعات</span><span>${fmtMoney(r.totalProfit ?? 0)} </span></div>` : ''}
-          <div class="formula-row"><span>+ إيراد الصيانة</span><span>${fmtMoney(r.maintenanceRevenue ?? 0)} </span></div>
-          <div class="formula-row"><span>− الالمعاملات المالية</span><span style="color:${BRAND.red}">${fmtMoney(r.totalExpenses ?? 0)} </span></div>
+          ${flags.maintenance ? `<div class="formula-row"><span>+ إيراد الصيانة</span><span>${fmtMoney(r.maintenanceRevenue ?? 0)} </span></div>` : ''}
+          <div class="formula-row"><span>− المصروفات</span><span style="color:${BRAND.red}">${fmtMoney(r.totalExpenses ?? 0)} </span></div>
           ${canProfit ? `<div class="formula-row total"><span>= صافي الربح</span><span>${fmtMoney(r.netProfit ?? 0)} </span></div>` : ''}
         </div>
         <div class="formula-box">
-          <div class="formula-row"><span>إيداعات مالية</span><span>${fmtMoney(r.financeIn)} </span></div>
-          <div class="formula-row"><span>سحوبات مالية</span><span>${fmtMoney(r.financeOut)} </span></div>
+          ${flags.finance ? `<div class="formula-row"><span>إيداعات مالية</span><span>${fmtMoney(r.financeIn)} </span></div>
+          <div class="formula-row"><span>سحوبات مالية</span><span>${fmtMoney(r.financeOut)} </span></div>` : ''}
           <div class="formula-row"><span>مستحقات على العملاء</span><span>${fmtMoney(r.customersReceivable)} </span></div>
           <div class="formula-row"><span>مستحقات للموردين</span><span style="color:${BRAND.red}">${fmtMoney(r.suppliersPayable)} </span></div>
         </div>

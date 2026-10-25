@@ -31,7 +31,7 @@ export async function GET() {
     }
 
     // saleh-mowazaf: module 'reports'
-    try { requireModule(s, 'reports') } catch (e) {
+    try { await requireModule(s, 'reports') } catch (e) {
       const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
     }
     // 🔒 RBAC: الربح لكل فرع للمدير أو لمن عنده صلاحية الأرباح بس

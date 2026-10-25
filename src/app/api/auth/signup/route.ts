@@ -203,7 +203,13 @@ async function __POST(req: NextRequest) {
             'purchases','finance','expenses','cash','reports','settings','users',
             'inventory','branches',
           ]),
-          capabilities: JSON.stringify(['collections','multi_unit','variants','returns_exchange','loyalty']),
+          // 🛡️ وحدات الجملة والكوليكشن للاحترافية بس — الأساسية/الغذائية بتاخد المرتجعات فقط هنا
+          // (variants بتتضاف في runtime لباقات الملابس، و multi_unit إجباري للغذائية في enforceVerticalRules)
+          capabilities: JSON.stringify(
+            trialPlan.code?.endsWith('-pro')
+              ? ['collections', 'multi_unit', 'variants', 'returns_exchange']
+              : ['returns_exchange'],
+          ),
         },
       })
     }

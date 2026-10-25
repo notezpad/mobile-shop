@@ -20,7 +20,7 @@ async function __GET(
   }
 
   // 🔐 صلاحيات الموظف: موديول 'sales'
-  try { requireModule(session, 'sales') } catch (e) {
+  try { await requireModule(session, 'sales') } catch (e) {
     const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 

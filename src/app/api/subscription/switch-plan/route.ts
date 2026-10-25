@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
 
     // Find the target plan
     const targetPlan = await db.plan.findUnique({ where: { code: planCode } })
-    if (!targetPlan) {
+    if (!targetPlan || targetPlan.visibility === 'hidden') {
       return NextResponse.json(
         { error: `الباقة ${planCode} مش موجودة في الـ DB — شغّل bunx tsx prisma/seed-plans.ts` },
         { status: 404 }

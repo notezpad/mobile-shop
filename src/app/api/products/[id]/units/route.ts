@@ -24,7 +24,7 @@ async function __GET(
   }
 
   // saleh-mowazaf: module 'products'
-  try { requireModule(session, 'products') } catch (e) {
+  try { await requireModule(session, 'products') } catch (e) {
     const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
   const { id } = await params

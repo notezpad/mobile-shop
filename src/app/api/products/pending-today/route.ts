@@ -22,7 +22,7 @@ async function __GET() {
   }
 
   // saleh-mowazaf: module 'purchases'
-  try { requireModule(session, 'purchases') } catch (e) {
+  try { await requireModule(session, 'purchases') } catch (e) {
     const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
   }
 
