@@ -1094,7 +1094,9 @@ function SignupContent() {
             ) : (
             <motion.div key="step-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
             {/* Form */}
-            <form id="su-form" onSubmit={handleSubmit} noValidate className="su-form min-w-0 space-y-1.5 sm:space-y-4">
+            <form id="su-form" onSubmit={handleSubmit} noValidate className="su-form min-w-0 space-y-1.5 sm:space-y-4"
+              toolname="nezam_pos_start_free_trial"
+              tooldescription="Create a new Nezam POS (نظام المحل) shop account and start a free 14-day trial of the selected plan (no credit card required). Collects shop name, owner name, email, Egyptian mobile number and a password (min 6 characters). The plan is chosen via the ?plan= URL parameter (electronics-basic, electronics-pro, fashion-basic, fashion-pro) or in the page's first step. Use the user's real details only and let the user review and press the submit button themselves, since submitting accepts the Terms and Privacy Policy.">
               {/* اختيار النشاط + المستوى — ظاهر دايماً وأول حاجة في الفورم (مفيش "تغيير" مخفي) */}
               {currentEntry ? (
                 <PlanSummary entry={currentEntry} onBack={backToPlans} error={getFieldError('plan')} />
@@ -1105,12 +1107,12 @@ function SignupContent() {
               {/* Row 1: اسم المحل + اسم المسؤول */}
               <div className="su-span grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-3">
                 <Field className="su-fld space-y-1.5 sm:space-y-2.5 max-sm:[&_label]:text-[13px]" label="اسم المحل" error={getFieldError('shopName')}>
-                  <Input id="su-shop" type="text" placeholder="النور للموبايلات" icon={<Store className="size-4" />}
+                  <Input id="su-shop" type="text" name="shopName" toolparamdescription="Business/shop name as it should appear on invoices, e.g. Al-Nour Mobiles." placeholder="النور للموبايلات" icon={<Store className="size-4" />}
                     value={shopName} onChange={(e: any) => { setShopName(e.target.value); clearFieldError('shopName') }}
                     disabled={loading} required autoComplete="organization" enterKeyHint="next" className="h-9 sm:h-10 lg:h-10" />
                 </Field>
                 <Field className="su-fld space-y-1.5 sm:space-y-2.5 max-sm:[&_label]:text-[13px]" label="اسم المسؤول" error={getFieldError('name')}>
-                  <Input type="text" placeholder="أحمد محمد" icon={<User className="size-4" />}
+                  <Input type="text" name="ownerName" toolparamdescription="Full name of the shop owner or account manager." placeholder="أحمد محمد" icon={<User className="size-4" />}
                     value={name} onChange={(e: any) => { setName(e.target.value); clearFieldError('name') }}
                     disabled={loading} required autoComplete="name" enterKeyHint="next" className="h-9 sm:h-10 lg:h-10" />
                 </Field>
@@ -1120,7 +1122,7 @@ function SignupContent() {
               <div className="su-span grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-3">
                 <Field className="su-fld space-y-1.5 sm:space-y-2.5 max-sm:[&_label]:text-[13px]" label="البريد الإلكتروني" error={getFieldError('email')}>
                   <div className="relative">
-                    <Input type="text" placeholder="name@gmail.com" icon={<Mail className="size-4" />}
+                    <Input type="text" name="email" toolparamdescription="Owner email address used to log in and receive account emails, e.g. owner@gmail.com." placeholder="name@gmail.com" icon={<Mail className="size-4" />}
                       value={email}
                       onChange={(e: any) => { setEmail(e.target.value.replace(/\s/g, '')); setEmailActiveIdx(-1); clearFieldError('email') }}
                       onFocus={() => setEmailFocused(true)}
@@ -1165,7 +1167,7 @@ function SignupContent() {
                   )}
                 </Field>
                 <Field className="su-fld space-y-1.5 sm:space-y-2.5 max-sm:[&_label]:text-[13px]" label="رقم الموبايل" error={getFieldError('phone')}>
-                  <Input type="tel" placeholder="01XXXXXXXXX" icon={<Smartphone className="size-4" />}
+                  <Input type="tel" name="phone" toolparamdescription="Egyptian mobile number in the format 01XXXXXXXXX (11 digits)." placeholder="01XXXXXXXXX" icon={<Smartphone className="size-4" />}
                     value={phone} onChange={(e: any) => { setPhone(e.target.value); clearFieldError('phone') }}
                     dir="ltr" className="text-left h-9 sm:h-10 lg:h-10" disabled={loading} required autoComplete="tel" inputMode="tel" enterKeyHint="next" />
                 </Field>
@@ -1174,7 +1176,7 @@ function SignupContent() {
               {/* كلمة المرور */}
               <Field className="su-fld space-y-1.5 sm:space-y-2.5 max-sm:[&_label]:text-[13px]" label="كلمة المرور" error={getFieldError('password')} hint="الحد الأدنى 6 أحرف">
                 <div className="relative">
-                  <Input type={showPass ? 'text' : 'password'} placeholder="••••••"
+                  <Input type={showPass ? 'text' : 'password'} name="password" toolparamdescription="Account password, minimum 6 characters. Must be chosen by the user." placeholder="••••••"
                     icon={<Lock className="size-4" />} value={password}
                     onChange={(e: any) => { setPassword(e.target.value); clearFieldError('password') }}
                     dir="ltr" className="text-left pl-10 h-9 sm:h-10 lg:h-10" disabled={loading} required minLength={6} autoComplete="new-password" autoCapitalize="none" enterKeyHint="done" />
@@ -1204,13 +1206,13 @@ function SignupContent() {
                 </button>
                 {/* ديسكتوب فقط (CSS): كود الدعوة ظاهر دايماً جنب كلمة المرور */}
                 <Field className="su-invite-d su-fld su-opt" label="كود الدعوة (اختياري)">
-                  <Input type="text" placeholder="اكتب كود الدعوة" value={inviteCode}
+                  <Input type="text" name="inviteCode" toolparamdescription="Optional invitation/referral code. Leave empty if the user has none." placeholder="اكتب كود الدعوة" value={inviteCode}
                     onChange={(e: any) => setInviteCode(e.target.value)} disabled={loading} />
                 </Field>
                 </>
               ) : (
                 <Field className="su-fld su-opt space-y-1.5 sm:space-y-2.5 max-sm:[&_label]:text-[13px]" label="كود الدعوة (اختياري)">
-                  <Input type="text" placeholder="اكتب كود الدعوة" value={inviteCode}
+                  <Input type="text" name="inviteCode" toolparamdescription="Optional invitation/referral code. Leave empty if the user has none." placeholder="اكتب كود الدعوة" value={inviteCode}
                     onChange={(e: any) => setInviteCode(e.target.value)} disabled={loading} autoFocus />
                 </Field>
               )}

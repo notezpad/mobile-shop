@@ -318,7 +318,9 @@ export default function ContactPage() {
                 </p>
               </div>
 
-              <form onSubmit={handleSubmit} className="ct-form">
+              <form onSubmit={handleSubmit} className="ct-form"
+                toolname="nezam_pos_contact_support"
+                tooldescription="Send a message to the Nezam POS (نظام المحل) support and sales team. Submitting opens a WhatsApp chat with a ready-made message that the user reviews and sends themselves. Use for pricing questions, technical problems, suggestions or partnerships. Name and message are required; phone and email are optional.">
                 <div className="ct-form-row">
                   <div className="ct-field">
                     <Label htmlFor="ct-name" className="ct-field-label">
@@ -327,6 +329,8 @@ export default function ContactPage() {
                     <Input
                       id="ct-name"
                       type="text"
+                      name="name"
+                      toolparamdescription="Full name of the person contacting support."
                       placeholder="اكتب اسمك"
                       value={form.name}
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -341,6 +345,8 @@ export default function ContactPage() {
                     <Input
                       id="ct-phone"
                       type="tel"
+                      name="phone"
+                      toolparamdescription="Optional phone/WhatsApp number of the sender, e.g. 01XXXXXXXXX."
                       placeholder="01X XXXX XXXX"
                       value={form.phone}
                       onChange={(e) => setForm({ ...form, phone: e.target.value })}
@@ -358,6 +364,8 @@ export default function ContactPage() {
                     <Input
                       id="ct-email"
                       type="email"
+                      name="email"
+                      toolparamdescription="Optional email address for the reply."
                       placeholder="you@example.com"
                       value={form.email}
                       onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -371,6 +379,8 @@ export default function ContactPage() {
                     </Label>
                     <select
                       id="ct-subject"
+                      name="subject"
+                      toolparamdescription="Topic of the message. Must be exactly one of the listed options."
                       value={form.subject}
                       onChange={(e) => setForm({ ...form, subject: e.target.value })}
                       className="ct-field-select"
@@ -390,6 +400,8 @@ export default function ContactPage() {
                   </Label>
                   <Textarea
                     id="ct-message"
+                    name="message"
+                    toolparamdescription="The message text, at least 10 characters, describing the question or problem."
                     placeholder="اكتب رسالتك هنا (10 أحرف على الأقل)..."
                     value={form.message}
                     onChange={(e) => setForm({ ...form, message: e.target.value })}

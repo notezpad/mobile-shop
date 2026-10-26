@@ -13,6 +13,7 @@ import {
   SITE_DESCRIPTION,
   SUPPORT_PHONE,
 } from "@/lib/site";
+import { buildOrganizationJsonLd } from "@/lib/plans-schema";
 
 // خط هوية اسم المحل في السايدبار
 const brandFont = IBM_Plex_Sans_Arabic({
@@ -177,25 +178,13 @@ export default async function RootLayout({
   // اتشال: aggregateRating (تقييمات مش حقيقية = مخالفة لسياسة جوجل)،
   // و SearchAction (مفيش بحث في الموقع بالشكل ده)، ورابط واتساب من sameAs.
   // SoftwareApplication اتنقل للصفحة الرئيسية بس (src/app/page.tsx).
-  const organizationJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "Organization",
-    name: SITE_NAME,
-    alternateName: SITE_NAME_AR,
-    url: SITE_URL,
-    logo: `${SITE_URL}/icon-512.png`,
-    description: SITE_DESCRIPTION,
-    contactPoint: {
-      "@type": "ContactPoint",
-      telephone: SUPPORT_PHONE,
-      contactType: "customer support",
-      availableLanguage: ["Arabic"],
-    },
-  };
+  const organizationJsonLd = buildOrganizationJsonLd(SUPPORT_PHONE);
 
   const websiteJsonLd = {
     "@context": "https://schema.org",
     "@type": "WebSite",
+    "@id": `${SITE_URL}/#website`,
+    publisher: { "@id": `${SITE_URL}/#organization` },
     name: SITE_NAME,
     url: SITE_URL,
     inLanguage: "ar",

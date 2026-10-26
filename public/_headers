@@ -29,6 +29,17 @@
 /manifest.json
   Cache-Control: public, max-age=86400
 
+# ملف llms.txt لوكلاء الذكاء الاصطناعي — Markdown نصّي، يتحدّث بسرعة مع أي تغيير في الباقات
+/llms.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=3600
+  X-Robots-Tag: all
+
+# robots.txt
+/robots.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=3600
+
 # الـ service worker نفسه لازم يتحدّث بسرعة
 /sw.js
   Cache-Control: public, max-age=0, must-revalidate

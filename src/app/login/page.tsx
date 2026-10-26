@@ -242,10 +242,13 @@ export default function LoginPage() {
             </AnimatePresence>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} noValidate className="space-y-3 sm:space-y-4">
+            <form onSubmit={handleSubmit} noValidate className="space-y-3 sm:space-y-4"
+              toolname="nezam_pos_login"
+              tooldescription="Sign in an existing Nezam POS (نظام المحل) shop owner or staff member to their dashboard using email and password. Only for existing accounts; to create a new trial account use the signup tool. Ask the user for their own password — never guess or invent credentials. The user must confirm before the form is submitted.">
               <Field label="البريد الإلكتروني" className="space-y-1.5 sm:space-y-2.5">
                 <Input
-                  type="email" placeholder="name@example.com"
+                  type="email" name="email" placeholder="name@example.com"
+                  toolparamdescription="The account email address used when the Nezam POS account was created, e.g. owner@example.com."
                   icon={<Mail className="size-4" />}
                   value={email} onChange={(e: any) => { setEmail(e.target.value); setError(null) }}
                   autoComplete="email" dir="ltr" className="text-left focus-visible:!border-[#00c98b] focus-visible:!ring-[#00c98b]/25 h-10 sm:h-11"
@@ -256,7 +259,8 @@ export default function LoginPage() {
               <Field label="كلمة المرور" className="space-y-1.5 sm:space-y-2.5">
                 <div className="relative">
                   <Input
-                    type={showPass ? "text" : "password"} placeholder="••••••••"
+                    type={showPass ? "text" : "password"} name="password" placeholder="••••••••"
+                    toolparamdescription="The account password. Must be provided by the user; do not guess."
                     icon={<Lock className="size-4" />}
                     value={password} onChange={(e: any) => { setPassword(e.target.value); setError(null) }}
                     autoComplete="current-password" dir="ltr" className="text-left pl-10 focus-visible:!border-[#00c98b] focus-visible:!ring-[#00c98b]/25 h-10 sm:h-11"
