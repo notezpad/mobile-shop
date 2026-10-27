@@ -36,15 +36,16 @@ const DEMO_VIDEOS: DemoVideo[] = [
     id: 'full-tour',
     title: 'الجولة الكاملة',
     desc: 'عرض كامل لكل خطوة: من إضافة المنتج لطباعة الفاتورة ومتابعة الأرباح',
-    src: 'https://video.nezampos.com/demo-video.mp4',
+    src: 'https://video.nezampos.com/nezampos.mp4',
+    duration: '14:51',
   },
-  // {
-  //   id: 'new-features',
-  //   title: 'ميزات NezamPOS الجديدة',
-  //   desc: 'وصف قصير يظهر تحت الفيديو',
-  //   src: 'https://video.nezampos.com/اسم-الملف.mp4',
-  //   duration: '7:07',
-  // },
+  {
+    id: 'new-features',
+    title: 'ميزات NezamPOS الجديدة',
+    desc: 'نقل الأرصدة القديمة صح من أول يوم، والاستيراد الذكي من إكسل، ونظام المواسم والمخزن الداخلي',
+    src: 'https://video.nezampos.com/demo-video.mp4',
+    duration: '7:07',
+  },
 ]
 
 function DemoVideoPlayer() {
