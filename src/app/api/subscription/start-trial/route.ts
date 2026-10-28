@@ -101,10 +101,15 @@ async function __POST(req: NextRequest) {
   // 🛡️ 2026-10-12: تجربة واحدة فقط لكل محل مدى الحياة (أي باقة).
   // كان الفحص بيقارن بآخر اشتراك ونفس الباقة بس، فكان ممكن تجربة على كل باقة
   // ورا بعض. دلوقتي: لو في أي اشتراك سابق من نوع trial → لازم دفع.
-  const priorTrial = await db.subscription.findFirst({
-    where: { tenantId: session.tenantId, period: 'trial', ...countableSubWhere },
-    select: { id: true },
-  })
+  // 🛡️ 2026-10-28: كمان أي اشتراك سابق (شهري/سنوي/من الأدمن) يمنع التجربة —
+  // قبل كده الفحص كان على period === 'trial' بس، فمحل اشتراكه المنتهي شهري
+  // كان ياخد تجربة مجانية جديدة. (latestSub هنا منتهي أكيد — النشط اترفض فوق.)
+  const priorTrial = latestSub
+    ? { id: latestSub.id }
+    : await db.subscription.findFirst({
+        where: { tenantId: session.tenantId, period: 'trial', ...countableSubWhere },
+        select: { id: true },
+      })
   if (priorTrial) {
     return NextResponse.json(
       {

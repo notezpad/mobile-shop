@@ -109,7 +109,11 @@ export default function PricingPage() {
             if (!alive) return
             setHasActiveSub(!d?.expired && !!d?.planCode && d.planCode !== '-')
             // 🛡️ v15: آخر اشتراك كان تجربة + انتهت = التجربة اتخدمت خلاص
-            setTrialUsed(Boolean(d?.expired) && d?.period === 'trial')
+            // 🛡️ 2026-10-28: أي اشتراك منتهي (تجربة/شهري/سنوي/بدون اشتراك لكن المحل expired)
+            // معناه إن المحل مش «جديد» — الزر لازم يبقى «اشترك الآن» مش «ابدأ تجربة».
+            // قبل كده الشرط كان period === 'trial' بس، فالمحل اللي اشتراكه
+            // اتعمل من الأدمن (شهري/سنوي) وانتهى كان بيشوف «ابدأ تجربة 14 يوم».
+            setTrialUsed(Boolean(d?.expired))
           })
           .catch(() => {
             // If we can't fetch subscription, assume no active sub → allow trial
