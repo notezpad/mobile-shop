@@ -55,6 +55,7 @@ import {
   Clock,
   Sparkles,
   Crown,
+  Repeat,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -620,6 +621,7 @@ export function AdminTenantsView() {
   const [detailId, setDetailId] = React.useState<string | null>(null)
   const [editOpen, setEditOpen] = React.useState(false)
   const [editRow, setEditRow] = React.useState<TenantRow | null>(null)
+  const [planRow, setPlanRow] = React.useState<TenantRow | null>(null)
   const [addOpen, setAddOpen] = React.useState(false)
   const [fakeOpen, setFakeOpen] = React.useState(false)
   const [deleteRow, setDeleteRow] = React.useState<TenantRow | null>(null)
@@ -1384,6 +1386,7 @@ export function AdminTenantsView() {
                         <div className="flex items-center justify-center gap-0.5">
                           <ActionButton icon={Eye} title="عرض التفاصيل" onClick={() => openDetail(r)} />
                           <ActionButton icon={Pencil} title="تعديل البيانات" onClick={() => openEdit(r)} />
+                          <ActionButton icon={Repeat} title="تغيير الباقة" tone="amber" onClick={() => setPlanRow(r)} />
                           <ActionButton
                             icon={LogIn}
                             title="دخول كمالك المحل"
@@ -1504,6 +1507,7 @@ export function AdminTenantsView() {
                 <div className="mt-2.5 flex items-center justify-between gap-0.5 border-t border-border/60 pt-2.5">
                   <ActionButton icon={Eye} title="التفاصيل" onClick={() => openDetail(r)} size="sm" />
                   <ActionButton icon={Pencil} title="تعديل" onClick={() => openEdit(r)} size="sm" />
+                  <ActionButton icon={Repeat} title="تغيير الباقة" tone="amber" onClick={() => setPlanRow(r)} size="sm" />
                   <ActionButton
                     icon={LogIn}
                     title="دخول كمالك"
@@ -1554,6 +1558,16 @@ export function AdminTenantsView() {
             setEditOpen(o)
             if (!o) setEditRow(null)
           }}
+          onSaved={() => load(true)}
+        />
+      )}
+
+      {planRow && (
+        <ChangePlanDialog
+          row={planRow}
+          plans={plans}
+          open={!!planRow}
+          onOpenChange={(o) => !o && setPlanRow(null)}
           onSaved={() => load(true)}
         />
       )}
@@ -1952,6 +1966,118 @@ function InfoTile({
         </p>
       </div>
     </div>
+  )
+}
+
+/* ═══════════════════════════ دايلوج تغيير الباقة يدويًا ═══════════════════════════ */
+
+function ChangePlanDialog({
+  row,
+  plans,
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  row: TenantRow
+  plans: Plan[]
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  onSaved: () => void
+}) {
+  const current = plans.find((p) => p.code === row.planCode)
+  const [planId, setPlanId] = React.useState<string>(current ? String(current.id) : '')
+  const [period, setPeriod] = React.useState<'keep' | 'monthly' | 'yearly' | 'trial'>('keep')
+  const [saving, setSaving] = React.useState(false)
+
+  const save = async () => {
+    if (!planId) {
+      toast.error('اختر الباقة الجديدة')
+      return
+    }
+    setSaving(true)
+    try {
+      await api(`/api/admin/tenants/${row.id}/assign-plan`, {
+        method: 'POST',
+        body: {
+          planId: Number(planId),
+          ...(period !== 'keep' ? { period } : {}),
+        },
+      })
+      toast.success('تم تغيير الباقة')
+      onOpenChange(false)
+      onSaved()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل تغيير الباقة')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+        <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
+          <DialogTitle className="flex items-center gap-2.5">
+            <TenantAvatar name={row.shopName} size="lg" />
+            <span>
+              تغيير الباقة
+              <span className="block text-xs font-normal text-muted-foreground">
+                {row.shopName} — الحالية: {row.planName || row.planCode || 'بدون'}
+              </span>
+            </span>
+          </DialogTitle>
+        </DialogHeader>
+        <DialogBody className="space-y-3.5 py-4">
+          <div className="space-y-1.5">
+            <Label>الباقة الجديدة</Label>
+            <Select value={planId} onValueChange={setPlanId}>
+              <SelectTrigger className="rounded-xl">
+                <SelectValue placeholder="اختر الباقة" />
+              </SelectTrigger>
+              <SelectContent>
+                {plans.map((p) => (
+                  <SelectItem key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>نوع الاشتراك</Label>
+            <Select value={period} onValueChange={(v) => setPeriod(v as typeof period)}>
+              <SelectTrigger className="rounded-xl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="keep">بدون تغيير</SelectItem>
+                <SelectItem value="monthly">شهري</SelectItem>
+                <SelectItem value="yearly">سنوي</SelectItem>
+                <SelectItem value="trial">تجريبي</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            التغيير يطبَّق على الاشتراك النشط الحالي بدون تعديل تاريخ الانتهاء. لو مفيش اشتراك نشط
+            هيتم إنشاء اشتراك جديد. لتمديد المدة أو تسجيل دفع استخدم صفحة الاشتراكات.
+          </p>
+        </DialogBody>
+        <DialogFooter className={STICKY_FOOTER}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            إلغاء
+          </Button>
+          <Button
+            onClick={save}
+            disabled={saving || !planId}
+            className="gap-1.5 bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-md shadow-amber-500/20 hover:from-amber-400 hover:to-orange-500"
+          >
+            {saving && <Loader2 className="size-4 animate-spin" />}
+            <Repeat className="size-4" />
+            تأكيد التغيير
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
