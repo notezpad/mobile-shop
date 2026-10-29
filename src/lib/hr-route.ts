@@ -42,3 +42,17 @@ export async function loadHrSettings(tenantId: string): Promise<HrSettingsValues
     dayDivisor: row.dayDivisor,
   }
 }
+
+/**
+ * يلفّ الـ handler: أي استثناء غير متوقع بيتحوّل لرد JSON فيه سبب الخطأ (بدل 500 فاضي)،
+ * فالواجهة تعرض السبب الحقيقي وتقدر نصلحه بسرعة. السبب بيتسجل في لوج السيرفر كمان.
+ */
+export async function hrSafe(fn: () => Promise<Response>): Promise<Response> {
+  try {
+    return await fn()
+  } catch (e) {
+    console.error('[hr] unhandled error:', e)
+    const msg = (e instanceof Error ? e.message : String(e)).replace(/\s+/g, ' ').slice(-300)
+    return NextResponse.json({ error: `خطأ في الخادم: ${msg}` }, { status: 500 })
+  }
+}

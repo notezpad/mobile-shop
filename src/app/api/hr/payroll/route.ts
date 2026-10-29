@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
-import { hrGuard, bad } from '@/lib/hr-route'
+import { hrGuard, bad, hrSafe } from '@/lib/hr-route'
 import { isMonthStr } from '@/lib/hr'
 import { getTenantTimezone, dateStrInTz } from '@/lib/tenantTime'
 import { generatePayrollDraft } from '@/lib/hr-payroll'
@@ -45,8 +45,8 @@ async function __POST(req: NextRequest) {
 }
 
 export async function GET(...args: Parameters<typeof __GET>) {
-  return withDb(() => __GET(...args))
+  return withDb(() => hrSafe(() => __GET(...args)))
 }
 export async function POST(...args: Parameters<typeof __POST>) {
-  return withDb(() => __POST(...args))
+  return withDb(() => hrSafe(() => __POST(...args)))
 }

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { withIdempotency } from '@/lib/idempotency'
-import { hrGuard, bad, loadHrSettings } from '@/lib/hr-route'
+import { hrGuard, bad, loadHrSettings, hrSafe } from '@/lib/hr-route'
 import { countedLate, hashPin, isValidPin, rawLateMinutes, timeToMinutes } from '@/lib/hr'
+import { getSql } from '@/lib/sql'
 import { getTenantTimezone, dateStrInTz, localDateStrToUtcBounds } from '@/lib/tenantTime'
 
 export const dynamic = 'force-dynamic'
@@ -77,7 +78,7 @@ async function __POST(req: NextRequest) {
   if (existing?.checkIn && (existing.status === 'present' || existing.status === 'late')) {
     if (existing.checkOut) return bad('سجّلت حضورك وانصرافك النهارده خلاص', 409)
     if (now.getTime() - existing.checkIn.getTime() < 2 * 60_000) return bad('سجّلت حضورك من لحظات', 409)
-    await db.attendanceRecord.update({ where: { id: existing.id }, data: { checkOut: now } })
+    await getSql()`UPDATE "AttendanceRecord" SET "checkOut" = ${now.toISOString()}::text::timestamp, "updatedAt" = now() WHERE "id" = ${existing.id}`
     return NextResponse.json({ ok: true, action: 'out', name: emp.name, at: now.toISOString() })
   }
 
@@ -87,27 +88,24 @@ async function __POST(req: NextRequest) {
   )
   const lateRaw = rawLateMinutes(now, shiftStartUtc)
   const isLate = countedLate(lateRaw, settings.graceMinutes) > 0
-  const data = {
-    status: isLate ? 'late' : 'present',
-    checkIn: now,
-    checkOut: null,
-    lateMinutes: isLate ? lateRaw : 0,
-    source: 'kiosk',
-    createdBy: session.userId,
-  }
-  await db.attendanceRecord.upsert({
-    where: { employeeId_date: { employeeId: emp.id, date: today } },
-    create: { tenantId: session.tenantId, employeeId: emp.id, date: today, ...data },
-    update: data,
-  })
+  const status = isLate ? 'late' : 'present'
+  const lateMinutes = isLate ? lateRaw : 0
+  await getSql()`
+    INSERT INTO "AttendanceRecord"
+      ("tenantId", "employeeId", "date", "status", "checkIn", "checkOut", "lateMinutes", "source", "createdBy", "updatedAt")
+    VALUES (${session.tenantId}, ${emp.id}, ${today}, ${status}, ${now.toISOString()}::text::timestamp, NULL,
+            ${lateMinutes}, 'kiosk', ${session.userId}, now())
+    ON CONFLICT ("employeeId", "date") DO UPDATE SET
+      "status" = EXCLUDED."status", "checkIn" = EXCLUDED."checkIn", "checkOut" = NULL,
+      "lateMinutes" = EXCLUDED."lateMinutes", "source" = 'kiosk', "createdBy" = EXCLUDED."createdBy", "updatedAt" = now()`
   return NextResponse.json({
     ok: true, action: 'in', name: emp.name, at: now.toISOString(), late: isLate, lateMinutes: isLate ? lateRaw : 0,
   })
 }
 
 export async function GET(...args: Parameters<typeof __GET>) {
-  return withDb(() => __GET(...args))
+  return withDb(() => hrSafe(() => __GET(...args)))
 }
 export async function POST(...args: Parameters<typeof __POST>) {
-  return withIdempotency(args[0] as NextRequest, () => withDb(() => __POST(...args)))
+  return withIdempotency(args[0] as NextRequest, () => withDb(() => hrSafe(() => __POST(...args))))
 }

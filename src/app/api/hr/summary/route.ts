@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
-import { hrGuard } from '@/lib/hr-route'
+import { hrGuard, hrSafe } from '@/lib/hr-route'
 import { addDaysStr, weekdayOf } from '@/lib/hr'
 import { getTenantTimezone, dateStrInTz, startOfMonthInTz } from '@/lib/tenantTime'
 
@@ -78,5 +78,5 @@ async function __GET() {
 }
 
 export async function GET(...args: Parameters<typeof __GET>) {
-  return withDb(() => __GET(...args))
+  return withDb(() => hrSafe(() => __GET(...args)))
 }

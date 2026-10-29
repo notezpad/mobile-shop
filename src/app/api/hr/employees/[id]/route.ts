@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
-import { hrGuard, bad } from '@/lib/hr-route'
+import { hrGuard, bad, hrSafe } from '@/lib/hr-route'
 import { hashPin, isDateStr, isValidPin } from '@/lib/hr'
 import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
 import { logAudit } from '@/lib/audit'
@@ -75,8 +75,8 @@ async function __DELETE(req: NextRequest, { params }: Ctx) {
 }
 
 export async function PUT(...args: Parameters<typeof __PUT>) {
-  return withDb(() => __PUT(...args))
+  return withDb(() => hrSafe(() => __PUT(...args)))
 }
 export async function DELETE(...args: Parameters<typeof __DELETE>) {
-  return withDb(() => __DELETE(...args))
+  return withDb(() => hrSafe(() => __DELETE(...args)))
 }

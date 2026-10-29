@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { withIdempotency } from '@/lib/idempotency'
-import { hrGuard, bad } from '@/lib/hr-route'
+import { hrGuard, bad, hrSafe } from '@/lib/hr-route'
 import { hashPin, isDateStr, isValidPin } from '@/lib/hr'
 import { getTenantTimezone, dateStrInTz, localDateStrToUtcBounds } from '@/lib/tenantTime'
 import { logAudit } from '@/lib/audit'
@@ -85,8 +85,8 @@ async function __POST(req: NextRequest) {
 }
 
 export async function GET(...args: Parameters<typeof __GET>) {
-  return withDb(() => __GET(...args))
+  return withDb(() => hrSafe(() => __GET(...args)))
 }
 export async function POST(...args: Parameters<typeof __POST>) {
-  return withIdempotency(args[0] as NextRequest, () => withDb(() => __POST(...args)))
+  return withIdempotency(args[0] as NextRequest, () => withDb(() => hrSafe(() => __POST(...args))))
 }

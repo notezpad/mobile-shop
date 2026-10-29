@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
-import { hrGuard, bad, loadHrSettings } from '@/lib/hr-route'
+import { hrGuard, bad, loadHrSettings, hrSafe } from '@/lib/hr-route'
 import { DEFAULT_HR_SETTINGS, isTimeStr } from '@/lib/hr'
 import { logAudit } from '@/lib/audit'
 
@@ -40,8 +40,8 @@ async function __PUT(req: NextRequest) {
 }
 
 export async function GET(...args: Parameters<typeof __GET>) {
-  return withDb(() => __GET(...args))
+  return withDb(() => hrSafe(() => __GET(...args)))
 }
 export async function PUT(...args: Parameters<typeof __PUT>) {
-  return withDb(() => __PUT(...args))
+  return withDb(() => hrSafe(() => __PUT(...args)))
 }

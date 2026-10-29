@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
-import { hrGuard, bad } from '@/lib/hr-route'
+import { hrGuard, bad, hrSafe } from '@/lib/hr-route'
 import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
@@ -42,5 +42,5 @@ async function __DELETE(req: NextRequest, { params }: { params: Promise<{ id: st
 }
 
 export async function DELETE(...args: Parameters<typeof __DELETE>) {
-  return withDb(() => __DELETE(...args))
+  return withDb(() => hrSafe(() => __DELETE(...args)))
 }
