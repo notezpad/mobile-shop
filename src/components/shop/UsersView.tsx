@@ -946,8 +946,10 @@ const MODULE_LABELS: Record<string, string> = {
   finance: 'المعاملات المالية', expenses: 'المصروفات', cash: 'الخزنة',
   reports: 'التقارير', settings: 'الإعدادات', users: 'المستخدمين',
   branches: 'الفروع', hr: 'الموارد البشرية',
+  // صلاحية مشرف الفرع: تسجيل الحضور والإجازات فقط، بدون أي مبالغ (مش مرتبطة بصلاحية الموارد البشرية الكاملة)
+  hr_attendance: 'الحضور والإجازات (مشرف)',
 }
-const PERM_MODULES: string[] = ALL_MODULES.filter((m) => m !== 'guide')
+const PERM_MODULES: string[] = [...ALL_MODULES.filter((m) => m !== 'guide'), 'hr_attendance']
 
 // صف في سجل البطاقة: «الاسم ........ القيمة» بخط منقّط زي الفواتير
 function LedgerRow({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
@@ -976,6 +978,9 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
   const [saving, setSaving] = React.useState(false)
   const [branchId, setBranchId] = React.useState<string>('')
   const [branches, setBranches] = React.useState<{ id: number; name: string }[]>([])
+  // الموارد البشرية (وصلاحية المشرف) تظهر بس لو الباقة فيها الموديول
+  const planMods = useShopStore((s) => s.plan.enabledModules)
+  const permModules = PERM_MODULES.filter((m) => (m === 'hr' || m === 'hr_attendance' ? planMods.includes('hr') : true))
   // 🔑 RBAC
   const [useCustomPerms, setUseCustomPerms] = React.useState(false)
   const [selectedPerms, setSelectedPerms] = React.useState<string[]>([])
@@ -1048,8 +1053,9 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
   const isAdmin = role === 'ADMIN'
   // الصفحات مقفولة (بتتعرض كلها مفعّلة) لو مدير أو لو الموظف على «كل الصفحات»
   const locked = isAdmin || !useCustomPerms
-  const has = (m: string) => locked || selectedPerms.includes(m)
-  const grantedCount = PERM_MODULES.filter(has).length
+  // hr_attendance لازم تتمنح صراحةً — «كل الصفحات» مبتديهاش (حماية بيانات الموظفين)
+  const has = (m: string) => (m === 'hr_attendance' ? !isAdmin && useCustomPerms && selectedPerms.includes(m) : locked || selectedPerms.includes(m))
+  const grantedCount = permModules.filter(has).length
   const profitsOn = isAdmin || canViewProfits
   const toggleMod = (m: string) =>
     setSelectedPerms((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]))
@@ -1058,7 +1064,7 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
     ? 'كل الصفحات'
     : grantedCount === 0
       ? 'ولا صفحة'
-      : `${grantedCount} من ${PERM_MODULES.length}`
+      : `${grantedCount} من ${permModules.length}`
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1116,7 +1122,7 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
             {/* عدّاد الصفحات: كل شرطة = صفحة */}
             <div className="hidden md:block" aria-hidden>
               <div className="flex gap-[3px]">
-                {PERM_MODULES.map((m) => (
+                {permModules.map((m) => (
                   <span
                     key={m}
                     className={cn(
@@ -1327,7 +1333,7 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
                     <div className="flex items-center gap-1 text-[11px]">
                       <button
                         type="button"
-                        onClick={() => setSelectedPerms([...PERM_MODULES])}
+                        onClick={() => setSelectedPerms(permModules.filter((m) => m !== 'hr_attendance'))}
                         className="rounded-md px-1.5 py-1 font-semibold text-violet-700 hover:bg-violet-500/10 dark:text-violet-300"
                       >
                         تحديد الكل
@@ -1380,7 +1386,7 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
                 role="group"
                 aria-label="الصفحات"
               >
-                {PERM_MODULES.map((mod) => {
+                {permModules.map((mod) => {
                   const checked = has(mod)
                   return (
                     <button

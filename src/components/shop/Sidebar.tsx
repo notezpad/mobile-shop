@@ -74,6 +74,9 @@ const HR_CHILDREN: { path: string; label: string; color: string; icon: LucideIco
   { path: '/hr/payroll', label: 'الرواتب', color: '#0d9488', icon: BadgeDollarSign },
 ]
 
+/** صفحات مشرف الفرع (صلاحية hr_attendance) */
+const HR_STAFF_PATHS = ['/hr/attendance', '/hr/leaves']
+
 const MAIN_GROUP: NavItem[] = [
   { path: '/dashboard', label: 'لوحة المعلومات', icon: LayoutDashboard, module: 'dashboard' },
   { path: '/pos', label: 'نقطة البيع', icon: ShoppingCart, module: 'pos' },
@@ -394,10 +397,15 @@ function InventoryGroup({
 function HrGroup({
   collapsed,
   onNavigate,
+  staffOnly,
 }: {
   collapsed?: boolean
   onNavigate?: () => void
+  /** مشرف الفرع: الحضور والإجازات فقط (مفيش مبالغ) */
+  staffOnly?: boolean
 }) {
+  const homePath = staffOnly ? '/hr/attendance' : '/hr'
+  const children = staffOnly ? HR_CHILDREN.filter((c) => HR_STAFF_PATHS.includes(c.path)) : HR_CHILDREN
   const router = useRouter()
   const { pathname, isActive } = useActivePath()
   const inHr = pathname.startsWith('/hr')
@@ -422,7 +430,7 @@ function HrGroup({
     const linkEl = (
       <Link
         prefetch={false}
-        href="/hr"
+        href={homePath}
         onMouseEnter={warmHr}
         onPointerDown={warmHr}
         onFocus={warmHr}
@@ -464,7 +472,7 @@ function HrGroup({
     if (!inHr) {
       setOpen(true)
       warmHr()
-      router.push('/hr')
+      router.push(homePath)
       onNavigate?.()
       return
     }
@@ -526,7 +534,7 @@ function HrGroup({
             className="absolute bottom-5 top-0 w-px bg-sidebar-border"
             style={{ insetInlineStart: '27px' }}
           />
-          {HR_CHILDREN.map((child) => {
+          {children.map((child) => {
             const active = pathname === child.path
             const ChildIcon = child.icon
             const warm = () => shouldSkipPreload() || preloadView(child.path)
@@ -872,7 +880,8 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
   const mainItems = MAIN_GROUP.filter((it) => hasModule(it.module))
   const manageItems = MANAGE_GROUP.filter((it) => hasModule(it.module))
   const showInventory = hasModule('inventory')
-  const showHr = hasModule('hr') && isAdmin
+  const hrStaffOnly = !isAdmin && !!user?.permissions?.includes('hr_attendance')
+  const showHr = planHasModule('hr') && (isAdmin || hrStaffOnly)
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -945,7 +954,7 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
                 onNavigate={onNavigate}
               />
             ))}
-            {showHr && <HrGroup collapsed={collapsed} onNavigate={onNavigate} />}
+            {showHr && <HrGroup collapsed={collapsed} onNavigate={onNavigate} staffOnly={hrStaffOnly} />}
           </div>
         </nav>
 

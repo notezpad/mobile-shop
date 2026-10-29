@@ -8,6 +8,7 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
+import { KioskAutoFlush } from './KioskQueueBanner'
 
 export const DAY_NAMES = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
 
@@ -45,34 +46,8 @@ export function dayLabel(dateStr: string): string {
 /** GET عبر طبقة api() (كاش/أوفلاين للقراءة فقط) */
 export const hrGet = <T,>(url: string) => api<T>(url)
 
-/**
- * كتابة مباشرة (بدون طابور أوفلاين) — الفلوس والحضور لازم يتنفذوا فعلاً وأونلاين،
- * وبنبعت Idempotency-Key عشان الضغط المزدوج/إعادة المحاولة ما تكرّرش العملية.
- */
-export async function hrSend<T = any>(url: string, method: 'POST' | 'PUT' | 'DELETE', body?: unknown): Promise<T> {
-  const key =
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : `hr-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
-  let res: Response
-  try {
-    res = await fetch(url, {
-      method,
-      headers: {
-        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-        ...(method === 'POST' ? { 'Idempotency-Key': key } : {}),
-      },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    })
-  } catch {
-    throw new Error('مفيش اتصال بالإنترنت — الحضور والرواتب محتاجين اتصال')
-  }
-  const text = await res.text()
-  let data: any = null
-  try { data = text ? JSON.parse(text) : null } catch { data = null }
-  if (!res.ok) throw new Error(data?.error || `طلب فاشل (${res.status})`)
-  return data as T
-}
+/** كتابة مباشرة (بدون طابور الأوفلاين العام) — التفاصيل في src/lib/hr-client.ts */
+export { hrSend } from '@/lib/hr-client'
 
 export function PageHead({
   title, subtitle, actions,
@@ -127,7 +102,12 @@ export function EmptyState({
 }
 
 export function PageShell({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto w-full max-w-6xl p-3 sm:p-6">{children}</div>
+  return (
+    <div className="mx-auto w-full max-w-6xl p-3 sm:p-6">
+      <KioskAutoFlush />
+      {children}
+    </div>
+  )
 }
 
 export function ListSkeleton({ rows = 4 }: { rows?: number }) {

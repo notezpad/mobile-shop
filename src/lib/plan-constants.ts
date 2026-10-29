@@ -263,6 +263,11 @@ export function enforceVerticalRules(
       capSet.add(c)
     }
   }
+  // 👥 الموارد البشرية: للباقات الاحترافية (موبايلات/ملابس) فقط — مش في الأساسية ولا الغذائية.
+  // بنشيلها هنا حتى لو الداتابيز/الأدمن ضافوها بالغلط (بتتحكم في الصفحة والـ API وصلاحية المشرف).
+  if (businessType === 'food' || planCode === 'electronics-basic' || planCode === 'fashion-basic') {
+    moduleSet.delete('hr')
+  }
   // 🛡️ 2026-10-03: التسعير الديناميكي (dynamic_retail_pricing) — باقة احترافية فقط.
   // نشيله من الباقات الأساسية (electronics-basic, fashion-basic) حتى لو
   // الداتابيز بتقول غير كده. ده يمنع أي bypass عبر API مباشرة.

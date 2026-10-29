@@ -9,6 +9,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { cn } from '@/lib/utils'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { HR_STATUS_LABEL, addDaysStr, weekdayOf, type HrStatus } from '@/lib/hr'
+import { HrNetworkError, newIdempotencyKey } from '@/lib/hr-client'
+import { enqueuePunch, loadItemsCache, queueAvailable, saveItemsCache } from '@/lib/hr-kiosk-queue'
+import { KioskQueueBanner, useKioskQueue } from './KioskQueueBanner'
 import { DAY_NAMES, EmptyState, ListSkeleton, PageHead, PageShell, Pill, dayLabel, hrGet, hrSend } from './hr-ui'
 
 interface Emp { id: number; name: string; jobTitle: string | null; weeklyOffDay: number; hireDate: string }
@@ -153,6 +156,8 @@ export function HrAttendanceView() {
           </Button>
         }
       />
+
+      <KioskQueueBanner />
 
       {loading || !data || !date ? (
         <ListSkeleton />
@@ -301,25 +306,66 @@ function KioskDialog({ onClose }: { onClose: () => void }) {
   const [picked, setPicked] = React.useState<KioskItem | null>(null)
   const [pin, setPin] = React.useState('')
   const [busy, setBusy] = React.useState(false)
-  const [done, setDone] = React.useState<{ text: string; tone: 'ok' | 'late' } | null>(null)
+  const [done, setDone] = React.useState<{ text: string; tone: 'ok' | 'late' | 'queued' } | null>(null)
+  const [offline, setOffline] = React.useState(false)
+  const { queue } = useKioskQueue()
 
   const load = React.useCallback(async () => {
     try {
-      const d = await hrGet<{ items: KioskItem[] }>('/api/hr/kiosk')
+      const d = await hrGet<{ today: string; tz: string; items: KioskItem[] }>('/api/hr/kiosk')
       setItems(d.items)
+      setOffline(false)
+      saveItemsCache(d.items, { today: d.today, tz: d.tz })
     } catch (e: any) {
-      toast.error(e?.message || 'فشل تحميل الموظفين')
-      setItems([])
+      // بدون نت: آخر قائمة اتحملت على الجهاز (حالات اليوم بتتفرّغ لو القائمة قديمة)
+      const c = loadItemsCache<KioskItem>()
+      if (c) {
+        let sameDay = false
+        try { sameDay = new Intl.DateTimeFormat('en-CA', { timeZone: c.tz }).format(new Date()) === c.today } catch { /* ignore */ }
+        setItems(sameDay ? c.items : c.items.map((i) => ({ ...i, status: null, checkIn: null, checkOut: null })))
+        setOffline(true)
+      } else {
+        toast.error(e?.message || 'فشل تحميل الموظفين')
+        setItems([])
+      }
     }
   }, [])
   React.useEffect(() => { load() }, [load])
 
+  // حالة الموظف الفعلية = من السيرفر + اللي اتسجل أوفلاين ومستني المزامنة
+  const effective = React.useCallback((e: KioskItem): KioskItem => {
+    let cur = e
+    for (const p of queue) {
+      if (p.employeeId !== e.id) continue
+      cur = cur.checkIn
+        ? cur.checkOut ? cur : { ...cur, checkOut: p.clientTime }
+        : { ...cur, status: 'present', checkIn: p.clientTime }
+    }
+    return cur
+  }, [queue])
+
+  const punchOffline = (emp: KioskItem, p: string, key: string) => {
+    if (!queueAvailable()) { toast.error('مفيش اتصال، والتخزين على الجهاز غير متاح (وضع خاص؟)'); setPin(''); return }
+    const eff = effective(emp)
+    if (eff.checkOut) { toast.error('سجّلت حضورك وانصرافك النهارده خلاص'); setPin(''); return }
+    const last = queue.filter((q) => q.employeeId === emp.id).at(-1)
+    if (last && Date.now() - new Date(last.clientTime).getTime() < 2 * 60_000) { toast.error('سجّلت من لحظات'); setPin(''); return }
+    enqueuePunch({ id: key, employeeId: emp.id, name: emp.name, pin: p, clientTime: new Date().toISOString() })
+    setDone({
+      text: `تم تسجيل ${eff.checkIn ? 'انصرافك' : 'حضورك'} يا ${emp.name} — بدون إنترنت، هيتأكد لما النت يرجع`,
+      tone: 'queued',
+    })
+    setTimeout(() => { setDone(null); setPicked(null); setPin('') }, 3500)
+  }
+
   const submit = async (p: string) => {
     if (!picked || busy) return
     setBusy(true)
+    const key = newIdempotencyKey()
     try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) { punchOffline(picked, p, key); return }
       const r = await hrSend<{ action: 'in' | 'out'; name: string; late?: boolean; lateMinutes?: number }>(
-        '/api/hr/kiosk', 'POST', { employeeId: picked.id, pin: p },
+        '/api/hr/kiosk', 'POST', { employeeId: picked.id, pin: p }, { key, timeoutMs: 8000 },
       )
       setDone(
         r.action === 'out'
@@ -330,6 +376,7 @@ function KioskDialog({ onClose }: { onClose: () => void }) {
       )
       setTimeout(() => { setDone(null); setPicked(null); setPin(''); load() }, 2500)
     } catch (e: any) {
+      if (e instanceof HrNetworkError) { punchOffline(picked, p, key); return }
       toast.error(e?.message || 'فشل التسجيل')
       setPin('')
     } finally {
@@ -347,8 +394,14 @@ function KioskDialog({ onClose }: { onClose: () => void }) {
           <DialogDescription>اختار اسمك واكتب الـ PIN. أول مرة النهارده = حضور، وبعدها = انصراف.</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+          {offline && !done && (
+            <p className="mb-3 rounded-xl bg-sky-500/10 px-3 py-2 text-sm font-bold text-sky-700">
+              مفيش اتصال — تقدر تسجّل عادي، والتسجيلات هتتبعت لما النت يرجع.
+            </p>
+          )}
+          {!done && <KioskQueueBanner />}
           {done ? (
-            <div className={cn('rounded-2xl p-10 text-center text-xl font-extrabold', done.tone === 'late' ? 'bg-amber-500/10 text-amber-700' : 'bg-emerald-500/10 text-emerald-700')}>
+            <div className={cn('rounded-2xl p-10 text-center text-xl font-extrabold', done.tone === 'late' ? 'bg-amber-500/10 text-amber-700' : done.tone === 'queued' ? 'bg-sky-500/10 text-sky-700' : 'bg-emerald-500/10 text-emerald-700')}>
               {done.text}
             </div>
           ) : !picked ? (
@@ -358,10 +411,10 @@ function KioskDialog({ onClose }: { onClose: () => void }) {
               <EmptyState title="مفيش موظفين" />
             ) : (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {items.map((e) => (
+                {items.map((raw) => { const e = effective(raw); return (
                   <button
                     key={e.id} type="button" disabled={!e.hasPin}
-                    onClick={() => { setPicked(e); setPin('') }}
+                    onClick={() => { setPicked(raw); setPin('') }}
                     className="rounded-2xl border bg-card p-3 text-start transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <div className="truncate font-bold">{e.name}</div>
@@ -369,7 +422,7 @@ function KioskDialog({ onClose }: { onClose: () => void }) {
                       {!e.hasPin ? 'بدون PIN' : e.checkOut ? 'انصرف' : e.checkIn ? 'حاضر — سجّل انصراف' : 'اضغط لتسجيل الحضور'}
                     </div>
                   </button>
-                ))}
+                ) })}
               </div>
             )
           ) : (

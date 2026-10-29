@@ -158,6 +158,8 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   const user = useShopStore((s) => s.user)
   const subscription = useShopStore((s) => s.subscription)
   const tenantTimezone = useShopStore((s) => s.branding.timezone)
+  const planLoaded = useShopStore((s) => s.planLoaded)
+  const enabledModules = useShopStore((s) => s.plan.enabledModules)
   const [mobileOpen, setMobileOpen] = React.useState(false)
 
   // ⚡ Initialize offline sync engine (flush outbox when network returns)
@@ -313,6 +315,19 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
     }
   }, [bootState, router])
 
+  // 👥 الموارد البشرية: لو الباقة مفيهاش الموديول (أساسية/غذائية) الصفحات كأنها مش موجودة،
+  // والمشرف (hr_attendance) مايدخلش غير الحضور والإجازات. الـ API بيرفض برضه (ده مجرد غلاف للواجهة).
+  const isAdminUser = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN'
+  const hrPath = pathname.replace(/\/+$/, '')
+  const hrBlocked =
+    hrPath.startsWith('/hr') && bootState === 'authed' && planLoaded && (
+      !enabledModules.includes('hr') ||
+      (!isAdminUser && !(user?.permissions?.includes('hr_attendance') && (hrPath === '/hr/attendance' || hrPath === '/hr/leaves')))
+    )
+  React.useEffect(() => {
+    if (hrBlocked) router.replace('/dashboard')
+  }, [hrBlocked, router])
+
   if (bootState === 'loading') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -467,7 +482,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         {/* Scrollable content area — renders the page */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain min-h-0 min-w-0">
           <div className="p-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 min-w-0">
-            {children}
+            {hrBlocked ? null : children}
           </div>
         </div>
       </div>

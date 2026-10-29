@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
-import { hrGuard, bad, loadHrSettings, hrSafe } from '@/lib/hr-route'
-import { HR_STATUSES, isDateStr, isMonthStr, monthBounds, type HrStatus } from '@/lib/hr'
+import { hrGuard, bad, loadHrSettings, hrSafe, isAdminRole, STAFF_EDIT_DAYS } from '@/lib/hr-route'
+import { HR_STATUSES, addDaysStr, isDateStr, isMonthStr, monthBounds, type HrStatus } from '@/lib/hr'
 import { getTenantTimezone, dateStrInTz } from '@/lib/tenantTime'
 import { getSql } from '@/lib/sql'
 import { logAudit } from '@/lib/audit'
@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 
 /** GET ?month=YYYY-MM → الموظفين النشطين + سجلات الحضور للشهر */
 async function __GET(req: NextRequest) {
-  const g = await hrGuard('admin')
+  const g = await hrGuard('staff')
   if ('res' in g) return g.res
   const { session } = g
   const tz = await getTenantTimezone(session.tenantId)
@@ -43,7 +43,7 @@ async function __GET(req: NextRequest) {
  * status = null → مسح السجل (يرجع "غير مسجّل" = حاضر ضمنيًا).
  */
 async function __POST(req: NextRequest) {
-  const g = await hrGuard('admin')
+  const g = await hrGuard('staff')
   if ('res' in g) return g.res
   const { session } = g
   const b = await req.json().catch(() => null)
@@ -54,6 +54,7 @@ async function __POST(req: NextRequest) {
   const tz = await getTenantTimezone(session.tenantId)
   const today = dateStrInTz(new Date(), tz)
   const sql = getSql()
+  const staffOnly = !isAdminRole(session.role)
 
   // ── تحقق + تجميع (آخر قيمة لنفس الموظف/اليوم هي اللي تكسب) ──
   const upserts = new Map<string, { employeeId: number; date: string; status: HrStatus; lateMinutes: number; note: string | null }>()
@@ -63,6 +64,7 @@ async function __POST(req: NextRequest) {
     if (!Number.isInteger(employeeId)) return bad('موظف غير صالح')
     if (!isDateStr(r?.date)) return bad('تاريخ غير صالح')
     if (r.date > today) return bad('لا يمكن تسجيل حضور ليوم لم يأتِ بعد')
+    if (staffOnly && r.date < addDaysStr(today, -STAFF_EDIT_DAYS)) return bad(`المشرف يقدر يعدّل آخر ${STAFF_EDIT_DAYS} أيام بس — اطلب من المدير`, 403)
     const key = `${employeeId}|${r.date}`
     if (r.status === null) {
       upserts.delete(key)

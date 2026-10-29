@@ -70,7 +70,15 @@ async function __POST(req: NextRequest) {
   fails.delete(key)
 
   const [tz, settings] = await Promise.all([getTenantTimezone(session.tenantId), loadHrSettings(session.tenantId)])
-  const now = new Date()
+  // تسجيل اتحفظ على الجهاز بدون نت: بنستخدم وقته الحقيقي (clientTime) بحدود أمان —
+  // مش في المستقبل (سماح دقيقتين لفرق الساعة) ومش أقدم من 48 ساعة.
+  let now = new Date()
+  if (b?.clientTime !== undefined) {
+    const t = new Date(String(b.clientTime))
+    if (Number.isNaN(t.getTime()) || t.getTime() > Date.now() + 2 * 60_000) return bad('وقت التسجيل غير صالح')
+    if (t.getTime() < Date.now() - 48 * 3600_000) return bad('التسجيل قديم (أكتر من 48 ساعة) — سجّله يدوي من الحضور', 410)
+    now = t
+  }
   const today = dateStrInTz(now, tz)
   const existing = await db.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId: emp.id, date: today } } })
 

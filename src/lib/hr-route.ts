@@ -1,6 +1,8 @@
 /**
  * hr-route.ts — حراسة مسارات الموارد البشرية (سيرفر فقط).
  *  - 'admin'  : مدير + موديول hr (كل شاشات HR والمرتبات).
+ *  - 'staff'  : مدير، أو موظف معاه صلاحية 'hr_attendance' صراحةً (مشرف الفرع) — للحضور والإجازات فقط،
+ *               ومفيش في المسارات دي أي مبالغ. قائمة الصلاحيات الفاضية = مفيش وصول (عكس باقي الشاشات).
  *  - 'device' : أي مستخدم داخل بالمحل + hr مفعّل في الباقة (كشك الحضور على جهاز المحل).
  */
 import { NextResponse } from 'next/server'
@@ -10,12 +12,14 @@ import { DEFAULT_HR_SETTINGS, type HrSettingsValues } from '@/lib/hr'
 import { requireModule, featureErrorResponse, getTenantModules, FeatureError } from '@/lib/features'
 
 export async function hrGuard(
-  kind: 'admin' | 'device',
+  kind: 'admin' | 'device' | 'staff',
 ): Promise<{ session: Session } | { res: NextResponse }> {
   try {
     const session = kind === 'admin' ? await requireAdmin() : await requireAuth()
-    if (kind === 'admin') {
+    if (kind === 'admin' || (kind === 'staff' && isAdminRole(session.role))) {
       await requireModule(session, 'hr')
+    } else if (kind === 'staff' && !(session.permissions ?? []).includes(HR_STAFF_PERMISSION)) {
+      throw new FeatureError('ليس لديك صلاحية لهذه العملية', 403)
     } else if (session.role !== 'SUPER_ADMIN') {
       const mods = await getTenantModules(session.tenantId)
       if (!mods.includes('hr')) throw new FeatureError('الميزة دي مش متاحة في باقتك الحالية', 403)
@@ -28,6 +32,11 @@ export async function hrGuard(
     return { res: NextResponse.json(err.body, { status: err.status }) }
   }
 }
+
+export const HR_STAFF_PERMISSION = 'hr_attendance'
+/** أقصى رجوع للخلف (بالأيام) لتعديل المشرف — المدير بدون حد */
+export const STAFF_EDIT_DAYS = 3
+export const isAdminRole = (role: string) => role === 'ADMIN' || role === 'SUPER_ADMIN'
 
 export const bad = (error: string, status = 400) => NextResponse.json({ error }, { status })
 

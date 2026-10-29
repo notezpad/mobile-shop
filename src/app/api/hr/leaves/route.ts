@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withDb } from '@/lib/db'
 import { withIdempotency } from '@/lib/idempotency'
 import { getSql } from '@/lib/sql'
-import { hrGuard, bad, hrSafe, loadHrSettings } from '@/lib/hr-route'
-import { LEAVE_TYPES, isDateStr, leaveWorkDays, round2, type LeaveType } from '@/lib/hr'
+import { hrGuard, bad, hrSafe, loadHrSettings, isAdminRole, STAFF_EDIT_DAYS } from '@/lib/hr-route'
+import { LEAVE_TYPES, addDaysStr, isDateStr, leaveWorkDays, round2, type LeaveType } from '@/lib/hr'
 import { getTenantTimezone, dateStrInTz } from '@/lib/tenantTime'
 import { logAudit } from '@/lib/audit'
 
@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 
 /** GET ?year=YYYY → سجل الإجازات + رصيد الإجازة السنوية لكل موظف نشط */
 async function __GET(req: NextRequest) {
-  const g = await hrGuard('admin')
+  const g = await hrGuard('staff')
   if ('res' in g) return g.res
   const { session } = g
   const tz = await getTenantTimezone(session.tenantId)
@@ -45,7 +45,7 @@ async function __GET(req: NextRequest) {
  * أيام فيها حضور فعلي (checkIn) أو الإجازة الأسبوعية أو قبل التعيين بتتخطى.
  */
 async function __POST(req: NextRequest) {
-  const g = await hrGuard('admin')
+  const g = await hrGuard('staff')
   if ('res' in g) return g.res
   const { session } = g
   const b = await req.json().catch(() => null)
@@ -70,6 +70,9 @@ async function __POST(req: NextRequest) {
 
   const sql = getSql()
   const tz = await getTenantTimezone(session.tenantId)
+  if (!isAdminRole(session.role) && startDate < addDaysStr(dateStrInTz(new Date(), tz), -STAFF_EDIT_DAYS)) {
+    return bad(`المشرف يقدر يسجل إجازة تبدأ من آخر ${STAFF_EDIT_DAYS} أيام أو بعدها — اطلب من المدير`, 403)
+  }
   const emp = (await sql<{ id: number; weeklyOffDay: number; hireDate: Date; active: boolean }[]>`
     SELECT "id", "weeklyOffDay", "hireDate", "active" FROM "Employee"
     WHERE "id" = ${employeeId} AND "tenantId" = ${session.tenantId}`)[0]
