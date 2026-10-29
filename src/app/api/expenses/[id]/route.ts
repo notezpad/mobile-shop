@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { canAccessBranchRecord } from '@/lib/branch-scope-db'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
 
@@ -23,6 +24,9 @@ async function __DELETE(
   }
   const expense = await db.expense.findUnique({ where: { id: eid } })
   if (!expense || expense.tenantId !== session.tenantId) {
+    return NextResponse.json({ error: 'المصروف غير موجود' }, { status: 404 })
+  }
+  if (!(await canAccessBranchRecord(session.tenantId, expense.branchId, session.branchId))) {
     return NextResponse.json({ error: 'المصروف غير موجود' }, { status: 404 })
   }
 

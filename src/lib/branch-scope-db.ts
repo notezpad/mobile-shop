@@ -12,7 +12,7 @@ export async function getMainBranchId(tenantId: string): Promise<number | null> 
   return main?.id ?? null
 }
 
-/** where لـ Prisma على Product حسب فرع المستخدم ({} للأدمن). */
+/** where لـ Prisma على أي جدول فيه branchId (Product/Sale/Expense/PurchaseOrder...) ({} للأدمن). */
 export async function productBranchWhere(
   tenantId: string,
   branchId: number | null | undefined,
@@ -34,4 +34,24 @@ export async function canAccessProductBranch(
   if (productBranchId === sessionBranchId) return true
   if (productBranchId != null) return false
   return (await getMainBranchId(tenantId)) === sessionBranchId
+}
+
+/** نفس productBranchWhere — اسم عام للجداول التانية. */
+export const branchWhere = productBranchWhere
+/** نفس canAccessProductBranch — اسم عام للجداول التانية. */
+export const canAccessBranchRecord = canAccessProductBranch
+
+/** أمر الشراء جوه نطاق فرع المستخدم؟ (لو الأمر مش موجود بنسيب المعالج يرد 404 بتاعه) */
+export async function purchaseOrderInScope(
+  tenantId: string,
+  orderId: number,
+  sessionBranchId: number | null | undefined,
+): Promise<boolean> {
+  if (!sessionBranchId) return true
+  const o = await db.purchaseOrder.findUnique({
+    where: { id: orderId },
+    select: { tenantId: true, branchId: true },
+  })
+  if (!o || o.tenantId !== tenantId) return true
+  return canAccessProductBranch(tenantId, o.branchId, sessionBranchId)
 }

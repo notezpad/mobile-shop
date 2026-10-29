@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { canAccessBranchRecord, purchaseOrderInScope } from '@/lib/branch-scope-db'
 import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
@@ -31,7 +32,8 @@ async function __GET(
     where: { id: oid },
     include: { items: true, supplier: true, returns: { include: { items: true }, orderBy: { id: 'desc' } } },
   })
-  if (!order || order.tenantId !== session.tenantId) {
+  if (!order || order.tenantId !== session.tenantId ||
+      !(await canAccessBranchRecord(session.tenantId, order.branchId, session.branchId))) {
     return NextResponse.json({ error: 'أمر الشراء غير موجود' }, { status: 404 })
   }
   return NextResponse.json(order)
@@ -62,6 +64,9 @@ async function __DELETE(
   const oid = parseInt(id, 10)
   if (isNaN(oid)) {
     return NextResponse.json({ error: 'معرف غير صالح' }, { status: 400 })
+  }
+  if (!(await purchaseOrderInScope(session.tenantId, oid, session.branchId))) {
+    return NextResponse.json({ error: 'أمر الشراء غير موجود' }, { status: 404 })
   }
 
   try {

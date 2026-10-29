@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
+import { productBranchWhere } from '@/lib/branch-scope-db'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
 import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
@@ -56,8 +57,15 @@ async function __GET(req: NextRequest) {
   // ⚡ v12 EDGE CACHE (Error 1102 / CPU limit): صفحة المصروفات من صفحات
   // الإدارة — قايمة بـ 500 صف + أسماء المستخدمين في كل فتح. 20 ثانية كاش
   // على الحافة (نفس نهج /api/products) + مسح فوري بعد أي مصروف جديد.
+  // 🏬 موظف الفرع يشوف مصروفات فرعه بس — والأدمن يقدر يفلتر بفرع (?branchId=)
+  const branchFilter = parseInt(searchParams.get('branchId') ?? '', 10)
+  const scopeBranch = session.branchId ?? (Number.isFinite(branchFilter) ? branchFilter : null)
+  Object.assign(where, await productBranchWhere(session.tenantId, scopeBranch))
+  // الكاش ده مفتاحه مش بيشمل الفرع → ممنوع نستخدمه لأي طلب متفلتر بفرع
+  const useCache = !scopeBranch
+
   const rawQuery = `from=${from ?? ''}&to=${to ?? ''}&cat=${category && CATEGORIES.has(category) ? encodeURIComponent(category) : ''}`
-  const cachedExpenses = await matchEdgeCache('/api/expenses', rawQuery, session.tenantId, '1')
+  const cachedExpenses = useCache ? await matchEdgeCache('/api/expenses', rawQuery, session.tenantId, '1') : null
   if (cachedExpenses) return cachedExpenses
 
   const rows = await db.expense.findMany({
@@ -85,7 +93,7 @@ async function __GET(req: NextRequest) {
   }, {})
 
   const res = NextResponse.json({ expenses: result, total, byCategory })
-  await putEdgeCache(res.clone(), '/api/expenses', rawQuery, session.tenantId, 20, '1')
+  if (useCache) await putEdgeCache(res.clone(), '/api/expenses', rawQuery, session.tenantId, 20, '1')
   return res
 }
 
@@ -132,11 +140,22 @@ async function __POST(req: NextRequest) {
   }
   const note = body.note ? String(body.note).trim() || null : null
 
+  // 🏬 فرع المصروف: فرع الموظف، والأدمن يقدر يختار فرع (لازم يكون تابع للمحل)
+  let expenseBranchId: number | null = session.branchId ?? null
+  if (!session.branchId && body.branchId) {
+    const bid = parseInt(String(body.branchId), 10)
+    const br = Number.isFinite(bid)
+      ? await db.branch.findFirst({ where: { id: bid, tenantId: session.tenantId }, select: { id: true } })
+      : null
+    if (!br) return NextResponse.json({ error: 'الفرع غير صالح' }, { status: 400 })
+    expenseBranchId = br.id
+  }
+
   const created = await db.$transaction(async (tx) => {
     const expense = await tx.expense.create({
       data: {
         tenantId: session.tenantId,
-        branchId: session.branchId ?? null,
+        branchId: expenseBranchId,
         category,
         amount,
         note,

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { canAccessBranchRecord } from '@/lib/branch-scope-db'
 import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
@@ -88,6 +89,17 @@ async function __POST(req: NextRequest) {
 
   if (!resolvedSaleId) {
     return NextResponse.json({ error: 'بيانات المرتجع غير مكتملة' }, { status: 400 })
+  }
+  // 🏬 موظف الفرع مايعملش مرتجع على فاتورة فرع تاني
+  if (session.branchId) {
+    const sb = await db.sale.findUnique({
+      where: { id: resolvedSaleId },
+      select: { tenantId: true, branchId: true },
+    })
+    if (!sb || sb.tenantId !== session.tenantId ||
+        !(await canAccessBranchRecord(session.tenantId, sb.branchId, session.branchId))) {
+      return NextResponse.json({ error: 'البيع غير موجود' }, { status: 404 })
+    }
   }
 
   try {

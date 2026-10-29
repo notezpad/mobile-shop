@@ -6,6 +6,7 @@ import { checkLowStockAndNotify, checkExpiringSubscriptions } from '@/lib/notifi
 import { getSql } from '@/lib/sql'
 import { getTenantTimezone, startOfDayInTz, startOfMonthInTz, dateStrInTz } from '@/lib/tenantTime'
 import { matchEdgeCache, putEdgeCache } from '@/lib/edgeCache'
+import { productBranchWhere, getMainBranchId } from '@/lib/branch-scope-db'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,7 +40,8 @@ export async function GET(req: Request) {
 
   // Edge cache key includes profit visibility so each group gets its own cache
   const dashQuery = `days=${chartDays}&p=${canViewProfits ? '1' : '0'}`
-  const cachedDashboard = await matchEdgeCache('/api/dashboard', dashQuery, session.tenantId, 2)
+  // 🏬 مفتاح الكاش ده مش بيشمل الفرع (ولا الـ purge) → الكاش لغير موظفي الفروع بس
+  const cachedDashboard = session.branchId ? null : await matchEdgeCache('/api/dashboard', dashQuery, session.tenantId, 2)
   if (cachedDashboard) return cachedDashboard
 
   return withDb(async () => {
@@ -60,40 +62,48 @@ export async function GET(req: Request) {
     // (⚡ v9: alias last7Start اتشال — الرسم بيتجمع في SQL مباشرة بـ lastNStart)
 
     const tid = session.tenantId
+    // 🏬 نطاق الفرع لموظف الفرع (الأدمن = 0 = كل الفروع). المنتج/الفاتورة غير المسندة = الرئيسي.
+    const bid = session.branchId ?? 0
+    const mainBid = bid ? (await getMainBranchId(tid)) ?? 0 : 0
+    const saleScope = await productBranchWhere(tid, session.branchId)
     const chartEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000)
     // All sums are computed inside PostgreSQL — loading every product and
     // sale item into the Worker was exceeding Cloudflare's CPU limit.
     const profitSince = (since: Date) => db.$queryRaw<{ profit: number }[]>`
       SELECT COALESCE(SUM((i."price" - i."cost") * i."quantity"), 0)::float8 AS profit
       FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
-      WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${since}`
+      WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${since}
+        AND (${bid}::int = 0 OR s."branchId" = ${bid}::int OR (s."branchId" IS NULL AND ${bid}::int = ${mainBid}::int))`
 
     const [
       todaySalesAgg, todayProfitRows, monthSalesAgg, monthProfitRows, cashAgg,
       stockRows, lowStockRows, activeMaintenance, activeMaintenanceOrders, last10SalesRaw,
       topProductRows, customersCount, custAgg, suppAgg, chartRows,
     ] = await Promise.all([
-      db.sale.aggregate({ where: { ...tenantFilter, createdAt: { gte: todayStart }, status: 'مكتملة' }, _sum: { total: true }, _count: { id: true } }),
+      db.sale.aggregate({ where: { ...tenantFilter, ...saleScope, createdAt: { gte: todayStart }, status: 'مكتملة' }, _sum: { total: true }, _count: { id: true } }),
       profitSince(todayStart),
-      db.sale.aggregate({ where: { ...tenantFilter, createdAt: { gte: monthStart }, status: 'مكتملة' }, _sum: { total: true }, _count: { id: true } }),
+      db.sale.aggregate({ where: { ...tenantFilter, ...saleScope, createdAt: { gte: monthStart }, status: 'مكتملة' }, _sum: { total: true }, _count: { id: true } }),
       profitSince(monthStart),
       db.cashEntry.aggregate({ where: tenantFilter, _sum: { amount: true } }),
       db.$queryRaw<{ vcost: number; vprice: number; low: number }[]>`
         SELECT COALESCE(SUM(p."cost" * p."quantity"), 0)::float8 AS vcost,
                COALESCE(SUM(p."price" * p."quantity"), 0)::float8 AS vprice,
                COUNT(*) FILTER (WHERE p."quantity" <= p."minQuantity")::int AS low
-        FROM "Product" p WHERE p."tenantId" = ${tid}`,
+        FROM "Product" p WHERE p."tenantId" = ${tid}
+          AND (${bid}::int = 0 OR p."branchId" = ${bid}::int OR (p."branchId" IS NULL AND ${bid}::int = ${mainBid}::int))`,
       db.$queryRaw<{ id: number; name: string; quantity: number; minQuantity: number; unitLabel: string | null }[]>`
         SELECT p."id", p."name", p."quantity", p."minQuantity", p."unitLabel" FROM "Product" p
         WHERE p."tenantId" = ${tid} AND p."quantity" <= p."minQuantity"
+          AND (${bid}::int = 0 OR p."branchId" = ${bid}::int OR (p."branchId" IS NULL AND ${bid}::int = ${mainBid}::int))
         ORDER BY p."quantity" ASC LIMIT 50`,
       db.maintenanceOrder.count({ where: { ...tenantFilter, status: { in: ['مستلم', 'قيد العمل', 'مكتمل'] } } }),
       db.maintenanceOrder.findMany({ where: { ...tenantFilter, status: { in: ['مستلم', 'قيد العمل', 'مكتمل'] } }, orderBy: { id: 'desc' }, take: 10 }),
-      db.sale.findMany({ where: tenantFilter, orderBy: { id: 'desc' }, take: 10, select: { id: true, invoiceNo: true, createdAt: true, total: true, paid: true, status: true, customer: { select: { name: true } } } }),
+      db.sale.findMany({ where: { ...tenantFilter, ...saleScope }, orderBy: { id: 'desc' }, take: 10, select: { id: true, invoiceNo: true, createdAt: true, total: true, paid: true, status: true, customer: { select: { name: true } } } }),
       db.$queryRaw<{ name: string; quantity: number; total: number; pieceLabel: string | null }[]>`
         SELECT MIN(i."name") AS name, MAX(i."pieceLabel") AS "pieceLabel", SUM(i."quantity")::float8 AS quantity, SUM(i."price" * i."quantity")::float8 AS total
         FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
         WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${last30Start}
+          AND (${bid}::int = 0 OR s."branchId" = ${bid}::int OR (s."branchId" IS NULL AND ${bid}::int = ${mainBid}::int))
         GROUP BY COALESCE(i."productId", 0) ORDER BY quantity DESC LIMIT 8`,
       db.customer.count({ where: tenantFilter }),
       db.customer.aggregate({ where: { ...tenantFilter, balance: { gt: 0 } }, _sum: { balance: true } }),
@@ -118,6 +128,7 @@ export async function GET(req: Request) {
           GROUP BY i."saleId"
         ) ip ON ip."saleId" = s."id"
         WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${lastNStart} AND s."createdAt" < ${chartEnd}
+          AND (${bid}::int = 0 OR s."branchId" = ${bid}::int OR (s."branchId" IS NULL AND ${bid}::int = ${mainBid}::int))
         GROUP BY 1 ORDER BY 1`,
     ])
 
@@ -281,7 +292,7 @@ export async function GET(req: Request) {
       })
     }
     // ⚡ خزّن نسخة على الحافة (clone — الرد الأصلي يكمل للمتصفح)
-    await putEdgeCache(res.clone(), '/api/dashboard', dashQuery, session.tenantId, 45, 2) // dashQuery includes p=0|1
+    if (!session.branchId) await putEdgeCache(res.clone(), '/api/dashboard', dashQuery, session.tenantId, 45, 2) // dashQuery includes p=0|1
     return res
   })
 }

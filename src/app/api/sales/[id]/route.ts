@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { canAccessBranchRecord } from '@/lib/branch-scope-db'
 import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
@@ -34,6 +35,9 @@ async function __GET(
     include: { items: true, customer: true, payments: true },
   })
   if (!sale || sale.tenantId !== session.tenantId) {
+    return NextResponse.json({ error: 'البيع غير موجود' }, { status: 404 })
+  }
+  if (!(await canAccessBranchRecord(session.tenantId, sale.branchId, session.branchId))) {
     return NextResponse.json({ error: 'البيع غير موجود' }, { status: 404 })
   }
   // 🔒 RBAC: تكلفة البنود مخفية عن اللي ملوش صلاحية الأرباح
@@ -116,6 +120,9 @@ async function __DELETE(
     },
   })
   if (!sale || sale.tenantId !== session.tenantId) {
+    return NextResponse.json({ error: 'البيع غير موجود' }, { status: 404 })
+  }
+  if (!(await canAccessBranchRecord(session.tenantId, sale.branchId, session.branchId))) {
     return NextResponse.json({ error: 'البيع غير موجود' }, { status: 404 })
   }
   if (sale.status === 'مرتجعة') {

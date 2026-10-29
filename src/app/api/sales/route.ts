@@ -5,7 +5,7 @@ import { requireCapability, requireModule, requireModuleWritePermission, feature
 import { getTenantTimezone, localDateStrToUtcBounds, dateStrInTz } from '@/lib/tenantTime'
 import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 import { withSql, isUniqueViolation, type Sql } from '@/lib/sql'
-import { productBranchScopeSql } from '@/lib/branch-scope'
+import { productBranchScopeSql, branchScopeSql } from '@/lib/branch-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,6 +53,10 @@ export async function GET(req: NextRequest) {
     const skip  = (page - 1) * limit
 
     const rangeParts = [sql`"tenantId" = ${session.tenantId}`]
+    // 🏬 موظف الفرع يشوف مبيعات فرعه بس — والأدمن يقدر يفلتر بفرع (?branchId=)
+    const branchFilter = parseInt(searchParams.get('branchId') ?? '', 10)
+    const scopeBranch = session.branchId ?? (Number.isFinite(branchFilter) ? branchFilter : null)
+    if (scopeBranch) rangeParts.push(sql`AND ${branchScopeSql(sql, session.tenantId, scopeBranch)}`)
     if (createdAt.gte) rangeParts.push(sql`AND "createdAt" >= ${createdAt.gte}`)
     if (createdAt.lte) rangeParts.push(sql`AND "createdAt" <= ${createdAt.lte}`)
     const rangeWhere = rangeParts
@@ -134,6 +138,7 @@ export async function GET(req: NextRequest) {
 // ─────────────────────────────────────────────────────────────────────────────
 type ProductRow = {
   id: number
+  branchId: number | null
   name: string
   cost: number
   quantity: number
@@ -252,7 +257,7 @@ export async function POST(req: NextRequest) {
     const [products, units, variants, customerRows, tenantRows, variantProductRows] = await Promise.all([
       (ids.length > 0
         ? sql<ProductRow[]>`
-            SELECT "id", "name", "cost", "quantity", "unitLabel"
+            SELECT "id", "branchId", "name", "cost", "quantity", "unitLabel"
             FROM "Product"
             WHERE "tenantId" = ${session.tenantId} AND "id" IN ${sql(ids)}
               AND ${productBranchScopeSql(sql, session.tenantId, session.branchId)}`
@@ -465,7 +470,11 @@ export async function POST(req: NextRequest) {
 
     const payload = {
       tenantId: session.tenantId,
-      branchId: session.branchId ?? null,
+      // 🏬 فرع الفاتورة: فرع الموظف، وللأدمن = فرع الأصناف لو كلها من فرع واحد
+      branchId: session.branchId ?? (() => {
+        const bs = new Set(products.map((p) => p.branchId ?? null))
+        return bs.size === 1 ? [...bs][0] : null
+      })(),
       userId: session.userId,
       customerId,
       total,

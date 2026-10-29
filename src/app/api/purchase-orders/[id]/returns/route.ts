@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { purchaseOrderInScope } from '@/lib/branch-scope-db'
 import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
@@ -39,6 +40,9 @@ async function __GET(
   }
   const oid = parseInt((await params).id, 10)
   if (isNaN(oid)) return NextResponse.json({ error: 'معرف غير صالح' }, { status: 400 })
+  if (!(await purchaseOrderInScope(session.tenantId, oid, session.branchId))) {
+    return NextResponse.json({ error: 'أمر الشراء غير موجود' }, { status: 404 })
+  }
 
   const returns = await db.purchaseReturn.findMany({
     where: { purchaseOrderId: oid, tenantId: session.tenantId },
@@ -58,6 +62,9 @@ async function __POST(
   }
   const oid = parseInt((await params).id, 10)
   if (isNaN(oid)) return NextResponse.json({ error: 'معرف غير صالح' }, { status: 400 })
+  if (!(await purchaseOrderInScope(session.tenantId, oid, session.branchId))) {
+    return NextResponse.json({ error: 'أمر الشراء غير موجود' }, { status: 404 })
+  }
 
   const body = await req.json().catch(() => null)
   if (!body || !Array.isArray(body.items) || body.items.length === 0) {

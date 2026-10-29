@@ -6,6 +6,7 @@ import { requireModule, featureErrorResponse } from '@/lib/features'
 import { round2, REFUND_METHODS } from '@/lib/purchase-return'
 import { getTenantTimezone, dateStrInTz, localDateStrToUtcBounds } from '@/lib/tenantTime'
 import { withSql, isUniqueViolation } from '@/lib/sql'
+import { branchScopeSql, getMainBranchIdSql } from '@/lib/branch-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,6 +59,10 @@ async function __GET(req: NextRequest) {
     }
 
     const rangeParts = [sql`"tenantId" = ${session.tenantId}`]
+    // 🏬 موظف الفرع يشوف مشتريات فرعه بس — والأدمن يقدر يفلتر بفرع (?branchId=)
+    const branchFilter = parseInt(searchParams.get('branchId') ?? '', 10)
+    const scopeBranch = session.branchId ?? (Number.isFinite(branchFilter) ? branchFilter : null)
+    if (scopeBranch) rangeParts.push(sql`AND ${branchScopeSql(sql, session.tenantId, scopeBranch)}`)
     if (createdAt.gte) rangeParts.push(sql`AND "createdAt" >= ${createdAt.gte}`)
     if (createdAt.lte) rangeParts.push(sql`AND "createdAt" <= ${createdAt.lte}`)
     const rangeWhere = rangeParts
@@ -157,11 +162,11 @@ async function __POST(req: NextRequest) {
       .map((i: any) => parseInt(i.productId, 10))
       .filter((n: number) => !isNaN(n))
     const products = ids.length
-      ? await sql<{ id: number; name: string }[]>`
-          SELECT "id", "name" FROM "Product"
+      ? await sql<{ id: number; name: string; branchId: number | null }[]>`
+          SELECT "id", "name", "branchId" FROM "Product"
           WHERE "id" IN ${sql(ids)} AND "tenantId" = ${session.tenantId}`
       : []
-    const productMap = new Map<number, { id: number; name: string }>(products.map((p) => [p.id, p]))
+    const productMap = new Map<number, { id: number; name: string; branchId: number | null }>(products.map((p) => [p.id, p]))
 
     // 🎨 2026-10-18: المنتجات اللي ليها ألوان/مقاسات — الشراء لازم يتحدد على
     // المقاس/اللون نفسه، وإلا الكمية بتتضاف على المنتج بس وتتمسح عند أول بيعة.
@@ -264,6 +269,43 @@ async function __POST(req: NextRequest) {
 
     total = round2(total)
 
+    // 🏬 فرع أمر الشراء: المخزون بيدخل على صف المنتج نفسه، فكل أصناف الأمر لازم تكون
+    // تبع فرع واحد. موظف الفرع = فرعه. الأدمن = الفرع اللي اختاره (body.branchId)
+    // أو فرع الأصناف لو كلها من فرع واحد. المنتج غير المسند = الفرع الرئيسي.
+    const mainBranchId = await getMainBranchIdSql(sql, session.tenantId)
+    let poBranchId: number | null = null
+    if (mainBranchId !== null) {
+      const eff = (b: number | null) => b ?? mainBranchId
+      if (session.branchId) {
+        poBranchId = session.branchId
+      } else if (body.branchId) {
+        const wanted = parseInt(String(body.branchId), 10)
+        const br = Number.isFinite(wanted)
+          ? await sql<{ id: number }[]>`
+              SELECT "id" FROM "Branch" WHERE "id" = ${wanted} AND "tenantId" = ${session.tenantId} LIMIT 1`
+          : []
+        if (!br[0]) return NextResponse.json({ error: 'الفرع غير صالح' }, { status: 400 })
+        poBranchId = br[0].id
+      } else {
+        const set = new Set(products.map((p) => eff(p.branchId)))
+        if (set.size !== 1) {
+          return NextResponse.json(
+            { error: 'الأصناف دي تابعة لأكتر من فرع — اختار الفرع أو اعمل أمر شراء منفصل لكل فرع' },
+            { status: 400 },
+          )
+        }
+        poBranchId = [...set][0]
+      }
+      for (const p of products) {
+        if (eff(p.branchId) !== poBranchId) {
+          return NextResponse.json(
+            { error: `المنتج "${p.name}" تابع لفرع آخر — مينفعش يتشترى على فرع مختلف` },
+            { status: 400 },
+          )
+        }
+      }
+    }
+
     // credit purchase requires a supplier
     if (paid < total && !supplierId) {
       return NextResponse.json(
@@ -298,7 +340,7 @@ async function __POST(req: NextRequest) {
     // المخزون، رصيد المورد، قيد الخزنة. شوف prisma/sql/create-purchase-order.sql
     const payload = {
       tenantId: session.tenantId,
-      branchId: session.branchId ?? null,
+      branchId: poBranchId,
       userId: session.userId,
       supplierId,
       total,
