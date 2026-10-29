@@ -50,6 +50,27 @@ export async function PUT(
       return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
     }
 
+    // 🏬 الفرع: موظف الفرع مايعدّلش منتج فرع تاني ومايقدرش ينقل المنتج لفرع تاني.
+    // الأدمن (بدون فرع) يقدر يغيّر الفرع، بشرط إن الفرع تابع لنفس المحل.
+    if (session.branchId && existing.branchId && existing.branchId !== session.branchId) {
+      return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
+    }
+    let nextBranchId: number | null = existing.branchId
+    if (!session.branchId && body.branchId !== undefined) {
+      const parsed = body.branchId ? parseInt(String(body.branchId), 10) : null
+      if (body.branchId && !Number.isFinite(parsed)) {
+        return NextResponse.json({ error: 'الفرع غير صالح' }, { status: 400 })
+      }
+      if (parsed) {
+        const br = await db.branch.findFirst({
+          where: { id: parsed, tenantId: session.tenantId },
+          select: { id: true },
+        })
+        if (!br) return NextResponse.json({ error: 'الفرع غير موجود' }, { status: 400 })
+      }
+      nextBranchId = parsed || null
+    }
+
     // 🛡️ 2026-09-30 (X9): تعديل التكلفة/الكمية من شاشة المنتج كان أي موظف
     // يقدر يعمله وبصمت — التكلفة بتغير ربح كل الفواتير الجاية، والكمية
     // كانت بتتغير من غير أي حركة مخزون (دفتر الحركات ميغطيهاش).
@@ -115,7 +136,7 @@ export async function PUT(
       if (barcode) {
         // 🏬 2026-10-18: التكرار بيتفحص جوه نفس (المحل + فرع المنتج) بس
         const dup = await db.product.findFirst({
-          where: { tenantId: session.tenantId, barcode, branchId: existing.branchId, id: { not: pid } },
+          where: { tenantId: session.tenantId, barcode, branchId: nextBranchId, id: { not: pid } },
           select: { id: true },
         })
         if (dup) {
@@ -177,12 +198,7 @@ export async function PUT(
                 ? String(body.imagePath)
                 : null
               : existing.imagePath,
-          branchId:
-            body.branchId !== undefined
-              ? body.branchId
-                ? parseInt(body.branchId, 10) || null
-                : null
-              : existing.branchId,
+          branchId: nextBranchId,
           // collection — اسم الكوليكشن لميزة الخصم الجماعي (فاشون فقط)
           collection:
             body.collection !== undefined
@@ -254,7 +270,7 @@ export async function PUT(
       )
     }
     // ⚡ v9: مسح كاش الكتالوج بعد تعديل المنتج (سعر/كمية/وحدات...)
-    await purgeCatalogCaches(session.tenantId, session.branchId)
+    await purgeCatalogCaches(session.tenantId, session.branchId, '3', [existing.branchId, nextBranchId])
     return NextResponse.json(updated)
   })
 }
@@ -295,7 +311,7 @@ export async function PATCH(
       data: { active: body.active },
     })
     // ⚡ v9: مسح كاش الكتالوج بعد تعطيل/تنشيط المنتج
-    await purgeCatalogCaches(session.tenantId, session.branchId)
+    await purgeCatalogCaches(session.tenantId, session.branchId, '3', [existing.branchId])
     return NextResponse.json(updated)
   })
 }
@@ -370,7 +386,7 @@ export async function DELETE(
         try {
           await db.product.delete({ where: { id: pid } })
           // ⚡ v9: مسح كاش الكتالوج بعد الحذف الفوري
-          await purgeCatalogCaches(session.tenantId, session.branchId)
+          await purgeCatalogCaches(session.tenantId, session.branchId, '3', [existing.branchId])
           return NextResponse.json({
             ok: true,
             hard_deleted: true,
@@ -485,7 +501,7 @@ export async function DELETE(
         })
 
         // ⚡ v9: مسح كاش الكتالوج بعد حذف الأرشفة
-        await purgeCatalogCaches(session.tenantId, session.branchId)
+        await purgeCatalogCaches(session.tenantId, session.branchId, '3', [existing.branchId])
         return NextResponse.json({
           ok: true,
           hard_deleted: true,
@@ -542,7 +558,7 @@ export async function DELETE(
           await tx.product.delete({ where: { id: pid } })
         })
         // ⚡ v9: مسح كاش الكتالوج بعد الحذف الكامل (force)
-        await purgeCatalogCaches(session.tenantId, session.branchId)
+        await purgeCatalogCaches(session.tenantId, session.branchId, '3', [existing.branchId])
         return NextResponse.json({
           ok: true,
           hard_deleted: true,

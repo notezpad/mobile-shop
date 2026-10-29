@@ -386,10 +386,24 @@ export async function POST(req: NextRequest) {
       category = await ensureCategory(String(body.category), session.tenantId)
     }
     const barcode = body.barcode ? String(body.barcode).trim() || null : null
+    // 🏬 الفرع المستهدف: موظف الفرع بيتثبت على فرعه، والأدمن بيختار — بشرط إن الفرع تابع لنفس المحل
+    let targetBranchId: number | null = session.branchId ?? null
+    if (!session.branchId && body.branchId) {
+      const parsedBranch = parseInt(String(body.branchId), 10)
+      if (!Number.isFinite(parsedBranch)) {
+        return NextResponse.json({ error: 'الفرع غير صالح' }, { status: 400 })
+      }
+      const br = await db.branch.findFirst({
+        where: { id: parsedBranch, tenantId: session.tenantId },
+        select: { id: true },
+      })
+      if (!br) return NextResponse.json({ error: 'الفرع غير موجود' }, { status: 400 })
+      targetBranchId = parsedBranch
+    }
     // ensure unique barcode (treat empty as null)
     if (barcode) {
       // 🏬 2026-10-18: الباركود فريد جوه (المحل + الفرع) — نفس الباركود مسموح في فرع تاني
-      const targetBranch = session.branchId ?? (body.branchId ? parseInt(body.branchId, 10) : null)
+      const targetBranch = targetBranchId
       const exists = await db.product.findFirst({
         where: { tenantId: session.tenantId, barcode, branchId: targetBranch || null },
         select: { id: true },
@@ -433,7 +447,7 @@ export async function POST(req: NextRequest) {
               : cleanUnitLabel(body.unitLabel)
             : null,
         imagePath: imagePathForCreate,
-        branchId: session.branchId ?? (body.branchId ? parseInt(body.branchId, 10) : null),
+        branchId: targetBranchId,
         collection: body.collection ? String(body.collection).trim() || null : null,
         // 👕 الموسم (فاشون فقط — الافتراضي طوال السنة) + المعروض (افتراضي: كل الكمية)
         season:
@@ -486,7 +500,7 @@ export async function POST(req: NextRequest) {
       })
     }
     // ⚡ v9: مسح كاش الكتالوج فوراً بعد إضافة منتج
-    await purgeCatalogCaches(session.tenantId, session.branchId)
+    await purgeCatalogCaches(session.tenantId, session.branchId, '3', [created.branchId])
 
     // 📊 أول منتج للمحل → حدث AddedFirstProduct (لا يوقف إضافة المنتج أبداً)
     if (session.role !== 'SUPER_ADMIN') {

@@ -168,16 +168,20 @@ export const PURGE_KEYS = {
 export async function purgeCatalogCaches(
   tenantId: number | string,
   branchId: number | null | undefined,
-  v: number | string = '3'
+  v: number | string = '3',
+  extraBranchIds: Array<number | null | undefined> = []
 ): Promise<void> {
-  await purgeEdgeCache(
-    [
-      PURGE_KEYS.products(branchId),
-      PURGE_KEYS.productsInventory(branchId),
-      PURGE_KEYS.categories,
-      PURGE_KEYS.suppliers,
-    ],
-    tenantId,
-    v
+  // 🏬 FIX: GET /api/products بيخزّن بالنسخ '4' (يشوف التكلفة) و'4n' (مايشوفهاش)،
+  // بس الـ purge كان بيمسح '3' بس — فالقايمة كانت بتفضل قديمة (فرع المنتج «بيختفي»).
+  // كمان بنمسح مفتاح الحساب الرئيسي (0) وأي فرع متأثر (القديم/الجديد).
+  const versions = Array.from(new Set([String(v), '3', '4', '4n']))
+  const branches = Array.from(
+    new Set<number>([branchId ?? 0, 0, ...extraBranchIds.map((b) => b ?? 0)])
   )
+  const entries = branches.flatMap((b) => [
+    PURGE_KEYS.products(b),
+    PURGE_KEYS.productsInventory(b),
+  ])
+  entries.push(PURGE_KEYS.categories, PURGE_KEYS.suppliers)
+  await Promise.all(versions.map((ver) => purgeEdgeCache(entries, tenantId, ver)))
 }

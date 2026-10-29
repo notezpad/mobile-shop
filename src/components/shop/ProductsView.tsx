@@ -86,6 +86,8 @@ interface Product {
   quantity: number
   minQuantity: number
   imagePath: string | null
+  // 🏬 الفرع المرتبط بالمنتج (null = غير مسند لفرع) — لازم يتمرر لدايالوج التعديل
+  branchId?: number | null
   active: boolean
   soldQuantity?: number
   retailMarginPercent?: number | null
@@ -406,6 +408,8 @@ export function ProductsView() {
       quantity: p.quantity,
       minQuantity: p.minQuantity,
       imagePath: p.imagePath,
+      // 🏬 FIX: من غير السطر ده الدايالوج كان بيفتح «بدون فرع» وأي حفظ بيمسح الفرع (branchId: null)
+      branchId: p.branchId ?? null,
       retailMarginPercent: p.retailMarginPercent ?? null,
       // 🥬 لازم يتمرروا، وإلا تعديل أي منتج بالوزن كان هيرجّعه «قطعة» ويمسح وحدته
       soldByWeight: p.soldByWeight === true,
