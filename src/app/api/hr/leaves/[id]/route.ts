@@ -5,6 +5,7 @@ import { hrGuard, bad, hrSafe, isAdminRole, STAFF_EDIT_DAYS } from '@/lib/hr-rou
 import { addDaysStr } from '@/lib/hr'
 import { getTenantTimezone, dateStrInTz } from '@/lib/tenantTime'
 import { logAudit } from '@/lib/audit'
+import { branchScopeSql } from '@/lib/branch-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,10 @@ async function __DELETE(req: NextRequest, { params }: { params: Promise<{ id: st
   const oldest = isAdminRole(session.role) ? '' : addDaysStr(dateStrInTz(new Date(), await getTenantTimezone(session.tenantId)), -STAFF_EDIT_DAYS)
   const removed = await sql.begin(async (tx) => {
     const lv = await tx<{ id: number; endDate: string }[]>`
-      SELECT "id", "endDate" FROM "LeaveRequest" WHERE "id" = ${id} AND "tenantId" = ${session.tenantId} FOR UPDATE`
+      SELECT l."id", l."endDate" FROM "LeaveRequest" l JOIN "Employee" e ON e."id" = l."employeeId"
+      WHERE l."id" = ${id} AND l."tenantId" = ${session.tenantId}
+        ${!isAdminRole(session.role) && session.branchId ? tx`AND ${branchScopeSql(tx as any, session.tenantId, session.branchId, 'e.branchId')}` : tx``}
+      FOR UPDATE OF l`
     if (lv.length === 0) return null
     if (!isAdminRole(session.role) && lv[0].endDate < oldest) return 'LOCKED' as const
     const del = await tx`

@@ -179,13 +179,25 @@ export async function getSession(): Promise<Session | null> {
     if (decoded.role === 'SUPER_ADMIN' && (await isSessionRevoked(decoded.userId as string, decoded.iat))) {
       return null
     }
+    // 🏬 فرع الموظف بيتقرا من الداتابيز مش من التوكن: التوكن بيعيش 7 أيام، فلو المدير
+    // سنّد الموظف لفرع (أو غيّره) بعد ما سجّل دخول كان بيفضل شايف كل المحل لحد ما يعمل
+    // خروج ودخول. استعلام واحد بالـ PK للأدوار غير الأدمن بس، ولو فشل بنرجع لقيمة التوكن.
+    let branchId = (decoded.branchId as number | null) ?? null
+    if (decoded.role !== 'ADMIN' && decoded.role !== 'SUPER_ADMIN') {
+      try {
+        const sql = getSql()
+        const rows = await sql<{ branchId: number | null }[]>`
+          SELECT "branchId" FROM "User" WHERE "id" = ${decoded.userId as string} LIMIT 1`
+        if (rows.length > 0) branchId = rows[0].branchId ?? null
+      } catch { /* نكمل بقيمة التوكن */ }
+    }
     return {
       userId: decoded.userId as string,
       tenantId: decoded.tenantId as string,
       role: decoded.role as Session['role'],
       name: decoded.name as string,
       email: decoded.email as string,
-      branchId: (decoded.branchId as number | null) ?? null,
+      branchId,
       permissions: (decoded.permissions as string[] | null) ?? null,
       canViewProfits: Boolean(decoded.canViewProfits),
     }

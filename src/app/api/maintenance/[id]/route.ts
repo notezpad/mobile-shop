@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { canAccessBranchRecord } from '@/lib/branch-scope-db'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +38,10 @@ async function __PUT(
       { error: 'أوردر الصيانة غير موجود' },
       { status: 404 }
     )
+  }
+
+  if (!(await canAccessBranchRecord(session.tenantId, existing.branchId ?? null, session.branchId))) {
+    return NextResponse.json({ error: 'أوردر الصيانة غير موجود' }, { status: 404 })
   }
 
   const nextStatus =
@@ -119,6 +124,9 @@ async function __DELETE(
       { error: 'أوردر الصيانة غير موجود' },
       { status: 404 }
     )
+  }
+  if (!(await canAccessBranchRecord(session.tenantId, existing.branchId ?? null, session.branchId))) {
+    return NextResponse.json({ error: 'أوردر الصيانة غير موجود' }, { status: 404 })
   }
   // 🛡️ 2026-09-30 (X1): حذف الأوردر كان بيسيب قيد الخزنة يتيم — الفلوس
   // بتفضل في الخزنة على حاجة اتمسحت. دلوقتي القيد بيعكس الأول.

@@ -6,6 +6,7 @@ import { hrGuard, bad, hrSafe, loadHrSettings, isAdminRole, STAFF_EDIT_DAYS } fr
 import { LEAVE_TYPES, addDaysStr, isDateStr, leaveWorkDays, round2, type LeaveType } from '@/lib/hr'
 import { getTenantTimezone, dateStrInTz } from '@/lib/tenantTime'
 import { logAudit } from '@/lib/audit'
+import { branchScopeSql } from '@/lib/branch-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,11 @@ async function __GET(req: NextRequest) {
   const yParam = new URL(req.url).searchParams.get('year')
   const year = yParam && /^\d{4}$/.test(yParam) ? yParam : dateStrInTz(new Date(), tz).slice(0, 4)
   const sql = getSql()
+  // 🏬 مشرف الفرع بيشوف إجازات موظفي فرعه بس
+  const empScope = (col: string) =>
+    !isAdminRole(session.role) && session.branchId
+      ? sql`AND ${branchScopeSql(sql, session.tenantId, session.branchId, col)}`
+      : sql``
 
   const [settings, items, emps] = await Promise.all([
     loadHrSettings(session.tenantId),
@@ -26,9 +32,11 @@ async function __GET(req: NextRequest) {
              l."days", l."hours", l."note", l."createdAt"
       FROM "LeaveRequest" l JOIN "Employee" e ON e."id" = l."employeeId"
       WHERE l."tenantId" = ${session.tenantId} AND l."startDate" BETWEEN ${year + '-01-01'} AND ${year + '-12-31'}
+        ${empScope('e.branchId')}
       ORDER BY l."startDate" DESC, l."id" DESC LIMIT 500`,
     sql<{ id: number; name: string }[]>`
-      SELECT "id", "name" FROM "Employee" WHERE "tenantId" = ${session.tenantId} AND "active" = true ORDER BY "name"`,
+      SELECT "id", "name" FROM "Employee" WHERE "tenantId" = ${session.tenantId} AND "active" = true
+        ${empScope('branchId')} ORDER BY "name"`,
   ])
   const used = new Map<number, number>()
   for (const l of items) if (l.type === 'annual') used.set(l.employeeId, (used.get(l.employeeId) ?? 0) + l.days)
@@ -75,7 +83,8 @@ async function __POST(req: NextRequest) {
   }
   const emp = (await sql<{ id: number; weeklyOffDay: number; hireDate: Date; active: boolean }[]>`
     SELECT "id", "weeklyOffDay", "hireDate", "active" FROM "Employee"
-    WHERE "id" = ${employeeId} AND "tenantId" = ${session.tenantId}`)[0]
+    WHERE "id" = ${employeeId} AND "tenantId" = ${session.tenantId}
+      ${!isAdminRole(session.role) && session.branchId ? sql`AND ${branchScopeSql(sql, session.tenantId, session.branchId)}` : sql``}`)[0]
   if (!emp) return bad('الموظف غير موجود', 404)
   if (!emp.active) return bad('الموظف موقوف')
 

@@ -202,6 +202,7 @@ model Branch {
   stocktakes     Stocktake[]
   purchaseOrders PurchaseOrder[]
   expenses       Expense[]
+  maintenanceOrders MaintenanceOrder[]
 
   @@index([tenantId])
 }
@@ -699,9 +700,12 @@ model MaintenanceOrder {
   status       String    @default("مستلم")
   receivedAt   DateTime  @default(now())
   deliveredAt  DateTime?
+  branchId     Int?
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id])
 
+  @@index([branchId])
   @@index([tenantId])
   @@index([tenantId, status])
   @@index([tenantId, phone])

@@ -5,6 +5,7 @@ import { HR_STATUSES, addDaysStr, isDateStr, isMonthStr, monthBounds, type HrSta
 import { getTenantTimezone, dateStrInTz } from '@/lib/tenantTime'
 import { getSql } from '@/lib/sql'
 import { logAudit } from '@/lib/audit'
+import { branchScopeSql } from '@/lib/branch-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,18 +20,31 @@ async function __GET(req: NextRequest) {
   const month = isMonthStr(monthParam) ? monthParam : today.slice(0, 7)
   const { first, last, days } = monthBounds(month)
 
-  const [employees, records, settings] = await Promise.all([
-    db.employee.findMany({
-      where: { tenantId: session.tenantId, active: true },
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true, jobTitle: true, weeklyOffDay: true, hireDate: true },
-    }),
-    db.attendanceRecord.findMany({
-      where: { tenantId: session.tenantId, date: { gte: first, lte: last } },
-      select: { employeeId: true, date: true, status: true, lateMinutes: true, checkIn: true, checkOut: true, note: true, source: true },
-    }),
+  // 🏬 مشرف الفرع بيشوف موظفي فرعه بس (موظف بدون فرع = تابع للرئيسي). المدير بيشوف الكل.
+  const scoped = !isAdminRole(session.role) && !!session.branchId
+  const sqlScope = getSql()
+  const [employees, settings] = await Promise.all([
+    scoped
+      ? sqlScope<{ id: number; name: string; jobTitle: string | null; weeklyOffDay: number; hireDate: Date }[]>`
+          SELECT "id", "name", "jobTitle", "weeklyOffDay", "hireDate" FROM "Employee"
+          WHERE "tenantId" = ${session.tenantId} AND "active" = true
+            AND ${branchScopeSql(sqlScope, session.tenantId, session.branchId)}
+          ORDER BY "name" ASC`
+      : db.employee.findMany({
+          where: { tenantId: session.tenantId, active: true },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, jobTitle: true, weeklyOffDay: true, hireDate: true },
+        }),
     loadHrSettings(session.tenantId),
   ])
+  const records = await db.attendanceRecord.findMany({
+    where: {
+      tenantId: session.tenantId,
+      date: { gte: first, lte: last },
+      ...(scoped ? { employeeId: { in: employees.map((e) => e.id) } } : {}),
+    },
+    select: { employeeId: true, date: true, status: true, lateMinutes: true, checkIn: true, checkOut: true, note: true, source: true },
+  })
   return NextResponse.json({
     month, today, tz, daysInMonth: days, settings,
     employees: employees.map((e) => ({ ...e, hireDate: dateStrInTz(e.hireDate, tz) })),
@@ -83,7 +97,8 @@ async function __POST(req: NextRequest) {
 
   const ids = [...new Set([...upserts.values(), ...deletes.values()].map((r) => r.employeeId))]
   const owned = await sql<{ id: number }[]>`
-    SELECT "id" FROM "Employee" WHERE "tenantId" = ${session.tenantId} AND "id" IN ${sql(ids)}`
+    SELECT "id" FROM "Employee" WHERE "tenantId" = ${session.tenantId} AND "id" IN ${sql(ids)}
+      ${staffOnly ? sql`AND ${branchScopeSql(sql, session.tenantId, session.branchId)}` : sql``}`
   if (owned.length !== ids.length) return bad('موظف غير موجود')
 
   // ⚡ استعلامين خفيفين (postgres.js) بدل معاملة Prisma — توفير CPU على الـ Worker
