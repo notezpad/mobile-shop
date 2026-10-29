@@ -203,6 +203,7 @@ model Branch {
   purchaseOrders PurchaseOrder[]
   expenses       Expense[]
   maintenanceOrders MaintenanceOrder[]
+  cashEntries       CashEntry[]
 
   @@index([tenantId])
 }
@@ -748,9 +749,12 @@ model CashEntry {
   // "فودافون كاش" vs "إنستاباي") — important for accounting because
   // Vodafone Cash is a different asset than physical cash.
   method    String?
+  // 🏬 2026-10-31: فرع القيد (NULL = قديم/غير مسند = الفرع الرئيسي). بيتحدد بـ trigger في الداتابيز.
+  branchId  Int?
   createdAt DateTime @default(now())
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id])
   // 🛡️ 2026-09-15 (v2): back-reference to SalePayment (if this CashEntry
   // was created as part of a sale payment). Nullable + optional relation.
   salePayments SalePayment[]
@@ -758,6 +762,7 @@ model CashEntry {
   @@index([tenantId])
   @@index([tenantId, createdAt])
   @@index([method])
+  @@index([branchId])
 }
 
 // Shop running costs (rent, electricity, salaries, etc.) — admin-only.

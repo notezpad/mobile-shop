@@ -84,7 +84,7 @@ export async function GET(req: Request) {
       profitSince(todayStart),
       db.sale.aggregate({ where: { ...tenantFilter, ...saleScope, createdAt: { gte: monthStart }, status: 'مكتملة' }, _sum: { total: true }, _count: { id: true } }),
       profitSince(monthStart),
-      db.cashEntry.aggregate({ where: tenantFilter, _sum: { amount: true } }),
+      db.cashEntry.aggregate({ where: { ...tenantFilter, ...saleScope }, _sum: { amount: true } }),
       db.$queryRaw<{ vcost: number; vprice: number; low: number }[]>`
         SELECT COALESCE(SUM(p."cost" * p."quantity"), 0)::float8 AS vcost,
                COALESCE(SUM(p."price" * p."quantity"), 0)::float8 AS vprice,

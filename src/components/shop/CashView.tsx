@@ -63,7 +63,16 @@ interface Entry {
   note: string | null
   method?: string | null
   userName?: string | null
+  branchId?: number | null
+  branchName?: string | null
   createdAt: string
+}
+
+interface CashBranch {
+  id: number
+  name: string
+  isMain: boolean
+  balance: number
 }
 
 type Tone =
@@ -190,7 +199,9 @@ function Amt({
 export function CashView() {
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
-  const [data, setData] = React.useState<{ balance: number; entries: Entry[] } | null>(null)
+  const [data, setData] = React.useState<{ balance: number; entries: Entry[]; branches?: CashBranch[] } | null>(null)
+  // 🏬 المدير: فلتر خزنة فرع واحد ('all' = كل الفروع)
+  const [branchFilter, setBranchFilter] = React.useState<string>('all')
   const [loading, setLoading] = React.useState(true)
   const [dialogOpen, setDialogOpen] = React.useState(false)
 
@@ -206,14 +217,16 @@ export function CashView() {
   const load = React.useCallback(async () => {
     setLoading(true)
     try {
-      const d = await api<{ balance: number; entries: Entry[] }>('/api/cash')
+      const d = await api<{ balance: number; entries: Entry[]; branches?: CashBranch[] }>(
+        branchFilter === 'all' ? '/api/cash' : `/api/cash?branchId=${branchFilter}`,
+      )
       setData(d)
     } catch (e: any) {
       toast.error(e?.message || 'فشل التحميل')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [branchFilter])
 
   React.useEffect(() => {
     load()
@@ -386,6 +399,28 @@ export function CashView() {
 
   return (
     <div className="space-y-4">
+      {/* ═══════════════ خزنة كل فرع (للمدير) ═══════════════ */}
+      {(data?.branches?.length ?? 0) > 1 && (
+        <div className="flex flex-wrap gap-2">
+          {[{ id: 'all', name: 'كل الفروع', balance: data!.branches!.reduce((a, b) => a + b.balance, 0) },
+            ...data!.branches!.map((b) => ({ id: String(b.id), name: b.name, balance: b.balance }))].map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => setBranchFilter(b.id)}
+              className={`rounded-xl border px-3 py-2 text-start text-xs transition sm:text-sm ${
+                branchFilter === b.id ? 'border-emerald-500 bg-emerald-500/10 font-bold' : 'bg-card hover:bg-muted'
+              }`}
+            >
+              <span className="block">{b.name}</span>
+              <span className={`block tabular-nums ${b.balance < 0 ? 'text-rose-600' : 'text-muted-foreground'}`}>
+                {formatCurrency(b.balance)}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ═══════════════ الهيرو ═══════════════ */}
       <section className="relative overflow-hidden rounded-3xl border bg-gradient-to-br from-emerald-50 via-white to-amber-50 p-4 dark:from-emerald-950/40 dark:via-card dark:to-amber-950/25 sm:p-7">
         {/* علامة مائية: الخزنة */}
@@ -716,6 +751,11 @@ export function CashView() {
                                     <span className="line-clamp-2">{e.note}</span>
                                   </p>
                                 ) : null}
+                                {(data?.branches?.length ?? 0) > 1 && e.branchName && (
+                                  <span className="mt-1 inline-block rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                                    {e.branchName}
+                                  </span>
+                                )}
                                 {/* الموظف — للموبايل والتابلت فقط */}
                                 {e.userName && (
                                   <p className="mt-1 truncate text-xs text-muted-foreground lg:hidden">بواسطة: {e.userName}</p>
@@ -878,7 +918,7 @@ export function CashView() {
         </aside>
       </div>
 
-      <ManualDialog open={dialogOpen} onOpenChange={setDialogOpen} onSaved={load} balance={balance} />
+      <ManualDialog open={dialogOpen} onOpenChange={setDialogOpen} onSaved={load} balance={balance} branches={data?.branches ?? []} defaultBranch={branchFilter} />
     </div>
   )
 }
@@ -1014,17 +1054,21 @@ interface ManualProps {
   onOpenChange: (o: boolean) => void
   onSaved: () => void
   balance: number
+  branches?: CashBranch[]
+  defaultBranch?: string
 }
 
 const QUICK_ADD = [50, 100, 200, 500, 1000]
-function ManualDialog({ open, onOpenChange, onSaved, balance }: ManualProps) {
+function ManualDialog({ open, onOpenChange, onSaved, balance, branches = [], defaultBranch = 'all' }: ManualProps) {
   const [amount, setAmount] = React.useState('')
   const [note, setNote] = React.useState('')
   const [dir, setDir] = React.useState<'in' | 'out'>('in')
   const [saving, setSaving] = React.useState(false)
+  const [targetBranch, setTargetBranch] = React.useState<string>('')
 
   React.useEffect(() => {
     if (open) {
+      setTargetBranch(defaultBranch !== 'all' ? defaultBranch : String(branches.find((b) => b.isMain)?.id ?? ''))
       setAmount('')
       setNote('')
       setDir('in')
@@ -1057,7 +1101,7 @@ function ManualDialog({ open, onOpenChange, onSaved, balance }: ManualProps) {
     try {
       await api('/api/cash', {
         method: 'POST',
-        body: { amount: signed, note: note.trim(), method: 'cash' },
+        body: { amount: signed, note: note.trim(), method: 'cash', ...(targetBranch ? { branchId: Number(targetBranch) } : {}) },
       })
       toast.success(isIn ? 'تم الإيداع في الخزنة' : 'تم السحب من الخزنة')
       onSaved()
@@ -1142,6 +1186,23 @@ function ManualDialog({ open, onOpenChange, onSaved, balance }: ManualProps) {
               ))}
             </div>
           </div>
+
+          {/* 🏬 الفرع (للمدير لما يكون فيه فروع) */}
+          {branches.length > 1 && (
+            <div className="space-y-2">
+              <Label htmlFor="m-branch">خزنة أنهي فرع؟</Label>
+              <select
+                id="m-branch"
+                value={targetBranch}
+                onChange={(e) => setTargetBranch(e.target.value)}
+                className="h-11 w-full rounded-xl border bg-background px-3 text-sm"
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* السبب — كتابة يدوية (إجباري) */}
           <div className="space-y-2">

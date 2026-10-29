@@ -5,6 +5,7 @@ import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { parseSignedAmount } from '@/lib/amount'
 import { withSql, type Sql } from '@/lib/sql'
+import { branchScopeSql } from '@/lib/branch-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,7 @@ const MANUAL_METHODS = new Set(['cash', 'vodafone_cash', 'instapay', 'fawry', 'c
  * من غير كاش حافة عمداً — الخزنة بتتغير مع كل بيعة/مصروف/سداد، وحدثة الرصيد
  * أهم هنا من أي توفير إضافي.
  */
-async function __GET(sql: Sql) {
+async function __GET(sql: Sql, req: NextRequest) {
   let session
   try {
     session = await requireAuth()
@@ -36,7 +37,22 @@ async function __GET(sql: Sql) {
   }
 
   const tid = session.tenantId
-  const [entryRows, balanceRows] = await Promise.all([
+
+  // 🏬 خزنة كل فرع: موظف الفرع بيشوف خزنة فرعه بس (والقيود غير المسندة لو فرعه هو الرئيسي).
+  // المدير (بدون فرع) بيشوف الكل، وممكن يفلتر بـ ?branchId=<id> لخزنة فرع واحد.
+  const branches = await sql<{ id: number; name: string; isMain: boolean }[]>`
+    SELECT "id", "name", "isMain" FROM "Branch" WHERE "tenantId" = ${tid} ORDER BY "isMain" DESC, "id" ASC`
+  const mainBranch = branches.find((b) => b.isMain) ?? null
+  const reqBranch = new URL(req.url).searchParams.get('branchId')
+  const filterBranch = session.branchId
+    ? session.branchId
+    : reqBranch && reqBranch !== 'all' && Number.isFinite(parseInt(reqBranch, 10))
+      ? parseInt(reqBranch, 10)
+      : null
+  const scope = branchScopeSql(sql, tid, filterBranch, 'e.branchId')
+  const scopeBal = branchScopeSql(sql, tid, filterBranch, 'branchId')
+
+  const [entryRows, balanceRows, perBranchRows] = await Promise.all([
     sql<{
       id: number
       tenantId: string
@@ -46,25 +62,47 @@ async function __GET(sql: Sql) {
       note: string | null
       userId: string | null
       method: string | null
+      branchId: number | null
       createdAt: Date
       userName: string | null
     }[]>`
       SELECT e."id", e."tenantId", e."source", e."refId", e."amount", e."note",
-             e."userId", e."method", e."createdAt",
+             e."userId", e."method", e."branchId", e."createdAt",
              (SELECT u."name" FROM "User" u WHERE u."id" = e."userId") AS "userName"
       FROM "CashEntry" e
-      WHERE e."tenantId" = ${tid}
+      WHERE e."tenantId" = ${tid} AND ${scope}
       ORDER BY e."id" DESC
       LIMIT 200`,
     sql<{ balance: number }[]>`
       SELECT COALESCE(SUM("amount"), 0)::float8 AS balance
       FROM "CashEntry"
-      WHERE "tenantId" = ${tid}`,
+      WHERE "tenantId" = ${tid} AND ${scopeBal}`,
+    // رصيد كل فرع (للمدير فقط) — القيود غير المسندة بتتحسب على الفرع الرئيسي
+    session.branchId || branches.length === 0
+      ? Promise.resolve([] as { branchId: number | null; balance: number }[])
+      : sql<{ branchId: number | null; balance: number }[]>`
+          SELECT "branchId", COALESCE(SUM("amount"), 0)::float8 AS balance
+          FROM "CashEntry" WHERE "tenantId" = ${tid} GROUP BY "branchId"`,
   ])
+
+  const nameOf = new Map(branches.map((b) => [b.id, b.name]))
+  const effective = (id: number | null) => id ?? mainBranch?.id ?? null
+  const entries = entryRows.map((e) => {
+    const bid = effective(e.branchId)
+    return { ...e, branchId: bid, branchName: bid != null ? nameOf.get(bid) ?? null : null }
+  })
+  const totals = new Map<number, number>()
+  for (const r of perBranchRows) {
+    const bid = effective(r.branchId)
+    if (bid != null) totals.set(bid, (totals.get(bid) ?? 0) + Number(r.balance))
+  }
 
   return NextResponse.json({
     balance: Number(balanceRows[0]?.balance ?? 0),
-    entries: entryRows,
+    entries,
+    branches: session.branchId
+      ? []
+      : branches.map((b) => ({ id: b.id, name: b.name, isMain: b.isMain, balance: totals.get(b.id) ?? 0 })),
   })
 }
 
@@ -111,6 +149,20 @@ async function __POST(req: NextRequest) {
   if (!MANUAL_METHODS.has(method)) {
     return NextResponse.json({ error: 'طريقة الدفع غير صالحة' }, { status: 400 })
   }
+  // 🏬 الحركة اليدوية لازم تتسجل على فرع: اللي المدير يحدده، وإلا الفرع الرئيسي (لو المحل عنده فروع).
+  let branchId: number | null = session.branchId ?? null
+  if (!branchId) {
+    if (body.branchId) {
+      const bid = parseInt(String(body.branchId), 10)
+      const ok = Number.isFinite(bid)
+        ? await db.branch.findFirst({ where: { id: bid, tenantId: session.tenantId }, select: { id: true } })
+        : null
+      if (!ok) return NextResponse.json({ error: 'الفرع غير موجود' }, { status: 400 })
+      branchId = bid
+    } else {
+      branchId = (await db.branch.findFirst({ where: { tenantId: session.tenantId, isMain: true }, select: { id: true } }))?.id ?? null
+    }
+  }
   const created = await db.cashEntry.create({
     data: {
       tenantId: session.tenantId,
@@ -119,13 +171,14 @@ async function __POST(req: NextRequest) {
       method,
       note,
       userId: session.userId,
+      branchId,
     },
   })
   return NextResponse.json(created, { status: 201 })
 }
 
-export async function GET() {
-  return withSql((sql) => __GET(sql))
+export async function GET(req: NextRequest) {
+  return withSql((sql) => __GET(sql, req))
 }
 export async function POST(...args: Parameters<typeof __POST>) {
   return withIdempotency(args[0] as NextRequest, () => withDb(() => __POST(...args)))
