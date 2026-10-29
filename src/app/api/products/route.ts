@@ -11,6 +11,8 @@ import { TRACKING_EVENTS } from '@/lib/tracking/types'
 import { withSql, type Sql } from '@/lib/sql'
 import { isInternalImageUrl } from '@/lib/product-image'
 import { isSeasonValue, parseClosedSeasons } from '@/lib/seasonal'
+import { productBranchScopeSql } from '@/lib/branch-scope'
+import { getMainBranchId } from '@/lib/branch-scope-db'
 
 export const dynamic = 'force-dynamic'
 
@@ -97,7 +99,8 @@ function buildWhere(
   else if (status === 'inactive') parts.push(sql`AND "active" = false`)
 
   if (hasSessionBranch) {
-    parts.push(sql`AND ("branchId" = ${sessionBranchId} OR "branchId" IS NULL)`)
+    // 🏬 عزل الفرع: منتجات فرعه بس (والغير مسندة لو فرعه هو الرئيسي)
+    parts.push(sql`AND ${productBranchScopeSql(sql, tenantId, sessionBranchId)}`)
   } else if (branchIdParam && branchIdParam !== 'all') {
     if (branchIdParam === 'none') parts.push(sql`AND "branchId" IS NULL`)
     else parts.push(sql`AND "branchId" = ${parseInt(branchIdParam, 10)}`)
@@ -399,6 +402,9 @@ export async function POST(req: NextRequest) {
       })
       if (!br) return NextResponse.json({ error: 'الفرع غير موجود' }, { status: 400 })
       targetBranchId = parsedBranch
+    } else if (!session.branchId) {
+      // 🏬 محل له فروع ومحدّدش فرع → المنتج يتبع الفرع الرئيسي (مفيش منتج «سايب»)
+      targetBranchId = await getMainBranchId(session.tenantId)
     }
     // ensure unique barcode (treat empty as null)
     if (barcode) {

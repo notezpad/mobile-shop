@@ -7,6 +7,7 @@ import { getTenantTimezone, localDateStrToUtcBounds, startOfDayInTz } from '@/li
 import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 import { withSql, type Sql } from '@/lib/sql'
 import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
+import { canAccessProductBranch } from '@/lib/branch-scope-db'
 import { evaluateManualMovement, splitReasonNote, type ManualMoveType } from '@/lib/stock-policy'
 
 export const dynamic = 'force-dynamic'
@@ -212,7 +213,7 @@ async function __POST(req: NextRequest) {
 
   const product = await db.product.findUnique({ where: { id: productId } })
   if (!product || product.tenantId !== s.tenantId) return NextResponse.json({ error: 'منتج غير صالح' }, { status: 400 })
-  if (s.branchId && product.branchId && product.branchId !== s.branchId) {
+  if (!(await canAccessProductBranch(s.tenantId, product.branchId, s.branchId))) {
     return NextResponse.json({ error: 'لا صلاحية على منتجات فرع آخر' }, { status: 403 })
   }
 

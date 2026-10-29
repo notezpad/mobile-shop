@@ -5,6 +5,7 @@ import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { round2 } from '@/lib/purchase-return'
 import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
+import { canAccessProductBranch } from '@/lib/branch-scope-db'
 
 export const dynamic = 'force-dynamic'
 
@@ -121,7 +122,7 @@ async function __POST(req: NextRequest) {
     if (!p) {
       return NextResponse.json({ error: `صنف غير موجود (#${l.productId})` }, { status: 400 })
     }
-    if (s.branchId && p.branchId && p.branchId !== s.branchId) {
+    if (!(await canAccessProductBranch(s.tenantId, p.branchId, s.branchId))) {
       return NextResponse.json({ error: `لا صلاحية على الصنف "${p.name}" (فرع آخر)` }, { status: 403 })
     }
   }

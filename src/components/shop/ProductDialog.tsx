@@ -127,7 +127,12 @@ export function ProductDialog({
       setRetailMarginPercent(
         initial?.retailMarginPercent != null ? String(initial.retailMarginPercent) : ''
       )
-      fetch('/api/branches').then(r => r.ok ? r.json() : []).then(setBranches).catch(() => setBranches([]))
+      fetch('/api/branches').then(r => r.ok ? r.json() : []).then((list: { id: number; name: string; isMain?: boolean }[]) => {
+        setBranches(list)
+        // 🏬 المنتج لازم يتبع فرع: الافتراضي (جديد أو قديم غير مسند) = الفرع الرئيسي
+        const main = list.find((b) => b.isMain) ?? list[0]
+        if (main) setBranchId((prev) => prev || String(main.id))
+      }).catch(() => setBranches([]))
       // 👕 الموسم (فاشون) — المعروض مش من الفورم تاني (كل الكمية معروضة افتراضيًا)
       setSeason((initial as any)?.season ?? 'ALL_YEAR')
       // عدد المقاسات: المنتج اللي له ألوان/مقاسات المعروض بيتقسم على مستوى المقاس
@@ -329,7 +334,7 @@ export function ProductDialog({
               <Field
                 label="الفرع"
                 className="col-span-2"
-                hint={branches.length > 0 ? 'الموظفون المرتبطون بفرع بيشوفوا منتجاته بس.' : undefined}
+                hint={branches.length > 0 ? 'كل منتج تابع لفرع واحد ومخزونه خاص بيه — الموظف المرتبط بفرع بيشوف منتجات فرعه بس.' : undefined}
               >
                 {branches.length > 0 ? (
                   <Select
@@ -340,7 +345,6 @@ export function ProductDialog({
                       <SelectValue placeholder="اختر الفرع" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">بدون فرع محدد</SelectItem>
                       {branches.map((b) => (
                         <SelectItem key={b.id} value={String(b.id)}>
                           {b.name}

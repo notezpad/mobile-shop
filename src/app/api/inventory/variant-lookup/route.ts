@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { productBranchWhere } from '@/lib/branch-scope-db'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +30,7 @@ async function __GET(req: NextRequest) {
       barcode: code,
       product: {
         tenantId: s.tenantId,
-        ...(wanted ? { OR: [{ branchId: wanted }, { branchId: null }] } : {}),
+        ...(await productBranchWhere(s.tenantId, wanted)),
       },
     },
     include: { product: { select: { id: true, name: true, barcode: true, branchId: true, soldByWeight: true } } },

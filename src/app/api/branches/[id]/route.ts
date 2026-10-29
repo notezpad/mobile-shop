@@ -56,9 +56,22 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
     if (!branch || branch.tenantId !== s.tenantId) {
       return NextResponse.json({ error: 'غير موجود' }, { status: 404 })
     }
-    // detach references then delete
-    await db.product.updateMany({ where: { branchId: bid, tenantId: s.tenantId }, data: { branchId: null } })
-    await db.user.updateMany({ where: { branchId: bid, tenantId: s.tenantId }, data: { branchId: null } })
+    // 🏬 الفرع الرئيسي مايتحذفش طول ما فيه فروع تانية (وإلا المنتجات والموظفين يبقوا «سايبين»)
+    const others = await db.branch.count({ where: { tenantId: s.tenantId, id: { not: bid } } })
+    if (branch.isMain && others > 0) {
+      return NextResponse.json(
+        { error: 'لا يمكن حذف الفرع الرئيسي — احذف الفروع الأخرى أولاً' },
+        { status: 400 }
+      )
+    }
+    // منتجات وموظفين الفرع المحذوف بينتقلوا للفرع الرئيسي — مش NULL: الموظف بدون فرع
+    // بياخد صلاحية رؤية كل الفروع، والمنتج بدون فرع كان بيظهر للكل.
+    const mainBranch = branch.isMain
+      ? null
+      : await db.branch.findFirst({ where: { tenantId: s.tenantId, isMain: true }, select: { id: true } })
+    const fallbackId = mainBranch?.id ?? null
+    await db.product.updateMany({ where: { branchId: bid, tenantId: s.tenantId }, data: { branchId: fallbackId } })
+    await db.user.updateMany({ where: { branchId: bid, tenantId: s.tenantId }, data: { branchId: fallbackId } })
     await db.branch.delete({ where: { id: bid } })
     // ⚡ v12: حذف فرع → امسح كاش الفروع وتقرير الفروع فورًا
     await purgeEdgeCache([PURGE_KEYS.branches, PURGE_KEYS.reportsBranches], s.tenantId, '1')

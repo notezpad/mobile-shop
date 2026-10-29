@@ -5,6 +5,7 @@ import { requireCapability, requireModule, requireModuleWritePermission, feature
 import { getTenantTimezone, localDateStrToUtcBounds, dateStrInTz } from '@/lib/tenantTime'
 import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 import { withSql, isUniqueViolation, type Sql } from '@/lib/sql'
+import { productBranchScopeSql } from '@/lib/branch-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -253,7 +254,8 @@ export async function POST(req: NextRequest) {
         ? sql<ProductRow[]>`
             SELECT "id", "name", "cost", "quantity", "unitLabel"
             FROM "Product"
-            WHERE "tenantId" = ${session.tenantId} AND "id" IN ${sql(ids)}`
+            WHERE "tenantId" = ${session.tenantId} AND "id" IN ${sql(ids)}
+              AND ${productBranchScopeSql(sql, session.tenantId, session.branchId)}`
         : Promise.resolve([] as ProductRow[])),
       (unitIds.length > 0
         ? sql<ProductUnitRow[]>`

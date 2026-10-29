@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
+import { productBranchWhere } from '@/lib/branch-scope-db'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,9 +33,7 @@ async function __GET() {
     active: true,
     purchaseOrderItems: { none: {} },
   }
-  if (session.branchId) {
-    where.OR = [{ branchId: session.branchId }, { branchId: null }]
-  }
+  Object.assign(where, await productBranchWhere(session.tenantId, session.branchId))
 
   const products = await db.product.findMany({
     where,

@@ -6,6 +6,7 @@ import { getPlanContext, requireModuleWritePermission, featureErrorResponse } fr
 import { ensureCategory } from '../route'
 import { isInternalImageUrl } from '@/lib/product-image'
 import { purgeCatalogCaches } from '@/lib/edgeCache'
+import { canAccessProductBranch, getMainBranchId } from '@/lib/branch-scope-db'
 import { displayAfterTotalChange, isSeasonValue } from '@/lib/seasonal'
 
 export const dynamic = 'force-dynamic'
@@ -52,7 +53,7 @@ export async function PUT(
 
     // 🏬 الفرع: موظف الفرع مايعدّلش منتج فرع تاني ومايقدرش ينقل المنتج لفرع تاني.
     // الأدمن (بدون فرع) يقدر يغيّر الفرع، بشرط إن الفرع تابع لنفس المحل.
-    if (session.branchId && existing.branchId && existing.branchId !== session.branchId) {
+    if (!(await canAccessProductBranch(session.tenantId, existing.branchId, session.branchId))) {
       return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
     }
     let nextBranchId: number | null = existing.branchId
@@ -68,7 +69,8 @@ export async function PUT(
         })
         if (!br) return NextResponse.json({ error: 'الفرع غير موجود' }, { status: 400 })
       }
-      nextBranchId = parsed || null
+      // محل له فروع + «بدون فرع» → الفرع الرئيسي
+      nextBranchId = parsed || (await getMainBranchId(session.tenantId))
     }
 
     // 🛡️ 2026-09-30 (X9): تعديل التكلفة/الكمية من شاشة المنتج كان أي موظف
@@ -306,6 +308,9 @@ export async function PATCH(
     if (!existing || existing.tenantId !== session.tenantId) {
       return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
     }
+    if (!(await canAccessProductBranch(session.tenantId, existing.branchId, session.branchId))) {
+      return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
+    }
     const updated = await db.product.update({
       where: { id: pid },
       data: { active: body.active },
@@ -341,6 +346,9 @@ export async function DELETE(
     }
     const existing = await db.product.findUnique({ where: { id: pid } })
     if (!existing || existing.tenantId !== session.tenantId) {
+      return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
+    }
+    if (!(await canAccessProductBranch(session.tenantId, existing.branchId, session.branchId))) {
       return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
     }
 
