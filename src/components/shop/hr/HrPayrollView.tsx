@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { AlertTriangle, ChevronLeft, ChevronRight, FileSpreadsheet, Loader2, RefreshCw, Settings2, Trash2, Wallet } from 'lucide-react'
+import { AlertTriangle, MessageCircle, ChevronLeft, ChevronRight, FileSpreadsheet, Loader2, RefreshCw, Settings2, Trash2, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,6 +18,7 @@ interface Slip {
   id: number; employeeId: number; employeeName: string; baseSalary: number; payableBase: number
   absentDays: number; absenceDeduction: number; lateMinutes: number; lateDeduction: number
   bonus: number; penalty: number; advanceDeduction: number; net: number; note: string | null; unrecordedDays: number
+  phone: string | null
 }
 interface Run { id: number; month: string; status: 'draft' | 'paid'; totalNet: number; method: string | null; paidAt: string | null; payslips: Slip[] }
 
@@ -199,8 +200,8 @@ export function HrPayrollView() {
             <table className="w-full min-w-[820px] text-sm">
               <thead className="bg-muted/50 text-xs text-muted-foreground">
                 <tr>
-                  {['الموظف', 'الأساسي', 'غياب', 'تأخير', 'حافز', 'جزاء', 'قسط سلفة', 'الصافي'].map((h) => (
-                    <th key={h} className="px-3 py-2 text-start font-bold">{h}</th>
+                  {['الموظف', 'الأساسي', 'غياب', 'تأخير', 'حافز', 'جزاء', 'قسط سلفة', 'الصافي', ''].map((h, i) => (
+                    <th key={i} className="px-3 py-2 text-start font-bold">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -237,6 +238,9 @@ export function HrPayrollView() {
                       </td>
                       <td className="px-3 py-2 tabular-nums text-violet-600">{p.advanceDeduction > 0 ? `- ${money(p.advanceDeduction)}` : '—'}</td>
                       <td className="px-3 py-2 text-base font-extrabold tabular-nums">{money(p.net)}</td>
+                      <td className="px-3 py-2">
+                        <WhatsAppSlip slip={p} month={run.month} shop={shopName} />
+                      </td>
                     </tr>
                   )
                 })}
@@ -298,6 +302,54 @@ export function HrPayrollView() {
   )
 }
 
+/** رقم مصري → صيغة دولية لـ wa.me (01xxxxxxxxx → 201xxxxxxxxx) */
+function waNumber(raw: string | null): string | null {
+  if (!raw) return null
+  let d = raw.replace(/[^\d+]/g, '')
+  if (d.startsWith('+')) d = d.slice(1)
+  else if (d.startsWith('00')) d = d.slice(2)
+  else if (d.startsWith('0')) d = `20${d.slice(1)}`
+  return /^\d{10,15}$/.test(d) ? d : null
+}
+
+function slipText(p: Slip, month: string, shop: string): string {
+  const lines = [
+    `*قسيمة راتب ${monthLabel(month)}*${shop ? ` — ${shop}` : ''}`,
+    `الموظف: ${p.employeeName}`,
+    `الأساسي: ${money(p.payableBase)}`,
+  ]
+  if (p.absenceDeduction > 0) lines.push(`خصم غياب (${p.absentDays} يوم): - ${money(p.absenceDeduction)}`)
+  if (p.lateDeduction > 0) lines.push(`خصم تأخير (${p.lateMinutes} دقيقة): - ${money(p.lateDeduction)}`)
+  if (p.bonus > 0) lines.push(`حافز: + ${money(p.bonus)}`)
+  if (p.penalty > 0) lines.push(`جزاء: - ${money(p.penalty)}`)
+  if (p.advanceDeduction > 0) lines.push(`قسط سلفة: - ${money(p.advanceDeduction)}`)
+  lines.push(`*الصافي: ${money(p.net)}*`)
+  return lines.join('\n')
+}
+
+function WhatsAppSlip({ slip, month, shop }: { slip: Slip; month: string; shop: string }) {
+  const num = waNumber(slip.phone)
+  const text = slipText(slip, month, shop)
+  if (!num) {
+    return (
+      <Button
+        variant="ghost" size="sm" className="gap-1 text-muted-foreground"
+        title={slip.phone ? 'رقم الموبايل غير صالح — اضغط لنسخ القسيمة' : 'مفيش رقم موبايل — اضغط لنسخ القسيمة'}
+        onClick={() => { navigator.clipboard?.writeText(text).then(() => toast.success('تم نسخ القسيمة'), () => toast.error('تعذّر النسخ')) }}
+      >
+        نسخ
+      </Button>
+    )
+  }
+  return (
+    <Button asChild variant="ghost" size="sm" className="gap-1 text-emerald-600">
+      <a href={`https://wa.me/${num}?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer">
+        <MessageCircle className="size-4" />واتساب
+      </a>
+    </Button>
+  )
+}
+
 function PayDialog({ run, onClose, onPaid }: { run: Run; onClose: () => void; onPaid: () => void }) {
   const [method, setMethod] = React.useState('cash')
   const [busy, setBusy] = React.useState(false)
@@ -343,7 +395,7 @@ function PayDialog({ run, onClose, onPaid }: { run: Run; onClose: () => void; on
   )
 }
 
-interface Settings { shiftStart: string; shiftHours: number; graceMinutes: number; lateMode: 'none' | 'per_minute'; dayDivisor: number }
+interface Settings { shiftStart: string; shiftHours: number; graceMinutes: number; lateMode: 'none' | 'per_minute'; dayDivisor: number; annualLeaveDays: number }
 
 function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [s, setS] = React.useState<Settings | null>(null)
@@ -409,6 +461,10 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
                     <SelectItem value="0">أيام الشهر الفعلية</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>رصيد الإجازة السنوية (يوم)</Label>
+                <Input type="number" dir="ltr" min={0} max={90} value={s.annualLeaveDays} onChange={(e) => setS({ ...s, annualLeaveDays: Number(e.target.value) })} />
               </div>
             </>
           )}

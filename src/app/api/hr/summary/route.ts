@@ -18,7 +18,7 @@ async function __GET() {
   const month = today.slice(0, 7)
   const weekAgo = addDaysStr(today, -6)
 
-  const [employees, todayRecs, weekRecs, advAgg, run, sales] = await Promise.all([
+  const [employees, todayRecs, weekRecs, advAgg, advByEmp, run, sales] = await Promise.all([
     db.employee.findMany({
       where: { tenantId, active: true },
       select: { id: true, name: true, baseSalary: true, weeklyOffDay: true },
@@ -32,6 +32,7 @@ async function __GET() {
       select: { employeeId: true, status: true },
     }),
     db.employeeAdvance.aggregate({ where: { tenantId, status: 'open' }, _sum: { remaining: true }, _count: true }),
+    db.employeeAdvance.groupBy({ by: ['employeeId'], where: { tenantId, status: 'open' }, _sum: { remaining: true } }),
     db.payrollRun.findUnique({
       where: { tenantId_month: { tenantId, month } },
       select: { id: true, status: true, totalNet: true, payslips: { select: { net: true, advanceDeduction: true } } },
@@ -53,9 +54,19 @@ async function __GET() {
   // تنبيه: 3 مرات تأخير/غياب أو أكتر في آخر 7 أيام
   const bad = new Map<number, number>()
   for (const r of weekRecs) bad.set(r.employeeId, (bad.get(r.employeeId) ?? 0) + 1)
-  const alerts = [...bad.entries()]
-    .filter(([id, n]) => n >= 3 && nameOf.has(id))
-    .map(([id, n]) => ({ id, name: nameOf.get(id)!, count: n }))
+  const alerts: { kind: 'attendance' | 'advance'; id: number; name: string; text: string }[] = [
+    ...[...bad.entries()]
+      .filter(([id, n]) => n >= 3 && nameOf.has(id))
+      .map(([id, n]) => ({ kind: 'attendance' as const, id, name: nameOf.get(id)!, text: `${n} مرات تأخير أو غياب في آخر 7 أيام` })),
+  ]
+  // سلفة متبقية أكبر من راتب شهر كامل = تستاهل متابعة
+  const salaryOf = new Map(employees.map((e) => [e.id, e.baseSalary]))
+  for (const a of advByEmp) {
+    const sal = salaryOf.get(a.employeeId)
+    if (sal && nameOf.has(a.employeeId) && (a._sum.remaining ?? 0) > sal) {
+      alerts.push({ kind: 'advance', id: a.employeeId, name: nameOf.get(a.employeeId)!, text: `سلفة متبقية أكبر من راتب شهر كامل` })
+    }
+  }
 
   const estimated = employees.reduce((s, e) => s + e.baseSalary, 0)
   const laborCost = run?.status === 'paid'

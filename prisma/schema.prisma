@@ -1145,6 +1145,8 @@ model Employee {
   attendance AttendanceRecord[]
   advances   EmployeeAdvance[]
   payslips   Payslip[]
+  leaves     LeaveRequest[]
+  evaluations EmployeeEvaluation[]
 
   @@index([tenantId])
   @@index([tenantId, active])
@@ -1157,6 +1159,7 @@ model HrSettings {
   graceMinutes Int      @default(15)
   lateMode     String   @default("per_minute") // none | per_minute
   dayDivisor   Int      @default(30)           // 0 = عدد أيام الشهر الفعلي
+  annualLeaveDays Int   @default(21)           // رصيد الإجازة السنوية (المرحلة 2)
   updatedAt    DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -1172,7 +1175,8 @@ model AttendanceRecord {
   checkOut    DateTime?
   lateMinutes Int      @default(0)
   note        String?
-  source      String   @default("manual") // manual | kiosk
+  source      String   @default("manual") // manual | kiosk | leave
+  leaveId     Int?     // لو السجل اتولّد من إجازة (بيتمسح مع إلغائها)
   createdBy   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -1242,4 +1246,50 @@ model Payslip {
 
   @@unique([runId, employeeId])
   @@index([tenantId])
+}
+
+// 🏖️ المرحلة 2 (2026-10-29): الإجازات والأذونات — المدير بيسجّلها مباشرة (معتمدة).
+// annual/sick = إجازة بمرتب (بتكتب leave في الحضور) | unpaid = بدون مرتب (بتكتب absent) |
+// permission = إذن ساعات (سجل متابعة فقط، بدون أثر على الراتب).
+model LeaveRequest {
+  id         Int      @id @default(autoincrement())
+  tenantId   String
+  employeeId Int
+  type       String   // annual | sick | unpaid | permission
+  startDate  String   // YYYY-MM-DD
+  endDate    String
+  days       Int      @default(0) // أيام العمل الفعلية (بدون الإجازة الأسبوعية)
+  hours      Float?   // للأذونات
+  note       String?
+  createdBy  String?
+  createdAt  DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, startDate])
+  @@index([employeeId])
+}
+
+// ─── تقييمات الموظفين (المرحلة 3) — تقييم شهري واحد لكل موظف ───
+model EmployeeEvaluation {
+  id              Int      @id @default(autoincrement())
+  tenantId        String
+  employeeId      Int
+  month           String   // YYYY-MM
+  attendanceScore Float    // 0-100 تلقائي من الحضور (بيتحسب لحظة الحفظ)
+  perfScore       Int      // 1-5 جودة الأداء
+  customerScore   Int      // 1-5 التعامل مع العملاء
+  teamScore       Int      // 1-5 الالتزام والتعاون
+  overall         Float    // 0-100 الدرجة النهائية
+  bonus           Float    @default(0) // حافز مقترح من التقييم
+  bonusApplied    Boolean  @default(false) // اتحط في مسودة المرتبات؟
+  note            String?
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, month])
+  @@index([tenantId, month])
 }

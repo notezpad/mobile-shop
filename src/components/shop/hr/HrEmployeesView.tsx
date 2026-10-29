@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Loader2, Plus, Search, Pencil, UserX, UserCheck, KeyRound } from 'lucide-react'
+import { Loader2, FileSpreadsheet, Plus, Search, Pencil, UserX, UserCheck, KeyRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDataRefresh } from '@/lib/offline/data-events'
+import { EmployeeImportDialog } from './EmployeeImportDialog'
 import { DAY_NAMES, EmptyState, ListSkeleton, PageHead, PageShell, Pill, hrGet, hrSend, money } from './hr-ui'
 
 interface Employee {
@@ -41,6 +42,7 @@ export function HrEmployeesView() {
   const [search, setSearch] = React.useState('')
   const [showInactive, setShowInactive] = React.useState(false)
   const [editing, setEditing] = React.useState<Employee | 'new' | null>(null)
+  const [importing, setImporting] = React.useState(false)
 
   const load = React.useCallback(async () => {
     try {
@@ -78,7 +80,7 @@ export function HrEmployeesView() {
       <PageHead
         title="الموظفين"
         subtitle="ضيف الموظف بالاسم والراتب ويوم الإجازة، والباقي اختياري."
-        actions={<Button onClick={() => setEditing('new')} className="gap-1.5"><Plus className="size-4" />موظف جديد</Button>}
+        actions={<div className="flex gap-2"><Button variant="outline" onClick={() => setImporting(true)} className="gap-1.5"><FileSpreadsheet className="size-4" />استيراد Excel</Button><Button onClick={() => setEditing('new')} className="gap-1.5"><Plus className="size-4" />موظف جديد</Button></div>}
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -136,6 +138,7 @@ export function HrEmployeesView() {
         </ul>
       )}
 
+      {importing && <EmployeeImportDialog onClose={() => setImporting(false)} onDone={() => { setImporting(false); load() }} />}
       {editing && (
         <EmployeeDialog
           employee={editing === 'new' ? null : editing}

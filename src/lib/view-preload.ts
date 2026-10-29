@@ -53,6 +53,8 @@ const VIEW_PRELOADS: Record<string, () => Promise<unknown>> = {
   '/hr': () => import('@/components/shop/hr/HrHomeView'),
   '/hr/employees': () => import('@/components/shop/hr/HrEmployeesView'),
   '/hr/attendance': () => import('@/components/shop/hr/HrAttendanceView'),
+  '/hr/evaluations': () => import('@/components/shop/hr/HrEvaluationsView'),
+  '/hr/leaves': () => import('@/components/shop/hr/HrLeavesView'),
   '/hr/advances': () => import('@/components/shop/hr/HrAdvancesView'),
   '/hr/payroll': () => import('@/components/shop/hr/HrPayrollView'),
 }

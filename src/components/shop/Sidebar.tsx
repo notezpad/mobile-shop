@@ -27,7 +27,7 @@ import {
   LayoutDashboard, ShoppingCart, Package, Receipt, Wrench, Users, Truck,
   PackagePlus, Wallet, ReceiptText, Banknote, Warehouse, Building2,
   BarChart3, Settings as SettingsIcon, UserCog, Power, ChevronLeft, ChevronDown, Store,
-  Boxes, Activity, ArrowRightLeft, ClipboardCheck, UsersRound, CalendarCheck, HandCoins, BadgeDollarSign,
+  Boxes, Activity, ArrowRightLeft, ClipboardCheck, UsersRound, CalendarCheck, HandCoins, BadgeDollarSign, TreePalm as PalmtreeIcon, Award,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -68,6 +68,8 @@ const HR_CHILDREN: { path: string; label: string; color: string; icon: LucideIco
   { path: '/hr', label: 'نظرة عامة', color: '#0ea5e9', icon: UsersRound },
   { path: '/hr/employees', label: 'الموظفين', color: '#10b981', icon: UserCog },
   { path: '/hr/attendance', label: 'الحضور والانصراف', color: '#f59e0b', icon: CalendarCheck },
+  { path: '/hr/evaluations', label: 'التقييمات', color: '#f59e0b', icon: Award },
+  { path: '/hr/leaves', label: 'الإجازات', color: '#ec4899', icon: PalmtreeIcon },
   { path: '/hr/advances', label: 'السلف', color: '#a855f7', icon: HandCoins },
   { path: '/hr/payroll', label: 'الرواتب', color: '#0d9488', icon: BadgeDollarSign },
 ]

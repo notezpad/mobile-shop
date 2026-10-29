@@ -17,7 +17,7 @@ interface Summary {
   advances: { count: number; remaining: number }
   payroll: { runId: number | null; status: 'draft' | 'paid' | null; estimated: number; laborCost: number; isEstimate: boolean }
   salesThisMonth: number; laborPct: number | null
-  alerts: { id: number; name: string; count: number }[]
+  alerts: { kind: 'attendance' | 'advance'; id: number; name: string; text: string }[]
 }
 
 export function HrHomeView() {
@@ -76,7 +76,7 @@ export function HrHomeView() {
               </div>
               <ul className="space-y-1 text-sm">
                 {s.alerts.map((a) => (
-                  <li key={a.id}><b>{a.name}</b> — {a.count} مرات تأخير أو غياب في آخر 7 أيام</li>
+                  <li key={`${a.kind}${a.id}`}><b>{a.name}</b> — {a.text}</li>
                 ))}
               </ul>
             </section>

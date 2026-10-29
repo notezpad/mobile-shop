@@ -32,6 +32,7 @@ export interface HrSettingsValues {
   graceMinutes: number
   lateMode: 'none' | 'per_minute'
   dayDivisor: number // 0 = عدد أيام الشهر الفعلي
+  annualLeaveDays: number // رصيد الإجازة السنوية
 }
 
 export const DEFAULT_HR_SETTINGS: HrSettingsValues = {
@@ -40,6 +41,7 @@ export const DEFAULT_HR_SETTINGS: HrSettingsValues = {
   graceMinutes: 15,
   lateMode: 'per_minute',
   dayDivisor: 30,
+  annualLeaveDays: 21,
 }
 
 export const round2 = (n: number) => Math.round((Number(n) + Number.EPSILON) * 100) / 100
@@ -191,4 +193,60 @@ export function countUnrecordedDays(args: {
     if (!args.recordedDates.has(d)) n++
   }
   return n
+}
+
+// ─────────────────────── الإجازات والأذونات (المرحلة 2) ───────────────────────
+
+export const LEAVE_TYPES = ['annual', 'sick', 'unpaid', 'permission'] as const
+export type LeaveType = (typeof LEAVE_TYPES)[number]
+
+export const LEAVE_TYPE_LABEL: Record<LeaveType, string> = {
+  annual: 'سنوية (بمرتب)',
+  sick: 'مرضية (بمرتب)',
+  unpaid: 'بدون مرتب',
+  permission: 'إذن (ساعات)',
+}
+
+/** كل التواريخ من start لـ end شامل — حد أقصى 366 يوم (حماية) */
+export function datesBetween(start: string, end: string): string[] {
+  const out: string[] = []
+  for (let d = start; d <= end && out.length <= 366; d = addDaysStr(d, 1)) out.push(d)
+  return out
+}
+
+/** أيام العمل الفعلية للإجازة: بدون الإجازة الأسبوعية وبدون الأيام قبل التعيين */
+export function leaveWorkDays(start: string, end: string, weeklyOffDay: number, hireDate: string): string[] {
+  return datesBetween(start, end).filter((d) => weekdayOf(d) !== weeklyOffDay && d >= hireDate)
+}
+
+// ─────────────────────────── التقييمات (المرحلة 3) ───────────────────────────
+
+export const EVAL_CRITERIA = [
+  { key: 'perfScore', label: 'جودة الأداء' },
+  { key: 'customerScore', label: 'التعامل مع العملاء' },
+  { key: 'teamScore', label: 'الالتزام والتعاون' },
+] as const
+export type EvalCriterionKey = (typeof EVAL_CRITERIA)[number]['key']
+
+/** وزن الحضور (تلقائي) مقابل تقييم المدير */
+export const EVAL_ATTENDANCE_WEIGHT = 0.4
+
+/** درجة الحضور 0-100: الغياب بيخصم بالكامل نصيبه، والتأخير بيخصم نصفه. أيام الإجازة خارج الحساب. */
+export function attendanceScore(workDays: number, absentDays: number, lateDays: number): number {
+  if (workDays <= 0) return 100
+  const s = 100 - (absentDays * 100) / workDays - (lateDays * 50) / workDays
+  return Math.round(Math.max(0, Math.min(100, s)) * 10) / 10
+}
+
+/** الدرجة النهائية 0-100 = حضور 40% + متوسط تقييم المدير (من 5) 60% */
+export function overallScore(att: number, perf: number, customer: number, team: number): number {
+  const mgr = (((perf + customer + team) / 3) / 5) * 100
+  return Math.round((att * EVAL_ATTENDANCE_WEIGHT + mgr * (1 - EVAL_ATTENDANCE_WEIGHT)) * 10) / 10
+}
+
+export function scoreGrade(overall: number): { label: string; tone: 'emerald' | 'sky' | 'amber' | 'rose' } {
+  if (overall >= 90) return { label: 'ممتاز', tone: 'emerald' }
+  if (overall >= 75) return { label: 'جيد جدًا', tone: 'sky' }
+  if (overall >= 60) return { label: 'جيد', tone: 'amber' }
+  return { label: 'يحتاج تحسين', tone: 'rose' }
 }

@@ -96,7 +96,7 @@ async function __POST(req: NextRequest) {
         AS r("employeeId" int, "date" text, "status" text, "lateMinutes" int, "note" text)
       ON CONFLICT ("employeeId", "date") DO UPDATE SET
         "status" = EXCLUDED."status", "lateMinutes" = EXCLUDED."lateMinutes", "note" = EXCLUDED."note",
-        "source" = 'manual', "createdBy" = EXCLUDED."createdBy", "updatedAt" = now()`
+        "source" = 'manual', "leaveId" = NULL, "createdBy" = EXCLUDED."createdBy", "updatedAt" = now()`
   }
   if (deletes.size > 0) {
     const payload = JSON.stringify([...deletes.values()])

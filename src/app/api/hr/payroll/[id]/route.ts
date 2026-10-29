@@ -50,9 +50,13 @@ async function __GET(_req: NextRequest, { params }: Ctx) {
       }))
     }
   }
+  const phones = new Map<number, string | null>(
+    (await db.employee.findMany({ where: { id: { in: run.payslips.map((p) => p.employeeId) } }, select: { id: true, phone: true } }))
+      .map((e) => [e.id, e.phone]),
+  )
   return NextResponse.json({
     id: run.id, month: run.month, status: run.status, totalNet: run.totalNet, method: run.method, paidAt: run.paidAt,
-    payslips: run.payslips.map((p) => ({ ...p, unrecordedDays: unrecorded.get(p.employeeId) ?? 0 })),
+    payslips: run.payslips.map((p) => ({ ...p, phone: phones.get(p.employeeId) ?? null, unrecordedDays: unrecorded.get(p.employeeId) ?? 0 })),
   })
 }
 

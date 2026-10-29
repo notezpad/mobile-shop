@@ -29,7 +29,10 @@ async function __PUT(req: NextRequest) {
   const dayDivisor = Math.floor(Number(b.dayDivisor))
   if (![0, 26, 30].includes(dayDivisor)) return bad('مقسوم قيمة اليوم يجب أن يكون 26 أو 30 أو 0')
 
-  const data = { shiftStart, shiftHours, graceMinutes, lateMode, dayDivisor }
+  const annualLeaveDays = b.annualLeaveDays === undefined ? DEFAULT_HR_SETTINGS.annualLeaveDays : Math.floor(Number(b.annualLeaveDays))
+  if (!(annualLeaveDays >= 0 && annualLeaveDays <= 90)) return bad('رصيد الإجازة السنوية غير صالح')
+
+  const data = { shiftStart, shiftHours, graceMinutes, lateMode, dayDivisor, annualLeaveDays }
   await db.hrSettings.upsert({
     where: { tenantId: session.tenantId },
     create: { tenantId: session.tenantId, ...data },

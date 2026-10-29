@@ -97,7 +97,7 @@ async function __POST(req: NextRequest) {
             ${lateMinutes}, 'kiosk', ${session.userId}, now())
     ON CONFLICT ("employeeId", "date") DO UPDATE SET
       "status" = EXCLUDED."status", "checkIn" = EXCLUDED."checkIn", "checkOut" = NULL,
-      "lateMinutes" = EXCLUDED."lateMinutes", "source" = 'kiosk', "createdBy" = EXCLUDED."createdBy", "updatedAt" = now()`
+      "lateMinutes" = EXCLUDED."lateMinutes", "source" = 'kiosk', "leaveId" = NULL, "createdBy" = EXCLUDED."createdBy", "updatedAt" = now()`
   return NextResponse.json({
     ok: true, action: 'in', name: emp.name, at: now.toISOString(), late: isLate, lateMinutes: isLate ? lateRaw : 0,
   })

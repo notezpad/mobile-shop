@@ -40,6 +40,7 @@ export async function loadHrSettings(tenantId: string): Promise<HrSettingsValues
     graceMinutes: row.graceMinutes,
     lateMode: row.lateMode === 'none' ? 'none' : 'per_minute',
     dayDivisor: row.dayDivisor,
+    annualLeaveDays: row.annualLeaveDays,
   }
 }
 
