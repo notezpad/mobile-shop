@@ -27,7 +27,7 @@ import {
   LayoutDashboard, ShoppingCart, Package, Receipt, Wrench, Users, Truck,
   PackagePlus, Wallet, ReceiptText, Banknote, Warehouse, Building2,
   BarChart3, Settings as SettingsIcon, UserCog, Power, ChevronLeft, ChevronDown, Store,
-  Boxes, Activity, ArrowRightLeft, ClipboardCheck,
+  Boxes, Activity, ArrowRightLeft, ClipboardCheck, UsersRound, CalendarCheck, HandCoins, BadgeDollarSign,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -61,6 +61,15 @@ const INVENTORY_CHILDREN: { path: string; label: string; color: string; icon: Lu
   { path: '/inventory/movements', label: 'الحركات', color: '#0ea5e9', icon: Activity },
   { path: '/inventory/transfers', label: 'التحويلات', color: '#f59e0b', icon: ArrowRightLeft },
   { path: '/inventory/stocktake', label: 'الجرد', color: '#0d9488', icon: ClipboardCheck },
+]
+
+/** الموارد البشرية — شاشات قليلة وبسيطة (كل واحدة بلونها زي المخزون) */
+const HR_CHILDREN: { path: string; label: string; color: string; icon: LucideIcon }[] = [
+  { path: '/hr', label: 'نظرة عامة', color: '#0ea5e9', icon: UsersRound },
+  { path: '/hr/employees', label: 'الموظفين', color: '#10b981', icon: UserCog },
+  { path: '/hr/attendance', label: 'الحضور والانصراف', color: '#f59e0b', icon: CalendarCheck },
+  { path: '/hr/advances', label: 'السلف', color: '#a855f7', icon: HandCoins },
+  { path: '/hr/payroll', label: 'الرواتب', color: '#0d9488', icon: BadgeDollarSign },
 ]
 
 const MAIN_GROUP: NavItem[] = [
@@ -324,6 +333,198 @@ function InventoryGroup({
             style={{ insetInlineStart: '27px' }}
           />
           {INVENTORY_CHILDREN.map((child) => {
+            const active = pathname === child.path
+            const ChildIcon = child.icon
+            const warm = () => shouldSkipPreload() || preloadView(child.path)
+            return (
+              <Link
+                key={child.path}
+                prefetch={false}
+                href={child.path}
+                onMouseEnter={warm}
+                onPointerDown={warm}
+                onFocus={warm}
+                onClick={onNavigate}
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'group/child relative flex min-h-[44px] items-center gap-3 rounded-xl py-1.5 pe-3 text-sm transition-all duration-base',
+                  'ps-[46px]',
+                  active
+                    ? 'font-bold text-sidebar-foreground'
+                    : 'font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+                )}
+                style={
+                  active
+                    ? { backgroundColor: `${child.color}1a`, boxShadow: `inset 0 0 0 1px ${child.color}40` }
+                    : undefined
+                }
+              >
+                {/* وصلة أفقية من العمود الفقري للصفحة */}
+                <span
+                  aria-hidden
+                  className="absolute top-1/2 h-px w-[14px] transition-colors"
+                  style={{
+                    insetInlineStart: '27px',
+                    backgroundColor: active ? child.color : 'var(--sidebar-border)',
+                  }}
+                />
+                {/* بلاطة الأيقونة — ملوّنة بهوية الصفحة دايمًا، وتتملّى لما تكون الصفحة الحالية */}
+                <span
+                  className="relative grid size-8 shrink-0 place-items-center rounded-lg transition-all duration-base group-hover/child:scale-105"
+                  style={
+                    active
+                      ? { backgroundColor: child.color, color: '#fff', boxShadow: `0 4px 12px -2px ${child.color}80` }
+                      : { backgroundColor: `${child.color}1f`, color: child.color }
+                  }
+                >
+                  <ChildIcon strokeWidth={active ? 2.3 : 2} className="size-[17px]" />
+                </span>
+                <span className="relative flex-1 truncate">{child.label}</span>
+              </Link>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function HrGroup({
+  collapsed,
+  onNavigate,
+}: {
+  collapsed?: boolean
+  onNavigate?: () => void
+}) {
+  const router = useRouter()
+  const { pathname, isActive } = useActivePath()
+  const inHr = pathname.startsWith('/hr')
+  const parentActiveHr = pathname === '/hr'
+
+  // Auto-open when entering inventory from outside, but respect manual close
+  // when navigating *between* inventory sub-pages.
+  const [open, setOpen] = React.useState(inHr)
+  const wasInHr = React.useRef(inHr)
+  React.useEffect(() => {
+    if (inHr && !wasInHr.current) setOpen(true)
+    wasInHr.current = inHr
+  }, [inHr])
+
+  // ⚡ PERF FIX: warm-up موحّد لكل روابط الموارد البشرية (راجع src/lib/view-preload.ts)
+  const warmHr = React.useCallback(() => {
+    if (!shouldSkipPreload()) preloadView('/hr')
+  }, [])
+
+  /* ── Collapsed mode: single icon link + tooltip ── */
+  if (collapsed) {
+    const linkEl = (
+      <Link
+        prefetch={false}
+        href="/hr"
+        onMouseEnter={warmHr}
+        onPointerDown={warmHr}
+        onFocus={warmHr}
+        onClick={onNavigate}
+        aria-label="الموارد البشرية"
+        className={cn(
+          'group relative grid size-10 place-items-center rounded-xl transition-all duration-base',
+          inHr
+            ? 'bg-primary-subtle text-primary-subtle-foreground ring-1 ring-primary/15'
+            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+        )}
+      >
+        {inHr && (
+          <span
+            aria-hidden
+            className="absolute right-0 top-1/2 -translate-y-1/2 h-7 w-[3px] rounded-l-full bg-gradient-to-b from-brand-400 to-brand-600 shadow-[0_0_8px_0px] shadow-brand-500/60"
+          />
+        )}
+        <UsersRound
+          strokeWidth={inHr ? 2.4 : 2}
+          className={cn('size-[18px]', inHr && 'text-primary')}
+        />
+      </Link>
+    )
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{linkEl}</TooltipTrigger>
+        <TooltipContent side="left" sideOffset={8}>
+          الموارد البشرية
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  /* ── Expanded mode: parent row (toggle) + connected sub-pages ── */
+  const onParentClick = () => {
+    // أول ضغطة من برّه الموارد البشرية: افتح القايمة وروح لحالة الموارد البشرية مباشرة.
+    // بعد كده الضغطة بتفتح/تقفل القايمة بس — من غير زرار × منفصل.
+    if (!inHr) {
+      setOpen(true)
+      warmHr()
+      router.push('/hr')
+      onNavigate?.()
+      return
+    }
+    setOpen((o) => !o)
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onParentClick}
+        onMouseEnter={warmHr}
+        onFocus={warmHr}
+        aria-expanded={open}
+        aria-controls="hr-subnav"
+        className={cn(
+          'group relative flex min-h-[40px] w-full items-center gap-3 rounded-xl px-3 py-1.5 text-right text-sm font-medium transition-all duration-base',
+          inHr
+            ? 'bg-primary-subtle text-primary-subtle-foreground ring-1 ring-primary/15'
+            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+        )}
+      >
+        {inHr && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute right-0 top-1/2 h-7 w-[3px] -translate-y-1/2 rounded-l-full bg-gradient-to-b from-brand-400 to-brand-600 shadow-[0_0_8px_0px] shadow-brand-500/60"
+          />
+        )}
+        <span
+          className={cn(
+            'relative grid size-8 shrink-0 place-items-center rounded-lg transition-all',
+            inHr
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground/75 group-hover:bg-sidebar-accent/80 group-hover:text-sidebar-accent-foreground',
+          )}
+        >
+          <UsersRound strokeWidth={inHr ? 2.2 : 2} className="size-[18px]" />
+        </span>
+        <span className="flex-1 truncate">الموارد البشرية</span>
+        <ChevronDown
+          aria-hidden
+          className={cn(
+            'size-4 shrink-0 opacity-60 transition-transform duration-base ease-out group-hover:opacity-100',
+            open && 'rotate-180',
+          )}
+        />
+      </button>
+
+      {/* Sub-pages — display:none toggling for zero-empty-space collapse */}
+      <div
+        id="hr-subnav"
+        style={{ display: open ? 'block' : 'none' }}
+        className={open ? 'submenu-in' : undefined}
+      >
+        <div className="relative mt-1.5 mb-1 space-y-1 pe-0">
+          {/* العمود الفقري: خط رأسي يمرّ من تحت أيقونة الموارد البشرية */}
+          <span
+            aria-hidden
+            className="absolute bottom-5 top-0 w-px bg-sidebar-border"
+            style={{ insetInlineStart: '27px' }}
+          />
+          {HR_CHILDREN.map((child) => {
             const active = pathname === child.path
             const ChildIcon = child.icon
             const warm = () => shouldSkipPreload() || preloadView(child.path)
@@ -669,6 +870,7 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
   const mainItems = MAIN_GROUP.filter((it) => hasModule(it.module))
   const manageItems = MANAGE_GROUP.filter((it) => hasModule(it.module))
   const showInventory = hasModule('inventory')
+  const showHr = hasModule('hr') && isAdmin
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -741,6 +943,7 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
                 onNavigate={onNavigate}
               />
             ))}
+            {showHr && <HrGroup collapsed={collapsed} onNavigate={onNavigate} />}
           </div>
         </nav>
 

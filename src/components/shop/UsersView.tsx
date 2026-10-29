@@ -945,7 +945,7 @@ const MODULE_LABELS: Record<string, string> = {
   suppliers: 'الموردين', purchases: 'المشتريات', inventory: 'المخزون',
   finance: 'المعاملات المالية', expenses: 'المصروفات', cash: 'الخزنة',
   reports: 'التقارير', settings: 'الإعدادات', users: 'المستخدمين',
-  branches: 'الفروع',
+  branches: 'الفروع', hr: 'الموارد البشرية',
 }
 const PERM_MODULES: string[] = ALL_MODULES.filter((m) => m !== 'guide')
 

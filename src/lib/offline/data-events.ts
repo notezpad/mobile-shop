@@ -42,6 +42,7 @@ export type DataTag =
   | 'maintenance'
   | 'notifications'
   | 'branches'
+  | 'hr'
   | 'users'
   | 'dashboard'
   | 'settings'
@@ -135,6 +136,11 @@ export function resourceTagsForUrl(url: string): DataTag[] {
   }
   if (has('/api/notifications')) tags.add('notifications')
   if (has('/api/branches')) tags.add('branches')
+  if (has('/api/hr')) {
+    tags.add('hr')
+    tags.add('cash')
+    tags.add('expenses')
+  }
   if (has('/api/users') || has('/api/employees')) tags.add('users')
   if (has('/api/settings') || has('/api/tenant')) tags.add('settings')
 

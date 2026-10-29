@@ -50,6 +50,11 @@ const VIEW_PRELOADS: Record<string, () => Promise<unknown>> = {
   '/settings': () => import('@/components/shop/SettingsView'),
   '/users': () => import('@/components/shop/UsersView'),
   '/branches': () => import('@/components/shop/BranchesView'),
+  '/hr': () => import('@/components/shop/hr/HrHomeView'),
+  '/hr/employees': () => import('@/components/shop/hr/HrEmployeesView'),
+  '/hr/attendance': () => import('@/components/shop/hr/HrAttendanceView'),
+  '/hr/advances': () => import('@/components/shop/hr/HrAdvancesView'),
+  '/hr/payroll': () => import('@/components/shop/hr/HrPayrollView'),
 }
 
 const preloading = new Set<string>()

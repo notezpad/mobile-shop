@@ -28,6 +28,7 @@ export const ALL_MODULES = [
   'settings',
   'users',
   'branches',
+  'hr',
   'guide',
 ] as const
 

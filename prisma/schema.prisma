@@ -74,6 +74,9 @@ model Tenant {
   expenses          Expense[]
   notifications     Notification[]
   demoRecords       DemoRecord[]
+  hrEmployees       Employee[]
+  hrSettings        HrSettings?
+  payrollRuns       PayrollRun[]
 
   // Notification preferences
   notifyLowStock            Boolean @default(true)
@@ -1114,4 +1117,129 @@ model IdempotencyKey {
 
   @@unique([tenantId, key], map: "IdempotencyKey_tenant_key_key")
   @@index([createdAt], map: "IdempotencyKey_createdAt_idx")
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// 👥 الموارد البشرية — المرحلة 1 (2026-10-28)
+// الموظف مختلف عن المستخدم (User): ممكن موظف بدون حساب دخول.
+// الفلوس Float زي باقي النظام. الـ SQL الفعلي: prisma/migrations/20261028_hr_phase1
+// ═══════════════════════════════════════════════════════════════
+model Employee {
+  id           Int      @id @default(autoincrement())
+  tenantId     String
+  branchId     Int?
+  userId       String?   // ربط اختياري بحساب دخول
+  name         String
+  phone        String?
+  jobTitle     String?
+  baseSalary   Float    @default(0)
+  hireDate     DateTime @default(now())
+  weeklyOffDay Int      @default(5) // 0=الأحد … 6=السبت (الافتراضي الجمعة)
+  pinHash      String?  // PIN كشك الحضور (مُجزّأ)
+  active       Boolean  @default(true)
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  attendance AttendanceRecord[]
+  advances   EmployeeAdvance[]
+  payslips   Payslip[]
+
+  @@index([tenantId])
+  @@index([tenantId, active])
+}
+
+model HrSettings {
+  tenantId     String   @id
+  shiftStart   String   @default("10:00")
+  shiftHours   Float    @default(8)
+  graceMinutes Int      @default(15)
+  lateMode     String   @default("per_minute") // none | per_minute
+  dayDivisor   Int      @default(30)           // 0 = عدد أيام الشهر الفعلي
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model AttendanceRecord {
+  id          Int      @id @default(autoincrement())
+  tenantId    String
+  employeeId  Int
+  date        String   // YYYY-MM-DD بتوقيت المحل
+  status      String   // present | late | absent | leave
+  checkIn     DateTime?
+  checkOut    DateTime?
+  lateMinutes Int      @default(0)
+  note        String?
+  source      String   @default("manual") // manual | kiosk
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@index([tenantId, date])
+}
+
+model EmployeeAdvance {
+  id          Int      @id @default(autoincrement())
+  tenantId    String
+  employeeId  Int
+  amount      Float
+  installment Float    // القسط الشهري
+  remaining   Float
+  status      String   @default("open") // open | settled | cancelled
+  method      String   @default("cash")
+  note        String?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([employeeId])
+}
+
+model PayrollRun {
+  id        Int       @id @default(autoincrement())
+  tenantId  String
+  month     String    // YYYY-MM
+  status    String    @default("draft") // draft | paid
+  totalNet  Float     @default(0)
+  method    String?
+  paidAt    DateTime?
+  createdBy String?
+  createdAt DateTime  @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payslips Payslip[]
+
+  @@unique([tenantId, month])
+}
+
+model Payslip {
+  id               Int      @id @default(autoincrement())
+  runId            Int
+  tenantId         String
+  employeeId       Int
+  employeeName     String
+  baseSalary       Float
+  payableBase      Float    // الأساسي بعد التناسب (تعيين وسط الشهر)
+  absentDays       Float    @default(0)
+  absenceDeduction Float    @default(0)
+  lateMinutes      Int      @default(0)
+  lateDeduction    Float    @default(0)
+  bonus            Float    @default(0)
+  penalty          Float    @default(0)
+  advanceDeduction Float    @default(0)
+  net              Float    @default(0)
+  note             String?
+
+  run      PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employee Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, employeeId])
+  @@index([tenantId])
 }

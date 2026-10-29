@@ -21,6 +21,7 @@ export type ViewKey =
   | 'users'
   | 'inventory'
   | 'branches'
+  | 'hr'
   | 'guide'
 
 export interface ShopBranding {
@@ -73,7 +74,7 @@ export interface SubscriptionState {
 export const ALL_MODULES = [
   'dashboard','pos','products','sales','maintenance','customers','suppliers',
   'purchases','finance','expenses','cash','reports','settings','users',
-  'inventory','branches',
+  'inventory','branches','hr',
 ] as const
 
 export interface PlanContext {

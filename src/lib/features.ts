@@ -224,6 +224,7 @@ const PERMISSION_ALIASES: Partial<Record<ModuleKey, ModuleKey[]>> = {
   reports: ['reports'],
   users: ['users'],
   branches: ['branches'],
+  hr: ['hr'],
   settings: ['settings'],
 }
 

@@ -92,6 +92,7 @@ export const MODULES_META: { key: string; label: string; desc: string; electroni
   { key: 'inventory', label: 'المخزون', desc: 'حركات المخزون والجرد والتحويلات' },
   { key: 'reports', label: 'التقارير', desc: 'تقارير المبيعات والأرباح' },
   { key: 'branches', label: 'الفروع', desc: 'إدارة الفروع المتعددة' },
+  { key: 'hr', label: 'الموارد البشرية', desc: 'الموظفين والحضور والسلف والرواتب' },
   { key: 'settings', label: 'الإعدادات', desc: 'إعدادات المحل (حرجة — مفعّلة دائماً)' },
   { key: 'users', label: 'المستخدمين', desc: 'إدارة المستخدمين (حرجة — مفعّلة دائماً)' },
   { key: 'maintenance', label: 'الصيانة', desc: 'أوامر صيانة الأجهزة — إلكترونيات فقط', electronicsOnly: true },

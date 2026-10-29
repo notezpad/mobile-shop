@@ -1,0 +1,44 @@
+/**
+ * hr-route.ts — حراسة مسارات الموارد البشرية (سيرفر فقط).
+ *  - 'admin'  : مدير + موديول hr (كل شاشات HR والمرتبات).
+ *  - 'device' : أي مستخدم داخل بالمحل + hr مفعّل في الباقة (كشك الحضور على جهاز المحل).
+ */
+import { NextResponse } from 'next/server'
+import { requireAdmin, requireAuth, authErrorResponse, type Session } from '@/lib/auth'
+import { db } from '@/lib/db'
+import { DEFAULT_HR_SETTINGS, type HrSettingsValues } from '@/lib/hr'
+import { requireModule, featureErrorResponse, getTenantModules, FeatureError } from '@/lib/features'
+
+export async function hrGuard(
+  kind: 'admin' | 'device',
+): Promise<{ session: Session } | { res: NextResponse }> {
+  try {
+    const session = kind === 'admin' ? await requireAdmin() : await requireAuth()
+    if (kind === 'admin') {
+      await requireModule(session, 'hr')
+    } else if (session.role !== 'SUPER_ADMIN') {
+      const mods = await getTenantModules(session.tenantId)
+      if (!mods.includes('hr')) throw new FeatureError('الميزة دي مش متاحة في باقتك الحالية', 403)
+    }
+    return { session }
+  } catch (e) {
+    const fe = featureErrorResponse(e)
+    if (fe) return { res: NextResponse.json(fe.body, { status: fe.status }) }
+    const err = authErrorResponse(e)
+    return { res: NextResponse.json(err.body, { status: err.status }) }
+  }
+}
+
+export const bad = (error: string, status = 400) => NextResponse.json({ error }, { status })
+
+export async function loadHrSettings(tenantId: string): Promise<HrSettingsValues> {
+  const row = await db.hrSettings.findUnique({ where: { tenantId } })
+  if (!row) return { ...DEFAULT_HR_SETTINGS }
+  return {
+    shiftStart: row.shiftStart,
+    shiftHours: row.shiftHours,
+    graceMinutes: row.graceMinutes,
+    lateMode: row.lateMode === 'none' ? 'none' : 'per_minute',
+    dayDivisor: row.dayDivisor,
+  }
+}

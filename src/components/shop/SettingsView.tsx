@@ -86,7 +86,7 @@ const MODULE_LABELS: Record<string, string> = {
   dashboard: 'لوحة المعلومات', pos: 'نقطة البيع', products: 'المنتجات', sales: 'سجل المبيعات',
   maintenance: 'الصيانة', customers: 'العملاء', suppliers: 'الموردين', purchases: 'المشتريات',
   inventory: 'المخزون', finance: 'المعاملات المالية', expenses: 'المصروفات', cash: 'الخزنة',
-  reports: 'التقارير', branches: 'الفروع', users: 'المستخدمين',
+  reports: 'التقارير', branches: 'الفروع', users: 'المستخدمين', hr: 'الموارد البشرية',
 }
 
 function fmtTz(d: Date, timeZone: string, opts: Intl.DateTimeFormatOptions) {

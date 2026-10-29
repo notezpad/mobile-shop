@@ -36,6 +36,7 @@ const VIEW_PATHS: Record<string, string> = {
   '/settings': 'settings',
   '/users': 'users',
   '/branches': 'branches',
+  '/hr': 'hr',
 }
 
 // 🛡️ 2026-09-27: الساعة والتاريخ هنا كانوا بيتحسبوا بـ now.getHours() /
