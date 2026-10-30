@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { HandCoins, Loader2, Plus, Undo2, Wallet } from 'lucide-react'
+import { Banknote, CalendarClock, HandCoins, Loader2, PiggyBank, Plus, Undo2, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,10 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDataRefresh } from '@/lib/offline/data-events'
-import { EmptyState, HrHero, ListSkeleton, PAY_METHODS, PageShell, Panel, PanelTitle, Pill, StatCell, StatStrip, hrGet, hrSend, money } from './hr-ui'
+import {
+  Avatar, Bar, CardGrid, EmptyState, FilterPill, HrHero, HrKpi, ItemCard, KpiGrid, ListSkeleton, PageShell, Pill,
+  PAY_METHODS, SearchBox, SegBar, Toolbar, hrGet, hrSend, money,
+} from './hr-ui'
 
 interface Advance {
   id: number
@@ -64,8 +67,23 @@ export function HrAdvancesView() {
     }
   }
 
+  const [query, setQuery] = React.useState('')
+  const [filter, setFilter] = React.useState<'all' | Advance['status']>('open')
+
   const openItems = items.filter((a) => a.status === 'open')
+  const settledItems = items.filter((a) => a.status === 'settled')
+  const cancelledItems = items.filter((a) => a.status === 'cancelled')
+  const counted = items.filter((a) => a.status !== 'cancelled')
+  const totalLent = counted.reduce((s, a) => s + a.amount, 0)
+  const totalRepaid = counted.reduce((s, a) => s + (a.amount - (a.status === 'settled' ? 0 : a.remaining)), 0)
+  const repaidPct = totalLent > 0 ? (totalRepaid / totalLent) * 100 : 0
   const monthlyInstallments = openItems.reduce((s, a) => s + Math.min(a.installment, a.remaining), 0)
+  const debtors = new Set(openItems.map((a) => a.employeeId)).size
+  const shown = items.filter((a) => {
+    if (filter !== 'all' && a.status !== filter) return false
+    const q = query.trim().toLowerCase()
+    return !q || a.employeeName.toLowerCase().includes(q)
+  })
 
   return (
     <PageShell>
@@ -75,7 +93,46 @@ export function HrAdvancesView() {
         kicker="الموارد البشرية"
         title="السلف"
         subtitle="سلف بتيخرج من الخزنة وتتخصم من الراتب بالقسط تلقائيًا."
-        actions={<Button onClick={() => setAdding(true)} className="gap-1.5"><Plus className="size-4" />سلفة جديدة</Button>}
+        actions={<Button onClick={() => setAdding(true)} className="h-11 w-full gap-1.5 sm:w-auto"><Plus className="size-4" />سلفة جديدة</Button>}
+        metric={{
+          label: 'إجمالي المتبقي على الموظفين',
+          value: money(total).replace(' جنيه', ''),
+          unit: 'جنيه',
+          loading,
+          foot: openItems.length > 0 ? `${openItems.length} سلفة جارية على ${debtors} ${debtors > 2 && debtors < 11 ? 'موظفين' : 'موظف'}` : 'مفيش سلف جارية — الحسابات مسوّاة',
+        }}
+        viz={
+          <div className="grid gap-3">
+            <div className="rounded-2xl border bg-card/70 p-3.5 backdrop-blur-sm sm:p-4">
+              <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+                <span className="font-bold text-muted-foreground">نسبة التحصيل</span>
+                <b className="tabular-nums text-emerald-700 dark:text-emerald-400">{Math.round(repaidPct)}%</b>
+              </div>
+              <Bar value={repaidPct} tone="emerald" className="h-3.5" />
+              <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>اتحصّل <b className="tabular-nums text-foreground">{money(totalRepaid)}</b></span>
+                <span>من <b className="tabular-nums text-foreground">{money(totalLent)}</b></span>
+              </div>
+            </div>
+            <SegBar
+              title="حالة السلف"
+              segments={[
+                { label: 'جارية', value: openItems.length, tone: 'violet' },
+                { label: 'اتسددت', value: settledItems.length, tone: 'emerald' },
+                { label: 'ملغية', value: cancelledItems.length, tone: 'slate' },
+              ]}
+              empty="لسه مفيش سلف"
+            />
+          </div>
+        }
+        kpis={
+          <KpiGrid>
+            <HrKpi tone="rose" icon={HandCoins} loading={loading} label="سلف جارية" value={openItems.length} sub={money(total)} />
+            <HrKpi tone="violet" icon={CalendarClock} loading={loading} label="أقساط الشهر ده" value={money(monthlyInstallments)} sub="تلقائي في مسودة الرواتب" />
+            <HrKpi tone="amber" icon={Banknote} loading={loading} label="إجمالي اللي اتسلّف" value={money(totalLent)} sub={`${counted.length} سلفة`} />
+            <HrKpi tone="emerald" icon={PiggyBank} loading={loading} label="اتحصّل لحد دلوقتي" value={money(totalRepaid)} sub={`${settledItems.length} سلفة اتسددت`} progress={repaidPct} />
+          </KpiGrid>
+        }
       />
 
       {loading ? (
@@ -90,55 +147,72 @@ export function HrAdvancesView() {
         />
       ) : (
         <>
-          <StatStrip className="mb-4">
-            <StatCell label="متبقي على الموظفين" dot="bg-danger" value={money(total)} foot={`${openItems.length} سلفة جارية`} />
-            <StatCell label="أقساط هتتخصم الشهر ده" dot="bg-violet-500" value={money(monthlyInstallments)} foot="تلقائي في مسودة الرواتب" />
-          </StatStrip>
+          <Toolbar>
+            <SearchBox value={query} onChange={setQuery} placeholder="ابحث باسم الموظف" />
+            <div className="flex flex-wrap gap-1.5">
+              <FilterPill active={filter === 'open'} onClick={() => setFilter('open')} count={openItems.length} dot="bg-violet-500">جارية</FilterPill>
+              <FilterPill active={filter === 'settled'} onClick={() => setFilter('settled')} count={settledItems.length} dot="bg-emerald-500">اتسددت</FilterPill>
+              {cancelledItems.length > 0 && <FilterPill active={filter === 'cancelled'} onClick={() => setFilter('cancelled')} count={cancelledItems.length} dot="bg-slate-400">ملغية</FilterPill>}
+              <FilterPill active={filter === 'all'} onClick={() => setFilter('all')} count={items.length}>الكل</FilterPill>
+            </div>
+          </Toolbar>
 
-          <PanelTitle icon={Wallet} title="السجل" />
-          <Panel>
-            <ul className="divide-y divide-border">
-              {items.map((a) => {
-                const paid = a.amount - a.remaining
+          {shown.length === 0 ? (
+            <EmptyState theme="advances" icon={Wallet} title="مفيش نتائج" hint="جرّب تغيّر الفلتر أو كلمة البحث." />
+          ) : (
+            <CardGrid min={320}>
+              {shown.map((a) => {
+                const paid = a.status === 'settled' ? a.amount : a.amount - a.remaining
                 const pct = a.amount > 0 ? Math.min(100, (paid / a.amount) * 100) : 0
                 const cancellable = a.status === 'open' && Math.abs(a.remaining - a.amount) < 0.005
                 return (
-                  <li key={a.id} className="px-3.5 py-3.5 transition-colors hover:bg-muted/30 sm:px-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className={`grid size-10 shrink-0 place-items-center rounded-2xl ${a.status === 'open' ? 'bg-danger-subtle text-danger-subtle-foreground' : 'bg-muted text-muted-foreground'}`}>
-                        <HandCoins className="size-5" />
-                      </span>
+                  <ItemCard key={a.id} dim={a.status === 'cancelled'} accent={a.status === 'open' ? 'bg-danger' : a.status === 'settled' ? 'bg-emerald-500' : 'bg-muted-foreground/40'}>
+                    <div className="flex items-start gap-3 p-4 pb-3 ps-5">
+                      <Avatar name={a.employeeName} className="size-12 text-lg" />
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-bold">{a.employeeName}</span>
-                          <Pill tone={STATUS[a.status].tone}>{STATUS[a.status].label}</Pill>
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {new Date(a.createdAt).toLocaleDateString('ar-EG-u-nu-latn')} · قسط {money(a.installment)}
-                          {a.note ? ` · ${a.note}` : ''}
-                        </p>
+                        <h3 className="truncate text-base font-extrabold">{a.employeeName}</h3>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{new Date(a.createdAt).toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                       </div>
-                      <div className="text-end">
-                        <div className="font-extrabold tabular-nums">{money(a.amount)}</div>
-                        {a.status === 'open' && <div className="text-xs font-semibold text-violet-600">متبقي {money(a.remaining)}</div>}
+                      <Pill tone={STATUS[a.status].tone}>{STATUS[a.status].label}</Pill>
+                    </div>
+
+                    <div className="grid grid-cols-3 divide-x divide-x-reverse border-y bg-muted/30 text-center">
+                      <div className="px-2 py-2.5">
+                        <div className="text-sm font-extrabold tabular-nums">{money(a.amount)}</div>
+                        <div className="text-[10px] text-muted-foreground">المبلغ</div>
                       </div>
-                      {cancellable && (
+                      <div className="px-2 py-2.5">
+                        <div className="text-sm font-extrabold tabular-nums text-emerald-700 dark:text-emerald-400">{money(paid)}</div>
+                        <div className="text-[10px] text-muted-foreground">اتسدد</div>
+                      </div>
+                      <div className="px-2 py-2.5">
+                        <div className={`text-sm font-extrabold tabular-nums ${a.status === 'open' ? 'text-rose-600 dark:text-rose-400' : ''}`}>{money(a.status === 'open' ? a.remaining : 0)}</div>
+                        <div className="text-[10px] text-muted-foreground">متبقي</div>
+                      </div>
+                    </div>
+
+                    <div className="px-4 py-3 ps-5">
+                      <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>قسط {money(a.installment)}</span>
+                        <b className="tabular-nums text-foreground">{Math.round(pct)}%</b>
+                      </div>
+                      <Bar value={pct} tone={a.status === 'settled' ? 'emerald' : 'rose'} />
+                      {a.note && <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{a.note}</p>}
+                    </div>
+
+                    {cancellable && (
+                      <div className="mt-auto border-t px-3 py-2 ps-4">
                         <Button variant="ghost" size="sm" disabled={cancelId === a.id} onClick={() => cancel(a.id)} className="gap-1 text-rose-600">
                           {cancelId === a.id ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}
-                          إلغاء
+                          إلغاء السلفة
                         </Button>
-                      )}
-                    </div>
-                    {a.status === 'open' && (
-                      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div className="h-full rounded-full bg-danger" style={{ width: `${pct}%` }} />
                       </div>
                     )}
-                  </li>
+                  </ItemCard>
                 )
               })}
-            </ul>
-          </Panel>
+            </CardGrid>
+          )}
         </>
       )}
 

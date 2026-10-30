@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { CalendarOff, HandCoins, KeyRound, Loader2, FileSpreadsheet, Phone, Plus, Search, Pencil, UserCheck, UserX, Users, Wallet } from 'lucide-react'
+import { CalendarOff, HandCoins, KeyRound, Loader2, FileSpreadsheet, Phone, Plus, Search, Pencil, UserCheck, UserX, Users, Wallet, Fingerprint, Banknote } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { EmployeeImportDialog } from './EmployeeImportDialog'
 import {
-  DAY_NAMES, EmptyState, HR_THEMES, HrHero, ListSkeleton, PageShell, Panel, Pill, StatCell, StatStrip,
+  DAY_NAMES, EmptyState, HR_THEMES, HrHero, HrKpi, KpiGrid, ListSkeleton, PageShell, Pill, StatusChip,
+  Avatar, CardGrid, FilterPill, ItemCard, MiniBars, Ring, SearchBox, Toolbar,
   PAY_METHODS, hrGet, hrSend, money, monthLabel,
 } from './hr-ui'
 
@@ -55,7 +56,8 @@ export function HrEmployeesView() {
   const [items, setItems] = React.useState<Employee[]>([])
   const [loading, setLoading] = React.useState(true)
   const [search, setSearch] = React.useState('')
-  const [showInactive, setShowInactive] = React.useState(false)
+  const [status, setStatus] = React.useState<'active' | 'inactive' | 'all'>('active')
+  const [sort, setSort] = React.useState<'name' | 'salary'>('name')
   const [editing, setEditing] = React.useState<Employee | 'new' | null>(null)
   const [importing, setImporting] = React.useState(false)
   const [settling, setSettling] = React.useState<Employee | null>(null)
@@ -73,15 +75,23 @@ export function HrEmployeesView() {
   React.useEffect(() => { load() }, [load])
   useDataRefresh(['hr'], load)
 
-  const visible = items.filter((e) => {
-    if (!showInactive && !e.active) return false
-    const q = search.trim().toLowerCase()
-    return !q || e.name.toLowerCase().includes(q) || (e.jobTitle ?? '').toLowerCase().includes(q)
-  })
+  const visible = items
+    .filter((e) => {
+      if (status === 'active' && !e.active) return false
+      if (status === 'inactive' && e.active) return false
+      const q = search.trim().toLowerCase()
+      return !q || e.name.toLowerCase().includes(q) || (e.jobTitle ?? '').toLowerCase().includes(q)
+    })
+    .sort((a, b) => (sort === 'salary' ? b.baseSalary - a.baseSalary : a.name.localeCompare(b.name, 'ar')))
   const inactiveCount = items.filter((e) => !e.active).length
   const activeItems = items.filter((e) => e.active)
   const totalPayroll = activeItems.reduce((s, e) => s + e.baseSalary, 0)
+  const avgSalary = activeItems.length ? totalPayroll / activeItems.length : 0
   const withPin = activeItems.filter((e) => e.hasPin).length
+  const pinPct = activeItems.length ? Math.round((withPin / activeItems.length) * 100) : 0
+  const advActive = activeItems.filter((e) => e.advanceRemaining > 0)
+  const advTotal = advActive.reduce((s, e) => s + e.advanceRemaining, 0)
+  const offDays = DAY_NAMES.map((d, i) => ({ label: d.replace('ال', ''), value: activeItems.filter((e) => e.weeklyOffDay === i).length }))
 
   const toggleActive = async (e: Employee) => {
     try {
@@ -101,12 +111,42 @@ export function HrEmployeesView() {
         icon={Users}
         kicker="الموارد البشرية"
         title="الموظفين"
-        subtitle="بيانات الفريق ورواتبهم الأساسية."
+        subtitle="بيانات الفريق ورواتبهم الأساسية وحالة كشك الحضور."
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setImporting(true)} className="gap-1.5"><FileSpreadsheet className="size-4" />استيراد Excel</Button>
-            <Button onClick={() => setEditing('new')} className="gap-1.5"><Plus className="size-4" />موظف جديد</Button>
+          <>
+            <Button variant="outline" onClick={() => setImporting(true)} className="flex-1 gap-1.5 bg-background/70 sm:flex-none"><FileSpreadsheet className="size-4" />استيراد Excel</Button>
+            <Button onClick={() => setEditing('new')} className="flex-1 gap-1.5 sm:flex-none"><Plus className="size-4" />موظف جديد</Button>
+          </>
+        }
+        metric={{
+          label: 'إجمالي الرواتب الشهرية (أساسي)',
+          value: money(totalPayroll).replace(' جنيه', ''),
+          unit: 'جنيه',
+          loading,
+          foot: `${activeItems.length} موظف نشط · متوسط الراتب ${money(Math.round(avgSalary))}`,
+        }}
+        viz={
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+            <div className="flex items-center gap-3.5 rounded-2xl border bg-card/70 p-3.5 backdrop-blur-sm sm:p-4">
+              <Ring value={pinPct} tone={pinPct === 100 ? 'emerald' : 'amber'} size={76}>
+                <span className="text-base font-extrabold tabular-nums">{pinPct}%</span>
+              </Ring>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-muted-foreground">تغطية كشك الحضور</p>
+                <p className="mt-0.5 text-sm font-extrabold tabular-nums">{withPin} / {activeItems.length}</p>
+                <p className="text-[11px] text-muted-foreground">عندهم PIN</p>
+              </div>
+            </div>
+            <MiniBars title="الإجازة الأسبوعية — عدد الموظفين لكل يوم" data={offDays} tone="sky" highlight={new Date().getDay()} />
           </div>
+        }
+        kpis={
+          <KpiGrid>
+            <HrKpi tone="sky" icon={Users} loading={loading} label="موظفين نشطين" value={activeItems.length} sub={inactiveCount > 0 ? `${inactiveCount} موقوف` : 'كلهم نشطين'} />
+            <HrKpi tone="emerald" icon={Banknote} loading={loading} label="متوسط الراتب" value={money(Math.round(avgSalary))} sub="لكل موظف نشط" />
+            <HrKpi tone={pinPct === 100 ? 'emerald' : 'amber'} icon={Fingerprint} loading={loading} label="كشك الحضور (PIN)" value={`${withPin} / ${activeItems.length}`} sub={withPin < activeItems.length ? 'الباقي يسجل حضورهم يدوي' : 'كلهم بيسجلوا بالـ PIN'} progress={pinPct} />
+            <HrKpi tone="violet" icon={HandCoins} loading={loading} label="سلف جارية" value={advActive.length} sub={money(advTotal)} />
+          </KpiGrid>
         }
       />
 
@@ -122,72 +162,73 @@ export function HrEmployeesView() {
         />
       ) : (
         <>
-          <StatStrip className="mb-4">
-            <StatCell label="عدد الموظفين" dot="bg-info" value={activeItems.length} foot={inactiveCount > 0 ? `${inactiveCount} موقوف` : 'كلهم نشطين'} />
-            <StatCell label="رواتب شهرية إجمالية" dot="bg-primary" value={money(totalPayroll)} foot="أساسي بدون خصومات" />
-            <StatCell label="كشك الحضور (PIN)" dot={withPin === activeItems.length ? 'bg-emerald-500' : 'bg-amber-500'} value={`${withPin} / ${activeItems.length}`} foot={withPin < activeItems.length ? 'الباقي يسجل حضورهم يدوي' : 'كلهم بيسجلوا بالـ PIN'} />
-            <StatCell label="سلف جارية" dot="bg-violet-500" value={activeItems.filter((e) => e.advanceRemaining > 0).length} foot={money(activeItems.reduce((s, e) => s + e.advanceRemaining, 0))} />
-          </StatStrip>
-
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[200px] flex-1">
-              <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ابحث بالاسم أو الوظيفة" className="ps-9" />
+          <Toolbar>
+            <SearchBox value={search} onChange={setSearch} placeholder="ابحث بالاسم أو الوظيفة" />
+            <div className="flex flex-wrap gap-1.5">
+              <FilterPill active={status === 'active'} onClick={() => setStatus('active')} count={activeItems.length} dot="bg-emerald-500">نشطين</FilterPill>
+              {inactiveCount > 0 && <FilterPill active={status === 'inactive'} onClick={() => setStatus('inactive')} count={inactiveCount} dot="bg-slate-400">موقوفين</FilterPill>}
+              {inactiveCount > 0 && <FilterPill active={status === 'all'} onClick={() => setStatus('all')} count={items.length}>الكل</FilterPill>}
             </div>
-            {inactiveCount > 0 && (
-              <Button variant={showInactive ? 'secondary' : 'outline'} size="sm" onClick={() => setShowInactive((v) => !v)}>
-                {showInactive ? 'إخفاء الموقوفين' : `عرض الموقوفين (${inactiveCount})`}
-              </Button>
-            )}
-          </div>
+            <span className="mx-1 hidden h-5 w-px bg-border sm:block" />
+            <div className="flex flex-wrap gap-1.5">
+              <FilterPill active={sort === 'name'} onClick={() => setSort('name')}>الاسم</FilterPill>
+              <FilterPill active={sort === 'salary'} onClick={() => setSort('salary')}>الأعلى راتبًا</FilterPill>
+            </div>
+          </Toolbar>
 
           {visible.length === 0 ? (
             <EmptyState theme="employees" icon={Search} title="مفيش نتائج" hint="جرّب كلمة بحث تانية." />
           ) : (
-            <Panel>
-              <ul className="divide-y divide-border">
-                {visible.map((e) => (
-                  <li key={e.id} className={`flex flex-wrap items-center gap-3 px-3.5 py-3.5 transition-colors hover:bg-muted/30 sm:px-4 ${e.active ? '' : 'opacity-60'}`}>
-                    <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-info-subtle text-base font-extrabold text-info-subtle-foreground">
-                      {e.name.trim().charAt(0)}
-                    </span>
+            <CardGrid min={310}>
+              {visible.map((e) => (
+                <ItemCard key={e.id} dim={!e.active} accent={e.active ? 'bg-info' : 'bg-muted-foreground/40'}>
+                  <div className="flex items-start gap-3 p-4 pb-3 ps-5">
+                    <Avatar name={e.name} className="size-12 text-lg" />
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate font-bold">{e.name}</span>
-                        {!e.active && <Pill tone="slate">موقوف</Pill>}
-                        {e.hasPin ? <Pill tone="emerald">PIN مفعّل</Pill> : <Pill tone="amber">بدون PIN</Pill>}
-                        {e.advanceRemaining > 0 && <Pill tone="violet">سلفة {money(e.advanceRemaining)}</Pill>}
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <h3 className="truncate text-base font-extrabold">{e.name}</h3>
+                        {!e.active && <StatusChip tone="slate">موقوف</StatusChip>}
                       </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                        {e.jobTitle && <span>{e.jobTitle}</span>}
-                        {e.phone && (
-                          <span className="flex items-center gap-1" dir="ltr"><Phone className="size-3" />{e.phone}</span>
-                        )}
-                        <span className="flex items-center gap-1"><CalendarOff className="size-3" />إجازة {DAY_NAMES[e.weeklyOffDay]}</span>
-                      </div>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{e.jobTitle || 'بدون مسمى وظيفي'}</p>
                     </div>
                     <div className="text-end">
-                      <div className="flex items-center justify-end gap-1 text-base font-extrabold tabular-nums">
-                        <Wallet className="size-3.5 text-muted-foreground" />
-                        {money(e.baseSalary)}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground">راتب شهري</div>
+                      <div className="text-lg font-extrabold leading-none tabular-nums">{money(e.baseSalary)}</div>
+                      <div className="mt-1 text-[11px] text-muted-foreground">راتب شهري</div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" aria-label="تعديل" onClick={() => setEditing(e)}><Pencil className="size-4" /></Button>
-                      {e.active && (
-                        <Button variant="ghost" size="icon" aria-label="تصفية حساب" onClick={() => setSettling(e)}>
-                          <HandCoins className="size-4 text-amber-600" />
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="icon" aria-label={e.active ? 'إيقاف' : 'تفعيل'} onClick={() => toggleActive(e)}>
-                        {e.active ? <UserX className="size-4 text-rose-600" /> : <UserCheck className="size-4 text-emerald-600" />}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 px-4 pb-3 ps-5">
+                    {e.hasPin ? <Pill tone="emerald">PIN مفعّل</Pill> : <Pill tone="amber">بدون PIN</Pill>}
+                    {e.advanceRemaining > 0 && <Pill tone="violet">سلفة {money(e.advanceRemaining)}</Pill>}
+                    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
+                      <CalendarOff className="size-3" />إجازة {DAY_NAMES[e.weeklyOffDay]}
+                    </span>
+                    {e.phone && (
+                      <span dir="ltr" className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
+                        <Phone className="size-3" />{e.phone}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-auto flex items-center gap-1.5 border-t bg-muted/30 px-3 py-2.5 ps-4">
+                    <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setEditing(e)}><Pencil className="size-3.5" />تعديل</Button>
+                    {e.active && (
+                      <Button variant="ghost" size="sm" className="gap-1.5 text-amber-700 dark:text-amber-400" onClick={() => setSettling(e)}>
+                        <HandCoins className="size-3.5" />تصفية
                       </Button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </Panel>
+                    )}
+                    <Button
+                      variant="ghost" size="sm"
+                      className={`ms-auto gap-1.5 ${e.active ? 'text-rose-600' : 'text-emerald-600'}`}
+                      onClick={() => toggleActive(e)}
+                    >
+                      {e.active ? <UserX className="size-3.5" /> : <UserCheck className="size-3.5" />}
+                      {e.active ? 'إيقاف' : 'تفعيل'}
+                    </Button>
+                  </div>
+                </ItemCard>
+              ))}
+            </CardGrid>
           )}
         </>
       )}
