@@ -24,7 +24,6 @@ import {
   User,
   Wallet,
   X,
-  GitBranch,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -34,8 +33,6 @@ import { api } from '@/lib/api'
 import { formatArabicDateTime, formatCurrency, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PurchaseOrderDialog } from './PurchaseOrderDialog'
-import { SplitPurchaseDialog } from './SplitPurchaseDialog'
-import { getMe } from '@/lib/auth-client'
 import { PurchaseReturnDialog } from './PurchaseReturnDialog'
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
@@ -212,22 +209,6 @@ export function PurchaseOrdersView() {
   const [openId, setOpenId] = React.useState<number | null>(null)
   const [returnId, setReturnId] = React.useState<number | null>(null)
   const [newOpen, setNewOpen] = React.useState(false)
-  // 🏬 الشراء الموزّع على فروع: للمدير (مش مربوط بفرع) ولما يكون فيه أكتر من فرع
-  const [splitOpen, setSplitOpen] = React.useState(false)
-  const [splitBranches, setSplitBranches] = React.useState<{ id: number; name: string; isMain?: boolean }[]>([])
-  React.useEffect(() => {
-    let alive = true
-    ;(async () => {
-      try {
-        const me = await getMe()
-        if (!me || me.branchId) return
-        const r = await fetch('/api/branches')
-        const list = r.ok ? await r.json() : []
-        if (alive && Array.isArray(list)) setSplitBranches(list)
-      } catch { /* الزر اختياري */ }
-    })()
-    return () => { alive = false }
-  }, [])
   // 📋 جاي من «حركة صادر»: اسم الصنف الجاي من المخزون (عشان رسالة “مفيش أوامر” تبقى محددة)
   const [returnFocusName, setReturnFocusName] = React.useState<string | null>(null)
   // 📋 جاي من «حركة وارد» في المخزون → افتح أمر شراء جديد (الصنف بيتعبّى جوه النافذة)
@@ -559,12 +540,6 @@ export function PurchaseOrdersView() {
             <FileSpreadsheet className="size-4 shrink-0" />
             <span className="truncate">تصدير Excel</span>
           </Button>
-          {splitBranches.length > 1 && (
-            <Button variant="outline" onClick={() => setSplitOpen(true)} className="w-full sm:w-auto">
-              <GitBranch className="size-4 shrink-0" />
-              <span className="truncate">شراء موزّع على فروع</span>
-            </Button>
-          )}
           <Button onClick={() => setNewOpen(true)} className="w-full bg-cyan-700 text-white hover:bg-cyan-600 focus-visible:ring-cyan-600/40 sm:w-auto">
             <Plus className="size-4 shrink-0" />
             <span className="truncate">أمر شراء جديد</span>
@@ -950,7 +925,6 @@ export function PurchaseOrdersView() {
       />
 
       <PurchaseOrderDialog open={newOpen} onOpenChange={setNewOpen} onSaved={() => load(from, to)} />
-      <SplitPurchaseDialog open={splitOpen} onOpenChange={setSplitOpen} branches={splitBranches} onSaved={() => load(from, to)} />
     </div>
   )
 }
