@@ -12,6 +12,7 @@
  */
 
 import type * as XLSXNamespace from 'xlsx-js-style'
+import { normalizeBarcode } from '@/lib/barcode'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // الثوابت
@@ -661,7 +662,7 @@ export function validateRows(
     let barcode: string | null = null
     const bcRaw = cleanCellText(getCell(raw, mapping.barcode))
     if (bcRaw) {
-      let bc: string | null = bcRaw.replace(INVISIBLE_RE, '').trim()
+      let bc: string | null = normalizeBarcode(bcRaw.replace(INVISIBLE_RE, ''))
       if (bc !== bcRaw) fixes.push('تنظيف الباركود من حروف مخفية')
       // 🧾 «-» و«لا يوجد» و«---» = منتج بدون باركود (شكل التصدير للخلية الفاضية)
       if (bc && isPlaceholderText(bc)) {

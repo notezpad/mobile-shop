@@ -1,8 +1,10 @@
+import { findBarcodeConflict, barcodeConflictMessage } from '@/lib/barcode-conflict'
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireCapability, featureErrorResponse, requireModuleWritePermission } from '@/lib/features'
 import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
+import { normalizeBarcode } from '@/lib/barcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,7 +44,7 @@ async function __PUT(
   const data: any = {}
   if (body.size !== undefined) data.size = body.size ? String(body.size).trim() : null
   if (body.color !== undefined) data.color = body.color ? String(body.color).trim() : null
-  if (body.barcode !== undefined) data.barcode = body.barcode ? String(body.barcode).trim() : null
+  if (body.barcode !== undefined) data.barcode = normalizeBarcode(body.barcode)
   if (body.quantity !== undefined) {
     data.quantity = parseInt(body.quantity, 10) || 0
     // 👕 التعديل اليدوي لكمية المقاس = البضاعة دي على الرف (معروضة بالكامل) —
@@ -54,15 +56,8 @@ async function __PUT(
     // 🏬 2026-10-18: باركود المقاس فريد جوه نفس (المحل + الفرع) — فحص برسالة واضحة
     // (الـ trigger في الداتابيز هو الحاجز الأخير)
     const prod = await db.product.findUnique({ where: { id: pid }, select: { branchId: true } })
-    const taken = await db.productVariant.findFirst({
-      where: {
-        barcode: data.barcode,
-        id: { not: vId },
-        product: { tenantId: session.tenantId, branchId: prod?.branchId ?? null },
-      },
-      select: { id: true },
-    })
-    if (taken) return NextResponse.json({ error: 'الباركود مستخدم' }, { status: 400 })
+    const owner = await findBarcodeConflict(session.tenantId, prod?.branchId ?? null, data.barcode, { variantId: vId })
+    if (owner) return NextResponse.json({ error: barcodeConflictMessage(owner) }, { status: 400 })
   }
   try {
     const updated = await db.productVariant.update({ where: { id: vId }, data })

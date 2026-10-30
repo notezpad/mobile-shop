@@ -1,7 +1,10 @@
+import { findBarcodeConflict, barcodeConflictMessage } from '@/lib/barcode-conflict'
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireCapability, featureErrorResponse, getPlanContext, requireModule, requireModuleWritePermission } from '@/lib/features'
+import { normalizeBarcode } from '@/lib/barcode'
+import { canAccessProductBranch } from '@/lib/branch-scope-db'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +35,11 @@ async function __GET(
   if (isNaN(pid)) return NextResponse.json({ error: 'معرف غير صالح' }, { status: 400 })
   const prod = await loadTenantProduct(session.tenantId, pid)
   if (!prod) return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
+  // 🏬 2026-10-31: فحص الفرع — كان ناقص زي variants: موظف فرع مينفعش يقرا وحدات
+  // منتج من فرع تاني لو عرف الـ id (نفس قاعدة branch-scope).
+  if (!(await canAccessProductBranch(session.tenantId, prod.branchId, session.branchId))) {
+    return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
+  }
 
   // 🛡️ 2026-09-27: مفيش تفعيل/تعطيل يدوي تاني (wholesaleEnabled) — الوحدات
   // بتظهر تلقائي لو، وبس لو، الباقة فيها capability = multi_unit (احترافية).
@@ -88,7 +96,7 @@ async function __POST(
   if (price != null && (isNaN(price) || price < 0)) {
     return NextResponse.json({ error: 'سعر غير صالح' }, { status: 400 })
   }
-  const barcode = body.barcode ? String(body.barcode).trim() || null : null
+  const barcode = normalizeBarcode(body.barcode)
   const factor =
     body.factor != null && body.factor !== '' ? parseInt(body.factor, 10) : null
 
@@ -97,6 +105,13 @@ async function __POST(
       { error: 'الوحدة محتاجة عدد قطع صحيح (factor) أكبر من صفر' },
       { status: 400 },
     )
+  }
+
+  // 🏬 2026-11-03: باركود الوحدة فريد جوه (المحل + الفرع) — فحص برسالة واضحة،
+  // والـ unique index + trigger في الداتابيز هما الحاجز الأخير
+  if (barcode) {
+    const owner = await findBarcodeConflict(session.tenantId, prod.branchId ?? null, barcode)
+    if (owner) return NextResponse.json({ error: barcodeConflictMessage(owner) }, { status: 400 })
   }
 
   try {
@@ -111,6 +126,12 @@ async function __POST(
     })
     return NextResponse.json(created, { status: 201 })
   } catch (e: any) {
+    // تفرقة بين تعارض الباركود وتعارض اسم الوحدة (كان أي P2002 بيتفسّر «اسم مستخدم»)
+    const target = JSON.stringify(e?.meta?.target ?? e?.meta ?? '')
+    const msg = String(e?.message ?? '')
+    if (msg.includes('نفس الفرع') || /barcode/i.test(target) || /barcode/i.test(msg)) {
+      return NextResponse.json({ error: 'الباركود مستخدم بالفعل' }, { status: 400 })
+    }
     if (e?.code === 'P2002') {
       return NextResponse.json({ error: 'اسم الوحدة مستخدم بالفعل لهذا المنتج' }, { status: 400 })
     }

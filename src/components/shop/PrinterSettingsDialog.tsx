@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Printer, Usb, Monitor, Network, Check, Loader2 } from 'lucide-react'
+import { Printer, Usb, Monitor, Network, Check, Loader2, AlertTriangle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,10 +15,15 @@ import {
   savePrinterSettings,
   isWebUsbSupported,
   connectUsbPrinter,
+  isUsbConnected,
+  usbErrorMessage,
+  USB_TROUBLESHOOTING_STEPS,
   type PrinterSettings,
   type PrinterWidth,
   type PrinterConnection,
+  type UsbErrorKind,
 } from '@/lib/thermal-printer'
+import { DEFAULT_CODE_PAGE } from '@/lib/escpos-encoding'
 import { Field, Led, SettingRow, Toggle, INK_BTN, INK_BTN_OUTLINE, INK_FIELD } from './settings-ui'
 
 /**
@@ -84,13 +89,16 @@ export function PrinterSettingsDialog({
   const [settings, setSettings] = React.useState<PrinterSettings>(DEFAULT_PRINTER_SETTINGS)
   const [connecting, setConnecting] = React.useState(false)
   const [connected, setConnected] = React.useState(false)
+  const [usbError, setUsbError] = React.useState<UsbErrorKind | null>(null)
   const usbSupported = typeof window !== 'undefined' && isWebUsbSupported()
 
   React.useEffect(() => {
     if (open) {
       const stored = getStoredPrinterSettings()
       setSettings({ ...DEFAULT_PRINTER_SETTINGS, ...stored })
-      setConnected(false)
+      // الطابعة المصرّح ليها بتفضل متصلة بعد أول إقران — نعرض حالتها الحقيقية
+      setConnected(isUsbConnected())
+      setUsbError(null)
     }
   }, [open])
 
@@ -107,14 +115,26 @@ export function PrinterSettingsDialog({
   const handleConnectUsb = async () => {
     setConnecting(true)
     try {
-      const success = await connectUsbPrinter()
-      if (success) {
+      // النتيجة منظمة: كل سبب فشل ليه رسالة مختلفة بدل رسالة عامة واحدة
+      const result = await connectUsbPrinter()
+      if (result.ok) {
         setConnected(true)
-        toast.success('تم الاتصال بالطابعة الحرارية')
+        setUsbError(null)
+        toast.success(`تم الاتصال بـ ${result.deviceName ?? 'الطابعة الحرارية'}`)
       } else {
-        toast.error('فشل الاتصال — تأكد من توصيل الطابعة بمنفذ USB')
+        const kind = result.error ?? 'unknown'
+        setConnected(false)
+        setUsbError(kind)
+        if (kind === 'cancelled') {
+          toast.info('تم إلغاء الاختيار — اضغط «اتصال» واختار الطابعة من القايمة')
+        } else {
+          toast.error(usbErrorMessage(kind), {
+            description: kind === 'access-denied' ? 'جرّب «طريقة الاتصال: المتصفح» — بتشتغل من غير أي صلاحيات' : undefined,
+          })
+        }
       }
     } catch {
+      setUsbError('unknown')
       toast.error('فشل الاتصال بالطابعة')
     } finally {
       setConnecting(false)
@@ -198,6 +218,23 @@ export function PrinterSettingsDialog({
             </div>
           )}
 
+          {/* لوحة المساعدة — بتظهر لما اتصال USB يفشل، بالرسالة وخطوات الحل */}
+          {settings.connection === 'usb' && usbError && usbError !== 'cancelled' && usbError !== 'gesture' && (
+            <div className="space-y-2 rounded-xl border border-dashed border-amber-500/40 bg-amber-500/10 px-4 py-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <p className="text-xs font-extrabold leading-relaxed text-amber-700 dark:text-amber-400">
+                  {usbErrorMessage(usbError)}
+                </p>
+              </div>
+              <ol className="list-decimal space-y-1 ps-5 text-[11px] font-medium leading-relaxed text-foreground/80">
+                {USB_TROUBLESHOOTING_STEPS.map((step, i) => (
+                  <li key={i}>{step}</li>
+                ))}
+              </ol>
+            </div>
+          )}
+
           {/* الشبكة */}
           {settings.connection === 'network' && (
             <div className="grid grid-cols-2 gap-3">
@@ -235,6 +272,29 @@ export function PrinterSettingsDialog({
               </SelectContent>
             </Select>
           </Field>
+
+          {/* رقم code page (للطباعة المباشرة USB) */}
+          {settings.connection === 'usb' && (
+            <Field label="رقم code page (اختياري)">
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={255}
+                value={settings.codePage ?? ''}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10)
+                  update('codePage', Number.isFinite(n) ? Math.min(255, Math.max(0, n)) : undefined)
+                }}
+                placeholder={`الافتراضي: ${DEFAULT_CODE_PAGE[settings.encoding]}`}
+                dir="ltr"
+                className={cn(INK_FIELD, 'text-right font-mono')}
+              />
+              <p className="mt-1 text-[11px] font-medium text-foreground/60">
+                لو العربي طالع رموز غريبة، جرّب رقم تاني من صفحة اختبار الطابعة (Epson: 32 / 37 / 50).
+              </p>
+            </Field>
+          )}
 
           {/* القطع التلقائي */}
           <SettingRow title="قطع الورق تلقائياً بعد الطباعة" on={settings.autoCut}>

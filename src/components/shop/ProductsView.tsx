@@ -664,10 +664,18 @@ export function ProductsView() {
       return next
     })
   }
+  // ✅ «تحديد الكل» بيشتغل على الصفحة الحالية بس، ومابيمسحش تحديد الصفحات التانية
+  // (قبل كده كان بيستبدل التحديد كله، والمقارنة بالعدد كانت بتغلط لما التحديد يعدّي صفحة)
   const toggleSelectAll = () => {
-    setSelectedIds((prev) =>
-      prev.size === products.length ? new Set() : new Set(products.map((p) => p.id))
-    )
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      const pageAllSelected = products.length > 0 && products.every((p) => prev.has(p.id))
+      for (const p of products) {
+        if (pageAllSelected) next.delete(p.id)
+        else next.add(p.id)
+      }
+      return next
+    })
   }
   const printOneLabel = (p: Product) => {
     setSinglePrintProduct(p)
@@ -730,9 +738,27 @@ export function ProductsView() {
     setSinglePrintProduct(null)
     setLabelsDialogOpen(true)
   }
-  const labelProducts = singlePrintProduct
+  // 🏷️ سعر الملصق = نفس سعر القطعة اللي بيتباع بيه في الكاشير (الديناميكي لو مفعّل)
+  // 🏷️ التحديد بيعدّي الصفحات: بنحتفظ بنسخة من كل منتج اتحدد عشان لما المستخدم يغيّر
+  // الصفحة/الفلتر منتجاته المحددة ماتتشالش من الطباعة (قبل كده بتتحسب من صفحة العرض بس)
+  const selectedCache = React.useRef(new Map<number, Product>())
+  React.useEffect(() => {
+    const cache = selectedCache.current
+    for (const p of products) if (selectedIds.has(p.id)) cache.set(p.id, p)
+    for (const id of [...cache.keys()]) if (!selectedIds.has(id)) cache.delete(id)
+  }, [products, selectedIds])
+  const labelSource: Product[] = singlePrintProduct
     ? [singlePrintProduct]
-    : products.filter((p) => selectedIds.has(p.id))
+    : (() => {
+        const onPage = new Map(products.map((p) => [p.id, p]))
+        const out: Product[] = []
+        for (const id of selectedIds) {
+          const p = onPage.get(id) ?? selectedCache.current.get(id)
+          if (p) out.push(p)
+        }
+        return out
+      })()
+  const labelProducts = labelSource.map((p) => ({ ...p, price: p.dynamicRetailPrice ?? p.price }))
 
   const hasFilters = search.trim() !== '' || category !== 'all' || status !== 'all' || lowOnly || seasonFilter !== 'all' || locFilter !== 'all'
   const clearFilters = () => {
@@ -744,7 +770,7 @@ export function ProductsView() {
     setLocFilter('all')
   }
   const lowOnPage = products.filter((p) => p.active && p.quantity <= p.minQuantity).length
-  const allSelected = products.length > 0 && selectedIds.size === products.length
+  const allSelected = products.length > 0 && products.every((p) => selectedIds.has(p.id))
   // سعر القطعة خاص بباقة الجملة (الاحترافية) فقط — القطاعي بيكتب سعره وخلاص
   const isWholesale = capabilities.includes('multi_unit')
   const selectionMode = selectedIds.size > 0
@@ -1400,7 +1426,13 @@ export function ProductsView() {
       {selectionMode && (
         <div className="sticky bottom-4 z-30 flex justify-center">
           <div className="animate-in-up flex flex-wrap items-center gap-1.5 rounded-2xl bg-foreground px-3 py-2 text-background shadow-xl">
-            <span className="px-2 text-sm font-extrabold tabular-nums">{selectedIds.size} محدد</span>
+            <span className="px-2 text-sm font-extrabold tabular-nums">
+              {selectedIds.size} محدد
+              {(() => {
+                const other = [...selectedIds].filter((id) => !products.some((p) => p.id === id)).length
+                return other > 0 ? <span className="ms-1 text-xs font-semibold opacity-70">({other} في صفحات تانية)</span> : null
+              })()}
+            </span>
             <Button variant="ghost" size="sm" className="text-background hover:bg-background/15 hover:text-background" onClick={openBulkLabels}>
               <Printer className="size-4" />
               طباعة ملصقات
@@ -1466,6 +1498,7 @@ export function ProductsView() {
         }}
         products={labelProducts}
         variantsEnabled={capabilities.includes('variants')}
+        unitsEnabled={capabilities.includes('multi_unit')}
       />
       <ProductUnitsDialog
         open={!!unitsFor}

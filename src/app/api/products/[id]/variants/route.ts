@@ -1,9 +1,11 @@
+import { findBarcodeConflict, barcodeConflictMessage } from '@/lib/barcode-conflict'
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireCapability, featureErrorResponse, requireModule, requireModuleWritePermission } from '@/lib/features'
 import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
 import { withSql } from '@/lib/sql'
+import { normalizeBarcode } from '@/lib/barcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,11 +66,25 @@ export async function GET(
 
     // نفس فحص loadTenantProduct القديم: المنتج موجود ومتابع لنفس المحل؟
     // (مش موجود أو تابع لمحل تاني → الحالتين كانوا 404 زي ما هما كده)
-    const prod = await sql<{ id: number }[]>`
-      SELECT "id" FROM "Product"
+    // 🏬 2026-10-31: وفحص الفرع كمان — كان ناقص: موظف فرع كان يقدر يقرا متغيرات
+    // منتج من فرع تاني لو عرف الـ id. نفس قاعدة branch-scope: منتج فرعه هو فرع
+    // الموظف مسموح، والمنتج غير المسند (branchId=null) مسموح بس لفرع الرئيسي.
+    const prod = await sql<{ id: number; branchId: number | null }[]>`
+      SELECT "id", "branchId" FROM "Product"
       WHERE "id" = ${pid} AND "tenantId" = ${session.tenantId}
       LIMIT 1`
     if (!prod[0]) return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
+    if (session.branchId) {
+      const pBranch = prod[0].branchId
+      const inScope =
+        pBranch === session.branchId ||
+        (pBranch == null &&
+          (await sql<{ id: number }[]>`
+            SELECT "id" FROM "Branch"
+            WHERE "tenantId" = ${session.tenantId} AND "isMain" = true AND "id" = ${session.branchId}
+            LIMIT 1`).length > 0)
+      if (!inScope) return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
+    }
 
     const variants = await sql<VariantRow[]>`
       SELECT "id", "productId", "size", "color", "barcode", "quantity", "displayQty", "createdAt"
@@ -106,7 +122,7 @@ async function __POST(
   const body = await req.json().catch(() => null)
   const size = body?.size ? String(body.size).trim() || null : null
   const color = body?.color ? String(body.color).trim() || null : null
-  const barcode = body?.barcode ? String(body.barcode).trim() || null : null
+  const barcode = normalizeBarcode(body?.barcode)
   const quantity = parseInt(body?.quantity ?? 0, 10) || 0
   if (!size && !color) {
     return NextResponse.json({ error: 'لازم مقاس أو لون على الأقل' }, { status: 400 })
@@ -127,13 +143,10 @@ async function __POST(
     }
   }
   if (barcode) {
-    // 🏬 2026-10-18: باركود المقاس فريد جوه نفس (المحل + الفرع) — الفحص هنا برسالة واضحة،
-    // والـ trigger في الداتابيز هو الحاجز الأخير
-    const taken = await db.productVariant.findFirst({
-      where: { barcode, product: { tenantId: session.tenantId, branchId: prod.branchId } },
-      select: { id: true },
-    })
-    if (taken) return NextResponse.json({ error: 'الباركود مستخدم بالفعل' }, { status: 400 })
+    // 🏬 باركود المقاس فريد جوه نفس (المحل + الفرع) — وعابر للجداول (منتج/لون-مقاس/وحدة).
+    // الفحص هنا برسالة واضحة، والـ trigger في الداتابيز هو الحاجز الأخير لتكرار المقاسات
+    const owner = await findBarcodeConflict(session.tenantId, prod.branchId ?? null, barcode)
+    if (owner) return NextResponse.json({ error: barcodeConflictMessage(owner) }, { status: 400 })
   }
   try {
     // 👕 الرصيد الافتتاحي للمقاس بيدخل معروضاً بالكامل

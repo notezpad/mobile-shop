@@ -1,3 +1,4 @@
+import { findBarcodeConflict, barcodeConflictMessage } from '@/lib/barcode-conflict'
 import { cleanUnitLabel, guessUnitLabel } from '@/lib/unit-label'
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
@@ -13,6 +14,7 @@ import { isInternalImageUrl } from '@/lib/product-image'
 import { isSeasonValue, parseClosedSeasons } from '@/lib/seasonal'
 import { productBranchScopeSql } from '@/lib/branch-scope'
 import { getMainBranchId } from '@/lib/branch-scope-db'
+import { normalizeBarcode } from '@/lib/barcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -388,7 +390,7 @@ export async function POST(req: NextRequest) {
     if (body.category && String(body.category).trim()) {
       category = await ensureCategory(String(body.category), session.tenantId)
     }
-    const barcode = body.barcode ? String(body.barcode).trim() || null : null
+    const barcode = normalizeBarcode(body.barcode)
     // 🏬 الفرع المستهدف: موظف الفرع بيتثبت على فرعه، والأدمن بيختار — بشرط إن الفرع تابع لنفس المحل
     let targetBranchId: number | null = session.branchId ?? null
     if (!session.branchId && body.branchId) {
@@ -409,16 +411,10 @@ export async function POST(req: NextRequest) {
     // ensure unique barcode (treat empty as null)
     if (barcode) {
       // 🏬 2026-10-18: الباركود فريد جوه (المحل + الفرع) — نفس الباركود مسموح في فرع تاني
-      const targetBranch = targetBranchId
-      const exists = await db.product.findFirst({
-        where: { tenantId: session.tenantId, barcode, branchId: targetBranch || null },
-        select: { id: true },
-      })
-      if (exists) {
-        return NextResponse.json(
-          { error: 'الباركود مستخدم بالفعل' },
-          { status: 400 }
-        )
+      // 🏷️ فحص عابر للجداول: منتج / لون-مقاس / وحدة جملة في نفس الفرع
+      const owner = await findBarcodeConflict(session.tenantId, targetBranchId || null, barcode)
+      if (owner) {
+        return NextResponse.json({ error: barcodeConflictMessage(owner) }, { status: 400 })
       }
     }
     // رابط صورة داخلي (نسخ منتج مثلًا) → ننسخ الصورة الأصلية بدل تخزين الرابط

@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import JsBarcode from 'jsbarcode'
+import { barcodeFormatFor } from '@/lib/barcode'
 
 interface BarcodeProps {
   value: string | null | undefined
@@ -38,47 +39,45 @@ export function Barcode({
   const [failed, setFailed] = React.useState(false)
 
   // ارتفاع محجوز ثابت للخلية عشان الصفوف تفضل متساوية حتى بدون باركود.
-  // (خطوط + شريحة الرقم الصغيرة + هامش رفيع)
+  // (خطوط + فجوة 3px + شريحة الرقم الصغيرة + هامش رفيع 2px فوق وتحت —
+  //  المحتوى الفعلي بالظبط: height + 3 + chipHeight + 4)
   const chipHeight = fontSize + 6
-  const reservedHeight = height + chipHeight + 6
+  const reservedHeight = height + chipHeight + 7
 
   React.useEffect(() => {
-    if (!value || !svgRef.current) return
+    // الـ <svg> بيفضل متركّب دايماً (حتى لو الرسم فشل) عشان الـ ref ما يبقاش null
+    // ونقدر نرجع نرسم لما القيمة تتغيّر لقيمة سليمة.
+    const svg = svgRef.current
+    if (!value || !svg) return
     setFailed(false)
     try {
-      JsBarcode(svgRef.current, value, {
-        format: 'CODE128',
+      JsBarcode(svg, value, {
+        format: barcodeFormatFor(value),
         height,
         width,
+        // 🛡️ flat: بدونها خطوط الحراسة في EAN-13 بتطول ~8px عن height فالمحتوى
+        // يزيد عن الحاوية اللي عليها overflow:hidden وتتقص من الخطوط. flat
+        // بيساوي كل الخطوط فالـ SVG يطلع بارتفاع height بالظبط.
+        flat: true,
         displayValue: false,
         margin: 0,
         background: 'transparent',
         lineColor: 'currentColor', // ⚡ uses inherited text color — adapts to dark/light mode
       })
       // نضيف زوايا دائرية على كل الأعمدة عشان الشكل يبقى ناعم/عصري
-      const svg = svgRef.current
       const rx = Math.max(0.6, width * 0.55)
       svg.querySelectorAll('rect').forEach((r) => {
         r.setAttribute('rx', String(rx))
         r.setAttribute('ry', String(rx))
       })
     } catch {
+      svg.replaceChildren() // نشيل أي رسم قديم/نصف مرسوم
       setFailed(true)
     }
   }, [value, height, width])
 
   if (!value) {
     return <div style={{ height: reservedHeight }} aria-hidden="true" />
-  }
-
-  if (failed) {
-    return (
-      <div className="flex items-center" style={{ height: reservedHeight }}>
-        <span className="font-mono text-xs text-muted-foreground" dir="ltr">
-          {value}
-        </span>
-      </div>
-    )
   }
 
   // شريحة الرقم أسفل الباركود — مونو، حروف متباعدة، خلفية muted خفيفة
@@ -143,7 +142,7 @@ export function Barcode({
         ref={svgRef}
         {...({ dir: 'ltr' } as React.SVGProps<SVGSVGElement>)}
         preserveAspectRatio={fitContainer ? 'xMidYMid meet' : undefined}
-        style={{ maxWidth: '100%', height: 'auto', display: 'block', color: 'inherit' }}
+        style={{ maxWidth: '100%', height: 'auto', display: failed ? 'none' : 'block', color: 'inherit' }}
       />
       {chip}
     </div>

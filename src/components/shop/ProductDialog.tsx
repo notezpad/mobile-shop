@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 import { CategoryCombobox } from './CategoryCombobox'
 import { api } from '@/lib/api'
 import { useShopStore } from '@/lib/store'
-import { generateEan13 } from '@/lib/barcode'
+import { fetchUniqueBarcode } from '@/lib/barcode-client'
 import { DialogHero, Field, InkInput, SectionTitle } from './product-dialog-ui'
 import { INK_BTN, INK_BTN_OUTLINE } from './settings-ui'
 import { cn } from '@/lib/utils'
@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { normalizeBarcode } from '@/lib/barcode'
 
 export interface ProductFormValues {
   id?: number
@@ -174,7 +175,7 @@ export function ProductDialog({
       const payload = {
         name: name.trim(),
         category: category || null,
-        barcode: barcode?.trim() || null,
+        barcode: normalizeBarcode(barcode),
         price: priceNum,
         // 🔒 لو التكلفة مخفية عن المستخدم ما نبعتهاش خالص (كانت هتتبعت ٠ وتتحفظ غلط أو تترفض من السيرفر)
         ...(costHidden ? {} : { cost: parseFloat(cost) || 0 }),
@@ -323,7 +324,7 @@ export function ProductDialog({
                     type="button"
                     variant="outline"
                     className={cn('h-11 rounded-xl px-4', INK_BTN_OUTLINE)}
-                    onClick={() => edit(setBarcode)(generateEan13())}
+                    onClick={async () => edit(setBarcode)(await fetchUniqueBarcode())}
                   >
                     <Dices className="size-4" />
                     توليد

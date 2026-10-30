@@ -1,7 +1,9 @@
+import { findBarcodeConflict, barcodeConflictMessage } from '@/lib/barcode-conflict'
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireCapability, featureErrorResponse, requireModuleWritePermission } from '@/lib/features'
+import { normalizeBarcode } from '@/lib/barcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,14 +39,38 @@ async function __PATCH(
   const owned = await loadOwned(session.tenantId, pid, uId)
   if (!owned) return NextResponse.json({ error: 'غير موجود' }, { status: 404 })
   const body = await req.json().catch(() => null)
-  if (!body || typeof body !== 'object' || typeof body.active !== 'boolean') {
+  if (!body || typeof body !== 'object') {
     return NextResponse.json({ error: 'بيانات غير صالحة' }, { status: 400 })
   }
-  const updated = await db.productUnit.update({
-    where: { id: uId },
-    data: { active: body.active },
-  })
-  return NextResponse.json(updated)
+  // يقبل active و/أو barcode (تعيين/تغيير/مسح باركود الوحدة)
+  const data: { active?: boolean; barcode?: string | null } = {}
+  if (body.active !== undefined) {
+    if (typeof body.active !== 'boolean') return NextResponse.json({ error: 'بيانات غير صالحة' }, { status: 400 })
+    data.active = body.active
+  }
+  if (body.barcode !== undefined) {
+    const bc = normalizeBarcode(body.barcode)
+    if (bc && bc.length > 64) return NextResponse.json({ error: 'الباركود أطول من الطبيعي (64 حرف)' }, { status: 400 })
+    data.barcode = bc
+    if (bc) {
+      const prod = await db.product.findUnique({ where: { id: pid }, select: { branchId: true } })
+      const owner = await findBarcodeConflict(session.tenantId, prod?.branchId ?? null, bc, { unitId: uId })
+      if (owner) return NextResponse.json({ error: barcodeConflictMessage(owner) }, { status: 400 })
+    }
+  }
+  if (Object.keys(data).length === 0) {
+    return NextResponse.json({ error: 'بيانات غير صالحة' }, { status: 400 })
+  }
+  try {
+    const updated = await db.productUnit.update({ where: { id: uId }, data })
+    return NextResponse.json(updated)
+  } catch (e: any) {
+    // الـ unique index / trigger هما الحاجز الأخير لو حصل تسابق
+    if (e?.code === 'P2002' || String(e?.message ?? '').includes('نفس الفرع')) {
+      return NextResponse.json({ error: 'الباركود مستخدم بالفعل' }, { status: 400 })
+    }
+    return NextResponse.json({ error: 'فشل تحديث الوحدة' }, { status: 500 })
+  }
 }
 
 async function __DELETE(

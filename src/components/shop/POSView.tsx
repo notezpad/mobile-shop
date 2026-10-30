@@ -45,7 +45,7 @@ import { formatCurrency, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
 import { printSale } from '@/lib/print-client'
-import { printThermalReceipt, getStoredPrinterSettings } from '@/lib/thermal-printer'
+import { printThermalReceipt, getStoredPrinterSettings, usbErrorMessage } from '@/lib/thermal-printer'
 import { ProductDialog } from './ProductDialog'
 import { POSVariantPickerDialog } from './POSVariantPickerDialog'
 import { Swatch } from '@/lib/color-swatch'
@@ -1513,6 +1513,16 @@ export function POSView() {
           remaining: sale.total - sale.paid,
           customerName: sale.customer?.name,
         })
+          .then((outcome) => {
+            // 🛡️ فشل USB مش بيوقف الطباعة — بنفتح نافذة المتصفح تلقائيًا، بس
+            // بنبلغ الكاشير بالسبب عشان ميثبتش إن الفاتورة متطبعتش خالص.
+            if (outcome.mode === 'browser' && outcome.usbError) {
+              toast.warning('فشلت طباعة USB — فتحنا نافذة الطباعة بدلاً منها', {
+                description: usbErrorMessage(outcome.usbError),
+              })
+            }
+          })
+          .catch(() => {})
         return
       }
 

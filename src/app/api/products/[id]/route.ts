@@ -1,3 +1,4 @@
+import { findBarcodeConflict, barcodeConflictMessage } from '@/lib/barcode-conflict'
 import { cleanUnitLabel } from '@/lib/unit-label'
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
@@ -8,6 +9,7 @@ import { isInternalImageUrl } from '@/lib/product-image'
 import { purgeCatalogCaches } from '@/lib/edgeCache'
 import { canAccessProductBranch, getMainBranchId } from '@/lib/branch-scope-db'
 import { displayAfterTotalChange, isSeasonValue } from '@/lib/seasonal'
+import { normalizeBarcode } from '@/lib/barcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -134,22 +136,17 @@ export async function PUT(
     }
     let barcode: string | null = null
     if (body.barcode !== undefined) {
-      barcode = body.barcode ? String(body.barcode).trim() || null : null
-      if (barcode) {
-        // 🏬 2026-10-18: التكرار بيتفحص جوه نفس (المحل + فرع المنتج) بس
-        const dup = await db.product.findFirst({
-          where: { tenantId: session.tenantId, barcode, branchId: nextBranchId, id: { not: pid } },
-          select: { id: true },
-        })
-        if (dup) {
-          return NextResponse.json(
-            { error: 'الباركود مستخدم بالفعل' },
-            { status: 400 }
-          )
-        }
-      }
+      barcode = normalizeBarcode(body.barcode)
     } else {
       barcode = existing.barcode
+    }
+    // 🏷️ فحص عابر للجداول (منتج/لون-مقاس/وحدة) في الفرع الوجهة — وبيتفحص كمان لو الفرع اتغيّر
+    // والباركود زي ما هو (قبل كده النقل لفرع فيه نفس الباركود كان بيفشل من الـ index برسالة عامة)
+    if (barcode && (body.barcode !== undefined || nextBranchId !== existing.branchId)) {
+      const owner = await findBarcodeConflict(session.tenantId, nextBranchId ?? null, barcode, { productId: pid })
+      if (owner) {
+        return NextResponse.json({ error: barcodeConflictMessage(owner) }, { status: 400 })
+      }
     }
     // 🛡️ 2026-10-03: التسعير الديناميكي — باقة احترافية فقط.
     const planCtxPatch = await getPlanContext(session.tenantId)

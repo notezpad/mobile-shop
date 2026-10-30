@@ -2,14 +2,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireCapability, requireModule, featureErrorResponse } from '@/lib/features'
 import { withSql } from '@/lib/sql'
+import { branchScopeSql } from '@/lib/branch-scope'
 
 export const dynamic = 'force-dynamic'
 
 /**
  * 🎨 فهرس المتغيرات للأوفلاين: كل (لون/مقاس) لكل منتجات المحل في طلبات مُرقّمة بالـ cursor
  * (id تصاعدي). الـ prewarm بيسحبه ويخزنه في IndexedDB عشان:
- *   - دايلوج اختيار اللون/المقاس + الملصقات يشتغلوا أوفلاين لأي منتج، مش بس اللي اتفتح قبل كده.
+ *   - دايلوج اختيار اللون/مقاس + الملصقات يشتغلوا أوفلاين لأي منتج، مش بس اللي اتفتح قبل كده.
  *   - مسح باركود متغير أوفلاين يتعرّف على المتغير الصح.
+ *
+ * ⚡ 2026-10-31 (ملصقات الباركود): بيدعم `?ids=1,2,3` — بيرجّع متغيرات المنتجات دي
+ * بس في طلب واحد، بدل ما دايلوج الطباعة يبعت طلب لكل منتج مختار (100 منتج = 100 طلب).
+ * نفس شكل الاستجابة `{ data, nextCursor }` — مع `ids` بنرجّع `nextCursor: null`.
+ *
+ * 🏬 عزل الفروع: المتغيرات بتورّث فرع المنتج — موظف فرع بيشوف متغيرات منتجات فرعه
+ * بس (والغير مسندة لو فرعه هو الرئيسي)، نفس قاعدة branch-scope.
  *
  * قراءة بس. الباقات اللي مفيهاش المتغيرات بترجع قايمة فاضية (مش خطأ) عشان الـ prewarm يعدّي بهدوء.
  */
@@ -20,6 +28,18 @@ type Row = {
   color: string | null
   barcode: string | null
   quantity: number
+}
+
+/** أقصى عدد ids في طلب واحد — 300 منتج كتير لأي عملية طباعة عملية، وبنحمي الاستعلام من URL طويل. */
+const MAX_IDS = 300
+
+function parseIds(raw: string | null): number[] {
+  if (!raw) return []
+  const list = raw
+    .split(',')
+    .map((x) => parseInt(x.trim(), 10))
+    .filter((n) => Number.isInteger(n) && n > 0)
+  return [...new Set(list)].slice(0, MAX_IDS)
 }
 
 export async function GET(req: NextRequest) {
@@ -38,13 +58,34 @@ export async function GET(req: NextRequest) {
       if (fe) return NextResponse.json(fe.body, { status: fe.status })
       throw e
     }
-    try {
-      await requireCapability(session, 'variants')
-    } catch {
-      return NextResponse.json({ data: [], nextCursor: null })
-    }
+    const capabilityGuard = await (async () => {
+      try {
+        await requireCapability(session, 'variants')
+        return null
+      } catch {
+        return NextResponse.json({ data: [], nextCursor: null })
+      }
+    })()
+    if (capabilityGuard) return capabilityGuard
+
+    // 🏬 نفس شرط النطاق في كل الفروع: منتجات فرع الموظف بس + الغير مسندة لو هو الفرع الرئيسي
+    const branchFilter = branchScopeSql(sql, session.tenantId, session.branchId, 'p."branchId"')
 
     const sp = req.nextUrl.searchParams
+    const ids = parseIds(sp.get('ids'))
+
+    if (ids.length > 0) {
+      const rows = await sql<Row[]>`
+        SELECT v."id", v."productId", v."size", v."color", v."barcode", v."quantity"
+        FROM "ProductVariant" v
+        JOIN "Product" p ON p."id" = v."productId"
+        WHERE p."tenantId" = ${session.tenantId}
+          AND v."productId" IN ${sql(ids)}
+          AND ${branchFilter}
+        ORDER BY v."id" ASC`
+      return NextResponse.json({ data: rows, nextCursor: null })
+    }
+
     const cursor = Math.max(0, parseInt(sp.get('cursor') || '0', 10) || 0)
     const limit = Math.min(2000, Math.max(1, parseInt(sp.get('limit') || '1000', 10) || 1000))
 
@@ -53,6 +94,7 @@ export async function GET(req: NextRequest) {
       FROM "ProductVariant" v
       JOIN "Product" p ON p."id" = v."productId"
       WHERE p."tenantId" = ${session.tenantId} AND v."id" > ${cursor}
+        AND ${branchFilter}
       ORDER BY v."id" ASC
       LIMIT ${limit}`
     const nextCursor = rows.length === limit ? Number(rows[rows.length - 1].id) : null

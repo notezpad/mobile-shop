@@ -31,6 +31,11 @@ export function fmt(n: number) {
   })
 }
 
+/** سعر الملصق بأرقام إنجليزية — متسق مع رقم الباركود المطبوع تحته (والمعاينة بتستخدمه برضه). */
+export function fmtLabelPrice(n: number): string {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 export function fmtDate(d: string | Date) {
   const date = typeof d === 'string' ? new Date(d) : d
   if (isNaN(date.getTime())) return ''
@@ -104,6 +109,22 @@ export function baseDocStyles(): string {
       @page { size: A4; margin: 10mm 8mm; }
     }
   `
+}
+
+/** شريط صغير في نافذة الطباعة بزر «إغلاق النافذة» — يظهر على الشاشة فقط ومش بيتطبع
+ *  (@media print ب يخفيه). كان السيناريو المزعج: المستخدم يطبع أو يكنسل حوار الطباعة
+ *  فالنافذة تفضل مفتوحة فاضية وميلاقيش طريقة يقفلها غير ما يريفرش الصفحة.
+ *  الضغطة نفسها بتتركّب من الـ opener (`armPrintWindow` في print-client.ts) —
+ *  مش inline onclick — عشان تشتغل حتى لو اتضاف CSP صارم بعدين. */
+export function printCloseBarHtml(): string {
+  return `
+  <div id="print-close-bar" dir="rtl" style="position:fixed;bottom:14px;inset-inline-end:14px;z-index:9999;">
+    <button id="print-close-btn" type="button"
+      style="font-family:inherit;font-size:13px;font-weight:700;color:#16211a;background:#fff;border:1px solid #e3e8e4;border-radius:10px;padding:9px 14px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.14);">
+      ✕&nbsp; إغلاق النافذة
+    </button>
+  </div>
+  <style>@media print { #print-close-bar { display: none !important; } }</style>`
 }
 
 export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
@@ -214,6 +235,7 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
       </div>
     </div>
   </div>
+  ${printCloseBarHtml()}
 </body>
 </html>`
 }
@@ -223,6 +245,10 @@ export interface LabelItem {
   barcode: string
   price?: number
   quantity: number
+  /** 🎨 المقاس (ملابس) — بيتطبع سطر مستقل تحت الاسم لو `showVariant` مفعل. */
+  size?: string | null
+  /** 🎨 اللون — بيتطبع مع المقاس في نفس السطر. */
+  color?: string | null
   /** Pre-rendered SVG markup for the barcode (the full `<svg>...</svg>` string),
    *  produced by `renderBarcodeSvg()` in print-client.ts. When provided, the print
    *  document uses this SVG directly — no CDN, no JS, no async rendering — so the
@@ -246,7 +272,22 @@ export interface LabelOptions {
   labelSize?: { widthMm: number; heightMm: number }
   /** @deprecated kept for backward compat — use `labelSize` instead. */
   rollSize?: { widthMm: number; heightMm: number }
+  /** 🎚️ حجم اسم المنتج كنسبة من الحجم التلقائي (0.6–1.6، الافتراضي 1 = تلقائي). */
+  nameScale?: number
+  /** 🎚️ حجم السعر كنسبة من الحجم التلقائي (0.6–1.6، الافتراضي 1 = تلقائي). */
+  priceScale?: number
+  /** 🎚️ طول خطوط الباركود كنسبة من أقصى ارتفاع متاح (0.5–1، الافتراضي 1 = أقصى ارتفاع). */
+  barcodeScale?: number
+  /** 👕 طباعة سطر «المقاس واللون» للمتغيرات/الملابس (الافتراضي true). */
+  showVariant?: boolean
+  /** 🖨️ اللغة المباشرة للطابعات الحرارية — تُهمل في نافذة المتصفح، تُستخدم في `printBarcodeLabelsDirect`. */
+  directLang?: 'tspl' | 'zpl'
 }
+
+/** line-height والهوامش الرأسية (مم) لعناصر الملصق — مشتركة بين حساب التخطيط وCSS الطباعة والمعاينة
+ *  (لو اتغيّرت هنا لازم تتغير في الاتنين، وعشان كده بتتقرا منها مباشرة). */
+export const LABEL_LH = { name: 1.15, text: 1.2, price: 1.2, variant: 1.15 } as const
+export const LABEL_GAP_MM = { name: 0.6, text: 0.4, price: 0.6, variant: 0.3 } as const
 
 /** A4 page dimensions in mm. Used to compute the label grid in sheet mode. */
 export const A4 = { widthMm: 210, heightMm: 297 }
@@ -262,12 +303,12 @@ export interface LabelLayout {
   nameMaxLines: number
   /** Barcode bar height (px) passed to JsBarcode. */
   barcodeHeightPx: number
-  /** Barcode bar width (px) — the thinnest module width. */
-  barcodeBarWidth: number
   /** Font size (pt) for the barcode digits text (when shown). */
   barcodeTextFontSizePt: number
   /** Font size (pt) for the price line. */
   priceFontSizePt: number
+  /** 👕 Font size (pt) for the size/color (variant) line. */
+  variantFontSizePt: number
   /** A4 grid layout — only meaningful in sheet mode. */
   sheet?: {
     columns: number
@@ -296,9 +337,28 @@ export function computeLabelLayout(
   widthMm: number,
   heightMm: number,
   mode: 'sheet' | 'roll' = 'roll',
-  opts: { showName?: boolean; showPrice?: boolean; showBarcodeText?: boolean } = {}
+  opts: {
+    showName?: boolean
+    showPrice?: boolean
+    showBarcodeText?: boolean
+    /** 👕 حجز ارتفاع لسطر المقاس/اللون (الافتراضي true — الملصقات اللي ملهاش مقاس مش بتأثر). */
+    showVariant?: boolean
+    /** 🎚️ حجم اسم المنتج كنسبة من التلقائي (0.6–1.6) — تحكّم المستخدم من الدايلوج. */
+    nameScale?: number
+    /** 🎚️ حجم السعر كنسبة من التلقائي (0.6–1.6). */
+    priceScale?: number
+    /** 🎚️ طول خطوط الباركود كنسبة من أقصى ارتفاع متاح (0.5–1). */
+    barcodeScale?: number
+  } = {}
 ): LabelLayout {
-  const { showName = true, showPrice = true, showBarcodeText = true } = opts
+  const { showName = true, showPrice = true, showBarcodeText = true, showVariant = true } = opts
+  // تحكّم المستخدم — بيتكلَم قبل حلقة التصغير التلقائية، فلو كبّر الخط أكتر من
+  // اللي الملصق بيحتمل، الحلقة تصغّر الكل نسبةً وتحافظ على قراءة الباركود.
+  const clampScale = (v: number | undefined, lo: number, hi: number) =>
+    typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : 1
+  const nameScale = clampScale(opts.nameScale, 0.6, 1.6)
+  const priceScale = clampScale(opts.priceScale, 0.6, 1.6)
+  const barcodeScale = clampScale(opts.barcodeScale, 0.5, 1)
 
   // Padding: ~6% of the smaller dimension, clamped to 1–2.5mm so the content
   // never crowds the label edge on small stickers.
@@ -307,40 +367,51 @@ export function computeLabelLayout(
   // Available content height = label height − top/bottom padding.
   const contentH = Math.max(4, heightMm - paddingMm * 2)
 
-  // Reserve vertical space for each shown element (mm) — these are *max* sizes
-  // that get scaled down proportionally if the total doesn't fit.
-  const reserves = {
-    name: showName ? Math.max(2.5, Math.min(5, heightMm * 0.13)) : 0,
-    barcodeText: showBarcodeText ? Math.max(2, Math.min(3.5, heightMm * 0.09)) : 0,
-    price: showPrice ? Math.max(2.5, Math.min(4.5, heightMm * 0.12)) : 0,
-    // Small inter-element gaps.
-    gaps: (showName ? 1 : 0) + (showBarcodeText ? 0.6 : 0) + (showPrice ? 1 : 0),
-  }
-  const reservedTotal = reserves.name + reserves.barcodeText + reserves.price + reserves.gaps
-  // Barcode gets whatever is left, clamped to a sane range. If everything
-  // overflows (tiny label with all elements shown), barcode shrinks first.
-  let barcodeMm = Math.max(4, contentH - reservedTotal)
-  if (barcodeMm < 5 && reservedTotal > contentH * 0.7) {
-    // Overflow case: scale all text reserves down to leave room for a 5mm barcode.
-    const scale = (contentH - 5 - reserves.gaps) / (reserves.name + reserves.barcodeText + reserves.price)
-    reserves.name *= scale
-    reserves.barcodeText *= scale
-    reserves.price *= scale
-    barcodeMm = 5
-  }
-  const barcodeHeightPx = Math.round(barcodeMm * 3.78)
-
-  // Font sizes derived from the reserved mm space (1mm ≈ 2.83pt).
-  const nameFontSizePt = Math.max(6, Math.min(12, Math.round(reserves.name * 2.83)))
-  const barcodeTextFontSizePt = Math.max(5.5, Math.min(10, Math.round(reserves.barcodeText * 2.83)))
-  const priceFontSizePt = Math.max(7, Math.min(13, Math.round(reserves.price * 2.83)))
-
   // Name lines: tiny labels get 1 line, roomy labels get 2.
-  const nameMaxLines = heightMm < 24 ? 1 : 2
+  let nameMaxLines = showName ? (heightMm < 24 ? 1 : 2) : 1
 
-  // Bar width: narrower labels need thinner bars so the entire barcode fits
-  // horizontally. These values work well for CODE128 with 13-digit inputs.
-  const barcodeBarWidth = widthMm < 35 ? 1 : widthMm < 45 ? 1.4 : 1.8
+  // الأحجام الأساسية (pt) من ارتفاع الملصق. الارتفاع الفعلي لكل عنصر =
+  // حجم الخط × line-height (نفس القيم المثبّتة في CSS الطباعة والمعاينة) + الهامش —
+  // ده اللي كان ناقص: الحجز القديم كان بيحسب سطر واحد من غير line-height،
+  // فالمحتوى يزيد عن الملصق ويتقص من فوق ومن تحت.
+  const PT_MM = 25.4 / 72
+  const baseName = Math.max(6, Math.min(12, Math.round(Math.max(2.5, Math.min(5, heightMm * 0.13)) * 2.83)))
+  const baseText = Math.max(5.5, Math.min(10, Math.round(Math.max(2, Math.min(3.5, heightMm * 0.09)) * 2.83)))
+  const basePrice = Math.max(7, Math.min(13, Math.round(Math.max(2.5, Math.min(4.5, heightMm * 0.12)) * 2.83)))
+
+  const textMm = (scale: number, lines: number) =>
+    (showName ? baseName * nameScale * scale * PT_MM * LABEL_LH.name * lines + LABEL_GAP_MM.name : 0) +
+    (showVariant ? baseText * 1.1 * scale * PT_MM * LABEL_LH.variant + LABEL_GAP_MM.variant : 0) +
+    (showBarcodeText ? baseText * scale * PT_MM * LABEL_LH.text + LABEL_GAP_MM.text : 0) +
+    (showPrice ? basePrice * priceScale * scale * PT_MM * LABEL_LH.price + LABEL_GAP_MM.price : 0)
+
+  const MIN_BARCODE_MM = 5
+  const COMFY_BARCODE_MM = 8
+  let scale = 1
+  let barcodeMm = contentH - textMm(scale, nameMaxLines)
+  // 1) لو الباركود ضيّق: الاسم يبقى سطر واحد
+  if (barcodeMm < COMFY_BARCODE_MM && nameMaxLines === 2) {
+    nameMaxLines = 1
+    barcodeMm = contentH - textMm(scale, nameMaxLines)
+  }
+  // 2) لسه ضيّق: نصغّر الخطوط تدريجياً (حد أدنى ~60%) لحد ما الباركود ياخد 5مم على الأقل
+  while (barcodeMm < MIN_BARCODE_MM && scale > 0.6) {
+    scale = Math.round((scale - 0.05) * 100) / 100
+    barcodeMm = contentH - textMm(scale, nameMaxLines)
+  }
+  // الباركود ياخد الباقي بالظبط — مفيش تجاوز لارتفاع الملصق
+  barcodeMm = Math.max(3, barcodeMm)
+  // 🎚️ طول الخطوط اللي حدده المستخدم: نسبة من المساحة المتاحة — الفرق بيفضل فراغ
+  // والمحتوى متوسّط رأسياً (flex center) فالشكل بيفضل مرتب. الحلقة اللي فوق بتضمن
+  // إن المساحة المتاحة نفسها كافية للقراءة قبل ما نضرب في النسبة.
+  barcodeMm = Math.max(3, Math.round(barcodeMm * barcodeScale * 100) / 100)
+  const barcodeHeightPx = Math.floor(barcodeMm * 3.78)
+
+  const r1 = (n: number) => Math.round(n * 10) / 10
+  const nameFontSizePt = r1(baseName * nameScale * scale)
+  const barcodeTextFontSizePt = r1(baseText * scale)
+  const priceFontSizePt = r1(basePrice * priceScale * scale)
+  const variantFontSizePt = r1(baseText * 1.1 * scale)
 
   let sheet: LabelLayout['sheet']
   if (mode === 'sheet') {
@@ -362,9 +433,9 @@ export function computeLabelLayout(
     nameFontSizePt,
     nameMaxLines,
     barcodeHeightPx,
-    barcodeBarWidth,
     barcodeTextFontSizePt,
     priceFontSizePt,
+    variantFontSizePt,
     sheet,
   }
 }
@@ -383,6 +454,7 @@ export function printBarcodeLabelsHtml(items: LabelItem[], opts: LabelOptions = 
     showName = true,
     showPrice = true,
     showBarcodeText = true,
+    showVariant = true,
     mode = 'sheet',
   } = opts
   const labelSize = opts.labelSize ?? opts.rollSize ?? { widthMm: 40, heightMm: 30 }
@@ -390,6 +462,10 @@ export function printBarcodeLabelsHtml(items: LabelItem[], opts: LabelOptions = 
     showName,
     showPrice,
     showBarcodeText,
+    showVariant,
+    nameScale: opts.nameScale,
+    priceScale: opts.priceScale,
+    barcodeScale: opts.barcodeScale,
   })
 
   const flat: LabelItem[] = []
@@ -407,6 +483,11 @@ export function printBarcodeLabelsHtml(items: LabelItem[], opts: LabelOptions = 
         `<div class="lbl-name" style="-webkit-line-clamp:${layout.nameMaxLines}">${escapeHtml(f.name)}</div>`
       )
     }
+    // 👕 سطر المقاس/اللون — الملصقات اللي ملهاش مقاس/لون مش بيطبعلها السطر ده
+    if (showVariant && (f.size || f.color)) {
+      const v = [f.size, f.color].filter((x) => !!x && String(x).trim()).join(' · ')
+      if (v) parts.push(`<div class="lbl-variant">${escapeHtml(v)}</div>`)
+    }
     if (f.barcodeSvg) {
       parts.push(`<div class="lbl-barcode-wrap">${f.barcodeSvg}</div>`)
     } else if (f.barcode) {
@@ -419,12 +500,20 @@ export function printBarcodeLabelsHtml(items: LabelItem[], opts: LabelOptions = 
       parts.push(`<div class="lbl-barcode-text" dir="ltr">${escapeHtml(f.barcode)}</div>`)
     }
     if (showPrice && f.price != null) {
-      parts.push(`<div class="lbl-price">${fmt(f.price)} ج.م</div>`)
+      parts.push(`<div class="lbl-price">${fmtLabelPrice(f.price)} ج.م</div>`)
     }
     return `<div class="label">${parts.join('')}</div>`
   }
 
-  const labelsHtml = flat.map(buildLabelHtml).join('')
+  // وضع A4: بنقسّم الملصقات لصفحات صريحة (perSheet في كل صفحة) بدل الاعتماد على كسر
+  // الصفحات التلقائي للـ grid — كل صفحة عنصر .sheet مستقل بكسر صفحة بعده.
+  const perPage = mode === 'sheet' ? Math.max(1, layout.sheet?.perSheet ?? 1) : flat.length || 1
+  const pages: LabelItem[][] = []
+  for (let i = 0; i < flat.length; i += perPage) pages.push(flat.slice(i, i + perPage))
+  const sheetsHtml =
+    mode === 'sheet'
+      ? pages.map((pg) => `<div class="sheet">${pg.map(buildLabelHtml).join('')}</div>`).join('')
+      : `<div class="sheet">${flat.map(buildLabelHtml).join('')}</div>`
 
   // Per-label CSS — the size is fixed to physical mm so it never stretches.
   const labelCss = `
@@ -446,16 +535,23 @@ export function printBarcodeLabelsHtml(items: LabelItem[], opts: LabelOptions = 
     font-family: 'Tahoma','Cairo',sans-serif;
     font-size: ${layout.nameFontSizePt}pt;
     font-weight: 700;
-    line-height: 1.15;
+    line-height: ${LABEL_LH.name};
+    flex-shrink: 0;
     max-width: 100%;
     overflow: hidden;
     display: -webkit-box;
     -webkit-box-orient: vertical;
     text-overflow: ellipsis;
-    margin: 0 0 0.6mm 0;
+    margin: 0 0 ${LABEL_GAP_MM.name}mm 0;
     word-break: break-word;
   }
+  /* 🛡️ الملصق نفسه RTL عشان نص الاسم/السعر يفضل سليم — حتى في وضع A4 اللي
+     بنحوّل فيه الشبكة لـ LTR (تحت) عشان تطابق المعاينة وترتيب الاستيكرز المقطّع */
+  .label {
+    direction: rtl;
+  }
   .lbl-barcode-wrap {
+    flex-shrink: 0;
     width: 100%;
     display: flex;
     justify-content: center;
@@ -466,6 +562,19 @@ export function printBarcodeLabelsHtml(items: LabelItem[], opts: LabelOptions = 
     max-width: 100%;
     height: auto;
     display: block;
+  }
+  .lbl-variant {
+    font-family: 'Tahoma','Cairo',sans-serif;
+    font-size: ${layout.variantFontSizePt}pt;
+    font-weight: 700;
+    line-height: ${LABEL_LH.variant};
+    flex-shrink: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin: 0 0 ${LABEL_GAP_MM.variant}mm 0;
+    color: #000;
   }
   .lbl-barcode-fallback {
     font-family: 'Consolas','Courier New',monospace;
@@ -479,14 +588,18 @@ export function printBarcodeLabelsHtml(items: LabelItem[], opts: LabelOptions = 
     font-size: ${layout.barcodeTextFontSizePt}pt;
     font-weight: 700;
     letter-spacing: 0.06em;
-    margin-top: 0.4mm;
+    line-height: ${LABEL_LH.text};
+    flex-shrink: 0;
+    margin-top: ${LABEL_GAP_MM.text}mm;
     color: #000;
   }
   .lbl-price {
     font-family: 'Tahoma','Cairo',sans-serif;
     font-size: ${layout.priceFontSizePt}pt;
     font-weight: 800;
-    margin-top: 0.6mm;
+    line-height: ${LABEL_LH.price};
+    flex-shrink: 0;
+    margin-top: ${LABEL_GAP_MM.price}mm;
     color: #000;
   }
   `
@@ -500,8 +613,11 @@ export function printBarcodeLabelsHtml(items: LabelItem[], opts: LabelOptions = 
     pageCss = `
   @page { size: ${layout.widthMm}mm ${layout.heightMm}mm; margin: 0; }
   html, body { margin: 0; padding: 0; background: #fff; }
-  .sheet { display: block; margin: 0; padding: 0; }
+  .sheet { display: block; margin: 0; padding: 0; overflow: hidden; }
+  /* ارتفاع الملصق أقل من الصفحة بـ 0.3مم: لو بالظبط نفس الارتفاع، تقريب البكسل بيطلّع
+     صفحة فاضية بعد كل ملصق في بعض الطابعات/المتصفحات. */
   .label {
+    height: ${Math.max(1, layout.heightMm - 0.3)}mm;
     margin: 0;
     border: none;
     border-radius: 0;
@@ -520,12 +636,21 @@ export function printBarcodeLabelsHtml(items: LabelItem[], opts: LabelOptions = 
   html, body { margin: 0; padding: 0; background: #fff; }
   .sheet {
     display: grid;
+    /* 🛡️ LTR: الصفحة dir="rtl" فالـ grid كان بيبدأ من اليمين وبيتلزق فيه —
+       بينما المعاينة LTR وبتبدأ من الشمال. ورق الاستيكرز المقطّع جاهز مقاسه
+       على ترتيب الشمال، فبنوحّل الشبكة لـ LTR عشان الطباعة تطابق المعاينة
+       حرفياً («بترتيب الطباعة الفعلي»). نصوص الملصق نفسه بتفضل RTL عبر
+       .label{direction:rtl} فوق. */
+    direction: ltr;
     grid-template-columns: repeat(${g.columns}, ${layout.widthMm}mm);
     grid-template-rows: repeat(${g.rows}, ${layout.heightMm}mm);
     gap: ${g.gapYMm}mm ${g.gapXMm}mm;
     justify-content: start;
     align-content: start;
+    break-after: page;
+    page-break-after: always;
   }
+  .sheet:last-child { break-after: auto; page-break-after: auto; }
   .label {
     border: 1px dashed #c8c8c8;
     border-radius: 1mm;
@@ -554,9 +679,10 @@ export function printBarcodeLabelsHtml(items: LabelItem[], opts: LabelOptions = 
 <body>
   ${
     flat.length > 0
-      ? `<div class="sheet">${labelsHtml}</div>`
+      ? sheetsHtml
       : `<div class="empty-msg">لا توجد ملصقات لطباعتها</div>`
   }
+  ${printCloseBarHtml()}
 </body>
 </html>`
 }

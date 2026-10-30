@@ -29,6 +29,7 @@ import {
   SlidersHorizontal,
   Tag,
   Type,
+  Usb,
   X,
 } from 'lucide-react'
 import {
@@ -44,8 +45,11 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { Swatch } from '@/lib/color-swatch'
 import { groupByColor } from '@/lib/variant-sort'
-import { printBarcodeLabels, renderBarcodeSvg } from '@/lib/print-client'
-import { computeLabelLayout, A4, type LabelLayout } from '@/lib/print'
+import { printBarcodeLabels, renderBarcodeSvg, measureBarcodeModuleMm, MIN_SCANNABLE_MODULE_MM } from '@/lib/print-client'
+import { printBarcodeLabelsDirect } from '@/lib/label-printer'
+import { isWebUsbSupported, usbErrorMessage } from '@/lib/thermal-printer'
+import { computeLabelLayout, A4, LABEL_LH, LABEL_GAP_MM, fmtLabelPrice, type LabelLayout } from '@/lib/print'
+import { normalizeBarcode, isRenderableBarcode, barcodeFormatFor } from '@/lib/barcode'
 import { cn } from '@/lib/utils'
 
 export interface LabelProduct {
@@ -65,6 +69,8 @@ interface Props {
   products: LabelProduct[]
   /** باقة فيها المتغيرات (لون/مقاس): لو true بنجيب متغيرات كل منتج ونطبع ملصق لكل لون/مقاس بباركود المتغير. الافتراضي false = السلوك القديم. */
   variantsEnabled?: boolean
+  /** باقة الجملة (multi_unit): لو true بنجيب وحدات كل منتج ونطبع ملصق لباركود الكرتونة/الدستة (الوحدات اللي ليها باركود). */
+  unitsEnabled?: boolean
 }
 
 interface VariantData {
@@ -73,6 +79,15 @@ interface VariantData {
   color: string | null
   barcode: string | null
   quantity: number
+}
+
+interface UnitData {
+  id: number
+  name: string
+  price: number | null
+  barcode: string | null
+  factor: number
+  active: boolean
 }
 
 /** صف طباعة واحد = ملصق واحد (منتج عادي، أو لون/مقاس من منتج له متغيرات). */
@@ -90,6 +105,10 @@ interface LabelRow {
   variantLabel: string | null
   /** الكمية الافتراضية: ١ للمنتج العادي، ٠ للمتغير (عشان متطبعش ١٥٠ ملصق بالغلط) */
   defaultQty: number
+  /** وحدة جملة (كرتونة/دستة...) بباركودها الخاص — كمية افتراضية ٠ زي المتغيرات */
+  isUnit?: boolean
+  /** عدد القطع في الوحدة (للوحدات فقط) */
+  factor?: number
 }
 
 const variantLabelOf = (v: Pick<VariantData, 'id' | 'color' | 'size'>) =>
@@ -99,6 +118,8 @@ interface Entry {
   product: LabelProduct
   /** null = منتج من غير متغيرات */
   groups: { color: string; total: number; rows: LabelRow[]; noBarcode: LabelRow[] }[] | null
+  /** وحدات الجملة اللي ليها باركود (فاضية لو الباقة مفيهاش وحدات) */
+  units: LabelRow[]
   rows: LabelRow[]
 }
 
@@ -106,6 +127,8 @@ interface Entry {
 
 type Mode = 'sheet' | 'roll'
 type PresetKey = '40x30' | '50x30' | '30x20' | 'custom'
+/** 🖨️ طريقة إرسال الطباعة: نافذة المتصفح، أو USB مباشر بلغة TSPL/ZPL. */
+type PrintLang = 'browser' | 'tspl' | 'zpl'
 
 const PRESETS: { key: PresetKey; w: number; h: number }[] = [
   { key: '40x30', w: 40, h: 30 },
@@ -142,6 +165,16 @@ interface Prefs {
   name: boolean
   price: boolean
   text: boolean
+  /** 👕 طباعة سطر المقاس/اللون */
+  variant: boolean
+  /** 🖨️ طريقة الإرسال: نافذة المتصفح أو USB مباشر */
+  lang: PrintLang
+  /** 🎚️ حجم اسم المنتج ٪ من التلقائي (60–150) */
+  namePct: number
+  /** 🎚️ حجم السعر ٪ من التلقائي (60–150) */
+  pricePct: number
+  /** 🎚️ طول خطوط الباركود ٪ من أقصى ارتفاع متاح (50–100) */
+  barcodePct: number
 }
 
 const fmtPrice = (n: number) =>
@@ -161,12 +194,14 @@ const ring = 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:
 
 /* ───────────────────────── الدايلوج ───────────────────────── */
 
-export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnabled = false }: Props) {
+export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnabled = false, unitsEnabled = false }: Props) {
   const [qty, setQty] = React.useState<Record<string, number>>({})
   const [focusKey, setFocusKey] = React.useState<string | null>(null)
   const [openColors, setOpenColors] = React.useState<Record<string, boolean>>({})
   const [variantsMap, setVariantsMap] = React.useState<Record<number, VariantData[]>>({})
   const [vState, setVState] = React.useState<{ loading: boolean; failed: number[] }>({ loading: false, failed: [] })
+  const [unitsMap, setUnitsMap] = React.useState<Record<number, UnitData[]>>({})
+  const [uState, setUState] = React.useState<{ loading: boolean; failed: number[] }>({ loading: false, failed: [] })
   // مفتاح ثابت للمنتجات المختارة — `products` نفسه بيتعمل array جديد في كل رندر من الأب
   const productIdsKey = products.map((p) => p.id).join(',')
   const [mode, setMode] = React.useState<Mode>('sheet')
@@ -176,6 +211,15 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
   const [showName, setShowName] = React.useState(true)
   const [showPrice, setShowPrice] = React.useState(true)
   const [showText, setShowText] = React.useState(true)
+  // 👕 سطر المقاس/اللون للملابس (بيظهر بس لللي ليهم مقاس/لون فعلاً)
+  const [showVariant, setShowVariant] = React.useState(true)
+  // 🖨️ نافذة المتصفح (افتراضي) أو USB مباشر TSPL/ZPL للطابعات الحرارية
+  const [printLang, setPrintLang] = React.useState<PrintLang>('browser')
+  const usbSupported = typeof window !== 'undefined' && isWebUsbSupported()
+  // 🎚️ أحجام العناصر (٪ من التلقائي) — بيتحفظوا مع باقي الإعدادات
+  const [namePct, setNamePct] = React.useState(100)
+  const [pricePct, setPricePct] = React.useState(100)
+  const [barcodePct, setBarcodePct] = React.useState(100)
   const [view, setView] = React.useState<'sheet' | 'label'>('sheet')
   const [previewOpen, setPreviewOpen] = React.useState(false) // موبايل فقط
   const [tab, setTab] = React.useState<'products' | 'settings'>('products')
@@ -204,6 +248,11 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
         if (typeof p.name === 'boolean') setShowName(p.name)
         if (typeof p.price === 'boolean') setShowPrice(p.price)
         if (typeof p.text === 'boolean') setShowText(p.text)
+        if (typeof p.variant === 'boolean') setShowVariant(p.variant)
+        if (p.lang === 'browser' || p.lang === 'tspl' || p.lang === 'zpl') setPrintLang(p.lang)
+        if (typeof p.namePct === 'number') setNamePct(clampInt(p.namePct, 60, 150) || 100)
+        if (typeof p.pricePct === 'number') setPricePct(clampInt(p.pricePct, 60, 150) || 100)
+        if (typeof p.barcodePct === 'number') setBarcodePct(clampInt(p.barcodePct, 50, 100) || 100)
       }
     } catch {
       /* التخزين غير متاح — عادي */
@@ -212,7 +261,9 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
      
   }, [open, productIdsKey])
 
-  // جلب متغيرات المنتجات المختارة (4 طلبات بالتوازي) — بس لو الباقة فيها المتغيرات
+  // ⚡ جلب متغيرات المنتجات المختارة في طلب واحد (variants-index?ids=…) —
+  // كان قبل كده طلب لكل منتج (100 منتج = 100 طلب). نفس شكل الاستجابة،
+  // ولو فشل بنعلّم كل المنتجات فاشلة فيظهر تنبيه القايمة.
   React.useEffect(() => {
     if (!open || !variantsEnabled || !productIdsKey) {
       setVariantsMap({})
@@ -224,50 +275,109 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
     setVariantsMap({})
     setVState({ loading: true, failed: [] })
     ;(async () => {
-      const out: Record<number, VariantData[]> = {}
-      const failed: number[] = []
-      let next = 0
-      const worker = async () => {
-        while (!cancelled) {
-          const idx = next++
-          if (idx >= ids.length) return
-          const id = ids[idx]
-          try {
-            const d = await api<any[]>(`/api/products/${id}/variants`)
-            out[id] = (Array.isArray(d) ? d : []).map((v) => ({
-              id: v.id,
-              size: v.size ?? null,
-              color: v.color ?? null,
-              barcode: v.barcode ?? null,
-              quantity: v.quantity ?? 0,
-            }))
-          } catch {
-            failed.push(id)
-          }
+      try {
+        const d = await api<{ data?: any[] }>(`/api/products/variants-index?ids=${ids.join(',')}&limit=2000`)
+        if (cancelled) return
+        const rows = Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : []
+        const out: Record<number, VariantData[]> = {}
+        const idSet = new Set(ids)
+        for (const v of rows) {
+          const pid = Number(v.productId)
+          // لو الرد جاي من كاش أوفلاين لفهرس كامل (من غير ids) بنفلتره هنا
+          if (!idSet.has(pid)) continue
+          ;(out[pid] ??= []).push({
+            id: v.id,
+            size: v.size ?? null,
+            color: v.color ?? null,
+            barcode: v.barcode ?? null,
+            quantity: v.quantity ?? 0,
+          })
         }
+        setVariantsMap(out)
+        setVState({ loading: false, failed: [] })
+      } catch {
+        if (cancelled) return
+        setVariantsMap({})
+        setVState({ loading: false, failed: ids })
       }
-      await Promise.all(Array.from({ length: Math.min(4, ids.length) }, worker))
-      if (cancelled) return
-      setVariantsMap(out)
-      setVState({ loading: false, failed })
     })()
     return () => {
       cancelled = true
     }
   }, [open, variantsEnabled, productIdsKey])
 
+  // ⚡ جلب وحدات الجملة في طلب واحد (units-index?ids=…) — نفس أسلوب جلب المتغيرات
+  React.useEffect(() => {
+    if (!open || !unitsEnabled || !productIdsKey) {
+      setUnitsMap({})
+      setUState({ loading: false, failed: [] })
+      return
+    }
+    let cancelled = false
+    const ids = productIdsKey.split(',').map(Number)
+    setUnitsMap({})
+    setUState({ loading: true, failed: [] })
+    ;(async () => {
+      try {
+        const d = await api<{ data?: any[] }>(`/api/products/units-index?ids=${ids.join(',')}&limit=5000`)
+        if (cancelled) return
+        const rows = Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : []
+        const out: Record<number, UnitData[]> = {}
+        const idSet = new Set(ids)
+        for (const u of rows) {
+          const pid = Number(u.productId)
+          if (!idSet.has(pid)) continue
+          ;(out[pid] ??= []).push({
+            id: u.id,
+            name: String(u.name ?? ''),
+            price: typeof u.price === 'number' ? u.price : u.price != null ? Number(u.price) : null,
+            barcode: u.barcode ?? null,
+            factor: Number(u.factor) || 1,
+            active: u.active !== false,
+          })
+        }
+        setUnitsMap(out)
+        setUState({ loading: false, failed: [] })
+      } catch {
+        if (cancelled) return
+        setUnitsMap({})
+        setUState({ loading: false, failed: ids })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, unitsEnabled, productIdsKey])
+
   React.useEffect(() => {
     if (!open || !hydrated.current) return
     try {
-      const p: Prefs = { mode, preset, cw, ch, name: showName, price: showPrice, text: showText }
+      const p: Prefs = { mode, preset, cw, ch, name: showName, price: showPrice, text: showText, variant: showVariant, lang: printLang, namePct, pricePct, barcodePct }
       localStorage.setItem(PREFS_KEY, JSON.stringify(p))
     } catch {
       /* ignore */
     }
-  }, [open, mode, preset, cw, ch, showName, showPrice, showText])
+  }, [open, mode, preset, cw, ch, showName, showPrice, showText, showVariant, printLang, namePct, pricePct, barcodePct])
 
   // كل منتج → إمّا صف واحد (منتج عادي)، أو صف لكل لون/مقاس (منتج له متغيرات، مجمّعة بالألوان)
+  // صفوف وحدات الجملة (كرتونة/دستة...) — اللي ليها باركود بس. السعر = سعر الوحدة المسجّل، أو سعر القطعة × عدد القطع
+  const unitRowsOf = (p: LabelProduct): LabelRow[] =>
+    (unitsMap[p.id] ?? [])
+      .filter((u) => u.active && !!u.barcode)
+      .map<LabelRow>((u) => ({
+        key: `u${u.id}`,
+        productId: p.id,
+        name: `${p.name} — ${u.name}`,
+        barcode: normalizeBarcode(u.barcode),
+        price: u.price ?? Math.round(p.price * u.factor * 100) / 100,
+        variantLabel: null,
+        defaultQty: 0,
+        isUnit: true,
+        factor: u.factor,
+      }))
+
   const entries: Entry[] = products.map((p) => {
+    const units = unitRowsOf(p)
     const vs = variantsMap[p.id]
     if (vs && vs.length > 0) {
       const groups = groupByColor(vs).map((g) => {
@@ -275,7 +385,7 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
           key: `v${v.id}`,
           productId: p.id,
           name: `${p.name} — ${variantLabelOf(v)}`,
-          barcode: v.barcode ?? null,
+          barcode: normalizeBarcode(v.barcode),
           price: p.price,
           size: v.size,
           color: v.color,
@@ -284,23 +394,25 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
         }))
         return { color: g.color, total: g.total, rows: rows.filter((r) => r.barcode), noBarcode: rows.filter((r) => !r.barcode) }
       })
-      return { product: p, groups, rows: groups.flatMap((g) => [...g.rows, ...g.noBarcode]) }
+      return { product: p, groups, units, rows: [...groups.flatMap((g) => [...g.rows, ...g.noBarcode]), ...units] }
     }
     return {
       product: p,
       groups: null,
+      units,
       rows: [
         {
           key: `p${p.id}`,
           productId: p.id,
           name: p.name,
-          barcode: p.barcode,
+          barcode: normalizeBarcode(p.barcode),
           price: p.price,
           size: p.size,
           color: p.color,
           variantLabel: null,
           defaultQty: 1,
         },
+        ...units,
       ],
     }
   })
@@ -308,6 +420,11 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
   const withBarcode = allRows.filter((r) => r.barcode)
   const withoutBarcode = allRows.filter((r) => !r.barcode)
   const hasVariantRows = allRows.some((r) => r.variantLabel)
+  const hasUnitRows = allRows.some((r) => r.isUnit)
+  // 👕 سطر المقاس/اللون بيتفعّل فعلياً بس لو في بيانات مقاس/لون — عشان المحلات
+  // اللي ملهاش متغيرات ما تاخدش حجز ارتفاع لسطر عمره ما هيظهر
+  const anyVariantData = allRows.some((r) => (!!r.size && !!r.size.trim()) || (!!r.color && !!r.color.trim()))
+  const effectiveShowVariant = showVariant && anyVariantData
   const qtyOf = (r: LabelRow) => qty[r.key] ?? r.defaultQty
   const total = withBarcode.reduce((s, r) => s + qtyOf(r), 0)
 
@@ -323,6 +440,10 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
     showName,
     showPrice,
     showBarcodeText: showText,
+    showVariant: effectiveShowVariant,
+    nameScale: namePct / 100,
+    priceScale: pricePct / 100,
+    barcodeScale: barcodePct / 100,
   })
 
   const perSheet = layout.sheet?.perSheet ?? 0
@@ -355,6 +476,25 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
 
   const sheetWarn = !!hint && mode === 'sheet'
 
+  // 🛡️ تحذير «خطوط ضيقة» (30×20 غير EAN-13): كود مورد/UPC من 12 رقم/نص بيترسم
+  // CODE128 بوفير وحدات كتير — على مقاس صغير عرض الوحدة بيتقصّ لنقطة طابعة واحدة
+  // (0.125مم) فالخطوط مش هتتقري غالباً. EAN-13 على نفس المقاس بيطلع 0.25مم وسليم.
+  // القياس هنا بنفس حساب الطباعة بالظبط (measureBarcodeModuleMm = نقاط 203dpi).
+  const availMm = layout.widthMm - layout.paddingMm * 2
+  const widthCodesKey = withBarcode.map((r) => r.barcode).join('|')
+  const narrowByCode = React.useMemo(() => {
+    const m = new Map<string, number>()
+    if (typeof window === 'undefined') return m
+    for (const c of new Set(widthCodesKey.split('|').filter(Boolean))) {
+      const mm = measureBarcodeModuleMm(c, availMm)
+      if (mm != null && mm < MIN_SCANNABLE_MODULE_MM - 1e-9) m.set(c, mm)
+    }
+    return m
+  }, [widthCodesKey, availMm])
+  const narrowRows =
+    narrowByCode.size > 0 ? withBarcode.filter((r) => r.barcode && narrowByCode.has(r.barcode)) : []
+  const narrowWarn = narrowRows.length > 0
+
   const setQ = (key: string, v: number) => setQty((p) => ({ ...p, [key]: clampInt(v, 0, MAX_QTY) }))
   /** نفس الكمية لمجموعة صفوف (لون كامل / منتج كامل) — 0 = إلغاء الاختيار */
   const setMany = (rows: LabelRow[], v: number) =>
@@ -368,35 +508,102 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
     setQty((prev) => {
       const next = { ...prev }
       for (const r of allRows) {
-        if (r.variantLabel) {
+        if (r.variantLabel || r.isUnit) {
           if ((prev[r.key] ?? r.defaultQty) > 0) next[r.key] = clampInt(v, 0, MAX_QTY)
         } else next[r.key] = clampInt(v, 0, MAX_QTY)
       }
       return next
     })
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     const items = withBarcode.filter((r) => qtyOf(r) > 0)
     if (items.length === 0) {
       toast.error(
         withBarcode.length === 0
           ? 'مفيش منتجات ليها باركود'
-          : hasVariantRows
-            ? 'اختار لون/مقاس واحد على الأقل'
+          : hasVariantRows || hasUnitRows
+            ? `اختار ${hasVariantRows ? 'لون/مقاس' : ''}${hasVariantRows && hasUnitRows ? ' أو ' : ''}${hasUnitRows ? 'وحدة' : ''} واحد على الأقل`
             : 'حدّد كمية لمنتج واحد على الأقل'
       )
       return
     }
-    printBarcodeLabels(
-      items.map((r) => ({
-        name: r.name,
-        barcode: r.barcode as string,
-        price: r.price,
-        quantity: qtyOf(r),
-      })),
-      { showName, showPrice, showBarcodeText: showText, mode, labelSize }
+    // أي باركود مش هيترسم (حروف غير ASCII مثلاً) كان بيطلع ملصق أرقام من غير خطوط بصمت —
+    // دلوقتي بنستبعده ونقول للمستخدم أسماء الأصناف.
+    const unrenderable = items.filter(
+      (r) =>
+        !isRenderableBarcode(r.barcode) ||
+        !renderBarcodeSvg(r.barcode as string, { height: 20, fontSize: 8, displayValue: false }),
     )
-    onOpenChange(false)
+    const printable = items.filter((r) => !unrenderable.includes(r))
+    if (unrenderable.length > 0) {
+      const names = unrenderable.slice(0, 3).map((r) => r.name).join('، ')
+      const more = unrenderable.length > 3 ? ` و${unrenderable.length - 3} آخرين` : ''
+      toast.error(
+        `باركود غير صالح للطباعة (فيه حروف مش مدعومة): ${names}${more}. عدّل الباركود من شاشة المنتج.`,
+      )
+      if (printable.length === 0) return
+    }
+    // ⚠️ باركود ضيّق (نقطة طابعة واحدة على المقاس ده): تنبيه بس — مش منع.
+    // المستخدم ممكن يعرف إن سكاونره بيقرا الخطوط الرفيعة ويكمّل عادي.
+    if (narrowWarn) {
+      const names = narrowRows.slice(0, 3).map((r) => r.name).join('، ')
+      const more = narrowRows.length > 3 ? ` و${narrowRows.length - 3} آخرين` : ''
+      toast.warning(
+        `خطوط باركود ${narrowRows.length} صنف هتطلع نقطة طابعة واحدة (0.125مم) على المقاس ده وممكن مي تتقري: ${names}${more}`,
+      )
+    }
+    // 👕 المقاس واللون بيروحوا مع الملصق (بيتطبعوا بس لللي ليهم قيمة فعلاً)
+    const printItems = printable.map((r) => ({
+      name: r.name,
+      barcode: r.barcode as string,
+      price: r.price,
+      quantity: qtyOf(r),
+      size: r.size,
+      color: r.color,
+    }))
+    const printOpts = {
+      showName,
+      showPrice,
+      showBarcodeText: showText,
+      showVariant: effectiveShowVariant,
+      mode,
+      labelSize,
+      nameScale: namePct / 100,
+      priceScale: pricePct / 100,
+      barcodeScale: barcodePct / 100,
+    }
+
+    // 🖨️ الطباعة المباشرة: رول + USB مدعوم + المستخدم مختار TSPL/ZPL —
+    // الملصق بيتبعت للطابعة كصورة أحادية بدقة النقاط (مطابق للمعاينة) من غير نافذة طباعة.
+    const directReady = printLang !== 'browser' && mode === 'roll' && usbSupported
+    if (directReady) {
+      try {
+        const res = await printBarcodeLabelsDirect(printItems, printOpts, printLang)
+        if (res.ok) {
+          toast.success(`اتطبعت ${num(res.labels ?? 0)} ${labelsWord(res.labels ?? 0)} مباشرة على الطابعة`)
+          onOpenChange(false)
+          return
+        }
+        if (res.error === 'cancelled') {
+          // المستخدم قفل نافذة الإذن — ما نفتحش نافذة طباعة من وراه، نخليه يختار
+          toast.info('تم إلغاء اختيار الطابعة — اضغط «طباعة» تاني واختارها من القايمة')
+          return
+        }
+        toast.warning(usbErrorMessage(res.error), {
+          description: 'فشلت الطباعة المباشرة — فتحنا نافذة الطباعة بدلاً منها عشان الملصقات متضيعش.',
+        })
+      } catch {
+        toast.warning('فشلت الطباعة المباشرة على الطابعة — فتحنا نافذة الطباعة بدلاً منها.')
+      }
+    } else if (printLang !== 'browser' && mode === 'sheet') {
+      toast.info('الطباعة المباشرة شغالة مع وضع «رول لاصق» بس — الملصقات دي هتتطبع بنافذة المتصفح.')
+    }
+
+    // 🛡️ printBarcodeLabels بترجّع نجاح/فشل: لو المتصفح حجب النافذة المنبثقة
+    // بنسيب الدايلوج مفتوح — الاختيارات والكميات ما تضيعش، والمستخدم يسمح
+    // بالنوافذ ويضغط تاني. بنقفل بس لما الطباعة تنطلق فعلاً.
+    const ok = printBarcodeLabels(printItems, printOpts)
+    if (ok) onOpenChange(false)
   }
 
   const modeText = mode === 'sheet' ? 'ورقة A4' : 'رول لاصق'
@@ -413,6 +620,7 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
       showName={showName}
       showPrice={showPrice}
       showText={showText}
+      showVariant={effectiveShowVariant}
       sheets={sheets}
     />
   )
@@ -479,7 +687,7 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
                   onClick={() => setTab('settings')}
                   icon={SlidersHorizontal}
                   label="إعدادات الطباعة"
-                  dot={sheetWarn}
+                  dot={sheetWarn || narrowWarn}
                 />
               </div>
             </div>
@@ -526,8 +734,10 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
                           <bdi dir="ltr" className="tabular-nums">{labelSize.widthMm} × {labelSize.heightMm}</bdi> مم
                         </SumChip>
                         {showName && <SumChip icon={Type}>الاسم</SumChip>}
+                        {showVariant && <SumChip icon={Shirt}>المقاس واللون</SumChip>}
                         {showText && <SumChip icon={BarcodeIcon}>رقم الباركود</SumChip>}
                         {showPrice && <SumChip icon={Tag}>السعر</SumChip>}
+                        {printLang !== 'browser' && <SumChip icon={Usb}>USB {printLang.toUpperCase()}</SumChip>}
                         {!showName && !showText && !showPrice && <SumChip>باركود فقط</SumChip>}
                       </span>
                     </span>
@@ -550,6 +760,35 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
                 <span>
                   <b>مقدرناش نجيب متغيرات {vState.failed.length} منتج</b> (النت أو السيرفر): لو ليهم ألوان/مقاسات هيتطبع
                   باركود المنتج الأساسي بس. اقفل الدايلوج وافتحه تاني للمحاولة.
+                </span>
+              </div>
+            )}
+
+            {uState.failed.length > 0 && (
+              <div
+                role="status"
+                className="flex items-start gap-2.5 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3.5 text-xs font-medium leading-relaxed text-amber-900 dark:text-amber-200"
+              >
+                <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <span>
+                  <b>مقدرناش نجيب وحدات الجملة لـ {uState.failed.length} منتج</b> (النت أو السيرفر) — مش هيظهر ملصق لباركود الكرتونة/الدستة
+                  بتاعهم. اقفل الدايلوج وافتحه تاني للمحاولة.
+                </span>
+              </div>
+            )}
+
+            {narrowWarn && (
+              <div
+                role="status"
+                className="flex items-start gap-2.5 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3.5 text-xs font-medium leading-relaxed text-amber-900 dark:text-amber-200"
+              >
+                <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <span title={narrowRows.map((r) => r.name).join('، ')}>
+                  <b>خطوط باركود {narrowRows.length} {hasVariantRows ? 'صنف' : 'منتج'} هتطلع أرفع من نقطة طابعة</b> على
+                  المقاس ده (0.125مم — غالباً مش هتتقري بالسكانر):{' '}
+                  {narrowRows.slice(0, 3).map((r) => r.name).join('، ')}
+                  {narrowRows.length > 3 ? ` و${narrowRows.length - 3} آخرين` : ''}. كبّر المقاس أو استخدم باركود
+                  EAN-13 للمقاسات الصغيرة.
                 </span>
               </div>
             )}
@@ -581,10 +820,10 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
                 المنتجات والكميات
               </Title>
 
-              {vState.loading ? (
+              {vState.loading || uState.loading ? (
                 <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed bg-card/60 px-4 py-8 text-sm font-bold text-foreground/70">
                   <Loader2 className="size-4 animate-spin" aria-hidden />
-                  بنجيب الألوان والمقاسات…
+                  بنجيب الألوان والمقاسات والوحدات…
                 </div>
               ) : withBarcode.length === 0 ? (
                 <div className="rounded-2xl border border-dashed bg-card/60 px-4 py-8 text-center">
@@ -597,7 +836,7 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
                   {withBarcode.length > 1 && (
                     <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
                       <span className="text-xs font-bold text-foreground/65">
-                        {hasVariantRows ? 'نفس الكمية للمختار:' : 'الكمية للكل:'}
+                        {hasVariantRows || hasUnitRows ? 'نفس الكمية للمختار:' : 'الكمية للكل:'}
                       </span>
                       {[1, 5, 10, 20].map((n) => (
                         <button
@@ -616,31 +855,52 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
                   )}
 
                   <ul className="space-y-2">
-                    {entries.map((e) =>
-                      e.groups ? (
-                        <VariantProductCard
-                          key={e.product.id}
-                          entry={e}
-                          qtyOf={qtyOf}
-                          setQ={setQ}
-                          setMany={setMany}
-                          focusKey={focus?.key ?? null}
-                          onFocus={setFocusKey}
-                          openColors={openColors}
-                          onToggleColor={(k, def) => setOpenColors((o) => ({ ...o, [k]: !(o[k] ?? def) }))}
-                        />
-                      ) : e.rows[0].barcode ? (
-                        <PlainRow
-                          key={e.rows[0].key}
-                          r={e.rows[0]}
-                          q={qtyOf(e.rows[0])}
-                          isFocus={focus?.key === e.rows[0].key}
-                          showPrice={showPrice}
-                          onFocus={() => setFocusKey(e.rows[0].key)}
-                          onQty={(v) => setQ(e.rows[0].key, v)}
-                        />
-                      ) : null
-                    )}
+                    {entries.flatMap((e) => {
+                      const nodes: React.ReactNode[] = []
+                      if (e.groups) {
+                        nodes.push(
+                          <VariantProductCard
+                            key={e.product.id}
+                            entry={e}
+                            qtyOf={qtyOf}
+                            setQ={setQ}
+                            setMany={setMany}
+                            focusKey={focus?.key ?? null}
+                            onFocus={setFocusKey}
+                            openColors={openColors}
+                            onToggleColor={(k, def) => setOpenColors((o) => ({ ...o, [k]: !(o[k] ?? def) }))}
+                          />,
+                        )
+                      } else if (e.rows[0].barcode) {
+                        nodes.push(
+                          <PlainRow
+                            key={e.rows[0].key}
+                            r={e.rows[0]}
+                            q={qtyOf(e.rows[0])}
+                            isFocus={focus?.key === e.rows[0].key}
+                            showPrice={showPrice}
+                            onFocus={() => setFocusKey(e.rows[0].key)}
+                            onQty={(v) => setQ(e.rows[0].key, v)}
+                          />,
+                        )
+                      }
+                      if (e.units.length > 0) {
+                        nodes.push(
+                          <UnitsBlock
+                            key={`units-${e.product.id}`}
+                            productName={e.product.name}
+                            rows={e.units}
+                            qtyOf={qtyOf}
+                            setQ={setQ}
+                            setMany={setMany}
+                            focusKey={focus?.key ?? null}
+                            onFocus={setFocusKey}
+                            showPrice={showPrice}
+                          />,
+                        )
+                      }
+                      return nodes
+                    })}
                   </ul>
                 </>
               )}
@@ -749,19 +1009,131 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
                   {hint}
                 </p>
               )}
+
+              {narrowWarn && (
+                <p className="mt-3 flex items-start gap-2 rounded-xl bg-amber-500/10 p-3 text-xs font-medium leading-relaxed text-amber-900 dark:text-amber-200">
+                  <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                  <span>
+                    <b>المقاس ده مش بيحتمل {narrowRows.length} {hasVariantRows ? 'صنف' : 'منتج'} بباركود مش EAN-13</b> —
+                    عرض الخط هيبقى نقطة طابعة واحدة (0.125مم) فغالباً مش هيتقري:{' '}
+                    {narrowRows.slice(0, 3).map((r) => r.name).join('، ')}
+                    {narrowRows.length > 3 ? ` و${narrowRows.length - 3} آخرين` : ''}. كبّر المقاس (زي 40×30) أو استخدم
+                    باركود EAN-13.
+                  </span>
+                </p>
+              )}
             </section>
 
             {/* 3) المحتوى */}
             <section>
               <Title n={3}>اللي يظهر على الملصق</Title>
-              <div className="grid gap-2.5 sm:grid-cols-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 <ToggleRow icon={Type} label="اسم المنتج" on={showName} onChange={setShowName} />
                 <ToggleRow icon={BarcodeIcon} label="رقم الباركود" on={showText} onChange={setShowText} />
                 <ToggleRow icon={Tag} label="السعر" on={showPrice} onChange={setShowPrice} />
+                <ToggleRow icon={Shirt} label="المقاس واللون" on={showVariant} onChange={setShowVariant} />
               </div>
               <p className="mt-2.5 text-xs font-medium leading-relaxed text-foreground/65">
-                أي عنصر بتقفله بيدّي مساحة أكبر للباركود، فيتقري أسهل.
+                أي عنصر بتقفله بيدّي مساحة أكبر للباركود، فيتقري أسهل. سطر «المقاس واللون» بيظهر بس للمنتجات
+                اللي ليها مقاس/لون فعلاً.
               </p>
+            </section>
+
+            {/* 4) الأحجام 🎚️ — تحكّم المستخدم في حجم الاسم/السعر وطول خطوط الباركود */}
+            <section>
+              <Title
+                n={4}
+                aside={
+                  namePct !== 100 || pricePct !== 100 || barcodePct !== 100 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNamePct(100)
+                        setPricePct(100)
+                        setBarcodePct(100)
+                      }}
+                      className={cn('rounded-lg px-2 py-1 text-xs font-extrabold text-primary transition-colors hover:bg-primary/10', ring)}
+                    >
+                      رجّع التلقائي
+                    </button>
+                  ) : undefined
+                }
+              >
+                أحجام العناصر
+              </Title>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Dim
+                  label="اسم المنتج (٪)"
+                  value={namePct}
+                  step={10}
+                  onChange={(v) => setNamePct(clampInt(v, 60, 150))}
+                />
+                <Dim
+                  label="السعر (٪)"
+                  value={pricePct}
+                  step={10}
+                  onChange={(v) => setPricePct(clampInt(v, 60, 150))}
+                />
+                <Dim
+                  label="طول خطوط الباركود (٪)"
+                  value={barcodePct}
+                  step={10}
+                  onChange={(v) => setBarcodePct(clampInt(v, 50, 100))}
+                />
+              </div>
+              <p className="mt-2.5 text-xs font-medium leading-relaxed text-foreground/65">
+                <bdi dir="ltr">100٪</bdi> هو الحجم التلقائي المناسب للمقاس. كبّر الاسم أو السعر لو مش واضحين، وقلّل
+                طول خطوط الباركود لو عايزها أقصر — والمعاينة بتحدّث فوراً. لو كبّرت الخط أكتر من اللي الملصق بيحتمل،
+                بنصغّره تلقائياً عشان الباركود يفضل مقروء.
+              </p>
+            </section>
+
+            {/* 5) الطباعة المباشرة 🖨️ — TSPL/ZPL على USB بدل نافذة الطباعة */}
+            <section>
+              <Title n={5}>الطباعة المباشرة للرول (USB)</Title>
+              <div role="radiogroup" aria-label="طريقة إرسال الطباعة" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {([
+                  { key: 'browser' as PrintLang, title: 'نافذة المتصفح', sub: 'الطريقة العادية — أي طابعة معرّفة على الجهاز' },
+                  { key: 'tspl' as PrintLang, title: 'USB مباشر TSPL', sub: 'TSC / Xprinter وأغلب الطابعات الصيني' },
+                  { key: 'zpl' as PrintLang, title: 'USB مباشر ZPL', sub: 'Zebra والمتوافقة معاها' },
+                ]).map((o) => (
+                  <button
+                    key={o.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={printLang === o.key}
+                    onClick={() => setPrintLang(o.key)}
+                    disabled={o.key !== 'browser' && !usbSupported}
+                    className={cn(
+                      'flex flex-col items-start gap-1 rounded-2xl border bg-card p-3 text-start transition-colors disabled:opacity-50',
+                      ring,
+                      printLang === o.key ? 'border-primary bg-primary/10 ring-1 ring-primary/50' : 'hover:bg-muted/60'
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5 text-sm font-extrabold leading-tight">
+                      {o.key !== 'browser' && <Usb className="size-3.5 shrink-0" aria-hidden />}
+                      {o.title}
+                    </span>
+                    <span className="text-[11px] font-medium leading-tight text-foreground/60">{o.sub}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2.5 text-xs font-medium leading-relaxed text-foreground/65">
+                في «USB مباشر» الملصق بيتبعت للطابعة كصورة بدقة النقاط (مطابق للمعاينة، والعربي سليم) من غير ما
+                تفتح نافذة طباعة — بيشتغل مع وضع «رول لاصق» على Chrome/Edge، وأول مرة هيطلب إذن الطابعة.
+              </p>
+              {printLang !== 'browser' && !usbSupported && (
+                <p className="mt-2.5 flex items-start gap-2 rounded-xl bg-amber-500/10 p-3 text-xs font-medium leading-relaxed text-amber-900 dark:text-amber-200">
+                  <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                  المتصفح الحالي مبيدعمش USB المباشر — الطباعة هتترجع لنافذة المتصفح. استخدم Chrome أو Edge على الكمبيوتر.
+                </p>
+              )}
+              {printLang !== 'browser' && mode === 'sheet' && usbSupported && (
+                <p className="mt-2.5 flex items-start gap-2 rounded-xl bg-amber-500/10 p-3 text-xs font-medium leading-relaxed text-amber-900 dark:text-amber-200">
+                  <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                  الطباعة المباشرة بتشتغل مع وضع «رول لاصق» بس — في وضع ورقة A4 هتتطبع بنافذة المتصفح.
+                </p>
+              )}
             </section>
 
                   <button
@@ -815,7 +1187,7 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
             <Button variant="outline" onClick={() => onOpenChange(false)} className="h-11 rounded-xl px-5 font-bold">
               إلغاء
             </Button>
-            <Button onClick={handlePrint} disabled={total === 0 || vState.loading} className="h-11 rounded-xl px-6 font-bold">
+            <Button onClick={handlePrint} disabled={total === 0 || vState.loading || uState.loading} className="h-11 rounded-xl px-6 font-bold">
               <Printer className="size-4" />
               طباعة {total > 0 ? `${num(total)} ${labelsWord(total)}` : ''}
             </Button>
@@ -872,6 +1244,11 @@ function PlainRow({
             <bdi dir="ltr" className="font-mono tabular-nums">{r.barcode}</bdi>
             {showPrice && <span className="tabular-nums">{fmtPrice(r.price)} ج.م</span>}
             {r.color && <span className="rounded-md bg-muted px-1.5 py-0.5">{r.color}</span>}
+            {r.isUnit && (
+              <span className="rounded-md bg-muted px-1.5 py-0.5 tabular-nums">
+                وحدة جملة{r.factor ? <> · <bdi dir="ltr">×{r.factor}</bdi> قطعة</> : null}
+              </span>
+            )}
             {q === 0 && <span className="font-bold text-foreground/70">مستبعد</span>}
           </span>
         </span>
@@ -922,6 +1299,55 @@ function BulkBar({
         </button>
       ))}
     </div>
+  )
+}
+
+/** وحدات الجملة (كرتونة/دستة...) لمنتج واحد — كل وحدة ليها باركودها وكميتها، والكمية الافتراضية ٠. */
+function UnitsBlock({
+  productName, rows, qtyOf, setQ, setMany, focusKey, onFocus, showPrice,
+}: {
+  productName: string
+  rows: LabelRow[]
+  qtyOf: (r: LabelRow) => number
+  setQ: (key: string, v: number) => void
+  setMany: (rows: LabelRow[], v: number) => void
+  focusKey: string | null
+  onFocus: (key: string) => void
+  showPrice: boolean
+}) {
+  const picked = rows.filter((r) => qtyOf(r) > 0).length
+  const labels = rows.reduce((n, r) => n + qtyOf(r), 0)
+  return (
+    <li className="overflow-hidden rounded-2xl border bg-card">
+      <div className="space-y-2 p-3">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground/60">
+            <Package className="size-4" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-extrabold leading-snug">وحدات الجملة — {productName}</p>
+            <p className="mt-0.5 text-[11px] font-medium tabular-nums text-foreground/60">
+              {rows.length} {ar(rows.length, 'وحدة', 'وحدتين', 'وحدات', 'وحدة')} بباركود
+              {picked > 0 ? ` · ${picked} مختار (${num(labels)} ${labelsWord(labels)})` : ''}
+            </p>
+          </div>
+        </div>
+        {rows.length > 1 && <BulkBar rows={rows} qtyOf={qtyOf} setMany={setMany} label="كل الوحدات" />}
+      </div>
+      <ul className="space-y-1.5 border-t bg-muted/20 p-2.5">
+        {rows.map((r) => (
+          <PlainRow
+            key={r.key}
+            r={r}
+            q={qtyOf(r)}
+            isFocus={focusKey === r.key}
+            showPrice={showPrice}
+            onFocus={() => onFocus(r.key)}
+            onQty={(v) => setQ(r.key, v)}
+          />
+        ))}
+      </ul>
+    </li>
   )
 }
 
@@ -1199,14 +1625,25 @@ function ToggleRow({
   )
 }
 
-function Dim({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function Dim({
+  label,
+  value,
+  onChange,
+  step = 1,
+}: {
+  label: string
+  value: number
+  onChange: (v: number) => void
+  /** مقدار تغيير أزرار +/− — 1 للمقاسات بالمم، 10 للنسب المئوية */
+  step?: number
+}) {
   return (
     <div>
       <p className="mb-1.5 text-xs font-bold">{label}</p>
       <div className="flex items-center gap-1.5" dir="ltr">
         <button
           type="button"
-          onClick={() => onChange(value - 1)}
+          onClick={() => onChange(value - step)}
           aria-label={`تقليل ${label}`}
           className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl border bg-background transition-colors hover:bg-muted', ring)}
         >
@@ -1222,7 +1659,7 @@ function Dim({ label, value, onChange }: { label: string; value: number; onChang
         />
         <button
           type="button"
-          onClick={() => onChange(value + 1)}
+          onClick={() => onChange(value + step)}
           aria-label={`زيادة ${label}`}
           className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl border bg-background transition-colors hover:bg-muted', ring)}
         >
@@ -1276,7 +1713,7 @@ function useFit(natW: number, natH: number, max: number) {
 }
 
 function PreviewPanel({
-  mode, view, onView, layout, products, qtyOf, focus, showName, showPrice, showText, sheets,
+  mode, view, onView, layout, products, qtyOf, focus, showName, showPrice, showText, showVariant, sheets,
 }: {
   mode: Mode
   view: 'sheet' | 'label'
@@ -1288,12 +1725,13 @@ function PreviewPanel({
   showName: boolean
   showPrice: boolean
   showText: boolean
+  showVariant: boolean
   sheets: number
 }) {
   const showSheet = mode === 'sheet' && view === 'sheet' && !!layout.sheet
 
   const sample: Sample = focus
-    ? { name: focus.name, barcode: focus.barcode as string, price: focus.price }
+    ? { name: focus.name, barcode: focus.barcode as string, price: focus.price, size: focus.size, color: focus.color }
     : { name: 'منتج تجريبي', barcode: '2000000000017', price: 25 }
 
   // 🛡️ 2026-10-19: باركود كل منتج بيتولّد مرة واحدة لكل مقاس (نفس طريقة print-client) —
@@ -1313,7 +1751,7 @@ function PreviewPanel({
           ? ''
           : renderBarcodeSvg(code, {
               height: layout.barcodeHeightPx,
-              width: layout.barcodeBarWidth,
+              availMm: layout.widthMm - layout.paddingMm * 2,
               fontSize: layout.barcodeTextFontSizePt,
               displayValue: false,
             }),
@@ -1321,7 +1759,7 @@ function PreviewPanel({
     }
     return m
      
-  }, [codesKey, layout.barcodeHeightPx, layout.barcodeBarWidth, layout.barcodeTextFontSizePt])
+  }, [codesKey, layout.barcodeHeightPx, layout.widthMm, layout.paddingMm, layout.barcodeTextFontSizePt])
   const svgFor = (code: string) => svgByCode.get(code) ?? ''
 
   return (
@@ -1369,6 +1807,7 @@ function PreviewPanel({
             showName={showName}
             showPrice={showPrice}
             showText={showText}
+            showVariant={showVariant}
           />
         ) : (
           <LabelStage
@@ -1379,6 +1818,7 @@ function PreviewPanel({
             showName={showName}
             showPrice={showPrice}
             showText={showText}
+            showVariant={showVariant}
           />
         )}
       </div>
@@ -1398,6 +1838,8 @@ interface Sample {
   name: string
   barcode: string
   price: number
+  size?: string | null
+  color?: string | null
 }
 
 interface FaceProps {
@@ -1405,11 +1847,12 @@ interface FaceProps {
   showName: boolean
   showPrice: boolean
   showText: boolean
+  showVariant: boolean
 }
 
 /** الملصق بمقاسه الطبيعي (px) — نفس تنسيق الطباعة. دايماً جوّه حاوية dir=ltr */
 function LabelFace({
-  layout, showName, showPrice, showText, sample, svg, dashed,
+  layout, showName, showPrice, showText, showVariant, sample, svg, dashed,
 }: FaceProps & { sample: Sample; svg: string; dashed?: boolean }) {
   return (
     <div
@@ -1436,7 +1879,8 @@ function LabelFace({
             fontFamily: "Tahoma, Cairo, sans-serif",
             fontSize: `${layout.nameFontSizePt}pt`,
             fontWeight: 700,
-            lineHeight: 1.15,
+            lineHeight: LABEL_LH.name,
+            flexShrink: 0,
             maxWidth: '100%',
             overflow: 'hidden',
             display: '-webkit-box',
@@ -1444,11 +1888,32 @@ function LabelFace({
             WebkitLineClamp: layout.nameMaxLines,
             textOverflow: 'ellipsis',
             textAlign: 'center',
-            margin: '0 0 0.6mm 0',
+            margin: `0 0 ${LABEL_GAP_MM.name}mm 0`,
             wordBreak: 'break-word',
           }}
         >
           {sample.name}
+        </div>
+      )}
+      {/* 👕 سطر المقاس/اللون — نفس تنسيق .lbl-variant في الطباعة بالظبط */}
+      {showVariant && (sample.size || sample.color) && (
+        <div
+          dir="rtl"
+          style={{
+            fontFamily: "Tahoma, Cairo, sans-serif",
+            fontSize: `${layout.variantFontSizePt}pt`,
+            fontWeight: 700,
+            lineHeight: LABEL_LH.variant,
+            flexShrink: 0,
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            textAlign: 'center',
+            margin: `0 0 ${LABEL_GAP_MM.variant}mm 0`,
+          }}
+        >
+          {[sample.size, sample.color].filter((x) => !!x && String(x).trim()).join(' · ')}
         </div>
       )}
       {svg ? (
@@ -1475,7 +1940,9 @@ function LabelFace({
             fontSize: `${layout.barcodeTextFontSizePt}pt`,
             fontWeight: 700,
             letterSpacing: '0.06em',
-            marginTop: '0.4mm',
+            lineHeight: LABEL_LH.text,
+            flexShrink: 0,
+            marginTop: `${LABEL_GAP_MM.text}mm`,
           }}
         >
           {sample.barcode}
@@ -1488,10 +1955,12 @@ function LabelFace({
             fontFamily: "Tahoma, Cairo, sans-serif",
             fontSize: `${layout.priceFontSizePt}pt`,
             fontWeight: 800,
-            marginTop: '0.6mm',
+            lineHeight: LABEL_LH.price,
+            flexShrink: 0,
+            marginTop: `${LABEL_GAP_MM.price}mm`,
           }}
         >
-          {fmtPrice(sample.price)} ج.م
+          {fmtLabelPrice(sample.price)} ج.م
         </div>
       )}
     </div>
@@ -1500,7 +1969,7 @@ function LabelFace({
 
 /** ملصق واحد مكبّر (رول، أو «الملصق» في وضع الورقة) */
 function LabelStage({
-  layout, sample, svg, stack, showName, showPrice, showText,
+  layout, sample, svg, stack, showName, showPrice, showText, showVariant,
 }: FaceProps & { sample: Sample; svg: string; stack: boolean }) {
   const pad = stack ? 10 : 0
   const natW = layout.widthMm * MM + pad
@@ -1517,7 +1986,7 @@ function LabelStage({
             </>
           )}
           <div className="absolute left-0 top-0 shadow-[0_6px_24px_rgba(0,0,0,0.14)]">
-            <LabelFace layout={layout} showName={showName} showPrice={showPrice} showText={showText} sample={sample} svg={svg} />
+            <LabelFace layout={layout} showName={showName} showPrice={showPrice} showText={showText} showVariant={showVariant} sample={sample} svg={svg} />
           </div>
         </div>
       </div>
@@ -1527,7 +1996,7 @@ function LabelStage({
 
 /** ورقة A4 كاملة: الخانات بتتملي بالترتيب الفعلي (منتج × كميته) لأول ورقة */
 function SheetStage({
-  layout, products, qtyOf, svgFor, showName, showPrice, showText,
+  layout, products, qtyOf, svgFor, showName, showPrice, showText, showVariant,
 }: FaceProps & { products: LabelRow[]; qtyOf: (r: LabelRow) => number; svgFor: (code: string) => string }) {
   const g = layout.sheet!
   const cells = g.columns * g.rows
@@ -1537,7 +2006,7 @@ function SheetStage({
     for (const p of products) {
       const n = qtyOf(p)
       for (let i = 0; i < n && out.length < cells; i++) {
-        out.push({ name: p.name, barcode: p.barcode as string, price: p.price })
+        out.push({ name: p.name, barcode: p.barcode as string, price: p.price, size: p.size, color: p.color })
       }
       if (out.length >= cells) break
     }
@@ -1590,6 +2059,7 @@ function SheetStage({
                 showName={showName}
                 showPrice={showPrice}
                 showText={showText}
+                showVariant={showVariant}
                 sample={s}
                 svg={svgFor(s.barcode)}
                 dashed

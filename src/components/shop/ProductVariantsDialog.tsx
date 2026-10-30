@@ -13,9 +13,10 @@ import { useConfirm } from './ConfirmDialogProvider'
 import { DialogHero, Field, IconBtn, INK_INPUT, InkInput, LockedNote, SectionTitle } from './product-dialog-ui'
 import { INK_BTN, INK_BTN_OUTLINE } from './settings-ui'
 import { parseVariantText, type ParsedVariantRow } from '@/lib/variantParser'
-import { generateUniqueEan13 } from '@/lib/barcode'
+import { fetchUniqueBarcode, fetchUniqueBarcodes } from '@/lib/barcode-client'
 import { Swatch, normAr } from '@/lib/color-swatch'
 import { groupByColor } from '@/lib/variant-sort'
+import { normalizeBarcode } from '@/lib/barcode'
 
 export interface ProductVariant {
   id: number
@@ -110,10 +111,11 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
     // never collide, on top of not reusing any barcode this product
     // already has.
     const usedBarcodes = new Set(existingBarcodes)
+    const freshCodes = await fetchUniqueBarcodes(preview.length, usedBarcodes)
     // كل الإضافات جوه batch → الشاشات اللي ورا بتتحدّث مرة واحدة في الآخر مش 18 مرة
     await withDataBatch(async () => {
-      for (const row of preview) {
-        const barcode = generateUniqueEan13(usedBarcodes)
+      for (const [rowIdx, row] of preview.entries()) {
+        const barcode = freshCodes[rowIdx]
         usedBarcodes.add(barcode)
         try {
           await api(`/api/products/${product.id}/variants`, {
@@ -156,7 +158,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
         body: {
           size: form.size.trim() || null,
           color: form.color.trim() || null,
-          barcode: form.barcode.trim() || null,
+          barcode: normalizeBarcode(form.barcode),
           quantity: form.quantity || 0,
         },
       })
@@ -254,7 +256,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
     if (!product) return
     setGeneratingId(id)
     try {
-      const barcode = generateUniqueEan13(existingBarcodes)
+      const barcode = await fetchUniqueBarcode(existingBarcodes)
       await api(`/api/products/${product.id}/variants/${id}`, {
         method: 'PUT',
         body: { barcode },
@@ -274,10 +276,11 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
     if (missing.length === 0) return
     setBulkGenerating(true)
     const used = new Set(existingBarcodes)
+    const freshMissing = await fetchUniqueBarcodes(missing.length, used)
     let okCount = 0
     let failCount = 0
-    for (const v of missing) {
-      const barcode = generateUniqueEan13(used)
+    for (const [mIdx, v] of missing.entries()) {
+      const barcode = freshMissing[mIdx]
       used.add(barcode)
       try {
         await api(`/api/products/${product.id}/variants/${v.id}`, {
@@ -443,7 +446,10 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                         title="توليد باركود"
                         aria-label="توليد باركود"
                         className={cn('h-11 rounded-xl px-3.5', INK_BTN_OUTLINE)}
-                        onClick={() => setForm((f) => ({ ...f, barcode: generateUniqueEan13(existingBarcodes) }))}
+                        onClick={async () => {
+                          const code = await fetchUniqueBarcode(existingBarcodes)
+                          setForm((f) => ({ ...f, barcode: code }))
+                        }}
                       >
                         <Dices className="size-4" />
                       </Button>

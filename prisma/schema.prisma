@@ -302,7 +302,9 @@ model ProductUnit {
   productId Int
   name      String
   price     Float?
-  barcode   String? @unique
+  // 🏬 2026-11-03: كان @unique على مستوى النظام كله — دلوقتي فريد جوه (المحل + الفرع) زي باقي الباركودات:
+  // index جوه المنتج + trigger جوه نفس الفرع (migration 20261103_scope_unit_barcode)
+  barcode   String?
   factor    Int
   active    Boolean @default(true)
   createdAt DateTime @default(now())
@@ -312,6 +314,7 @@ model ProductUnit {
 
   @@unique([productId, name])
   @@index([productId])
+  @@index([barcode])
 }
 
 // Product variant: one row per size/color combination, with its own stock and barcode.

@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Boxes, Loader2, Plus, Power, Trash2 } from 'lucide-react'
+import { Boxes, Dices, Loader2, Plus, Power, Trash2 } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -12,6 +12,8 @@ import { useConfirm } from './ConfirmDialogProvider'
 import { DialogHero, Field, IconBtn, InkInput, LockedNote, SectionTitle } from './product-dialog-ui'
 import { INK_BTN, INK_BTN_OUTLINE } from './settings-ui'
 import { DEFAULT_UNITS, hasDefaultUnit } from '@/lib/default-units'
+import { fetchUniqueBarcode } from '@/lib/barcode-client'
+import { normalizeBarcode } from '@/lib/barcode'
 
 interface ProductUnit {
   id: number
@@ -121,7 +123,7 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
         body: {
           name: form.name.trim(),
           price: form.price ? Number(form.price) : null,
-          barcode: form.barcode.trim() || null,
+          barcode: normalizeBarcode(form.barcode),
           factor: parseInt(form.factor, 10),
         },
       })
@@ -133,6 +135,20 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
       toast.error(e?.message || 'فشل الإنشاء')
     } finally {
       setSaving(false)
+    }
+  }
+
+  // 🏷️ توليد باركود لوحدة موجودة (الوحدات التلقائية بتتعمل من غير باركود) — عشان تتطبع كملصق كرتونة/دستة
+  const generateForUnit = async (u: ProductUnit) => {
+    if (!product) return
+    try {
+      const code = await fetchUniqueBarcode(units.map((x) => x.barcode).filter((b): b is string => !!b))
+      await api(`/api/products/${product.id}/units/${u.id}`, { method: 'PATCH', body: { barcode: code } })
+      setUnits((prev) => prev.map((x) => (x.id === u.id ? { ...x, barcode: code } : x)))
+      toast.success(`اتولّد باركود «${u.name}»`)
+      onChanged?.()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل توليد الباركود')
     }
   }
 
@@ -216,13 +232,29 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
                       />
                     </Field>
                     <Field label="باركود (اختياري)" htmlFor="u-barcode" className="col-span-2 sm:col-span-4">
-                      <InkInput
-                        id="u-barcode"
-                        num
-                        className="text-start"
-                        value={form.barcode}
-                        onChange={(e) => setForm({ ...form, barcode: e.target.value })}
-                      />
+                      <div className="flex items-center gap-2">
+                        <InkInput
+                          id="u-barcode"
+                          num
+                          wrapperClassName="flex-1"
+                          className="text-start"
+                          value={form.barcode}
+                          onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          title="توليد باركود"
+                          aria-label="توليد باركود"
+                          className={cn('h-11 rounded-xl px-3.5', INK_BTN_OUTLINE)}
+                          onClick={async () => {
+                            const code = await fetchUniqueBarcode(units.map((u) => u.barcode).filter((b): b is string => !!b))
+                            setForm((f) => ({ ...f, barcode: code }))
+                          }}
+                        >
+                          <Dices className="size-4" />
+                        </Button>
+                      </div>
                     </Field>
                   </div>
 
@@ -296,6 +328,11 @@ export function ProductUnitsDialog({ open, onOpenChange, product, onChanged }: P
                             {u.barcode ? ` · ${u.barcode}` : ''}
                           </p>
                         </div>
+                        {!u.barcode && (
+                          <IconBtn label="توليد باركود للوحدة" onClick={() => generateForUnit(u)}>
+                            <Dices className="size-4" />
+                          </IconBtn>
+                        )}
                         <IconBtn label={u.active ? 'تعطيل الوحدة' : 'تفعيل الوحدة'} onClick={() => toggleUnit(u)}>
                           <Power className={cn('size-4', !u.active && 'text-success-subtle-foreground')} />
                         </IconBtn>

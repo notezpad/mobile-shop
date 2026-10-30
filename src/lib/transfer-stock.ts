@@ -178,7 +178,7 @@ export async function applyTransferItem(tx: Tx, ctx: TransferCtx, line: Transfer
   // ── 2.5) وحدات الجملة (ربع دستة / نصف / دستة / دستة ونص ...) ─────────────────
   // لو نسخة الوجهة مالهاش أي وحدات بنكوّبي وحدات المصدر (الاسم/المعامل/السعر/التفعيل).
   // لو ليها وحدات بنسيبها زي ما هي (ممكن التاجر عدّلها أو مسح منها قصداً).
-  // باركود الوحدة مابيتنسخش (فريد على مستوى النظام ومش مستخدم في البيع).
+  // باركود الوحدة مابيتنسخش عن قصد (مش مستخدم في البيع، ونسخه محتاج فحص تعارض في الفرع الوجهة).
   const srcUnits = await tx.productUnit.findMany({
     where: { productId: src.id },
     select: { name: true, price: true, factor: true, active: true },
