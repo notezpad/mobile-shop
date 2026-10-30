@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Loader2, Plus, Undo2 } from 'lucide-react'
+import { CalendarDays, CalendarPlus, Loader2, Undo2, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,7 +10,7 @@ import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, Dia
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { LEAVE_TYPES, LEAVE_TYPE_LABEL, type LeaveType } from '@/lib/hr'
-import { EmptyState, ListSkeleton, PageHead, PageShell, Pill, hrGet, hrSend } from './hr-ui'
+import { EmptyState, HrHero, ListSkeleton, PageShell, Panel, PanelTitle, Pill, StatCell, StatStrip, hrGet, hrSend } from './hr-ui'
 
 interface Leave {
   id: number; employeeId: number; employeeName: string; type: LeaveType
@@ -48,12 +48,18 @@ export function HrLeavesView() {
     finally { setBusyId(null) }
   }
 
+  const totalUsed = data?.balances.reduce((s, b) => s + b.used, 0) ?? 0
+  const overdrawn = data?.balances.filter((b) => b.remaining < 0).length ?? 0
+
   return (
     <PageShell>
-      <PageHead
+      <HrHero
+        theme="leaves"
+        icon={CalendarDays}
+        kicker="الموارد البشرية"
         title="الإجازات والأذونات"
-        subtitle="سجّل الإجازة وهتظهر في الحضور تلقائي. السنوية والمرضية بمرتب، وبدون مرتب بتتخصم."
-        actions={<Button onClick={() => setAdding(true)} className="gap-1.5"><Plus className="size-4" />إجازة / إذن جديد</Button>}
+        subtitle="إجازات وأذونات الفريق — بتتزامن مع الحضور والأرصدة تلقائيًا."
+        actions={<Button onClick={() => setAdding(true)} className="gap-1.5"><CalendarPlus className="size-4" />إجازة / إذن جديد</Button>}
       />
 
       {loading || !data ? (
@@ -61,53 +67,70 @@ export function HrLeavesView() {
       ) : (
         <>
           {data.balances.length > 0 && (
-            <section className="mb-6">
-              <h2 className="mb-2 text-base font-extrabold">رصيد الإجازة السنوية {data.year}</h2>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {data.balances.map((b) => {
-                  const pct = b.allowance > 0 ? Math.min(100, (b.used / b.allowance) * 100) : 0
-                  return (
-                    <div key={b.employeeId} className="rounded-2xl border bg-card p-3">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="truncate font-bold">{b.name}</span>
-                        <span className={b.remaining < 0 ? 'text-sm font-extrabold text-rose-600' : 'text-sm font-extrabold'}>
-                          متبقي {b.remaining} من {b.allowance}
-                        </span>
+            <>
+              <StatStrip className="mb-4">
+                <StatCell label="رصيد سنوي لكل موظف" dot="bg-stocktake" value={`${data.annualLeaveDays} يوم`} foot={`سنة ${data.year}`} />
+                <StatCell label="أيام مستخدمة" dot="bg-amber-500" value={`${totalUsed} يوم`} foot={`${data.balances.length} موظف`} />
+                <StatCell label="تجاوزوا الرصيد" dot={overdrawn > 0 ? 'bg-rose-500' : 'bg-emerald-500'} value={overdrawn} foot={overdrawn > 0 ? 'يتابعوا مع الإدارة' : 'كل الأرصدة منتظمة'} />
+              </StatStrip>
+
+              <section className="mb-6">
+                <PanelTitle icon={Users} title={`رصيد الإجازة السنوية ${data.year}`} />
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {data.balances.map((b) => {
+                    const pct = b.allowance > 0 ? Math.min(100, (b.used / b.allowance) * 100) : 0
+                    return (
+                      <div key={b.employeeId} className="rounded-2xl border bg-card p-3.5 shadow-sm">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="truncate font-bold">{b.name}</span>
+                          <span className={b.remaining < 0 ? 'text-sm font-extrabold text-rose-600' : 'text-sm font-extrabold'}>
+                            متبقي {b.remaining} من {b.allowance}
+                          </span>
+                        </div>
+                        <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                          <div className={b.remaining < 0 ? 'h-full bg-rose-500' : 'h-full bg-stocktake'} style={{ width: `${pct}%` }} />
+                        </div>
                       </div>
-                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div className={b.remaining < 0 ? 'h-full bg-rose-500' : 'h-full bg-emerald-500'} style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
+                    )
+                  })}
+                </div>
+              </section>
+            </>
           )}
 
-          <h2 className="mb-2 text-base font-extrabold">السجل</h2>
+          <PanelTitle icon={CalendarDays} title="السجل" />
           {data.items.length === 0 ? (
-            <EmptyState title="مفيش إجازات متسجلة السنة دي" hint="لما موظف ياخد إجازة أو إذن سجّله هنا." />
+            <EmptyState
+              theme="leaves"
+              icon={CalendarDays}
+              title="مفيش إجازات متسجلة السنة دي" hint="سجّل إجازة أو إذن — بيظهر في الحضور والرواتب تلقائي."
+            />
           ) : (
-            <ul className="space-y-2">
-              {data.items.map((l) => (
-                <li key={l.id} className="flex flex-wrap items-center gap-3 rounded-2xl border bg-card p-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-bold">{l.employeeName}</span>
-                      <Pill tone={TONE[l.type]}>{LEAVE_TYPE_LABEL[l.type]}</Pill>
+            <Panel>
+              <ul className="divide-y divide-border">
+                {data.items.map((l) => (
+                  <li key={l.id} className="flex flex-wrap items-center gap-3 px-3.5 py-3.5 transition-colors hover:bg-muted/30 sm:px-4">
+                    <span className={`grid size-10 shrink-0 place-items-center rounded-2xl ${TONE_BG[l.type]}`}>
+                      <CalendarDays className="size-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold">{l.employeeName}</span>
+                        <Pill tone={TONE[l.type]}>{LEAVE_TYPE_LABEL[l.type]}</Pill>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {l.startDate === l.endDate ? fmt(l.startDate) : `${fmt(l.startDate)} → ${fmt(l.endDate)}`}
+                        {l.type === 'permission' ? ` · ${l.hours} ساعة` : ` · ${l.days} يوم عمل`}
+                        {l.note ? ` · ${l.note}` : ''}
+                      </p>
                     </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {l.startDate === l.endDate ? fmt(l.startDate) : `${fmt(l.startDate)} → ${fmt(l.endDate)}`}
-                      {l.type === 'permission' ? ` · ${l.hours} ساعة` : ` · ${l.days} يوم عمل`}
-                      {l.note ? ` · ${l.note}` : ''}
-                    </p>
-                  </div>
-                  <Button variant="ghost" size="sm" disabled={busyId === l.id} onClick={() => cancel(l.id)} className="gap-1 text-rose-600">
-                    {busyId === l.id ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}إلغاء
-                  </Button>
-                </li>
-              ))}
-            </ul>
+                    <Button variant="ghost" size="sm" disabled={busyId === l.id} onClick={() => cancel(l.id)} className="gap-1 text-rose-600">
+                      {busyId === l.id ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}إلغاء
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
           )}
         </>
       )}
@@ -115,6 +138,14 @@ export function HrLeavesView() {
       {adding && <LeaveDialog balances={data?.balances ?? []} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); load() }} />}
     </PageShell>
   )
+}
+
+/** خلفيات أيقونة لطيفة حسب نوع الإجازة */
+const TONE_BG: Record<LeaveType, string> = {
+  annual: 'bg-emerald-500/10 text-emerald-600',
+  sick: 'bg-sky-500/10 text-sky-600',
+  unpaid: 'bg-rose-500/10 text-rose-600',
+  permission: 'bg-violet-500/10 text-violet-600',
 }
 
 function LeaveDialog({ balances, onClose, onSaved }: { balances: Balance[]; onClose: () => void; onSaved: () => void }) {
@@ -147,7 +178,12 @@ function LeaveDialog({ balances, onClose, onSaved }: { balances: Balance[]; onCl
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
         <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
-          <DialogTitle>إجازة / إذن جديد</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="grid size-8 place-items-center rounded-xl bg-stocktake text-stocktake-foreground">
+              <CalendarPlus className="size-4" />
+            </span>
+            إجازة / إذن جديد
+          </DialogTitle>
           <DialogDescription>أيام الإجازة الأسبوعية بتتخطى تلقائي.</DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-3.5 py-4">

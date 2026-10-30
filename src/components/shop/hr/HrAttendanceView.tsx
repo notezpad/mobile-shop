@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { CalendarDays, ChevronLeft, ChevronRight, Delete, Loader2, MonitorSmartphone, UserCheck } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Delete, Loader2, MonitorSmartphone, UserCheck, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +12,9 @@ import { HR_STATUS_LABEL, addDaysStr, weekdayOf, type HrStatus } from '@/lib/hr'
 import { HrNetworkError, newIdempotencyKey } from '@/lib/hr-client'
 import { enqueuePunch, loadItemsCache, queueAvailable, saveItemsCache } from '@/lib/hr-kiosk-queue'
 import { KioskQueueBanner, useKioskQueue } from './KioskQueueBanner'
-import { DAY_NAMES, EmptyState, ListSkeleton, PageHead, PageShell, Pill, dayLabel, hrGet, hrSend } from './hr-ui'
+import {
+  DAY_NAMES, EmptyState, HrHero, ListSkeleton, PageShell, Panel, PanelTitle, StatCell, StatStrip, dayLabel, hrGet, hrSend,
+} from './hr-ui'
 
 interface Emp { id: number; name: string; jobTitle: string | null; weeklyOffDay: number; hireDate: string }
 interface Rec {
@@ -26,10 +28,10 @@ interface MonthData {
 }
 
 const STATUS_STYLE: Record<HrStatus, string> = {
-  present: 'bg-emerald-600 text-white border-emerald-600',
-  late: 'bg-amber-500 text-white border-amber-500',
-  absent: 'bg-rose-600 text-white border-rose-600',
-  leave: 'bg-sky-600 text-white border-sky-600',
+  present: 'bg-emerald-600 text-white border-emerald-600 shadow-sm',
+  late: 'bg-amber-500 text-white border-amber-500 shadow-sm',
+  absent: 'bg-rose-600 text-white border-rose-600 shadow-sm',
+  leave: 'bg-sky-600 text-white border-sky-600 shadow-sm',
 }
 const STATUSES: HrStatus[] = ['present', 'late', 'absent', 'leave']
 
@@ -147,9 +149,12 @@ export function HrAttendanceView() {
 
   return (
     <PageShell>
-      <PageHead
+      <HrHero
+        theme="attendance"
+        icon={MonitorSmartphone}
+        kicker="الموارد البشرية"
         title="الحضور والانصراف"
-        subtitle="اضغط على حالة كل موظف. اللي ملوش حالة بيتحسب حاضر."
+        subtitle="سجل يومي بكل موظف — منه بيتحدد أيام الشغل في الرواتب."
         actions={
           <Button variant="outline" onClick={() => setKiosk(true)} className="gap-1.5">
             <MonitorSmartphone className="size-4" />كشك الحضور (PIN)
@@ -162,110 +167,115 @@ export function HrAttendanceView() {
       {loading || !data || !date ? (
         <ListSkeleton />
       ) : data.employees.length === 0 ? (
-        <EmptyState title="مفيش موظفين لسه" hint="ضيف الموظفين الأول من شاشة الموظفين." />
+        <EmptyState theme="attendance" icon={Users} title="مفيش موظفين لسه" hint="ضيف الموظفين الأول من شاشة الموظفين." />
       ) : (
         <>
           {/* شريط اليوم */}
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border bg-card p-3">
-            <Button variant="outline" size="icon" aria-label="اليوم السابق" onClick={() => setDate(addDaysStr(date, -1))}>
-              <ChevronRight className="size-4" />
-            </Button>
-            <div className="min-w-0 flex-1 text-center">
-              <div className="truncate font-extrabold">{dayLabel(date)}</div>
-              {date === today && <div className="text-xs text-emerald-600">النهارده</div>}
+          <Panel className="mb-4">
+            <div className="flex flex-wrap items-center gap-2 p-3">
+              <Button variant="outline" size="icon" aria-label="اليوم السابق" onClick={() => setDate(addDaysStr(date, -1))}>
+                <ChevronRight className="size-4" />
+              </Button>
+              <div className="min-w-0 flex-1 text-center">
+                <div className="truncate font-extrabold">{dayLabel(date)}</div>
+                {date === today && <div className="text-xs font-semibold text-emerald-600">النهارده</div>}
+              </div>
+              <Button variant="outline" size="icon" aria-label="اليوم التالي" disabled={date >= today} onClick={() => setDate(addDaysStr(date, 1))}>
+                <ChevronLeft className="size-4" />
+              </Button>
+              <Input
+                type="date" value={date} max={today} dir="ltr" className="w-40"
+                onChange={(e) => e.target.value && setDate(e.target.value > today ? today : e.target.value)}
+              />
+              <Button onClick={presentAll} disabled={busy} className="gap-1.5">
+                <UserCheck className="size-4" />حاضر للكل
+              </Button>
             </div>
-            <Button variant="outline" size="icon" aria-label="اليوم التالي" disabled={date >= today} onClick={() => setDate(addDaysStr(date, 1))}>
-              <ChevronLeft className="size-4" />
-            </Button>
-            <Input
-              type="date" value={date} max={today} dir="ltr" className="w-40"
-              onChange={(e) => e.target.value && setDate(e.target.value > today ? today : e.target.value)}
-            />
-            <Button onClick={presentAll} disabled={busy} className="gap-1.5">
-              <UserCheck className="size-4" />حاضر للكل
-            </Button>
-          </div>
+          </Panel>
 
-          <div className="mb-3 flex flex-wrap gap-2 text-xs">
-            <Pill tone="emerald">حاضر {counts.present}</Pill>
-            <Pill tone="amber">متأخر {counts.late}</Pill>
-            <Pill tone="rose">غائب {counts.absent}</Pill>
-            <Pill tone="sky">إجازة {counts.leave}</Pill>
-          </div>
+          {/* عدّادات اليوم */}
+          <StatStrip className="mb-4">
+            <StatCell label="حاضر" dot="bg-emerald-500" value={counts.present} />
+            <StatCell label="متأخر" dot="bg-amber-500" value={counts.late} />
+            <StatCell label="غائب" dot="bg-rose-500" value={counts.absent} />
+            <StatCell label="إجازة" dot="bg-sky-500" value={counts.leave} />
+          </StatStrip>
 
-          <ul className="space-y-2">
-            {emps.map((e) => {
-              const r = recMap.get(`${e.id}|${date}`)
-              const isOff = weekdayOf(date) === e.weeklyOffDay
-              return (
-                <li key={e.id} className="rounded-2xl border bg-card p-3">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <div className="min-w-[140px] flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold">{e.name}</span>
-                        {isOff && !r && <Pill>إجازة أسبوعية ({DAY_NAMES[e.weeklyOffDay]})</Pill>}
+          <Panel>
+            <ul className="divide-y divide-border">
+              {emps.map((e) => {
+                const r = recMap.get(`${e.id}|${date}`)
+                const isOff = weekdayOf(date) === e.weeklyOffDay
+                return (
+                  <li key={e.id} className="px-3.5 py-3.5 transition-colors hover:bg-muted/30 sm:px-4">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                      <div className="min-w-[140px] flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold">{e.name}</span>
+                          {isOff && !r && <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">إجازة أسبوعية ({DAY_NAMES[e.weeklyOffDay]})</span>}
+                        </div>
+                        {(r?.checkIn || r?.checkOut) && (
+                          <p className="mt-0.5 text-xs text-muted-foreground" dir="rtl">
+                            {r.checkIn && <>حضور {timeOf(r.checkIn)}</>}
+                            {r.checkOut && <> · انصراف {timeOf(r.checkOut)}</>}
+                          </p>
+                        )}
                       </div>
-                      {(r?.checkIn || r?.checkOut) && (
-                        <p className="mt-0.5 text-xs text-muted-foreground" dir="rtl">
-                          {r.checkIn && <>حضور {timeOf(r.checkIn)}</>}
-                          {r.checkOut && <> · انصراف {timeOf(r.checkOut)}</>}
-                        </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {STATUSES.map((s) => (
+                          <button
+                            key={s} type="button" onClick={() => setStatus(e, s)}
+                            className={cn(
+                              'min-h-[38px] rounded-xl border px-3.5 text-sm font-bold transition-all',
+                              r?.status === s ? STATUS_STYLE[s] : 'bg-background text-foreground/70 hover:bg-muted',
+                            )}
+                          >
+                            {HR_STATUS_LABEL[s]}
+                          </button>
+                        ))}
+                      </div>
+                      {r?.status === 'late' && (
+                        <LateMinutes
+                          value={r.lateMinutes}
+                          onCommit={(v) => send([{ employeeId: e.id, date, status: 'late', lateMinutes: v }])}
+                        />
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {STATUSES.map((s) => (
-                        <button
-                          key={s} type="button" onClick={() => setStatus(e, s)}
-                          className={cn(
-                            'min-h-[38px] rounded-xl border px-3 text-sm font-bold transition-colors',
-                            r?.status === s ? STATUS_STYLE[s] : 'bg-background text-foreground/70 hover:bg-muted',
-                          )}
-                        >
-                          {HR_STATUS_LABEL[s]}
-                        </button>
-                      ))}
-                    </div>
-                    {r?.status === 'late' && (
-                      <LateMinutes
-                        value={r.lateMinutes}
-                        onCommit={(v) => send([{ employeeId: e.id, date, status: 'late', lateMinutes: v }])}
-                      />
-                    )}
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+                  </li>
+                )
+              })}
+            </ul>
+          </Panel>
 
           {/* ملخص الشهر */}
-          <div className="mt-8">
-            <h2 className="mb-2 flex items-center gap-2 text-base font-extrabold">
-              <CalendarDays className="size-4" />ملخص شهر {data.month}
-            </h2>
-            <div className="overflow-x-auto rounded-2xl border bg-card">
-              <table className="w-full min-w-[460px] text-sm">
-                <thead className="bg-muted/50 text-xs text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2 text-start font-bold">الموظف</th>
-                    <th className="px-3 py-2 text-center font-bold">غياب</th>
-                    <th className="px-3 py-2 text-center font-bold">إجازات</th>
-                    <th className="px-3 py-2 text-center font-bold">أيام تأخير</th>
-                    <th className="px-3 py-2 text-center font-bold">دقائق تأخير</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {summary.map((s) => (
-                    <tr key={s.id} className="border-t">
-                      <td className="px-3 py-2 font-semibold">{s.name}</td>
-                      <td className={cn('px-3 py-2 text-center tabular-nums', s.absent > 0 && 'font-bold text-rose-600')}>{s.absent}</td>
-                      <td className="px-3 py-2 text-center tabular-nums">{s.leave}</td>
-                      <td className={cn('px-3 py-2 text-center tabular-nums', s.lateDays > 0 && 'font-bold text-amber-600')}>{s.lateDays}</td>
-                      <td className="px-3 py-2 text-center tabular-nums">{s.lateMin}</td>
+          <div className="mt-6 sm:mt-8">
+            <PanelTitle icon={CalendarDays} title={`ملخص شهر ${data.month}`} />
+            <Panel>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[460px] text-sm">
+                  <thead className="bg-muted/50 text-xs text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2.5 text-start font-bold">الموظف</th>
+                      <th className="px-3 py-2.5 text-center font-bold">غياب</th>
+                      <th className="px-3 py-2.5 text-center font-bold">إجازات</th>
+                      <th className="px-3 py-2.5 text-center font-bold">أيام تأخير</th>
+                      <th className="px-3 py-2.5 text-center font-bold">دقائق تأخير</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {summary.map((s) => (
+                      <tr key={s.id} className="border-t transition-colors hover:bg-muted/30">
+                        <td className="px-3 py-2.5 font-semibold">{s.name}</td>
+                        <td className={cn('px-3 py-2.5 text-center tabular-nums', s.absent > 0 && 'font-bold text-rose-600')}>{s.absent}</td>
+                        <td className="px-3 py-2.5 text-center tabular-nums">{s.leave}</td>
+                        <td className={cn('px-3 py-2.5 text-center tabular-nums', s.lateDays > 0 && 'font-bold text-amber-600')}>{s.lateDays}</td>
+                        <td className="px-3 py-2.5 text-center tabular-nums">{s.lateMin}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
           </div>
         </>
       )}
@@ -390,7 +400,12 @@ function KioskDialog({ onClose }: { onClose: () => void }) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
         <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
-          <DialogTitle>كشك الحضور</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="grid size-8 place-items-center rounded-xl bg-warning text-warning-foreground">
+              <MonitorSmartphone className="size-4" />
+            </span>
+            كشك الحضور
+          </DialogTitle>
           <DialogDescription>اختار اسمك واكتب الـ PIN. أول مرة النهارده = حضور، وبعدها = انصراف.</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
