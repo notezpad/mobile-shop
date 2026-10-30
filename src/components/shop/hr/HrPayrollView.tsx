@@ -1,10 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import {
-  CalendarRange, CheckCircle2, Clock, FileSpreadsheet, Loader2, MessageCircle, MinusCircle,
-  PlusCircle, RefreshCw, Settings2, Trash2, Wallet,
-} from 'lucide-react'
+import { AlertTriangle, MessageCircle, ChevronLeft, ChevronRight, FileSpreadsheet, Loader2, RefreshCw, Settings2, Trash2, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,24 +11,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { useDataRefresh } from '@/lib/offline/data-events'
-import {
-  EmptyState, GlassRail, GlassStat, HrHero, ListSkeleton, ModuleDock, PageShell, Pill, Panel, PanelTitle, Reveal, StatusChip,
-  HR_THEMES, PAY_METHODS, hrGet, hrSend, ink, money, monthLabel, num, shiftMonth, tint,
-} from './hr-ui'
+import { EmptyState, ListSkeleton, PAY_METHODS, PageHead, PageShell, Pill, Stat, hrGet, hrSend, money, monthLabel, shiftMonth } from './hr-ui'
 
 interface RunLite { id: number; month: string; status: 'draft' | 'paid'; totalNet: number; count: number }
 interface Slip {
   id: number; employeeId: number; employeeName: string; baseSalary: number; payableBase: number
   absentDays: number; absenceDeduction: number; lateMinutes: number; lateDeduction: number
-  bonus: number; penalty: number; advanceDeduction: number; net: number; note: string | null
-  unrecordedDays: number; pendingDays: number
-  workedDays: number | null; expectedWorkDays: number | null
+  bonus: number; penalty: number; advanceDeduction: number; net: number; note: string | null; unrecordedDays: number
   phone: string | null
 }
 interface Run { id: number; month: string; status: 'draft' | 'paid'; totalNet: number; method: string | null; paidAt: string | null; payslips: Slip[] }
 
 const r2 = (n: number) => Math.round(n * 100) / 100
-const HEX = HR_THEMES.payroll.hex
 
 export function HrPayrollView() {
   const [runs, setRuns] = React.useState<RunLite[]>([])
@@ -139,9 +130,8 @@ export function HrPayrollView() {
       sheetName: 'الرواتب',
       columns: [
         { header: 'الموظف', key: 'name', format: 'text' },
-        { header: 'أيام الشغل', key: 'worked', format: 'text' },
         { header: 'الأساسي', key: 'base', format: 'currency' },
-        { header: 'خصم غياب وأيام بدون تسجيل', key: 'abs', format: 'currency' },
+        { header: 'خصم غياب', key: 'abs', format: 'currency' },
         { header: 'خصم تأخير', key: 'late', format: 'currency' },
         { header: 'حافز', key: 'bonus', format: 'currency' },
         { header: 'جزاء', key: 'penalty', format: 'currency' },
@@ -149,173 +139,154 @@ export function HrPayrollView() {
         { header: 'الصافي', key: 'net', format: 'currency' },
       ],
       rows: run.payslips.map((p) => ({
-        name: p.employeeName,
-        worked: p.workedDays !== null && p.expectedWorkDays !== null ? `${p.workedDays} من ${p.expectedWorkDays}` : '—',
-        base: p.payableBase, abs: p.absenceDeduction, late: p.lateDeduction,
+        name: p.employeeName, base: p.payableBase, abs: p.absenceDeduction, late: p.lateDeduction,
         bonus: p.bonus, penalty: p.penalty, adv: p.advanceDeduction, net: p.net,
       })),
       totals: { name: 'الإجمالي', net: run.totalNet },
     })
   }
 
-  const totalWorked = run?.payslips.reduce((s, p) => s + (p.workedDays ?? 0), 0) ?? 0
+  const totalUnrecorded = run?.status === 'draft' ? run.payslips.reduce((s, p) => s + p.unrecordedDays, 0) : 0
   const pastRuns = runs.filter((r) => r.month !== month)
 
   return (
     <PageShell>
-      <ModuleDock exclude="payroll" />
-
-      <HrHero
-        theme="payroll"
-        icon={Wallet}
-        kicker="الموارد البشرية"
+      <PageHead
         title="الرواتب"
-        subtitle="الصافي بيتحسب من أيام الشغل المسجّلة لكل موظف."
+        subtitle="جهّز الرواتب بضغطة، راجعها، واعتمدها — والخزنة والمصروفات بتتحدث لوحدها."
         actions={<Button variant="outline" onClick={() => setSettingsOpen(true)} className="gap-1.5"><Settings2 className="size-4" />قواعد الحساب</Button>}
-      >
-        {run && (
-          <GlassRail>
-            <GlassStat
-              label="الحالة"
-              value={run.status === 'paid' ? 'اتصرفت' : 'مسودة'}
-              foot={run.status === 'paid' && run.paidAt ? new Date(run.paidAt).toLocaleDateString('ar-EG-u-nu-latn') : 'للمراجعة قبل الاعتماد'}
-            />
-            <GlassStat label="عدد الموظفين" value={run.payslips.length} />
-            <GlassStat label="صافي الرواتب" value={<span className="whitespace-nowrap">{num(run.totalNet)} <span className="text-xs font-bold text-muted-foreground">جنيه</span></span>} foot={`أيام شغل مسجّلة: ${totalWorked}`} />
-            <GlassStat label="إجمالي أقساط السلف" value={<span className="whitespace-nowrap">{num(run.payslips.reduce((s, p) => s + p.advanceDeduction, 0))} <span className="text-xs font-bold text-muted-foreground">جنيه</span></span>} />
-          </GlassRail>
-        )}
-      </HrHero>
+      />
 
-      {/* ════ اختيار الشهر ════ */}
-      <Reveal>
-        <Panel className="mb-4">
-          <div className="flex items-center gap-2 p-3">
-            <Button variant="outline" size="icon" aria-label="الشهر السابق" onClick={() => setMonth(shiftMonth(month, -1))}><CalendarRange className="size-4 rotate-180" /></Button>
-            <div className="min-w-0 flex-1 text-center">
-              <div className="truncate text-lg font-extrabold">{month ? monthLabel(month) : '...'}</div>
-              {month === currentMonth && <div className="text-[11px] font-bold text-teal-600 dark:text-teal-400">الشهر الحالي</div>}
-            </div>
-            <Button variant="outline" size="icon" aria-label="الشهر التالي" disabled={!month || month >= currentMonth} onClick={() => setMonth(shiftMonth(month, 1))}><CalendarRange className="size-4" /></Button>
-          </div>
-        </Panel>
-      </Reveal>
+      {/* اختيار الشهر */}
+      <div className="mb-4 flex items-center gap-2 rounded-2xl border bg-card p-3">
+        <Button variant="outline" size="icon" aria-label="الشهر السابق" onClick={() => setMonth(shiftMonth(month, -1))}><ChevronRight className="size-4" /></Button>
+        <div className="flex-1 text-center text-lg font-extrabold">{month ? monthLabel(month) : '...'}</div>
+        <Button variant="outline" size="icon" aria-label="الشهر التالي" disabled={!month || month >= currentMonth} onClick={() => setMonth(shiftMonth(month, 1))}><ChevronLeft className="size-4" /></Button>
+      </div>
 
       {loading ? (
         <ListSkeleton />
       ) : !run ? (
-        <Reveal delay={40}>
-          <EmptyState
-            theme="payroll"
-            icon={Wallet}
-            title={`مفيش رواتب متجهزة لشهر ${month ? monthLabel(month) : ''}`}
-            hint="المسودة بتتجهّز من سجلات الحضور والإجازات والسلف — تراجعها واعتمدها."
-            action={
-              <Button onClick={generate} disabled={busy || !month} className="gap-1.5">
-                {busy ? <Loader2 className="size-4 animate-spin" /> : <Wallet className="size-4" />}
-                جهّز رواتب الشهر
-              </Button>
-            }
-          />
-        </Reveal>
+        <EmptyState
+          title={`مفيش رواتب متجهزة لشهر ${month ? monthLabel(month) : ''}`}
+          hint="النظام هيحسب الغياب والتأخير والسلف من سجلات الحضور ويطلعلك مسودة تراجعها قبل الصرف."
+          action={
+            <Button onClick={generate} disabled={busy || !month} className="gap-1.5">
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <Wallet className="size-4" />}
+              جهّز رواتب الشهر
+            </Button>
+          }
+        />
       ) : (
         <>
-          {/* ════ خط سير الدورة ════ */}
-          <Reveal delay={30}>
-            <div className="mb-4 flex items-center justify-center gap-0 rounded-2xl border bg-card p-3 shadow-sm">
-              {(['مسودة', 'مراجعة واعتماد', 'صرف'] as const).map((step, i) => {
-                const done = run.status === 'paid' || (i === 0)
-                const current = run.status === 'draft' ? i === 1 : i === 2
-                return (
-                  <React.Fragment key={step}>
-                    {i > 0 && <div className={`mx-1.5 h-0.5 w-6 sm:w-10 rounded-full ${run.status === 'paid' ? 'bg-emerald-500' : 'bg-border'}`} />}
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`grid size-6 place-items-center rounded-full text-[10px] font-black ${
-                          run.status === 'paid' ? 'bg-emerald-500 text-white'
-                            : current ? 'text-white' : 'bg-muted text-muted-foreground'
-                        }`}
-                        style={run.status === 'draft' && current ? { background: HEX } : undefined}
-                      >
-                        {done && run.status === 'paid' ? '✓' : i + 1}
-                      </span>
-                      <span className={`text-[11px] font-bold sm:text-xs ${current && run.status === 'draft' ? '' : 'text-muted-foreground'}`} style={current && run.status === 'draft' ? { color: ink(HEX, 82) } : undefined}>
-                        {step}
-                      </span>
-                    </div>
-                  </React.Fragment>
-                )
-              })}
-            </div>
-          </Reveal>
-
-          {/* ════ قسائم الرواتب ════ */}
-          <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
-            {run.payslips.map((p, idx) => (
-              <Reveal key={p.id} delay={Math.min(idx * 40, 240)}>
-                <PayslipCard slip={p} month={run.month} draft={run.status === 'draft'} edits={edits} setEdits={setEdits} shop={shopName} />
-              </Reveal>
-            ))}
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label="الحالة" value={run.status === 'paid' ? 'اتصرفت' : 'مسودة'} tone={run.status === 'paid' ? 'emerald' : 'amber'} />
+            <Stat label="عدد الموظفين" value={run.payslips.length} tone="sky" />
+            <Stat label="صافي الرواتب" value={money(run.totalNet)} tone="violet" />
+            <Stat label="إجمالي أقساط السلف" value={money(run.payslips.reduce((s, p) => s + p.advanceDeduction, 0))} tone="slate" />
           </div>
 
-          {/* ════ شريط الأوامر ════ */}
-          <Reveal delay={80}>
-            <Panel className="mt-4">
-              <div className="flex flex-wrap items-center gap-2 p-3">
-                {run.status === 'draft' ? (
-                  <>
-                    <Button
-                      onClick={async () => { if (!dirty || (await saveEdits(true))) setPayOpen(true) }}
-                      disabled={busy} className="gap-1.5"
-                      style={{ background: HEX }}
-                    >
-                      <Wallet className="size-4" />اعتماد وصرف الرواتب
-                    </Button>
-                    {dirty && <Button variant="secondary" onClick={() => saveEdits()} disabled={busy} className="gap-1.5"><CheckCircle2 className="size-4" />حفظ التعديلات</Button>}
-                    <Button variant="outline" onClick={async () => { if (!dirty || (await saveEdits(true))) generate() }} disabled={busy} className="gap-1.5">
-                      <RefreshCw className="size-4" />أعد الحساب
-                    </Button>
-                    <Button variant="ghost" onClick={removeDraft} disabled={busy} className="gap-1.5 text-rose-600"><Trash2 className="size-4" />حذف المسودة</Button>
-                  </>
-                ) : (
-                  <p className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
-                    <span className="grid size-6 place-items-center rounded-full bg-emerald-500/15 text-emerald-600"><CheckCircle2 className="size-4" /></span>
-                    اتصرفت {run.paidAt ? new Date(run.paidAt).toLocaleDateString('ar-EG-u-nu-latn') : ''} من {PAY_METHODS.find((m) => m.value === run.method)?.label ?? run.method}
-                  </p>
-                )}
-                <Button variant="outline" onClick={exportExcel} className="gap-1.5 sm:ms-auto"><FileSpreadsheet className="size-4" />Excel</Button>
-              </div>
-            </Panel>
-          </Reveal>
+          {totalUnrecorded > 0 && (
+            <div className="mb-4 flex items-start gap-2 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+              <p>
+                فيه <b>{totalUnrecorded}</b> يوم عمل مالوش تسجيل حضور — بيتحسبوا حاضر. لو فيه غياب، سجّله من شاشة الحضور
+                وبعدين اضغط "أعد الحساب".
+              </p>
+            </div>
+          )}
+
+          <div className="overflow-x-auto rounded-2xl border bg-card">
+            <table className="w-full min-w-[820px] text-sm">
+              <thead className="bg-muted/50 text-xs text-muted-foreground">
+                <tr>
+                  {['الموظف', 'الأساسي', 'غياب', 'تأخير', 'حافز', 'جزاء', 'قسط سلفة', 'الصافي', ''].map((h, i) => (
+                    <th key={i} className="px-3 py-2 text-start font-bold">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {run.payslips.map((p) => {
+                  const e = edits[p.id] ?? { bonus: '', penalty: '', note: '' }
+                  const draft = run.status === 'draft'
+                  return (
+                    <tr key={p.id} className="border-t align-top">
+                      <td className="px-3 py-2">
+                        <div className="font-bold">{p.employeeName}</div>
+                        {draft && p.unrecordedDays > 0 && <Pill tone="amber">{p.unrecordedDays} يوم بدون تسجيل</Pill>}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums">{money(p.payableBase)}</td>
+                      <td className="px-3 py-2 tabular-nums text-rose-600">
+                        {p.absenceDeduction > 0 ? `- ${money(p.absenceDeduction)}` : '—'}
+                        {p.absentDays > 0 && <div className="text-[11px] text-muted-foreground">{p.absentDays} يوم</div>}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums text-rose-600">
+                        {p.lateDeduction > 0 ? `- ${money(p.lateDeduction)}` : '—'}
+                        {p.lateMinutes > 0 && <div className="text-[11px] text-muted-foreground">{p.lateMinutes} دقيقة</div>}
+                      </td>
+                      <td className="px-3 py-2">
+                        {draft ? (
+                          <Input type="number" inputMode="decimal" min={0} dir="ltr" className="h-9 w-24" value={e.bonus}
+                            onChange={(ev) => setEdits((s) => ({ ...s, [p.id]: { ...e, bonus: ev.target.value } }))} />
+                        ) : (p.bonus > 0 ? `+ ${money(p.bonus)}` : '—')}
+                      </td>
+                      <td className="px-3 py-2">
+                        {draft ? (
+                          <Input type="number" inputMode="decimal" min={0} dir="ltr" className="h-9 w-24" value={e.penalty}
+                            onChange={(ev) => setEdits((s) => ({ ...s, [p.id]: { ...e, penalty: ev.target.value } }))} />
+                        ) : (p.penalty > 0 ? `- ${money(p.penalty)}` : '—')}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums text-violet-600">{p.advanceDeduction > 0 ? `- ${money(p.advanceDeduction)}` : '—'}</td>
+                      <td className="px-3 py-2 text-base font-extrabold tabular-nums">{money(p.net)}</td>
+                      <td className="px-3 py-2">
+                        <WhatsAppSlip slip={p} month={run.month} shop={shopName} />
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {run.status === 'draft' ? (
+              <>
+                <Button
+                  onClick={async () => { if (!dirty || (await saveEdits(true))) setPayOpen(true) }}
+                  disabled={busy} className="gap-1.5"
+                >
+                  <Wallet className="size-4" />اعتماد وصرف الرواتب
+                </Button>
+                {dirty && <Button variant="secondary" onClick={() => saveEdits()} disabled={busy}>حفظ التعديلات</Button>}
+                <Button variant="outline" onClick={async () => { if (!dirty || (await saveEdits(true))) generate() }} disabled={busy} className="gap-1.5">
+                  <RefreshCw className="size-4" />أعد الحساب
+                </Button>
+                <Button variant="ghost" onClick={removeDraft} disabled={busy} className="gap-1.5 text-rose-600"><Trash2 className="size-4" />حذف المسودة</Button>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                اتصرفت {run.paidAt ? new Date(run.paidAt).toLocaleDateString('ar-EG-u-nu-latn') : ''} من {PAY_METHODS.find((m) => m.value === run.method)?.label ?? run.method}
+              </p>
+            )}
+            <Button variant="outline" onClick={exportExcel} className="gap-1.5 sm:ms-auto"><FileSpreadsheet className="size-4" />Excel</Button>
+          </div>
         </>
       )}
 
-      {/* ════ دورات سابقة ════ */}
       {pastRuns.length > 0 && (
-        <div className="mt-7">
-          <PanelTitle icon={Clock} hex={HEX} title="دورات سابقة" />
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {pastRuns.map((r, idx) => (
-              <Reveal key={r.id} delay={Math.min(idx * 35, 210)}>
-                <button
-                  type="button" onClick={() => setMonth(r.month)}
-                  className="group flex w-full items-center gap-3 rounded-2xl border bg-card px-3.5 py-3 text-start shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-                >
-                  <span
-                    className="grid size-9 shrink-0 place-items-center rounded-xl text-white"
-                    style={{ background: r.status === 'paid' ? '#10b981' : tint('#f59e0b', 80), color: r.status === 'paid' ? undefined : ink('#f59e0b', 82) }}
-                  >
-                    <Wallet className="size-4" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-bold">{monthLabel(r.month)}</span>
-                    <span className="block text-[11px] tabular-nums text-muted-foreground">{money(r.totalNet)} · {r.count} موظف</span>
-                  </span>
-                  <StatusChip tone={r.status === 'paid' ? 'emerald' : 'amber'}>{r.status === 'paid' ? 'اتصرفت' : 'مسودة'}</StatusChip>
+        <div className="mt-8">
+          <h2 className="mb-2 text-base font-extrabold">دورات سابقة</h2>
+          <ul className="space-y-1.5">
+            {pastRuns.map((r) => (
+              <li key={r.id}>
+                <button type="button" onClick={() => setMonth(r.month)} className="flex w-full items-center gap-3 rounded-xl border bg-card px-3 py-2.5 text-start hover:bg-muted">
+                  <span className="flex-1 font-semibold">{monthLabel(r.month)}</span>
+                  <Pill tone={r.status === 'paid' ? 'emerald' : 'amber'}>{r.status === 'paid' ? 'اتصرفت' : 'مسودة'}</Pill>
+                  <span className="tabular-nums text-sm">{money(r.totalNet)}</span>
                 </button>
-              </Reveal>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
 
@@ -328,161 +299,6 @@ export function HrPayrollView() {
       )}
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
     </PageShell>
-  )
-}
-
-/* ═══════════════════════ قسيمة راتب — كارت بشكل مستند ═══════════════════════ */
-
-function PayslipCard({
-  slip: p, month, draft, edits, setEdits, shop,
-}: {
-  slip: Slip
-  month: string
-  draft: boolean
-  edits: Record<number, { bonus: string; penalty: string; note: string }>
-  setEdits: React.Dispatch<React.SetStateAction<Record<number, { bonus: string; penalty: string; note: string }>>>
-  shop: string
-}) {
-  const e = edits[p.id] ?? { bonus: '', penalty: '', note: '' }
-  const setEdit = (k: 'bonus' | 'penalty' | 'note', v: string) =>
-    setEdits((s) => ({ ...s, [p.id]: { ...(s[p.id] ?? { bonus: '', penalty: '', note: '' }), [k]: v } }))
-
-  return (
-    <article className="relative flex h-full flex-col overflow-hidden rounded-3xl border bg-card shadow-sm transition-all hover:shadow-md">
-      {/* رأس القسيمة */}
-      <div className="relative shrink-0 px-4 py-3" style={{ background: `linear-gradient(130deg, ${HEX}, color-mix(in srgb, ${HEX} 55%, black))` }}>
-        <div aria-hidden className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '12px 12px' }} />
-        <div className="relative flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="grid size-10 shrink-0 place-items-center rounded-xl border-2 border-white/60 bg-white/15 text-base font-black text-white backdrop-blur-sm">
-              {p.employeeName.trim().charAt(0)}
-            </span>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-extrabold text-white">{p.employeeName}</div>
-              <div className="text-[10.5px] font-semibold text-white/75">قسيمة راتب {monthLabel(month)}</div>
-            </div>
-          </div>
-          {p.workedDays !== null && p.expectedWorkDays !== null && (
-            <span className="shrink-0 rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-black tabular-nums text-white backdrop-blur-sm">
-              {p.workedDays}<span className="text-white/70"> / {p.expectedWorkDays} يوم</span>
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* تنبيهات القسيمة */}
-      {(p.workedDays === 0 || (p.workedDays !== null && p.workedDays > 0 && p.unrecordedDays > 0) || p.pendingDays > 0) && (
-        <div className="flex flex-wrap gap-1.5 px-4 pt-3">
-          {p.workedDays === 0 && <Pill tone="rose">بدون أيام شغل مسجّلة</Pill>}
-          {p.workedDays !== null && p.workedDays > 0 && p.unrecordedDays > 0 && <Pill tone="amber">{p.unrecordedDays} يوم بدون تسجيل</Pill>}
-          {p.pendingDays > 0 && <Pill tone="sky">{p.pendingDays} يوم متبقي</Pill>}
-        </div>
-      )}
-
-      {/* تفصيل الحساب */}
-      <div className="flex min-h-0 flex-1 flex-col px-4 py-3">
-        <SlipRow label="الأساسي المستحق" value={money(p.payableBase)} />
-        <SlipRow
-          label="خصم غياب وبدون تسجيل"
-          sub={p.absentDays + p.unrecordedDays > 0 ? `${p.absentDays + p.unrecordedDays} يوم` : undefined}
-          value={p.absenceDeduction > 0 ? `- ${money(p.absenceDeduction)}` : '—'}
-          tone={p.absenceDeduction > 0 ? 'minus' : 'dim'}
-        />
-        <SlipRow
-          label="خصم التأخير"
-          sub={p.lateMinutes > 0 ? `${p.lateMinutes} دقيقة` : undefined}
-          value={p.lateDeduction > 0 ? `- ${money(p.lateDeduction)}` : '—'}
-          tone={p.lateDeduction > 0 ? 'minus' : 'dim'}
-        />
-        {draft ? (
-          <EditRow
-            icon={<PlusCircle className="size-3.5 text-emerald-600" />}
-            label="حافز"
-            value={e.bonus} onChange={(v) => setEdit('bonus', v)} accent="text-emerald-700 dark:text-emerald-400"
-          />
-        ) : (
-          <SlipRow label="حافز" value={p.bonus > 0 ? `+ ${money(p.bonus)}` : '—'} tone={p.bonus > 0 ? 'plus' : 'dim'} />
-        )}
-        {draft ? (
-          <EditRow
-            icon={<MinusCircle className="size-3.5 text-rose-600" />}
-            label="جزاء"
-            value={e.penalty} onChange={(v) => setEdit('penalty', v)} accent="text-rose-700 dark:text-rose-400"
-          />
-        ) : (
-          <SlipRow label="جزاء" value={p.penalty > 0 ? `- ${money(p.penalty)}` : '—'} tone={p.penalty > 0 ? 'minus' : 'dim'} />
-        )}
-        <SlipRow
-          label="قسط سلفة"
-          value={p.advanceDeduction > 0 ? `- ${money(p.advanceDeduction)}` : '—'}
-          tone={p.advanceDeduction > 0 ? 'violet' : 'dim'}
-        />
-
-        {/* خط التثقيب + الصافي */}
-        <div className="relative mt-auto pt-3">
-          <div aria-hidden className="pointer-events-none absolute inset-x-0 top-1 flex justify-between">
-            <span className="size-3.5 rounded-full bg-background ring-1 ring-border" />
-            <span className="size-3.5 rounded-full bg-background ring-1 ring-border" />
-          </div>
-          <div className="border-t-2 border-dashed pt-3.5" style={{ borderColor: 'color-mix(in srgb, var(--border) 85%, transparent)' }}>
-            <div className="flex items-end justify-between gap-2">
-              <span className="text-sm font-bold text-muted-foreground">الصافي المستحق</span>
-              <span className="text-2xl font-black tabular-nums tracking-tight" style={{ color: ink(HEX, 85) }}>
-                {money(p.net)}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ذيل القسيمة — الإرسال */}
-      <div className="mt-auto flex items-center justify-between gap-2 border-t bg-muted/30 px-4 py-2.5">
-        <WhatsAppSlip slip={p} month={month} shop={shop} />
-        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50" dir="ltr">payslip</span>
-      </div>
-    </article>
-  )
-}
-
-function SlipRow({ label, sub, value, tone = 'neutral' }: {
-  label: string
-  sub?: string
-  value: React.ReactNode
-  tone?: 'neutral' | 'plus' | 'minus' | 'violet' | 'dim'
-}) {
-  const color =
-    tone === 'plus' ? 'text-emerald-700 dark:text-emerald-400'
-    : tone === 'minus' ? 'text-rose-700 dark:text-rose-400'
-    : tone === 'violet' ? 'text-violet-700 dark:text-violet-400'
-    : tone === 'dim' ? 'text-muted-foreground/70'
-    : ''
-  return (
-    <div className="flex items-center justify-between gap-2 border-b border-border/50 py-1.5 last:border-0">
-      <span className="text-[12.5px] text-muted-foreground">
-        {label}
-        {sub && <span className="ms-1 text-[10.5px] font-semibold text-muted-foreground/70">({sub})</span>}
-      </span>
-      <span className={`text-[13px] font-bold tabular-nums ${color}`}>{value}</span>
-    </div>
-  )
-}
-
-function EditRow({ icon, label, value, onChange, accent }: {
-  icon: React.ReactNode
-  label: string
-  value: string
-  onChange: (v: string) => void
-  accent: string
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2 border-b border-border/50 py-1.5 last:border-0">
-      <span className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">{icon}{label}</span>
-      <Input
-        type="number" inputMode="decimal" min={0} dir="ltr" value={value} onChange={(ev) => onChange(ev.target.value)}
-        className={`h-8 w-24 border-dashed text-end text-[13px] font-bold tabular-nums ${accent}`}
-        placeholder="0"
-      />
-    </div>
   )
 }
 
@@ -500,17 +316,9 @@ function slipText(p: Slip, month: string, shop: string): string {
   const lines = [
     `*قسيمة راتب ${monthLabel(month)}*${shop ? ` — ${shop}` : ''}`,
     `الموظف: ${p.employeeName}`,
+    `الأساسي: ${money(p.payableBase)}`,
   ]
-  if (p.workedDays !== null && p.expectedWorkDays !== null) {
-    lines.push(`أيام الشغل: ${p.workedDays} من ${p.expectedWorkDays}`)
-  }
-  lines.push(`الأساسي: ${money(p.payableBase)}`)
-  if (p.absenceDeduction > 0) {
-    const parts: string[] = []
-    if (p.absentDays > 0) parts.push(`${p.absentDays} غياب`)
-    if (p.unrecordedDays > 0) parts.push(`${p.unrecordedDays} بدون تسجيل`)
-    lines.push(`خصم أيام (${parts.join(' + ')}): - ${money(p.absenceDeduction)}`)
-  }
+  if (p.absenceDeduction > 0) lines.push(`خصم غياب (${p.absentDays} يوم): - ${money(p.absenceDeduction)}`)
   if (p.lateDeduction > 0) lines.push(`خصم تأخير (${p.lateMinutes} دقيقة): - ${money(p.lateDeduction)}`)
   if (p.bonus > 0) lines.push(`حافز: + ${money(p.bonus)}`)
   if (p.penalty > 0) lines.push(`جزاء: - ${money(p.penalty)}`)
@@ -520,35 +328,29 @@ function slipText(p: Slip, month: string, shop: string): string {
 }
 
 function WhatsAppSlip({ slip, month, shop }: { slip: Slip; month: string; shop: string }) {
-  const numPhone = waNumber(slip.phone)
+  const num = waNumber(slip.phone)
   const text = slipText(slip, month, shop)
-  if (!numPhone) {
+  if (!num) {
     return (
       <Button
         variant="ghost" size="sm" className="gap-1 text-muted-foreground"
         title={slip.phone ? 'رقم الموبايل غير صالح — اضغط لنسخ القسيمة' : 'مفيش رقم موبايل — اضغط لنسخ القسيمة'}
         onClick={() => { navigator.clipboard?.writeText(text).then(() => toast.success('تم نسخ القسيمة'), () => toast.error('تعذّر النسخ')) }}
       >
-        نسخ القسيمة
+        نسخ
       </Button>
     )
   }
   return (
     <Button asChild variant="ghost" size="sm" className="gap-1 text-emerald-600">
-      <a href={`https://wa.me/${numPhone}?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer">
-        <MessageCircle className="size-4" />واتساب للموظف
+      <a href={`https://wa.me/${num}?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer">
+        <MessageCircle className="size-4" />واتساب
       </a>
     </Button>
   )
 }
 
-function PayDialog({
-  run, onClose, onPaid,
-}: {
-  run: Run
-  onClose: () => void
-  onPaid: () => void
-}) {
+function PayDialog({ run, onClose, onPaid }: { run: Run; onClose: () => void; onPaid: () => void }) {
   const [method, setMethod] = React.useState('cash')
   const [busy, setBusy] = React.useState(false)
   const pay = async () => {
@@ -618,13 +420,8 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
         <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
-          <DialogTitle className="flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-xl bg-stocktake text-stocktake-foreground">
-              <Settings2 className="size-4" />
-            </span>
-            قواعد الحساب
-          </DialogTitle>
-          <DialogDescription>القيم الافتراضية مناسبة لأغلب المحلات. الحساب دايمًا على الأيام الفعلية المسجّلة.</DialogDescription>
+          <DialogTitle>قواعد الحساب</DialogTitle>
+          <DialogDescription>القيم الافتراضية مناسبة لأغلب المحلات.</DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-3.5 py-4">
           {!s ? <ListSkeleton rows={3} /> : (

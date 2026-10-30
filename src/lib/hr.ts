@@ -3,13 +3,11 @@
  * ──────────────────────────────────────────────────────────────────────
  * القواعد (راتب شهري ثابت):
  *   • قيمة اليوم = الراتب ÷ مقسوم (الافتراضي 30، أو 0 = أيام الشهر الفعلية).
- *   • الحساب على الأيام الفعلية المسجّلة: اليوم بيتدفع بس لو عنده سجل
- *     حضور/تأخير، أو إجازة معتمدة بمرتب، أو إذن، أو راحة أسبوعية مستحقة
- *     (الأسبوع اللي فيه يوم مؤهل واحد على الأقل). اليوم اللي ملوش أي سجل
- *     مبيتدفعش — والنظام بينبّه على الأيام دي قبل اعتماد الراتب.
- *   • الإجازة السنوية/المرضية (بمرتب) بتتدفع كامل. بدون مرتب بتتخصم.
+ *   • الغياب بدون إذن = خصم يوم. الإجازة المعتمدة (leave) بدون خصم.
  *   • التأخير: لو دقائق التأخير ≤ فترة السماح → لا شيء. لو أكتر → تتحسب كلها.
  *     الخصم = الدقائق × (قيمة اليوم ÷ دقائق الوردية).
+ *   • اللي ملوش سجل حضور في يوم = يُعتبر حاضر (الغياب لازم يتسجّل صراحةً)،
+ *     والنظام بيحذّر المدير من الأيام غير المسجّلة قبل اعتماد الراتب.
  *   • موظف اتعيّن وسط الشهر: الأساسي بيتناسب بأيام الشهر المتبقية.
  *   • السلف بتتخصم تلقائي بقيمة القسط (حتى المتبقي) وماتتخطاش صافي الراتب.
  */
@@ -128,7 +126,6 @@ export interface PayslipCalcInput {
   hireDate: string
   month: string
   settings: HrSettingsValues
-  /** أيام الغياب المسجّلة صراحةً (للعرض في القسيمة) */
   absentDays: number
   /** مجموع دقائق التأخير بعد السماح (من countedLate لكل يوم) */
   lateMinutes: number
@@ -136,12 +133,6 @@ export interface PayslipCalcInput {
   advanceDue: number
   bonus: number
   penalty: number
-  /**
-   * الأيام المستحقة الدفع فعليًا (حضور/تأخير + إجازة بمرتب + إذن + راحة مستحقة)
-   * من countPaidDays. لو اتبعتت، الخصم بيتحسب على (أيام الخدمة − الأيام دي)
-   * بدل الاعتماد على الغياب المسجّل بس — اليوم اللي ملوش سجل مبيتدفعش.
-   */
-  paidDays?: number
 }
 
 export interface PayslipCalcResult {
@@ -162,14 +153,7 @@ export function computePayslip(i: PayslipCalcInput): PayslipCalcResult {
   const divisor = i.settings.dayDivisor > 0 ? i.settings.dayDivisor : days
   const dailyRate = i.baseSalary / divisor
 
-  // أيام بدون مقابل: في وضع الأيام الفعلية = أيام الخدمة ناقص الأيام المؤهلة
-  // (غياب صريح + أيام من غير تسجيل + راحة أسبوعية مش مستحقة). غير كده = الغياب الصريح بس.
-  const unpaidDays =
-    i.paidDays !== undefined
-      ? Math.max(0, activeDays - Math.max(0, i.paidDays))
-      : Math.max(0, i.absentDays)
-
-  const absenceDeduction = round2(Math.min(payableBase, unpaidDays * dailyRate))
+  const absenceDeduction = round2(Math.min(payableBase, Math.max(0, i.absentDays) * dailyRate))
 
   let lateDeduction = 0
   if (i.settings.lateMode === 'per_minute' && i.settings.shiftHours > 0 && i.lateMinutes > 0) {
@@ -209,103 +193,6 @@ export function countUnrecordedDays(args: {
     if (!args.recordedDates.has(d)) n++
   }
   return n
-}
-
-// ───────────── حساب الأيام الفعلية المستحقة للدفع ─────────────
-
-export type DayRecordStatus = 'present' | 'late' | 'leave' | 'absent'
-
-export interface PaidDaysBreakdown {
-  /** أيام حضور/تأخير مسجّلة */
-  workedDays: number
-  /** أيام إجازة معتمدة بمرتب (سجل leave) */
-  paidLeaveDays: number
-  /** أيام إذن (ساعات) — متابعة بس وبتتدفع زي ما هي */
-  permissionDays: number
-  /** راحات أسبوعية مستحقة (الأسبوع اللي فيه يوم مؤهل) */
-  entitledOffDays: number
-  /** إجمالي الأيام المدفوعة */
-  paidDays: number
-  /** أيام شغل فعلية متوقعة في الشهر (من غير الراحة الأسبوعية) */
-  expectedWorkDays: number
-  /** أيام شغل عدّا النهارده من غير أي سجل (بتتخصم) */
-  unrecordedDays: number
-  /** أيام شغل لسه جاية (بعد النهارده) — لسه مالهاش سجل طبعًا */
-  pendingDays: number
-}
-
-/** رقم الأسبوع (يبدأ السبت) لتاريخ YYYY-MM-DD — أداة مساعدة */
-function weekIndexOf(dateStr: string): number {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const epochDays = Math.floor(Date.UTC(y, m - 1, d) / 86_400_000)
-  // 1970-01-03 كان سبت (epoch 2) — فالأسبوع المصري بيبدأ من السبت
-  return Math.floor((epochDays - 2) / 7)
-}
-
-/**
- * الأيام الفعلية المستحقة للدفع في الشهر:
- *   • يوم عنده سجل حضور/تأخير، أو إجازة بمرتب، أو إذن → بيتدفع.
- *   • الراحة الأسبوعية بتتدفع لو الأسبوع بتاعها فيه يوم مؤهل واحد على الأقل
- *     (محدش شغل ولا إجازة في أسبوع → راحته مش مستحقة).
- *   • أي يوم شغل تاني — غياب صريح أو من غير تسجيل — مبيتدفعش.
- *   • الأيام الجاية (بعد today) بترجع في pendingDays عشان الواجهة تنبّه
- *     إن الحساب النهائي محتاج «أعد الحساب» بعد تسجيلها.
- */
-export function countPaidDays(args: {
-  month: string
-  today: string
-  hireDate: string
-  weeklyOffDay: number
-  records: Map<string, DayRecordStatus>
-  /** تواريخ الأذون (نوع permission — مالهاش سجل حضور) */
-  permissionDates?: Set<string>
-}): PaidDaysBreakdown {
-  const { first, last } = monthBounds(args.month)
-  const from = args.hireDate > first ? args.hireDate : first
-  const r: PaidDaysBreakdown = {
-    workedDays: 0, paidLeaveDays: 0, permissionDays: 0, entitledOffDays: 0, paidDays: 0,
-    expectedWorkDays: 0, unrecordedDays: 0, pendingDays: 0,
-  }
-  if (from > last) return r
-  const qualifyingWeeks = new Set<number>()
-  const offDays: string[] = []
-  // المرور الأول: السجلات المؤهلة + تجميع الراحات الأسبوعية لفحصها بعد ما
-  // أسابيع الشهر كلها تتجمّع (الراحة ممكن يومها يسبق باقي أيام أسبوعه في الترتيب)
-  for (let d = from; d <= last; d = addDaysStr(d, 1)) {
-    const st = args.records.get(d)
-    const isPermission = !st && args.permissionDates?.has(d)
-    if (weekdayOf(d) !== args.weeklyOffDay) r.expectedWorkDays++
-    if (st === 'present' || st === 'late') {
-      r.workedDays++
-      r.paidDays++
-      qualifyingWeeks.add(weekIndexOf(d))
-      continue
-    }
-    if (st === 'leave') {
-      r.paidLeaveDays++
-      r.paidDays++
-      qualifyingWeeks.add(weekIndexOf(d))
-      continue
-    }
-    if (isPermission) {
-      r.permissionDays++
-      r.paidDays++
-      qualifyingWeeks.add(weekIndexOf(d))
-      continue
-    }
-    if (st === 'absent') continue // غياب صريح — مهما كان اليوم
-    if (weekdayOf(d) === args.weeklyOffDay) { offDays.push(d); continue }
-    if (d > args.today) r.pendingDays++
-    else r.unrecordedDays++
-  }
-  // المرور الثاني: الراحة الأسبوعية مدفوعة لو أسبوعها فيه يوم مؤهل واحد على الأقل
-  for (const d of offDays) {
-    if (qualifyingWeeks.has(weekIndexOf(d))) {
-      r.entitledOffDays++
-      r.paidDays++
-    }
-  }
-  return r
 }
 
 // ─────────────────────── الإجازات والأذونات (المرحلة 2) ───────────────────────
