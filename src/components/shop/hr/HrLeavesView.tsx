@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Loader2, Plus, Undo2 } from 'lucide-react'
+import { CalendarDays, CalendarPlus, Clock3, Loader2, Undo2, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,7 +10,10 @@ import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, Dia
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { LEAVE_TYPES, LEAVE_TYPE_LABEL, type LeaveType } from '@/lib/hr'
-import { EmptyState, ListSkeleton, PageHead, PageShell, Pill, hrGet, hrSend } from './hr-ui'
+import {
+  EmptyState, GlassRail, GlassStat, HrHero, ListSkeleton, ModuleDock, PageShell, PanelTitle, Pill, Reveal, Ring,
+  HR_THEMES, hrGet, hrSend, ink, tint,
+} from './hr-ui'
 
 interface Leave {
   id: number; employeeId: number; employeeName: string; type: LeaveType
@@ -21,6 +24,12 @@ interface Data { year: string; annualLeaveDays: number; items: Leave[]; balances
 
 const TONE: Record<LeaveType, 'emerald' | 'sky' | 'rose' | 'violet'> = {
   annual: 'emerald', sick: 'sky', unpaid: 'rose', permission: 'violet',
+}
+const TYPE_META: Record<LeaveType, { hex: string; icon: React.ElementType }> = {
+  annual: { hex: '#10b981', icon: CalendarDays },
+  sick: { hex: '#0ea5e9', icon: Clock3 },
+  unpaid: { hex: '#f43f5e', icon: CalendarDays },
+  permission: { hex: '#8b5cf6', icon: Clock3 },
 }
 const fmt = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 
@@ -48,67 +57,136 @@ export function HrLeavesView() {
     finally { setBusyId(null) }
   }
 
+  const totalUsed = data?.balances.reduce((s, b) => s + b.used, 0) ?? 0
+  const overdrawn = data?.balances.filter((b) => b.remaining < 0).length ?? 0
+  const totalAllowance = data?.balances.reduce((s, b) => s + b.allowance, 0) ?? 0
+
   return (
     <PageShell>
-      <PageHead
+      <ModuleDock exclude="leaves" />
+
+      <HrHero
+        theme="leaves"
+        icon={CalendarDays}
+        kicker="الموارد البشرية"
         title="الإجازات والأذونات"
-        subtitle="سجّل الإجازة وهتظهر في الحضور تلقائي. السنوية والمرضية بمرتب، وبدون مرتب بتتخصم."
-        actions={<Button onClick={() => setAdding(true)} className="gap-1.5"><Plus className="size-4" />إجازة / إذن جديد</Button>}
-      />
+        subtitle="إجازات وأذونات الفريق — بتتزامن مع الحضور والأرصدة تلقائيًا."
+        actions={<Button onClick={() => setAdding(true)} className="gap-1.5"><CalendarPlus className="size-4" />إجازة / إذن جديد</Button>}
+      >
+        {data && data.balances.length > 0 && (
+          <GlassRail>
+            <GlassStat label="رصيد سنوي لكل موظف" value={`${data.annualLeaveDays} يوم`} foot={`سنة ${data.year}`} />
+            <GlassStat label="أيام مستخدمة" value={`${totalUsed} يوم`} foot={`من إجمالي ${totalAllowance} يوم`} />
+            <GlassStat label="تجاوزوا الرصيد" value={overdrawn} foot={overdrawn > 0 ? 'يتابعوا مع الإدارة' : 'كل الأرصدة منتظمة'} />
+          </GlassRail>
+        )}
+      </HrHero>
 
       {loading || !data ? (
         <ListSkeleton />
       ) : (
         <>
           {data.balances.length > 0 && (
-            <section className="mb-6">
-              <h2 className="mb-2 text-base font-extrabold">رصيد الإجازة السنوية {data.year}</h2>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {data.balances.map((b) => {
-                  const pct = b.allowance > 0 ? Math.min(100, (b.used / b.allowance) * 100) : 0
+            <Reveal>
+              <section className="mb-6">
+                <PanelTitle icon={Users} hex={HR_THEMES.leaves.hex} title={`رصيد الإجازة السنوية ${data.year}`} />
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {data.balances.map((b) => {
+                    const pct = b.allowance > 0 ? Math.min(100, (b.used / b.allowance) * 100) : 0
+                    const over = b.remaining < 0
+                    const hex = over ? '#f43f5e' : HR_THEMES.leaves.hex
+                    return (
+                      <div
+                        key={b.employeeId}
+                        className="flex items-center gap-3 rounded-3xl border bg-card p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                      >
+                        <Ring value={pct} size={74} stroke={8} hex={hex} delay={200}>
+                          <div className="text-center">
+                            <div className="text-sm font-black tabular-nums leading-none" style={{ color: ink(hex, 80) }}>{b.remaining}</div>
+                            <div className="text-[9px] font-bold text-muted-foreground">متبقي</div>
+                          </div>
+                        </Ring>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-extrabold" title={b.name}>{b.name}</div>
+                          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                            استخدم <b className="tabular-nums text-foreground">{b.used}</b> من <b className="tabular-nums text-foreground">{b.allowance}</b> يوم
+                          </p>
+                          {over && <Pill tone="rose">تجاوز الرصيد</Pill>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            </Reveal>
+          )}
+
+          <Reveal delay={60}>
+            <PanelTitle icon={CalendarDays} hex={HR_THEMES.leaves.hex} title="سجل الإجازات والأذونات" />
+            {data.items.length === 0 ? (
+              <EmptyState
+                theme="leaves"
+                icon={CalendarDays}
+                title="مفيش إجازات متسجلة السنة دي"
+                hint="سجّل إجازة أو إذن — بيظهر في الحضور والرواتب تلقائي."
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {data.items.map((l, idx) => {
+                  const meta = TYPE_META[l.type]
+                  const Icon = meta.icon
                   return (
-                    <div key={b.employeeId} className="rounded-2xl border bg-card p-3">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="truncate font-bold">{b.name}</span>
-                        <span className={b.remaining < 0 ? 'text-sm font-extrabold text-rose-600' : 'text-sm font-extrabold'}>
-                          متبقي {b.remaining} من {b.allowance}
-                        </span>
-                      </div>
-                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div className={b.remaining < 0 ? 'h-full bg-rose-500' : 'h-full bg-emerald-500'} style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
+                    <Reveal key={l.id} delay={Math.min(idx * 40, 240)}>
+                      {/* تذكرة إجازة — حافة مثقوبة زي التذاكر */}
+                      <article className="relative flex overflow-hidden rounded-2xl border bg-card shadow-sm transition-all hover:shadow-md">
+                        {/* كعب التذكرة */}
+                        <div
+                          className="relative grid w-[84px] shrink-0 place-items-center border-e-2 border-dashed p-2 text-center"
+                          style={{ background: tint(meta.hex, 8), borderColor: 'color-mix(in srgb, var(--border) 90%, transparent)' }}
+                        >
+                          {/* خرام التذكرة */}
+                          <span aria-hidden className="absolute -top-2.5 -end-2.5 size-5 rounded-full bg-background ring-1 ring-border" />
+                          <span aria-hidden className="absolute -bottom-2.5 -end-2.5 size-5 rounded-full bg-background ring-1 ring-border" />
+                          <span
+                            className="grid size-10 place-items-center rounded-2xl text-white shadow-sm"
+                            style={{ background: `linear-gradient(140deg, ${meta.hex}, color-mix(in srgb, ${meta.hex} 66%, black))` }}
+                          >
+                            <Icon className="size-5" strokeWidth={2.1} />
+                          </span>
+                          <span className="mt-1.5 text-[10px] font-black leading-tight" style={{ color: ink(meta.hex, 80) }}>
+                            {LEAVE_TYPE_LABEL[l.type]}
+                          </span>
+                        </div>
+
+                        {/* جسم التذكرة */}
+                        <div className="flex min-w-0 flex-1 flex-col justify-between gap-2 p-3.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate font-extrabold">{l.employeeName}</span>
+                            <Pill tone={TONE[l.type]}>{l.type === 'permission' ? `${l.hours} ساعة` : `${l.days} يوم`}</Pill>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            <span className="font-bold tabular-nums text-foreground/75">{l.startDate === l.endDate ? fmt(l.startDate) : `${fmt(l.startDate)} ← ${fmt(l.endDate)}`}</span>
+                            {l.note ? <span> · {l.note}</span> : ''}
+                          </p>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10.5px] font-semibold text-muted-foreground">
+                              {l.type === 'permission' ? 'إذن متابعة — بدون أثر على الراتب' : 'بتتزامن مع الحضور تلقائي'}
+                            </span>
+                            <Button
+                              variant="ghost" size="sm" disabled={busyId === l.id} onClick={() => cancel(l.id)}
+                              className="h-7 gap-1 px-2 text-xs text-rose-600 hover:bg-rose-500/10"
+                            >
+                              {busyId === l.id ? <Loader2 className="size-3.5 animate-spin" /> : <Undo2 className="size-3.5" />}إلغاء
+                            </Button>
+                          </div>
+                        </div>
+                      </article>
+                    </Reveal>
                   )
                 })}
               </div>
-            </section>
-          )}
-
-          <h2 className="mb-2 text-base font-extrabold">السجل</h2>
-          {data.items.length === 0 ? (
-            <EmptyState title="مفيش إجازات متسجلة السنة دي" hint="لما موظف ياخد إجازة أو إذن سجّله هنا." />
-          ) : (
-            <ul className="space-y-2">
-              {data.items.map((l) => (
-                <li key={l.id} className="flex flex-wrap items-center gap-3 rounded-2xl border bg-card p-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-bold">{l.employeeName}</span>
-                      <Pill tone={TONE[l.type]}>{LEAVE_TYPE_LABEL[l.type]}</Pill>
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {l.startDate === l.endDate ? fmt(l.startDate) : `${fmt(l.startDate)} → ${fmt(l.endDate)}`}
-                      {l.type === 'permission' ? ` · ${l.hours} ساعة` : ` · ${l.days} يوم عمل`}
-                      {l.note ? ` · ${l.note}` : ''}
-                    </p>
-                  </div>
-                  <Button variant="ghost" size="sm" disabled={busyId === l.id} onClick={() => cancel(l.id)} className="gap-1 text-rose-600">
-                    {busyId === l.id ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}إلغاء
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
+            )}
+          </Reveal>
         </>
       )}
 
@@ -147,7 +225,12 @@ function LeaveDialog({ balances, onClose, onSaved }: { balances: Balance[]; onCl
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
         <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
-          <DialogTitle>إجازة / إذن جديد</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="grid size-8 place-items-center rounded-xl bg-pink-500 text-white">
+              <CalendarPlus className="size-4" />
+            </span>
+            إجازة / إذن جديد
+          </DialogTitle>
           <DialogDescription>أيام الإجازة الأسبوعية بتتخطى تلقائي.</DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-3.5 py-4">

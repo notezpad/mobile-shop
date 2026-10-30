@@ -1,7 +1,10 @@
 'use client'
 
 import * as React from 'react'
-import { CalendarDays, ChevronLeft, ChevronRight, Delete, Loader2, MonitorSmartphone, UserCheck } from 'lucide-react'
+import {
+  CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Delete, Loader2, MonitorSmartphone,
+  Palmtree, UserCheck, UserX, Users,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +15,10 @@ import { HR_STATUS_LABEL, addDaysStr, weekdayOf, type HrStatus } from '@/lib/hr'
 import { HrNetworkError, newIdempotencyKey } from '@/lib/hr-client'
 import { enqueuePunch, loadItemsCache, queueAvailable, saveItemsCache } from '@/lib/hr-kiosk-queue'
 import { KioskQueueBanner, useKioskQueue } from './KioskQueueBanner'
-import { DAY_NAMES, EmptyState, ListSkeleton, PageHead, PageShell, Pill, dayLabel, hrGet, hrSend } from './hr-ui'
+import {
+  DAY_NAMES, EmptyState, GlassRail, GlassStat, HrHero, ListSkeleton, ModuleDock, PageShell,
+  Panel, PanelTitle, Reveal, dayLabel, hrGet, hrSend, ink, tint,
+} from './hr-ui'
 
 interface Emp { id: number; name: string; jobTitle: string | null; weeklyOffDay: number; hireDate: string }
 interface Rec {
@@ -25,11 +31,12 @@ interface MonthData {
   employees: Emp[]; records: Rec[]
 }
 
-const STATUS_STYLE: Record<HrStatus, string> = {
-  present: 'bg-emerald-600 text-white border-emerald-600',
-  late: 'bg-amber-500 text-white border-amber-500',
-  absent: 'bg-rose-600 text-white border-rose-600',
-  leave: 'bg-sky-600 text-white border-sky-600',
+/** هوية الحالات — لون + أيقونة */
+const STATUS_META: Record<HrStatus, { hex: string; icon: React.ElementType }> = {
+  present: { hex: '#10b981', icon: Check },
+  late: { hex: '#f59e0b', icon: Clock3 },
+  absent: { hex: '#f43f5e', icon: UserX },
+  leave: { hex: '#0ea5e9', icon: Palmtree },
 }
 const STATUSES: HrStatus[] = ['present', 'late', 'absent', 'leave']
 
@@ -125,21 +132,6 @@ export function HrAttendanceView() {
     return c
   }, [emps, recMap, date])
 
-  const summary = React.useMemo(() => {
-    if (!data) return []
-    return data.employees.map((e) => {
-      const rs = data.records.filter((r) => r.employeeId === e.id)
-      const lateRs = rs.filter((r) => r.status === 'late')
-      return {
-        id: e.id, name: e.name,
-        absent: rs.filter((r) => r.status === 'absent').length,
-        leave: rs.filter((r) => r.status === 'leave').length,
-        lateDays: lateRs.length,
-        lateMin: lateRs.reduce((s, r) => s + r.lateMinutes, 0),
-      }
-    })
-  }, [data])
-
   const timeOf = (iso: string | null) =>
     iso && data
       ? new Date(iso).toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit', timeZone: data.tz })
@@ -147,131 +139,283 @@ export function HrAttendanceView() {
 
   return (
     <PageShell>
-      <PageHead
+      <ModuleDock exclude="attendance" />
+
+      <HrHero
+        theme="attendance"
+        icon={MonitorSmartphone}
+        kicker="الموارد البشرية"
         title="الحضور والانصراف"
-        subtitle="اضغط على حالة كل موظف. اللي ملوش حالة بيتحسب حاضر."
+        subtitle={date ? dayLabel(date) : 'سجل يومي بكل موظف — منه بيتحدد أيام الشغل في الرواتب.'}
         actions={
           <Button variant="outline" onClick={() => setKiosk(true)} className="gap-1.5">
             <MonitorSmartphone className="size-4" />كشك الحضور (PIN)
           </Button>
         }
-      />
+      >
+        {!loading && data && (
+          <GlassRail>
+            {(['present', 'late', 'absent', 'leave'] as HrStatus[]).map((st) => {
+              const meta = STATUS_META[st]
+              return (
+                <GlassStat
+                  key={st}
+                  label={
+                    <span className="flex items-center gap-1.5">
+                      <span className="size-2 rounded-full" style={{ background: meta.hex }} />
+                      {HR_STATUS_LABEL[st]}
+                    </span>
+                  }
+                  value={<span style={{ color: ink(meta.hex, 80) }}>{counts[st]}</span>}
+                />
+              )
+            })}
+          </GlassRail>
+        )}
+      </HrHero>
 
       <KioskQueueBanner />
 
       {loading || !data || !date ? (
         <ListSkeleton />
       ) : data.employees.length === 0 ? (
-        <EmptyState title="مفيش موظفين لسه" hint="ضيف الموظفين الأول من شاشة الموظفين." />
+        <EmptyState theme="attendance" icon={Users} title="مفيش موظفين لسه" hint="ضيف الموظفين الأول من شاشة الموظفين." />
       ) : (
         <>
-          {/* شريط اليوم */}
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border bg-card p-3">
-            <Button variant="outline" size="icon" aria-label="اليوم السابق" onClick={() => setDate(addDaysStr(date, -1))}>
-              <ChevronRight className="size-4" />
-            </Button>
-            <div className="min-w-0 flex-1 text-center">
-              <div className="truncate font-extrabold">{dayLabel(date)}</div>
-              {date === today && <div className="text-xs text-emerald-600">النهارده</div>}
-            </div>
-            <Button variant="outline" size="icon" aria-label="اليوم التالي" disabled={date >= today} onClick={() => setDate(addDaysStr(date, 1))}>
-              <ChevronLeft className="size-4" />
-            </Button>
-            <Input
-              type="date" value={date} max={today} dir="ltr" className="w-40"
-              onChange={(e) => e.target.value && setDate(e.target.value > today ? today : e.target.value)}
-            />
-            <Button onClick={presentAll} disabled={busy} className="gap-1.5">
-              <UserCheck className="size-4" />حاضر للكل
-            </Button>
-          </div>
+          {/* ════ شريط اليوم — تاكسي بين الأيام ════ */}
+          <Reveal>
+            <Panel className="mb-3.5">
+              <div className="flex flex-wrap items-center gap-2 p-3">
+                <Button variant="outline" size="icon" aria-label="اليوم السابق" onClick={() => setDate(addDaysStr(date, -1))}>
+                  <ChevronRight className="size-4" />
+                </Button>
+                <div className="min-w-0 flex-1 text-center">
+                  <div className="truncate font-extrabold">{dayLabel(date)}</div>
+                  {date === today && (
+                    <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600">
+                      <span className="relative flex size-1.5">
+                        <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+                        <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
+                      </span>
+                      النهارده
+                    </span>
+                  )}
+                </div>
+                <Button variant="outline" size="icon" aria-label="اليوم التالي" disabled={date >= today} onClick={() => setDate(addDaysStr(date, 1))}>
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <Input
+                  type="date" value={date} max={today} dir="ltr" className="w-40"
+                  onChange={(e) => e.target.value && setDate(e.target.value > today ? today : e.target.value)}
+                />
+                <Button onClick={presentAll} disabled={busy} className="gap-1.5">
+                  <UserCheck className="size-4" />حاضر للكل
+                </Button>
+              </div>
+            </Panel>
+          </Reveal>
 
-          <div className="mb-3 flex flex-wrap gap-2 text-xs">
-            <Pill tone="emerald">حاضر {counts.present}</Pill>
-            <Pill tone="amber">متأخر {counts.late}</Pill>
-            <Pill tone="rose">غائب {counts.absent}</Pill>
-            <Pill tone="sky">إجازة {counts.leave}</Pill>
-          </div>
-
-          <ul className="space-y-2">
-            {emps.map((e) => {
-              const r = recMap.get(`${e.id}|${date}`)
-              const isOff = weekdayOf(date) === e.weeklyOffDay
-              return (
-                <li key={e.id} className="rounded-2xl border bg-card p-3">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <div className="min-w-[140px] flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold">{e.name}</span>
-                        {isOff && !r && <Pill>إجازة أسبوعية ({DAY_NAMES[e.weeklyOffDay]})</Pill>}
-                      </div>
-                      {(r?.checkIn || r?.checkOut) && (
-                        <p className="mt-0.5 text-xs text-muted-foreground" dir="rtl">
-                          {r.checkIn && <>حضور {timeOf(r.checkIn)}</>}
-                          {r.checkOut && <> · انصراف {timeOf(r.checkOut)}</>}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {STATUSES.map((s) => (
-                        <button
-                          key={s} type="button" onClick={() => setStatus(e, s)}
-                          className={cn(
-                            'min-h-[38px] rounded-xl border px-3 text-sm font-bold transition-colors',
-                            r?.status === s ? STATUS_STYLE[s] : 'bg-background text-foreground/70 hover:bg-muted',
+          {/* ════ لوحة الفريق ════ */}
+          <Reveal delay={60}>
+            <Panel className="mb-3.5">
+              <ul className="divide-y divide-border">
+                {emps.map((e) => {
+                  const r = recMap.get(`${e.id}|${date}`)
+                  const isOff = weekdayOf(date) === e.weeklyOffDay
+                  return (
+                    <li key={e.id} className="px-3.5 py-3 transition-colors hover:bg-muted/25 sm:px-4">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        {/* الاسم والتوقيتات */}
+                        <div className="min-w-[150px] flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className="grid size-8 shrink-0 place-items-center rounded-xl text-sm font-black"
+                              style={r ? { background: tint(STATUS_META[r.status].hex, 14), color: ink(STATUS_META[r.status].hex, 82) } : { background: 'var(--muted)', color: 'var(--muted-foreground)' }}
+                            >
+                              {e.name.trim().charAt(0)}
+                            </span>
+                            <span className="truncate font-bold">{e.name}</span>
+                            {isOff && !r && (
+                              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10.5px] font-bold text-muted-foreground">
+                                راحة أسبوعية ({DAY_NAMES[e.weeklyOffDay]})
+                              </span>
+                            )}
+                          </div>
+                          {(r?.checkIn || r?.checkOut) && (
+                            <p className="mt-1 ps-10 text-xs text-muted-foreground" dir="rtl">
+                              {r.checkIn && <>حضور <b className="tabular-nums text-foreground/80">{timeOf(r.checkIn)}</b></>}
+                              {r.checkOut && <> · انصراف <b className="tabular-nums text-foreground/80">{timeOf(r.checkOut)}</b></>}
+                            </p>
                           )}
-                        >
-                          {HR_STATUS_LABEL[s]}
-                        </button>
-                      ))}
-                    </div>
-                    {r?.status === 'late' && (
-                      <LateMinutes
-                        value={r.lateMinutes}
-                        onCommit={(v) => send([{ employeeId: e.id, date, status: 'late', lateMinutes: v }])}
-                      />
-                    )}
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+                        </div>
 
-          {/* ملخص الشهر */}
-          <div className="mt-8">
-            <h2 className="mb-2 flex items-center gap-2 text-base font-extrabold">
-              <CalendarDays className="size-4" />ملخص شهر {data.month}
-            </h2>
-            <div className="overflow-x-auto rounded-2xl border bg-card">
-              <table className="w-full min-w-[460px] text-sm">
-                <thead className="bg-muted/50 text-xs text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2 text-start font-bold">الموظف</th>
-                    <th className="px-3 py-2 text-center font-bold">غياب</th>
-                    <th className="px-3 py-2 text-center font-bold">إجازات</th>
-                    <th className="px-3 py-2 text-center font-bold">أيام تأخير</th>
-                    <th className="px-3 py-2 text-center font-bold">دقائق تأخير</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {summary.map((s) => (
-                    <tr key={s.id} className="border-t">
-                      <td className="px-3 py-2 font-semibold">{s.name}</td>
-                      <td className={cn('px-3 py-2 text-center tabular-nums', s.absent > 0 && 'font-bold text-rose-600')}>{s.absent}</td>
-                      <td className="px-3 py-2 text-center tabular-nums">{s.leave}</td>
-                      <td className={cn('px-3 py-2 text-center tabular-nums', s.lateDays > 0 && 'font-bold text-amber-600')}>{s.lateDays}</td>
-                      <td className="px-3 py-2 text-center tabular-nums">{s.lateMin}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                        {/* أزرار الحالة */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {STATUSES.map((s) => {
+                            const active = r?.status === s
+                            const meta = STATUS_META[s]
+                            const Icon = meta.icon
+                            return (
+                              <button
+                                key={s} type="button" onClick={() => setStatus(e, s)}
+                                className={cn(
+                                  'flex min-h-[38px] items-center gap-1.5 rounded-xl border px-3 text-[13px] font-bold transition-all active:scale-95',
+                                  active ? 'border-transparent text-white shadow-md' : 'bg-background text-foreground/65 hover:bg-muted',
+                                )}
+                                style={active ? { background: meta.hex, boxShadow: `0 6px 16px -6px ${meta.hex}88` } : undefined}
+                              >
+                                <Icon className="size-3.5" strokeWidth={2.6} />
+                                {HR_STATUS_LABEL[s]}
+                              </button>
+                            )
+                          })}
+                        </div>
+
+                        {r?.status === 'late' && (
+                          <LateMinutes
+                            value={r.lateMinutes}
+                            onCommit={(v) => send([{ employeeId: e.id, date, status: 'late', lateMinutes: v }])}
+                          />
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </Panel>
+          </Reveal>
+
+          {/* ════ خريطة الشهر ════ */}
+          <Reveal delay={100}>
+            <section>
+              <PanelTitle
+                icon={CalendarDays}
+                hex="#f59e0b"
+                title={`خريطة شهر ${data.month}`}
+                action={<MonthLegend />}
+              />
+              <Panel>
+                <div className="overflow-x-auto p-3.5 sm:p-4">
+                  <div className="min-w-[600px] space-y-2.5">
+                    {/* صف أرقام الأيام */}
+                    <div className="flex items-end gap-2.5">
+                      <div className="w-[104px] shrink-0 text-[10px] font-bold text-muted-foreground">اليوم</div>
+                      <div className="flex flex-1 gap-[3px]">
+                        {Array.from({ length: data.daysInMonth }).map((_, i) => {
+                          const d = i + 1
+                          const isToday = `${data.month}-${String(d).padStart(2, '0')}` === data.today
+                          return (
+                            <div key={i} className="flex-1 text-center text-[8.5px] font-bold tabular-nums" style={{ color: isToday ? ink('#10b981', 85) : 'var(--muted-foreground)' }}>
+                              {d}
+                            </div>
+                          )
+                        })}
+                        <div className="w-[86px] shrink-0" />
+                      </div>
+                    </div>
+
+                    {emps.map((e) => (
+                      <HeatRow
+                        key={e.id}
+                        emp={e}
+                        data={data}
+                        recMap={recMap}
+                        selected={date}
+                        onPick={(d) => setDate(d)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </Panel>
+            </section>
+          </Reveal>
         </>
       )}
 
       {kiosk && <KioskDialog onClose={() => { setKiosk(false); load(date ? date.slice(0, 7) : undefined) }} />}
     </PageShell>
+  )
+}
+
+/** صف موظف في خريطة الشهر */
+function HeatRow({
+  emp, data, recMap, selected, onPick,
+}: {
+  emp: Emp
+  data: MonthData
+  recMap: Map<string, Rec>
+  selected: string
+  onPick: (date: string) => void
+}) {
+  // ملخص الشهر
+  const rs = data.records.filter((r) => r.employeeId === emp.id)
+  const absent = rs.filter((r) => r.status === 'absent').length
+  const leave = rs.filter((r) => r.status === 'leave').length
+  const lateRs = rs.filter((r) => r.status === 'late')
+  const lateMin = lateRs.reduce((s, r) => s + r.lateMinutes, 0)
+  const clean = rs.length > 0 && absent === 0 && lateRs.length === 0
+
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="w-[104px] shrink-0">
+        <div className="truncate text-[13px] font-bold" title={emp.name}>{emp.name}</div>
+        <div className="mt-0.5 flex flex-wrap gap-1">
+          {clean && <span className="text-[9.5px] font-bold text-emerald-600">سجل نضيف ✓</span>}
+          {absent > 0 && <span className="text-[9.5px] font-bold text-rose-600">غياب {absent}</span>}
+          {lateRs.length > 0 && <span className="text-[9.5px] font-bold text-amber-600">تأخير {lateRs.length} مرة / {lateMin} د</span>}
+          {leave > 0 && <span className="text-[9.5px] font-bold text-sky-600">إجازة {leave}</span>}
+        </div>
+      </div>
+
+      <div className="flex flex-1 gap-[3px]">
+        {Array.from({ length: data.daysInMonth }).map((_, i) => {
+          const d = String(i + 1).padStart(2, '0')
+          const dateStr = `${data.month}-${d}`
+          const rec = recMap.get(`${emp.id}|${dateStr}`)
+          const isToday = dateStr === data.today
+          const isSel = dateStr === selected
+          const isFuture = dateStr > data.today
+          const meta = rec ? STATUS_META[rec.status] : null
+          return (
+            <button
+              key={i}
+              type="button"
+              title={`${d} ${emp.name}${rec ? ` — ${HR_STATUS_LABEL[rec.status]}${rec.status === 'late' ? ` (${rec.lateMinutes} د)` : ''}` : ''}`}
+              onClick={() => !isFuture && onPick(dateStr)}
+              disabled={isFuture}
+              className={cn(
+                'h-6 flex-1 rounded-[5px] transition-all',
+                !meta && (isFuture ? 'bg-muted/40' : 'bg-muted hover:bg-muted/70'),
+                isFuture && 'cursor-default',
+                isSel && 'ring-2 ring-foreground/70 ring-offset-1 ring-offset-card',
+                !isSel && isToday && 'ring-1 ring-emerald-500/70',
+                !isFuture && 'hover:scale-125 hover:z-10',
+              )}
+              style={meta ? { background: meta.hex } : undefined}
+            />
+          )
+        })}
+      </div>
+
+      {/* عمود ثابت يمين لموازنة صف الأرقام */}
+      <div className="w-[86px] shrink-0" />
+    </div>
+  )
+}
+
+function MonthLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-2.5 text-[11px] font-semibold text-muted-foreground">
+      {(['present', 'late', 'absent', 'leave'] as HrStatus[]).map((s) => (
+        <span key={s} className="flex items-center gap-1.5">
+          <span className="size-2.5 rounded-[3px]" style={{ background: STATUS_META[s].hex }} />
+          {HR_STATUS_LABEL[s]}
+        </span>
+      ))}
+      <span className="flex items-center gap-1.5">
+        <span className="size-2.5 rounded-[3px] bg-muted" />بدون سجل
+      </span>
+    </div>
   )
 }
 
@@ -283,13 +427,15 @@ function LateMinutes({ value, onCommit }: { value: number; onCommit: (v: number)
     if (n !== value) onCommit(n)
   }
   return (
-    <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      دقيقة
+    <label className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs font-bold text-amber-700 dark:text-amber-400">
+      <Clock3 className="size-3.5" />
       <Input
-        type="number" inputMode="numeric" min={0} max={600} value={v} dir="ltr" className="h-9 w-20"
+        type="number" inputMode="numeric" min={0} max={600} value={v} dir="ltr"
+        className="h-7 w-16 border-0 bg-transparent px-1 text-center text-xs font-bold tabular-nums focus-visible:ring-1"
         onChange={(e) => setV(e.target.value)} onBlur={commit}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       />
+      دقيقة
     </label>
   )
 }
@@ -390,7 +536,12 @@ function KioskDialog({ onClose }: { onClose: () => void }) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
         <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
-          <DialogTitle>كشك الحضور</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="grid size-8 place-items-center rounded-xl bg-warning text-warning-foreground">
+              <MonitorSmartphone className="size-4" />
+            </span>
+            كشك الحضور
+          </DialogTitle>
           <DialogDescription>اختار اسمك واكتب الـ PIN. أول مرة النهارده = حضور، وبعدها = انصراف.</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
@@ -411,15 +562,20 @@ function KioskDialog({ onClose }: { onClose: () => void }) {
               <EmptyState title="مفيش موظفين" />
             ) : (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {items.map((raw) => { const e = effective(raw); return (
+                {items.map((raw) => { const e = effective(raw); const inProgress = !!e.checkIn && !e.checkOut
+                  return (
                   <button
                     key={e.id} type="button" disabled={!e.hasPin}
                     onClick={() => { setPicked(raw); setPin('') }}
-                    className="rounded-2xl border bg-card p-3 text-start transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                    className={cn(
+                      'rounded-2xl border bg-card p-3 text-start transition-all hover:-translate-y-0.5 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0',
+                      inProgress && 'border-emerald-500/50 bg-emerald-500/[0.06]',
+                    )}
                   >
                     <div className="truncate font-bold">{e.name}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {!e.hasPin ? 'بدون PIN' : e.checkOut ? 'انصرف' : e.checkIn ? 'حاضر — سجّل انصراف' : 'اضغط لتسجيل الحضور'}
+                    <div className={cn('mt-1 flex items-center gap-1.5 text-xs', inProgress ? 'font-bold text-emerald-600' : 'text-muted-foreground')}>
+                      {inProgress && <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />}
+                      {!e.hasPin ? 'بدون PIN' : e.checkOut ? 'انصرف ✓' : e.checkIn ? 'حاضر — سجّل انصراف' : 'اضغط لتسجيل الحضور'}
                     </div>
                   </button>
                 ) })}
@@ -430,7 +586,7 @@ function KioskDialog({ onClose }: { onClose: () => void }) {
               <div className="mb-1 text-lg font-extrabold">{picked.name}</div>
               <div className="mb-4 flex justify-center gap-2" dir="ltr" aria-label="PIN">
                 {Array.from({ length: Math.max(4, pin.length) }).map((_, i) => (
-                  <span key={i} className={cn('size-3.5 rounded-full border', i < pin.length ? 'bg-primary border-primary' : 'bg-muted')} />
+                  <span key={i} className={cn('size-3.5 rounded-full border transition-all', i < pin.length ? 'scale-110 border-warning bg-warning' : 'bg-muted')} />
                 ))}
               </div>
               <div className="grid grid-cols-3 gap-2" dir="ltr">

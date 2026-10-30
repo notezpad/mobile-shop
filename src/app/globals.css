@@ -8163,3 +8163,18 @@ html[data-hg-boot] body::after {
 @media (prefers-reduced-motion: reduce) {
   .nz-demo-play::after { animation: none; display: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   الموارد البشرية — Reveal (ظهور متدرّج CSS خالص)
+   بتشتغل حتى لو الجافاسكريبت اتأخر — وبتحترم reduced-motion.
+   ═══════════════════════════════════════════════════════════════ */
+@keyframes hr-reveal-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.hr-reveal {
+  animation: hr-reveal-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hr-reveal { animation: none; }
+}

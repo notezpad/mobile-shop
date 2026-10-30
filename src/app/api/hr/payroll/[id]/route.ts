@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { hrGuard, bad, hrSafe } from '@/lib/hr-route'
-import { countUnrecordedDays, monthBounds, round2 } from '@/lib/hr'
+import { countPaidDays, monthBounds, round2, type DayRecordStatus } from '@/lib/hr'
 import { getTenantTimezone, dateStrInTz } from '@/lib/tenantTime'
 import { logAudit } from '@/lib/audit'
 
@@ -21,32 +21,43 @@ async function __GET(_req: NextRequest, { params }: Ctx) {
   const run = Number.isFinite(id) ? await loadRun(id, session.tenantId) : null
   if (!run) return bad('الدورة غير موجودة', 404)
 
-  // تحذير: أيام عمل غير مسجّلة لكل موظف (بتتحسب حاضر ضمنيًا)
+  // تفاصيل الأيام الفعلية لكل موظف (للمسودة): أيام شغل / بدون تسجيل / لسه جاية
   const tz = await getTenantTimezone(session.tenantId)
   const today = dateStrInTz(new Date(), tz)
   const { first, last } = monthBounds(run.month)
-  const unrecorded = new Map<number, number>()
+  const breakdown = new Map<number, ReturnType<typeof countPaidDays> | null>()
   if (run.status === 'draft') {
-    const [emps, recs] = await Promise.all([
+    const [emps, recs, perms] = await Promise.all([
       db.employee.findMany({
         where: { id: { in: run.payslips.map((p) => p.employeeId) } },
         select: { id: true, hireDate: true, weeklyOffDay: true },
       }),
       db.attendanceRecord.findMany({
         where: { tenantId: session.tenantId, date: { gte: first, lte: last } },
-        select: { employeeId: true, date: true },
+        select: { employeeId: true, date: true, status: true },
+      }),
+      db.leaveRequest.findMany({
+        where: { tenantId: session.tenantId, type: 'permission', startDate: { gte: first, lte: last } },
+        select: { employeeId: true, startDate: true },
       }),
     ])
-    const dates = new Map<number, Set<string>>()
+    const recsByEmp = new Map<number, Map<string, DayRecordStatus>>()
     for (const r of recs) {
-      const s = dates.get(r.employeeId) ?? new Set<string>()
-      s.add(r.date)
-      dates.set(r.employeeId, s)
+      const m = recsByEmp.get(r.employeeId) ?? new Map<string, DayRecordStatus>()
+      m.set(r.date, r.status as DayRecordStatus)
+      recsByEmp.set(r.employeeId, m)
+    }
+    const permsByEmp = new Map<number, Set<string>>()
+    for (const p of perms) {
+      const s = permsByEmp.get(p.employeeId) ?? new Set<string>()
+      s.add(p.startDate)
+      permsByEmp.set(p.employeeId, s)
     }
     for (const e of emps) {
-      unrecorded.set(e.id, countUnrecordedDays({
+      breakdown.set(e.id, countPaidDays({
         month: run.month, today, hireDate: dateStrInTz(e.hireDate, tz),
-        weeklyOffDay: e.weeklyOffDay, recordedDates: dates.get(e.id) ?? new Set(),
+        weeklyOffDay: e.weeklyOffDay, records: recsByEmp.get(e.id) ?? new Map(),
+        permissionDates: permsByEmp.get(e.id),
       }))
     }
   }
@@ -56,7 +67,16 @@ async function __GET(_req: NextRequest, { params }: Ctx) {
   )
   return NextResponse.json({
     id: run.id, month: run.month, status: run.status, totalNet: run.totalNet, method: run.method, paidAt: run.paidAt,
-    payslips: run.payslips.map((p) => ({ ...p, phone: phones.get(p.employeeId) ?? null, unrecordedDays: unrecorded.get(p.employeeId) ?? 0 })),
+    payslips: run.payslips.map((p) => {
+      const b = breakdown.get(p.employeeId)
+      return {
+        ...p, phone: phones.get(p.employeeId) ?? null,
+        unrecordedDays: b?.unrecordedDays ?? 0,
+        pendingDays: b?.pendingDays ?? 0,
+        workedDays: b?.workedDays ?? null,
+        expectedWorkDays: b?.expectedWorkDays ?? null,
+      }
+    }),
   })
 }
 
