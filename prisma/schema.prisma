@@ -441,6 +441,8 @@ model PurchaseOrder {
   id         Int      @id @default(autoincrement())
   tenantId   String
   branchId   Int?
+  // 🏬 أوامر الشراء المتقسمة من فاتورة واحدة بتشترك في نفس المعرّف (NULL = أمر عادي)
+  splitGroupId String?
   orderNo    String?
   supplierId Int?
   userId     String?
@@ -465,6 +467,7 @@ model PurchaseOrder {
 
   @@index([tenantId])
   @@index([tenantId, createdAt])
+  @@index([splitGroupId])
   @@index([branchId])
   // 🛡️ 2026-09-30: رقم أمر الشراء فريد داخل المحل — نفس ضمانة الفواتير
   // (كان count+1 بيتكرر مع الحذف ومع الطلبات المتزامنة).

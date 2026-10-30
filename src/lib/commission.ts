@@ -195,6 +195,8 @@ export async function createPrincipalCashEntry(
     refId?: number | null
     amount: number
     note?: string | null
+    /** 🏬 فرع القيد صراحةً (اختياري). لو مفيش، الـ trigger بيحدده من المصدر أو من فرع المستخدم. */
+    branchId?: number | null
   },
 ): Promise<{ id: number }> {
   const entry = await tx.cashEntry.create({
@@ -206,6 +208,7 @@ export async function createPrincipalCashEntry(
       method: input.method ?? null,
       note: input.note ?? null,
       userId: input.userId ?? null,
+      ...(input.branchId ? { branchId: input.branchId } : {}),
     },
     select: { id: true },
   })

@@ -105,6 +105,22 @@ async function __POST(req: NextRequest) {
   const methodName = METHOD_LABELS[method] || method
   const supplierName = supplier.name
 
+  // 🏬 الدفع للمورد بيتخصم من خزنة فرع: المدير بيختار (body.branchId)، والافتراضي الرئيسي.
+  // موظف الفرع بيتخصم من خزنة فرعه (الـ trigger بيحدده من المستخدم).
+  let cashBranchId: number | null = null
+  if (!session.branchId) {
+    if (body.branchId) {
+      const bid = parseInt(String(body.branchId), 10)
+      const ok = Number.isFinite(bid)
+        ? await db.branch.findFirst({ where: { id: bid, tenantId: session.tenantId }, select: { id: true } })
+        : null
+      if (!ok) return NextResponse.json({ error: 'الفرع غير صالح' }, { status: 400 })
+      cashBranchId = bid
+    } else {
+      cashBranchId = (await db.branch.findFirst({ where: { tenantId: session.tenantId, isMain: true }, select: { id: true } }))?.id ?? null
+    }
+  }
+
   const created = await db.$transaction(async (tx) => {
     // 1. create the SupplierPayment record (we pay the supplier)
     const payment = await tx.supplierPayment.create({
@@ -133,6 +149,7 @@ async function __POST(req: NextRequest) {
       source: 'supplier_payment',
       refId: payment.id,
       amount: -amount,
+      branchId: cashBranchId,
       note: `دفعة لمورد ${supplierName} - ${methodName}`,
     })
 

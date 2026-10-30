@@ -44,6 +44,21 @@ export function SupplierPaymentDialog({
   const [method, setMethod] = React.useState('cash')
   const [note, setNote] = React.useState('')
   const [saving, setSaving] = React.useState(false)
+  // 🏬 الدفعة بتتخصم من خزنة فرع — الافتراضي الرئيسي، والمدير يقدر يختار فرع تاني
+  const [branches, setBranches] = React.useState<{ id: number; name: string; isMain?: boolean }[]>([])
+  const [branchId, setBranchId] = React.useState('')
+
+  React.useEffect(() => {
+    if (!open) return
+    fetch('/api/branches')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: { id: number; name: string; isMain?: boolean }[]) => {
+        setBranches(Array.isArray(list) ? list : [])
+        const main = list.find((b) => b.isMain) ?? list[0]
+        if (main) setBranchId((prev) => prev || String(main.id))
+      })
+      .catch(() => setBranches([]))
+  }, [open])
 
   React.useEffect(() => {
     if (open) {
@@ -77,6 +92,7 @@ export function SupplierPaymentDialog({
             amount,
             method,
             note: note.trim() || null,
+            ...(branches.length > 1 && branchId ? { branchId: Number(branchId) } : {}),
           },
         }
       )
@@ -184,7 +200,21 @@ export function SupplierPaymentDialog({
 
           {/* الطريقة + ملاحظة */}
           <section>
-            <SectionTitle n={3}>دفعت إزاي؟</SectionTitle>
+            {branches.length > 1 && (
+              <div className="mb-4 space-y-2">
+                <SectionTitle n={3}>من خزنة أنهي فرع؟</SectionTitle>
+                <select
+                  value={branchId}
+                  onChange={(e) => setBranchId(e.target.value)}
+                  className="h-11 w-full rounded-xl border bg-background px-3 text-sm"
+                >
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <SectionTitle n={branches.length > 1 ? 4 : 3}>دفعت إزاي؟</SectionTitle>
             <MethodPills value={method} onChange={setMethod} label="طريقة الدفع" methods={PAYMENT_METHODS} />
             <input
               id="sp-note"
