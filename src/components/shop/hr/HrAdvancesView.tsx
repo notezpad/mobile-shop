@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { HandCoins, Loader2, Plus, Undo2, Wallet } from 'lucide-react'
+import { Loader2, Plus, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDataRefresh } from '@/lib/offline/data-events'
-import { EmptyState, HrHero, ListSkeleton, PAY_METHODS, PageShell, Panel, PanelTitle, Pill, StatCell, StatStrip, hrGet, hrSend, money } from './hr-ui'
+import { EmptyState, ListSkeleton, PAY_METHODS, PageHead, PageShell, Pill, Stat, hrGet, hrSend, money } from './hr-ui'
 
 interface Advance {
   id: number
@@ -64,82 +64,61 @@ export function HrAdvancesView() {
     }
   }
 
-  const openItems = items.filter((a) => a.status === 'open')
-  const monthlyInstallments = openItems.reduce((s, a) => s + Math.min(a.installment, a.remaining), 0)
-
   return (
     <PageShell>
-      <HrHero
-        theme="advances"
-        icon={HandCoins}
-        kicker="الموارد البشرية"
+      <PageHead
         title="السلف"
-        subtitle="سلف بتيخرج من الخزنة وتتخصم من الراتب بالقسط تلقائيًا."
+        subtitle="السلفة بتخرج من الخزنة وبتتخصم تلقائي من الراتب بالقسط اللي تحدده."
         actions={<Button onClick={() => setAdding(true)} className="gap-1.5"><Plus className="size-4" />سلفة جديدة</Button>}
       />
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:max-w-md">
+        <Stat label="متبقي على الموظفين" value={money(total)} tone="violet" />
+        <Stat label="سلف جارية" value={items.filter((a) => a.status === 'open').length} tone="amber" />
+      </div>
 
       {loading ? (
         <ListSkeleton />
       ) : items.length === 0 ? (
-        <EmptyState
-          theme="advances"
-          icon={HandCoins}
-          title="مفيش سلف"
-          hint="سجّل أي سلفة عشان تتخصم من راتب الموظف بالقسط تلقائي."
-          action={<Button onClick={() => setAdding(true)} className="gap-1.5"><Plus className="size-4" />سلفة جديدة</Button>}
-        />
+        <EmptyState title="مفيش سلف" hint="لما تدّي موظف سلفة سجّلها هنا عشان تتخصم من راتبه تلقائي." />
       ) : (
-        <>
-          <StatStrip className="mb-4">
-            <StatCell label="متبقي على الموظفين" dot="bg-danger" value={money(total)} foot={`${openItems.length} سلفة جارية`} />
-            <StatCell label="أقساط هتتخصم الشهر ده" dot="bg-violet-500" value={money(monthlyInstallments)} foot="تلقائي في مسودة الرواتب" />
-          </StatStrip>
-
-          <PanelTitle icon={Wallet} title="السجل" />
-          <Panel>
-            <ul className="divide-y divide-border">
-              {items.map((a) => {
-                const paid = a.amount - a.remaining
-                const pct = a.amount > 0 ? Math.min(100, (paid / a.amount) * 100) : 0
-                const cancellable = a.status === 'open' && Math.abs(a.remaining - a.amount) < 0.005
-                return (
-                  <li key={a.id} className="px-3.5 py-3.5 transition-colors hover:bg-muted/30 sm:px-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className={`grid size-10 shrink-0 place-items-center rounded-2xl ${a.status === 'open' ? 'bg-danger-subtle text-danger-subtle-foreground' : 'bg-muted text-muted-foreground'}`}>
-                        <HandCoins className="size-5" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-bold">{a.employeeName}</span>
-                          <Pill tone={STATUS[a.status].tone}>{STATUS[a.status].label}</Pill>
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {new Date(a.createdAt).toLocaleDateString('ar-EG-u-nu-latn')} · قسط {money(a.installment)}
-                          {a.note ? ` · ${a.note}` : ''}
-                        </p>
-                      </div>
-                      <div className="text-end">
-                        <div className="font-extrabold tabular-nums">{money(a.amount)}</div>
-                        {a.status === 'open' && <div className="text-xs font-semibold text-violet-600">متبقي {money(a.remaining)}</div>}
-                      </div>
-                      {cancellable && (
-                        <Button variant="ghost" size="sm" disabled={cancelId === a.id} onClick={() => cancel(a.id)} className="gap-1 text-rose-600">
-                          {cancelId === a.id ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}
-                          إلغاء
-                        </Button>
-                      )}
+        <ul className="space-y-2">
+          {items.map((a) => {
+            const paid = a.amount - a.remaining
+            const pct = a.amount > 0 ? Math.min(100, (paid / a.amount) * 100) : 0
+            const cancellable = a.status === 'open' && Math.abs(a.remaining - a.amount) < 0.005
+            return (
+              <li key={a.id} className="rounded-2xl border bg-card p-3 sm:p-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-bold">{a.employeeName}</span>
+                      <Pill tone={STATUS[a.status].tone}>{STATUS[a.status].label}</Pill>
                     </div>
-                    {a.status === 'open' && (
-                      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div className="h-full rounded-full bg-danger" style={{ width: `${pct}%` }} />
-                      </div>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          </Panel>
-        </>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {new Date(a.createdAt).toLocaleDateString('ar-EG-u-nu-latn')} · قسط {money(a.installment)}
+                      {a.note ? ` · ${a.note}` : ''}
+                    </p>
+                  </div>
+                  <div className="text-end">
+                    <div className="font-extrabold tabular-nums">{money(a.amount)}</div>
+                    {a.status === 'open' && <div className="text-xs text-violet-600">متبقي {money(a.remaining)}</div>}
+                  </div>
+                  {cancellable && (
+                    <Button variant="ghost" size="sm" disabled={cancelId === a.id} onClick={() => cancel(a.id)} className="gap-1 text-rose-600">
+                      {cancelId === a.id ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}
+                      إلغاء
+                    </Button>
+                  )}
+                </div>
+                {a.status === 'open' && (
+                  <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-violet-500" style={{ width: `${pct}%` }} />
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
       )}
 
       {adding && <AdvanceDialog onClose={() => setAdding(false)} onSaved={() => { setAdding(false); load() }} />}
@@ -185,12 +164,7 @@ function AdvanceDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
         <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
-          <DialogTitle className="flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-xl bg-danger text-danger-foreground">
-              <HandCoins className="size-4" />
-            </span>
-            سلفة جديدة
-          </DialogTitle>
+          <DialogTitle>سلفة جديدة</DialogTitle>
           <DialogDescription>المبلغ هيخرج من الخزنة فورًا.</DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-3.5 py-4">

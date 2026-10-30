@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Award, CalendarRange, Loader2, MessageCircleQuestion, Star, Trophy, Users, Wallet } from 'lucide-react'
+import { Award, ChevronLeft, ChevronRight, Loader2, Star, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { EVAL_CRITERIA, overallScore, scoreGrade, type EvalCriterionKey } from '@/lib/hr'
-import { EmptyState, HrHero, ListSkeleton, PageShell, Panel, PanelTitle, Pill, StatCell, StatStrip, hrGet, hrSend, money, monthLabel, shiftMonth } from './hr-ui'
+import { EmptyState, ListSkeleton, PageHead, PageShell, Pill, hrGet, hrSend, money, monthLabel, shiftMonth } from './hr-ui'
 
 interface Saved {
   perfScore: number; customerScore: number; teamScore: number
@@ -19,10 +19,6 @@ interface Item {
   employeeId: number; name: string; jobTitle: string | null; baseSalary: number
   workDays: number; absentDays: number; lateDays: number; lateMinutes: number; leaveDays: number
   attendanceScore: number; evaluation: Saved | null
-}
-
-const GRADE_BAR: Record<string, string> = {
-  emerald: 'bg-emerald-500', sky: 'bg-sky-500', amber: 'bg-amber-500', rose: 'bg-rose-500',
 }
 
 export function HrEvaluationsView() {
@@ -69,115 +65,72 @@ export function HrEvaluationsView() {
     } as Record<string, string[]>
   }, [items])
 
-  const evaluated = items.filter((i) => i.evaluation).length
-  const avgOverall = evaluated > 0 ? Math.round(items.filter((i) => i.evaluation).reduce((s, i) => s + i.evaluation!.overall, 0) / evaluated) : null
-
   return (
     <PageShell>
-      <HrHero
-        theme="evaluations"
-        icon={Award}
-        kicker="الموارد البشرية"
+      <PageHead
         title="تقييمات الموظفين"
-        subtitle="حضور تلقائي 40% + تقييمك 60% — والحافز بينزل في مسودة الرواتب."
+        subtitle="درجة الحضور بتتحسب لوحدها (40%) وانت تقيّم 3 حاجات من 5 (60%)، وتقدر تربط حافز بالتقييم."
       />
 
-      {/* اختيار الشهر */}
-      <Panel className="mb-4">
-        <div className="flex items-center gap-2 p-3">
-          <Button variant="outline" size="icon" aria-label="الشهر السابق" disabled={!month} onClick={() => setMonth(shiftMonth(month, -1))}><CalendarRange className="size-4 rotate-180" /></Button>
-          <div className="flex-1 text-center text-lg font-extrabold">{month ? monthLabel(month) : '...'}</div>
-          <Button variant="outline" size="icon" aria-label="الشهر التالي" disabled={!month || month >= currentMonth} onClick={() => setMonth(shiftMonth(month, 1))}><CalendarRange className="size-4" /></Button>
-        </div>
-      </Panel>
+      <div className="mb-4 flex items-center gap-2 rounded-2xl border bg-card p-3">
+        <Button variant="outline" size="icon" aria-label="الشهر السابق" disabled={!month} onClick={() => setMonth(shiftMonth(month, -1))}><ChevronRight className="size-4" /></Button>
+        <div className="flex-1 text-center text-lg font-extrabold">{month ? monthLabel(month) : '...'}</div>
+        <Button variant="outline" size="icon" aria-label="الشهر التالي" disabled={!month || month >= currentMonth} onClick={() => setMonth(shiftMonth(month, 1))}><ChevronLeft className="size-4" /></Button>
+      </div>
 
       {loading ? (
         <ListSkeleton />
       ) : items.length === 0 ? (
-        <EmptyState theme="evaluations" icon={Users} title="مفيش موظفين نشطين" hint="ضيف موظفين الأول من صفحة الموظفين." />
+        <EmptyState title="مفيش موظفين نشطين" hint="ضيف موظفين الأول من صفحة الموظفين." />
       ) : (
         <>
-          <StatStrip className="mb-4">
-            <StatCell label="تم تقييمهم" dot="bg-chart-4" value={`${evaluated} / ${items.length}`} foot={month ? monthLabel(month) : undefined} />
-            <StatCell label="متوسط الدرجة النهائية" dot={avgOverall !== null && avgOverall >= 75 ? 'bg-emerald-500' : 'bg-amber-500'} value={avgOverall !== null ? `${avgOverall}%` : '—'} foot="حضور 40% + تقييم المدير 60%" />
-            <StatCell label="حوافز مستنية الإضافة" dot="bg-violet-500" value={money(pending.reduce((s, i) => s + (i.evaluation?.bonus ?? 0), 0))} foot={`${pending.length} حافز`} />
-          </StatStrip>
-
           {pending.length > 0 && (
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-warning-subtle p-3.5">
-              <p className="text-sm font-bold text-warning-subtle-foreground">
-                {pending.length} حافز من التقييمات لسه ماتضافش للمرتبات (إجمالي {money(pending.reduce((s, i) => s + i.evaluation!.bonus, 0))})
-              </p>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3">
+              <p className="text-sm font-bold">{pending.length} حافز من التقييمات لسه ماتضافش للمرتبات (إجمالي {money(pending.reduce((s, i) => s + i.evaluation!.bonus, 0))})</p>
               <Button size="sm" onClick={applyBonuses} disabled={applying} className="gap-1.5">
                 {applying ? <Loader2 className="size-4 animate-spin" /> : <Wallet className="size-4" />}أضفهم لمسودة المرتبات
               </Button>
             </div>
           )}
 
-          <section className="mb-5">
-            <PanelTitle icon={MessageCircleQuestion} title="اسأل عن الشهر ده" />
-            <Panel className="p-3.5">
-              <div className="flex flex-wrap gap-2">
-                {Object.keys(answers).map((k) => (
-                  <Button key={k} size="sm" variant={q === k ? 'default' : 'outline'} onClick={() => setQ(q === k ? null : k)}>{k}</Button>
-                ))}
-              </div>
-              {q && (
-                <ul className="mt-3 space-y-1.5 text-sm">
-                  {answers[q].length ? answers[q].map((a, i) => (
-                    <li key={i} className="flex items-center gap-2">
-                      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-muted text-[11px] font-bold text-muted-foreground">{i + 1}</span>
-                      {a}
-                    </li>
-                  )) : <li className="text-muted-foreground">مفيش بيانات كفاية للإجابة.</li>}
-                </ul>
-              )}
-            </Panel>
+          <section className="mb-5 rounded-2xl border bg-card p-3">
+            <p className="mb-2 text-sm font-extrabold">اسأل عن الشهر ده</p>
+            <div className="flex flex-wrap gap-2">
+              {Object.keys(answers).map((k) => (
+                <Button key={k} size="sm" variant={q === k ? 'default' : 'outline'} onClick={() => setQ(q === k ? null : k)}>{k}</Button>
+              ))}
+            </div>
+            {q && (
+              <ul className="mt-3 space-y-1 text-sm">
+                {answers[q].length ? answers[q].map((a, i) => <li key={i}>{i + 1}. {a}</li>) : <li className="text-muted-foreground">مفيش بيانات كفاية للإجابة.</li>}
+              </ul>
+            )}
           </section>
 
-          <PanelTitle icon={Trophy} title="تقييم الشهر" />
-          <Panel>
-            <ul className="divide-y divide-border">
-              {items.map((i) => {
-                const ev = i.evaluation
-                const grade = ev ? scoreGrade(ev.overall) : null
-                return (
-                  <li key={i.employeeId} className="px-3.5 py-3.5 transition-colors hover:bg-muted/30 sm:px-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="truncate font-bold">{i.name}</span>
-                          {i.jobTitle && <span className="text-xs text-muted-foreground">{i.jobTitle}</span>}
-                          {grade && (
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/10 px-2 py-0.5 text-[11px] font-bold text-violet-700 dark:text-violet-300">
-                              <Trophy className="size-3" />{grade.label} · {ev!.overall}%
-                            </span>
-                          )}
-                          {ev && ev.bonus > 0 && <Pill tone={ev.bonusApplied ? 'emerald' : 'amber'}>حافز {money(ev.bonus)}{ev.bonusApplied ? ' ✓' : ''}</Pill>}
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          حضور {i.attendanceScore}% · غياب {i.absentDays} · تأخير {i.lateDays} مرة{i.leaveDays ? ` · إجازة ${i.leaveDays}` : ''}
-                        </p>
-                        {/* شريط درجة الحضور */}
-                        <div className="mt-2 flex items-center gap-2">
-                          <div className="h-1.5 w-28 overflow-hidden rounded-full bg-muted">
-                            <div
-                              className={`h-full rounded-full ${grade ? GRADE_BAR[grade.tone] : 'bg-muted-foreground/40'}`}
-                              style={{ width: `${Math.max(2, Math.min(100, i.attendanceScore))}%` }}
-                            />
-                          </div>
-                          <span className="text-[11px] font-semibold text-muted-foreground">درجة الحضور</span>
-                        </div>
-                      </div>
-                      <Button variant={ev ? 'outline' : 'default'} size="sm" onClick={() => setEditing(i)} className="gap-1.5">
-                        <Award className="size-4" />{ev ? 'تعديل' : 'قيّم'}
-                      </Button>
+          <ul className="space-y-2">
+            {items.map((i) => {
+              const ev = i.evaluation
+              const grade = ev ? scoreGrade(ev.overall) : null
+              return (
+                <li key={i.employeeId} className="flex flex-wrap items-center gap-3 rounded-2xl border bg-card p-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-bold">{i.name}</span>
+                      {i.jobTitle && <span className="text-xs text-muted-foreground">{i.jobTitle}</span>}
+                      {grade && <Pill tone={grade.tone}>{grade.label} · {ev!.overall}%</Pill>}
+                      {ev && ev.bonus > 0 && <Pill tone={ev.bonusApplied ? 'emerald' : 'amber'}>حافز {money(ev.bonus)}{ev.bonusApplied ? ' ✓' : ''}</Pill>}
                     </div>
-                  </li>
-                )
-              })}
-            </ul>
-          </Panel>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      حضور {i.attendanceScore}% · غياب {i.absentDays} · تأخير {i.lateDays} مرة{i.leaveDays ? ` · إجازة ${i.leaveDays}` : ''}
+                    </p>
+                  </div>
+                  <Button variant={ev ? 'outline' : 'default'} size="sm" onClick={() => setEditing(i)} className="gap-1.5">
+                    <Award className="size-4" />{ev ? 'تعديل' : 'قيّم'}
+                  </Button>
+                </li>
+              )
+            })}
+          </ul>
         </>
       )}
 
@@ -214,12 +167,7 @@ function EvalDialog({ item, month, onClose, onSaved }: { item: Item; month: stri
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent mobileSheet className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
         <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
-          <DialogTitle className="flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-xl bg-chart-4 text-white">
-              <Award className="size-4" />
-            </span>
-            تقييم {item.name}
-          </DialogTitle>
+          <DialogTitle>تقييم {item.name}</DialogTitle>
           <DialogDescription>{monthLabel(month)} — درجة الحضور التلقائية: {item.attendanceScore}%</DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-4 py-4">
