@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { CalendarDays, CalendarPlus, Loader2, ListChecks, Sun, ShieldAlert, Undo2, Users } from 'lucide-react'
+import { CalendarDays, CalendarPlus, Loader2, Undo2, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,10 +10,7 @@ import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, Dia
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { LEAVE_TYPES, LEAVE_TYPE_LABEL, type LeaveType } from '@/lib/hr'
-import {
-  Avatar, CardGrid, EmptyState, FilterPill, HrHero, HrKpi, KpiGrid, ListSkeleton, PageShell, Panel, PanelTitle, Pill,
-  Ring, SearchBox, SegBar, Toolbar, hrGet, hrSend,
-} from './hr-ui'
+import { EmptyState, HrHero, ListSkeleton, PageShell, Panel, PanelTitle, Pill, StatCell, StatStrip, hrGet, hrSend } from './hr-ui'
 
 interface Leave {
   id: number; employeeId: number; employeeName: string; type: LeaveType
@@ -51,23 +48,8 @@ export function HrLeavesView() {
     finally { setBusyId(null) }
   }
 
-  const [query, setQuery] = React.useState('')
-  const [typeFilter, setTypeFilter] = React.useState<'all' | LeaveType>('all')
-
-  const balances = data?.balances ?? []
-  const totalUsed = balances.reduce((s, b) => s + b.used, 0)
-  const totalAllowance = balances.reduce((s, b) => s + b.allowance, 0)
-  const usedPct = totalAllowance > 0 ? (totalUsed / totalAllowance) * 100 : 0
-  const overdrawn = balances.filter((b) => b.remaining < 0).length
-  const items = data?.items ?? []
-  const typeCount = (t: LeaveType) => items.filter((l) => l.type === t).length
-  const shown = items.filter((l) => {
-    if (typeFilter !== 'all' && l.type !== typeFilter) return false
-    const q = query.trim().toLowerCase()
-    return !q || l.employeeName.toLowerCase().includes(q)
-  })
-  const dayNum = (d: string) => new Date(`${d}T12:00:00Z`).getUTCDate()
-  const monShort = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('ar-EG-u-nu-latn', { month: 'short', timeZone: 'UTC' })
+  const totalUsed = data?.balances.reduce((s, b) => s + b.used, 0) ?? 0
+  const overdrawn = data?.balances.filter((b) => b.remaining < 0).length ?? 0
 
   return (
     <PageShell>
@@ -77,123 +59,80 @@ export function HrLeavesView() {
         kicker="الموارد البشرية"
         title="الإجازات والأذونات"
         subtitle="إجازات وأذونات الفريق — بتتزامن مع الحضور والأرصدة تلقائيًا."
-        actions={<Button onClick={() => setAdding(true)} className="h-11 w-full gap-1.5 sm:w-auto"><CalendarPlus className="size-4" />إجازة / إذن جديد</Button>}
-        metric={{
-          label: `أيام إجازة مستخدمة — سنة ${data?.year ?? ''}`,
-          value: totalUsed,
-          unit: totalAllowance ? `يوم من ${totalAllowance}` : 'يوم',
-          loading: loading || !data,
-          foot: totalAllowance ? `استهلاك الفريق ${Math.round(usedPct)}% من الرصيد السنوي` : 'لسه مفيش أرصدة — ضيف موظفين',
-        }}
-        viz={
-          <div className="grid gap-3 sm:grid-cols-[auto_minmax(0,1fr)]">
-            <div className="flex items-center justify-center rounded-2xl border bg-card/70 p-3.5 backdrop-blur-sm sm:p-4">
-              <Ring value={usedPct} tone={usedPct > 85 ? 'rose' : usedPct > 60 ? 'amber' : 'violet'} size={92} stroke={9}>
-                <span className="text-lg font-extrabold tabular-nums">{Math.round(usedPct)}%</span>
-              </Ring>
-            </div>
-            <SegBar
-              title="أنواع الإجازات المسجّلة"
-              segments={LEAVE_TYPES.map((t) => ({ label: LEAVE_TYPE_LABEL[t], value: typeCount(t), tone: TONE[t] }))}
-              empty="لسه مفيش إجازات متسجّلة"
-            />
-          </div>
-        }
-        kpis={
-          <KpiGrid>
-            <HrKpi tone="violet" icon={Sun} loading={loading || !data} label="رصيد سنوي لكل موظف" value={`${data?.annualLeaveDays ?? 0} يوم`} sub={`سنة ${data?.year ?? ''}`} />
-            <HrKpi tone="amber" icon={CalendarDays} loading={loading || !data} label="أيام مستخدمة" value={`${totalUsed} يوم`} sub={`${balances.length} موظف`} progress={usedPct} />
-            <HrKpi tone={overdrawn > 0 ? 'rose' : 'emerald'} icon={ShieldAlert} loading={loading || !data} label="تجاوزوا الرصيد" value={overdrawn} sub={overdrawn > 0 ? 'يتابعوا مع الإدارة' : 'كل الأرصدة منتظمة'} />
-            <HrKpi tone="sky" icon={ListChecks} loading={loading || !data} label="إجازات متسجّلة" value={items.length} sub="السنة دي" />
-          </KpiGrid>
-        }
+        actions={<Button onClick={() => setAdding(true)} className="gap-1.5"><CalendarPlus className="size-4" />إجازة / إذن جديد</Button>}
       />
 
       {loading || !data ? (
         <ListSkeleton />
       ) : (
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-          {/* ───── السجل ───── */}
-          <div className="min-w-0 space-y-4">
-            <Toolbar>
-              <SearchBox value={query} onChange={setQuery} placeholder="ابحث باسم الموظف" />
-              <div className="flex flex-wrap gap-1.5">
-                <FilterPill active={typeFilter === 'all'} onClick={() => setTypeFilter('all')} count={items.length}>الكل</FilterPill>
-                {LEAVE_TYPES.map((t) => (
-                  <FilterPill key={t} active={typeFilter === t} onClick={() => setTypeFilter(t)} count={typeCount(t)}>{LEAVE_TYPE_LABEL[t]}</FilterPill>
-                ))}
-              </div>
-            </Toolbar>
+        <>
+          {data.balances.length > 0 && (
+            <>
+              <StatStrip className="mb-4">
+                <StatCell label="رصيد سنوي لكل موظف" dot="bg-stocktake" value={`${data.annualLeaveDays} يوم`} foot={`سنة ${data.year}`} />
+                <StatCell label="أيام مستخدمة" dot="bg-amber-500" value={`${totalUsed} يوم`} foot={`${data.balances.length} موظف`} />
+                <StatCell label="تجاوزوا الرصيد" dot={overdrawn > 0 ? 'bg-rose-500' : 'bg-emerald-500'} value={overdrawn} foot={overdrawn > 0 ? 'يتابعوا مع الإدارة' : 'كل الأرصدة منتظمة'} />
+              </StatStrip>
 
-            {items.length === 0 ? (
-              <EmptyState
-                theme="leaves"
-                icon={CalendarDays}
-                title="مفيش إجازات متسجلة السنة دي" hint="سجّل إجازة أو إذن — بيظهر في الحضور والرواتب تلقائي."
-                action={<Button onClick={() => setAdding(true)} className="gap-1.5"><CalendarPlus className="size-4" />إجازة / إذن جديد</Button>}
-              />
-            ) : shown.length === 0 ? (
-              <EmptyState theme="leaves" icon={CalendarDays} title="مفيش نتائج" hint="جرّب تغيّر الفلتر أو كلمة البحث." />
-            ) : (
-              <CardGrid min={320}>
-                {shown.map((l) => (
-                  <div key={l.id} className="animate-in-up motion-reduce:animate-none group relative flex items-stretch overflow-hidden rounded-3xl border bg-card shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg">
-                    <div className={`flex w-[72px] shrink-0 flex-col items-center justify-center gap-0.5 ${TONE_BG[l.type]}`}>
-                      <span className="text-2xl font-extrabold leading-none tabular-nums">{dayNum(l.startDate)}</span>
-                      <span className="text-[11px] font-bold">{monShort(l.startDate)}</span>
-                    </div>
-                    <div className="min-w-0 flex-1 p-3.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate font-extrabold">{l.employeeName}</span>
-                        <Pill tone={TONE[l.type]}>{LEAVE_TYPE_LABEL[l.type]}</Pill>
-                      </div>
-                      <p className="mt-1.5 text-xs text-muted-foreground">
-                        {l.startDate === l.endDate ? fmt(l.startDate) : `${fmt(l.startDate)} → ${fmt(l.endDate)}`}
-                        <span className="mx-1">·</span>
-                        <b className="text-foreground">{l.type === 'permission' ? `${l.hours} ساعة` : `${l.days} يوم عمل`}</b>
-                      </p>
-                      {l.note && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{l.note}</p>}
-                      <Button variant="ghost" size="sm" disabled={busyId === l.id} onClick={() => cancel(l.id)} className="-ms-2 mt-1.5 h-8 gap-1 px-2 text-rose-600">
-                        {busyId === l.id ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}إلغاء
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </CardGrid>
-            )}
-          </div>
-
-          {/* ───── الأرصدة ───── */}
-          <div className="min-w-0 lg:sticky lg:top-4">
-            <PanelTitle icon={Users} title={`رصيد الإجازة السنوية ${data.year}`} />
-            {balances.length === 0 ? (
-              <EmptyState theme="leaves" icon={Users} title="مفيش موظفين" hint="ضيف موظفين الأول من صفحة الموظفين." />
-            ) : (
-              <Panel>
-                <ul className="max-h-[70vh] divide-y divide-border overflow-y-auto">
-                  {balances.map((b) => {
+              <section className="mb-6">
+                <PanelTitle icon={Users} title={`رصيد الإجازة السنوية ${data.year}`} />
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {data.balances.map((b) => {
                     const pct = b.allowance > 0 ? Math.min(100, (b.used / b.allowance) * 100) : 0
-                    const over = b.remaining < 0
                     return (
-                      <li key={b.employeeId} className="flex items-center gap-3 px-3.5 py-3 transition-colors hover:bg-muted/30">
-                        <Ring value={over ? 100 : pct} tone={over ? 'rose' : pct > 80 ? 'amber' : 'violet'} size={46} stroke={11}>
-                          <Avatar name={b.name} className="size-7 rounded-lg text-xs" />
-                        </Ring>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-bold">{b.name}</p>
-                          <p className="text-[11px] text-muted-foreground">استخدم {b.used} من {b.allowance} يوم</p>
+                      <div key={b.employeeId} className="rounded-2xl border bg-card p-3.5 shadow-sm">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="truncate font-bold">{b.name}</span>
+                          <span className={b.remaining < 0 ? 'text-sm font-extrabold text-rose-600' : 'text-sm font-extrabold'}>
+                            متبقي {b.remaining} من {b.allowance}
+                          </span>
                         </div>
-                        <span className={over ? 'text-sm font-extrabold text-rose-600' : 'text-sm font-extrabold'}>
-                          {over ? `زيادة ${Math.abs(b.remaining)}` : `متبقي ${b.remaining}`}
-                        </span>
-                      </li>
+                        <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                          <div className={b.remaining < 0 ? 'h-full bg-rose-500' : 'h-full bg-stocktake'} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
                     )
                   })}
-                </ul>
-              </Panel>
-            )}
-          </div>
-        </div>
+                </div>
+              </section>
+            </>
+          )}
+
+          <PanelTitle icon={CalendarDays} title="السجل" />
+          {data.items.length === 0 ? (
+            <EmptyState
+              theme="leaves"
+              icon={CalendarDays}
+              title="مفيش إجازات متسجلة السنة دي" hint="سجّل إجازة أو إذن — بيظهر في الحضور والرواتب تلقائي."
+            />
+          ) : (
+            <Panel>
+              <ul className="divide-y divide-border">
+                {data.items.map((l) => (
+                  <li key={l.id} className="flex flex-wrap items-center gap-3 px-3.5 py-3.5 transition-colors hover:bg-muted/30 sm:px-4">
+                    <span className={`grid size-10 shrink-0 place-items-center rounded-2xl ${TONE_BG[l.type]}`}>
+                      <CalendarDays className="size-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold">{l.employeeName}</span>
+                        <Pill tone={TONE[l.type]}>{LEAVE_TYPE_LABEL[l.type]}</Pill>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {l.startDate === l.endDate ? fmt(l.startDate) : `${fmt(l.startDate)} → ${fmt(l.endDate)}`}
+                        {l.type === 'permission' ? ` · ${l.hours} ساعة` : ` · ${l.days} يوم عمل`}
+                        {l.note ? ` · ${l.note}` : ''}
+                      </p>
+                    </div>
+                    <Button variant="ghost" size="sm" disabled={busyId === l.id} onClick={() => cancel(l.id)} className="gap-1 text-rose-600">
+                      {busyId === l.id ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}إلغاء
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          )}
+        </>
       )}
 
       {adding && <LeaveDialog balances={data?.balances ?? []} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); load() }} />}

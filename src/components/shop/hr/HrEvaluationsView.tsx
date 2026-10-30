@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Award, Coins, Crown, Gauge, Loader2, MessageCircleQuestion, Star, Trophy, Users, Wallet } from 'lucide-react'
+import { Award, CalendarRange, Loader2, MessageCircleQuestion, Star, Trophy, Users, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,10 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { EVAL_CRITERIA, overallScore, scoreGrade, type EvalCriterionKey } from '@/lib/hr'
-import {
-  Avatar, Bar, CardGrid, EmptyState, HrHero, HrKpi, ItemCard, KpiGrid, ListSkeleton, MonthSwitcher, PageShell, Panel,
-  PanelTitle, Pill, Ring, SegBar, hrGet, hrSend, money, monthLabel, shiftMonth,
-} from './hr-ui'
+import { EmptyState, HrHero, ListSkeleton, PageShell, Panel, PanelTitle, Pill, StatCell, StatStrip, hrGet, hrSend, money, monthLabel, shiftMonth } from './hr-ui'
 
 interface Saved {
   perfScore: number; customerScore: number; teamScore: number
@@ -72,14 +69,8 @@ export function HrEvaluationsView() {
     } as Record<string, string[]>
   }, [items])
 
-  const evaluatedItems = items.filter((i) => i.evaluation)
-  const evaluated = evaluatedItems.length
-  const avgOverall = evaluated > 0 ? Math.round(evaluatedItems.reduce((s, i) => s + i.evaluation!.overall, 0) / evaluated) : null
-  const avgAttendance = items.length > 0 ? Math.round(items.reduce((s, i) => s + i.attendanceScore, 0) / items.length) : 0
-  const pendingTotal = pending.reduce((s, i) => s + (i.evaluation?.bonus ?? 0), 0)
-  const best = [...evaluatedItems].sort((a, b) => b.evaluation!.overall - a.evaluation!.overall)[0]
-  const gradeCount = (tone: 'emerald' | 'sky' | 'amber' | 'rose') => evaluatedItems.filter((i) => scoreGrade(i.evaluation!.overall).tone === tone).length
-  const avgTone = avgOverall === null ? 'slate' : scoreGrade(avgOverall).tone
+  const evaluated = items.filter((i) => i.evaluation).length
+  const avgOverall = evaluated > 0 ? Math.round(items.filter((i) => i.evaluation).reduce((s, i) => s + i.evaluation!.overall, 0) / evaluated) : null
 
   return (
     <PageShell>
@@ -89,50 +80,16 @@ export function HrEvaluationsView() {
         kicker="الموارد البشرية"
         title="تقييمات الموظفين"
         subtitle="حضور تلقائي 40% + تقييمك 60% — والحافز بينزل في مسودة الرواتب."
-        actions={
-          <MonthSwitcher
-            label={month ? monthLabel(month) : '...'}
-            prevDisabled={!month}
-            nextDisabled={!month || month >= currentMonth}
-            onPrev={() => setMonth(shiftMonth(month, -1))}
-            onNext={() => setMonth(shiftMonth(month, 1))}
-          />
-        }
-        metric={{
-          label: 'متوسط الدرجة النهائية للفريق',
-          value: avgOverall !== null ? avgOverall : '—',
-          unit: avgOverall !== null ? '%' : undefined,
-          loading,
-          foot: avgOverall !== null ? `${scoreGrade(avgOverall).label} · ${evaluated} من ${items.length} اتقيّموا` : 'لسه ماتقيّمش حد الشهر ده',
-        }}
-        viz={
-          <div className="grid gap-3 sm:grid-cols-[auto_minmax(0,1fr)]">
-            <div className="flex items-center justify-center rounded-2xl border bg-card/70 p-3.5 backdrop-blur-sm sm:p-4">
-              <Ring value={avgOverall ?? 0} tone={avgTone} size={92} stroke={9}>
-                <Trophy className="size-6 text-violet-600 dark:text-violet-300" />
-              </Ring>
-            </div>
-            <SegBar
-              title="توزيع التقديرات"
-              segments={[
-                { label: 'ممتاز', value: gradeCount('emerald'), tone: 'emerald' },
-                { label: 'جيد جدًا', value: gradeCount('sky'), tone: 'sky' },
-                { label: 'جيد', value: gradeCount('amber'), tone: 'amber' },
-                { label: 'يحتاج تحسين', value: gradeCount('rose'), tone: 'rose' },
-              ]}
-              empty="لسه مفيش تقييمات في الشهر ده"
-            />
-          </div>
-        }
-        kpis={
-          <KpiGrid>
-            <HrKpi tone="violet" icon={Star} loading={loading} label="تم تقييمهم" value={`${evaluated} / ${items.length}`} sub={month ? monthLabel(month) : undefined} progress={items.length ? (evaluated / items.length) * 100 : 0} />
-            <HrKpi tone="sky" icon={Gauge} loading={loading} label="متوسط درجة الحضور" value={`${avgAttendance}%`} sub="محسوب تلقائي من السجل" progress={avgAttendance} />
-            <HrKpi tone="amber" icon={Coins} loading={loading} label="حوافز مستنية الإضافة" value={money(pendingTotal)} sub={`${pending.length} حافز`} />
-            <HrKpi tone="emerald" icon={Crown} loading={loading} label="الأعلى تقييمًا" value={best ? best.name : '—'} sub={best ? `${best.evaluation!.overall}% · ${scoreGrade(best.evaluation!.overall).label}` : 'لسه مفيش'} />
-          </KpiGrid>
-        }
       />
+
+      {/* اختيار الشهر */}
+      <Panel className="mb-4">
+        <div className="flex items-center gap-2 p-3">
+          <Button variant="outline" size="icon" aria-label="الشهر السابق" disabled={!month} onClick={() => setMonth(shiftMonth(month, -1))}><CalendarRange className="size-4 rotate-180" /></Button>
+          <div className="flex-1 text-center text-lg font-extrabold">{month ? monthLabel(month) : '...'}</div>
+          <Button variant="outline" size="icon" aria-label="الشهر التالي" disabled={!month || month >= currentMonth} onClick={() => setMonth(shiftMonth(month, 1))}><CalendarRange className="size-4" /></Button>
+        </div>
+      </Panel>
 
       {loading ? (
         <ListSkeleton />
@@ -140,11 +97,16 @@ export function HrEvaluationsView() {
         <EmptyState theme="evaluations" icon={Users} title="مفيش موظفين نشطين" hint="ضيف موظفين الأول من صفحة الموظفين." />
       ) : (
         <>
+          <StatStrip className="mb-4">
+            <StatCell label="تم تقييمهم" dot="bg-chart-4" value={`${evaluated} / ${items.length}`} foot={month ? monthLabel(month) : undefined} />
+            <StatCell label="متوسط الدرجة النهائية" dot={avgOverall !== null && avgOverall >= 75 ? 'bg-emerald-500' : 'bg-amber-500'} value={avgOverall !== null ? `${avgOverall}%` : '—'} foot="حضور 40% + تقييم المدير 60%" />
+            <StatCell label="حوافز مستنية الإضافة" dot="bg-violet-500" value={money(pending.reduce((s, i) => s + (i.evaluation?.bonus ?? 0), 0))} foot={`${pending.length} حافز`} />
+          </StatStrip>
+
           {pending.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-amber-500/40 bg-warning-subtle p-3.5 shadow-sm sm:p-4">
-              <p className="flex items-center gap-2.5 text-sm font-bold text-warning-subtle-foreground">
-                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-warning text-warning-foreground"><Coins className="size-4" /></span>
-                {pending.length} حافز من التقييمات لسه ماتضافش للمرتبات (إجمالي {money(pendingTotal)})
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-warning-subtle p-3.5">
+              <p className="text-sm font-bold text-warning-subtle-foreground">
+                {pending.length} حافز من التقييمات لسه ماتضافش للمرتبات (إجمالي {money(pending.reduce((s, i) => s + i.evaluation!.bonus, 0))})
               </p>
               <Button size="sm" onClick={applyBonuses} disabled={applying} className="gap-1.5">
                 {applying ? <Loader2 className="size-4 animate-spin" /> : <Wallet className="size-4" />}أضفهم لمسودة المرتبات
@@ -152,89 +114,70 @@ export function HrEvaluationsView() {
             </div>
           )}
 
-          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-            {/* ───── كروت التقييم ───── */}
-            <div className="min-w-0">
-              <PanelTitle icon={Trophy} title="تقييم الشهر" />
-              <CardGrid min={300}>
-                {items.map((i) => {
-                  const ev = i.evaluation
-                  const grade = ev ? scoreGrade(ev.overall) : null
-                  return (
-                    <ItemCard key={i.employeeId} accent={grade ? GRADE_BAR[grade.tone] : 'bg-muted-foreground/30'}>
-                      <div className="flex items-center gap-3 p-4 pb-3 ps-5">
-                        <Avatar name={i.name} className="size-12 text-lg" />
-                        <div className="min-w-0 flex-1">
-                          <h3 className="truncate text-base font-extrabold">{i.name}</h3>
-                          <p className="truncate text-xs text-muted-foreground">{i.jobTitle || 'موظف'}</p>
+          <section className="mb-5">
+            <PanelTitle icon={MessageCircleQuestion} title="اسأل عن الشهر ده" />
+            <Panel className="p-3.5">
+              <div className="flex flex-wrap gap-2">
+                {Object.keys(answers).map((k) => (
+                  <Button key={k} size="sm" variant={q === k ? 'default' : 'outline'} onClick={() => setQ(q === k ? null : k)}>{k}</Button>
+                ))}
+              </div>
+              {q && (
+                <ul className="mt-3 space-y-1.5 text-sm">
+                  {answers[q].length ? answers[q].map((a, i) => (
+                    <li key={i} className="flex items-center gap-2">
+                      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-muted text-[11px] font-bold text-muted-foreground">{i + 1}</span>
+                      {a}
+                    </li>
+                  )) : <li className="text-muted-foreground">مفيش بيانات كفاية للإجابة.</li>}
+                </ul>
+              )}
+            </Panel>
+          </section>
+
+          <PanelTitle icon={Trophy} title="تقييم الشهر" />
+          <Panel>
+            <ul className="divide-y divide-border">
+              {items.map((i) => {
+                const ev = i.evaluation
+                const grade = ev ? scoreGrade(ev.overall) : null
+                return (
+                  <li key={i.employeeId} className="px-3.5 py-3.5 transition-colors hover:bg-muted/30 sm:px-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="truncate font-bold">{i.name}</span>
+                          {i.jobTitle && <span className="text-xs text-muted-foreground">{i.jobTitle}</span>}
                           {grade && (
-                            <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-violet-500/10 px-2 py-0.5 text-[11px] font-bold text-violet-700 dark:text-violet-300">
-                              <Trophy className="size-3" />{grade.label}
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/10 px-2 py-0.5 text-[11px] font-bold text-violet-700 dark:text-violet-300">
+                              <Trophy className="size-3" />{grade.label} · {ev!.overall}%
                             </span>
                           )}
-                        </div>
-                        <Ring value={ev?.overall ?? 0} tone={grade?.tone ?? 'slate'} size={64} stroke={10}>
-                          <span className="text-sm font-extrabold tabular-nums">{ev ? `${ev.overall}%` : '—'}</span>
-                        </Ring>
-                      </div>
-
-                      <div className="grid grid-cols-4 gap-1.5 px-4 pb-3 ps-5 text-center">
-                        {[
-                          { l: 'حضور', v: `${i.attendanceScore}%` },
-                          { l: 'غياب', v: i.absentDays, bad: i.absentDays > 0 },
-                          { l: 'تأخير', v: i.lateDays, bad: i.lateDays > 0 },
-                          { l: 'إجازة', v: i.leaveDays },
-                        ].map((m) => (
-                          <div key={m.l} className="rounded-xl bg-muted/50 py-1.5">
-                            <div className={`text-sm font-extrabold tabular-nums ${m.bad ? 'text-rose-600' : ''}`}>{m.v}</div>
-                            <div className="text-[10px] text-muted-foreground">{m.l}</div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="px-4 pb-3 ps-5">
-                        <div className="mb-1 flex items-center justify-between text-[11px] text-muted-foreground">
-                          <span>درجة الحضور</span>
                           {ev && ev.bonus > 0 && <Pill tone={ev.bonusApplied ? 'emerald' : 'amber'}>حافز {money(ev.bonus)}{ev.bonusApplied ? ' ✓' : ''}</Pill>}
                         </div>
-                        <Bar value={Math.max(2, i.attendanceScore)} tone={grade?.tone ?? 'slate'} />
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          حضور {i.attendanceScore}% · غياب {i.absentDays} · تأخير {i.lateDays} مرة{i.leaveDays ? ` · إجازة ${i.leaveDays}` : ''}
+                        </p>
+                        {/* شريط درجة الحضور */}
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="h-1.5 w-28 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className={`h-full rounded-full ${grade ? GRADE_BAR[grade.tone] : 'bg-muted-foreground/40'}`}
+                              style={{ width: `${Math.max(2, Math.min(100, i.attendanceScore))}%` }}
+                            />
+                          </div>
+                          <span className="text-[11px] font-semibold text-muted-foreground">درجة الحضور</span>
+                        </div>
                       </div>
-
-                      <div className="mt-auto border-t bg-muted/30 px-3 py-2.5 ps-4">
-                        <Button variant={ev ? 'outline' : 'default'} size="sm" onClick={() => setEditing(i)} className="w-full gap-1.5">
-                          <Award className="size-4" />{ev ? 'تعديل التقييم' : 'قيّم الموظف'}
-                        </Button>
-                      </div>
-                    </ItemCard>
-                  )
-                })}
-              </CardGrid>
-            </div>
-
-            {/* ───── اسأل ───── */}
-            <div className="min-w-0 lg:sticky lg:top-4">
-              <PanelTitle icon={MessageCircleQuestion} title="اسأل عن الشهر ده" />
-              <Panel className="p-3.5">
-                <div className="flex flex-wrap gap-2">
-                  {Object.keys(answers).map((k) => (
-                    <Button key={k} size="sm" variant={q === k ? 'default' : 'outline'} onClick={() => setQ(q === k ? null : k)}>{k}</Button>
-                  ))}
-                </div>
-                {q ? (
-                  <ul className="mt-3 space-y-1.5 text-sm">
-                    {answers[q].length ? answers[q].map((a, i) => (
-                      <li key={i} className="flex items-center gap-2 rounded-xl bg-muted/40 px-2.5 py-2">
-                        <span className="grid size-5 shrink-0 place-items-center rounded-full bg-violet-500/15 text-[11px] font-bold text-violet-700 dark:text-violet-300">{i + 1}</span>
-                        {a}
-                      </li>
-                    )) : <li className="text-muted-foreground">مفيش بيانات كفاية للإجابة.</li>}
-                  </ul>
-                ) : (
-                  <p className="mt-3 text-xs text-muted-foreground">اختار سؤال وهتلاقي الإجابة محسوبة من بيانات الشهر.</p>
-                )}
-              </Panel>
-            </div>
-          </div>
+                      <Button variant={ev ? 'outline' : 'default'} size="sm" onClick={() => setEditing(i)} className="gap-1.5">
+                        <Award className="size-4" />{ev ? 'تعديل' : 'قيّم'}
+                      </Button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </Panel>
         </>
       )}
 

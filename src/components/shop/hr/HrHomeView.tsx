@@ -3,15 +3,15 @@
 import * as React from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, ArrowUpLeft, Award, Banknote, CalendarDays, FileClock, Fingerprint, HandCoins, HeartHandshake,
-  MonitorSmartphone, PiggyBank, Percent, UserCheck, Users, Wallet, BadgeCheck,
+  AlertTriangle, ArrowUpLeft, Award, CalendarDays, Fingerprint, HandCoins, HeartHandshake,
+  MonitorSmartphone, TrendingUp, UserCheck, Users, Wallet,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import {
-  EmptyState, HR_THEMES, HrHero, HrKpi, KpiGrid, ListSkeleton, PageShell, Panel, PanelTitle, Pill, SegBar, StatusChip,
+  EmptyState, HR_THEMES, HrHero, ListSkeleton, PageShell, PanelTitle, Pill, StatCell, StatStrip, StatusChip,
   dayLabel, hrGet, money, monthLabel,
 } from './hr-ui'
 
@@ -49,22 +49,6 @@ export function HrHomeView() {
   React.useEffect(() => { load() }, [load])
   useDataRefresh(['hr'], load)
 
-  const total = s?.employeesCount ?? 0
-  const lateN = s?.late.length ?? 0
-  const absentN = s?.absent.length ?? 0
-  const leaveN = s?.leave.length ?? 0
-  const moduleChip = (href: string): string | null => {
-    if (!s) return null
-    switch (href) {
-      case '/hr/employees': return `${s.employeesCount} موظف`
-      case '/hr/attendance': return s.notRecorded > 0 ? `${s.notRecorded} لسه ماتسجّلوش` : 'كله مسجّل ✓'
-      case '/hr/leaves': return leaveN > 0 ? `${leaveN} في إجازة النهارده` : null
-      case '/hr/advances': return s.advances.count > 0 ? `${s.advances.count} جارية` : null
-      case '/hr/payroll': return s.payroll.status === 'paid' ? 'اتصرفت' : s.payroll.status === 'draft' ? 'مسودة جاهزة' : 'لسه ماتجهزتش'
-      default: return null
-    }
-  }
-
   return (
     <PageShell>
       <HrHero
@@ -74,50 +58,10 @@ export function HrHomeView() {
         title="الموارد البشرية"
         subtitle={s ? dayLabel(s.today) : 'حضور، إجازات، سلف، ورواتب — من مكان واحد.'}
         actions={
-          <>
-            <Button asChild variant="outline" className="h-11 flex-1 gap-1.5 bg-background/70 sm:flex-none"><Link href="/hr/attendance?kiosk=1"><MonitorSmartphone className="size-4" />كشك الحضور</Link></Button>
-            <Button asChild className="h-11 flex-1 gap-1.5 sm:flex-none"><Link href="/hr/attendance"><UserCheck className="size-4" />سجّل الحضور</Link></Button>
-          </>
-        }
-        metric={{
-          label: 'حاضرين النهارده',
-          value: s ? s.present : '—',
-          unit: s ? `من ${total} موظف` : undefined,
-          loading: loading || !s,
-          foot: s
-            ? (s.notRecorded > 0 ? `${s.notRecorded} لسه ماتسجّلوش${s.onOff ? ` · ${s.onOff} في إجازتهم الأسبوعية` : ''}` : 'كل الفريق متسجّل ✓')
-            : undefined,
-        }}
-        viz={
-          s && total > 0 ? (
-            <SegBar
-              title="حالة الفريق النهارده"
-              segments={[
-                { label: 'حاضر', value: s.present, tone: 'emerald' },
-                { label: 'متأخر', value: lateN, tone: 'amber' },
-                { label: 'غائب', value: absentN, tone: 'rose' },
-                { label: 'إجازة', value: leaveN, tone: 'sky' },
-                { label: 'إجازة أسبوعية', value: s.onOff, tone: 'violet' },
-                { label: 'لسه', value: s.notRecorded, tone: 'slate' },
-              ]}
-            />
-          ) : undefined
-        }
-        kpis={
-          s && total > 0 ? (
-            <KpiGrid>
-              <HrKpi tone="emerald" icon={Banknote} label={s.payroll.isEstimate ? 'تكلفة العمالة (تقديرية)' : 'تكلفة العمالة'} value={money(s.payroll.laborCost)} sub={monthLabel(s.month)} />
-              <HrKpi tone="sky" icon={Percent} label="من كل 100 جنيه بيع" value={s.laborPct === null ? '—' : `${s.laborPct} جنيه`} sub={s.laborPct === null ? 'مفيش مبيعات الشهر ده لسه' : `مبيعات الشهر ${money(s.salesThisMonth)}`} progress={s.laborPct ?? undefined} progressLabel={s.laborPct === null ? undefined : `${s.laborPct}%`} />
-              <HrKpi tone="violet" icon={PiggyBank} label="سلف على الموظفين" value={money(s.advances.remaining)} sub={`${s.advances.count} سلفة جارية`} />
-              <HrKpi
-                tone={s.payroll.status === 'paid' ? 'emerald' : s.payroll.status === 'draft' ? 'amber' : 'slate'}
-                icon={s.payroll.status === 'paid' ? BadgeCheck : FileClock}
-                label="رواتب الشهر"
-                value={s.payroll.status === 'paid' ? 'اتصرفت' : s.payroll.status === 'draft' ? 'مسودة جاهزة' : 'لسه ماتجهزتش'}
-                sub={s.payroll.status === 'paid' ? 'تم الصرف' : 'افتح الرواتب للمراجعة'}
-              />
-            </KpiGrid>
-          ) : undefined
+          <div className="flex gap-2">
+            <Button asChild variant="outline" size="sm" className="gap-1.5"><Link href="/hr/attendance?kiosk=1"><MonitorSmartphone className="size-4" />كشك الحضور</Link></Button>
+            <Button asChild size="sm" className="gap-1.5"><Link href="/hr/attendance"><UserCheck className="size-4" />سجّل الحضور</Link></Button>
+          </div>
         }
       />
 
@@ -132,91 +76,110 @@ export function HrHomeView() {
           action={<Button asChild><Link href="/hr/employees">ضيف أول موظف</Link></Button>}
         />
       ) : (
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-          {/* ───── وحدات الموارد البشرية ───── */}
-          <section className="min-w-0">
+        <div className="space-y-4 sm:space-y-5">
+          {/* النهارده */}
+          <section>
+            <PanelTitle icon={Fingerprint} title="حضور النهارده" action={<StatusChip tone={s.notRecorded > 0 ? 'amber' : 'emerald'}>{s.notRecorded > 0 ? `${s.notRecorded} لسه ماتسجّلوش` : 'كل حاجة مسجّلة'}</StatusChip>} />
+            <StatStrip>
+              <StatCell label="حاضر" dot="bg-emerald-500" value={s.present} foot={s.onOff > 0 ? `${s.onOff} في إجازتهم الأسبوعية` : undefined} />
+              <StatCell label="متأخر" dot="bg-amber-500" value={s.late.length} />
+              <StatCell label="غائب" dot="bg-rose-500" value={s.absent.length} />
+              <StatCell label="لسه ماتسجّلش" dot="bg-muted-foreground/60" value={s.notRecorded} foot={`إجمالي الفريق: ${s.employeesCount}`} />
+            </StatStrip>
+            {(s.late.length > 0 || s.absent.length > 0) && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {s.late.map((e) => <Pill key={`l${e.id}`} tone="amber">{e.name} — متأخر {e.lateMinutes} د</Pill>)}
+                {s.absent.map((e) => <Pill key={`a${e.id}`} tone="rose">{e.name} — غائب</Pill>)}
+              </div>
+            )}
+          </section>
+
+          {/* تنبيهات */}
+          {s.alerts.length > 0 && (
+            <section className="overflow-hidden rounded-3xl border border-amber-500/40 bg-warning-subtle shadow-sm">
+              <div className="flex items-center gap-2.5 border-b border-amber-500/20 px-4 py-3">
+                <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-warning text-warning-foreground">
+                  <AlertTriangle className="size-4" strokeWidth={2.4} />
+                </span>
+                <h2 className="text-sm font-bold text-warning-subtle-foreground">يستاهل انتباهك</h2>
+              </div>
+              <ul className="divide-y divide-border/60 px-4 py-1 text-sm">
+                {s.alerts.map((a) => (
+                  <li key={`${a.kind}${a.id}`} className="py-2"><b>{a.name}</b> — {a.text}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* وحدات الموارد البشرية */}
+          <section>
             <PanelTitle icon={HeartHandshake} title="وحدات الموارد البشرية" />
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {MODULES.map((m) => {
                 const t = HR_THEMES[m.theme]
-                const chip = moduleChip(m.href)
                 return (
                   <Link
                     key={m.href}
                     href={m.href}
-                    className="animate-in-up motion-reduce:animate-none group relative flex min-h-[148px] flex-col overflow-hidden rounded-3xl border bg-card p-4 shadow-sm transition-all duration-base hover:-translate-y-1.5 hover:shadow-xl"
-                    style={{ background: `linear-gradient(145deg, color-mix(in srgb, ${t.varName} 11%, var(--card)), var(--card) 65%)` }}
+                    className="group relative overflow-hidden rounded-3xl border bg-card p-4 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
+                    style={{ background: `radial-gradient(340px 130px at 100% 0%, color-mix(in srgb, ${t.varName} 9%, transparent), transparent)` }}
                   >
-                    <span aria-hidden className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(to left, ${t.varName}, transparent)` }} />
-                    <m.icon aria-hidden strokeWidth={1.1} className="pointer-events-none absolute -bottom-5 -start-4 size-28 opacity-[0.07] transition-transform duration-slow group-hover:scale-110" style={{ color: t.varName }} />
-                    <div className="relative flex items-start justify-between gap-2">
-                      <span className={cn('grid size-12 shrink-0 place-items-center rounded-2xl shadow-md', t.solid, t.solidFg)}>
-                        <m.icon className="size-6" strokeWidth={2.1} />
+                    <span
+                      aria-hidden
+                      className="absolute inset-x-0 top-0 h-[3px]"
+                      style={{ background: `linear-gradient(to left, color-mix(in srgb, ${t.varName} 70%, transparent), transparent)` }}
+                    />
+                    <div className="flex items-start gap-3">
+                      <span className={cn('grid size-10 shrink-0 place-items-center rounded-2xl shadow-sm', t.solid, t.solidFg)}>
+                        <m.icon className="size-5" strokeWidth={2.2} />
                       </span>
-                      <ArrowUpLeft className="size-5 shrink-0 text-muted-foreground/40 transition-all group-hover:-translate-y-0.5 group-hover:text-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <h3 className="flex items-center justify-between gap-2 font-extrabold">
+                          {m.title}
+                          <ArrowUpLeft className="size-4 shrink-0 text-muted-foreground/50 transition-all group-hover:-translate-y-0.5 group-hover:text-primary" />
+                        </h3>
+                        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{m.desc}</p>
+                      </div>
                     </div>
-                    <h3 className="relative mt-3 text-lg font-extrabold">{m.title}</h3>
-                    <p className="relative mt-0.5 text-xs leading-relaxed text-muted-foreground">{m.desc}</p>
-                    {chip && (
-                      <span className="relative mt-auto pt-3">
-                        <span className={cn('inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold', t.subtle)}>{chip}</span>
-                      </span>
-                    )}
                   </Link>
                 )
               })}
             </div>
           </section>
 
-          {/* ───── اللي محتاج انتباهك ───── */}
-          <aside className="min-w-0 space-y-4 lg:sticky lg:top-4">
-            {s.alerts.length > 0 && (
-              <section className="overflow-hidden rounded-3xl border border-amber-500/40 bg-warning-subtle shadow-sm">
-                <div className="flex items-center gap-2.5 border-b border-amber-500/20 px-4 py-3">
-                  <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-warning text-warning-foreground">
-                    <AlertTriangle className="size-4" strokeWidth={2.4} />
-                  </span>
-                  <h2 className="text-sm font-bold text-warning-subtle-foreground">يستاهل انتباهك</h2>
-                  <span className="ms-auto rounded-full bg-warning px-2 py-0.5 text-[11px] font-bold text-warning-foreground">{s.alerts.length}</span>
-                </div>
-                <ul className="divide-y divide-border/60 px-4 py-1 text-sm">
-                  {s.alerts.map((a) => (
-                    <li key={`${a.kind}${a.id}`} className="py-2.5"><b>{a.name}</b> — {a.text}</li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            <section>
-              <PanelTitle
-                icon={Fingerprint}
-                title="حضور النهارده"
-                action={<StatusChip tone={s.notRecorded > 0 ? 'amber' : 'emerald'}>{s.notRecorded > 0 ? `${s.notRecorded} لسه ماتسجّلوش` : 'كل حاجة مسجّلة'}</StatusChip>}
+          {/* الفلوس */}
+          <section>
+            <PanelTitle icon={TrendingUp} title={`فلوس الشهر — ${monthLabel(s.month)}`} />
+            <StatStrip>
+              <StatCell
+                label={s.payroll.isEstimate ? 'تكلفة العمالة (تقديرية)' : 'تكلفة العمالة'} dot="bg-primary"
+                value={money(s.payroll.laborCost)}
               />
-              <Panel>
-                {lateN === 0 && absentN === 0 ? (
-                  <p className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-                    <BadgeCheck className="size-5 text-emerald-600" />مفيش متأخرين ولا غايبين النهارده.
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-border">
-                    {s.late.map((e) => (
-                      <li key={`l${e.id}`} className="flex items-center justify-between gap-2 px-4 py-2.5 text-sm">
-                        <span className="truncate font-bold">{e.name}</span>
-                        <Pill tone="amber">متأخر {e.lateMinutes} د</Pill>
-                      </li>
-                    ))}
-                    {s.absent.map((e) => (
-                      <li key={`a${e.id}`} className="flex items-center justify-between gap-2 px-4 py-2.5 text-sm">
-                        <span className="truncate font-bold">{e.name}</span>
-                        <Pill tone="rose">غائب</Pill>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Panel>
-            </section>
-          </aside>
+              <StatCell
+                label="من كل 100 جنيه بيع" dot="bg-info"
+                value={s.laborPct === null ? '—' : `${s.laborPct} جنيه`}
+                foot={s.laborPct === null ? 'مفيش مبيعات الشهر ده لسه' : `مبيعات الشهر ${money(s.salesThisMonth)}`}
+              />
+              <StatCell label="سلف على الموظفين" dot="bg-violet-500" value={money(s.advances.remaining)} foot={`${s.advances.count} سلفة جارية`} />
+              <div className="flex flex-col justify-between p-3.5 sm:p-5">
+                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground sm:text-sm">
+                  <span className="size-2 rounded-full bg-amber-500" />رواتب الشهر
+                </div>
+                <div className="my-1.5">
+                  {s.payroll.status === 'paid' ? (
+                    <StatusChip tone="emerald">اتصرفت</StatusChip>
+                  ) : s.payroll.status === 'draft' ? (
+                    <StatusChip tone="amber">مسودة جاهزة</StatusChip>
+                  ) : (
+                    <StatusChip tone="slate">لسه ماتجهزتش</StatusChip>
+                  )}
+                </div>
+                <Button asChild size="sm" variant={s.payroll.status === 'paid' ? 'outline' : 'default'} className="gap-1.5">
+                  <Link href="/hr/payroll"><Wallet className="size-4" />{s.payroll.status === 'paid' ? 'عرض' : 'جهّز / اعتمد'}</Link>
+                </Button>
+              </div>
+            </StatStrip>
+          </section>
         </div>
       )}
     </PageShell>
