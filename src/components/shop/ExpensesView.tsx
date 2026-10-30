@@ -36,6 +36,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { getMe } from '@/lib/auth-client'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogBody, DialogContent, DialogFooter } from '@/components/ui/dialog'
 import {
@@ -229,6 +230,25 @@ export function ExpensesView() {
   const [category, setCategory] = React.useState<string>(CATEGORIES[0])
   const [amount, setAmount] = React.useState('')
   const [note, setNote] = React.useState('')
+  // 🏬 المدير بيختار المصروف على أنهي فرع (الافتراضي الرئيسي). موظف الفرع مابيشوفش الاختيار.
+  const [expBranches, setExpBranches] = React.useState<{ id: number; name: string; isMain?: boolean }[]>([])
+  const [expBranchId, setExpBranchId] = React.useState('')
+  React.useEffect(() => {
+    let alive = true
+    ;(async () => {
+      try {
+        const me = await getMe()
+        if (!me || me.branchId) return
+        const r = await fetch('/api/branches')
+        const list = r.ok ? await r.json() : []
+        if (!alive || !Array.isArray(list) || list.length < 2) return
+        setExpBranches(list)
+        const main = list.find((b: { isMain?: boolean }) => b.isMain) ?? list[0]
+        setExpBranchId((prev) => prev || String(main.id))
+      } catch { /* الاختيار اختياري */ }
+    })()
+    return () => { alive = false }
+  }, [])
   const [saving, setSaving] = React.useState(false)
 
   const [from, setFrom] = React.useState('')
@@ -410,7 +430,7 @@ export function ExpensesView() {
     try {
       await api('/api/expenses', {
         method: 'POST',
-        body: { category, amount: amt, note: note.trim() || null },
+        body: { category, amount: amt, note: note.trim() || null, ...(expBranches.length > 1 && expBranchId ? { branchId: Number(expBranchId) } : {}) },
       })
       toast.success('تم تسجيل المصروف')
       resetForm()
@@ -1548,6 +1568,22 @@ export function ExpensesView() {
               <Label>النوع</Label>
               <CategoryPicker value={category} onChange={setCategory} />
             </div>
+
+            {!editing && expBranches.length > 1 && (
+              <div className="space-y-2">
+                <Label htmlFor="exp-branch">على أنهي فرع؟</Label>
+                <select
+                  id="exp-branch"
+                  value={expBranchId}
+                  onChange={(e) => setExpBranchId(e.target.value)}
+                  className="h-11 w-full rounded-xl border bg-background px-3 text-sm"
+                >
+                  {expBranches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="exp-note">ملاحظات</Label>

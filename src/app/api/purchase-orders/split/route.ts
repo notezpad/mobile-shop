@@ -13,8 +13,13 @@ import {
   splitPaid,
   round2,
   loadSrcProducts,
+  loadSrcVariants,
   findDestProduct,
+  findDestVariant,
   ensureDestProduct,
+  ensureDestVariant,
+  checkDestCompat,
+  variantLabel,
 } from '@/lib/purchase-split'
 
 export const dynamic = 'force-dynamic'
@@ -93,14 +98,22 @@ async function __POST(req: NextRequest) {
         return NextResponse.json({ error: 'منتج غير موجود في السلة' }, { status: 400 })
       }
     }
-    const withVariants = await sql<{ productId: number }[]>`
-      SELECT DISTINCT "productId" FROM "ProductVariant" WHERE "productId" IN ${sql(items.map((i) => i.productId))}`
-    if (withVariants.length > 0) {
-      const nm = srcMap.get(Number(withVariants[0].productId))?.name ?? ''
-      return NextResponse.json(
-        { error: `المنتج "${nm}" له ألوان ومقاسات — التوزيع عليه لسه مش متاح، اشتريه على فرع واحد` },
-        { status: 400 },
-      )
+    // 🎨 الألوان/المقاسات: منتج له variants لازم كل بند يحدد اللون/المقاس، والعكس ممنوع
+    const srcVariants = await loadSrcVariants(sql, items.map((i) => i.productId))
+    const variantMap = new Map(srcVariants.map((v) => [v.id, v]))
+    for (const it of items) {
+      const own = srcVariants.filter((v) => v.productId === it.productId)
+      const nm = srcMap.get(it.productId)!.name
+      if (own.length > 0) {
+        if (it.variantId == null) {
+          return NextResponse.json({ error: `المنتج "${nm}" له ألوان ومقاسات — حدّد اللون والمقاس لكل كمية` }, { status: 400 })
+        }
+        if (!own.some((v) => v.id === it.variantId)) {
+          return NextResponse.json({ error: `اللون/المقاس غير تابع للمنتج "${nm}"` }, { status: 400 })
+        }
+      } else if (it.variantId != null) {
+        return NextResponse.json({ error: `المنتج "${nm}" ليس له ألوان أو مقاسات` }, { status: 400 })
+      }
     }
 
     // التجميع: فرع → بنوده
@@ -109,7 +122,14 @@ async function __POST(req: NextRequest) {
       const lines = items
         .map((it) => {
           const a = it.allocations.find((x) => x.branchId === branchId)
-          return a ? { src: srcMap.get(it.productId)!, cost: it.cost, quantity: a.quantity } : null
+          return a
+            ? {
+                src: srcMap.get(it.productId)!,
+                variant: it.variantId != null ? variantMap.get(it.variantId)! : null,
+                cost: it.cost,
+                quantity: a.quantity,
+              }
+            : null
         })
         .filter((x): x is NonNullable<typeof x> => x !== null)
       const total = round2(lines.reduce((s, l) => s + l.cost * l.quantity, 0))
@@ -134,6 +154,16 @@ async function __POST(req: NextRequest) {
     }
     const paidParts = splitPaid(perBranch.map((b) => b.total), paid)
 
+    // توافق منتجات الوجهة مع نوع الصنف (قبل أي كتابة)
+    for (const b of perBranch) {
+      for (const l of b.lines) {
+        const dest = await findDestProduct(sql, tid, l.src, mainBranchId, b.branchId)
+        if (!dest) continue
+        const err = await checkDestCompat(sql, dest.id, l.variant !== null, l.src.name, branchName.get(b.branchId) ?? '')
+        if (err) return NextResponse.json({ error: err }, { status: 400 })
+      }
+    }
+
     // ── معاينة ──
     if (preview) {
       const out = []
@@ -142,14 +172,16 @@ async function __POST(req: NextRequest) {
         const lines = []
         for (const l of b.lines) {
           const dest = await findDestProduct(sql, tid, l.src, mainBranchId, b.branchId)
+          const destVariant = dest && l.variant ? await findDestVariant(sql, dest.id, l.variant) : null
           lines.push({
             productId: l.src.id,
-            name: l.src.name,
+            name: l.variant ? `${l.src.name} — ${variantLabel(l.variant)}` : l.src.name,
             quantity: l.quantity,
             cost: l.cost,
             destProductId: dest?.id ?? null,
             destName: dest?.name ?? null,
             willCreate: !dest,
+            willCreateVariant: !!l.variant && !destVariant,
           })
         }
         out.push({
@@ -178,10 +210,13 @@ async function __POST(req: NextRequest) {
             const itemsData = []
             for (const l of b.lines) {
               const destId = await ensureDestProduct(tx, tid, l.src, mainBranchId, b.branchId)
+              const destVariantId = l.variant
+                ? await ensureDestVariant(tx, tid, b.branchId, destId, l.variant)
+                : null
               itemsData.push({
                 productId: destId,
-                variantId: null,
-                name: l.src.name,
+                variantId: destVariantId,
+                name: l.variant ? `${l.src.name} — ${variantLabel(l.variant)}` : l.src.name,
                 cost: l.cost,
                 quantity: l.quantity,
               })

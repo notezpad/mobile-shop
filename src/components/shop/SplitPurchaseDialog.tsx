@@ -17,9 +17,10 @@ import { DialogHero, MethodPills } from './purchase-dialog-ui'
 interface BranchLite { id: number; name: string; isMain?: boolean }
 interface SupplierLite { id: number; name: string }
 interface ProductHit { id: number; name: string; barcode: string | null; cost: number | null; branchId: number | null }
-interface Line { product: ProductHit; cost: string; qty: Record<number, string> }
+interface Line { product: ProductHit; variant: { id: number; label: string } | null; cost: string; qty: Record<number, string> }
+interface VariantRow { id: number; color: string | null; size: string | null }
 
-interface PreviewLine { productId: number; name: string; quantity: number; cost: number; destName: string | null; willCreate: boolean }
+interface PreviewLine { productId: number; name: string; quantity: number; cost: number; destName: string | null; willCreate: boolean; willCreateVariant?: boolean }
 interface PreviewBranch { branchId: number; branchName: string; total: number; paid: number; lines: PreviewLine[] }
 interface Preview { total: number; paid: number; branches: PreviewBranch[] }
 
@@ -86,19 +87,39 @@ export function SplitPurchaseDialog({
 
   const touch = () => { setPreview(null); idemRef.current = '' }
 
-  const addProduct = (p: ProductHit) => {
+  const addProduct = async (p: ProductHit) => {
     if (lines.some((l) => l.product.id === p.id)) { toast.info('المنتج ده مضاف بالفعل'); return }
-    setLines((prev) => [...prev, { product: p, cost: p.cost != null ? String(p.cost) : '', qty: {} }])
-    setQuery(''); setHits([]); touch()
+    setQuery(''); setHits([])
+    const cost = p.cost != null ? String(p.cost) : ''
+    let variants: VariantRow[] = []
+    try {
+      const r = await fetch(`/api/products/${p.id}/variants`)
+      const list = r.ok ? await r.json() : []
+      variants = Array.isArray(list) ? list : []
+    } catch { /* هنعامله كمنتج عادي، والسيرفر هيرفض لو له مقاسات */ }
+    const label = (v: VariantRow) => [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`
+    setLines((prev) => [
+      ...prev,
+      ...(variants.length > 0
+        ? variants.map((v) => ({ product: p, variant: { id: v.id, label: label(v) }, cost, qty: {} }))
+        : [{ product: p, variant: null, cost, qty: {} }]),
+    ])
+    touch()
   }
-  const setCost = (i: number, v: string) => { setLines((p) => p.map((l, k) => (k === i ? { ...l, cost: v } : l))); touch() }
+  // التكلفة بتتطبق على كل ألوان/مقاسات نفس المنتج
+  const setCost = (i: number, v: string) => {
+    setLines((p) => p.map((l, k) => (k === i || (l.variant && l.product.id === p[i].product.id) ? { ...l, cost: v } : l)))
+    touch()
+  }
   const setQty = (i: number, bid: number, v: string) => {
     setLines((p) => p.map((l, k) => (k === i ? { ...l, qty: { ...l.qty, [bid]: v } } : l))); touch()
   }
   const removeLine = (i: number) => { setLines((p) => p.filter((_, k) => k !== i)); touch() }
 
   const lineQty = (l: Line) => branches.reduce((s, b) => s + num(l.qty[b.id] ?? ''), 0)
-  const grandTotal = r2(lines.reduce((s, l) => s + num(l.cost) * lineQty(l), 0))
+  // بنود الألوان/المقاسات الفاضية (كمية صفر) بتتجاهل، لكن البند العادي لازم يكون ليه كمية
+  const activeLines = lines.filter((l) => !l.variant || lineQty(l) > 0)
+  const grandTotal = r2(activeLines.reduce((s, l) => s + num(l.cost) * lineQty(l), 0))
   const paid = payMode === 'full' ? grandTotal : payMode === 'credit' ? 0 : r2(num(partial))
   const noSupplier = !supplierId
 
@@ -107,8 +128,9 @@ export function SplitPurchaseDialog({
     supplierId: supplierId ? Number(supplierId) : null,
     paid,
     paymentMethod: paid > 0 ? payMethod : 'cash',
-    items: lines.map((l) => ({
+    items: activeLines.map((l) => ({
       productId: l.product.id,
+      variantId: l.variant?.id ?? null,
       cost: num(l.cost),
       allocations: branches
         .map((b) => ({ branchId: b.id, quantity: num(l.qty[b.id] ?? '') }))
@@ -117,8 +139,8 @@ export function SplitPurchaseDialog({
   })
 
   const validate = (): string | null => {
-    if (lines.length === 0) return 'ضيف صنف واحد على الأقل'
-    for (const l of lines) {
+    if (activeLines.length === 0) return 'ضيف صنف واحد على الأقل وحدّد كميته'
+    for (const l of activeLines) {
       if (lineQty(l) <= 0) return `حدّد كمية لـ "${l.product.name}" في فرع واحد على الأقل`
       if (!(num(l.cost) >= 0) || l.cost.trim() === '') return `اكتب سعر التكلفة لـ "${l.product.name}"`
     }
@@ -208,10 +230,13 @@ export function SplitPurchaseDialog({
             )}
 
             {lines.map((l, i) => (
-              <div key={l.product.id} className="space-y-3 rounded-2xl border bg-card p-3">
+              <div key={`${l.product.id}:${l.variant?.id ?? 0}`} className="space-y-3 rounded-2xl border bg-card p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="truncate font-bold">{l.product.name}</div>
+                    <div className="truncate font-bold">
+                      {l.product.name}
+                      {l.variant && <span className="ms-1 rounded-md bg-cyan-600/10 px-1.5 py-0.5 text-xs font-bold text-cyan-700 dark:text-cyan-300">{l.variant.label}</span>}
+                    </div>
                     <div className="text-xs text-muted-foreground">إجمالي الكمية: {lineQty(l)} · {formatCurrency(num(l.cost) * lineQty(l))}</div>
                   </div>
                   <button type="button" onClick={() => removeLine(i)} aria-label="حذف الصنف" className="rounded-lg p-2 text-rose-600 hover:bg-rose-500/10">
@@ -268,10 +293,14 @@ export function SplitPurchaseDialog({
                   </div>
                   <ul className="space-y-1 text-xs">
                     {b.lines.map((l) => (
-                      <li key={l.productId} className="flex items-center justify-between gap-2">
+                      <li key={`${l.productId}-${l.name}`} className="flex items-center justify-between gap-2">
                         <span className="truncate">{l.name} × {l.quantity}</span>
-                        <span className={l.willCreate ? 'shrink-0 font-bold text-amber-600' : 'shrink-0 text-muted-foreground'}>
-                          {l.willCreate ? 'هيتعمل منتج جديد في الفرع' : `هيتضاف على: ${l.destName}`}
+                        <span className={l.willCreate || l.willCreateVariant ? 'shrink-0 font-bold text-amber-600' : 'shrink-0 text-muted-foreground'}>
+                          {l.willCreate
+                            ? 'هيتعمل منتج جديد في الفرع'
+                            : l.willCreateVariant
+                              ? `هيتضاف على: ${l.destName} (مقاس/لون جديد)`
+                              : `هيتضاف على: ${l.destName}`}
                         </span>
                       </li>
                     ))}
