@@ -1,3 +1,5 @@
+import { printHtmlInFrame } from '@/lib/print-frame'
+
 export interface PrintableSaleItem {
   name: string
   price: number
@@ -111,11 +113,10 @@ export function baseDocStyles(): string {
   `
 }
 
-/** شريط صغير في نافذة الطباعة بزر «إغلاق النافذة» — يظهر على الشاشة فقط ومش بيتطبع
- *  (@media print ب يخفيه). كان السيناريو المزعج: المستخدم يطبع أو يكنسل حوار الطباعة
- *  فالنافذة تفضل مفتوحة فاضية وميلاقيش طريقة يقفلها غير ما يريفرش الصفحة.
- *  الضغطة نفسها بتتركّب من الـ opener (`armPrintWindow` في print-client.ts) —
- *  مش inline onclick — عشان تشتغل حتى لو اتضاف CSP صارم بعدين. */
+/** شريط صغير بزر «إغلاق النافذة» بيتحطّ في مستندات الطباعة — يظهر على الشاشة فقط
+ *  ومش بيتطبع (@media print بيخفيه). تاريخياً كان ل النوافذ المنبثقة؛ دلوقتي
+ *  الطباعة بتمرّ جوه iframe مخفي (print-frame.ts) فالشريط ده بيبقى مخفي فعلياً
+ *  جوّه الإطار — بنسيبه في الـ HTML للتوافق مع أي عرض خارجي للمستند. */
 export function printCloseBarHtml(): string {
   return `
   <div id="print-close-bar" dir="rtl" style="position:fixed;bottom:14px;inset-inline-end:14px;z-index:9999;">
@@ -687,22 +688,16 @@ export function printBarcodeLabelsHtml(items: LabelItem[], opts: LabelOptions = 
 </html>`
 }
 
-/** Opens a new browser window, writes the given HTML into it, and triggers the
- *  print dialog once it's rendered. Shared by every "طباعة PDF" button in the app
- *  so the open/print behavior (and popup-blocked handling) is consistent everywhere. */
+/** يطبع مستند HTML جوه iframe مخفي في نفس الصفحة (print-frame.ts) — بدل نافذة
+ *  منبثقة. مشترك بين كل أزرار «طباعة PDF» في التطبيق عشان سلوك الطباعة يكون
+ *  موحّد. الـ iframe مبيتمنعش من حاجب النوافذ، ولما المستخدم يكنسل معاينة
+ *  الطباعة الصفحة تفضل شغالة عادي (كانت النافذة المنبثقة بتجمد الصفحة بعد
+ *  الإلغاء لحد ريفرش).
+ *  `onPopupBlocked` اتبقى للتوافق — بيتنادى بس لو الطباعة ماقدرتش تنطلق خالص
+ *  (بيئة غير متصفح)، وحاجب النوافذ المنبثقة ملوش علاقة تاني. */
 export function openPrintWindow(html: string, onPopupBlocked?: () => void): void {
-  const w = window.open('', '_blank', 'width=800,height=600')
-  if (!w) {
-    onPopupBlocked?.()
-    return
-  }
-  w.document.open()
-  w.document.write(html)
-  w.document.close()
-  setTimeout(() => {
-    w.focus()
-    w.print()
-  }, 250)
+  const ok = printHtmlInFrame(html, 'طباعة')
+  if (!ok) onPopupBlocked?.()
 }
 
 export interface ListReportColumn {

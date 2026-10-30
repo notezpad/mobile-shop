@@ -24,6 +24,7 @@
 import { formatCurrency } from '@/lib/format'
 import { encodeForPrinter, DEFAULT_CODE_PAGE } from '@/lib/escpos-encoding'
 import { renderBarcodeSvg } from '@/lib/print-client'
+import { printHtmlInFrame } from '@/lib/print-frame'
 import { isRenderableBarcode } from '@/lib/barcode'
 
 // الطابعة الحرارية بتحوّل النص لـ bytes — لازم نشيل حروف اتجاه الـ bidi غير المرئية
@@ -343,19 +344,10 @@ export function printThermalReceiptBrowser(data: ThermalReceiptData, settings: P
 </body>
 </html>`
 
-  const w = window.open('', '_blank', `width=${settings.width === '58mm' ? '240' : '320'},height=600`)
-  if (!w) {
-    alert('الرجاء السماح بالنوافذ المنبثقة للطباعة')
-    return
-  }
-  w.document.open()
-  w.document.write(html)
-  w.document.close()
-  w.document.title = `فاتورة ${data.invoiceNo}`
-  setTimeout(() => {
-    w.focus()
-    w.print()
-  }, 250)
+  // 🛡️ iframe مخفي في نفس الصفحة بدل نافذة منبثقة — حاجب النوافذ ملوش دعوة،
+  // ولما المستخدم يكنسل معاينة الطباعة الصفحة تفضل شغالة عادي ويقدر يطبع تاني
+  // (كانت النافذة المنبثقة بتجمّد الصفحة بعد الإلغاء لحد ريفرش).
+  printHtmlInFrame(html, `فاتورة ${data.invoiceNo}`)
 }
 
 // ─── WebUSB Direct Printing ────────────────────────────────

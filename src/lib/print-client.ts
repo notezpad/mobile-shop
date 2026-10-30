@@ -10,6 +10,7 @@ import {
   type LabelItem,
   type LabelOptions,
 } from '@/lib/print'
+import { printHtmlInFrame } from '@/lib/print-frame'
 
 /** نقطة طابعة الملصقات الشائعة (203dpi) بالمم — عرض الوحدة بيتقصّ لمضاعفاتها
  *  عشان الخطوط تترسم بعدد صحيح من النقاط (مسح ثابت على الطابعة). */
@@ -20,59 +21,13 @@ const MM = 3.78 // 1mm ≈ 3.78px @ 96dpi
 const DOT_MM = PRINTER_DOT_MM
 const svgNS = 'http://www.w3.org/2000/svg'
 
-/** تجهيز نافذة الطباعة بعد كتابة الـ HTML فيها:
- *  1) زر «إغلاق النافذة» اللي في الـ HTML — الضغطة بتتركّب من هنا (مش inline onclick)
- *     عشان تشتغل تحت أي CSP.
- *  2) إغلاق تلقائي لما حوار الطباعة يتقفل (طبع فعلًا أو كنسل) عبر `onafterprint` —
- *     كان السيناريو المزعج: المستخدم يكنسل الطباعة فالنافذة تفضل مفتوحة فاضية
- *     ومبيقفلهاش غير الريفرش. لو المتصفح مادعمش afterprint، زر الإغلاق الظاهر
- *     بيغطّي الحالة دي.
- *  `autoClose: false` للنوافذ اللي المستخدم ممكن يعايز يفضل فيها (تصدير PDF/تقارير). */
-function armPrintWindow(w: Window, autoClose = true) {
-  try {
-    w.document
-      .getElementById('print-close-btn')
-      ?.addEventListener('click', () => {
-        try {
-          w.close()
-        } catch {
-          /* ignore */
-        }
-      })
-  } catch {
-    /* ignore */
-  }
-  if (!autoClose) return
-  try {
-    w.onafterprint = () => {
-      try {
-        w.close()
-      } catch {
-        /* ignore */
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-}
-
-/** Open a print window with the given HTML and trigger print dialog. */
-export function printHtml(html: string, title = 'طباعة') {
-  const w = window.open('', '_blank', 'width=800,height=600')
-  if (!w) {
-    alert('الرجاء السماح بالنوافذ المنبثقة للطباعة')
-    return
-  }
-  w.document.open()
-  w.document.write(html)
-  w.document.close()
-  w.document.title = title
-  armPrintWindow(w)
-  // give the browser a tick to lay out before printing
-  setTimeout(() => {
-    w.focus()
-    w.print()
-  }, 250)
+/** طباعة مستند HTML — جوه iframe مخفي في نفس الصفحة (print-frame.ts).
+ *  مفيش نافذة منبثقة: حاجب النوافذ ملوش دعوة، ولما المستخدم يكنسل المعاينة
+ *  الصفحة تفضل شغالة عادي ويقدر يضغط «طباعة» تاني فوراً — دي كانت مشكلة
+ *  النافذة المنبثقة القديمة (الصفحة بتتجمّد بعد الإلغاء لحد ريفرش).
+ *  بيرجّع true لو أمر الطباعة انطلق. */
+export function printHtml(html: string, title = 'طباعة'): boolean {
+  return printHtmlInFrame(html, title)
 }
 
 export function printSale(sale: PrintableSale, shop?: {
@@ -85,8 +40,9 @@ export function printSale(sale: PrintableSale, shop?: {
   printHtml(printInvoiceHtml(sale, shop), `فاتورة ${sale.invoiceNo ?? sale.id}`)
 }
 
-/** Export invoice as PDF — opens the invoice in a new window with print dialog
- *  pre-configured for PDF output (no headers/footers, portrait A5). */
+/** Export invoice as PDF — prints the invoice (styled for A5 portrait, no
+ *  headers/footers) through the hidden print iframe; the user picks
+ *  «حفظ كـ PDF» from the print dialog. No popup window involved. */
 export function exportSalePdf(sale: PrintableSale, shop?: {
   name?: string
   phone?: string
@@ -105,19 +61,7 @@ export function exportSalePdf(sale: PrintableSale, shop?: {
     </style>`
   const html = baseHtml.replace('</head>', `${pdfStyles}</head>`)
 
-  const w = window.open('', '_blank', 'width=600,height=800')
-  if (!w) { alert('الرجاء السماح بالنوافذ المنبثقة'); return }
-  w.document.open()
-  w.document.write(html)
-  w.document.close()
-  w.document.title = `فاتورة-${sale.invoiceNo ?? sale.id}`
-  // تصدير PDF: من من غير إغلاق تلقائي — المستخدم ممكن يكنسل عشان يتصفّح/يحفظ،
-  // بس زر «إغلاق النافذة» الظاهر متاح دايماً.
-  armPrintWindow(w, false)
-  setTimeout(() => {
-    w.focus()
-    w.print() // user can choose "Save as PDF" from the print dialog
-  }, 300)
+  printHtmlInFrame(html, `فاتورة-${sale.invoiceNo ?? sale.id}`)
 }
 
 /** يقيس عرض الوحدة (module) اللي هيترسم بها الباركود فعلاً جوه مساحة متاحة —
@@ -214,14 +158,14 @@ export function renderBarcodeSvg(
   }
 }
 
-/** Opens the barcode-label sheet in its own window. Barcodes are pre-rendered
- *  to SVG strings here (using the bundled `jsbarcode`), then handed to
- *  `printBarcodeLabelsHtml` which produces a 100% static HTML document — no
- *  CDN script, no async rendering, no chance of a blank/half-rendered sheet.
+/** يطبع ورقة ملصقات الباركود جوه iframe مخفي في نفس الصفحة. الباركودات مترندرة
+ *  مسبقاً كـ SVG (بـ jsbarcode المدمج) وبتتم للـ `printBarcodeLabelsHtml` اللي
+ *  بيطلّع مستند HTML ثابت 100% — من غير CDN ولا سكريبتات ولا رندر async —
+ *  فمستحيل الورقة تطلع فاضية أو نصف مرسومة.
  *
- *  بترجّع boolean: true = النافذة اتفتحت وأمر الطباعة انطلق، false = المتصفح
- *  حجب النافذة المنبثقة — عشان الدايلوج ميتقفلش ويضيّع اختيار الكميات لما
- *  الطباعة تفشل. */
+ *  بترجّع boolean: true = أمر الطباعة انطلق (المعاينة هتظهر فوق نفس الصفحة —
+ *  لو المستخدم كنسلها الصفحة تفضل شغالة ويقدر يضغط طباعة تاني فوراً)،
+ *  false = الطباعة ماقدرتش تنطلق (حالة نظرية — البيئة مش متصفح). */
 export function printBarcodeLabels(items: LabelItem[], opts?: LabelOptions): boolean {
   const mode = opts?.mode ?? 'sheet'
   const labelSize = opts?.labelSize ?? opts?.rollSize ?? { widthMm: 40, heightMm: 30 }
@@ -259,23 +203,7 @@ export function printBarcodeLabels(items: LabelItem[], opts?: LabelOptions): boo
   })
 
   const html = printBarcodeLabelsHtml(enriched, { ...opts, mode, labelSize })
-  const w = window.open('', '_blank', 'width=900,height=700')
-  if (!w) {
-    alert('الرجاء السماح بالنوافذ المنبثقة للطباعة')
-    return false // الدايلوج بيفضل مفتوح والاختيارات زي ما هي
-  }
-  w.document.open()
-  w.document.write(html)
-  w.document.close()
-  w.document.title = 'طباعة ملصقات الباركود'
-  // 🛡️ نافذة الطباعة بتتقفل لوحدها لما حوار الطباعة يتقفل (طبع أو كنسل) —
-  // وكانت بتفضل مفتوحة والمستخدم ميقدرش يقفلها غير الريفرش. + زر إغلاق ظاهر احتياط.
-  armPrintWindow(w)
-  // The print document is now fully static — no scripts to load, no async
-  // barcode rendering to wait for. A short tick is enough for layout/paint.
-  setTimeout(() => {
-    w.focus()
-    w.print()
-  }, 250)
-  return true
+  // 🛡️ iframe مخفي في نفس الصفحة بدل نافذة منبثقة — الإلغاء مبيسيبش الصفحة
+  // مجمدة، ومفيش نافذة فاضية تفضل مفتوحة، وحاجب النوافذ ملوش دعوة.
+  return printHtmlInFrame(html, 'طباعة ملصقات الباركود')
 }
