@@ -1,7 +1,10 @@
 'use client'
 
 import * as React from 'react'
-import { AlertTriangle, MessageCircle, ChevronLeft, ChevronRight, FileSpreadsheet, Loader2, RefreshCw, Settings2, Trash2, Wallet } from 'lucide-react'
+import {
+  CalendarRange, Clock, FileSpreadsheet, Loader2, MessageCircle,
+  RefreshCw, Settings2, Trash2, Wallet,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,13 +14,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useShopStore } from '@/lib/store'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { useDataRefresh } from '@/lib/offline/data-events'
-import { EmptyState, ListSkeleton, PAY_METHODS, PageHead, PageShell, Pill, Stat, hrGet, hrSend, money, monthLabel, shiftMonth } from './hr-ui'
+import {
+  EmptyState, HrHero, ListSkeleton, PAY_METHODS, PageShell, Panel, PanelTitle, Pill, StatCell, StatStrip, StatusChip,
+  hrGet, hrSend, money, monthLabel, shiftMonth,
+} from './hr-ui'
 
 interface RunLite { id: number; month: string; status: 'draft' | 'paid'; totalNet: number; count: number }
 interface Slip {
   id: number; employeeId: number; employeeName: string; baseSalary: number; payableBase: number
   absentDays: number; absenceDeduction: number; lateMinutes: number; lateDeduction: number
-  bonus: number; penalty: number; advanceDeduction: number; net: number; note: string | null; unrecordedDays: number
+  bonus: number; penalty: number; advanceDeduction: number; net: number; note: string | null
+  unrecordedDays: number; pendingDays: number
+  workedDays: number | null; expectedWorkDays: number | null
   phone: string | null
 }
 interface Run { id: number; month: string; status: 'draft' | 'paid'; totalNet: number; method: string | null; paidAt: string | null; payslips: Slip[] }
@@ -130,8 +138,9 @@ export function HrPayrollView() {
       sheetName: 'الرواتب',
       columns: [
         { header: 'الموظف', key: 'name', format: 'text' },
+        { header: 'أيام الشغل', key: 'worked', format: 'text' },
         { header: 'الأساسي', key: 'base', format: 'currency' },
-        { header: 'خصم غياب', key: 'abs', format: 'currency' },
+        { header: 'خصم غياب وأيام بدون تسجيل', key: 'abs', format: 'currency' },
         { header: 'خصم تأخير', key: 'late', format: 'currency' },
         { header: 'حافز', key: 'bonus', format: 'currency' },
         { header: 'جزاء', key: 'penalty', format: 'currency' },
@@ -139,37 +148,46 @@ export function HrPayrollView() {
         { header: 'الصافي', key: 'net', format: 'currency' },
       ],
       rows: run.payslips.map((p) => ({
-        name: p.employeeName, base: p.payableBase, abs: p.absenceDeduction, late: p.lateDeduction,
+        name: p.employeeName,
+        worked: p.workedDays !== null && p.expectedWorkDays !== null ? `${p.workedDays} من ${p.expectedWorkDays}` : '—',
+        base: p.payableBase, abs: p.absenceDeduction, late: p.lateDeduction,
         bonus: p.bonus, penalty: p.penalty, adv: p.advanceDeduction, net: p.net,
       })),
       totals: { name: 'الإجمالي', net: run.totalNet },
     })
   }
 
-  const totalUnrecorded = run?.status === 'draft' ? run.payslips.reduce((s, p) => s + p.unrecordedDays, 0) : 0
+  const totalWorked = run?.payslips.reduce((s, p) => s + (p.workedDays ?? 0), 0) ?? 0
   const pastRuns = runs.filter((r) => r.month !== month)
 
   return (
     <PageShell>
-      <PageHead
+      <HrHero
+        theme="payroll"
+        icon={Wallet}
+        kicker="الموارد البشرية"
         title="الرواتب"
-        subtitle="جهّز الرواتب بضغطة، راجعها، واعتمدها — والخزنة والمصروفات بتتحدث لوحدها."
+        subtitle="الصافي بيتحسب من أيام الشغل المسجّلة لكل موظف."
         actions={<Button variant="outline" onClick={() => setSettingsOpen(true)} className="gap-1.5"><Settings2 className="size-4" />قواعد الحساب</Button>}
       />
 
       {/* اختيار الشهر */}
-      <div className="mb-4 flex items-center gap-2 rounded-2xl border bg-card p-3">
-        <Button variant="outline" size="icon" aria-label="الشهر السابق" onClick={() => setMonth(shiftMonth(month, -1))}><ChevronRight className="size-4" /></Button>
-        <div className="flex-1 text-center text-lg font-extrabold">{month ? monthLabel(month) : '...'}</div>
-        <Button variant="outline" size="icon" aria-label="الشهر التالي" disabled={!month || month >= currentMonth} onClick={() => setMonth(shiftMonth(month, 1))}><ChevronLeft className="size-4" /></Button>
-      </div>
+      <Panel className="mb-4">
+        <div className="flex items-center gap-2 p-3">
+          <Button variant="outline" size="icon" aria-label="الشهر السابق" onClick={() => setMonth(shiftMonth(month, -1))}><CalendarRange className="size-4 rotate-180" /></Button>
+          <div className="flex-1 text-center text-lg font-extrabold">{month ? monthLabel(month) : '...'}</div>
+          <Button variant="outline" size="icon" aria-label="الشهر التالي" disabled={!month || month >= currentMonth} onClick={() => setMonth(shiftMonth(month, 1))}><CalendarRange className="size-4" /></Button>
+        </div>
+      </Panel>
 
       {loading ? (
         <ListSkeleton />
       ) : !run ? (
         <EmptyState
+          theme="payroll"
+          icon={Wallet}
           title={`مفيش رواتب متجهزة لشهر ${month ? monthLabel(month) : ''}`}
-          hint="النظام هيحسب الغياب والتأخير والسلف من سجلات الحضور ويطلعلك مسودة تراجعها قبل الصرف."
+          hint="المسودة بتتجهّز من سجلات الحضور والإجازات والسلف — تراجعها واعتمدها."
           action={
             <Button onClick={generate} disabled={busy || !month} className="gap-1.5">
               {busy ? <Loader2 className="size-4 animate-spin" /> : <Wallet className="size-4" />}
@@ -179,74 +197,83 @@ export function HrPayrollView() {
         />
       ) : (
         <>
-          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat label="الحالة" value={run.status === 'paid' ? 'اتصرفت' : 'مسودة'} tone={run.status === 'paid' ? 'emerald' : 'amber'} />
-            <Stat label="عدد الموظفين" value={run.payslips.length} tone="sky" />
-            <Stat label="صافي الرواتب" value={money(run.totalNet)} tone="violet" />
-            <Stat label="إجمالي أقساط السلف" value={money(run.payslips.reduce((s, p) => s + p.advanceDeduction, 0))} tone="slate" />
-          </div>
+          <StatStrip className="mb-4">
+            <StatCell
+              label="الحالة" dot={run.status === 'paid' ? 'bg-emerald-500' : 'bg-amber-500'}
+              value={run.status === 'paid' ? 'اتصرفت' : 'مسودة'}
+              foot={run.status === 'paid' && run.paidAt ? new Date(run.paidAt).toLocaleDateString('ar-EG-u-nu-latn') : 'للمراجعة قبل الاعتماد'}
+            />
+            <StatCell label="عدد الموظفين" dot="bg-sky-500" value={run.payslips.length} />
+            <StatCell label="صافي الرواتب" dot="bg-primary" value={money(run.totalNet)} foot={`أيام شغل مسجّلة: ${totalWorked}`} />
+            <StatCell label="إجمالي أقساط السلف" dot="bg-violet-500" value={money(run.payslips.reduce((s, p) => s + p.advanceDeduction, 0))} />
+          </StatStrip>
 
-          {totalUnrecorded > 0 && (
-            <div className="mb-4 flex items-start gap-2 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
-              <p>
-                فيه <b>{totalUnrecorded}</b> يوم عمل مالوش تسجيل حضور — بيتحسبوا حاضر. لو فيه غياب، سجّله من شاشة الحضور
-                وبعدين اضغط "أعد الحساب".
-              </p>
+          <Panel>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] text-sm">
+                <thead className="bg-muted/50 text-xs text-muted-foreground">
+                  <tr>
+                    {['الموظف', 'أيام الشغل', 'الأساسي', 'غياب وبدون تسجيل', 'تأخير', 'حافز', 'جزاء', 'قسط سلفة', 'الصافي', ''].map((h, i) => (
+                      <th key={i} className="px-3 py-2.5 text-start font-bold">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {run.payslips.map((p) => {
+                    const e = edits[p.id] ?? { bonus: '', penalty: '', note: '' }
+                    const draft = run.status === 'draft'
+                    const unrecordedTotal = p.absentDays + p.unrecordedDays
+                    return (
+                      <tr key={p.id} className="border-t align-top transition-colors hover:bg-muted/30">
+                        <td className="px-3 py-3">
+                          <div className="font-bold">{p.employeeName}</div>
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {p.workedDays === 0 && <Pill tone="rose">بدون أيام شغل مسجّلة</Pill>}
+                            {p.workedDays !== null && p.workedDays > 0 && p.unrecordedDays > 0 && <Pill tone="amber">{p.unrecordedDays} يوم بدون تسجيل</Pill>}
+                            {p.pendingDays > 0 && <Pill tone="sky">{p.pendingDays} يوم متبقي</Pill>}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          {p.workedDays !== null ? (
+                            <>
+                              <div className="font-extrabold tabular-nums">{p.workedDays}</div>
+                              {p.expectedWorkDays !== null && <div className="text-[11px] text-muted-foreground">من {p.expectedWorkDays} يوم شغل</div>}
+                            </>
+                          ) : '—'}
+                        </td>
+                        <td className="px-3 py-3 tabular-nums">{money(p.payableBase)}</td>
+                        <td className="px-3 py-3 tabular-nums text-rose-600">
+                          {p.absenceDeduction > 0 ? `- ${money(p.absenceDeduction)}` : '—'}
+                          {unrecordedTotal > 0 && <div className="text-[11px] text-muted-foreground">{unrecordedTotal} يوم (غياب + بدون تسجيل)</div>}
+                        </td>
+                        <td className="px-3 py-3 tabular-nums text-rose-600">
+                          {p.lateDeduction > 0 ? `- ${money(p.lateDeduction)}` : '—'}
+                          {p.lateMinutes > 0 && <div className="text-[11px] text-muted-foreground">{p.lateMinutes} دقيقة</div>}
+                        </td>
+                        <td className="px-3 py-3">
+                          {draft ? (
+                            <Input type="number" inputMode="decimal" min={0} dir="ltr" className="h-9 w-24" value={e.bonus}
+                              onChange={(ev) => setEdits((s) => ({ ...s, [p.id]: { ...e, bonus: ev.target.value } }))} />
+                          ) : (p.bonus > 0 ? `+ ${money(p.bonus)}` : '—')}
+                        </td>
+                        <td className="px-3 py-3">
+                          {draft ? (
+                            <Input type="number" inputMode="decimal" min={0} dir="ltr" className="h-9 w-24" value={e.penalty}
+                              onChange={(ev) => setEdits((s) => ({ ...s, [p.id]: { ...e, penalty: ev.target.value } }))} />
+                          ) : (p.penalty > 0 ? `- ${money(p.penalty)}` : '—')}
+                        </td>
+                        <td className="px-3 py-3 tabular-nums text-violet-600">{p.advanceDeduction > 0 ? `- ${money(p.advanceDeduction)}` : '—'}</td>
+                        <td className="px-3 py-3 text-base font-extrabold tabular-nums">{money(p.net)}</td>
+                        <td className="px-3 py-3">
+                          <WhatsAppSlip slip={p} month={run.month} shop={shopName} />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
-          )}
-
-          <div className="overflow-x-auto rounded-2xl border bg-card">
-            <table className="w-full min-w-[820px] text-sm">
-              <thead className="bg-muted/50 text-xs text-muted-foreground">
-                <tr>
-                  {['الموظف', 'الأساسي', 'غياب', 'تأخير', 'حافز', 'جزاء', 'قسط سلفة', 'الصافي', ''].map((h, i) => (
-                    <th key={i} className="px-3 py-2 text-start font-bold">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {run.payslips.map((p) => {
-                  const e = edits[p.id] ?? { bonus: '', penalty: '', note: '' }
-                  const draft = run.status === 'draft'
-                  return (
-                    <tr key={p.id} className="border-t align-top">
-                      <td className="px-3 py-2">
-                        <div className="font-bold">{p.employeeName}</div>
-                        {draft && p.unrecordedDays > 0 && <Pill tone="amber">{p.unrecordedDays} يوم بدون تسجيل</Pill>}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums">{money(p.payableBase)}</td>
-                      <td className="px-3 py-2 tabular-nums text-rose-600">
-                        {p.absenceDeduction > 0 ? `- ${money(p.absenceDeduction)}` : '—'}
-                        {p.absentDays > 0 && <div className="text-[11px] text-muted-foreground">{p.absentDays} يوم</div>}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums text-rose-600">
-                        {p.lateDeduction > 0 ? `- ${money(p.lateDeduction)}` : '—'}
-                        {p.lateMinutes > 0 && <div className="text-[11px] text-muted-foreground">{p.lateMinutes} دقيقة</div>}
-                      </td>
-                      <td className="px-3 py-2">
-                        {draft ? (
-                          <Input type="number" inputMode="decimal" min={0} dir="ltr" className="h-9 w-24" value={e.bonus}
-                            onChange={(ev) => setEdits((s) => ({ ...s, [p.id]: { ...e, bonus: ev.target.value } }))} />
-                        ) : (p.bonus > 0 ? `+ ${money(p.bonus)}` : '—')}
-                      </td>
-                      <td className="px-3 py-2">
-                        {draft ? (
-                          <Input type="number" inputMode="decimal" min={0} dir="ltr" className="h-9 w-24" value={e.penalty}
-                            onChange={(ev) => setEdits((s) => ({ ...s, [p.id]: { ...e, penalty: ev.target.value } }))} />
-                        ) : (p.penalty > 0 ? `- ${money(p.penalty)}` : '—')}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums text-violet-600">{p.advanceDeduction > 0 ? `- ${money(p.advanceDeduction)}` : '—'}</td>
-                      <td className="px-3 py-2 text-base font-extrabold tabular-nums">{money(p.net)}</td>
-                      <td className="px-3 py-2">
-                        <WhatsAppSlip slip={p} month={run.month} shop={shopName} />
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          </Panel>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {run.status === 'draft' ? (
@@ -264,7 +291,8 @@ export function HrPayrollView() {
                 <Button variant="ghost" onClick={removeDraft} disabled={busy} className="gap-1.5 text-rose-600"><Trash2 className="size-4" />حذف المسودة</Button>
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">
+              <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Clock className="size-4" />
                 اتصرفت {run.paidAt ? new Date(run.paidAt).toLocaleDateString('ar-EG-u-nu-latn') : ''} من {PAY_METHODS.find((m) => m.value === run.method)?.label ?? run.method}
               </p>
             )}
@@ -275,13 +303,13 @@ export function HrPayrollView() {
 
       {pastRuns.length > 0 && (
         <div className="mt-8">
-          <h2 className="mb-2 text-base font-extrabold">دورات سابقة</h2>
+          <PanelTitle icon={Clock} title="دورات سابقة" />
           <ul className="space-y-1.5">
             {pastRuns.map((r) => (
               <li key={r.id}>
-                <button type="button" onClick={() => setMonth(r.month)} className="flex w-full items-center gap-3 rounded-xl border bg-card px-3 py-2.5 text-start hover:bg-muted">
+                <button type="button" onClick={() => setMonth(r.month)} className="flex w-full items-center gap-3 rounded-2xl border bg-card px-3.5 py-3 text-start shadow-sm transition-colors hover:bg-muted">
                   <span className="flex-1 font-semibold">{monthLabel(r.month)}</span>
-                  <Pill tone={r.status === 'paid' ? 'emerald' : 'amber'}>{r.status === 'paid' ? 'اتصرفت' : 'مسودة'}</Pill>
+                  <StatusChip tone={r.status === 'paid' ? 'emerald' : 'amber'}>{r.status === 'paid' ? 'اتصرفت' : 'مسودة'}</StatusChip>
                   <span className="tabular-nums text-sm">{money(r.totalNet)}</span>
                 </button>
               </li>
@@ -316,9 +344,17 @@ function slipText(p: Slip, month: string, shop: string): string {
   const lines = [
     `*قسيمة راتب ${monthLabel(month)}*${shop ? ` — ${shop}` : ''}`,
     `الموظف: ${p.employeeName}`,
-    `الأساسي: ${money(p.payableBase)}`,
   ]
-  if (p.absenceDeduction > 0) lines.push(`خصم غياب (${p.absentDays} يوم): - ${money(p.absenceDeduction)}`)
+  if (p.workedDays !== null && p.expectedWorkDays !== null) {
+    lines.push(`أيام الشغل: ${p.workedDays} من ${p.expectedWorkDays}`)
+  }
+  lines.push(`الأساسي: ${money(p.payableBase)}`)
+  if (p.absenceDeduction > 0) {
+    const parts: string[] = []
+    if (p.absentDays > 0) parts.push(`${p.absentDays} غياب`)
+    if (p.unrecordedDays > 0) parts.push(`${p.unrecordedDays} بدون تسجيل`)
+    lines.push(`خصم أيام (${parts.join(' + ')}): - ${money(p.absenceDeduction)}`)
+  }
   if (p.lateDeduction > 0) lines.push(`خصم تأخير (${p.lateMinutes} دقيقة): - ${money(p.lateDeduction)}`)
   if (p.bonus > 0) lines.push(`حافز: + ${money(p.bonus)}`)
   if (p.penalty > 0) lines.push(`جزاء: - ${money(p.penalty)}`)
@@ -350,7 +386,13 @@ function WhatsAppSlip({ slip, month, shop }: { slip: Slip; month: string; shop: 
   )
 }
 
-function PayDialog({ run, onClose, onPaid }: { run: Run; onClose: () => void; onPaid: () => void }) {
+function PayDialog({
+  run, onClose, onPaid,
+}: {
+  run: Run
+  onClose: () => void
+  onPaid: () => void
+}) {
   const [method, setMethod] = React.useState('cash')
   const [busy, setBusy] = React.useState(false)
   const pay = async () => {
@@ -421,7 +463,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
       <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
         <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
           <DialogTitle>قواعد الحساب</DialogTitle>
-          <DialogDescription>القيم الافتراضية مناسبة لأغلب المحلات.</DialogDescription>
+          <DialogDescription>القيم الافتراضية مناسبة لأغلب المحلات. الحساب دايمًا على الأيام الفعلية المسجّلة.</DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-3.5 py-4">
           {!s ? <ListSkeleton rows={3} /> : (
