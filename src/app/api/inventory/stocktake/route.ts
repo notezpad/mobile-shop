@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
-import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
-import { requireModule, featureErrorResponse } from '@/lib/features'
+import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireModule, featureErrorResponse, requireBlindStocktakeAccess, isStocktakeManager } from '@/lib/features'
 import { withSql, type Sql } from '@/lib/sql'
 import { validateVariantLines } from '@/lib/transfer-stock'
 import { applyStocktakeDiff, computeStocktakeShrink, recordStocktakeShrinkLoss } from '@/lib/stocktake-stock'
@@ -24,12 +24,38 @@ async function __GETImpl(sql: Sql) {
   try { s = await requireAuth() } catch (e) {
     const err = authErrorResponse(e); return NextResponse.json(err?.body,{status:err?.status})
   }
-  try { await requireModule(s, 'inventory') } catch (e) {
-    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
+  // 🫥 (التحديث الحادي عشر): الوصول لمحطة الجرد بقى من بابين:
+  //   1) موديول «المخزون» كامل (زي الأول) — أوراق مفتوحة بأرقامها.
+  //   2) صلاحية «الجرد الأعمي» المستقلة — أوراق أعمي بس، بدون أي أرقام.
+  const isManager = isStocktakeManager(s)
+  let hasInventory = isManager
+  if (!hasInventory) {
+    try { await requireModule(s, 'inventory'); hasInventory = true } catch (e) {
+      const fe = featureErrorResponse(e)
+      if (!fe) throw e
+      hasInventory = false
+    }
   }
+  if (!hasInventory) {
+    try { requireBlindStocktakeAccess(s) } catch (e) {
+      const fe = featureErrorResponse(e)
+      if (fe) return NextResponse.json(fe.body, { status: fe.status })
+      throw e
+    }
+  }
+
   // نفس where القديم حرفيًا: tenant دايمًا + فرع الجلسة لو موجود
+  // 🫥 + العدّاد صاحب الجرد الأعمي (بدون موديول المخزون) بيشوف أوراق أعمي بس
   const whereParts = [sql`st."tenantId" = ${s.tenantId}`]
   if (s.branchId) whereParts.push(sql` AND st."branchId" = ${s.branchId}`)
+  if (!hasInventory) whereParts.push(sql` AND st."mode" = 'blind'`)
+
+  // 🛡️ قاعدة العتمة: أي طلب من غير مدير → أوراق الأعمي بترجع من غير
+  // systemQty ومن غير diff — الحجب جوه الـ SQL نفسه (مش إخفاء واجهة)،
+  // فمستحيل الرقم يوصل جهاز العدّاد حتى من الرد الخام أو الكاش الأوفلاين.
+  const itemFields = isManager
+    ? sql`'systemQty', si."systemQty", 'countedQty', si."countedQty", 'diff', si."diff",`
+    : sql`'countedQty', si."countedQty",`
 
   // ⚡ PERF FIX (CPU time / Error 1102): نفس سقف القديم — آخر 200 جلسة جرد
   // (الـ UI بيعرضها بالترتيب ده ومفيش pagination أصلاً).
@@ -38,7 +64,8 @@ async function __GETImpl(sql: Sql) {
     FROM (
       SELECT json_build_object(
         'id', st."id", 'tenantId', st."tenantId", 'branchId', st."branchId",
-        'status', st."status", 'note', st."note", 'createdBy', st."createdBy",
+        'status', st."status", 'mode', st."mode", 'cycleScheduleId', st."cycleScheduleId",
+        'note', st."note", 'createdBy', st."createdBy",
         'createdAt', to_char(st."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
         'committedAt', CASE WHEN st."committedAt" IS NULL THEN NULL
                        ELSE to_char(st."committedAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') END,
@@ -50,7 +77,7 @@ async function __GETImpl(sql: Sql) {
             'variantId', si."variantId",
             'variant', CASE WHEN pv."id" IS NULL THEN NULL
                        ELSE json_build_object('size', pv."size", 'color', pv."color") END,
-            'systemQty', si."systemQty", 'countedQty', si."countedQty", 'diff', si."diff",
+            ${itemFields}
             'product', CASE WHEN p."id" IS NULL THEN NULL
                        ELSE json_build_object('name', p."name", 'barcode', p."barcode") END
           ) ORDER BY si."id")
@@ -80,17 +107,33 @@ async function __POST(req: NextRequest) {
   let s
   try {
     // 🛡️ 2026-09-30 (X8): اعتماد الجرد بيغيّر أرصدة المخزن فعلياً — أدمن بس.
-    s = await requireAdmin()
+    // 🫥 (التحديث الحادي عشر): الموظف صاحب صلاحية «الجرد الأعمي» يقدر يعدّ
+    // ويحفظ مسودة أعمي بس (وضع blind مفروض + الاعتماد متوقف عنده).
+    s = await requireAuth()
   } catch (e) {
     const err = authErrorResponse(e); return NextResponse.json(err?.body,{status:err?.status})
   }
-  try { await requireModule(s, 'inventory') } catch (e) {
-    const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
-  }
+  const isAdmin = isStocktakeManager(s)
   const b = await req.json().catch(() => null)
+  let mode = 'open'
+  let commit = b?.commit === true
+  if (!isAdmin) {
+    try { requireBlindStocktakeAccess(s) } catch (e) {
+      const fe = featureErrorResponse(e)
+      if (fe) return NextResponse.json(fe.body, { status: fe.status })
+      throw e
+    }
+    // الموظف: جرد أعمي مفروض + مسودة بس — محرك الاعتماد أدمن بس (من غير ولا سطر)
+    mode = 'blind'
+    commit = false
+  } else {
+    mode = b?.mode === 'blind' ? 'blind' : 'open'
+  }
+  if (!isAdmin) {
+    try { await requireModule(s, 'inventory') } catch { /* صلاحية الجرد الأعمي تكفي — الاعتماد متوقف عنده أصلاً */ }
+  }
   const branchId = s.branchId ?? (b?.branchId ? parseInt(b.branchId, 10) : null)
   const items = Array.isArray(b?.items) ? b.items : []
-  const commit = b?.commit === true
   if (items.length === 0) return NextResponse.json({ error: 'أضف منتجات للجرد' }, { status: 400 })
   // 🛡️ 2026-09-30 (X8): اعتماد الجرد من غير سبب كان بيقبل أي تغيير مجهول.
   if (commit) {
@@ -159,6 +202,7 @@ async function __POST(req: NextRequest) {
         tenantId: s.tenantId,
         branchId,
         status: commit ? 'committed' : 'draft',
+        mode,
         note: b?.note ? String(b.note) : null,
         createdBy: s.userId,
         committedAt: commit ? new Date() : null,
@@ -196,6 +240,23 @@ async function __POST(req: NextRequest) {
     }
     return st
   })
+  // 🫥 رد ورقة أعمي → بدون أرقام نظام حتى للمدير (هو نفسه بيعدّ أعمي —
+  // الفروق تظهرله في الأرشيف بعد ما العدّ يخلص، مش أثناء العدّ).
+  if (mode === 'blind') {
+    return NextResponse.json(
+      {
+        ...created,
+        items: created.items.map((it) => ({
+          id: it.id,
+          stocktakeId: it.stocktakeId,
+          productId: it.productId,
+          variantId: it.variantId,
+          countedQty: it.countedQty,
+        })),
+      },
+      { status: 201 },
+    )
+  }
   return NextResponse.json(created, { status: 201 })
 }
 

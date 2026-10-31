@@ -105,6 +105,12 @@ function buildWhere(
     parts.push(sql`AND ${productBranchScopeSql(sql, tenantId, sessionBranchId)}`)
   } else if (branchIdParam && branchIdParam !== 'all') {
     if (branchIdParam === 'none') parts.push(sql`AND "branchId" IS NULL`)
+    // 🏬 (التحديث الرابع عشر) 'main' = الفرع الرئيسي + الأصناف غير المسندة
+    // (نفس قاعدة النطاق: غير المسند بيتعامل كأنه تابع للفرع الرئيسي) —
+    // بتستخدمها نقطة البيع لما المدير يختار «فرع البيع» الرئيسي.
+    else if (branchIdParam === 'main')
+      parts.push(sql`AND ("branchId" IS NULL OR "branchId" = (
+        SELECT "id" FROM "Branch" WHERE "tenantId" = ${tenantId} AND "isMain" = true LIMIT 1))`)
     else parts.push(sql`AND "branchId" = ${parseInt(branchIdParam, 10)}`)
   }
 

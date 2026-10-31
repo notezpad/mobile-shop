@@ -16,6 +16,7 @@ import { RoleBadge } from '@/components/shop/RoleBadge'
 import { useOfflineReady } from '@/lib/offline/use-offline'
 import { scheduleIdleWarmup } from '@/lib/view-preload'
 import { useShopStore } from '@/lib/store'
+import { parsePaymentMethodsConfig } from '@/lib/payment-methods'
 import { api } from '@/lib/api'
 import { getMe, type AuthUser } from '@/lib/auth-client'
 
@@ -240,7 +241,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
       // الخطوة 2 (خلفية): بيانات المحل + الاشتراك — بالتوازي وبغير حاجب
       ;(async () => {
         const [tenantResult, subResult] = await Promise.allSettled([
-          api<{ shopName?: string; phone?: string | null; address?: string | null; logoPath?: string | null; invoicePrefix?: string; timezone?: string }>('/api/tenant'),
+          api<{ shopName?: string; phone?: string | null; address?: string | null; logoPath?: string | null; invoicePrefix?: string; timezone?: string; paymentMethodsConfig?: string; sellerCommissionsEnabled?: boolean }>('/api/tenant'),
           api<any>('/api/subscription'),
         ])
         if (!alive) return
@@ -259,6 +260,11 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
             // 🛡️ 2026-09-27: تولبار الساعة/التاريخ فوق بيتبع دلوقتي المنطقة
             // الزمنية بتاعة المحل (مش جهاز المستخدم) — راجع LiveClock تحت.
             timezone: t?.timezone || 'Africa/Cairo',
+            // 💳 وسائل الدفع المفعّلة للمحل — نقطة البيع ودفعات العملاء بيقراوها من هنا.
+            // parse آمن: أي شكل قديم/تالف بيرجع للسلوك القديم من غير ما يكسر حاجة.
+            paymentMethods: parsePaymentMethodsConfig(t?.paymentMethodsConfig),
+            // 💰 (التحديث الثالث عشر) عمولات البائعين — بتتحكم في خانة «البائع» في نقطة البيع
+            sellerCommissionsEnabled: t?.sellerCommissionsEnabled === true,
           })
         }
 

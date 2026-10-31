@@ -136,6 +136,8 @@ export interface PayslipCalcInput {
   advanceDue: number
   bonus: number
   penalty: number
+  /** 💰 (التحديث الثالث عشر) عمولة البائع المرتبط بالموظف — بتدخل في الصافي */
+  commission?: number
   /**
    * الأيام المستحقة الدفع فعليًا (حضور/تأخير + إجازة بمرتب + إذن + راحة مستحقة)
    * من countPaidDays. لو اتبعتت، الخصم بيتحسب على (أيام الخدمة − الأيام دي)
@@ -181,7 +183,7 @@ export function computePayslip(i: PayslipCalcInput): PayslipCalcResult {
 
   const gross = Math.max(
     0,
-    round2(payableBase - absenceDeduction - lateDeduction + (i.bonus || 0) - (i.penalty || 0)),
+    round2(payableBase - absenceDeduction - lateDeduction + (i.bonus || 0) - (i.penalty || 0) + (i.commission || 0)),
   )
   const advanceDeduction = round2(Math.min(gross, Math.max(0, i.advanceDue)))
   const net = round2(gross - advanceDeduction)

@@ -14,10 +14,9 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { enabledMethods } from '@/lib/payment-methods'
+import { useShopStore } from '@/lib/store'
 import { DecimalInput, DialogHero, MethodPills, SectionTitle } from './customer-dialog-ui'
-
-// الطرق المتاحة في الدفعات: كاش + محفظة إلكترونية فقط
-const PAYMENT_METHODS = ['cash', 'fawry'] as const
 
 const QUICK_AMOUNTS = [100, 500, 1000, 5000]
 
@@ -45,13 +44,22 @@ export function PaymentDialog({
   const [note, setNote] = React.useState('')
   const [saving, setSaving] = React.useState(false)
 
+  // 💳 وسائل الدفع المفعّلة لتحصيل العملاء — من إعدادات المحل (الإعدادات → وسائل الدفع).
+  // «كاش» مفعّلة دايماً (السيرفر بيفّرضها) فالافتراضي ده آمن.
+  const payMethods = useShopStore((s) => s.branding.paymentMethods)
+  const collectMethods = React.useMemo(
+    () => enabledMethods(payMethods, 'collect'),
+    [payMethods]
+  )
+
   React.useEffect(() => {
     if (open) {
       setAmount(0)
-      setMethod('cash')
+      // 🛡️ الافتراضي كاش — ولو إعداد قديم غريب مردّهوش، أول وسيلة مفعّلة
+      setMethod(collectMethods.some((m) => m.id === 'cash') ? 'cash' : collectMethods[0]?.id ?? 'cash')
       setNote('')
     }
-  }, [open, customerId])
+  }, [open, customerId, collectMethods])
 
   const owed = currentBalance > 0
   const after = r2(currentBalance - amount)
@@ -185,7 +193,12 @@ export function PaymentDialog({
           {/* الطريقة + ملاحظة */}
           <section>
             <SectionTitle n={3}>استلمت إزاي؟</SectionTitle>
-            <MethodPills value={method} onChange={setMethod} label="طريقة الدفع" methods={PAYMENT_METHODS} />
+            <MethodPills
+              value={method}
+              onChange={(v) => setMethod(v)}
+              label="طريقة الدفع"
+              items={collectMethods.map((m) => ({ value: m.id, label: m.label }))}
+            />
             <input
               id="pay-note"
               value={note}

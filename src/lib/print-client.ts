@@ -61,7 +61,7 @@ export function exportSalePdf(sale: PrintableSale, shop?: {
     </style>`
   const html = baseHtml.replace('</head>', `${pdfStyles}</head>`)
 
-  printHtmlInFrame(html, `فاتورة-${sale.invoiceNo ?? sale.id}`)
+  printHtmlInFrame(html, `فاتورة-${sale.invoiceNo ?? sale.id}`, { pageWidthPx: 559 }) // A5 = 148مم
 }
 
 /** يقيس عرض الوحدة (module) اللي هيترسم بها الباركود فعلاً جوه مساحة متاحة —
@@ -205,5 +205,8 @@ export function printBarcodeLabels(items: LabelItem[], opts?: LabelOptions): boo
   const html = printBarcodeLabelsHtml(enriched, { ...opts, mode, labelSize })
   // 🛡️ iframe مخفي في نفس الصفحة بدل نافذة منبثقة — الإلغاء مبيسيبش الصفحة
   // مجمدة، ومفيش نافذة فاضية تفضل مفتوحة، وحاجب النوافذ ملوش دعوة.
-  return printHtmlInFrame(html, 'طباعة ملصقات الباركود')
+  // عرض الإطار = عرض صفحة الطباعة: A4 للورق، أو مقاس الملصق نفسه للرول
+  // (عشان ترتيب المستند يطابق صفحة @page في الوضعين).
+  const pageWidthPx = mode === 'sheet' ? 794 : Math.round(labelSize.widthMm * 3.78)
+  return printHtmlInFrame(html, 'طباعة ملصقات الباركود', { pageWidthPx })
 }

@@ -213,8 +213,13 @@ const PERMISSION_ALIASES: Partial<Record<ModuleKey, ModuleKey[]>> = {
   pos: ['pos'],
   // كتالوج المنتجات قراءة مشتركة (نقطة البيع/المشتريات/المخزون/الذكاء الاصطناعي)
   products: ['products', 'pos', 'purchases', 'inventory'],
-  // سجل المبيعات بيتقري من نقطة البيع كمان (آخر الفواتير)
-  sales: ['sales', 'pos'],
+  // 🔒 2026-10-31: سجل المبيعات بقى للـ 'sales' فقط — شيلنا alias 'pos'
+  // لأن نقطة البيع مابتقراش القايمة (بيع = requireModuleWritePermission('pos'))،
+  // وترك alias القراءة بيخلّي كاشير نقطة البيع يقدر يسحب سجل مبيعات المحل
+  // كله من الـ API مباشرة — وده اللي المالك خايف منه. المرتجع للكاشير بقى
+  // له بوابته المستقلة (صلاحية 'returns' + lookup لفاتورة واحدة) — شوف
+  // requireSaleReturnAccess تحت.
+  sales: ['sales'],
   maintenance: ['maintenance'],
   // العملاء بيتقروا من نقطة البيع وسجل المبيعات
   customers: ['customers', 'pos', 'sales'],
@@ -234,14 +239,104 @@ const PERMISSION_ALIASES: Partial<Record<ModuleKey, ModuleKey[]>> = {
  * مباشرةً ولو كان قراءتهم مسموحة له.
  * أي موديول مش موجود في الخريطة = الكتابة بتفرض الموديول نفسه فقط.
  */
-const WRITE_ALIASES: Partial<Record<ModuleKey, ModuleKey[]>> = {
+// 🔁 القيم string[] مش ModuleKey[] — عشان صلاحية المرتجع المستقلة 'returns'
+// (مش موديول/صفحة) تقدر تفتح باب كتابة موديول 'sales'.
+const WRITE_ALIASES: Partial<Record<ModuleKey, readonly string[]>> = {
   // البيع فعل هو شغلانة نقطة البيع
   pos: ['pos'],
   // إتمام شراء من شاشة المشتريات — الدفع للمورد جزء من نفس الشغلانة (زي قبل كده)
   suppliers: ['suppliers', 'purchases'],
   purchases: ['purchases'],
-  // مرتجع البيع بيتم من شاشة سجل المبيعات
-  sales: ['sales'],
+  // 🔁 2026-10-31: مرتجع البيع بيتقبل من اتنين:
+  //   'sales'  — من شاشة سجل المبيعات (المالك/الموظف المصرّح له).
+  //   'returns' — صلاحية المرتجع المستقلة: كاشير نقطة البيع يستلم مرتجع
+  //               من زرار «مرتجع فاتورة» جوه نقطة البيع نفسها — من غير ما
+  //               يشوف سجل المبيعات ولا الأرباح خالص.
+  sales: ['sales', 'returns'],
+}
+
+/**
+ * 🔁 2026-10-31 — صلاحية البحث عن فاتورة لغرض المرتجع (GET /api/sales/returns/lookup).
+ *
+ * دي مش صلاحية قراءة سجل المبيعات — بترجع فاتورة واحدة بس (اللي هيعمل منها
+ * مرتجع) بدون أي تكاليف أو أرباح أو قوائم مبيعات. المسموح:
+ *   - المدير / SUPER_ADMIN.
+ *   - موظف من غير قائمة صلاحيات (وضع افتراضي زي السايدبار).
+ *   - موظف عنده 'sales' (سجل المبيعات) أو 'returns' (صلاحية المرتجع المستقلة).
+ */
+export function requireSaleReturnAccess(
+  session: { role: string; permissions?: string[] | null },
+) {
+  if (session.role !== 'EMPLOYEE') return
+  const p = session.permissions
+  if (!p || p.length === 0) return
+  if (!p.includes('sales') && !p.includes('returns')) {
+    throw new FeatureError('ليس لديك صلاحية لهذه العملية', 403)
+  }
+}
+
+/**
+ * 🕐 2026-10-31 (التحديث الثامن): صلاحية إغلاق الوردية (الجرد الأعمى للدرج).
+ * زي requireSaleReturnAccess بالظبط — مدير، أو موظف من غير قيود، أو موظف
+ * عنده 'shift_close' (صلاحية مستقلة مش موديول — بتتحدد في شاشة المستخدمين
+ * جنب نقطة البيع). الكاشير بيكتب اللي عدّاه بس، والأرقام للمدير.
+ */
+export function requireShiftCloseAccess(
+  session: { role: string; permissions?: string[] | null },
+) {
+  if (session.role !== 'EMPLOYEE') return
+  const p = session.permissions
+  if (!p || p.length === 0) return
+  if (!p.includes('shift_close')) {
+    throw new FeatureError('ليس لديك صلاحية لهذه العملية', 403)
+  }
+}
+
+/**
+ * 🫥 2026-10-31 (التحديث الحادي عشر): صلاحية «إجراء الجرد الأعمي» —
+ * نفس النمط بالظبط: مدير، أو موظف من غير قائمة صلاحيات، أو موظف عنده
+ * 'blind_stocktake' (صلاحية مستقلة مش موديول — جنب نقطة البيع في شاشة
+ * المستخدمين). بتفتح محطة الجرد بس: العدّ من غير رؤية أي أرقام — لا كميات
+ * النظام ولا الفروق ولا التكاليف، والاعتماد يفضل للأدمن زي ما هو.
+ */
+export function requireBlindStocktakeAccess(
+  session: { role: string; permissions?: string[] | null },
+) {
+  if (session.role !== 'EMPLOYEE') return
+  const p = session.permissions
+  if (!p || p.length === 0) return
+  if (!p.includes('blind_stocktake')) {
+    throw new FeatureError('ليس لديك صلاحية لهذه العملية', 403)
+  }
+}
+
+/**
+ * 🫥 (التحديث الحادي عشر) — هل السيشن ده «مدير» بنظرة الجرد؟
+ * المدير (غير الموظف) هو الوحيد اللي يشوف أرقام النظام والفروق في أوراق
+ * الجرد الأعمي — أي طلب من موظف بيرجع من غير systemQty/diff جوه الـ SQL.
+ */
+export function isStocktakeManager(session: { role: string }): boolean {
+  return session.role !== 'EMPLOYEE'
+}
+
+/**
+ * 💰 2026-11-01 (التحديث الثالث عشر) — صلاحية شاشة «عمولات البائعين».
+ * نفس النمط المستقل: مدير، أو موظف من غير قائمة صلاحيات، أو موظف عنده
+ * 'commissions' (صلاحية مستقلة مش موديول — جنب نقطة البيع في شاشة
+ * المستخدمين). بتفتح تقرير العمولات الشهري + التسوية (والتسوية نفسها
+ * بتفرض أدمن على السيرفر فوق كده).
+ * ملاحظة: عرض البائع لعمولته هو لوحده مسار منفصل (/api/commissions/my)
+ * ومش محتاج الصلاحية دي — ده رقمه هو.
+ */
+export function requireCommissionsAccess(
+  session: { role: string; permissions?: string[] | null },
+) {
+  if (session.role !== 'EMPLOYEE') return
+  const p = session.permissions
+  if (!p || p.length === 0) return
+  if (!p.includes('commissions')) {
+    throw new FeatureError('ليس لديك صلاحية لهذه العملية', 403)
+  }
 }
 
 export function requireModulePermission(

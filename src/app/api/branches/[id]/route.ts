@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
 import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
+import { normalizeShifts } from '@/lib/branch-shifts'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +28,16 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       return NextResponse.json({ error: 'غير موجود' }, { status: 404 })
     }
     const b = await req.json().catch(() => null)
+    // 🕐 ورديات الفرع (التحديث الثامن) — بتتطابق على السيرفر، والفاضية = NULL
+    const shiftsPatch =
+      b?.shifts !== undefined
+        ? (() => {
+            const shifts = normalizeShifts(b?.shifts)
+            const shiftsValue: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue =
+              shifts.length > 0 ? shifts.map((s) => ({ name: s.name, from: s.from, to: s.to })) : Prisma.DbNull
+            return { shifts: shiftsValue }
+          })()
+        : {}
     const updated = await db.branch.update({
       where: { id: bid },
       data: {
@@ -33,6 +45,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         address: b?.address !== undefined ? (b.address ? String(b.address) : null) : branch.address,
         phone: b?.phone !== undefined ? (b.phone ? String(b.phone) : null) : branch.phone,
         active: b?.active !== undefined ? Boolean(b.active) : branch.active,
+        ...shiftsPatch,
       },
     })
     // ⚡ v12: تعديل فرع → امسح كاش الفروع وتقرير الفروع فورًا

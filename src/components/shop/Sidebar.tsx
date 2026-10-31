@@ -28,6 +28,8 @@ import {
   PackagePlus, Wallet, ReceiptText, Banknote, Warehouse, Building2,
   BarChart3, Settings as SettingsIcon, UserCog, Power, ChevronLeft, ChevronDown, Store,
   Boxes, Activity, ArrowRightLeft, ClipboardCheck, UsersRound, CalendarCheck, HandCoins, BadgeDollarSign, TreePalm as PalmtreeIcon, Award,
+  Percent,
+  UserRound,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -86,12 +88,19 @@ const MAIN_GROUP: NavItem[] = [
   { path: '/customers', label: 'العملاء', icon: Users, module: 'customers' },
   { path: '/suppliers', label: 'الموردين', icon: Truck, module: 'suppliers' },
   { path: '/purchases', label: 'المشتريات', icon: PackagePlus, module: 'purchases' },
+  // 🪪 (التحديث الرابع عشر) «ملفي» — الصفحة الشخصية للموظف (حضوره وراتبه
+  // وسلفه وإجازاته) — بتركب على موديول 'hr'، والفلتر تحت بيتحكم في ظهورها
+  // بصلاحية 'my_profile' المستقلة.
+  { path: '/my-profile', label: 'ملفي', icon: UserRound, module: 'hr' },
 ]
 
 const MANAGE_GROUP: NavItem[] = [
   { path: '/finance', label: 'المعاملات المالية', icon: Wallet, module: 'finance' },
   { path: '/expenses', label: 'المصروفات', icon: ReceiptText, module: 'expenses' },
   { path: '/cash', label: 'الخزنة', icon: Banknote, module: 'cash' },
+  // 💰 (التحديث الثالث عشر) عمولات البائعين — بتركب على موديول 'sales'،
+  // والموظف اللي عنده صلاحية 'commissions' المستقلة بيشوفها كمان (شوف الفلتر تحت)
+  { path: '/commissions', label: 'عمولات البائعين', icon: Percent, module: 'sales' },
   { path: '/reports', label: 'التقارير', icon: BarChart3, module: 'reports' },
   { path: '/branches', label: 'الفروع', icon: Building2, module: 'branches' },
   { path: '/users', label: 'المستخدمين', icon: UserCog, module: 'users' },
@@ -205,9 +214,13 @@ function NavButton({
 function InventoryGroup({
   collapsed,
   onNavigate,
+  blindOnly = false,
 }: {
   collapsed?: boolean
   onNavigate?: () => void
+  /** 🫥 عدّاد الجرد الأعمي: موظف بصلاحية العدّ الأعمي بدون موديول المخزون —
+   *  بيشوف مدخل «الجرد الأعمي» بس (مش صفحات المخزون بأرقامها) */
+  blindOnly?: boolean
 }) {
   const router = useRouter()
   const { pathname, isActive } = useActivePath()
@@ -337,7 +350,7 @@ function InventoryGroup({
             className="absolute bottom-5 top-0 w-px bg-sidebar-border"
             style={{ insetInlineStart: '27px' }}
           />
-          {INVENTORY_CHILDREN.map((child) => {
+          {(blindOnly ? INVENTORY_CHILDREN.filter((c) => c.path === '/inventory/stocktake') : INVENTORY_CHILDREN).map((child) => {
             const active = pathname === child.path
             const ChildIcon = child.icon
             const warm = () => shouldSkipPreload() || preloadView(child.path)
@@ -877,9 +890,39 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
     return true  // مدير أو موظف بكل الصلاحيات
   }
 
-  const mainItems = MAIN_GROUP.filter((it) => hasModule(it.module))
-  const manageItems = MANAGE_GROUP.filter((it) => hasModule(it.module))
+  const mainItems = MAIN_GROUP.filter((it) => {
+    // 🪪 «ملفي»: مش موديول — بتظهر للموظف (غير المدير) اللي عنده صلاحية
+    // 'my_profile' المستقلة، أو الموظف بدون قائمة صلاحيات (الوضع الافتراضي
+    // اللي بيشوف كل الباقة) — بشرط موديول الموارد البشرية مفعّل في الباقة.
+    if (it.path === '/my-profile') {
+      return planHasModule('hr') && !isAdmin && (userPermissions === null || userPermissions.includes('my_profile'))
+    }
+    return hasModule(it.module)
+  })
+  // 💰 عمولات البائعين: غير الموديول العادي — الموظف اللي عنده صلاحية
+  // 'commissions' المستقلة (من غير 'sales') بيشوف المدخل كمان، والبائع
+  // المعلَّم كـ«بائع» (والميزة مفعّلة) بيشوف المدخل بوضع «عمولتي» — أرقامه
+  // هو بس من غير تقرير المحل ولا الصرف.
+  const sellerCommissionsEnabled = useShopStore((s) => s.branding.sellerCommissionsEnabled)
+  const sellerOnlyMode =
+    !isAdmin &&
+    user?.isSeller === true &&
+    sellerCommissionsEnabled === true &&
+    // بس لما يكون مقيد بقائمة صلاحيات (اللي ملوش قائمة شايف كل الباقة أصلاً
+    // — نفس فلسفة requireCommissionsAccess على السيرفر)
+    !!userPermissions &&
+    !userPermissions.includes('commissions')
+  const manageItems = MANAGE_GROUP.filter(
+    (it) =>
+      hasModule(it.module) ||
+      (it.path === '/commissions' && planHasModule('sales') && (!!userPermissions?.includes('commissions') || sellerOnlyMode))
+  ).map((it) =>
+    it.path === '/commissions' && sellerOnlyMode ? { ...it, label: 'عمولتي' } : it,
+  )
   const showInventory = hasModule('inventory')
+  // 🫥 العدّاد الأعمي: صلاحية العدّ بدون موديول المخزون → مدخل الجرد الأعمي بس
+  const showBlindStocktake =
+    !showInventory && planHasModule('inventory') && !!userPermissions?.includes('blind_stocktake')
   const hrStaffOnly = !isAdmin && !!user?.permissions?.includes('hr_attendance')
   const showHr = planHasModule('hr') && (isAdmin || hrStaffOnly)
 
@@ -930,8 +973,8 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
                 onNavigate={onNavigate}
               />
             ))}
-            {showInventory && (
-              <InventoryGroup collapsed={collapsed} onNavigate={onNavigate} />
+            {(showInventory || showBlindStocktake) && (
+              <InventoryGroup collapsed={collapsed} onNavigate={onNavigate} blindOnly={!showInventory} />
             )}
           </div>
 

@@ -61,6 +61,10 @@ export type Session = {
   permissions: string[] | null
   /** هل يشوف الأرباح والتكاليف؟ دايمًا true للمدير، محكوم عليه للموظف */
   canViewProfits: boolean
+  /** 💰 (التحديث الثالث عشر) هل الحساب معلّم كـ«بائع»؟ — بيتقرا من التوكن
+   *  عشان السايدبار يفتح مدخل «عمولتي» للبائع من غير استعلام DB إضافي.
+   *  بيتحدّث عند تسجيل الدخول الجاي (نفس سلوك الصلاحيات). */
+  isSeller: boolean
 }
 
 // ─── Password helpers (Web Crypto PBKDF2) ────────────────────────────────────
@@ -121,6 +125,7 @@ export async function createSession(user: {
   branchId: number | null
   permissions?: string[] | null
   canViewProfits?: boolean
+  isSeller?: boolean
 }) {
   // المدير دايمًا يشوف الأرباح — مش محتاج تخزين في الـ JWT
   const canViewProfits = (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN')
@@ -135,6 +140,7 @@ export async function createSession(user: {
     branchId: user.branchId ?? null,
     permissions: user.permissions ?? null,
     canViewProfits,
+    isSeller: user.isSeller === true,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -200,6 +206,7 @@ export async function getSession(): Promise<Session | null> {
       branchId,
       permissions: (decoded.permissions as string[] | null) ?? null,
       canViewProfits: Boolean(decoded.canViewProfits),
+      isSeller: decoded.isSeller === true,
     }
   } catch {
     return null

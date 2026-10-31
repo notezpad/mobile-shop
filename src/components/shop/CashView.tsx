@@ -52,6 +52,7 @@ import { cn } from '@/lib/utils'
 import { printListReportHtml, openPrintWindow, printLtr } from '@/lib/print'
 import { useShopStore } from '@/lib/store'
 import { useDataRefresh } from '@/lib/offline/data-events'
+import { ShiftClosuresCard } from './ShiftClosuresCard'
 
 /* ================================================================== */
 /*  الأنواع والثوابت                                                   */
@@ -199,6 +200,12 @@ function Amt({
 export function CashView() {
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
+  // 💳 أسماء وسائل المحل (بما فيها المخصصة من «وسائل الدفع») عشان شارة
+  // وسيلة الدفع في قيود الخزنة تعرض «أمان» بدل custom_xxx.
+  const pmLabelMap = React.useMemo(
+    () => Object.fromEntries(shopBranding.paymentMethods.map((p) => [p.id, p.label])),
+    [shopBranding.paymentMethods]
+  )
   const [data, setData] = React.useState<{ balance: number; entries: Entry[]; branches?: CashBranch[] } | null>(null)
   // 🏬 المدير: فلتر خزنة فرع واحد ('all' = كل الفروع)
   const [branchFilter, setBranchFilter] = React.useState<string>('all')
@@ -741,7 +748,7 @@ export function CashView() {
                                   </span>
                                   {e.method && e.method !== 'cash' && (
                                     <span className="rounded-md border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:text-[11px]">
-                                      {mtdMeta(e.method).label}
+                                      {pmLabelMap[e.method] ?? mtdMeta(e.method).label}
                                     </span>
                                   )}
                                 </div>
@@ -917,6 +924,9 @@ export function CashView() {
           </div>
         </aside>
       </div>
+
+      {/* 🕐 إغلاقات الورديات — الجرد الأعمى (التحديث الثامن): رقابة المدير على درج كل وردية */}
+      <ShiftClosuresCard branchFilter={branchFilter} />
 
       <ManualDialog open={dialogOpen} onOpenChange={setDialogOpen} onSaved={load} balance={balance} branches={data?.branches ?? []} defaultBranch={branchFilter} />
     </div>

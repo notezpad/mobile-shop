@@ -77,6 +77,8 @@ export function PurchaseVariantsDialog({
   showCost = true,
   allowZero = false,
   maxByStock = false,
+  // 🫥 (التحديث الحادي عشر): الجرد الأعمي — مخزون اللون/المقاس مخفي خالص
+  showStock = true,
   title = 'الكمية لكل لون ومقاس',
   confirmLabel = 'أضف للسلة',
   emptyHint = 'اكتب الكمية في الخلايا اللي هتشتريها',
@@ -96,6 +98,8 @@ export function PurchaseVariantsDialog({
   allowZero?: boolean
   /** التحويل: الكمية ماتتعداش مخزون اللون/المقاس */
   maxByStock?: boolean
+  /** 🫥 الجرد الأعمي: عمود مخزون اللون/المقاس مخفي خالص */
+  showStock?: boolean
   title?: string
   confirmLabel?: string
   emptyHint?: string
@@ -323,9 +327,11 @@ export function PurchaseVariantsDialog({
           <span className="truncate">{label}</span>
         </span>
         {qtyInput(v)}
-        <span className="pb-1.5 text-center text-[10px] font-medium tabular-nums text-foreground/55">
-          {stockLabel} {v.quantity}
-        </span>
+        {showStock && (
+          <span className="pb-1.5 text-center text-[10px] font-medium tabular-nums text-foreground/55">
+            {stockLabel} {v.quantity}
+          </span>
+        )}
       </>,
     )
   }
@@ -444,9 +450,11 @@ export function PurchaseVariantsDialog({
                             v,
                             <>
                               {qtyInput(v, 'pt-1')}
-                              <span className="pb-1 text-center text-[10px] font-medium tabular-nums text-foreground/55">
-                                {stockLabel} {v.quantity}
-                              </span>
+                              {showStock && (
+                                <span className="pb-1 text-center text-[10px] font-medium tabular-nums text-foreground/55">
+                                  {stockLabel} {v.quantity}
+                                </span>
+                              )}
                             </>,
                           )
                         ) : (

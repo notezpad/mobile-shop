@@ -28,6 +28,8 @@ interface Employee {
   active: boolean
   hasPin: boolean
   advanceRemaining: number
+  // 🪪 (التحديث الرابع عشر) حساب الدخول المربوط — لـ«ملفي» وعمولة الراتب
+  userId: string | null
 }
 
 interface FormState {
@@ -38,8 +40,10 @@ interface FormState {
   weeklyOffDay: string
   hireDate: string
   pin: string
+  // 🪪 حساب الدخول — 'none' = غير مربوط
+  userId: string
 }
-const EMPTY: FormState = { name: '', jobTitle: '', phone: '', baseSalary: '', weeklyOffDay: '5', hireDate: '', pin: '' }
+const EMPTY: FormState = { name: '', jobTitle: '', phone: '', baseSalary: '', weeklyOffDay: '5', hireDate: '', pin: '', userId: 'none' }
 
 interface SettlePreview {
   today: string
@@ -308,6 +312,11 @@ export function HrEmployeesView() {
                                 بدون PIN
                               </span>
                             )}
+                            {e.userId && (
+                              <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                🪪 ملفي مفعّل
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-1 text-xs text-slate-500">
                             <Briefcase className="size-3.5" />
@@ -436,11 +445,24 @@ function EmployeeDialog({
       ? {
           name: employee.name, jobTitle: employee.jobTitle ?? '', phone: employee.phone ?? '',
           baseSalary: String(employee.baseSalary), weeklyOffDay: String(employee.weeklyOffDay),
-          hireDate: employee.hireDate, pin: '',
+          hireDate: employee.hireDate, pin: '', userId: employee.userId ?? 'none',
         }
       : EMPTY,
   )
   const [saving, setSaving] = React.useState(false)
+  // 🪪 حسابات الدخول المتاحة للربط — (الشاشة دي للمالك/المدير بس أصلاً)
+  const [users, setUsers] = React.useState<{ id: string; name: string; email: string; active: boolean }[]>([])
+  React.useEffect(() => {
+    let alive = true
+    hrGet<{ id: string; name: string; email: string; active: boolean }[]>('/api/users')
+      .then((r) => {
+        if (alive) setUsers(Array.isArray(r) ? r : [])
+      })
+      .catch(() => null)
+    return () => {
+      alive = false
+    }
+  }, [])
   const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) => setF((s) => ({ ...s, [k]: e.target.value }))
 
   const save = async () => {
@@ -456,6 +478,8 @@ function EmployeeDialog({
       }
       if (f.hireDate) body.hireDate = f.hireDate
       if (f.pin) body.pin = f.pin
+      // 🪪 الربط دايمًا بيتبعت — '' = فك الربط (الـ API بيتحقق من التكرار)
+      body.userId = f.userId === 'none' ? '' : f.userId
       if (employee) await hrSend(`/api/hr/employees/${employee.id}`, 'PUT', body)
       else await hrSend('/api/hr/employees', 'POST', body)
       toast.success(employee ? 'تم حفظ التعديلات' : 'تمت إضافة الموظف')
@@ -522,6 +546,25 @@ function EmployeeDialog({
                 className="shadow-inner"
               />
             </div>
+          </div>
+          {/* 🪪 (التحديث الرابع عشر) ربط حساب الدخول — «ملفي» + عمولة الراتب */}
+          <div className="space-y-1.5">
+            <Label className="flex items-center gap-1.5"><UserRound className="size-3.5" />حساب الدخول (اختياري)</Label>
+            <Select value={f.userId} onValueChange={(v) => setF((s) => ({ ...s, userId: v }))}>
+              <SelectTrigger className="shadow-inner"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">غير مربوط — بدون صفحة «ملفي»</SelectItem>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={u.id} disabled={!u.active}>
+                    {u.name} ({u.email}){!u.active ? ' — موقوف' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              الربط بيخلي الموظف يشوف «ملفي» (حضوره وراتبه وسلفه وإجازاته) من حسابه،
+              وعمولة البائع تتحط في قسيمة راتبه أوتوماتيك — والحساب الواحد مبيتربطش بموظفين اتنين.
+            </p>
           </div>
         </DialogBody>
         <DialogFooter className="shrink-0 border-t bg-background px-4 py-3 sm:px-6">

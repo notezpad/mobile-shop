@@ -249,7 +249,14 @@ function truncate(s: string, max: number): string {
 
 // ─── Browser Print (HTML fallback) ─────────────────────────
 export function printThermalReceiptBrowser(data: ThermalReceiptData, settings: PrinterSettings): void {
-  const width = settings.width === '58mm' ? '58mm' : '80mm'
+  // ⚠️ عرض التصميم لازم يكون **أصغر من عرض الورقة** بهامش أمان:
+  // طابعات الحرارية ليها منطقة مش بتطبع على الطرفين (غالباً 2-4مم لكل جهة)،
+  // ولو التصميم بعرض الورقة بالظبط (80مم) المنطقة دي بتقص شريحة من طرف السطور —
+  // وده اللي كان بيخلي «INV-» من رقم الفاتورة و «1,8» من الإجمالي يتقصوا.
+  // 80مم ورقة ← تصميم 74مم (2مم هامش داخل التصميم + 4مم أمان للطابعة)،
+  // 58مم ورقة ← تصميم 54مم (نفس المنطق).
+  const pw = settings.width === '58mm' ? '54mm' : '74mm'
+  const pageWidthPx = settings.width === '58mm' ? 204 : 280
   const fontSize = settings.width === '58mm' ? '11px' : '13px'
 
   const itemsHtml = data.items
@@ -270,7 +277,7 @@ export function printThermalReceiptBrowser(data: ThermalReceiptData, settings: P
         height: 40,
         fontSize: 10,
         displayValue: true,
-        availMm: settings.width === '58mm' ? 50 : 70,
+        availMm: settings.width === '58mm' ? 46 : 66,
       })
     : ''
   const barcodeHtml = barcodeSvg ? `<div class="barcode">${barcodeSvg}</div>` : ''
@@ -282,19 +289,19 @@ export function printThermalReceiptBrowser(data: ThermalReceiptData, settings: P
 <title>فاتورة ${escapeHtml(data.invoiceNo)}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  @page { size: ${width} auto; margin: 0; }
+  @page { size: ${pw} auto; margin: 0; }
   body {
     font-family: 'Cairo', 'Tahoma', monospace;
     font-size: ${fontSize};
-    width: ${width};
+    width: ${pw};
     padding: 2mm;
     color: #000;
     background: #fff;
   }
-  .header { text-align: center; margin-bottom: 4mm; }
+  .header { text-align: center; margin-bottom: 3mm; }
   .shop-name { font-size: ${settings.width === '58mm' ? '14px' : '16px'}; font-weight: bold; }
   .shop-meta { font-size: ${settings.width === '58mm' ? '9px' : '11px'}; margin-top: 1mm; }
-  .separator { border-top: 1px dashed #000; margin: 2mm 0; }
+  .separator { border-top: 1px dashed #000; margin: 1.6mm 0; }
   .info-row { display: flex; justify-content: space-between; margin: 0.5mm 0; }
   table { width: 100%; border-collapse: collapse; }
   th { font-size: ${settings.width === '58mm' ? '9px' : '11px'}; text-align: right; border-bottom: 1px dashed #000; padding-bottom: 1mm; }
@@ -302,13 +309,13 @@ export function printThermalReceiptBrowser(data: ThermalReceiptData, settings: P
   .name { text-align: right; font-weight: 500; }
   .qty, .price { text-align: center; }
   .total { text-align: left; font-weight: 600; }
-  .totals { margin-top: 2mm; }
+  .totals { margin-top: 1.6mm; }
   .totals .row { display: flex; justify-content: space-between; padding: 0.5mm 0; }
   .totals .grand { font-weight: bold; font-size: ${settings.width === '58mm' ? '13px' : '15px'}; border-top: 1px dashed #000; padding-top: 1mm; margin-top: 1mm; }
-  .barcode { display: flex; justify-content: center; margin-top: 3mm; }
+  .barcode { display: flex; justify-content: center; margin-top: 2mm; }
   .barcode svg { max-width: 100%; height: auto; display: block; }
-  .footer { text-align: center; margin-top: 4mm; font-size: ${settings.width === '58mm' ? '9px' : '11px'}; }
-  @media print { body { width: ${width}; } }
+  .footer { text-align: center; margin-top: 2.5mm; font-size: ${settings.width === '58mm' ? '9px' : '11px'}; }
+  @media print { body { width: ${pw}; } }
 </style>
 </head>
 <body>
@@ -331,10 +338,10 @@ export function printThermalReceiptBrowser(data: ThermalReceiptData, settings: P
   </table>
   <div class="separator"></div>
   <div class="totals">
-    <div class="row"><span>الإجمالي</span><span>${formatCurrency(data.total)} ج.م</span></div>
-    <div class="row"><span>المدفوع</span><span>${formatCurrency(data.paid)} ج.م</span></div>
-    ${data.remaining > 0 ? `<div class="row"><span>المتبقي</span><span>${formatCurrency(data.remaining)} ج.م</span></div>` : ''}
-    <div class="grand"><span>الإجمالي النهائي</span><span>${formatCurrency(data.total)} ج.م</span></div>
+    <div class="row"><span>الإجمالي</span><span>${formatCurrency(data.total)}</span></div>
+    <div class="row"><span>المدفوع</span><span>${formatCurrency(data.paid)}</span></div>
+    ${data.remaining > 0 ? `<div class="row"><span>المتبقي</span><span>${formatCurrency(data.remaining)}</span></div>` : ''}
+    <div class="grand"><span>الإجمالي النهائي</span><span>${formatCurrency(data.total)}</span></div>
   </div>
   ${barcodeHtml}
   <div class="footer">
@@ -347,7 +354,398 @@ export function printThermalReceiptBrowser(data: ThermalReceiptData, settings: P
   // 🛡️ iframe مخفي في نفس الصفحة بدل نافذة منبثقة — حاجب النوافذ ملوش دعوة،
   // ولما المستخدم يكنسل معاينة الطباعة الصفحة تفضل شغالة عادي ويقدر يطبع تاني
   // (كانت النافذة المنبثقة بتجمّد الصفحة بعد الإلغاء لحد ريفرش).
-  printHtmlInFrame(html, `فاتورة ${data.invoiceNo}`)
+  // عرض الإطار = عرض صفحة الفاتورة بالظبط (74/54مم) عشان الترتيب يطابق الورقة.
+  printHtmlInFrame(html, `فاتورة ${data.invoiceNo}`, { pageWidthPx })
+}
+
+// ─── إيصال الاستبدال 🔄 ────────────────────────────────────────────────────
+// 2026-10-31: إيصال مستقل لعملية الاستبدال — أسطر المرتجع اللي راجع للمخزن،
+// وأسطر البديل اللي خرج من المخزن مكانها، والفرق (البديل أغلى ← تحصيل الآن أو
+// على حساب العميل، أرخص ← رد كاش و/أو خصم من الحساب، متكافئ ← مفيش فلوس
+// اتحركت). نفس هندسة فاتورة البيع بالظبط: ESC/POS مباشر على USB + طباعة
+// متصفح احتياطية بإطار مخفي (74/54مم) — وأرقام الفرق دي من رد السيرفر نفسه.
+
+export interface ThermalExchangeReceiptData {
+  shopName: string
+  shopPhone?: string
+  shopAddress?: string
+  /** رقم فاتورة الأصل اللي منها بيتم المرتجع */
+  invoiceNo: string
+  /** رقم سجل المرتجع — نفس الرقم اللي في حركة الخزنة (مرتجع #N) */
+  returnId?: number
+  date: string
+  /** بضاعة العميل اللي رجعت للمخزن */
+  returnedItems: { name: string; qty: number; price: number; total: number }[]
+  /** بضاعة البديل اللي خرجت من المخزن */
+  exchangeItems: { name: string; qty: number; price: number; total: number }[]
+  /** إجماليات السيرفر (نفس رد /api/sales/returns) — السيرفر هو المرجع */
+  returnValue: number
+  exchangeTotal: number
+  /** رد كاش للعميل دلوقتي (البديل أرخص) */
+  refund: number
+  refundMethod?: string | null
+  /** خصم من حساب العميل (البديل أرخص وفاتورة بعميل) */
+  creditApplied: number
+  /** فرق مدفوع (البديل أغلى) */
+  charge: number
+  /** هل فاتورة الأصل بعميل مسجل؟ — بيحدد صياغة سطر الفرق */
+  hasCustomer: boolean
+  customerName?: string
+  cashierName?: string
+  note?: string
+}
+
+const EXCHANGE_METHOD_LABELS: Record<string, string> = {
+  cash: 'كاش',
+  vodafone_cash: 'فودافون كاش',
+  instapay: 'انستاباي',
+  fawry: 'فوري',
+}
+
+function exchangeMethodLabel(m?: string | null): string {
+  return (m && EXCHANGE_METHOD_LABELS[m]) || 'كاش'
+}
+
+const round2Money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
+
+/** سطر إجماليات: التسمية يمين والمبلغ يسار — بس بدون قصّ 40% الصارم بتاع
+ *  أعمدة الأصناف (تسميات زي «الفارق على العميل» أطول من اسم صنف مقصوص). */
+function totalLine(label: string, value: string, width: number): string {
+  const l = truncate(label, Math.floor(width * 0.6))
+  const v = truncate(value, Math.floor(width * 0.35))
+  const line = `${l} ${v}`
+  return line.padEnd(width, ' ').substring(0, width)
+}
+
+function buildEscPosExchangeReceipt(
+  data: ThermalExchangeReceiptData,
+  settings: PrinterSettings,
+): Uint8Array {
+  const cols = COLUMN_WIDTH[settings.width]
+  const bytes: number[] = []
+
+  bytes.push(...CMD.init)
+  const page = Number.isInteger(settings.codePage) && settings.codePage! >= 0 && settings.codePage! <= 255
+    ? settings.codePage!
+    : DEFAULT_CODE_PAGE[settings.encoding]
+  bytes.push(...CMD.selectCodePage(page))
+  const textToBytes = (text: string) => encodeForPrinter(text, settings.encoding)
+
+  // ── هيدر المحل (نفس فاتورة البيع)
+  bytes.push(...CMD.alignCenter)
+  bytes.push(...CMD.boldOn)
+  bytes.push(...CMD.doubleWidth)
+  bytes.push(...textToBytes(data.shopName))
+  bytes.push(...CMD.normalSize)
+  bytes.push(...CMD.boldOff)
+  bytes.push(LF)
+  if (data.shopPhone) {
+    bytes.push(...CMD.alignCenter)
+    bytes.push(...textToBytes(`تليفون: ${data.shopPhone}`))
+    bytes.push(LF)
+  }
+  if (data.shopAddress) {
+    bytes.push(...CMD.alignCenter)
+    bytes.push(...textToBytes(data.shopAddress))
+    bytes.push(LF)
+  }
+
+  bytes.push(...CMD.alignLeft)
+  bytes.push(...textToBytes('-'.repeat(cols)))
+  bytes.push(LF)
+
+  // ── عنوان الإيصال + بيانات العملية
+  bytes.push(...CMD.alignCenter)
+  bytes.push(...CMD.boldOn)
+  bytes.push(...CMD.doubleWidth)
+  bytes.push(...textToBytes('إيصال استبدال'))
+  bytes.push(...CMD.normalSize)
+  bytes.push(...CMD.boldOff)
+  bytes.push(LF)
+
+  bytes.push(...CMD.alignLeft)
+  bytes.push(...textToBytes(`فاتورة الأصل: ${data.invoiceNo}`))
+  bytes.push(LF)
+  if (data.returnId) {
+    bytes.push(...textToBytes(`مرتجع: #${data.returnId}`))
+    bytes.push(LF)
+  }
+  bytes.push(...textToBytes(`التاريخ: ${data.date}`))
+  bytes.push(LF)
+  if (data.customerName) {
+    bytes.push(...textToBytes(`العميل: ${data.customerName}`))
+    bytes.push(LF)
+  }
+  if (data.cashierName) {
+    bytes.push(...textToBytes(`الموظف: ${data.cashierName}`))
+    bytes.push(LF)
+  }
+
+  bytes.push(...textToBytes('-'.repeat(cols)))
+  bytes.push(LF)
+
+  // ── رأس الأعمدة مرة واحدة، وقسمين تحته
+  bytes.push(...textToBytes(padLine('الصنف', 'الكمية', 'السعر', 'الإجمالي', cols)))
+  bytes.push(LF)
+  bytes.push(...textToBytes('-'.repeat(cols)))
+  bytes.push(LF)
+
+  const pushItems = (items: ThermalExchangeReceiptData['returnedItems']) => {
+    items.forEach((item) => {
+      const name = truncate(item.name, Math.floor(cols * 0.4))
+      bytes.push(...textToBytes(padLine(name, String(item.qty), plainMoney(item.price), plainMoney(item.total), cols)))
+      bytes.push(LF)
+    })
+  }
+
+  bytes.push(...CMD.boldOn)
+  bytes.push(...textToBytes('** مرتجع — راجع للمخزن **'))
+  bytes.push(...CMD.boldOff)
+  bytes.push(LF)
+  pushItems(data.returnedItems)
+
+  bytes.push(...textToBytes('-'.repeat(cols)))
+  bytes.push(LF)
+
+  bytes.push(...CMD.boldOn)
+  bytes.push(...textToBytes('** بديل — خرج من المخزن **'))
+  bytes.push(...CMD.boldOff)
+  bytes.push(LF)
+  pushItems(data.exchangeItems)
+
+  bytes.push(...textToBytes('-'.repeat(cols)))
+  bytes.push(LF)
+
+  // ── الفرق — أرقام السيرفر هي الحَكَم
+  const net = round2Money(data.returnValue - data.exchangeTotal)
+  bytes.push(...textToBytes(totalLine('قيمة المرتجع', plainMoney(data.returnValue), cols)))
+  bytes.push(LF)
+  bytes.push(...textToBytes(totalLine('قيمة البديل', plainMoney(data.exchangeTotal), cols)))
+  bytes.push(LF)
+  if (net > 0) {
+    bytes.push(...CMD.boldOn)
+    bytes.push(...textToBytes(totalLine('الفارق للعميل', plainMoney(net), cols)))
+    bytes.push(...CMD.boldOff)
+    bytes.push(LF)
+    if (data.refund > 0) {
+      bytes.push(...textToBytes(totalLine(`رد ${exchangeMethodLabel(data.refundMethod)}`, plainMoney(data.refund), cols)))
+      bytes.push(LF)
+    }
+    if (data.creditApplied > 0) {
+      bytes.push(...textToBytes(totalLine('خصم من حساب العميل', plainMoney(data.creditApplied), cols)))
+      bytes.push(LF)
+    }
+  } else if (net < 0) {
+    bytes.push(...CMD.boldOn)
+    bytes.push(...textToBytes(totalLine('الفارق على العميل', plainMoney(data.charge), cols)))
+    bytes.push(...CMD.boldOff)
+    bytes.push(LF)
+    bytes.push(...textToBytes(totalLine(data.hasCustomer ? 'اتسجل على حساب العميل' : `اتحصّل ${exchangeMethodLabel(data.refundMethod)}`, '', cols)))
+    bytes.push(LF)
+  } else {
+    bytes.push(...CMD.alignCenter)
+    bytes.push(...CMD.boldOn)
+    bytes.push(...textToBytes('استبدال متكافئ — مفيش فرق'))
+    bytes.push(...CMD.boldOff)
+    bytes.push(LF)
+    bytes.push(...CMD.alignLeft)
+  }
+
+  if (data.note) {
+    bytes.push(...textToBytes(truncate(`ملاحظات: ${data.note}`, cols)))
+    bytes.push(LF)
+  }
+
+  bytes.push(...textToBytes('-'.repeat(cols)))
+  bytes.push(LF)
+
+  // باركود فاتورة الأصل (نفس كود فاتورة البيع — CODE128)
+  const invoiceCode = data.invoiceNo
+  if (isRenderableBarcode(invoiceCode) && invoiceCode.length <= 40) {
+    const dots = settings.width === '58mm' ? 384 : 576
+    const modules = (invoiceCode.length + 4) * 11 + 2
+    const moduleW = modules * 2 <= dots ? 2 : 1
+    const payload = [0x7b, 0x42, ...Array.from(invoiceCode).map((c) => c.charCodeAt(0))]
+    bytes.push(...CMD.alignCenter)
+    bytes.push(...CMD.barcodeHeight(60), ...CMD.barcodeWidth(moduleW), ...CMD.barcodeTextBelow)
+    bytes.push(GS, 0x6b, 73, payload.length, ...payload)
+    bytes.push(LF)
+  }
+
+  bytes.push(...CMD.alignCenter)
+  bytes.push(...textToBytes(settings.footerText))
+  bytes.push(LF)
+  bytes.push(...textToBytes(`نظام المحل — استبدال فاتورة ${data.invoiceNo}`))
+  bytes.push(LF)
+
+  bytes.push(...CMD.feed(3))
+  if (settings.autoCut) {
+    bytes.push(...CMD.cut)
+  }
+
+  return new Uint8Array(bytes)
+}
+
+// ─── Browser Print (HTML fallback) لإيصال الاستبدال ─────────
+export function printThermalExchangeReceiptBrowser(
+  data: ThermalExchangeReceiptData,
+  settings: PrinterSettings,
+): void {
+  // نفس منطق فاتورة البيع: تصميم أصغر من الورقة بهامش أمان (74/54مم).
+  const pw = settings.width === '58mm' ? '54mm' : '74mm'
+  const pageWidthPx = settings.width === '58mm' ? 204 : 280
+  const fontSize = settings.width === '58mm' ? '11px' : '13px'
+
+  const itemsRows = (items: ThermalExchangeReceiptData['returnedItems']) =>
+    items
+      .map(
+        (item) => `
+      <tr>
+        <td class="name">${escapeHtml(item.name)}</td>
+        <td class="qty">${item.qty}</td>
+        <td class="price">${formatCurrency(item.price)}</td>
+        <td class="total">${formatCurrency(item.total)}</td>
+      </tr>`,
+      )
+      .join('')
+
+  const net = round2Money(data.returnValue - data.exchangeTotal)
+  let diffHtml: string
+  if (net > 0) {
+    diffHtml = `
+    <div class="grand"><span>الفارق للعميل</span><span>${formatCurrency(net)}</span></div>
+    ${data.refund > 0 ? `<div class="row"><span>رد ${escapeHtml(exchangeMethodLabel(data.refundMethod))}</span><span>${formatCurrency(data.refund)}</span></div>` : ''}
+    ${data.creditApplied > 0 ? `<div class="row"><span>خصم من حساب العميل</span><span>${formatCurrency(data.creditApplied)}</span></div>` : ''}`
+  } else if (net < 0) {
+    diffHtml = `
+    <div class="grand"><span>الفارق على العميل</span><span>${formatCurrency(data.charge)}</span></div>
+    <div class="row"><span>${escapeHtml(data.hasCustomer ? 'اتسجل على حساب العميل' : `اتحصّل ${exchangeMethodLabel(data.refundMethod)}`)}</span><span></span></div>`
+  } else {
+    diffHtml = `<div class="grand"><span>استبدال متكافئ — مفيش فرق</span><span>${formatCurrency(0)}</span></div>`
+  }
+
+  const barcodeSvg = isRenderableBarcode(data.invoiceNo)
+    ? renderBarcodeSvg(data.invoiceNo, {
+        height: 40,
+        fontSize: 10,
+        displayValue: true,
+        availMm: settings.width === '58mm' ? 46 : 66,
+      })
+    : ''
+  const barcodeHtml = barcodeSvg ? `<div class="barcode">${barcodeSvg}</div>` : ''
+
+  const html = `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>إيصال استبدال ${escapeHtml(data.invoiceNo)}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  @page { size: ${pw} auto; margin: 0; }
+  body {
+    font-family: 'Cairo', 'Tahoma', monospace;
+    font-size: ${fontSize};
+    width: ${pw};
+    padding: 2mm;
+    color: #000;
+    background: #fff;
+  }
+  .header { text-align: center; margin-bottom: 2mm; }
+  .shop-name { font-size: ${settings.width === '58mm' ? '14px' : '16px'}; font-weight: bold; }
+  .shop-meta { font-size: ${settings.width === '58mm' ? '9px' : '11px'}; margin-top: 1mm; }
+  .doc-title { text-align: center; font-weight: bold; font-size: ${settings.width === '58mm' ? '13px' : '15px'}; margin: 1mm 0; }
+  .separator { border-top: 1px dashed #000; margin: 1.6mm 0; }
+  .info-row { display: flex; justify-content: space-between; margin: 0.5mm 0; }
+  .sec-title { font-weight: bold; margin: 1.4mm 0 0.6mm; }
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: ${settings.width === '58mm' ? '9px' : '11px'}; text-align: right; border-bottom: 1px dashed #000; padding-bottom: 1mm; }
+  td { padding: 0.5mm 0; }
+  .name { text-align: right; font-weight: 500; }
+  .qty, .price { text-align: center; }
+  .total { text-align: left; font-weight: 600; }
+  .totals { margin-top: 1.6mm; }
+  .totals .row { display: flex; justify-content: space-between; padding: 0.5mm 0; }
+  .totals .grand { display: flex; justify-content: space-between; align-items: baseline; font-weight: bold; font-size: ${settings.width === '58mm' ? '13px' : '15px'}; border-top: 1px dashed #000; padding-top: 1mm; margin-top: 1mm; }
+  .note { margin-top: 1.4mm; font-size: ${settings.width === '58mm' ? '9px' : '10px'}; }
+  .barcode { display: flex; justify-content: center; margin-top: 2mm; }
+  .barcode svg { max-width: 100%; height: auto; display: block; }
+  .footer { text-align: center; margin-top: 2.5mm; font-size: ${settings.width === '58mm' ? '9px' : '11px'}; }
+  @media print { body { width: ${pw}; } }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="shop-name">${escapeHtml(data.shopName)}</div>
+    ${data.shopPhone ? `<div class="shop-meta">تليفون: ${escapeHtml(data.shopPhone)}</div>` : ''}
+    ${data.shopAddress ? `<div class="shop-meta">${escapeHtml(data.shopAddress)}</div>` : ''}
+  </div>
+  <div class="separator"></div>
+  <div class="doc-title">إيصال استبدال</div>
+  <div class="info-row"><span>فاتورة الأصل:</span><span>${escapeHtml(data.invoiceNo)}</span></div>
+  ${data.returnId ? `<div class="info-row"><span>مرتجع:</span><span>#${data.returnId}</span></div>` : ''}
+  <div class="info-row"><span>التاريخ:</span><span>${escapeHtml(data.date)}</span></div>
+  ${data.customerName ? `<div class="info-row"><span>العميل:</span><span>${escapeHtml(data.customerName)}</span></div>` : ''}
+  ${data.cashierName ? `<div class="info-row"><span>الموظف:</span><span>${escapeHtml(data.cashierName)}</span></div>` : ''}
+  <div class="separator"></div>
+  <div class="sec-title">المرتجع — راجع للمخزن</div>
+  <table>
+    <thead>
+      <tr><th>الصنف</th><th>كمية</th><th>سعر</th><th>إجمالي</th></tr>
+    </thead>
+    <tbody>${itemsRows(data.returnedItems)}</tbody>
+  </table>
+  <div class="sec-title">البديل — خرج من المخزن</div>
+  <table>
+    <thead>
+      <tr><th>الصنف</th><th>كمية</th><th>سعر</th><th>إجمالي</th></tr>
+    </thead>
+    <tbody>${itemsRows(data.exchangeItems)}</tbody>
+  </table>
+  <div class="separator"></div>
+  <div class="totals">
+    <div class="row"><span>قيمة المرتجع</span><span>${formatCurrency(data.returnValue)}</span></div>
+    <div class="row"><span>قيمة البديل</span><span>${formatCurrency(data.exchangeTotal)}</span></div>
+    ${diffHtml}
+  </div>
+  ${data.note ? `<div class="note">ملاحظات: ${escapeHtml(data.note)}</div>` : ''}
+  ${barcodeHtml}
+  <div class="footer">
+    <div>${escapeHtml(settings.footerText)}</div>
+    <div style="margin-top:1mm;font-size:9px">نظام المحل — استبدال فاتورة ${escapeHtml(data.invoiceNo)}</div>
+  </div>
+</body>
+</html>`
+
+  // نفس إطار الطباعة المخفي بتاع فاتورة البيع — مفيش نوافذ منبثقة أصلاً
+  printHtmlInFrame(html, `إيصال استبدال ${data.invoiceNo}`, { pageWidthPx })
+}
+
+// ─── Main print function لإيصال الاستبدال ──────────────────
+export async function printThermalExchangeReceipt(
+  data: ThermalExchangeReceiptData,
+  settings?: Partial<PrinterSettings>,
+): Promise<PrintOutcome> {
+  const fullSettings: PrinterSettings = {
+    ...DEFAULT_PRINTER_SETTINGS,
+    ...getStoredPrinterSettings(),
+    ...settings,
+  }
+
+  switch (fullSettings.connection) {
+    case 'usb': {
+      // sendRawToUsbPrinter: اتصال لو محتاج + تقسيم 4KB + تصنيف أخطاء USB
+      const raw = await sendRawToUsbPrinter(buildEscPosExchangeReceipt(data, fullSettings))
+      if (raw.ok) return { ok: true, mode: 'usb' }
+      // 🛡️ فشل USB مش بيوقف العملية — نفتح طباعة المتصفح فورًا ونبلغ بالسبب
+      printThermalExchangeReceiptBrowser(data, fullSettings)
+      return { ok: true, mode: 'browser', usbError: raw.error }
+    }
+    case 'network':
+    case 'browser':
+    default:
+      printThermalExchangeReceiptBrowser(data, fullSettings)
+      return { ok: true, mode: 'browser' }
+  }
 }
 
 // ─── WebUSB Direct Printing ────────────────────────────────

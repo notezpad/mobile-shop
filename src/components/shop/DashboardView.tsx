@@ -48,6 +48,8 @@ import { api } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
+import { runCycleCountAutomation } from '@/lib/cycle-count-client'
+import { MyCommissionCard } from './MyCommissionCard'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { useIsMobile } from '@/hooks/use-mobile'
 
@@ -364,6 +366,10 @@ export function DashboardView() {
   React.useEffect(() => {
     load()
 
+    // 🔄 (التحديث الثاني عشر) محرك الجرد الدوري المجدول: أول فتح للداشبورد
+    // بيشغّل الفحص (بخصر 10 دقايق لكل جلسة) — الأوراق المستحقة بتتولّد تلقائياً
+    void runCycleCountAutomation()
+
     // 🛡️ Auto-refresh every 15 minutes (كان 5) وبس لو التاب ظاهر
     const interval = setInterval(() => {
       if (document.visibilityState === 'hidden') return
@@ -454,6 +460,9 @@ export function DashboardView() {
 
   return (
     <div className="min-w-0 space-y-4 sm:space-y-5">
+      {/* ═════════ 💰 عمولتي (التحديث الثالث عشر) — للبائع بس ═════════ */}
+      <MyCommissionCard />
+
       {/* ═════════ Hero — مبيعات اليوم + منحنى الأيام الأخيرة ═════════ */}
       <section className="overflow-hidden rounded-3xl border bg-card text-card-foreground shadow-sm">
         <div

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db, withDb } from '@/lib/db'
 import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse, assertWithinPlanLimit } from '@/lib/features'
 import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 import { withSql } from '@/lib/sql'
+import { normalizeShifts } from '@/lib/branch-shifts'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,6 +81,10 @@ export async function POST(req: NextRequest) {
     const name = String(b?.name ?? '').trim()
     if (!name) return NextResponse.json({ error: 'اسم الفرع مطلوب' }, { status: 400 })
     const count = await db.branch.count({ where: { tenantId: s.tenantId } })
+    // 🕐 ورديات الفرع (التحديث الثامن) — بتتطابق على السيرفر، والفاضية = NULL
+    const shifts = normalizeShifts(b?.shifts)
+    const shiftsValue: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue =
+      shifts.length > 0 ? shifts.map((s) => ({ name: s.name, from: s.from, to: s.to })) : Prisma.DbNull
     const created = await db.branch.create({
       data: {
         tenantId: s.tenantId,
@@ -87,6 +93,7 @@ export async function POST(req: NextRequest) {
         phone: b?.phone ? String(b.phone) : null,
         active: b?.active !== false,
         isMain: count === 0,
+        shifts: shiftsValue,
       },
     })
     // ⚡ v12: فرع جديد → امسح كاش الفروع وتقرير الفروع فورًا

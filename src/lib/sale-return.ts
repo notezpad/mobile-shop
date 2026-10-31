@@ -190,6 +190,19 @@ export async function performSaleReturn(
     quantity: number
   }> = []
   let exchangeTotal = 0
+  // 🏬 (التحديث الرابع عشر) نطاق فرع الفاتورة للاستبدال — بيتحسب مرة واحدة:
+  // بضاعة الاستبدال لازم تخرج من نفس فرع الفاتورة (غير المسند = الفرع الرئيسي)
+  // عشان مخزون فرع ما يخرجش بديل لمرتجع فرع تاني. المحل اللي مفيهوش فروع → من غير فحص.
+  let exchangeInvBranchId: number | null = null
+  let exchangeMainBranchId: number | null = null
+  if (await tx.branch.count({ where: { tenantId } })) {
+    const mainB = await tx.branch.findFirst({
+      where: { tenantId, isMain: true },
+      select: { id: true },
+    })
+    exchangeMainBranchId = mainB?.id ?? null
+    exchangeInvBranchId = sale.branchId ?? exchangeMainBranchId
+  }
   if (input.exchange && input.exchange.length > 0) {
     for (const ex of input.exchange) {
       const pid = Number(ex?.productId)
@@ -200,6 +213,16 @@ export async function performSaleReturn(
       }
       const p = await tx.product.findFirst({ where: { id: pid, tenantId } })
       if (!p) throw new SaleReturnError('منتج الاستبدال غير موجود', 400)
+      // 🏬 (التحديث الرابع عشر) البديل من نفس فرع الفاتورة — غير المسند = الرئيسي
+      if (
+        exchangeInvBranchId != null &&
+        (p.branchId ?? exchangeMainBranchId) !== exchangeInvBranchId
+      ) {
+        throw new SaleReturnError(
+          `بضاعة الاستبدال «${p.name}» من فرع مختلف — الاستبدال بيتم من أصناف فرع الفاتورة نفسه`,
+          400,
+        )
+      }
       // 🎨 2026-10-18: منتج له ألوان/مقاسات → الاستبدال بيخصم من اللون/المقاس نفسه (كان بيخصم من
       // Product.quantity بس فالخصم بيتمسح عند أول مزامنة للمقاسات)
       const exVariants = await tx.productVariant.findMany({

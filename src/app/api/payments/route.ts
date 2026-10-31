@@ -10,7 +10,11 @@ export const dynamic = 'force-dynamic'
 
 class SaleOverpaid extends Error {}
 
-const VALID_METHODS = new Set(['cash', 'vodafone_cash', 'instapay', 'fawry'])
+// 💳 2026-10-31: الوسائل بقت إعداد لكل محل — القائمة المعروفة + الوسائل
+// المخصصة (custom_*) اللي صاحب المحل بيضيفها من الإعدادات → «وسائل الدفع».
+const VALID_METHODS = new Set(['cash', 'card', 'vodafone_cash', 'instapay', 'fawry'])
+const isValidPayMethod = (m: string) =>
+  VALID_METHODS.has(m) || /^custom_[a-z0-9]{4,30}$/.test(m)
 
 const METHOD_LABELS: Record<string, string> = {
   cash: 'كاش',
@@ -129,7 +133,7 @@ async function __POST(req: NextRequest) {
 
   // method must be valid
   const method = String(body.method ?? '')
-  if (!VALID_METHODS.has(method)) {
+  if (!isValidPayMethod(method)) {
     return NextResponse.json(
       { error: 'طريقة الدفع غير صالحة' },
       { status: 400 }

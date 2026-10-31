@@ -6,6 +6,7 @@ import { getTenantTimezone, localDateStrToUtcBounds, dateStrInTz } from '@/lib/t
 import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 import { withSql, isUniqueViolation, type Sql } from '@/lib/sql'
 import { productBranchScopeSql, branchScopeSql } from '@/lib/branch-scope'
+import { resolveSellerRate } from '@/lib/seller-commissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,10 +65,12 @@ export async function GET(req: NextRequest) {
     const [saleRows, cnt] = await Promise.all([
       sql<any[]>`
         SELECT s."id", s."invoiceNo", s."total", s."paid", s."status",
-               s."createdAt", s."refunded", s."paymentMethod",
+               s."createdAt", s."refunded", s."paymentMethod", s."branchId",
                (SELECT json_build_object('id', c."id", 'name', c."name", 'phone', c."phone")
                 FROM "Customer" c WHERE c."id" = s."customerId") AS customer,
-               (SELECT u."name" FROM "User" u WHERE u."id" = s."userId") AS "userName"
+               (SELECT u."name" FROM "User" u WHERE u."id" = s."userId") AS "userName",
+               -- 💰 (التحديث الثالث عشر) اسم البائع المستحق للعمولة
+               (SELECT u2."name" FROM "User" u2 WHERE u2."id" = s."sellerId") AS "sellerName"
         FROM "Sale" s
         WHERE ${rangeWhere}
         ORDER BY s."id" DESC
@@ -106,6 +109,11 @@ export async function GET(req: NextRequest) {
       refunded: s.refunded,
       paymentMethod: s.paymentMethod,
       userName: s.userName ?? null,
+      // 💰 (التحديث الثالث عشر) البائع المستحق للعمولة — يظهر في سجل المبيعات
+      sellerId: s.sellerId ?? null,
+      sellerName: s.sellerName ?? null,
+      // 🏬 (التحديث الرابع عشر) فرع الفاتورة — لفلتر بضاعة الاستبدال في المرتجع
+      branchId: s.branchId ?? null,
       customer: s.customer ?? null,
       // 🔒 RBAC: نخفي تكلفة المنتجات لمن لا يملك صلاحية رؤية الأرباح
       items: (itemsBySale.get(s.id) ?? []).map((it) => ({
@@ -202,11 +210,15 @@ export async function POST(req: NextRequest) {
   }
   // 🛡️ 2026-09-30 (C12): طريقة دفع مبلغ البيع — زي أمر الشراء بالظبط،
   // عشان الخزنة تتفصل كاش / محافظ / انستاباي على أكبر تدفق فلوس في النظام.
-  const SALE_METHODS = new Set(['cash', 'vodafone_cash', 'instapay', 'fawry'])
+  // 💳 2026-10-31: الوسائل بقت إعداد لكل محل — المدمجة + المخصصة (custom_*)
+  // اللي بتتضاف من الإعدادات → «وسائل الدفع».
+  const SALE_METHODS = new Set(['cash', 'card', 'vodafone_cash', 'instapay', 'fawry'])
+  const isValidSaleMethod = (m: string) =>
+    SALE_METHODS.has(m) || /^custom_[a-z0-9]{4,30}$/.test(m)
   const paymentMethod = body.paymentMethod === undefined || body.paymentMethod === null || body.paymentMethod === ''
     ? 'cash'
     : String(body.paymentMethod)
-  if (!SALE_METHODS.has(paymentMethod)) {
+  if (!isValidSaleMethod(paymentMethod)) {
     return NextResponse.json({ error: 'طريقة الدفع غير صالحة' }, { status: 400 })
   }
   // 🛡️ 2026-09-30 (M10): تاريخ استحقاق اختياري للفاتورة الآجلة.
@@ -221,6 +233,10 @@ export async function POST(req: NextRequest) {
   // 🛡️ 2026-09-30 (M7): مفتاح عدم التكرار للأوفلاين — retry لنفس الفاتورة بيرجّع
   // الفاتورة الأصلية بدل ما يعمل خصم مخزن وخزنة ودين مكرر.
   const clientRef = body.clientRef ? String(body.clientRef).slice(0, 64) : null
+  // 💰 (التحديث الثالث عشر) البائع المستحق للعمولة — منفصل عن الكشير (userId).
+  // ملاحظة أمنية: العميل ما بيبعتش نسبة أبداً — النسبة بيتحددها السيرفر
+  // من إعدادات المحل/البائع لحظة البيع (لقطة).
+  const rawSellerId = body.sellerId ? String(body.sellerId) : null
   let customerId: number | null = null
   if (body.customerId) {
     customerId = parseInt(body.customerId, 10) || null
@@ -254,7 +270,7 @@ export async function POST(req: NextRequest) {
       .map((i: any) => parseInt(i.productId, 10))
       .filter((n: number) => !isNaN(n))
 
-    const [products, units, variants, customerRows, tenantRows, variantProductRows] = await Promise.all([
+    const [products, units, variants, customerRows, tenantRows, variantProductRows, sellerRows] = await Promise.all([
       (ids.length > 0
         ? sql<ProductRow[]>`
             SELECT "id", "branchId", "name", "cost", "quantity", "unitLabel"
@@ -280,13 +296,20 @@ export async function POST(req: NextRequest) {
             FROM "Customer"
             WHERE "id" = ${customerId}`
         : Promise.resolve([] as CustomerRow[])),
-      sql<{ invoicePrefix: string }[]>`
-        SELECT "invoicePrefix" FROM "Tenant" WHERE "id" = ${session.tenantId}`,
+      sql<{ invoicePrefix: string; sellerCommissionsEnabled: boolean; sellerCommissionRate: number | null }[]>`
+        SELECT "invoicePrefix", "sellerCommissionsEnabled", "sellerCommissionRate" FROM "Tenant" WHERE "id" = ${session.tenantId}`,
       (noVariantProductIds.length > 0
         ? sql<{ productId: number }[]>`
             SELECT DISTINCT "productId" FROM "ProductVariant"
             WHERE "productId" IN ${sql(noVariantProductIds)}`
         : Promise.resolve([] as { productId: number }[])),
+      // 💰 التحقق من البائع — مستخدم شغّال معلّم كـ«بائع» في نفس المحل
+      (rawSellerId
+        ? sql<{ id: string; name: string; active: boolean; isSeller: boolean; sellerCommissionRate: number | null }[]>`
+            SELECT "id", "name", "active", "isSeller", "sellerCommissionRate"
+            FROM "User"
+            WHERE "id" = ${rawSellerId} AND "tenantId" = ${session.tenantId}`
+        : Promise.resolve([] as { id: string; name: string; active: boolean; isSeller: boolean; sellerCommissionRate: number | null }[])),
     ])
     const productsWithVariants = new Set<number>(variantProductRows.map((r) => Number(r.productId)))
 
@@ -295,6 +318,23 @@ export async function POST(req: NextRequest) {
     if (customerId) {
       if (!customerCheck || customerCheck.tenantId !== session.tenantId) {
         return NextResponse.json({ error: 'العميل غير صالح' }, { status: 400 })
+      }
+    }
+
+    // 💰 إسناد البائع — الميزة كلها بتتجاهل لو المالك قفلها من الإعدادات.
+    let sellerAttribution: { id: string; rate: number | null } | null = null
+    if (rawSellerId) {
+      const t = tenantRows[0]
+      if (t?.sellerCommissionsEnabled) {
+        const seller = sellerRows[0] ?? null
+        if (!seller || !seller.active || !seller.isSeller) {
+          return NextResponse.json({ error: 'البائع المحدد غير صالح' }, { status: 400 })
+        }
+        sellerAttribution = {
+          id: seller.id,
+          // لقطة النسبة: استثناء البائع ← النسبة العامة ← null (بدون عمولة)
+          rate: resolveSellerRate(seller.sellerCommissionRate, t.sellerCommissionRate),
+        }
       }
     }
 
@@ -455,6 +495,51 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 🏬 (التحديث الرابع عشر) «كل فاتورة لفرعها» — فرع الفاتورة بيتحدد هنا:
+    //   - موظف مرتبط بفرع: فرعه هو (زي ما كان من الأول — الكتالوج أصلاً عزل فرعه).
+    //   - مدير (بدون فرع): فرع البيع المختار من نقطة البيع (body.branchId) —
+    //     بيتحقق إنه فرع تابع لنفس المحل. لو مبعتش: نستنتج من الأصناف
+    //     (غير المسندة بتتبع الفرع الرئيسي — نفس قاعدة النطاق). لو الأصناف
+    //     مختلطة من أكتر من فرع → الفاتورة **مرفوضة** برسالة واضحة بدل ما
+    //     تتسجل «بدون فرع» وتضيع من تقارير الفرع وتحصل في خزنة الفرع الغلط.
+    //   - المحل اللي مفيهوش فروع أصلاً: زي ما كان (branchId = null).
+    let saleBranchId: number | null = session.branchId ?? null
+    const branchRows = await sql<{ id: number; isMain: boolean }[]>`
+      SELECT "id", "isMain" FROM "Branch" WHERE "tenantId" = ${session.tenantId}`
+    const mainBranchId = branchRows.find((b) => b.isMain)?.id ?? null
+    if (!session.branchId && branchRows.length > 0) {
+      const rawBranch =
+        body.branchId != null && body.branchId !== ''
+          ? parseInt(String(body.branchId), 10)
+          : null
+      if (rawBranch != null && !Number.isNaN(rawBranch)) {
+        if (!branchRows.some((b) => b.id === rawBranch)) {
+          return NextResponse.json({ error: 'الفرع المحدد غير صالح' }, { status: 400 })
+        }
+        saleBranchId = rawBranch
+      } else {
+        const derived = new Set(products.map((p) => p.branchId ?? mainBranchId))
+        saleBranchId = derived.size === 1 ? [...derived][0] ?? null : null
+      }
+      if (saleBranchId == null) {
+        return NextResponse.json(
+          { error: 'الفاتورة فيها أصناف من أكتر من فرع — اختار «فرع البيع» في نقطة البيع قبل إتمام البيع، عشان الفاتورة تتبع فرع محدد' },
+          { status: 400 }
+        )
+      }
+    }
+    // أصناف السلة لازم تكون فعلاً من فرع الفاتورة (غير المسند = الفرع الرئيسي)
+    // — عشان مخزون فرع ما يخصمش على فاتورة فرع تاني حتى لو حد بعت الطلب يدوي.
+    if (saleBranchId != null && branchRows.length > 0) {
+      const foreign = products.find((p) => (p.branchId ?? mainBranchId) !== saleBranchId)
+      if (foreign) {
+        return NextResponse.json(
+          { error: `الصنف «${foreign.name}» مش من أصناف فرع الفاتورة — نقطة البيع بتعرض أصناف الفرع المختار بس` },
+          { status: 400 }
+        )
+      }
+    }
+
     // 🛡️ 2026-09-30 (M7): idempotency — نفس clientRef؟ رجّع الفاتورة الأصلية.
     if (clientRef) {
       const existing = await fetchSaleByClientRef(sql, session.tenantId, clientRef)
@@ -470,11 +555,9 @@ export async function POST(req: NextRequest) {
 
     const payload = {
       tenantId: session.tenantId,
-      // 🏬 فرع الفاتورة: فرع الموظف، وللأدمن = فرع الأصناف لو كلها من فرع واحد
-      branchId: session.branchId ?? (() => {
-        const bs = new Set(products.map((p) => p.branchId ?? null))
-        return bs.size === 1 ? [...bs][0] : null
-      })(),
+      // 🏬 فرع الفاتورة — «كل فاتورة لفرعها» (التحديث الرابع عشر): فرع الموظف،
+      // وللمدير فرع البيع المختار (أو استنتاج الأصناف — والمختلط بيرفض فوق).
+      branchId: saleBranchId,
       userId: session.userId,
       customerId,
       total,
@@ -511,6 +594,17 @@ export async function POST(req: NextRequest) {
         if (isUniqueViolation(e) && attempt < MAX_ATTEMPTS) continue
         throw e
       }
+    }
+
+    // 💰 (التحديث الثالث عشر) إسناد البائع + لقطة النسبة على الفاتورة —
+    // تحديث خفيف بعد دالة create_sale (المنشورة على Supabase ومش بنعدّلها).
+    // بيتطبق بس لو الفاتورة لسه من غير بائع (first-write-wins) — تعديل
+    // الإسناد بعد كده بيتم من مسار المدير بس (PATCH /api/sales/[id] + AuditLog).
+    if (sale?.id && sellerAttribution) {
+      await sql`
+        UPDATE "Sale"
+        SET "sellerId" = ${sellerAttribution.id}, "commissionRate" = ${sellerAttribution.rate}
+        WHERE "id" = ${sale.id} AND "tenantId" = ${session.tenantId} AND "sellerId" IS NULL`
     }
 
     // ⚡ EDGE CACHE purge (2026-10-06): البيع الجديد لازم يظهر فورًا في الداشبورد

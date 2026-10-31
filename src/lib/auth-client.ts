@@ -11,6 +11,8 @@ export interface AuthUser {
   permissions?: string[] | null
   /** هل يشوف الأرباح؟ */
   canViewProfits?: boolean
+  /** 💰 (التحديث الثالث عشر) هل الحساب معلّم كـ«بائع»؟ — بيفتح مدخل «عمولتي» في السايدبار */
+  isSeller?: boolean
 }
 
 const RETRYABLE_LOGIN_STATUS = new Set([500, 502, 503, 504])

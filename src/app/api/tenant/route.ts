@@ -7,6 +7,8 @@ import {
 } from '@/lib/auth'
 import { getPlanContext } from '@/lib/features'
 import { withSql } from '@/lib/sql'
+import { normalizePaymentMethodsConfig } from '@/lib/payment-methods'
+import { normalizeCommissionSettings } from '@/lib/seller-commissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +34,9 @@ async function __GET() {
       SELECT "id", "shopName", "phone", "address", "logoPath", "invoicePrefix",
              "timezone", "commissionVodafoneCash", "commissionInstapay",
              "commissionFawry", "retailEnabled", "dynamicRetailPricingEnabled",
-             "defaultRetailMarginPercent", "productCardStyle"
+             "defaultRetailMarginPercent", "productCardStyle", "paymentMethodsConfig",
+             "blindCashEnabled",
+             "sellerCommissionsEnabled", "sellerCommissionRate", "sellerCommissionTarget"
       FROM "Tenant"
       WHERE "id" = ${session.tenantId}
       LIMIT 1`
@@ -151,6 +155,43 @@ async function __PUT(req: NextRequest) {
     data.productCardStyle = body.productCardStyle
   }
 
+  // 💳 وسائل الدفع (إعداد لكل محل) — تحقق صارم على السيرفر قبل التخزين:
+  // «كاش» بتتفرض مفعّلة في الشاشتين، والمعرفات المخصصة لازم 'custom_'،
+  // وكل وسيلة لازم ليها اسم. التفاصيل في src/lib/payment-methods.ts.
+  if (body.paymentMethodsConfig !== undefined) {
+    const norm = normalizePaymentMethodsConfig(body.paymentMethodsConfig)
+    if (!norm.ok) {
+      return NextResponse.json({ error: norm.error || 'إعداد وسائل الدفع غير صالح' }, { status: 400 })
+    }
+    data.paymentMethodsConfig = norm.serialized
+  }
+
+  // 🫥 (التحديث الحادي عشر): مفتاح «الجرد الأعمى للخزينة» — صاحب المحل هو
+  // اللي بيقرر: مفعّل = الكاشير يعدّ من غير ما يشوف المتوقع؛ متوقّف = الوضع
+  // التقليدي (المتوقع ظاهر والحقل متعبّي + تأكيد). الحساب والفارق على
+  // السيرفر في الحالتين — المفتاح بيغير العرض للكاشير بس.
+  if (body.blindCashEnabled !== undefined) {
+    data.blindCashEnabled = Boolean(body.blindCashEnabled)
+  }
+
+  // 💰 (التحديث الثالث عشر) إعدادات عمولات البائعين — تحقق صارم على السيرفر:
+  // التفعيل بيتطلب نسبة عامة، والنسبة % من 0 لـ 100، والتارجت رقم >= 0.
+  // لكل بائع استثناء بنفس الحقول على User (من شاشة المستخدمين).
+  if (
+    body.sellerCommissionsEnabled !== undefined ||
+    body.sellerCommissionRate !== undefined ||
+    body.sellerCommissionTarget !== undefined
+  ) {
+    const norm = normalizeCommissionSettings(body)
+    if (!norm.ok) {
+      return NextResponse.json({ error: norm.error || 'إعدادات العمولات غير صالحة' }, { status: 400 })
+    }
+    const v = norm.value
+    if (v.enabled !== undefined) data.sellerCommissionsEnabled = v.enabled
+    if (v.rate !== undefined) data.sellerCommissionRate = v.rate
+    if (v.target !== undefined) data.sellerCommissionTarget = v.target
+  }
+
   const updated = await db.tenant.update({
     where: { id: session.tenantId },
     data,
@@ -169,6 +210,11 @@ async function __PUT(req: NextRequest) {
       dynamicRetailPricingEnabled: true,
       defaultRetailMarginPercent: true,
       productCardStyle: true,
+      paymentMethodsConfig: true,
+      blindCashEnabled: true,
+      sellerCommissionsEnabled: true,
+      sellerCommissionRate: true,
+      sellerCommissionTarget: true,
     },
   })
   return NextResponse.json(updated)

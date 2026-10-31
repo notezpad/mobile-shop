@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { clearAuthSnapshot, type AuthUser } from './auth-client'
+import { defaultPaymentMethodsConfig, type PaymentMethodConfig } from './payment-methods'
 
 export type ViewKey =
   | 'dashboard'
@@ -41,6 +42,18 @@ export interface ShopBranding {
    * tenant's own default until `/api/tenant` responds.
    */
   timezone: string
+  /**
+   * 💳 وسائل الدفع المفعّلة للمحل (نقطة البيع + دفعات العملاء) — بتتيجي من
+   * /api/tenant مع باقي بيانات المحل. الافتراضي = السلوك القديم (كاش + محفظة
+   * في نقطة البيع) لحد ما الإعداد الحقيقي يوصل — نفس نمط timezone.
+   * الإعداد نفسه من الإعدادات → «وسائل الدفع».
+   */
+  paymentMethods: PaymentMethodConfig[]
+  /**
+   * 💰 (التحديث الثالث عشر) عمولات البائعين مفعّلة للمحل؟ — بتتحكم في ظهور
+   * خانة «البائع» في نقطة البيع. الافتراضي false لحد ما /api/tenant يرد.
+   */
+  sellerCommissionsEnabled: boolean
 }
 
 /**
@@ -112,6 +125,7 @@ export interface StocktakeDraftItem {
   variantId?: number | null
   name: string
   barcode: string | null
+  /** 🫥 في الجرد الأعمي عمروما بيتعرض — السيرفر بيسجل الرقم الحقيقي بنفسه */
   systemQty: number
   countedQty: number
   /** 🥬 2026-10-12: منتج بيع بالوزن — العد بيبقى بالكيلو بكسور */
@@ -122,6 +136,9 @@ export interface StocktakeDraft {
   branchId: string
   items: StocktakeDraftItem[]
   note: string
+  /** 🫥 2026-10-31 (التحديث الحادي عشر): نوع الجرد — 'open' تقليدي / 'blind' أعمي.
+   *  الموظف صاحب صلاحية الجرد الأعمي مفروض عليه blind ومقفول على السيرفر كمان. */
+  mode?: 'open' | 'blind'
   /** ISO date string of when this draft was last touched — for showing "draft auto-saved" UI. */
   updatedAt: number | null
 }
@@ -212,6 +229,7 @@ const DEFAULT_STOCKTAKE_DRAFT: StocktakeDraft = {
   branchId: '',
   items: [],
   note: '',
+  mode: 'open',
   updatedAt: null,
 }
 
@@ -236,7 +254,7 @@ export const useShopStore = create<ShopState>()(
       setActiveView: (v) => set({ activeView: v }),
       shopName: '', // فاضي لحد ما الاسم الحقيقي يوصل من /api/tenant (كان placeholder بيظهر في السايدبار)
       setShopName: (n) => set({ shopName: n }),
-      branding: { phone: null, address: null, logoPath: null, invoicePrefix: 'INV', timezone: 'Africa/Cairo' },
+      branding: { phone: null, address: null, logoPath: null, invoicePrefix: 'INV', timezone: 'Africa/Cairo', paymentMethods: defaultPaymentMethodsConfig(), sellerCommissionsEnabled: false },
       setBranding: (b) => set((s) => ({ branding: { ...s.branding, ...b } })),
       user: null,
       setUser: (u) => set({ user: u }),

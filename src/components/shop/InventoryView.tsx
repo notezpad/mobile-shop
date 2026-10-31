@@ -79,6 +79,10 @@ export interface Transfer {
 export interface Stocktake {
   id: number
   status: string
+  // 🫥 2026-10-31: نوع الجرد — 'open' تقليدي / 'blind' أعمي
+  mode?: 'open' | 'blind'
+  // 🔄 (التحديث الثاني عشر): ورقة متولّدة من جدول جرد دوري
+  cycleScheduleId?: number | null
   createdAt: string
   committedAt: string | null
   note: string | null
@@ -89,9 +93,10 @@ export interface Stocktake {
     productId: number
     variantId?: number | null
     variant?: { size: string | null; color: string | null } | null
-    systemQty: number
+    // 🫥 اختيارية: السيرفر بيشيلها من ردود الأوراق الأعمية لغير المدير
+    systemQty?: number
     countedQty: number
-    diff: number
+    diff?: number
     product: { name: string; barcode: string | null }
   }[]
 }
@@ -268,7 +273,7 @@ export function InventoryView() {
         rows: stocktakes.map((s) => ({
           date: new Date(s.createdAt).toLocaleString('ar-EG'),
           branch: s.branch?.name || 'كل الفروع', itemsCount: s.items.length,
-          diffTotal: s.items.reduce((sum, i) => sum + i.diff, 0),
+          diffTotal: s.items.reduce((sum, i) => sum + (i.diff ?? 0), 0),
           status: STOCKTAKE_STATUS_LABELS[s.status] ?? s.status, user: s.createdByName || '-',
         })),
       })

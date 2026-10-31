@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse, hashPassword } from '@/lib/auth'
 import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
+import { normalizeSellerFields } from '@/lib/seller-commissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,6 +104,20 @@ async function __PUT(
   if (body.branchId !== undefined) {
     data.branchId = body.branchId ? parseInt(body.branchId, 10) : null
   }
+  // 💰 (التحديث الثالث عشر) بيانات البائع — تحقق صارم (نسبة % وتارجت >= 0)
+  if (
+    body.isSeller !== undefined ||
+    body.sellerCommissionRate !== undefined ||
+    body.sellerCommissionTarget !== undefined
+  ) {
+    const norm = normalizeSellerFields(body)
+    if (!norm.ok) {
+      return NextResponse.json({ error: norm.error }, { status: 400 })
+    }
+    if (norm.value.isSeller !== undefined) data.isSeller = norm.value.isSeller
+    if (norm.value.sellerCommissionRate !== undefined) data.sellerCommissionRate = norm.value.sellerCommissionRate
+    if (norm.value.sellerCommissionTarget !== undefined) data.sellerCommissionTarget = norm.value.sellerCommissionTarget
+  }
   if (body.active !== undefined) {
     data.active = Boolean(body.active)
   }
@@ -130,6 +145,9 @@ async function __PUT(
       createdAt: true,
       permissions: true,
       canViewProfits: true,
+      isSeller: true,
+      sellerCommissionRate: true,
+      sellerCommissionTarget: true,
     },
   })
   // ⚡ v12: تعديل/إيقاف مستخدم → امسح كاش قائمة المستخدمين فورًا

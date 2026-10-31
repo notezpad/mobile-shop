@@ -5,6 +5,8 @@ import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { createPrincipalCashEntry } from '@/lib/commission'
+import { logAudit } from '@/lib/audit'
+import { resolveSellerRate } from '@/lib/seller-commissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -297,8 +299,103 @@ async function __DELETE(
   })
 }
 
+/**
+ * 💰 (التحديث الثالث عشر) تعديل إسناد البائع على فاتورة موجودة — PATCH /api/sales/[id]
+ * body: { sellerId: string | null }
+ *
+ * 🛡️ أدمن/مالك بس + كل تغيير بيتسجل في AuditLog (مين غيّر إسناد فاتورة،
+ * من مين لمن). النسبة بتتحسب تاني لحظة التعديل من إعدادات المحل/البائع —
+ * دي لقطة جديدة للفاتورة دي، مش بتأثر على أي فاتورة تانية.
+ * حالة خاصة: لو الفاتورة اتصرفت عمولتها (CommissionPayout للشهر) التعديل
+ * بيتسجل برضه — الأرقام النهائية للشهر بتتحسب لحظة الصرف، فالتغيير قبل
+ * الصرف بيتعكس صح، والتغيير بعد الصرف بيبان في الشهر الجاي.
+ */
+async function __PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  let session
+  try {
+    session = await requireAdmin()
+  } catch (e) {
+    const err = authErrorResponse(e)
+    return NextResponse.json(err?.body, { status: err?.status })
+  }
+
+  const { id } = await params
+  const sid = parseInt(id, 10)
+  if (isNaN(sid)) {
+    return NextResponse.json({ error: 'معرف غير صالح' }, { status: 400 })
+  }
+
+  const body = await req.json().catch(() => null)
+  const rawSellerId = body?.sellerId === null ? null : body?.sellerId ? String(body.sellerId) : undefined
+  if (rawSellerId === undefined) {
+    return NextResponse.json({ error: 'البائع مطلوب (أو null لإزالة الإسناد)' }, { status: 400 })
+  }
+
+  const sale = await db.sale.findUnique({ where: { id: sid } })
+  if (!sale || sale.tenantId !== session.tenantId) {
+    return NextResponse.json({ error: 'البيع غير موجود' }, { status: 404 })
+  }
+  if (!(await canAccessBranchRecord(session.tenantId, sale.branchId, session.branchId))) {
+    return NextResponse.json({ error: 'البيع غير موجود' }, { status: 404 })
+  }
+
+  const tenantCfg = await db.tenant.findUnique({
+    where: { id: session.tenantId },
+    select: { sellerCommissionsEnabled: true, sellerCommissionRate: true },
+  })
+  if (!tenantCfg?.sellerCommissionsEnabled) {
+    return NextResponse.json({ error: 'ميزة عمولات البائعين متوقفة' }, { status: 400 })
+  }
+
+  const prevSellerId = sale.sellerId
+  let nextSellerId: string | null = null
+  let nextRate: number | null = null
+  let nextSellerName: string | null = null
+  if (rawSellerId !== null) {
+    const seller = await db.user.findFirst({
+      where: { id: rawSellerId, tenantId: session.tenantId },
+      select: { id: true, name: true, active: true, isSeller: true, sellerCommissionRate: true },
+    })
+    if (!seller || !seller.active || !seller.isSeller) {
+      return NextResponse.json({ error: 'البائع المحدد غير صالح' }, { status: 400 })
+    }
+    nextSellerId = seller.id
+    nextRate = resolveSellerRate(seller.sellerCommissionRate, tenantCfg.sellerCommissionRate)
+    nextSellerName = seller.name
+  }
+
+  await db.sale.update({
+    where: { id: sid },
+    data: { sellerId: nextSellerId, commissionRate: nextRate },
+  })
+
+  await logAudit(
+    {
+      action: 'sales.seller_change',
+      targetType: 'sale',
+      targetId: sid,
+      details: {
+        invoiceNo: sale.invoiceNo,
+        from: prevSellerId,
+        to: nextSellerId,
+        toName: nextSellerName,
+        rate: nextRate,
+      },
+    },
+    req,
+  )
+
+  return NextResponse.json({ ok: true, id: sid, sellerId: nextSellerId, sellerName: nextSellerName, commissionRate: nextRate })
+}
+
 export async function GET(...args: Parameters<typeof __GET>) {
   return withDb(() => __GET(...args))
+}
+export async function PATCH(...args: Parameters<typeof __PATCH>) {
+  return withDb(() => __PATCH(...args))
 }
 export async function DELETE(...args: Parameters<typeof __DELETE>) {
   return withIdempotency(args[0] as NextRequest, () => withDb(() => __DELETE(...args)))

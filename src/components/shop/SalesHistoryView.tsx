@@ -4,7 +4,7 @@ import * as React from 'react'
 import { commonUnit, formatQtyUnit, unitWord } from '@/lib/unit-label'
 import {
   ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, FileDown, FileSpreadsheet,
-  Filter, Layers, PackageCheck, Printer, ReceiptText, RotateCcw, Search, User, Users, Wallet, X,
+  Filter, HandCoins, Layers, PackageCheck, Printer, ReceiptText, RotateCcw, Search, User, Users, Wallet, X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -49,8 +49,13 @@ interface Sale {
   status: string
   createdAt: string
   userName?: string | null
+  // 💰 (التحديث الثالث عشر) البائع المستحق للعمولة (منفصل عن الكاشير)
+  sellerId?: string | null
+  sellerName?: string | null
   refunded?: number
   paymentMethod?: string | null
+  /** 🏬 (التحديث الرابع عشر) فرع الفاتورة — فلتر بضاعة الاستبدال في المرتجع */
+  branchId?: number | null
   customer: ({ id: number; name: string; phone?: string | null }) | null
   items: SaleItem[]
 }
@@ -106,7 +111,10 @@ const NO_CUSTOMER = '__walkin'
 const METHOD_LABELS: Record<string, string> = {
   cash: 'نقدي', vodafone_cash: 'فودافون كاش', instapay: 'انستاباي', fawry: 'فوري',
 }
-const methodLabel = (m?: string | null) => (m ? METHOD_LABELS[m] ?? m : null)
+// 💳 extra = أسماء وسائل المحل المخصصة من إعدادات «وسائل الدفع» (custom_* وأي
+// إعادة تسمية) — الأولوية ليها، وبعدين الأسماء المعروفة، وبعدين الـ id نفسه.
+const methodLabel = (m?: string | null, extra?: Record<string, string>) =>
+  m ? (extra?.[m] ?? METHOD_LABELS[m] ?? m) : null
 const SORT_LABELS: Record<SortKey, string> = {
   recent: 'الأحدث أولاً', oldest: 'الأقدم أولاً', value: 'الأكبر قيمة', due: 'الأكبر باقي',
 }
@@ -176,6 +184,12 @@ export function SalesHistoryView() {
   const searchRef = React.useRef<HTMLInputElement>(null)
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
+  const user = useShopStore((s) => s.user)
+  // 💳 خريطة أسماء وسائل المحل (بما فيها المخصصة) لعرضها في السجل والفلاتر
+  const pmLabelMap = React.useMemo(
+    () => Object.fromEntries(shopBranding.paymentMethods.map((p) => [p.id, p.label])),
+    [shopBranding.paymentMethods]
+  )
 
   const load = React.useCallback(async (f?: string, t?: string, p = 1) => {
     setLoading(true)
@@ -286,8 +300,8 @@ export function SalesHistoryView() {
     })
     return [...m.entries()]
       .sort((a, b) => b[1].n - a[1].n)
-      .map(([k, e]) => ({ value: k, label: methodLabel(k) ?? k, count: e.n, hint: `محصّل ${formatCurrency(e.paid)}`, tone: 'muted' as const }))
-  }, [sales, calcs])
+      .map(([k, e]) => ({ value: k, label: methodLabel(k, pmLabelMap) ?? k, count: e.n, hint: `محصّل ${formatCurrency(e.paid)}`, tone: 'muted' as const }))
+  }, [sales, calcs, pmLabelMap])
   const userOpts = React.useMemo<PickOption[]>(() => {
     const m = new Map<string, { n: number; net: number }>()
     sales.forEach((s) => {
@@ -431,6 +445,7 @@ export function SalesHistoryView() {
         { header: 'المدفوع', key: 'paid', format: 'currency' },
         { header: 'الحالة', key: 'status', format: 'text' },
         { header: 'الكاشير', key: 'userName', format: 'text' },
+        { header: 'البائع', key: 'sellerName', format: 'text' },
       ],
       rows: filtered.map((s) => ({
         invoiceNo: invNo(s),
@@ -441,6 +456,7 @@ export function SalesHistoryView() {
         paid: s.paid,
         status: s.status,
         userName: s.userName || '-',
+        sellerName: s.sellerName || '-',
       })),
       totals: { invoiceNo: 'الإجمالي', total: net, paid: collected },
     })
@@ -779,11 +795,20 @@ export function SalesHistoryView() {
                                   </span>
                                 )}
 
-                                {s.paymentMethod && methodLabel(s.paymentMethod) && (
+                                {/* 💰 البائع المستحق للعمولة — بيبان لما يكون مختلف عن الكاشير */}
+                                {s.sellerName && s.sellerName !== s.userName && (
+                                  <span className="flex min-w-0 items-center gap-1">
+                                    <span aria-hidden className="size-[3px] shrink-0 rounded-full bg-current opacity-50" />
+                                    <HandCoins className="size-3 shrink-0 text-emerald-600/70 dark:text-emerald-400/70" aria-hidden />
+                                    <span className="truncate font-semibold text-emerald-700/80 dark:text-emerald-400/80">البائع: {s.sellerName}</span>
+                                  </span>
+                                )}
+
+                                {s.paymentMethod && methodLabel(s.paymentMethod, pmLabelMap) && (
                                   <span className="flex min-w-0 items-center gap-1">
                                     <span aria-hidden className="size-[3px] shrink-0 rounded-full bg-current opacity-50" />
                                     <Wallet className="size-3 shrink-0 text-foreground/50" aria-hidden />
-                                    <span className="truncate">{methodLabel(s.paymentMethod)}</span>
+                                    <span className="truncate">{methodLabel(s.paymentMethod, pmLabelMap)}</span>
                                   </span>
                                 )}
                               </div>
@@ -915,6 +940,12 @@ export function SalesHistoryView() {
         <SaleReturnDialog
           open
           onOpenChange={(o) => !o && setPartialReturnSale(null)}
+          printContext={{
+            shopName: shopName || 'محل',
+            shopPhone: shopBranding.phone,
+            shopAddress: shopBranding.address,
+            cashierName: user?.name,
+          }}
           sale={{
             id: partialReturnSale.id,
             invoiceNo: partialReturnSale.invoiceNo,
@@ -923,6 +954,8 @@ export function SalesHistoryView() {
             paid: partialReturnSale.paid,
             refunded: partialReturnSale.refunded ?? 0,
             paymentMethod: (partialReturnSale as any).paymentMethod ?? null,
+            // 🏬 (التحديث الرابع عشر) فرع الفاتورة — فلتر بضاعة الاستبدال
+            branchId: partialReturnSale.branchId ?? null,
           }}
           items={partialReturnSale.items.map((it) => ({
             id: it.id,

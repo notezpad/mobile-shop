@@ -30,6 +30,8 @@ async function __GET() {
       impersonating,
       permissions: s.permissions ?? null,
       canViewProfits: s.canViewProfits,
+      // 💰 (التحديث الثالث عشر) من التوكن — السايدبار بيفتح بيها مدخل «عمولتي»
+      isSeller: s.isSeller === true,
     },
   })
   // 🛡️ FIX (stuck-logout / "unauthorized" toast storm / data goes blank):

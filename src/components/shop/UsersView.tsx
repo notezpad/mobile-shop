@@ -40,6 +40,7 @@ import {
   UserX,
   Users,
   X,
+  HandCoins,
 } from 'lucide-react'
 import {
   Dialog,
@@ -84,6 +85,10 @@ interface UserRow {
   branch?: { name: string } | null
   permissions?: string | null
   canViewProfits?: boolean
+  // 💰 (التحديث الثالث عشر) بيانات البائع
+  isSeller?: boolean
+  sellerCommissionRate?: number | null
+  sellerCommissionTarget?: number | null
 }
 
 type RoleFilter = 'all' | 'ADMIN' | 'EMPLOYEE'
@@ -946,10 +951,33 @@ const MODULE_LABELS: Record<string, string> = {
   finance: 'المعاملات المالية', expenses: 'المصروفات', cash: 'الخزنة',
   reports: 'التقارير', settings: 'الإعدادات', users: 'المستخدمين',
   branches: 'الفروع', hr: 'الموارد البشرية',
+  // 🔁 صلاحية مستقلة مش صفحة: استلام المرتجع من زرار جوه نقطة البيع —
+  // بدون سجل المبيعات ولا الأرباح (البحث بيرجّع فاتورة واحدة بس من غير تكاليف)
+  returns: 'المرتجعات (من نقطة البيع — بدون سجل المبيعات)',
+  // 🕐 صلاحية مستقلة: إغلاق الوردية بالجرد الأعمى — الكاشير يكتب اللي عدّاه
+  // في الدرج من غير ما يشوف المتوقع، والفارق يظهر للمدير بس في الخزنة
+  shift_close: 'إغلاق الوردية (جرد الدرج الأعمى)',
+  // 🫥 (التحديث الحادي عشر) صلاحية مستقلة: عدّ الجرد الأعمي — الموظف يفتح
+  // محطة الجرد بس ويعدّ من غير رؤية أي أرقام، والاعتماد للمدير
+  blind_stocktake: 'الجرد الأعمي (عدّ بدون رؤية الأرقام والفروق)',
+  // 💰 (التحديث الثالث عشر) صلاحية مستقلة: شاشة عمولات البائعين (تقرير + متابعة)
+  commissions: 'عمولات البائعين (متابعة الشهور — الصرف للمالك بس)',
+  // 🪪 (التحديث الرابع عشر) صلاحية مستقلة: الصفحة الشخصية للموظف
+  my_profile: 'ملفي الشخصي (حضوره وراتبه وسلفه — عرض بس من غير أي تعديل)',
   // صلاحية مشرف الفرع: تسجيل الحضور والإجازات فقط، بدون أي مبالغ (مش مرتبطة بصلاحية الموارد البشرية الكاملة)
   hr_attendance: 'الحضور والإجازات (مشرف)',
 }
-const PERM_MODULES: string[] = [...ALL_MODULES.filter((m) => m !== 'guide'), 'hr_attendance']
+// 🔁 'returns' صلاحية مش موديول — بنحطها جنب نقطة البيع عشان السيناريو
+// الطبيعي: كاشير [نقطة البيع + المرتجعات] من غير سجل المبيعات.
+// 🕐 'shift_close' كمان جنبهم: كاشير [نقطة البيع + المرتجعات + إغلاق الوردية].
+// 🫥 'blind_stocktake' معاهم: عدّاد الجرد الأعمي [نقطة البيع + عدّ من غير أرقام].
+const PERM_MODULES: string[] = (() => {
+  const arr: string[] = [...ALL_MODULES.filter((m) => m !== 'guide')]
+  const i = arr.indexOf('pos')
+  arr.splice(i >= 0 ? i + 1 : arr.length, 0, 'returns', 'shift_close', 'blind_stocktake', 'commissions')
+  arr.push('hr_attendance', 'my_profile')
+  return arr
+})()
 
 // صف في سجل البطاقة: «الاسم ........ القيمة» بخط منقّط زي الفواتير
 function LedgerRow({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
@@ -985,6 +1013,10 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
   const [useCustomPerms, setUseCustomPerms] = React.useState(false)
   const [selectedPerms, setSelectedPerms] = React.useState<string[]>([])
   const [canViewProfits, setCanViewProfits] = React.useState(false)
+  // 💰 (التحديث الثالث عشر) بيانات البائع — استثناء نسبة/تارجت (فاضي = وراثة العام)
+  const [isSeller, setIsSeller] = React.useState(false)
+  const [sellerRate, setSellerRate] = React.useState('')
+  const [sellerTarget, setSellerTarget] = React.useState('')
 
   React.useEffect(() => {
     if (open) {
@@ -1001,6 +1033,10 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
       setUseCustomPerms(!!parsedPerms && parsedPerms.length > 0)
       setSelectedPerms(parsedPerms ?? [])
       setCanViewProfits(Boolean(initial?.canViewProfits))
+      // 💰 بيانات البائع
+      setIsSeller(Boolean(initial?.isSeller))
+      setSellerRate(initial?.sellerCommissionRate != null ? String(initial.sellerCommissionRate) : '')
+      setSellerTarget(initial?.sellerCommissionTarget != null ? String(initial.sellerCommissionTarget) : '')
       fetch('/api/branches')
         .then((r) => (r.ok ? r.json() : []))
         .then(setBranches)
@@ -1026,6 +1062,10 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
         branchId: branchId ? parseInt(branchId, 10) : null,
         permissions: role === 'ADMIN' ? null : (useCustomPerms ? selectedPerms : null),
         canViewProfits: role === 'ADMIN' ? true : canViewProfits,
+        // 💰 بيانات البائع — فاضي = وراثة إعدادات المحل العامة
+        isSeller,
+        sellerCommissionRate: sellerRate.trim() === '' ? null : Number(sellerRate),
+        sellerCommissionTarget: sellerTarget.trim() === '' ? null : Number(sellerTarget),
       }
       if (initial) {
         if (password) body.password = password
@@ -1459,6 +1499,89 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
                     )}
                   />
                 </button>
+              </div>
+
+              {/* 💰 (التحديث الثالث عشر) بيانات البائع — عمولة على المبيعات */}
+              <div
+                className={cn(
+                  'mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5',
+                  !isSeller && 'opacity-80'
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <HandCoins className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">بائع (يستحق عمولة على مبيعاته)</p>
+                    <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80">
+                      بيظهر في خانة «البائع» في نقطة البيع، وبيشوف عمولته هو بس من مدخل «عمولتي»
+                      — والحساب والتسوية من شاشة عمولات البائعين (أنت بس اللي بتصرّف).
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      'text-xs font-semibold',
+                      isSeller ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'
+                    )}
+                  >
+                    {isSeller ? 'بائع' : 'مش بائع'}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isSeller}
+                    aria-label="بائع يستحق عمولة"
+                    onClick={() => setIsSeller((v) => !v)}
+                    className={cn(
+                      'relative h-5 w-9 shrink-0 rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500/60',
+                      isSeller ? 'bg-emerald-500' : 'bg-muted-foreground/30'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'absolute top-0.5 size-4 rounded-full bg-white shadow transition-[inset-inline-start] duration-150',
+                        isSeller ? 'start-[calc(100%-1.125rem)]' : 'start-0.5'
+                      )}
+                    />
+                  </button>
+                </div>
+
+                {isSeller && (
+                  <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-bold text-foreground/80">
+                        نسبة استثناء (%) — فاضي = النسبة العامة
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.25"
+                        inputMode="decimal"
+                        value={sellerRate}
+                        onChange={(e) => setSellerRate(e.target.value)}
+                        dir="ltr"
+                        className="h-8 w-full rounded-lg border bg-background px-2 text-left text-xs tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                        placeholder="مثال: 5"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-bold text-foreground/80">
+                        تارجت استثناء شهري — فاضي = العام
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        inputMode="decimal"
+                        value={sellerTarget}
+                        onChange={(e) => setSellerTarget(e.target.value)}
+                        dir="ltr"
+                        className="h-8 w-full rounded-lg border bg-background px-2 text-left text-xs tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                        placeholder="مثال: 150000"
+                      />
+                    </label>
+                  </div>
+                )}
               </div>
             </div>
           </div>

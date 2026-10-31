@@ -5,9 +5,12 @@ import * as React from 'react'
 import {
   ImagePlus, Loader2, Save, Sparkles, CalendarDays, CheckCircle2, Printer, Bell,
   SlidersHorizontal, LayoutGrid, Store, Receipt, BadgeCheck, Percent, Calculator, Undo2, Clock,
+  Banknote, CreditCard, Smartphone, Wallet, WalletCards, Lock, Plus, Trash2,
 } from 'lucide-react'
 import { PrinterSettingsDialog } from './PrinterSettingsDialog'
 import { RedeemCodeCard } from './RedeemCodeCard'
+import { ShiftSettingsCard } from './ShiftSettingsCard'
+import { SellerCommissionsCard } from './SellerCommissionsCard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,6 +23,13 @@ import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { useDataRefresh } from '@/lib/offline/data-events'
+import {
+  parsePaymentMethodsConfig,
+  serializePaymentMethodsConfig,
+  customMethodId,
+  MAX_PAYMENT_METHODS,
+  type PaymentMethodConfig,
+} from '@/lib/payment-methods'
 import { Panel, Led, Toggle, SettingRow, Field, INK_FIELD, INK_BTN, INK_BTN_OUTLINE } from './settings-ui'
 
 interface TenantData {
@@ -37,6 +47,8 @@ interface TenantData {
   dynamicRetailPricingEnabled: boolean
   defaultRetailMarginPercent: number
   productCardStyle: 'auto' | 'image' | 'compact'
+  /** 💳 إعداد وسائل الدفع (JSON string) — '' = السلوك القديم. بيتحرر من كارت «وسائل الدفع» */
+  paymentMethodsConfig: string
 }
 
 interface SubInfo {
@@ -80,6 +92,7 @@ const TRACKED: { key: keyof TenantData; label: string }[] = [
   { key: 'dynamicRetailPricingEnabled', label: 'التسعير التلقائي' },
   { key: 'defaultRetailMarginPercent', label: 'هامش الربح' },
   { key: 'productCardStyle', label: 'شكل بطاقة المنتج' },
+  { key: 'paymentMethodsConfig', label: 'وسائل الدفع' },
 ]
 
 const MODULE_LABELS: Record<string, string> = {
@@ -105,6 +118,17 @@ function useNow() {
   }, [])
   return now
 }
+
+// 💳 أيقونات وسائل الدفع — نفس خريطة نقطة البيع (المخصصة = محفظة عامة)
+const PM_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  cash: Banknote,
+  card: CreditCard,
+  vodafone_cash: Wallet,
+  instapay: Smartphone,
+  fawry: Store,
+}
+const pmIconFor = (id: string): React.ComponentType<{ className?: string }> =>
+  PM_ICONS[id] ?? WalletCards
 
 function NumInput({
   value, onChange, suffix, min = 0, disabled,
@@ -263,6 +287,9 @@ export function SettingsView() {
         logoPath: out.logoPath,
         invoicePrefix: out.invoicePrefix,
         timezone: out.timezone,
+        // 💳 تحديث وسائل الدفع فوراً في المتجر المحلي — نقطة البيع ودفعات
+        // العملاء بتعكس الإعداد الجديد من غير refresh.
+        paymentMethods: parsePaymentMethodsConfig(out.paymentMethodsConfig),
       })
       toast.success('تم حفظ الإعدادات')
     } catch (e: any) {
@@ -320,6 +347,15 @@ export function SettingsView() {
     { key: 'commissionInstapay', label: 'انستاباي' },
     { key: 'commissionFawry', label: 'محفظة فوري' },
   ]
+
+  // 💳 وسائل الدفع — القائمة العاملة مشتقة من الإعداد المخزّن، ولو الحقل لسه
+  // فاضي ('' = محل قديم ما فتحش الإعدادات) بيتعرض السلوك القديم جاهز للتحرير.
+  const pmList = React.useMemo(
+    () => parsePaymentMethodsConfig(data?.paymentMethodsConfig),
+    [data?.paymentMethodsConfig]
+  )
+  const setPmList = (next: PaymentMethodConfig[]) =>
+    update('paymentMethodsConfig', serializePaymentMethodsConfig(next))
 
   return (
     <div className="space-y-4 pb-6 sm:space-y-5">
@@ -605,6 +641,16 @@ export function SettingsView() {
           <NotificationSettingsCard />
         </div>
 
+        {/* ═════════ 🕐 ورديات المحل (التحديث الثامن) — للفرع الواحد ═════════ */}
+        <div className="stagger-5 lg:col-span-6">
+          <ShiftSettingsCard />
+        </div>
+
+        {/* ═════════ 💰 عمولات البائعين (التحديث الثالث عشر) ═════════ */}
+        <div className="stagger-5 lg:col-span-6">
+          <SellerCommissionsCard />
+        </div>
+
         {/* ═════════ التسعير التلقائي ═════════ */}
         {hasWholesale && !isFoodShop && (
           <Panel
@@ -685,6 +731,124 @@ export function SettingsView() {
                 </button>
               )
             })}
+          </div>
+        </Panel>
+
+        {/* ═════════ وسائل الدفع ═════════ */}
+        <Panel
+          tag="05 / Payment methods"
+          title="وسائل الدفع"
+          hint="اختار اللي يظهر في نقطة البيع واللي يظهر في دفعات العملاء — كل محل ليها إعدادها. الاسم قابل للتعديل، وتقدر تضيف وسايل مخصصة."
+          icon={CreditCard}
+          className="stagger-6 lg:col-span-6"
+          bodyClassName="space-y-3"
+        >
+          {pmList.map((m) => {
+            const Icon = pmIconFor(m.id)
+            return (
+              <div
+                key={m.id}
+                className={cn(
+                  'rounded-xl border p-3',
+                  m.pos || m.collect
+                    ? 'border-foreground/20 bg-muted/40'
+                    : 'border-dashed border-foreground/25'
+                )}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.06] ring-1 ring-foreground/10">
+                    <Icon className="size-4" />
+                  </span>
+                  <Input
+                    value={m.label}
+                    maxLength={24}
+                    disabled={saving}
+                    aria-label={`اسم وسيلة الدفع: ${m.label}`}
+                    onChange={(e) =>
+                      setPmList(pmList.map((x) => (x.id === m.id ? { ...x, label: e.target.value } : x)))
+                    }
+                    className={cn(INK_FIELD, 'h-9 flex-1 font-bold')}
+                  />
+                  {m.builtin ? (
+                    <span
+                      className="shrink-0 rounded-lg border border-dashed border-foreground/25 px-2 py-1 text-[10px] font-bold text-muted-foreground"
+                      title="وسيلة مدمجة في النظام — بتتشال أو تتفعل بالمفاتيح"
+                    >
+                      مدمجة
+                    </span>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      disabled={saving}
+                      onClick={() => setPmList(pmList.filter((x) => x.id !== m.id))}
+                      aria-label={`حذف ${m.label}`}
+                      className="h-9 w-9 shrink-0 rounded-lg text-muted-foreground hover:text-rose-600"
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  )}
+                </div>
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-6 gap-y-2 ps-0.5">
+                  <span className="flex items-center gap-2 text-xs font-bold text-foreground/70">
+                    نقطة البيع
+                    <Toggle
+                      label={`إظهار ${m.label} في نقطة البيع`}
+                      checked={m.pos}
+                      disabled={saving || m.id === 'cash'}
+                      stateLabel={m.id === 'cash' ? 'دائم' : undefined}
+                      onChange={(v) =>
+                        setPmList(pmList.map((x) => (x.id === m.id ? { ...x, pos: v } : x)))
+                      }
+                    />
+                  </span>
+                  <span className="flex items-center gap-2 text-xs font-bold text-foreground/70">
+                    دفعات العملاء
+                    <Toggle
+                      label={`إظهار ${m.label} في دفعات العملاء`}
+                      checked={m.collect}
+                      disabled={saving || m.id === 'cash'}
+                      stateLabel={m.id === 'cash' ? 'دائم' : undefined}
+                      onChange={(v) =>
+                        setPmList(pmList.map((x) => (x.id === m.id ? { ...x, collect: v } : x)))
+                      }
+                    />
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+
+          <div className="space-y-2.5">
+            <Button
+              variant="outline"
+              disabled={saving || pmList.length >= MAX_PAYMENT_METHODS}
+              onClick={() =>
+                setPmList([
+                  ...pmList,
+                  { id: customMethodId(), label: 'وسيلة جديدة', pos: true, collect: true, builtin: false },
+                ])
+              }
+              className={cn('h-10 w-full gap-2 rounded-xl font-bold', INK_BTN_OUTLINE)}
+            >
+              <Plus className="size-4" />
+              إضافة وسيلة دفع مخصصة
+            </Button>
+
+            {/* معاينة لحظية — نفس فلسفة معاينة الفاتورة فوق */}
+            <div className="space-y-2 rounded-xl border border-dashed border-foreground/25 p-3">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">معاينة لحظية</p>
+              <PmPreviewLine caption="في نقطة البيع" methods={pmList.filter((x) => x.pos)} />
+              <PmPreviewLine caption="في دفعات العملاء" methods={pmList.filter((x) => x.collect)} />
+            </div>
+
+            <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
+              <Lock className="mt-0.5 size-3 shrink-0" />
+              <span>
+                «كاش» وسيلة أساسية مش بتتقفل. ولو شغّلت وسيلة واحدة بس في نقطة البيع، شاشة الكاشير هتسجّل عليها
+                تلقائياً من غير سؤال — مثالية للمحلات اللي كاش بس.
+              </span>
+            </p>
           </div>
         </Panel>
 
@@ -776,6 +940,34 @@ export function SettingsView() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── وسائل الدفع: سطر معاينة صغير (كابشن + شيلدات الوسائل المفعّلة) ───
+function PmPreviewLine({
+  caption,
+  methods,
+}: {
+  caption: string
+  methods: PaymentMethodConfig[]
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] font-semibold text-muted-foreground">{caption}:</span>
+      {methods.length === 0 && <span className="text-[11px] text-muted-foreground">—</span>}
+      {methods.map((m) => {
+        const Icon = pmIconFor(m.id)
+        return (
+          <span
+            key={m.id}
+            className="inline-flex items-center gap-1 rounded-lg border border-foreground/15 bg-background px-2 py-1 text-[11px] font-bold"
+          >
+            <Icon className="size-3" />
+            {m.label}
+          </span>
+        )
+      })}
     </div>
   )
 }

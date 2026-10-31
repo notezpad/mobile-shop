@@ -53,6 +53,8 @@ import { printListReportHtml, openPrintWindow } from '@/lib/print'
 import { useShopStore } from '@/lib/store'
 import { useConfirm } from './ConfirmDialogProvider'
 import { useDataRefresh } from '@/lib/offline/data-events'
+import { BranchShiftsEditor } from './BranchShiftsEditor'
+import type { BranchShift } from '@/lib/branch-shifts'
 
 interface Branch {
   id: number
@@ -62,6 +64,8 @@ interface Branch {
   active: boolean
   isMain: boolean
   createdAt: string
+  // 🕐 2026-10-31 (التحديث الثامن): ورديات الفرع — null/[] = الميزة متوقفة
+  shifts?: BranchShift[] | null
 }
 
 interface BranchReport {
@@ -145,7 +149,7 @@ export function BranchesView() {
   const [loading, setLoading] = React.useState(true)
   const [open, setOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<Branch | null>(null)
-  const [form, setForm] = React.useState({ name: '', address: '', phone: '', active: true })
+  const [form, setForm] = React.useState<{ name: string; address: string; phone: string; active: boolean; shifts: BranchShift[] }>({ name: '', address: '', phone: '', active: true, shifts: [] })
   const [saving, setSaving] = React.useState(false)
 
   const load = React.useCallback(async () => {
@@ -206,12 +210,12 @@ export function BranchesView() {
 
   const openNew = () => {
     setEditing(null)
-    setForm({ name: '', address: '', phone: '', active: true })
+    setForm({ name: '', address: '', phone: '', active: true, shifts: [] })
     setOpen(true)
   }
   const openEdit = (b: Branch) => {
     setEditing(b)
-    setForm({ name: b.name, address: b.address ?? '', phone: b.phone ?? '', active: b.active })
+    setForm({ name: b.name, address: b.address ?? '', phone: b.phone ?? '', active: b.active, shifts: Array.isArray(b.shifts) ? b.shifts : [] })
     setOpen(true)
   }
 
@@ -619,6 +623,20 @@ export function BranchesView() {
                 {form.active ? 'مفتوح' : 'موقوف'}
                 <Switch id="b-active" checked={form.active} onCheckedChange={(v) => setForm((f) => ({ ...f, active: v }))} />
               </label>
+            </div>
+
+            {/* 🕐 ورديات الفرع — تفعيل «إغلاق الوردية» بالجرد الأعمى (التحديث الثامن) */}
+            <div className="space-y-2">
+              <Label>ورديات الفرع — لتشغيل «إغلاق الوردية» في نقطة البيع</Label>
+              <BranchShiftsEditor
+                shifts={form.shifts}
+                onChange={(shifts) => setForm((f) => ({ ...f, shifts }))}
+              />
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                لما تحدد ورديات، الكاشير اللي معاه صلاحية «إغلاق الوردية» هيلاقي زرار
+                في نقطة البيع يعدّ بيه الدرج من غير ما يشوف المتوقع — والفارق (عجز/زيادة)
+                يظهرلك انت بس في صفحة الخزنة. سيبها فاضية لو مش محتاج الميزة.
+              </p>
             </div>
           </div>
 

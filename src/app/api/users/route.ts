@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse, hashPassword } from '@/lib/auth'
 import { requireModule, featureErrorResponse, assertWithinPlanLimit } from '@/lib/features'
 import { matchEdgeCache, putEdgeCache, purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
+import { normalizeSellerFields } from '@/lib/seller-commissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +40,10 @@ async function __GET() {
       lastLoginAt: true,
       permissions: true,
       canViewProfits: true,
+      // 💰 (التحديث الثالث عشر) بيانات البائع (شارة + استثناءات النسبة/التارجت)
+      isSeller: true,
+      sellerCommissionRate: true,
+      sellerCommissionTarget: true,
       branch: { select: { name: true } },
     },
   })
@@ -81,6 +86,16 @@ async function __POST(req: NextRequest) {
       : null)
   // 🔒 الأرباح: المدير دايمًا يشوفها — الموظف بيحدده صاحب المحل
   const canViewProfits = role === 'ADMIN' ? true : Boolean(body.canViewProfits)
+  // 💰 (التحديث الثالث عشر) بيانات البائع — تحقق صارم (نسبة % وتارجت >= 0)
+  const sellerNorm = normalizeSellerFields(body)
+  if (!sellerNorm.ok) {
+    return NextResponse.json({ error: sellerNorm.error }, { status: 400 })
+  }
+  const sellerFields = {
+    isSeller: sellerNorm.value.isSeller ?? false,
+    sellerCommissionRate: sellerNorm.value.sellerCommissionRate ?? null,
+    sellerCommissionTarget: sellerNorm.value.sellerCommissionTarget ?? null,
+  }
 
   if (!name) {
     return NextResponse.json({ error: 'الاسم مطلوب' }, { status: 400 })
@@ -113,6 +128,7 @@ async function __POST(req: NextRequest) {
       branchId,
       permissions,
       canViewProfits,
+      ...sellerFields,
     },
     select: {
       id: true,
@@ -124,6 +140,9 @@ async function __POST(req: NextRequest) {
       createdAt: true,
       permissions: true,
       canViewProfits: true,
+      isSeller: true,
+      sellerCommissionRate: true,
+      sellerCommissionTarget: true,
     },
   })
   // ⚡ v12: مستخدم جديد → امسح كاش قائمة المستخدمين فورًا

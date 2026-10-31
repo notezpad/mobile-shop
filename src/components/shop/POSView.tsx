@@ -11,6 +11,8 @@ import {
   ChevronLeft,
   ChevronDown,
   ChevronRight,
+  ClipboardCheck,
+  CreditCard,
   Loader2,
   Maximize2,
   Minimize2,
@@ -21,16 +23,20 @@ import {
   PackageSearch,
   Plus,
   Printer,
+  RotateCcw,
   ScanBarcode,
   Search,
   Shirt,
   Footprints,
   ShoppingBag,
+  Smartphone,
+  Store,
   Trash2,
   User,
   Volume2,
   VolumeX,
   Wallet,
+  WalletCards,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -44,10 +50,15 @@ import { api } from '@/lib/api'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
+import { enabledMethods } from '@/lib/payment-methods'
 import { printSale } from '@/lib/print-client'
 import { printThermalReceipt, getStoredPrinterSettings, usbErrorMessage } from '@/lib/thermal-printer'
 import { ProductDialog } from './ProductDialog'
 import { POSVariantPickerDialog } from './POSVariantPickerDialog'
+import { POSReturnLookupDialog } from './POSReturnLookupDialog'
+import { SaleReturnDialog } from './SaleReturnDialog'
+import { ShiftCloseDialog } from './ShiftCloseDialog'
+import type { SaleLookupSale } from './pos-return-types'
 import { Swatch } from '@/lib/color-swatch'
 
 /* ────────────────────────────────────────────────────────────────
@@ -75,6 +86,19 @@ interface ProductLite {
 
 function piecePrice(product: ProductLite): number {
   return product.dynamicRetailPrice ?? product.price
+}
+
+// 💳 أيقونات وسائل الدفع — المدمجة ليها أيقونة ثابتة، والمخصصة بتبقى محفظة
+// عامة (WalletCards). الأسماء نفسها بتتعرف من src/lib/payment-methods.ts.
+const POS_PAY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  cash: Banknote,
+  card: CreditCard,
+  vodafone_cash: Wallet,
+  instapay: Smartphone,
+  fawry: Store,
+}
+function payIconFor(id: string): React.ComponentType<{ className?: string }> {
+  return POS_PAY_ICONS[id] ?? WalletCards
 }
 
 interface CustomerLite {
@@ -768,6 +792,102 @@ export function POSView() {
   const t = useVocab()
   const user = useShopStore((s) => s.user)
   const draftKey = draftKeyFor(user)
+
+  // 🔁 2026-10-31 — مرتجع الفاتورة من نقطة البيع:
+  // الزرار بيظهر بس للي عنده صلاحية المرتجع (مدير / موظف بدون قيود /
+  // permissions فيها 'returns' أو 'sales') — باقي الكاشيرز مش هيشوفوه خالص
+  // فنقطة البيع بتفضل زي ما هي بالظبط. نفس شروط requireSaleReturnAccess.
+  const canProcessReturns =
+    user?.role === 'ADMIN' ||
+    user?.role === 'SUPER_ADMIN' ||
+    !user?.permissions ||
+    user.permissions.length === 0 ||
+    user.permissions.includes('returns') ||
+    user.permissions.includes('sales')
+  // 🕐 2026-10-31 (التحديث الثامن) — إغلاق الوردية بالجرد الأعمى: نفس النمط
+  // بالظبط (صلاحية مستقلة 'shift_close') — والفرع اللي من غير ورديات معرفة
+  // الدايلوج نفسه بيوضح ده، فمفيش اختلاف في شكل النقطة لحد ما المدير يفعلها.
+  const canCloseShift =
+    user?.role === 'ADMIN' ||
+    user?.role === 'SUPER_ADMIN' ||
+    !user?.permissions ||
+    user.permissions.length === 0 ||
+    user.permissions.includes('shift_close')
+  // 🏬 (التحديث الرابع عشر) «كل فاتورة لفرعها» — المدير (بدون فرع) في محل فيه
+  // أكتر من فرع لازم يختار «فرع البيع» قبل ما يبيع: الكتالوج بيتفلتر على أصناف
+  // الفرع، والفاتورة بتتسجل عليه — مفيش فاتورة مختلطة أو «بدون فرع» تضيع من
+  // تقارير الفرع وتحصل في خزنة الفرع الغلط. الكاشير التابع لفرع شاشته زي ما هي.
+  const needsSaleBranch =
+    !!user &&
+    (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') &&
+    !user.branchId
+  const [branches, setBranches] = React.useState<{ id: number; name: string; isMain: boolean }[]>([])
+  // 'main' = الفرع الرئيسي (بيعرض كمان أصناف المخزن العام غير المسندة — نفس قاعدة النطاق)
+  const [saleBranch, setSaleBranch] = React.useState<number | 'main' | null>(() => {
+    try {
+      const u = useShopStore.getState().user
+      const raw = u ? window.localStorage.getItem(`pos:saleBranch:v1:${u.tenantId}:${u.userId}`) : null
+      if (!raw) return null
+      if (raw === 'main') return 'main'
+      const n = parseInt(raw, 10)
+      return Number.isFinite(n) && n > 0 ? n : null
+    } catch {
+      return null
+    }
+  })
+  // الفروع متعددة؟ لحد ما القايمة توصل نعتبرها مش متاحة (المحل بفرع واحد = زي ما كان)
+  const multiBranch = branches.length > 1
+  const setSaleBranchPersisted = React.useCallback((v: number | 'main' | null) => {
+    setSaleBranch(v)
+    try {
+      const k = useShopStore.getState().user
+        ? `pos:saleBranch:v1:${useShopStore.getState().user!.tenantId}:${useShopStore.getState().user!.userId}`
+        : null
+      if (!k) return
+      if (v == null) window.localStorage.removeItem(k)
+      else window.localStorage.setItem(k, String(v))
+    } catch {
+      /* ignore */
+    }
+  }, [])
+  // تحميل قايمة الفروع — للمدير بس (الكاشير مش محتاجها)
+  React.useEffect(() => {
+    if (!needsSaleBranch) return
+    let alive = true
+    api<{ id: number; name: string; isMain: boolean }[]>('/api/branches')
+      .then((d) => {
+        if (!alive) return
+        const list = Array.isArray(d) ? d : []
+        setBranches(list)
+        // الاختيار المحفوظ بقى مش موجود (فرع اتحذف)؟ نفضيه — والكتالوج هيوقف لحد اختيار جديد
+        setSaleBranch((cur) => {
+          if (cur == null) return null
+          if (cur === 'main') return list.some((b) => b.isMain) ? 'main' : null
+          return list.some((b) => b.id === cur) ? cur : null
+        })
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [needsSaleBranch])
+  // id فرع البيع اللي هيتبعت للسيرفر ('main' → الـ id الحقيقي للفرع الرئيسي)
+  const saleBranchApiId = React.useMemo(() => {
+    if (!needsSaleBranch || !multiBranch || saleBranch == null) return null
+    if (saleBranch === 'main') return branches.find((b) => b.isMain)?.id ?? null
+    return saleBranch
+  }, [needsSaleBranch, multiBranch, saleBranch, branches])
+  // تغيير الفرع والسلة فيها أصناف → مرفوض (عشان الفاتورة كلها تتبع فرع واحد)
+  const changeSaleBranch = (v: number | 'main') => {
+    if (cartRef.current.length > 0 && v !== saleBranch) {
+      toast.error('فيه أصناف في السلة من فرع تاني — فضّي السلة أو خلّص الفاتورة الأول، عشان الفاتورة كلها تتبع فرع واحد')
+      return
+    }
+    setSaleBranchPersisted(v)
+  }
+  const [posReturnOpen, setPosReturnOpen] = React.useState(false)
+  const [posReturnSale, setPosReturnSale] = React.useState<SaleLookupSale | null>(null)
+  const [shiftCloseOpen, setShiftCloseOpen] = React.useState(false)
   // Read once, on mount — before any state below is created.
   const [restored] = React.useState<PosDraft | null>(() => loadDraft())
 
@@ -802,6 +922,13 @@ export function POSView() {
   const [paymentMethod, setPaymentMethod] = React.useState('cash')
   // 🛡️ 2026-09-30 (M10): تاريخ استحقاق اختياري للفواتير الآجلة (للتقادم والتنبيهات).
   const [dueDate, setDueDate] = React.useState('')
+  // 💰 (التحديث الثالث عشر) البائع المستحق للعمولة — منفصل عن الكاشير.
+  // القايمة بتتيجي من /api/commissions/sellers (مستخدمين شغالين معلّمين كـ«بائع»)،
+  // والاختيار لكل فاتورة على حدة — مفيش «تذكّر» من فاتورة للتانية عشان الإسناد
+  // مايبقاش غلط بصمت. الميزة كلها مخفية لو المالك قفلها من الإعدادات.
+  const sellerCommissionsEnabled = useShopStore((s) => s.branding.sellerCommissionsEnabled)
+  const [sellers, setSellers] = React.useState<{ id: string; name: string }[]>([])
+  const [sellerId, setSellerId] = React.useState('')
   const [received, setReceived] = React.useState<number | ''>('')
   const [submitting, setSubmitting] = React.useState(false)
   const [customersVersion, setCustomersVersion] = React.useState(0)
@@ -847,7 +974,7 @@ export function POSView() {
     new Map<number, { t: number; units: PosUnit[]; variants: PosVariant[] }>()
   )
   const barcodeCache = React.useRef(
-    new Map<string, { t: number; product: ProductLite; variantId: number | null }>()
+    new Map<string, { t: number; b: string; product: ProductLite; variantId: number | null }>()
   )
   const gridCache = React.useRef(
     new Map<string, { t: number; tick: number; data: ProductLite[] }>()
@@ -1024,6 +1151,44 @@ export function POSView() {
   const hasUnitsCap = capabilities.includes('multi_unit')
   const hasVariantsCap = capabilities.includes('variants')
 
+  // 💳 وسائل الدفع المفعّلة لنقطة البيع — من إعدادات المحل (الإعدادات → وسائل الدفع).
+  // كل عميل ليها مجموعته: كاش بس، كاش + محفظة، كاش + فيزا + انستاباي + محفظة...
+  // لو الوسيلة الوحيدة «كاش»، السؤال كله بيختفي من شاشة الكاشير (تلقائي).
+  const posPayMethods = React.useMemo(
+    () => enabledMethods(shopBranding.paymentMethods, 'pos'),
+    [shopBranding.paymentMethods]
+  )
+  // 🛡️ لو الوسيلة المختارة اتشالت من الإعداد (أو جهاز قديم فتح بعد تغيير
+  // الإعداد)، بنرجّع لأول وسيلة مفعّلة — الكاش دايماً موجودة فمفيش طريق مسدود.
+  React.useEffect(() => {
+    if (posPayMethods.length > 0 && !posPayMethods.some((m) => m.id === paymentMethod)) {
+      setPaymentMethod(posPayMethods[0].id)
+    }
+  }, [posPayMethods, paymentMethod])
+
+  // 💰 (التحديث الثالث عشر) تحميل قايمة البائعين — بس لو الميزة مفعّلة.
+  // لو البائع المختار اتحذف من القايمة، الاختيار بيرجع فاضي (بدون إسناد)
+  // بدل ما يفضل باقي على اسم مش موجود.
+  React.useEffect(() => {
+    if (!sellerCommissionsEnabled) {
+      setSellers([])
+      setSellerId('')
+      return
+    }
+    let alive = true
+    api<{ sellers: { id: string; name: string }[] }>('/api/commissions/sellers')
+      .then((r) => {
+        if (!alive) return
+        const list = Array.isArray(r?.sellers) ? r.sellers : []
+        setSellers(list)
+        setSellerId((cur) => (cur && list.some((s) => s.id === cur) ? cur : ''))
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [sellerCommissionsEnabled])
+
   /* ── data loading ───────────────────────────────────────────── */
 
   React.useEffect(() => {
@@ -1049,9 +1214,21 @@ export function POSView() {
   // The grid is always populated: latest products by default, filtered by the
   // search box and the selected category. `search=` is always present in the
   // URL so the offline layer keeps serving it from IndexedDB.
+  //
+  // 🏬 (التحديث الرابع عشر) المدير في محل متعدد الفروع: الكتالوج بيتفلتر على
+  // «فرع البيع» المختار (الرئيسي بيعرض كمان غير المسندة)، ولو مفيش اختيار
+  // لسه مفيش كتالوج خالص — مستحيل تبدأ بيع من غير ما تحدد فرع الفاتورة.
   React.useEffect(() => {
+    if (needsSaleBranch && multiBranch && saleBranch == null) {
+      setProducts([])
+      setProductsLoading(false)
+      setSearchError(false)
+      return
+    }
     const q = query.trim()
-    const cacheKey = `${q}|${category}`
+    const branchParam =
+      needsSaleBranch && multiBranch && saleBranch != null ? String(saleBranch) : ''
+    const cacheKey = `${q}|${category}|${branchParam}`
     const hit = gridCache.current.get(cacheKey)
     if (hit && hit.tick === refreshTick && Date.now() - hit.t < 20_000) {
       // Same view seen a moment ago (e.g. right after a scan cleared the box):
@@ -1066,6 +1243,7 @@ export function POSView() {
     const t = setTimeout(async () => {
       const url =
         `/api/products?search=${encodeURIComponent(q)}&limit=100&pos=1` +
+        (branchParam ? `&branchId=${branchParam}` : '') +
         (category !== 'all' ? `&category=${encodeURIComponent(category)}` : '')
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
@@ -1093,7 +1271,7 @@ export function POSView() {
       cancelled = true
       clearTimeout(t)
     }
-  }, [query, category, refreshTick])
+  }, [query, category, refreshTick, needsSaleBranch, multiBranch, saleBranch])
 
   const resolvedCustomer = React.useMemo(() => {
     if (selectedCustomerId) return customers.find((x) => x.id === selectedCustomerId) ?? null
@@ -1315,14 +1493,23 @@ export function POSView() {
   const processScan = async (raw: string, mode: 'scan' | 'manual') => {
     const code = normalizeCode(raw)
     if (!code) return
+    // 🏬 (التحديث الرابع عشر) السكان بيلتزم بفرع البيع المختار:
+    // مفيش بحث من غير فرع (يضيف أصناف فرع تاني) ومفيش إضافة قبل اختيار الفرع.
+    if (needsSaleBranch && multiBranch && saleBranch == null) {
+      playBeep('err')
+      toast.error('اختار «فرع البيع» الأول — من الشريط اللي فوق قايمة الأصناف')
+      return
+    }
+    const scanBranchParam =
+      needsSaleBranch && multiBranch && saleBranch != null ? `&branchId=${String(saleBranch)}` : ''
     try {
       let target: { product: ProductLite; variantId: number | null } | null = null
       const cached = barcodeCache.current.get(code)
-      if (cached && Date.now() - cached.t < 60_000) {
+      if (cached && cached.b === scanBranchParam && Date.now() - cached.t < 60_000) {
         target = { product: cached.product, variantId: cached.variantId }
       } else {
         const res = await api<{ data: ProductLite[] } | ProductLite[]>(
-          `/api/products?search=${encodeURIComponent(code)}&limit=20&pos=1`
+          `/api/products?search=${encodeURIComponent(code)}&limit=20&pos=1${scanBranchParam}`
         )
         const data: ProductLite[] = Array.isArray(res) ? res : (res as any)?.data ?? []
         const exact = data.find((r) => r.barcode === code)
@@ -1345,7 +1532,7 @@ export function POSView() {
         } else {
           return // several name matches: the grid already shows them
         }
-        barcodeCache.current.set(code, { t: Date.now(), ...target })
+        barcodeCache.current.set(code, { t: Date.now(), b: scanBranchParam, ...target })
       }
       const added = await handleProductSelect(target.product, target.variantId, { fromScan: true })
       if (added) playBeep('ok')
@@ -1570,6 +1757,11 @@ export function POSView() {
       toast.error('السلة فارغة')
       return
     }
+    // 🏬 (التحديث الرابع عشر) مفيش فاتورة من غير فرع — المدير لازم يختار «فرع البيع» الأول
+    if (needsSaleBranch && multiBranch && saleBranchApiId == null) {
+      toast.error('اختار «فرع البيع» الأول — من الشريط اللي فوق قايمة الأصناف')
+      return
+    }
     if (creditNeedsCustomer) {
       toast.error('البيع بالآجل لازم يكون مرتبط بعميل')
       return
@@ -1607,6 +1799,13 @@ export function POSView() {
           customerId,
           paid,
           paymentMethod,
+          // 🏬 (التحديث الرابع عشر) فرع البيع المختار — الفاتورة بتتسجل عليه
+          // والخزنة والورديات بتتبعه. الأوفلاين بيخزن نفس الـ body والمزامنة
+          // بتمر بنفس تحقق السيرفر.
+          ...(saleBranchApiId != null ? { branchId: saleBranchApiId } : {}),
+          // 💰 (التحديث الثالث عشر) البائع المستحق للعمولة — بس لو مختار فعلاً.
+          // السيرفر هو اللي بيتحقق منه وبيحط لقطة النسبة — العميل ما بيبعتش نسبة.
+          ...(sellerId ? { sellerId } : {}),
           ...(dueDate ? { dueDate: new Date(`${dueDate}T12:00:00`).toISOString() } : {}),
         },
       })
@@ -1654,6 +1853,7 @@ export function POSView() {
       setReceived('')
       setPaymentMethod('cash')
       setDueDate('')
+      setSellerId('') // 💰 إسناد البائع لكل فاتورة على حدة — مفيش ترحيل للفاتورة الجاية
       closeCartSheet()
       setCustomersVersion((v) => v + 1)
       // Refresh stock numbers in the grid and get ready for the next scan.
@@ -1890,6 +2090,28 @@ export function POSView() {
     'flex size-9 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground'
   const toolsDock = (
     <div className="flex items-center overflow-hidden rounded-xl border border-foreground/20 bg-card">
+      {canProcessReturns && (
+        <button
+          type="button"
+          onClick={() => setPosReturnOpen(true)}
+          title="مرتجع فاتورة — استلم مرتجع العميل برقم الفاتورة"
+          aria-label="مرتجع فاتورة"
+          className={cn(dockBtn, 'border-e border-foreground/15 text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300')}
+        >
+          <RotateCcw className="size-4" />
+        </button>
+      )}
+      {canCloseShift && (
+        <button
+          type="button"
+          onClick={() => setShiftCloseOpen(true)}
+          title="إغلاق الوردية — جرد الدرج (بدون أي أرقام من النظام)"
+          aria-label="إغلاق الوردية"
+          className={cn(dockBtn, 'border-e border-foreground/15 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300')}
+        >
+          <ClipboardCheck className="size-4" />
+        </button>
+      )}
       <button
         type="button"
         onClick={() => setSoundOn((v) => !v)}
@@ -2068,6 +2290,48 @@ export function POSView() {
         </button>
         </div>
 
+        {/* 🏬 (التحديث الرابع عشر) شريط «فرع البيع» — للمدير بس ولما يكون فيه
+            أكتر من فرع. الفاتورة كلها بتتبع الفرع ده: الأصناف والخزنة والتقارير. */}
+        {needsSaleBranch && multiBranch && (
+          <div className="-mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none]">
+            <span className="flex shrink-0 items-center gap-1 text-xs font-bold text-muted-foreground">
+              <Store className="size-3.5" />
+              فرع البيع:
+            </span>
+            {[...branches]
+              .sort((a, b) => (b.isMain ? 1 : 0) - (a.isMain ? 1 : 0))
+              .map((b) => {
+                const val: number | 'main' = b.isMain ? 'main' : b.id
+                const active = saleBranch === val
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => changeSaleBranch(val)}
+                    aria-pressed={active}
+                    title={
+                      b.isMain
+                        ? 'الفرع الرئيسي — بيعرض كمان أصناف المخزن العام (غير المسندة)'
+                        : undefined
+                    }
+                    className={cn(
+                      'flex shrink-0 items-center gap-1.5 rounded-full border-2 px-4 py-1.5 text-sm font-bold transition-colors',
+                      active
+                        ? 'border-brand-600 bg-brand-600/10 text-brand-800 shadow-sm dark:text-brand-200'
+                        : 'border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground'
+                    )}
+                  >
+                    {active && <Check className="size-3.5" />}
+                    {b.name}
+                    {b.isMain && (
+                      <span className="text-[10px] font-bold opacity-70">(الرئيسي)</span>
+                    )}
+                  </button>
+                )
+              })}
+          </div>
+        )}
+
         {categories.length > 0 && (
           <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none]">
             {[{ id: 'all', name: 'الكل' }, ...categories].map((c) => {
@@ -2114,7 +2378,21 @@ export function POSView() {
           paged ? 'overflow-hidden overscroll-contain' : cn('lg:overflow-y-auto lg:overscroll-contain', slimScroll)
         )}
       >
-        {searchError ? (
+        {needsSaleBranch && multiBranch && saleBranch == null ? (
+          // 🏬 (التحديث الرابع عشر) مفيش بيع من غير فرع — رسالة الاختيار الإجبارية
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <div className="flex size-14 items-center justify-center rounded-2xl bg-brand-600/10">
+              <Store className="size-7 text-brand-600" />
+            </div>
+            <div>
+              <p className="font-bold">اختار «فرع البيع» الأول</p>
+              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                كل فاتورة لازم تتبع فرع محدد عشان المخزون والخزنة والتقارير تفضل منفصلة لكل فرع —
+                اختار الفرع من الشريط اللي فوق، والأصناف هتظهر لفرعك على طول.
+              </p>
+            </div>
+          </div>
+        ) : searchError ? (
           <div className="flex flex-col items-center gap-2 py-16 text-center">
             <AlertTriangle className="size-8 text-destructive" />
             <p className="text-sm text-destructive">{t('تعذّر تحميل المنتجات — تأكد من الاتصال وجرّب تاني.')}</p>
@@ -2902,33 +3180,73 @@ export function POSView() {
           )}
         </div>
 
-        {/* وسيلة الدفع: بتحدد الدرج اللي الفلوس دخلت فيه
-            (انستاباي وفوري اتشالوا من الكاشير بطلب صاحب المحل) */}
-        <div className="space-y-1.5">
-          <p className="text-sm font-bold text-foreground/75">وسيلة الدفع</p>
-          <div role="radiogroup" aria-label="وسيلة الدفع" className="grid grid-cols-2 gap-2">
-            {[
-              { v: 'cash', label: 'كاش', icon: Banknote },
-              { v: 'vodafone_cash', label: 'محفظة', icon: Wallet },
-            ].map((m) => {
-              const active = paymentMethod === m.v
-              return (
-                <button
-                  key={m.v}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => setPaymentMethod(m.v)}
-                  className={cn(choiceCls(active), 'flex-row gap-2', d === 2 ? 'h-9 text-sm' : d === 1 ? 'h-10 text-base' : 'h-11 text-base')}
-                >
-                  {active && checkMark}
-                  <m.icon className="size-5" />
-                  {m.label}
-                </button>
-              )
-            })}
+        {/* 💰 (التحديث الثالث عشر) البائع المستحق للعمولة — منفصل عن الكاشير.
+            بيظهر بس لما المالك يفعّل عمولات البائعين ويعلّم مستخدمين كـ«بائع».
+            لو مفيش بائع مختار، الفاتورة بتتسجل من غير عمولة — الاختيار الواعي
+            أحسن من تخمين صامت. */}
+        {sellerCommissionsEnabled && sellers.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-sm font-bold text-foreground/75">البائع (العمولة)</p>
+            <div role="radiogroup" aria-label="البائع" className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={sellerId === ''}
+                onClick={() => setSellerId('')}
+                className={cn(choiceCls(sellerId === ''), 'h-9 px-3 text-sm')}
+              >
+                {sellerId === '' && checkMark}
+                بدون بائع
+              </button>
+              {sellers.map((s) => {
+                const active = sellerId === s.id
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setSellerId(s.id)}
+                    className={cn(choiceCls(active), 'h-9 px-3 text-sm')}
+                  >
+                    {active && checkMark}
+                    <span className="max-w-32 truncate">{s.name}</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* وسيلة الدفع: بتحدد الدرج اللي الفلوس دخلت فيه.
+            💳 الأزرار دي بتيجي من إعدادات المحل (الإعدادات → وسائل الدفع) —
+            كل محل بيختار وسائله (كاش بس / كاش + محفظة / فيزا + انستاباي + ...).
+            لو مفعّلة وسيلة واحدة بس، السؤال بيختفي خالص والبيع بيتسجل عليها تلقائياً. */}
+        {posPayMethods.length > 1 && (
+          <div className="space-y-1.5">
+            <p className="text-sm font-bold text-foreground/75">وسيلة الدفع</p>
+            <div role="radiogroup" aria-label="وسيلة الدفع" className="grid grid-cols-2 gap-2">
+              {posPayMethods.map((m) => {
+                const active = paymentMethod === m.id
+                const Icon = payIconFor(m.id)
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setPaymentMethod(m.id)}
+                    className={cn(choiceCls(active), 'flex-row gap-2', d === 2 ? 'h-9 text-sm' : d === 1 ? 'h-10 text-base' : 'h-11 text-base')}
+                  >
+                    {active && checkMark}
+                    <Icon className="size-5" />
+                    {m.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* نوع الدفع: كامل / جزئي (الباقي آجل) */}
         <div className="space-y-1.5">
@@ -3243,6 +3561,52 @@ export function POSView() {
           setRefreshTick((t) => t + 1)
         }}
       />
+
+      {/* 🔁 مرتجع فاتورة من نقطة البيع — خطوتين: بحث برقم الفاتورة ← دايلوج المرتجع المعتمد */}
+      <POSReturnLookupDialog
+        open={posReturnOpen}
+        onOpenChange={setPosReturnOpen}
+        onFound={(sale) => {
+          setPosReturnOpen(false)
+          setPosReturnSale(sale)
+        }}
+      />
+      {/* 🕐 إغلاق الوردية بالجرد الأعمى — الكاشير يكتب اللي عدّاه بس */}
+      <ShiftCloseDialog open={shiftCloseOpen} onOpenChange={setShiftCloseOpen} />
+      {posReturnSale && (
+        <SaleReturnDialog
+          open
+          onOpenChange={(o) => !o && setPosReturnSale(null)}
+          printContext={{
+            shopName: shopName || 'محل',
+            shopPhone: shopBranding.phone,
+            shopAddress: shopBranding.address,
+            cashierName: user?.name,
+          }}
+          sale={{
+            id: posReturnSale.id,
+            invoiceNo: posReturnSale.invoiceNo,
+            customerId: posReturnSale.customerId,
+            customerName: posReturnSale.customerName,
+            paid: posReturnSale.paid,
+            refunded: posReturnSale.refunded,
+            paymentMethod: posReturnSale.paymentMethod,
+          }}
+          items={posReturnSale.items.map((it) => ({
+            id: it.id,
+            productId: it.productId,
+            pieceLabel: it.pieceLabel,
+            unitQuantity: it.unitQuantity,
+            name:
+              it.name +
+              (it.variantLabel ? ` — ${it.variantLabel}` : '') +
+              (it.unitLabel ? ` (${it.unitQuantity}× ${it.unitLabel})` : ''),
+            price: it.price,
+            quantity: it.quantity,
+            returnedQty: it.returnedQty,
+          }))}
+        />
+      )}
     </div>
   )
 }

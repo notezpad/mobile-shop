@@ -26,25 +26,39 @@ const CLEANUP_FALLBACK_MS = 90_000
 
 /** يطبع مستند HTML كامل جوه iframe مخفي في نفس الصفحة.
  *  بيرجّع `true` لو أمر الطباعة انطلق — المستند static بالكامل فمفيش انتظار
- *  شبكة أو سكريبتات، سيك واحد كفاية للترتيب (نفس توقيت النوافذ القديمة). */
-export function printHtmlInFrame(html: string, title = 'طباعة'): boolean {
+ *  شبكة أو سكريبتات، سيك واحد كفاية للترتيب (نفس توقيت النوافذ القديمة).
+ *
+ *  `pageWidthPx`: عرض صفحة الطباعة بالبكسل (794 = A4، 280 = فاتورة 74مم،
+ *  204 = فاتورة 54مم) — بنكبّر الإطار بالمقاس ده بدل 1px عشان عرض الـ viewport
+ *  بتاع مستند الإطار يكون مطابق للورقة: فايرفوكس بيترتب مستند الإطار بعرض
+ *  عنصر الإطار نفسه عند الطباعة، ومتصفحات تانية بتاخد بالها من الـ viewport
+ *  في وحدات زي 100%/vw. العرض الافتراضي A4. */
+export function printHtmlInFrame(
+  html: string,
+  title = 'طباعة',
+  opts?: { pageWidthPx?: number; pageHeightPx?: number },
+): boolean {
   if (typeof document === 'undefined' || !document.body) return false
 
   // إطار قديم من طباعة قبلها؟ نشيله الأول — ضمان إن «طباعة تاني» تشتغل دايماً
   document.getElementById(PRINT_FRAME_ID)?.remove()
 
+  const pageW = Math.max(64, Math.round(opts?.pageWidthPx ?? 794))
+  const pageH = Math.max(64, Math.round(opts?.pageHeightPx ?? 1024))
+
   const frame = document.createElement('iframe')
   frame.id = PRINT_FRAME_ID
   frame.setAttribute('aria-hidden', 'true')
   frame.tabIndex = -1
-  // مخفي تماماً بس مش display:none — كروم مبيطبعش إطارات display:none بشكل موثوق
+  // برّه الشاشة تماماً بس بمقاس الورقة الكامل — مش display:none (كروم مبيطبعش
+  // إطارات display:none بشكل موثوق) ولا 1px (المتصفح بيترتب المستند بعرض
+ //  الإطار فالمحتوى كان ممكن يتقص). +4px عشان ميبانش سكرول بار يغيّر الترتيب.
   const st = frame.style
   st.position = 'fixed'
-  st.insetInlineEnd = '0'
-  st.bottom = '0'
-  st.width = '1px'
-  st.height = '1px'
-  st.opacity = '0'
+  st.top = '0'
+  st.left = '-10000px'
+  st.width = `${pageW + 4}px`
+  st.height = `${pageH}px`
   st.border = '0'
   st.pointerEvents = 'none'
   document.body.appendChild(frame)

@@ -41,6 +41,13 @@ model Tenant {
   defaultRetailMarginPercent  Float   @default(20)
   // شكل بطاقة المنتج في صفحة المنتجات: 'auto' | 'image' | 'compact'
   productCardStyle            String  @default("auto")
+  // 💳 وسائل الدفع (إعداد لكل محل) — JSON array:
+  // [{ id:'cash', label:'كاش', pos:true, collect:true }, ...]
+  // pos=تظهر في نقطة البيع، collect=تظهر في دفعات العملاء.
+  // '' (فاضي) = السلوك القديم (نقطة البيع: كاش+محفظة، الدفعات: كلها) —
+  // بيتحرح من الإعدادات → «وسائل الدفع» بمفاتيح تشغيل/إيقاف.
+  // المصدر: src/lib/payment-methods.ts
+  paymentMethodsConfig        String  @default("")
   // 👕 المواسم المقفولة (باقات الملابس فقط) — JSON array لأسماء مواسم مقفولة
   // مثال: '["SUMMER"]' = الصيف مقفول في المخزن الداخلي.
   // بيتحدث فقط من معالج المواسم (POST /api/products/seasonal) — بيدخل الفلتر
@@ -68,6 +75,21 @@ model Tenant {
   stockMovements    StockMovement[]
   transfers         Transfer[]
   stocktakes        Stocktake[]
+  shiftClosures     ShiftClosure[]
+  // 🫥 (التحديث الحادي عشر) مفتاح «الجرد الأعمى للخزينة» — صاحب المحل هو اللي
+  // بيشغّله/يقفله: مفعّل (افتراضي) = الكاشير يعدّ الدرج من غير ما يشوف المتوقع؛
+  // متوقّف = الوضع التقليدي (المتوقع ظاهر والحقل متعبّي + «تأكيد»).
+  blindCashEnabled  Boolean   @default(true)
+  // 💰 (التحديث الثالث عشر) عمولات البائعين — صاحب المحل هو المتحكم:
+  // المفتاح العام + النسبة العامة (%) + التارجت الشهري العام (اختياري).
+  // لكل بائع استثناء بنفس الحقول على User (null = وراثة العام).
+  sellerCommissionsEnabled Boolean @default(false)
+  sellerCommissionRate     Float?  // % مثل 3 = 3% — مطلوب عند التفعيل
+  sellerCommissionTarget   Float?  // تارجت مبيعات شهري (null = بدون تارجت)
+  // 🔄 (التحديث الثاني عشر) الجرد الدوري المجدول — جداول «كل سبت: إكسسوارات أعمي»
+  cycleCountSchedules CycleCountSchedule[]
+  // 💰 (التحديث الثالث عشر) تسويات عمولات البائعين
+  commissionPayouts   CommissionPayout[]
   suppliers         Supplier[]
   purchaseOrders    PurchaseOrder[]
   supplierPayments  SupplierPayment[]
@@ -204,6 +226,13 @@ model Branch {
   expenses       Expense[]
   maintenanceOrders MaintenanceOrder[]
   cashEntries       CashEntry[]
+  shiftClosures     ShiftClosure[]
+  cycleCountSchedules CycleCountSchedule[]
+  // 🕐 2026-10-31 (التحديث الثامن): تعريف ورديات الفرع — مصفوفة
+  // [{name: "صباحي", from: "08:00", to: "16:00"}] · NULL أو [] = الميزة
+  // متفعّلةش للفرع ده (زرار «إغلاق الوردية» مش هيظهر في نقطة البيع).
+  // الوردية ممكن تعدّي نص الليل (from > to — مثال ليلي 22:00→06:00).
+  shifts Json?
 
   @@index([tenantId])
 }
@@ -219,6 +248,11 @@ model User {
   active         Boolean   @default(true)
   permissions    String?   // JSON: string[] of module keys; null = يشوف كل الباقة
   canViewProfits Boolean   @default(false) // هل يقدر يشوف الأرباح والتكاليف؟
+  // 💰 (التحديث الثالث عشر) بيانات البائع — تظهر في منتقي نقطة البيع:
+  // isSeller + استثناء نسبة/تارجت (null = وراثة إعدادات المحل العامة).
+  isSeller               Boolean @default(false)
+  sellerCommissionRate   Float?  // % — استثناء عن النسبة العامة
+  sellerCommissionTarget Float?  // استثناء عن التارجت العام
   lastLoginAt    DateTime?
   passwordChangedAt DateTime? // يُبطل جلسات SUPER_ADMIN الأقدم منه
   createdAt      DateTime  @default(now())
@@ -563,6 +597,13 @@ model Sale {
   // لنفس الفاتورة بيرجع الفاتورة الأصلية بدل ما يعمل نسخة تانية.
   clientRef  String?
   status     String   @default("مكتملة") // مكتملة | مرتجعة جزئياً | مرتجعة
+  // 💰 2026-11-01 (التحديث الثالث عشر): البائع المستحق للعمولة — منفصل تماماً
+  // عن userId (الكشير اللي سجّل الفاتورة). نص خالص بدون FK (نفس نمط createdBy)
+  // عشان حذف/تعطيل مستخدم ما يكسرش تاريخ الفواتير أبداً.
+  sellerId   String?
+  // 💰 لقطة نسبة العمولة (كـ % مثل 3 = 3%) لحظة البيع — تغيير النسب بعدين
+  // مبيأثرش على الفواتير القديمة. null = الفاتورة من غير عمولة.
+  commissionRate Float?
   createdAt  DateTime @default(now())
 
   tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -577,12 +618,49 @@ model Sale {
   @@index([tenantId])
   @@index([tenantId, createdAt])
   @@index([branchId])
+  // 💰 (التحديث الثالث عشر): تقرير عمولات الشهر بيقري بالبائع + الشهر
+  @@index([tenantId, sellerId, createdAt])
   // 🛡️ 2026-09-30: رقم الفاتورة فريد داخل المحل — الضمانة الأخيرة ضد تكرار
   // الأرقام مع فواتير متزامنة (التوليد نفسه جوه الـ tx + retry على P2002).
   // الـ NULLs (فواتير قديمة قبل نظام الأرقام) مسموحة في Postgres.
   @@unique([tenantId, invoiceNo])
   // 🛡️ 2026-09-30: مفتاح عدم التكرار للأوفلاين — نفس الـ clientRef مايتسجلش مرتين.
   @@unique([tenantId, clientRef])
+}
+
+// 💰 2026-11-01 (التحديث الثالث عشر): تسوية عمولات البائعين الشهرية.
+// سجل واحد لكل (محل، بائع، شهر) — بيعمل قفل طبيعي يمنع الصرف مرتين.
+// الأرقام كلها لقطات (snapshots) وقت الصرف — مستقلة عن أي تعديل لاحق.
+model CommissionPayout {
+  id       Int      @id @default(autoincrement())
+  tenantId String
+  // البائع — نص خالص (نفس نمط createdBy) بدون FK
+  userId   String
+  // الشهر YYYY-MM بتوقيت المحل (Tenant.timezone)
+  month    String
+  salesTotal   Float  @default(0) // إجمالي مبيعات الشهر وقت الصرف
+  returnsTotal Float  @default(0) // إجمالي مرتجعات الشهر (بتوقيت المرتجع)
+  netBase      Float  @default(0) // الصافي الخاضع للعمولة
+  rate         Float  @default(0) // النسبة الفعلية المطبقة (%)
+  target       Float?             // التارجت وقت الصرف (null = بدون تارجت)
+  targetMet    Boolean @default(true)
+  // إضافات/خصومات يدوية (+/-) يحطها المالك وقت الصرف (سلف على العمولة مثلاً)
+  adjustments  Float  @default(0)
+  // العمولة النهائية المصروفة = commission المحسوبة + adjustments (ممكن سالبة)
+  amount       Float  @default(0)
+  // اتصرفت جوه مسير الرواتب (محجوزة في قسيمة الراتب)؟
+  viaPayroll   Boolean @default(false)
+  method       String?            // كاش / محفظة / انستاباي... (سجل فقط)
+  note         String?
+  paidById     String?
+  paidAt       DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, month])
+  @@index([tenantId, month])
+  @@index([tenantId, userId])
 }
 
 model SaleItem {
@@ -768,6 +846,36 @@ model CashEntry {
   @@index([branchId])
 }
 
+// 🕐 2026-10-31 (التحديث الثامن): إغلاق وردية بالجرد الأعمى (Blind Count).
+// الكاشير بيكتب المبلغ اللي عدّاه في الدرج بس — من غير ما يشوف «المتوقع».
+// السيرفر هو اللي بيحسب المتوقع (رصيد الكاش الورقي للفرع لحظة الإغلاق:
+// CashEntry method='cash' أو NULL — القيود القديمة قبل عمود method بتعتبر كاش)
+// والفارق = counted − expected. الرد للكاشير بيبقى {ok} فقط — الأرقام دي
+// للمدير بس (تقرير إغلاقات الورديات في صفحة الخزنة).
+model ShiftClosure {
+  id        Int      @id @default(autoincrement())
+  tenantId  String
+  branchId  Int?
+  // اسم الوردية من إعدادات الفرع (صباحي/مسائي/ليلي...)
+  shiftName String?
+  // مين قفل الوردية (سجل تدقيق)
+  userId    String?
+  // اللي الكاشير عدّاه في الدرج
+  counted   Float
+  // المتوقع — snapshot لحظة الإغلاق، للمدير فقط
+  expected  Float
+  // counted − expected (موجب = زيادة، سالب = عجز)
+  variance  Float
+  note      String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, branchId, createdAt])
+}
+
 // Shop running costs (rent, electricity, salaries, etc.) — admin-only.
 model Expense {
   id        Int      @id @default(autoincrement())
@@ -876,6 +984,13 @@ model Stocktake {
   tenantId    String
   branchId    Int?
   status      String    @default("draft") // draft | committed
+  // 🫥 2026-10-31 (التحديث الحادي عشر): نوع الجرد — 'open' (تقليدي: كميات النظام
+  // ظاهرة للعدّاد) أو 'blind' (أعمي: مفيش أي رقم متوقع يوصله لا في الشاشة ولا
+  // في أي رد سيرفر — الحجب جوه الـ SQL نفسه لغير المدير). الأوراق القديمة 'open'.
+  mode        String    @default("open") // open | blind
+  // 🔄 (التحديث الثاني عشر): لو الورقة اتولّدت من جدول جرد دوري — الرابط هنا
+  // (للشارة + منع تراكم المسودات + تقرير التغطية). null = جرد يدوي.
+  cycleScheduleId Int?
   note        String?
   createdBy   String?
   createdAt   DateTime  @default(now())
@@ -884,8 +999,10 @@ model Stocktake {
   tenant Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   branch Branch?         @relation(fields: [branchId], references: [id])
   items  StocktakeItem[]
+  cycleSchedule CycleCountSchedule? @relation(fields: [cycleScheduleId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
+  @@index([tenantId, mode])
 }
 
 model StocktakeItem {
@@ -905,6 +1022,38 @@ model StocktakeItem {
   product   Product?  @relation(fields: [productId], references: [id])
 
   @@index([stocktakeId])
+}
+
+// 🔄 2026-10-31 (التحديث الثاني عشر) — الجرد الدوري المجدول (Cycle Counting).
+// أداة أتمتة في يد صاحب المحل: «جرد الإكسسوارات كل سبت — أعمي». أول تشغيل
+// للتطبيق في الموعد بيتولّد منه ورقة جرد تلقائياً + إشعار. المفتاح enabled
+// لكل جدول على حدة، والمعالجة بـ claim ذري عشان مفيش ورقتين لو تزامن جهازين.
+model CycleCountSchedule {
+  id        Int      @id @default(autoincrement())
+  tenantId  String
+  // الفرع المستهدف — null = كل الفروع (بنفس دلالات Stocktake.branchId)
+  branchId  Int?
+  // نطاق العدّ: اسم تصنيف معيّن (Product.category نص) أو null = الكتالوج كله
+  category  String?
+  // نوع الورقة المتولّدة: 'blind' (أعمي) أو 'open' (تقليدي)
+  mode      String   @default("blind") // blind | open
+  // الإيقاع: 'daily' | 'weekly' | 'monthly' — بتوقيت المحل (Tenant.timezone)
+  frequency String   @default("weekly")
+  // weekly: يوم الأسبوع 0=الأحد .. 6=السبت · monthly: يوم الشهر 1..28
+  dayOfWeek  Int?
+  dayOfMonth Int?
+  // مفتاح تشغيل/إيقاف لكل جدول على حدة — صاحب المحل هو المتحكم
+  enabled   Boolean  @default(true)
+  note      String?
+  // آخر مرة اتولّدت ورقة من الجدول ده — أساس حساب «فات الموعد؟» ومنع التكرار
+  lastRunAt DateTime?
+  createdAt DateTime @default(now())
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id])
+  sheets Stocktake[]
+
+  @@index([tenantId, enabled])
 }
 
 model Notification {
@@ -1250,6 +1399,9 @@ model Payslip {
   bonus            Float    @default(0)
   penalty          Float    @default(0)
   advanceDeduction Float    @default(0)
+  // 💰 (التحديث الثالث عشر) عمولة البائع المرتبط بحساب الموظف (Employee.userId)
+  // — بتتعبّى تلقائياً عند توليد مسودة الرواتب، وبتدخل في الصافي
+  commission       Float    @default(0)
   net              Float    @default(0)
   note             String?
 

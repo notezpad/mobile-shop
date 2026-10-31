@@ -151,7 +151,11 @@ const EMPTY_LOAD_ERRORS: InventoryLoadErrors = {
 
 type SourceKey = 'branches' | 'products' | 'movements' | 'transfers' | 'stocktake'
 
-export function useInventoryData(): InventoryData {
+export function useInventoryData(opts?: { light?: boolean }): InventoryData {
+  // 🫥 (التحديث الحادي عشر) الوضع الخفيف للعدّاد الأعمي: بيجيب الفروع + أوراق
+  // الجرد بس — **من غير منتجات ولا حركات ولا تحويلات** — فمستحيل أي كمية
+  // أو تكلفة توصل جهاز العدّاد من أول تحميل (صفحة أمان مش بس توفير).
+  const light = opts?.light === true
   const [branches, setBranches] = React.useState<Branch[]>([])
   const [products, setProducts] = React.useState<InventoryProduct[]>([])
   const [movements, setMovements] = React.useState<Movement[]>([])
@@ -197,17 +201,20 @@ export function useInventoryData(): InventoryData {
     }
 
     // المرحلة 1: الفروع + القائمة الأساسية حسب الصفحة المستدعية
-    const priority: SourceKey =
-      pathname === '/inventory/movements'
+    const priority: SourceKey = light
+      ? 'stocktake' // 🫥 العدّاد الأعمي: الجرد هو الأساس — مفيش منتجات أصلاً
+      : pathname === '/inventory/movements'
         ? 'movements'
         : pathname === '/inventory/transfers'
           ? 'transfers'
           : pathname === '/inventory/stocktake'
             ? 'stocktake'
             : 'products' // /inventory — القائمة الأساسية هي المنتجات
-    const first: SourceKey[] = ['branches', priority]
+    const first: SourceKey[] = light ? ['branches', 'stocktake'] : ['branches', priority]
     const rest: SourceKey[] = (
-      ['branches', 'products', 'movements', 'transfers', 'stocktake'] as SourceKey[]
+      light
+        ? (['branches', 'stocktake'] as SourceKey[]) // 🫥 الوضع الخفيف: مصدرين بس
+        : (['branches', 'products', 'movements', 'transfers', 'stocktake'] as SourceKey[])
     ).filter((k) => !first.includes(k))
 
     try {
@@ -217,7 +224,7 @@ export function useInventoryData(): InventoryData {
     }
     // المرحلة 2: الباقي في الخلفية — fetchOne ما بترميشن (apiSafe بتلقط)
     void Promise.all(rest.map(fetchOne))
-  }, [pathname])
+  }, [pathname, light])
 
   React.useEffect(() => {
     load()

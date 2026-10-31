@@ -99,7 +99,7 @@ async function __PUT(req: NextRequest, { params }: Ctx) {
     if (!p) return bad('قسيمة غير موجودة')
     const bonus = round2(Math.max(0, Number(ed.bonus) || 0))
     const penalty = round2(Math.max(0, Number(ed.penalty) || 0))
-    const gross = Math.max(0, round2(p.payableBase - p.absenceDeduction - p.lateDeduction + bonus - penalty))
+    const gross = Math.max(0, round2(p.payableBase - p.absenceDeduction - p.lateDeduction + bonus - penalty + (p.commission || 0)))
     const advanceDeduction = round2(Math.min(gross, p.advanceDeduction))
     const net = round2(gross - advanceDeduction)
     updates.push(db.payslip.update({
@@ -122,7 +122,12 @@ async function __DELETE(req: NextRequest, { params }: Ctx) {
   const run = Number.isFinite(id) ? await loadRun(id, session.tenantId) : null
   if (!run) return bad('الدورة غير موجودة', 404)
   if (run.status !== 'draft') return bad('لا يمكن حذف دورة اتصرفت', 409)
-  await db.payrollRun.delete({ where: { id: run.id } })
+  // 💰 (التحديث الثالث عشر) حذف المسودة بيحرر حجوزات العمولات (viaPayroll)
+  // — الشهر يرجع يظهر غير مصروف في تقرير العمولات
+  await db.$transaction([
+    db.commissionPayout.deleteMany({ where: { tenantId: session.tenantId, month: run.month, viaPayroll: true } }),
+    db.payrollRun.delete({ where: { id: run.id } }),
+  ])
   await logAudit({ action: 'hr.payroll.delete', targetType: 'payroll', targetId: run.id, details: { month: run.month } }, req)
   return NextResponse.json({ ok: true })
 }

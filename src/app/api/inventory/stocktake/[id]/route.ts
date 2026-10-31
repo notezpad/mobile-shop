@@ -4,6 +4,8 @@ import { db, withDb } from '@/lib/db'
 import { requireAdmin, authErrorResponse } from '@/lib/auth'
 import { applyStocktakeDiff, computeStocktakeShrink, recordStocktakeShrinkLoss } from '@/lib/stocktake-stock'
 import { STOCK_POLICY } from '@/lib/stock-policy'
+import { withSql } from '@/lib/sql'
+import { createNotification } from '@/lib/notifications'
 export const dynamic = 'force-dynamic'
 
 async function __POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -56,6 +58,24 @@ async function __POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }
     if (e instanceof AlreadyCommitted) return NextResponse.json({ ok: true, alreadyCommitted: true })
     throw e
   }
+
+  // 🫥 (التحديث الحادي عشر): تنبيه عجز كبير في ورقة جرد أعمي — إشعار واحد
+  // للمدير بعد الاعتماد الناجح (فوق نفس حد الملاحظة الإجبارية).
+  if (st.mode === 'blind' && shrink.value >= STOCK_POLICY.stocktakeNoteThreshold) {
+    try {
+      await withSql(async (sql) => {
+        await createNotification(sql, s.tenantId, {
+          type: 'blind_shortage',
+          title: 'عجز كبير في جرد أعمي',
+          message: `ورقة الجرد الأعمي #${sid} اتعتمدت بعجز ${shrink.value} جنيه — راجع تقرير التغطية والأصناف الناقصة.`,
+          link: '/inventory/stocktake',
+        })
+      })
+    } catch {
+      /* الإشعار مش حرج — الاعتماد تم بالفعل */
+    }
+  }
+
   return NextResponse.json({ ok: true })
 }
 

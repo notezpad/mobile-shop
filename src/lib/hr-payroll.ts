@@ -9,13 +9,34 @@ import { db } from '@/lib/db'
 import { getTenantTimezone, dateStrInTz } from '@/lib/tenantTime'
 import { loadHrSettings } from '@/lib/hr-route'
 import { computePayslip, countPaidDays, countedLate, monthBounds, type DayRecordStatus } from '@/lib/hr'
+import { getSql } from '@/lib/sql'
+import {
+  sellersMonthAggregates,
+  applyTargetGate,
+  resolveSellerTarget,
+  resolveSellerRate,
+  type SellerMonthNumbers,
+} from '@/lib/seller-commissions'
 
 export async function generatePayrollDraft(tenantId: string, month: string, userId: string) {
   const [tz, settings] = await Promise.all([getTenantTimezone(tenantId), loadHrSettings(tenantId)])
   const { first, last } = monthBounds(month)
   const today = dateStrInTz(new Date(), tz)
 
-  const [employees, records, advances, existingRun, permissions] = await Promise.all([
+  // 💰 (التحديث الثالث عشر) عمولات البائعين — تُحسب لكل موظف مرتبط بحساب
+  // مستخدم (Employee.userId) معلّم كـ«بائع»، بشرط:
+  //  1. الميزة مفعّلة عند صاحب المحل.
+  //  2. ما تكونش اتصرفت منفصلة (CommissionPayout للشهر موجود) — وقتها 0.
+  //  3. تحقق تارجت البائع (استثناء له أو العام).
+  // وبيتسجل حجز CommissionPayout (viaPayroll=true) جوه نفس الـ transaction
+  // عشان التقرير يمنع صرفها منفصلة، ويتنضف لو المسودة اتعملت تاني من غير عمولة.
+  const commissionsCfg = await db.tenant.findUnique({
+    where: { id: tenantId },
+    select: { sellerCommissionsEnabled: true, sellerCommissionRate: true, sellerCommissionTarget: true },
+  })
+  const commissionsEnabled = commissionsCfg?.sellerCommissionsEnabled === true
+
+  const [employees, records, advances, existingRun, permissions, monthPayouts] = await Promise.all([
     db.employee.findMany({ where: { tenantId, active: true } }),
     db.attendanceRecord.findMany({
       where: { tenantId, date: { gte: first, lte: last } },
@@ -28,6 +49,7 @@ export async function generatePayrollDraft(tenantId: string, month: string, user
       where: { tenantId, type: 'permission', startDate: { gte: first, lte: last } },
       select: { employeeId: true, startDate: true },
     }),
+    db.commissionPayout.findMany({ where: { tenantId, month } }),
   ])
   if (existingRun && existingRun.status === 'paid') throw new Error('PAID')
 
@@ -53,6 +75,27 @@ export async function generatePayrollDraft(tenantId: string, month: string, user
     advDue.set(a.employeeId, (advDue.get(a.employeeId) ?? 0) + Math.min(a.installment, a.remaining))
   }
 
+  // 💰 عمولات البائعين للشهر — استعلام SQL واحد للمبيعات + واحد للمرتجعات
+  const linkedUserIds = [...new Set(employees.map((e) => e.userId).filter((v): v is string => !!v))]
+  let aggByUser = new Map<string, SellerMonthNumbers>()
+  let sellerUsersById = new Map<string, { id: string; name: string; isSeller: boolean; sellerCommissionRate: number | null; sellerCommissionTarget: number | null }>()
+  if (commissionsEnabled && linkedUserIds.length > 0) {
+    const [sqlAgg, sellerUsers] = await Promise.all([
+      sellersMonthAggregates(getSql(), tenantId, month, tz),
+      db.user.findMany({
+        where: { tenantId, id: { in: linkedUserIds } },
+        select: { id: true, name: true, isSeller: true, sellerCommissionRate: true, sellerCommissionTarget: true },
+      }),
+    ])
+    aggByUser = sqlAgg
+    sellerUsersById = new Map(sellerUsers.map((u) => [u.id, u]))
+  }
+  // عمولة اتصرفت منفصلة (payout يدوي من تقرير العمولات)؟ → مبيتدفعش تاني في
+  // القسيمة. حجوزات viaPayroll بتتحسب fresh كل توليد — مش بتمنع الحساب.
+  const paidOutUsers = new Set(
+    monthPayouts.filter((p) => !p.viaPayroll).map((p) => p.userId),
+  )
+
   const rows = employees
     .map((e) => {
       const hire = dateStrInTz(e.hireDate, tz)
@@ -64,13 +107,33 @@ export async function generatePayrollDraft(tenantId: string, month: string, user
         records: recsByEmp.get(e.id) ?? new Map(),
         permissionDates: permsByEmp.get(e.id),
       })
+      // 💰 عمولة الموظف-البائع للشهر (0 لو مش بائع / الميزة مقفولة / اتصرفت)
+      let commission = 0
+      let commissionMeta: { userId: string; target: number | null; netBase: number; salesTotal: number; returnsTotal: number; rate: number } | null = null
+      const sellerUser = e.userId ? sellerUsersById.get(e.userId) : null
+      if (sellerUser && sellerUser.isSeller && e.userId && !paidOutUsers.has(e.userId)) {
+        const nums = aggByUser.get(e.userId)
+        const target = resolveSellerTarget(sellerUser.sellerCommissionTarget, commissionsCfg?.sellerCommissionTarget ?? null)
+        const gate = applyTargetGate(nums?.grossCommission ?? 0, nums?.netBase ?? 0, target)
+        commission = gate.commission
+        if (gate.targetMet && commission !== 0) {
+          commissionMeta = {
+            userId: e.userId,
+            target,
+            netBase: nums?.netBase ?? 0,
+            salesTotal: nums?.salesTotal ?? 0,
+            returnsTotal: nums?.returnsTotal ?? 0,
+            rate: resolveSellerRate(sellerUser.sellerCommissionRate, commissionsCfg?.sellerCommissionRate ?? null) ?? 0,
+          }
+        }
+      }
       const calc = computePayslip({
         baseSalary: e.baseSalary, hireDate: hire, month, settings,
         absentDays: absent.get(e.id) ?? 0, lateMinutes: late.get(e.id) ?? 0,
-        advanceDue: advDue.get(e.id) ?? 0, bonus, penalty,
+        advanceDue: advDue.get(e.id) ?? 0, bonus, penalty, commission,
         paidDays: paid.paidDays,
       })
-      return { e, hire, bonus, penalty, note: p?.note ?? null, calc }
+      return { e, hire, bonus, penalty, commission, commissionMeta, note: p?.note ?? null, calc }
     })
     // موظف اتعيّن بعد الشهر ده مالوش راتب فيه
     .filter((r) => r.hire <= last)
@@ -94,6 +157,8 @@ export async function generatePayrollDraft(tenantId: string, month: string, user
         lateDeduction: r.calc.lateDeduction,
         bonus: r.bonus,
         penalty: r.penalty,
+        // 💰 العمولة تُحسب fresh في كل توليد مسودة (مش محفوظة زي الحافز)
+        commission: r.commission,
         advanceDeduction: r.calc.advanceDeduction,
         net: r.calc.net,
         note: r.note,
@@ -104,6 +169,39 @@ export async function generatePayrollDraft(tenantId: string, month: string, user
         update: data,
       })
     }
+
+    // 💰 حجز/تحديث عمولات الرواتب في تقرير العمولات (viaPayroll) — نفس tx
+    const payrollMarkers = rows.filter((r) => r.commissionMeta)
+    for (const r of payrollMarkers) {
+      const m = r.commissionMeta!
+      await tx.commissionPayout.upsert({
+        where: { tenantId_userId_month: { tenantId, userId: m.userId, month } },
+        create: {
+          tenantId, userId: m.userId, month,
+          salesTotal: m.salesTotal, returnsTotal: m.returnsTotal, netBase: m.netBase,
+          rate: m.rate, target: m.target, targetMet: true,
+          adjustments: 0, amount: r.commission,
+          viaPayroll: true, method: 'payroll',
+          note: 'محجوزة في مسير رواتب الشهر',
+          paidById: userId,
+        },
+        update: {
+          salesTotal: m.salesTotal, returnsTotal: m.returnsTotal, netBase: m.netBase,
+          rate: m.rate, target: m.target, targetMet: true,
+          adjustments: 0, amount: r.commission,
+          viaPayroll: true, method: 'payroll',
+        },
+      })
+    }
+    // 💰 تنظيف حجوزات مسير الرواتب اللي عمولتها بقت 0 (مسودة اتولّدت تاني بعد مرتجعات مثلاً)
+    const markerUserIds = new Set(payrollMarkers.map((r) => r.commissionMeta!.userId))
+    const stalePayrollPayouts = monthPayouts.filter((p) => p.viaPayroll && !markerUserIds.has(p.userId))
+    if (stalePayrollPayouts.length > 0) {
+      await tx.commissionPayout.deleteMany({
+        where: { tenantId, month, viaPayroll: true, userId: { in: stalePayrollPayouts.map((p) => p.userId) } },
+      })
+    }
+
     return run
   }, { timeout: 20_000, maxWait: 10_000 })
   return run

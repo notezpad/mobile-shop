@@ -272,6 +272,7 @@ export function MethodPills({
   label,
   tone = 'light',
   methods,
+  items,
 }: {
   value: string
   onChange: (v: string) => void
@@ -279,9 +280,12 @@ export function MethodPills({
   tone?: PayTone
   /** تقييد الطرق المعروضة (القيم من PAY_METHODS). الافتراضي: كلها */
   methods?: readonly string[]
+  /** 💳 قائمة كاملة جاهزة {value,label} — بتتجاوز PAY_METHODS (بتسمح بوسائل
+   * مخصصة من إعدادات المحل). لو بتبعتها، مش محتاج تبعت methods */
+  items?: { value: string; label: string }[]
 }) {
   const dark = tone === 'dark'
-  const list = methods ? PAY_METHODS.filter((m) => methods.includes(m.value)) : PAY_METHODS
+  const list = items ?? (methods ? PAY_METHODS.filter((m) => methods.includes(m.value)) : PAY_METHODS)
   return (
     <div role="radiogroup" aria-label={label} className="grid grid-cols-2 gap-2">
       {list.map((m) => {

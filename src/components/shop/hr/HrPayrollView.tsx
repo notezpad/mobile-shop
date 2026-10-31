@@ -24,6 +24,8 @@ interface Slip {
   id: number; employeeId: number; employeeName: string; baseSalary: number; payableBase: number
   absentDays: number; absenceDeduction: number; lateMinutes: number; lateDeduction: number
   bonus: number; penalty: number; advanceDeduction: number; net: number; note: string | null
+  // 💰 (التحديث الثالث عشر) عمولة البائع المرتبط بالموظف — بتدخل في الصافي
+  commission: number
   unrecordedDays: number; pendingDays: number
   workedDays: number | null; expectedWorkDays: number | null
   phone: string | null
@@ -152,6 +154,7 @@ export function HrPayrollView() {
         { header: 'خصم تأخير', key: 'late', format: 'currency' },
         { header: 'حافز', key: 'bonus', format: 'currency' },
         { header: 'جزاء', key: 'penalty', format: 'currency' },
+        { header: 'عمولة', key: 'commission', format: 'currency' },
         { header: 'قسط سلفة', key: 'adv', format: 'currency' },
         { header: 'الصافي', key: 'net', format: 'currency' },
       ],
@@ -159,7 +162,7 @@ export function HrPayrollView() {
         name: p.employeeName,
         worked: p.workedDays !== null && p.expectedWorkDays !== null ? `${p.workedDays} من ${p.expectedWorkDays}` : '—',
         base: p.payableBase, abs: p.absenceDeduction, late: p.lateDeduction,
-        bonus: p.bonus, penalty: p.penalty, adv: p.advanceDeduction, net: p.net,
+        bonus: p.bonus, penalty: p.penalty, commission: p.commission ?? 0, adv: p.advanceDeduction, net: p.net,
       })),
       totals: { name: 'الإجمالي', net: run.totalNet },
     })
@@ -334,6 +337,15 @@ export function HrPayrollView() {
                           {p.advanceDeduction > 0 ? `- ${money(p.advanceDeduction)}` : '—'}
                         </span>
                       </div>
+                      {/* 💰 عمولة البائع — بتظهر بس لو فيه قيمة عشان الكارت يفضل نضيف */}
+                      {(p.commission ?? 0) !== 0 && (
+                        <div className="bg-emerald-50/70 dark:bg-emerald-950/30 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900 flex flex-col justify-between gap-1">
+                          <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">عمولة مبيعات</span>
+                          <span className="font-black text-sm text-emerald-600 dark:text-emerald-400">
+                            {(p.commission ?? 0) > 0 ? `+ ${money(p.commission)}` : `- ${money(Math.abs(p.commission))}`}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* الحافز والجزاء (قابلين للتعديل) */}

@@ -20,6 +20,10 @@ import {
   TrendingUp,
   TrendingDown,
   Boxes,
+  EyeOff,
+  SearchX,
+  ListChecks,
+  RefreshCw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -56,6 +60,7 @@ import {
   shortDateLabel,
   timeLabel,
 } from './shared'
+import { CycleCountPanel } from './CycleCountPanel'
 
 interface Props {
   stocktakes: Stocktake[]
@@ -63,12 +68,26 @@ interface Props {
   products: InventoryProduct[]
   userBranchId: number | null
   onChanged: () => void
+  /** 🫥 مدير؟ (غير الموظف) — هو الوحيد اللي يشوف أرقام النظام والفروق في الأوراق الأعمية */
+  isManager?: boolean
+  /** 🫥 عدّاد أعمي صرف: موظف بصلاحية «الجرد الأعمي» بدون موديول المخزون —
+   *  الوضع الأعمي مفروض عليه ومقفول، والمحطة بتبقى خفيفة بدون أرقام خالص */
+  blindOnly?: boolean
 }
 
 const VIOLET = ACCENT.stocktake
 const GREEN = '#10b981'
 const AMBER = '#f59e0b'
 const ROSE = '#f43f5e'
+
+/** 🫥 نتيجة البحث الأعمي — بلا أي كميات أو تكاليف بالتصميم (شوف lookup/route.ts) */
+interface BlindLookupProduct {
+  id: number
+  name: string
+  barcode: string | null
+  soldByWeight?: boolean
+  variants: { id: number; size: string | null; color: string | null; barcode: string | null }[]
+}
 
 const diffColor = (d: number) => (d === 0 ? VIOLET : d > 0 ? GREEN : ROSE)
 /** ختم الحالة */
@@ -129,7 +148,7 @@ function MatchRing({ value, total }: { value: number; total: number }) {
 const unitField =
   'border-stocktake/25 bg-card text-foreground placeholder:text-muted-foreground/70 focus-visible:border-stocktake focus-visible:ring-stocktake/20'
 
-export function StocktakeTab({ stocktakes, branches, products, userBranchId, onChanged }: Props) {
+export function StocktakeTab({ stocktakes, branches, products, userBranchId, onChanged, isManager = true, blindOnly = false }: Props) {
   // 🛡️ 2026-09-14: branchId, items, note live in the Zustand store with
   // localStorage persistence — so a draft stays alive across tab switches,
   // page refreshes, and even navigation to other pages. The `scan` input
@@ -141,6 +160,20 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
   const branchId = stocktakeDraft.branchId
   const items = stocktakeDraft.items
   const note = stocktakeDraft.note
+
+  // 🫥 (التحديث الحادي عشر) نوع الجرد: للعدّاد الأعمي مفروض ومقفول (وعلى
+  // السيرفر كمان) — والمدير يختاره من المفتاح تحت، وتغييره محتاج مسودة فاضية
+  // عشان ما تختلطش أعداد مكتوبة بوضع مختلف.
+  const effectiveMode: 'open' | 'blind' = blindOnly ? 'blind' : (stocktakeDraft.mode ?? 'open')
+  const isBlind = effectiveMode === 'blind'
+  const setMode = (m: 'open' | 'blind') => {
+    if (blindOnly || m === effectiveMode) return
+    if (items.length > 0) {
+      toast.error('فيه أصناف في المسودة — امسحها الأول أو اعتمدها قبل تغيير نوع الجرد')
+      return
+    }
+    setStocktakeDraft({ mode: m })
+  }
 
   const setBranchId = (v: string) => setStocktakeDraft({ branchId: v })
   const setItems = (updater: (prev: typeof items) => typeof items) =>
@@ -155,6 +188,8 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
   const [statusFilter, setStatusFilter] = React.useState<'all' | 'draft' | 'committed'>('all')
   const [view, setView] = React.useState<'all' | 'diff' | 'match'>('all')
   const [last, setLast] = React.useState<{ name: string; qty: number; n: number } | null>(null)
+  // 🫥 نتايج بحث أعمية متعددة — منتقي صغير يختار منه
+  const [blindResults, setBlindResults] = React.useState<BlindLookupProduct[] | null>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
 
   const effectiveBranchId = branchId || (branches.length > 0 ? String(branches[0].id) : '')
@@ -179,11 +214,78 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
   // مفتاح سطر الجرد: منتج + (لون/مقاس) — منتج واحد ممكن يبقى له أسطر كتير
   const keyOf = (i: { productId: number; variantId?: number | null }) => `${i.productId}:${i.variantId ?? 0}`
 
+  // ─── 🫥 الجرد الأعمي: البحث كله بيعدي على endpoint نقي من الأرقام ───
+  const addBlindProductLine = (p: BlindLookupProduct, inc?: number) => {
+    const step = p.soldByWeight ? 0.5 : 1
+    const add = inc ?? step
+    const existing = items.find((i) => i.productId === p.id && !i.variantId)
+    setItems((prev) => {
+      const exists = prev.find((i) => i.productId === p.id && !i.variantId)
+      if (exists) {
+        return prev.map((i) => (i === exists ? { ...i, countedQty: Math.round((i.countedQty + add) * 1000) / 1000 } : i))
+      }
+      return [
+        ...prev,
+        { productId: p.id, variantId: null, name: p.name, barcode: p.barcode, systemQty: 0, countedQty: add, soldByWeight: p.soldByWeight === true },
+      ]
+    })
+    const newQty = Math.round(((existing?.countedQty ?? 0) + add) * 1000) / 1000
+    setLast((l) => ({ name: p.name, qty: newQty, n: (l?.n ?? 0) + 1 }))
+    inputRef.current?.focus()
+  }
+
+  const addBlindVariantLine = (product: { id: number; name: string; barcode: string | null }, v: { id: number; size: string | null; color: string | null; barcode: string | null }) => {
+    const name = `${product.name} — ${[v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`}`
+    const pid = product.id
+    setItems((prev) => {
+      const exists = prev.find((i) => i.productId === pid && i.variantId === v.id)
+      if (exists) return prev.map((i) => (i === exists ? { ...i, countedQty: i.countedQty + 1 } : i))
+      return [...prev, { productId: pid, variantId: v.id, name, barcode: v.barcode, systemQty: 0, countedQty: 1, soldByWeight: false }]
+    })
+    setLast((l) => ({ name, qty: (items.find((i) => i.productId === pid && i.variantId === v.id)?.countedQty ?? 0) + 1, n: (l?.n ?? 0) + 1 }))
+    inputRef.current?.focus()
+  }
+
+  const blindScan = async (q: string) => {
+    try {
+      const r = await api<{ results: BlindLookupProduct[]; variantHit: { product: { id: number; name: string; barcode: string | null; soldByWeight?: boolean }; variant: { id: number; size: string | null; color: string | null; barcode: string | null } } | null }>(
+        `/api/inventory/stocktake/lookup?q=${encodeURIComponent(q)}${effectiveBranchId ? `&branchId=${effectiveBranchId}` : ''}`,
+      )
+      if (r.variantHit) {
+        addBlindVariantLine(r.variantHit.product, r.variantHit.variant)
+        return
+      }
+      const results = Array.isArray(r.results) ? r.results : []
+      if (results.length === 1) {
+        const p = results[0]
+        if (p.variants?.length > 0) {
+          setMatrix({ product: { ...p, quantity: 0, cost: 0, price: 0, minQuantity: 0, branchId: null, category: null }, variants: p.variants.map((v) => ({ ...v, quantity: 0 })) })
+          return
+        }
+        addBlindProductLine(p)
+        return
+      }
+      if (results.length > 1) {
+        setBlindResults(results)
+        return
+      }
+      toast.error(`لم يتم العثور على المنتج: ${q}`, { id: 'not-found' })
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل البحث — جرّب تاني')
+    }
+    inputRef.current?.focus()
+  }
+
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault()
     const q = scan.trim()
     if (!q) return
     setScan('')
+    // 🫥 الوضع الأعمي: مفيش بحث محلي في قايمة المنتجات أصلاً (القايمة أصلاً مش محمّلة)
+    if (isBlind) {
+      await blindScan(q)
+      return
+    }
     let p = scopedProducts.find((x) => x.barcode && x.barcode === q)
     if (!p) p = scopedProducts.find((x) => x.name.toLowerCase() === q.toLowerCase())
     if (!p) p = scopedProducts.find((x) => x.name.toLowerCase().includes(q.toLowerCase()))
@@ -258,7 +360,8 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
         variantId: v.id,
         name: `${product.name} — ${[v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`}`,
         barcode: v.barcode ?? product.barcode,
-        systemQty: v.quantity,
+        // 🫥 في الأعمي: الكمية بالنظام عند السيرفر بس — الرقم المحلي صفر ماتعرضش
+        systemQty: isBlind ? 0 : v.quantity,
         countedQty: r.qty[v.id],
         soldByWeight: false,
       }))
@@ -338,6 +441,8 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
 
   const requestCommit = () => {
     if (items.length === 0) { toast.error('أضف أصنافاً للجرد'); return }
+    // 🫥 في الأعمي: مفيش اعتماد من محطة العدّ خالص — حفظ مسودة والمراجعة من الأرشيف
+    if (isBlind) { void submit(false); return }
     const sh = shrinkOf(items.map((i) => ({ productId: i.productId, diff: i.countedQty - i.systemQty })))
     if (sh.value <= 0) { void submit(true, false); return }
     setRecordLoss(true)
@@ -354,11 +459,15 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
           branchId: effectiveBranchId ? parseInt(effectiveBranchId, 10) : null,
           items: items.map((i) => ({ productId: i.productId, variantId: i.variantId ?? null, systemQty: i.systemQty, countedQty: i.countedQty })),
           note: note.trim() || null,
+          // 🫥 نوع الجرد بيسافر مع الطلب — والسيرفر هو اللي بيفرضه على الموظف
+          mode: effectiveMode,
           commit,
           recordLoss: loss,
         },
       })
-      toast.success(commit ? 'تم اعتماد الجرد وتسوية الكميات' : 'تم حفظ الجرد كمسودة')
+      toast.success(isBlind
+        ? (commit ? 'تم اعتماد الجرد الأعمي' : 'تم حفظ الجرد الأعمي كمسودة — المدير هيراجعه من الأرشيف')
+        : (commit ? 'تم اعتماد الجرد وتسوية الكميات' : 'تم حفظ الجرد كمسودة'))
       resetForm()
       onChanged()
     } catch (e: any) {
@@ -404,9 +513,40 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                 <h2 className="text-xl font-black leading-tight">مسح وإضافة صنف</h2>
                 <p className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                   <span className="inv-blink size-2 rounded-full bg-stocktake" />
-                  جاهز للمسح — كل قراءة تزيد العدد الفعلي واحدًا
+                  {isBlind ? 'جرد أعمي — كل قراءة بتسجل القطعة من غير أي أرقام متوقعة' : 'جاهز للمسح — كل قراءة تزيد العدد الفعلي واحدًا'}
                 </p>
               </div>
+            </div>
+
+            {/* 🫥 مفتاح نوع الجرد: للمدير اختيار حر، وللعدّاد الأعمي مفروض ومقفول */}
+            <div className={cn('flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3', isBlind ? 'border-stocktake/40 bg-stocktake-soft' : 'border-border bg-card-muted')}>
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-sm font-extrabold">
+                  {isBlind ? <EyeOff className="size-4 text-stocktake" /> : <ListChecks className="size-4 text-stocktake" />}
+                  {isBlind ? 'جرد أعمي (Blind Count)' : 'جرد تقليدي'}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                  {isBlind
+                    ? 'الكميات المتوقعة مخفية تماماً — امسح الباركود وعدّ القطع قطعة قطعة، والفروق تظهر للمدير بعد المراجعة.'
+                    : 'كميات النظام ظاهرة جنب عدّك للتأكد السريع — زي الجرد المعتاد.'}
+                </p>
+              </div>
+              {blindOnly ? (
+                <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-stocktake px-3 py-1.5 text-[11px] font-extrabold text-stocktake-foreground">
+                  <EyeOff className="size-3.5" />
+                  مفروض عليك — صلاحية العدّ الأعمي
+                </span>
+              ) : (
+                <Segmented<'open' | 'blind'>
+                  value={effectiveMode}
+                  onChange={(m) => setMode(m)}
+                  accent={VIOLET}
+                  options={[
+                    { value: 'open', label: 'تقليدي' },
+                    { value: 'blind', label: 'أعمي', color: '#7c3aed' },
+                  ]}
+                />
+              )}
             </div>
 
             <div className="grid gap-2.5 sm:grid-cols-2">
@@ -482,20 +622,32 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
           </div>
 
           {/* لوحة الجلسة: حالة فاضية إرشادية / حالة جرد نشط */}
-          <SessionPanel
-            items={items}
-            matchedCount={matchedCount}
-            diffCount={diffCount}
-            totalDiff={totalDiff}
-            productsCount={scopedProducts.length}
-          />
+          {isBlind ? (
+            <BlindSessionPanel itemsCount={items.length} totalPieces={items.reduce((s, i) => s + i.countedQty, 0)} hasItems={items.length > 0} />
+          ) : (
+            <SessionPanel
+              items={items}
+              matchedCount={matchedCount}
+              diffCount={diffCount}
+              totalDiff={totalDiff}
+              productsCount={scopedProducts.length}
+            />
+          )}
         </div>
 
         {items.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stocktake/15 bg-card-muted px-5 py-3.5 sm:px-7">
             <p className="text-sm text-muted-foreground">
-              الاعتماد بيعدّل كميات المخزون حسب العدّ الفعلي ·{' '}
-              <span dir="ltr" className="font-mono font-bold text-foreground"><Signed value={totalDiff} /></span> وحدة
+              {isBlind ? (
+                <>
+                  🫥 جرد أعمي — الفروق بتتحسب على السيرفر وتظهر للمدير بعد المراجعة · عدّيت <b className="tabular-nums text-foreground">{items.length}</b> صنف
+                </>
+              ) : (
+                <>
+                  الاعتماد بيعدّل كميات المخزون حسب العدّ الفعلي ·{' '}
+                  <span dir="ltr" className="font-mono font-bold text-foreground"><Signed value={totalDiff} /></span> وحدة
+                </>
+              )}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button variant="ghost" onClick={resetForm} disabled={saving} className="text-muted-foreground hover:bg-stocktake/10 hover:text-foreground">
@@ -505,10 +657,13 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                 حفظ مسودة
               </Button>
-              <Button onClick={requestCommit} disabled={saving} className="bg-stocktake text-stocktake-foreground hover:bg-stocktake-strong">
-                {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-                اعتماد وتسوية
-              </Button>
+              {/* 🫥 في الأعمي: مفيش اعتماد من محطة العدّ — المراجعة والاعتماد من الأرشيف للمدير */}
+              {!isBlind && (
+                <Button onClick={requestCommit} disabled={saving} className="bg-stocktake text-stocktake-foreground hover:bg-stocktake-strong">
+                  {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                  اعتماد وتسوية
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -522,16 +677,24 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
               <p className="text-xs font-bold text-stocktake">بطاقات الجرد الحالية</p>
               <h3 className="text-lg font-black">الأصناف المعدودة <span className="text-sm font-medium text-muted-foreground">· {items.length}</span></h3>
             </div>
-            <Segmented<'all' | 'diff' | 'match'>
-              value={view}
-              onChange={setView}
-              accent={VIOLET}
-              options={[
-                { value: 'all', label: 'الكل', count: items.length },
-                { value: 'diff', label: 'بفرق', count: diffCount, color: AMBER },
-                { value: 'match', label: 'مطابق', count: matchedCount, color: GREEN },
-              ]}
-            />
+            {/* 🫥 في الأعمي: مفيش فلاتر مطابق/بفرق — مفيش أرقام نظام أصلاً */}
+            {isBlind ? (
+              <span className="flex items-center gap-1.5 rounded-full bg-stocktake/10 px-3 py-1.5 text-[11px] font-bold text-stocktake">
+                <EyeOff className="size-3.5" />
+                الأرقام المتوقعة مخفية
+              </span>
+            ) : (
+              <Segmented<'all' | 'diff' | 'match'>
+                value={view}
+                onChange={setView}
+                accent={VIOLET}
+                options={[
+                  { value: 'all', label: 'الكل', count: items.length },
+                  { value: 'diff', label: 'بفرق', count: diffCount, color: AMBER },
+                  { value: 'match', label: 'مطابق', count: matchedCount, color: GREEN },
+                ]}
+              />
+            )}
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {shown.map((it) => {
@@ -571,6 +734,14 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                   </div>
 
                    <div className="p-4">
+                     {isBlind ? (
+                       /* 🫥 الجرد الأعمي: عدّادك أنت بس — مفيش رصيد نظام ولا مقارنة ولا نتيجة */
+                       <div className="text-center">
+                         <p className="mb-1.5 text-xs font-black text-stocktake">{it.soldByWeight ? 'الوزن اللي عدّيته (كجم)' : 'اللي عدّيته'}</p>
+                         <QtyStepper value={it.countedQty} min={0} onChange={(v) => setCounted(keyOf(it), v)} accent={VIOLET} decimal={it.soldByWeight} step={it.soldByWeight ? 0.5 : 1} />
+                       </div>
+                     ) : (
+                       <>
                      <div className="grid grid-cols-[1fr_auto] items-center gap-3">
                      <div className="rounded-xl border border-border bg-card-muted p-3">
                        <p className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground"><Scale className="size-3.5" /> رصيد النظام {it.soldByWeight ? '(كجم)' : ''}</p>
@@ -604,6 +775,8 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                       </span>
                     )}
                    </div>
+                       </>
+                     )}
                    </div>
                 </article>
               )
@@ -646,8 +819,9 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {visible.map((st, i) => {
-              const totalD = st.items.reduce((s, x) => s + x.diff, 0)
-              const matched = st.items.filter((x) => x.diff === 0).length
+              const blindSheet = st.mode === 'blind'
+              const totalD = st.items.reduce((s, x) => s + (x.diff ?? 0), 0)
+              const matched = st.items.filter((x) => (x.diff ?? 0) === 0).length
               const pct = st.items.length ? (matched / st.items.length) * 100 : 0
               return (
                 <button
@@ -667,18 +841,42 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                       <div className="min-w-0">
                         <p className="font-mono text-xs font-bold text-muted-foreground">ورقة جرد #{String(st.id).padStart(4, '0')}</p>
                         <h4 className="mt-0.5 truncate text-[15px] font-extrabold">{st.branch?.name ?? 'كل الفروع'}</h4>
+                        {/* 🫥 شارات نوع الورقة */}
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          {blindSheet && (
+                            <span className="flex items-center gap-1 rounded-md bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-extrabold text-violet-700 dark:text-violet-300">
+                              <EyeOff className="size-3" />
+                              أعمي
+                            </span>
+                          )}
+                          {st.cycleScheduleId != null && (
+                            <span className="rounded-md bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-extrabold text-sky-700 dark:text-sky-300">
+                              🔄 جرد دوري
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <Stamp status={st.status} rot={i % 2 ? 7 : -8} />
                     </div>
 
                     <div className="mt-4 flex items-end justify-between">
                       <div>
-                        <p className="text-xs text-muted-foreground">صافي الفرق</p>
-                        <p dir="ltr" className="text-start font-mono text-3xl font-black tabular-nums">
-                          <span style={{ color: totalD === 0 ? undefined : diffColor(totalD) }}>
-                            <Signed value={totalD} />
-                          </span>
-                        </p>
+                        {/* 🫥 العدّاد الأعمي: مفيش صافي فرق — بس عدد الأصناف */}
+                        {!blindSheet || isManager ? (
+                          <>
+                            <p className="text-xs text-muted-foreground">صافي الفرق</p>
+                            <p dir="ltr" className="text-start font-mono text-3xl font-black tabular-nums">
+                              <span style={{ color: totalD === 0 ? undefined : diffColor(totalD) }}>
+                                <Signed value={totalD} />
+                              </span>
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-xs text-muted-foreground">عدد الأصناف</p>
+                            <p className="font-mono text-3xl font-black tabular-nums text-stocktake">{st.items.length}</p>
+                          </>
+                        )}
                       </div>
                       <div className="text-end text-xs text-muted-foreground">
                         <p><b className="tabular-nums text-foreground">{st.items.length}</b> صنف</p>
@@ -686,15 +884,25 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                       </div>
                     </div>
 
-                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-amber-400/40">
-                      <div className="h-full rounded-full bg-stocktake" style={{ width: `${pct}%` }} />
-                    </div>
-                    <div className="mt-1.5 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{matched} مطابق · {st.items.length - matched} بفرق</span>
-                      {st.createdByName && (
+                    {/* 🫥 شريط المطابقة والفروق: للمدير بس — العدّاد ميشوفش الفروق للأبد */}
+                    {(!blindSheet || isManager) && (
+                      <>
+                        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-amber-400/40">
+                          <div className="h-full rounded-full bg-stocktake" style={{ width: `${pct}%` }} />
+                        </div>
+                        <div className="mt-1.5 flex items-center justify-between text-xs text-muted-foreground">
+                          <span>{matched} مطابق · {st.items.length - matched} بفرق</span>
+                          {st.createdByName && (
+                            <span className="flex items-center gap-1"><User className="size-3" />{st.createdByName}</span>
+                          )}
+                        </div>
+                      </>
+                    )}
+                    {blindSheet && !isManager && st.createdByName && (
+                      <div className="mt-1.5 flex items-center justify-end text-xs text-muted-foreground">
                         <span className="flex items-center gap-1"><User className="size-3" />{st.createdByName}</span>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </button>
               )
@@ -713,11 +921,58 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
         onConfirm={confirmMatrix}
         showCost={false}
         allowZero
+        // 🫥 الجرد الأعمي: مخزون اللون/المقاس مخفي خالص
+        showStock={!isBlind}
         title="العدّ الفعلي لكل لون ومقاس"
         confirmLabel="سجّل العدّ"
         emptyHint="اكتب العدد الفعلي لكل لون/مقاس (اكتب 0 لو مفيش منه). الخلية الفاضية = ما اتعدّتش"
         stockLabel="بالنظام"
       />
+
+      {/* 🫥 منتقي نتايج البحث الأعمي — بحث رجّع أكتر من صنف واحد */}
+      <Dialog open={blindResults !== null} onOpenChange={(o) => { if (!o) setBlindResults(null) }}>
+        <DialogContent mobileSheet className="gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="gap-0 border-b bg-stocktake p-4 text-stocktake-foreground">
+            <DialogTitle className="flex items-center gap-2 text-stocktake-foreground">
+              <SearchX className="size-5" />
+              اختار الصنف اللي عدّيته
+            </DialogTitle>
+            <DialogDescription className="text-stocktake-foreground/75">
+              البحث رجّع {blindResults?.length ?? 0} صنف — اختار الصح منه
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[50vh] overflow-y-auto p-3">
+            {(blindResults ?? []).map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => {
+                  setBlindResults(null)
+                  if (p.variants?.length > 0) {
+                    setMatrix({ product: { ...p, quantity: 0, cost: 0, price: 0, minQuantity: 0, branchId: null, category: null }, variants: p.variants.map((v) => ({ ...v, quantity: 0 })) })
+                  } else {
+                    addBlindProductLine(p)
+                  }
+                }}
+                className="flex w-full items-center gap-3 rounded-xl border border-stocktake/20 bg-card px-3 py-2.5 text-start transition-colors hover:border-stocktake/50 hover:bg-stocktake-soft"
+              >
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-stocktake/15 text-stocktake">
+                  <PackageOpen className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-extrabold">{p.name}</span>
+                  <span dir="ltr" className="mt-0.5 flex items-center gap-1 text-start font-mono text-[11px] text-muted-foreground">
+                    <Hash className="size-3 shrink-0" />{p.barcode || 'بدون باركود'}
+                  </span>
+                </span>
+                {p.variants?.length > 0 && (
+                  <span className="shrink-0 rounded-md bg-stocktake/10 px-2 py-0.5 text-[10px] font-bold text-stocktake">{p.variants.length} لون/مقاس</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* 📉 ملخص عجز الجرد قبل الاعتماد */}
       <Dialog open={confirm !== null} onOpenChange={(o: boolean) => { if (!o) setConfirm(null) }}>
@@ -779,10 +1034,11 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
           stocktake={viewing}
           open={!!viewing}
           onOpenChange={(o) => !o && setViewing(null)}
+          isManager={isManager}
           onCommit={async () => {
             // عجز؟ نعرض الملخص الأول (التأكيد الفعلي من نافذة التأكيد)
             if (!confirm) {
-              const sh = shrinkOf(viewing.items.map((i) => ({ productId: i.productId, diff: i.diff })))
+              const sh = shrinkOf(viewing.items.map((i) => ({ productId: i.productId, diff: i.diff ?? 0 })))
               if (sh.value > 0) {
                 setRecordLoss(true)
                 setConfirmNote(viewing.note ?? '')
@@ -805,7 +1061,99 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
           saving={saving}
         />
       )}
+
+      {/* 🔄 الجرد الدوري المجدول — للمدير بس */}
+      {isManager && !blindOnly && (
+        <CycleCountPanel branches={branches} onChanged={onChanged} />
+      )}
     </div>
+  )
+}
+
+/** 🫥 لوحة الجلسة الأعمية — بدون أي أرقام نظام: «عدّيت X صنف» بس */
+function BlindSessionPanel({
+  itemsCount,
+  totalPieces,
+  hasItems,
+}: {
+  itemsCount: number
+  totalPieces: number
+  hasItems: boolean
+}) {
+  const aside = 'flex flex-col gap-5 border-t border-stocktake/15 bg-stocktake-soft p-5 lg:border-s lg:border-t-0 lg:px-6 lg:py-6'
+
+  if (!hasItems) {
+    const steps = [
+      { n: 1, t: 'امسح الباركود', d: 'أو اكتب اسم الصنف واضغط Enter' },
+      { n: 2, t: 'عدّ القطع قطعة قطعة', d: 'كل قراءة بتزوّد عدّك واحد' },
+      { n: 3, t: 'احفظ المسودة', d: 'المدير هيراجعها ويعتمدها من الأرشيف' },
+    ]
+    return (
+      <aside className={cn(aside, 'justify-center')}>
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="relative size-24">
+            <svg viewBox="0 0 100 100" className="size-full">
+              <circle cx="50" cy="50" r="44" fill="none" stroke="var(--stocktake)" strokeOpacity="0.45" strokeWidth="2.5" strokeDasharray="6 6" style={{ animation: 'inv-dash 1.6s linear infinite' }} />
+            </svg>
+            <span className="absolute inset-3.5 flex items-center justify-center rounded-full bg-card text-stocktake shadow-sm ring-1 ring-stocktake/20">
+              <EyeOff className="size-8" />
+            </span>
+          </div>
+          <div>
+            <p className="text-lg font-black leading-tight">جرد أعمي — عدّ في عتمة كاملة</p>
+            <p className="mt-1 text-xs font-medium text-muted-foreground">مفيش أي رقم متوقع هيوصلك — عدّ اللي شايفه بعينك بس</p>
+          </div>
+        </div>
+
+        <ol className="space-y-2">
+          {steps.map((st) => (
+            <li key={st.n} className="flex items-center gap-3 rounded-xl border border-stocktake/15 bg-card px-3 py-2.5 shadow-xs">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-stocktake text-xs font-black text-stocktake-foreground">{st.n}</span>
+              <div className="min-w-0">
+                <p className="text-[13px] font-bold leading-tight">{st.t}</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{st.d}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        <div className="flex items-center justify-center gap-2 rounded-lg bg-stocktake/10 px-3 py-2 text-xs font-bold text-stocktake">
+          <EyeOff className="size-4" />
+          الأرقام المتوقعة محجوبة عنك بالكامل
+        </div>
+      </aside>
+    )
+  }
+
+  return (
+    <aside className={cn(aside, 'items-stretch')}>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-black">جلسة العدّ الأعمي</p>
+        <span className="flex items-center gap-1.5 rounded-full bg-stocktake/10 px-2.5 py-1 text-[11px] font-bold text-stocktake">
+          <span className="inv-blink size-1.5 rounded-full bg-stocktake" />
+          جارية
+        </span>
+      </div>
+
+      {/* عدّاد التقدّم — عدد أصناف مش رقم حساس */}
+      <div className="rounded-xl border border-stocktake/15 bg-card p-4 text-center shadow-xs">
+        <p className="font-mono text-4xl font-black tabular-nums text-stocktake">{itemsCount}</p>
+        <p className="mt-1 text-xs font-bold text-muted-foreground">عدّيت {itemsCount} صنف</p>
+      </div>
+
+      <div className="rounded-xl border border-stocktake/15 bg-card p-3 shadow-xs">
+        <div className="flex items-center justify-between py-1 text-sm">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <Boxes className="size-4 text-stocktake" />
+            إجمالي القطع المعدودة
+          </span>
+          <b className="tabular-nums text-foreground">{totalPieces.toLocaleString('en-US', { maximumFractionDigits: 2 })}</b>
+        </div>
+        <p className="mt-2 border-t border-dashed border-stocktake/20 pt-2 text-[11px] leading-relaxed text-muted-foreground">
+          الفروق بتتحسب على السيرفر — هتظهر للمدير بعد ما تحفظ ويراجع الورقة
+        </p>
+      </div>
+    </aside>
   )
 }
 
@@ -963,17 +1311,41 @@ function SessionPanel({
    (نفس بصمة كروت الأرشيف) → فوتر بهوية الصفحة بدل الزر العام. */
 
 function StocktakeDetailDialog({
-  stocktake, open, onOpenChange, onCommit, saving,
+  stocktake, open, onOpenChange, onCommit, saving, isManager = true,
 }: {
   stocktake: Stocktake
   open: boolean
   onOpenChange: (o: boolean) => void
   onCommit: () => void
   saving: boolean
+  /** 🫥 المدير بس يشوف الفروق وتقرير التغطية — العدّاد يشوف عدّه بس للأبد */
+  isManager?: boolean
 }) {
-  const totalD = stocktake.items.reduce((s, i) => s + i.diff, 0)
-  const diffItems = stocktake.items.filter((i) => i.diff !== 0).length
+  const blindSheet = stocktake.mode === 'blind'
+  const canSeeNumbers = !blindSheet || isManager
+  const totalD = stocktake.items.reduce((s, i) => s + (i.diff ?? 0), 0)
+  const diffItems = stocktake.items.filter((i) => (i.diff ?? 0) !== 0).length
   const isDraft = stocktake.status === 'draft'
+  // 🫥 تقرير التغطية (الأدمن بس): اللي ما اتعدّش — أهم فحص مضاد للغش
+  const [coverage, setCoverage] = React.useState<{ total: number; counted: number; missing: { id: number; name: string; barcode: string | null }[] } | null>(null)
+  const [covLoading, setCovLoading] = React.useState(false)
+  const [covOpen, setCovOpen] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!open || !isManager || !blindSheet || stocktake.status !== 'committed' && stocktake.status !== 'draft') {
+      setCoverage(null)
+      return
+    }
+    let alive = true
+    setCovLoading(true)
+    api<{ total: number; counted: number; missing: { id: number; name: string; barcode: string | null }[] }>(
+      `/api/inventory/stocktake/${stocktake.id}/coverage`,
+    )
+      .then((r) => { if (alive) setCoverage(r) })
+      .catch(() => { if (alive) setCoverage(null) })
+      .finally(() => { if (alive) setCovLoading(false) })
+    return () => { alive = false }
+  }, [open, isManager, blindSheet, stocktake.id, stocktake.status])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1018,24 +1390,38 @@ function StocktakeDetailDialog({
             </span>
             <p className="font-mono text-xl font-black tabular-nums text-stocktake">{stocktake.items.length}</p>
           </div>
-          <div className="flex flex-col items-center gap-1 border-e border-stocktake/15 px-3 py-3">
-            <span className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
-              <Scale className="size-3.5 text-stocktake-warm" />
-              بفرق
-            </span>
-            <p className="font-mono text-xl font-black tabular-nums text-amber-600 dark:text-amber-400">{diffItems}</p>
-          </div>
-          <div className="flex flex-col items-center gap-1 px-3 py-3">
-            <span className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
-              <ArrowLeftRight className="size-3.5 text-stocktake" />
-              صافي الفرق
-            </span>
-            <p dir="ltr" className="font-mono text-xl font-black tabular-nums">
-              <span className={totalD === 0 ? 'text-muted-foreground' : totalD > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
-                <Signed value={totalD} />
-              </span>
-            </p>
-          </div>
+          {canSeeNumbers ? (
+            <>
+              <div className="flex flex-col items-center gap-1 border-e border-stocktake/15 px-3 py-3">
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
+                  <Scale className="size-3.5 text-stocktake-warm" />
+                  بفرق
+                </span>
+                <p className="font-mono text-xl font-black tabular-nums text-amber-600 dark:text-amber-400">{diffItems}</p>
+              </div>
+              <div className="flex flex-col items-center gap-1 px-3 py-3">
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
+                  <ArrowLeftRight className="size-3.5 text-stocktake" />
+                  صافي الفرق
+                </span>
+                <p dir="ltr" className="font-mono text-xl font-black tabular-nums">
+                  <span className={totalD === 0 ? 'text-muted-foreground' : totalD > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
+                    <Signed value={totalD} />
+                  </span>
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-col items-center gap-1 col-span-2 px-3 py-3">
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
+                  <EyeOff className="size-3.5 text-stocktake" />
+                  جرد أعمي — الفروق للمدير فقط
+                </span>
+                <p className="text-xs text-muted-foreground">عدّيت <b className="tabular-nums">{stocktake.items.length}</b> صنف — شكراً ليك 👌</p>
+              </div>
+            </>
+          )}
         </div>
 
         {/* ─── بنود الورقة: ورق مسطّر زي كروت الأرشيف ─── */}
@@ -1047,11 +1433,12 @@ function StocktakeDetailDialog({
             <p className="py-8 text-center text-sm text-muted-foreground">الورقة دي مفيهاش بنود</p>
           ) : (
             stocktake.items.map((it, idx) => {
-              const c = diffColor(it.diff)
+              const d = it.diff ?? 0
+              const c = diffColor(d)
               return (
                 <div key={idx} className="flex items-center gap-3 border-b border-dashed border-border/70 py-2.5 last:border-b-0">
                   <span className="w-6 shrink-0 font-mono text-xs font-bold text-muted-foreground/70">{String(idx + 1).padStart(2, '0')}</span>
-                  <span aria-hidden className="h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: c }} />
+                  <span aria-hidden className="h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: canSeeNumbers ? c : 'var(--stocktake)' }} />
                   <div className="min-w-0 flex-1">
                     {/* 🛡️ 2026-10-05: بعد الحذف المحاسبي للمنتج بيفضل الربط null —
                         نعرض بديل واضح بدل اسم فاضي، والكميات (systemQty/countedQty) محفوظة. */}
@@ -1059,22 +1446,36 @@ function StocktakeDetailDialog({
                       {it.product?.name ? it.product.name + (it.variant ? ` — ${[it.variant.color, it.variant.size].filter(Boolean).join(' / ')}` : '') : 'منتج محذوف (الكميات محفوظة)'}
                     </p>
                     <p className="text-xs tabular-nums text-muted-foreground">
-                      النظام <span className="font-mono font-bold">{num(it.systemQty)}</span>
-                      <span className="mx-1 text-muted-foreground/60">←</span>
-                      العدّ <span className="font-mono font-black text-foreground">{num(it.countedQty)}</span>
+                      {canSeeNumbers ? (
+                        <>
+                          النظام <span className="font-mono font-bold">{num(it.systemQty ?? 0)}</span>
+                          <span className="mx-1 text-muted-foreground/60">←</span>
+                          العدّ <span className="font-mono font-black text-foreground">{num(it.countedQty)}</span>
+                        </>
+                      ) : (
+                        <>
+                          عدّيت <span className="font-mono font-black text-foreground">{num(it.countedQty)}</span>
+                        </>
+                      )}
                     </p>
                   </div>
-                  {it.diff === 0 ? (
-                    <span title="مطابق" className="flex size-6 shrink-0 items-center justify-center rounded-full bg-stocktake/12 text-stocktake">
-                      <Check className="size-3.5" />
-                    </span>
+                  {canSeeNumbers ? (
+                    d === 0 ? (
+                      <span title="مطابق" className="flex size-6 shrink-0 items-center justify-center rounded-full bg-stocktake/12 text-stocktake">
+                        <Check className="size-3.5" />
+                      </span>
+                    ) : (
+                      <span
+                        dir="ltr"
+                        className="shrink-0 rounded-lg border px-2.5 py-1 font-mono text-sm font-black tabular-nums"
+                        style={{ backgroundColor: `${c}1a`, color: c, borderColor: `${c}45` }}
+                      >
+                        <Signed value={d} />
+                      </span>
+                    )
                   ) : (
-                    <span
-                      dir="ltr"
-                      className="shrink-0 rounded-lg border px-2.5 py-1 font-mono text-sm font-black tabular-nums"
-                      style={{ backgroundColor: `${c}1a`, color: c, borderColor: `${c}45` }}
-                    >
-                      <Signed value={it.diff} />
+                    <span title="معدود" className="flex size-6 shrink-0 items-center justify-center rounded-full bg-stocktake/12 text-stocktake">
+                      <Check className="size-3.5" />
                     </span>
                   )}
                 </div>
@@ -1083,9 +1484,55 @@ function StocktakeDetailDialog({
           )}
         </div>
 
+        {/* ─── 🫥 تقرير التغطية (المدير بس — أوراق الأعمي): مين مااتعدّش ─── */}
+        {isManager && blindSheet && coverage && (
+          <div className="border-t border-stocktake/15 bg-card px-5 py-3 sm:px-6">
+            <button
+              type="button"
+              onClick={() => setCovOpen((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 text-start"
+            >
+              <span className="flex items-center gap-2 text-sm font-extrabold">
+                <ListChecks className="size-4 text-stocktake" />
+                تغطية العدّ
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="rounded-lg bg-stocktake/10 px-2.5 py-1 font-mono text-sm font-black tabular-nums text-stocktake">
+                  {coverage.counted} من {coverage.total}
+                </span>
+                {covLoading && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+              </span>
+            </button>
+            {covOpen && (
+              <div className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-dashed p-2">
+                {coverage.missing.length === 0 ? (
+                  <p className="py-2 text-center text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                    تغطية كاملة 100% — كل أصناف النطاق اتعدّت 👌
+                  </p>
+                ) : (
+                  <>
+                    <p className="px-1 pb-1 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                      {coverage.missing.length} صنف ما اتعدّوش — راجعهم قبل الاعتماد
+                    </p>
+                    <ul className="space-y-1">
+                      {coverage.missing.map((m) => (
+                        <li key={m.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5 text-xs">
+                          <span className="truncate font-bold">{m.name}</span>
+                          <span dir="ltr" className="shrink-0 font-mono text-[10px] text-muted-foreground">{m.barcode || '—'}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ─── الفوتر بهوية المحطة ─── */}
         <DialogFooter className="gap-2 border-t border-stocktake/15 bg-stocktake-soft/60 p-4 sm:px-6">
-          {isDraft && (
+          {/* 🫥 الاعتماد: أدمن بس — العدّاد الأعمي مش بيشوف زرار الاعتماد أصلاً */}
+          {isDraft && isManager && (
             <>
               <span className="me-auto hidden items-center gap-1.5 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-xs font-bold text-amber-700 ring-1 ring-amber-500/20 dark:text-amber-400 sm:flex">
                 <AlertCircle className="size-3.5" />
@@ -1100,6 +1547,12 @@ function StocktakeDetailDialog({
                 اعتماد وتسوية
               </Button>
             </>
+          )}
+          {!isManager && (
+            <span className="me-auto hidden items-center gap-1.5 rounded-lg bg-stocktake/10 px-2.5 py-1.5 text-xs font-bold text-stocktake sm:flex">
+              <EyeOff className="size-3.5" />
+              الاعتماد للمدير فقط — عدّك محفوظ
+            </span>
           )}
           <Button
             variant="outline"
