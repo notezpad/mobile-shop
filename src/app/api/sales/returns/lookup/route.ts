@@ -144,8 +144,6 @@ async function __GET(req: NextRequest) {
       refunded: sale.refunded,
       paymentMethod: sale.paymentMethod,
       customerId: sale.customerId,
-      // 🏬 (التحديث الرابع عشر) فرع الفاتورة — عشان بحث بضاعة الاستبدال يتفلتر عليه
-      branchId: sale.branchId,
       customerName: sale.customer?.name ?? null,
       items: sale.items.map((it) => ({
         id: it.id,

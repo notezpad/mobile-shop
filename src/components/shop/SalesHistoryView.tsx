@@ -54,8 +54,6 @@ interface Sale {
   sellerName?: string | null
   refunded?: number
   paymentMethod?: string | null
-  /** 🏬 (التحديث الرابع عشر) فرع الفاتورة — فلتر بضاعة الاستبدال في المرتجع */
-  branchId?: number | null
   customer: ({ id: number; name: string; phone?: string | null }) | null
   items: SaleItem[]
 }
@@ -954,8 +952,6 @@ export function SalesHistoryView() {
             paid: partialReturnSale.paid,
             refunded: partialReturnSale.refunded ?? 0,
             paymentMethod: (partialReturnSale as any).paymentMethod ?? null,
-            // 🏬 (التحديث الرابع عشر) فرع الفاتورة — فلتر بضاعة الاستبدال
-            branchId: partialReturnSale.branchId ?? null,
           }}
           items={partialReturnSale.items.map((it) => ({
             id: it.id,

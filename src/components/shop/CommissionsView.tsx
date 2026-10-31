@@ -21,7 +21,6 @@ import {
   ChevronLeft,
   ChevronRight,
   HandCoins,
-  Info,
   Loader2,
   Lock,
   RefreshCw,
@@ -44,7 +43,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { MyCommissionCard } from './MyCommissionCard'
 
 interface SellerRow {
   userId: string
@@ -105,16 +103,7 @@ const PAYOUT_METHODS = [
 ]
 
 export function CommissionsView() {
-  const user = useShopStore((s) => s.user)
   const isAdmin = useShopStore((s) => s.user?.role === 'ADMIN' || s.user?.role === 'SUPER_ADMIN')
-  // 💰 وضع «عمولتي»: بائع مقيد بقائمة صلاحيات من غير 'commissions' —
-  // مش هنادّي تقرير المحل خالص (السيرفر بيرد 403 عليه) — بنعرض أرقامه هو بس
-  // من /api/commissions/my. (نفس شرط sellerOnlyMode في السايدبار.)
-  const sellerOnly =
-    !isAdmin &&
-    user?.isSeller === true &&
-    !!user.permissions && user.permissions.length > 0 &&
-    !user.permissions.includes('commissions')
   const [month, setMonth] = React.useState<string>('')
   const [currentMonth, setCurrentMonth] = React.useState<string>('')
   const [data, setData] = React.useState<ReportData | null>(null)
@@ -139,42 +128,13 @@ export function CommissionsView() {
   }, [])
 
   React.useEffect(() => {
-    // 💰 وضع «عمولتي» — مفيش تقرير محل يتندّى (الـ API هيرد 403)
-    if (sellerOnly) return
     // أول تحميل: الشهر الحالي — الـ API بيرجّع الشهر الصحيح بتوقيت المحل لو فاضية
     void load('')
-  }, [load, sellerOnly])
+  }, [load])
 
   const goMonth = (m: string) => {
     if (!m) return
     void load(m)
-  }
-
-  // 💰 وضع «عمولتي» — صفحة البائع الشخصية: أرقامه هو بس (قبل فحص loading
-  // عشان التقرير عمره ما يتندّى في الوضع ده)
-  if (sellerOnly) {
-    return (
-      <div className="mx-auto w-full max-w-2xl space-y-4 p-3 sm:p-5" dir="rtl">
-        <div className="min-w-0">
-          <h1 className="flex items-center gap-2 text-lg font-extrabold sm:text-xl">
-            <HandCoins className="size-5 text-amber-600 dark:text-amber-400" />
-            عمولتي
-          </h1>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-            عمولتك على مبيعاتك أنت — بتتحسب على السيرفر من فواتيرك (المرتجع بيخصم بالعكس)،
-            والتسوية الشهرية بيقوم بيها مالك المحل.
-          </p>
-        </div>
-        <MyCommissionCard />
-        <div className="flex items-start gap-2.5 rounded-2xl border border-border bg-muted/40 p-4 text-xs leading-relaxed text-muted-foreground">
-          <Info className="mt-0.5 size-4 shrink-0" />
-          <p>
-            الأرقام بتتحدّث مع كل فاتورة بتتسجل في نقطة البيع — والعمولة النهائية بتتقفل
-            لما المالك يصرفها (منفصلة أو مع الراتب) وساعتها بتشوف بشارة التأكيد بالقيمة المصروفة.
-          </p>
-        </div>
-      </div>
-    )
   }
 
   if (loading) {

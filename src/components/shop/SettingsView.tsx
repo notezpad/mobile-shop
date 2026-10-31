@@ -323,6 +323,15 @@ export function SettingsView() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  // 🛡️ 2026-11-01 (إصلاح React error #310): الـ useMemo ده كان بعد الـ early
+  // return بتاع شاشة التحميل — أول رندر (بيانات مش موجودة) كان بيتصرف عدد hooks
+  // أقل من الرندر اللي بعده، فReact بيضرب «Rendered more hooks than during the
+  // previous render» أول ما البيانات توصل. كل الـ hooks لازم تتحر قبل أي return.
+  const pmList = React.useMemo(
+    () => parsePaymentMethodsConfig(data?.paymentMethodsConfig),
+    [data?.paymentMethodsConfig]
+  )
+
   if (loading && !data) {
     return (
       <div className="space-y-4 sm:space-y-5">
@@ -348,12 +357,6 @@ export function SettingsView() {
     { key: 'commissionFawry', label: 'محفظة فوري' },
   ]
 
-  // 💳 وسائل الدفع — القائمة العاملة مشتقة من الإعداد المخزّن، ولو الحقل لسه
-  // فاضي ('' = محل قديم ما فتحش الإعدادات) بيتعرض السلوك القديم جاهز للتحرير.
-  const pmList = React.useMemo(
-    () => parsePaymentMethodsConfig(data?.paymentMethodsConfig),
-    [data?.paymentMethodsConfig]
-  )
   const setPmList = (next: PaymentMethodConfig[]) =>
     update('paymentMethodsConfig', serializePaymentMethodsConfig(next))
 

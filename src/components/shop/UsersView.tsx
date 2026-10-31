@@ -962,8 +962,6 @@ const MODULE_LABELS: Record<string, string> = {
   blind_stocktake: 'الجرد الأعمي (عدّ بدون رؤية الأرقام والفروق)',
   // 💰 (التحديث الثالث عشر) صلاحية مستقلة: شاشة عمولات البائعين (تقرير + متابعة)
   commissions: 'عمولات البائعين (متابعة الشهور — الصرف للمالك بس)',
-  // 🪪 (التحديث الرابع عشر) صلاحية مستقلة: الصفحة الشخصية للموظف
-  my_profile: 'ملفي الشخصي (حضوره وراتبه وسلفه — عرض بس من غير أي تعديل)',
   // صلاحية مشرف الفرع: تسجيل الحضور والإجازات فقط، بدون أي مبالغ (مش مرتبطة بصلاحية الموارد البشرية الكاملة)
   hr_attendance: 'الحضور والإجازات (مشرف)',
 }
@@ -975,7 +973,7 @@ const PERM_MODULES: string[] = (() => {
   const arr: string[] = [...ALL_MODULES.filter((m) => m !== 'guide')]
   const i = arr.indexOf('pos')
   arr.splice(i >= 0 ? i + 1 : arr.length, 0, 'returns', 'shift_close', 'blind_stocktake', 'commissions')
-  arr.push('hr_attendance', 'my_profile')
+  arr.push('hr_attendance')
   return arr
 })()
 
@@ -1513,8 +1511,7 @@ function UserDialog({ open, onOpenChange, initial, onSaved }: Props) {
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">بائع (يستحق عمولة على مبيعاته)</p>
                     <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80">
-                      بيظهر في خانة «البائع» في نقطة البيع، وبيشوف عمولته هو بس من مدخل «عمولتي»
-                      — والحساب والتسوية من شاشة عمولات البائعين (أنت بس اللي بتصرّف).
+                      بيظهر في خانة «البائع» في نقطة البيع — والحساب والتسوية من شاشة عمولات البائعين.
                     </p>
                   </div>
                   <span

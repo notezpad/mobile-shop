@@ -51,8 +51,6 @@ const VIEW_PRELOADS: Record<string, () => Promise<unknown>> = {
   '/users': () => import('@/components/shop/UsersView'),
   '/branches': () => import('@/components/shop/BranchesView'),
   '/hr': () => import('@/components/shop/hr/HrHomeView'),
-  // 🪪 (التحديث الرابع عشر) «ملفي» — الصفحة الشخصية للموظف
-  '/my-profile': () => import('@/components/shop/MyProfileView'),
   '/hr/employees': () => import('@/components/shop/hr/HrEmployeesView'),
   '/hr/attendance': () => import('@/components/shop/hr/HrAttendanceView'),
   '/hr/evaluations': () => import('@/components/shop/hr/HrEvaluationsView'),

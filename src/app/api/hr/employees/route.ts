@@ -61,20 +61,6 @@ async function __POST(req: NextRequest) {
   if (b.pin !== undefined && b.pin !== '' && !isValidPin(b.pin)) return bad('الـ PIN لازم 4 إلى 6 أرقام')
   const branchId = b.branchId ? Number(b.branchId) : session.branchId ?? null
 
-  // 🪪 (التحديث الرابع عشر) ربط اختياري بحساب دخول — اللي بيخلي الموظف
-  // يشوف «ملفي» وعمولته تتحط في قسيمة راتبه. الحساب لازم يكون من نفس
-  // المحل وشغّال، ومش مربوط بموظف تاني.
-  let linkedUserId: string | null = null
-  if (b.userId !== undefined && b.userId !== null && String(b.userId).trim() !== '') {
-    const uid = String(b.userId).trim()
-    const u = await db.user.findFirst({ where: { id: uid, tenantId: session.tenantId }, select: { id: true, active: true } })
-    if (!u) return bad('حساب الدخول غير موجود في محلك')
-    if (!u.active) return bad('حساب الدخول موقوف — فعّله الأول من شاشة المستخدمين')
-    const taken = await db.employee.findFirst({ where: { tenantId: session.tenantId, userId: uid }, select: { id: true } })
-    if (taken) return bad('حساب الدخول ده مربوط بموظف تاني بالفعل')
-    linkedUserId = uid
-  }
-
   const emp = await db.employee.create({
     data: {
       tenantId: session.tenantId,
@@ -86,7 +72,6 @@ async function __POST(req: NextRequest) {
       weeklyOffDay,
       hireDate,
       notes: b.notes ? String(b.notes).trim() || null : null,
-      userId: linkedUserId,
     },
   })
   if (b.pin) {

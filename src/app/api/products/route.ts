@@ -95,6 +95,7 @@ function buildWhere(
   loc = '',
   hideSleeping = false,
   closedSeasons: string[] = [],
+  saleBranchId: number | null = null,
 ) {
   const parts = [sql`"tenantId" = ${tenantId}`]
   if (status === 'active') parts.push(sql`AND "active" = true`)
@@ -105,13 +106,13 @@ function buildWhere(
     parts.push(sql`AND ${productBranchScopeSql(sql, tenantId, sessionBranchId)}`)
   } else if (branchIdParam && branchIdParam !== 'all') {
     if (branchIdParam === 'none') parts.push(sql`AND "branchId" IS NULL`)
-    // 🏬 (التحديث الرابع عشر) 'main' = الفرع الرئيسي + الأصناف غير المسندة
-    // (نفس قاعدة النطاق: غير المسند بيتعامل كأنه تابع للفرع الرئيسي) —
-    // بتستخدمها نقطة البيع لما المدير يختار «فرع البيع» الرئيسي.
-    else if (branchIdParam === 'main')
-      parts.push(sql`AND ("branchId" IS NULL OR "branchId" = (
-        SELECT "id" FROM "Branch" WHERE "tenantId" = ${tenantId} AND "isMain" = true LIMIT 1))`)
     else parts.push(sql`AND "branchId" = ${parseInt(branchIdParam, 10)}`)
+  } else if (saleBranchId != null) {
+    // 🏬 (التحديث الرابع عشر) «فرع الفاتورة» في نقطة البيع — مدير بدون فرع ثابت
+    // بيختار فرع، والكتالوج بيتفلتر عليه بنفس قاعدة نطاق الفرع (الفرع الرئيسي
+    // بيشوف كمان المنتجات غير المسندة). الموظف المرتبط بفرع مش بيبعته أبداً —
+    // نطاق فرعه هو الحاكم.
+    parts.push(sql`AND ${productBranchScopeSql(sql, tenantId, saleBranchId)}`)
   }
 
   if (search) {
@@ -180,6 +181,9 @@ export async function GET(req: NextRequest) {
     const category = searchParams.get('category')?.trim() || ''
     const status = searchParams.get('status') || 'active'
     const branchIdParam = searchParams.get('branchId')
+    // 🏬 (التحديث الرابع عشر) فرع الفاتورة في نقطة البيع — للمدير بدون فرع ثابت
+    const saleBranchRaw = parseInt(searchParams.get('saleBranch') ?? '', 10)
+    const saleBranchId = Number.isFinite(saleBranchRaw) && saleBranchRaw > 0 && !session.branchId ? saleBranchRaw : null
 
     const page  = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50', 10)))
@@ -203,7 +207,8 @@ export async function GET(req: NextRequest) {
       status === 'all' &&
       sortKey === 'newest' &&
       !lowOnly &&
-      !viewParam
+      !viewParam &&
+      !searchParams.has('saleBranch')
     const invQuery = `branch=${session.branchId ?? 0}&inv=1&page=${page}`
     if (invCacheable) {
       const invHit = await matchEdgeCache('/api/products', invQuery, session.tenantId, canViewProfits ? '4' : '4n')
@@ -218,6 +223,7 @@ export async function GET(req: NextRequest) {
       !locParam &&
       !viewParam &&
       !posFlag &&
+      !searchParams.has('saleBranch') &&
       status === 'active' &&
       !searchParams.has('page') &&
       !searchParams.has('limit') &&
@@ -247,6 +253,7 @@ export async function GET(req: NextRequest) {
       // 👕 الشبكة (بدون بحث) بتخفي النايم — مع البحث بيظهر عادي بالبادج
       posFlag && !search,
       closedSeasons,
+      saleBranchId,
     )
 
     // ⚡ v10: في وضع slim (شاشة المخزون) plan context والتسعير مش محتاجين

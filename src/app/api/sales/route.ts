@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
     const [saleRows, cnt] = await Promise.all([
       sql<any[]>`
         SELECT s."id", s."invoiceNo", s."total", s."paid", s."status",
-               s."createdAt", s."refunded", s."paymentMethod", s."branchId",
+               s."createdAt", s."refunded", s."paymentMethod",
                (SELECT json_build_object('id', c."id", 'name', c."name", 'phone', c."phone")
                 FROM "Customer" c WHERE c."id" = s."customerId") AS customer,
                (SELECT u."name" FROM "User" u WHERE u."id" = s."userId") AS "userName",
@@ -112,8 +112,6 @@ export async function GET(req: NextRequest) {
       // 💰 (التحديث الثالث عشر) البائع المستحق للعمولة — يظهر في سجل المبيعات
       sellerId: s.sellerId ?? null,
       sellerName: s.sellerName ?? null,
-      // 🏬 (التحديث الرابع عشر) فرع الفاتورة — لفلتر بضاعة الاستبدال في المرتجع
-      branchId: s.branchId ?? null,
       customer: s.customer ?? null,
       // 🔒 RBAC: نخفي تكلفة المنتجات لمن لا يملك صلاحية رؤية الأرباح
       items: (itemsBySale.get(s.id) ?? []).map((it) => ({
@@ -237,6 +235,13 @@ export async function POST(req: NextRequest) {
   // ملاحظة أمنية: العميل ما بيبعتش نسبة أبداً — النسبة بيتحددها السيرفر
   // من إعدادات المحل/البائع لحظة البيع (لقطة).
   const rawSellerId = body.sellerId ? String(body.sellerId) : null
+  // 🏬 (التحديث الرابع عشر) «فرع الفاتورة» — للمدير (حساب بدون فرع ثابت) فقط.
+  // الموظف المرتبط بفرع فرعه هو الحاكم مهما بعت — والسيرفر هو الحكم النهائي.
+  const rawBodyBranch = body.branchId != null && body.branchId !== '' ? parseInt(String(body.branchId), 10) : NaN
+  if (body.branchId != null && body.branchId !== '' && !Number.isFinite(rawBodyBranch)) {
+    return NextResponse.json({ error: 'الفرع المحدد غير صالح' }, { status: 400 })
+  }
+  const requestedBranchId = Number.isFinite(rawBodyBranch) && rawBodyBranch > 0 ? rawBodyBranch : null
   let customerId: number | null = null
   if (body.customerId) {
     customerId = parseInt(body.customerId, 10) || null
@@ -270,7 +275,7 @@ export async function POST(req: NextRequest) {
       .map((i: any) => parseInt(i.productId, 10))
       .filter((n: number) => !isNaN(n))
 
-    const [products, units, variants, customerRows, tenantRows, variantProductRows, sellerRows] = await Promise.all([
+    const [products, units, variants, customerRows, tenantRows, variantProductRows, sellerRows, tenantBranchRows] = await Promise.all([
       (ids.length > 0
         ? sql<ProductRow[]>`
             SELECT "id", "branchId", "name", "cost", "quantity", "unitLabel"
@@ -310,6 +315,9 @@ export async function POST(req: NextRequest) {
             FROM "User"
             WHERE "id" = ${rawSellerId} AND "tenantId" = ${session.tenantId}`
         : Promise.resolve([] as { id: string; name: string; active: boolean; isSeller: boolean; sellerCommissionRate: number | null }[])),
+      // 🏬 فروع المحل — لتحديد فرع الفاتورة والتحقق إن الفرع المطلوب تابع لنفس المحل
+      sql<{ id: number; isMain: boolean }[]>`
+        SELECT "id", "isMain" FROM "Branch" WHERE "tenantId" = ${session.tenantId} ORDER BY "isMain" DESC, "id" ASC`,
     ])
     const productsWithVariants = new Set<number>(variantProductRows.map((r) => Number(r.productId)))
 
@@ -341,6 +349,55 @@ export async function POST(req: NextRequest) {
     const productMap = new Map<number, ProductRow>(products.map((p) => [p.id, p]))
     const unitMap = new Map<number, ProductUnitRow>(units.map((u) => [u.id, u]))
     const variantMap = new Map<number, ProductVariantRow>(variants.map((v) => [v.id, v]))
+
+    // 🏬 ─── فرع الفاتورة — الحكم النهائي (التحديث الرابع عشر) ───
+    // المشكلة اللي اتصلحت: مدير بيع أصناف من فروع مختلفة → الفاتورة كانت
+    // تتسجل «بدون فرع» وتختفي من تقارير الفرع، والفلوس تروح لخزنة الفرع
+    // الرئيسي فتظهر عجز وهمي في الجرد الأعمى للورديات.
+    // القاعدة دلوقتي:
+    //   1. موظف مرتبط بفرع → فرعه دايماً (مهما اتبعت في الجسم).
+    //   2. مدير + اختار فرع صالح من نفس المحل → ده فرع الفاتورة، وكل الأصناف
+    //      لازم تطلع منه (غير المسند بيتحسب للفرع الرئيسي).
+    //   3. مدير + محل متعدد الفروع + مفيش اختيار → البيع مرفوض خالص — مفيش
+    //      فاتورة «بدون فرع» تاني.
+    //   4. مدير + فرع واحد/صفر → نفس السلوك القديم (غير المسند = الرئيسي).
+    const tenantBranches = tenantBranchRows
+    const tenantBranchCount = tenantBranches.length
+    const mainBranchId = tenantBranches.find((b) => b.isMain)?.id ?? null
+    const resolvedProductBranch = (p: ProductRow) => p.branchId ?? mainBranchId
+    let invoiceBranchId: number | null = null
+    if (session.branchId) {
+      // 1️⃣ موظف مرتبط بفرع — فرعه هو الحاكم
+      invoiceBranchId = session.branchId
+    } else if (requestedBranchId != null) {
+      // 2️⃣ مدير اختار فرع — لازم يكون تابع لنفس المحل
+      const br = tenantBranches.find((b) => b.id === requestedBranchId)
+      if (!br) {
+        return NextResponse.json({ error: 'الفرع المحدد غير موجود في هذا المحل' }, { status: 400 })
+      }
+      invoiceBranchId = requestedBranchId
+      // الفاتورة الواحدة من فرع واحد — أول صنف من فرع تاني بيرفض البيع كله
+      // (بدون خصم مخزون ولا قيد خزنة — مفيش حاجة اتسجلت أصلاً).
+      const mismatch = products.find((p) => resolvedProductBranch(p) !== invoiceBranchId)
+      if (mismatch) {
+        return NextResponse.json(
+          { error: `الصنف "${mismatch.name}" مش من فرع الفاتورة المختار — الفاتورة الواحدة لازم كل أصنافها من فرع واحد` },
+          { status: 400 }
+        )
+      }
+    } else if (tenantBranchCount > 1) {
+      // 3️⃣ مدير في محل متعدد الفروع وماحددش فرع → مرفوض (دي الحالة اللي كانت
+      // بتولد الفواتير «بدون فرع» وتلخبط التقارير والخزنة).
+      return NextResponse.json(
+        { error: 'المحل ليه أكتر من فرع — لازم تختار «فرع الفاتورة» في نقطة البيع قبل إتمام البيع' },
+        { status: 400 }
+      )
+    } else {
+      // 4️⃣ محل بفرع واحد (أو بدون فروع) — نفس السلوك القديم بالظبط،
+      // بس الصنف غير المسند بيتسجل صراحةً للفرع الرئيسي بدل NULL.
+      const bs = new Set(products.map((p) => resolvedProductBranch(p)))
+      invoiceBranchId = bs.size === 1 ? [...bs][0] : mainBranchId
+    }
 
     // Pre-check capability if any item references a unitId.
     const hasUnits = body.items.some((i: any) => i.unitId)
@@ -495,51 +552,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 🏬 (التحديث الرابع عشر) «كل فاتورة لفرعها» — فرع الفاتورة بيتحدد هنا:
-    //   - موظف مرتبط بفرع: فرعه هو (زي ما كان من الأول — الكتالوج أصلاً عزل فرعه).
-    //   - مدير (بدون فرع): فرع البيع المختار من نقطة البيع (body.branchId) —
-    //     بيتحقق إنه فرع تابع لنفس المحل. لو مبعتش: نستنتج من الأصناف
-    //     (غير المسندة بتتبع الفرع الرئيسي — نفس قاعدة النطاق). لو الأصناف
-    //     مختلطة من أكتر من فرع → الفاتورة **مرفوضة** برسالة واضحة بدل ما
-    //     تتسجل «بدون فرع» وتضيع من تقارير الفرع وتحصل في خزنة الفرع الغلط.
-    //   - المحل اللي مفيهوش فروع أصلاً: زي ما كان (branchId = null).
-    let saleBranchId: number | null = session.branchId ?? null
-    const branchRows = await sql<{ id: number; isMain: boolean }[]>`
-      SELECT "id", "isMain" FROM "Branch" WHERE "tenantId" = ${session.tenantId}`
-    const mainBranchId = branchRows.find((b) => b.isMain)?.id ?? null
-    if (!session.branchId && branchRows.length > 0) {
-      const rawBranch =
-        body.branchId != null && body.branchId !== ''
-          ? parseInt(String(body.branchId), 10)
-          : null
-      if (rawBranch != null && !Number.isNaN(rawBranch)) {
-        if (!branchRows.some((b) => b.id === rawBranch)) {
-          return NextResponse.json({ error: 'الفرع المحدد غير صالح' }, { status: 400 })
-        }
-        saleBranchId = rawBranch
-      } else {
-        const derived = new Set(products.map((p) => p.branchId ?? mainBranchId))
-        saleBranchId = derived.size === 1 ? [...derived][0] ?? null : null
-      }
-      if (saleBranchId == null) {
-        return NextResponse.json(
-          { error: 'الفاتورة فيها أصناف من أكتر من فرع — اختار «فرع البيع» في نقطة البيع قبل إتمام البيع، عشان الفاتورة تتبع فرع محدد' },
-          { status: 400 }
-        )
-      }
-    }
-    // أصناف السلة لازم تكون فعلاً من فرع الفاتورة (غير المسند = الفرع الرئيسي)
-    // — عشان مخزون فرع ما يخصمش على فاتورة فرع تاني حتى لو حد بعت الطلب يدوي.
-    if (saleBranchId != null && branchRows.length > 0) {
-      const foreign = products.find((p) => (p.branchId ?? mainBranchId) !== saleBranchId)
-      if (foreign) {
-        return NextResponse.json(
-          { error: `الصنف «${foreign.name}» مش من أصناف فرع الفاتورة — نقطة البيع بتعرض أصناف الفرع المختار بس` },
-          { status: 400 }
-        )
-      }
-    }
-
     // 🛡️ 2026-09-30 (M7): idempotency — نفس clientRef؟ رجّع الفاتورة الأصلية.
     if (clientRef) {
       const existing = await fetchSaleByClientRef(sql, session.tenantId, clientRef)
@@ -555,9 +567,8 @@ export async function POST(req: NextRequest) {
 
     const payload = {
       tenantId: session.tenantId,
-      // 🏬 فرع الفاتورة — «كل فاتورة لفرعها» (التحديث الرابع عشر): فرع الموظف،
-      // وللمدير فرع البيع المختار (أو استنتاج الأصناف — والمختلط بيرفض فوق).
-      branchId: saleBranchId,
+      // 🏬 فرع الفاتورة — انظر «فرع الفاتورة — الحكم النهائي» فوق
+      branchId: invoiceBranchId,
       userId: session.userId,
       customerId,
       total,
@@ -622,8 +633,11 @@ export async function POST(req: NextRequest) {
     )
     // ⚡ v9: البيع بيخصم مخزون — امسح كاش قائمة المنتجات كمان (نفس فرع البائع)
     // ⚡ v10: وكمان نسخة قائمة المخزون (شاشة المخزون) عشان الكميات تفضل حية
+    // 🏬 (التحديث الرابع عشر): ومن فرع الفاتورة كمان — بيع المدير بيبقى على
+    // فرع مختار ممكن يختلف عن فرع الجلسة.
+    const purgeBranchKeys = new Set<number | null>([session.branchId, invoiceBranchId])
     await purgeEdgeCache(
-      [PURGE_KEYS.products(session.branchId), PURGE_KEYS.productsInventory(session.branchId)],
+      [...purgeBranchKeys].flatMap((b) => [PURGE_KEYS.products(b), PURGE_KEYS.productsInventory(b)]),
       session.tenantId,
       '3'
     )

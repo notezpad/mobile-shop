@@ -29,7 +29,5 @@ export interface SaleLookupSale {
   paymentMethod: string | null
   customerId: number | null
   customerName: string | null
-  /** 🏬 (التحديث الرابع عشر) فرع الفاتورة — بحث بضاعة الاستبدال بيتفلتر عليه (null = قديمة/بدون فرع) */
-  branchId: number | null
   items: SaleLookupItem[]
 }

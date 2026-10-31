@@ -108,6 +108,13 @@ interface CustomerLite {
   balance: number
 }
 
+// 🏬 (التحديث الرابع عشر) فرع في قائمة «فرع الفاتورة» بنقطة البيع
+interface PosBranchInfo {
+  id: number
+  name: string
+  isMain: boolean
+}
+
 interface PosUnit {
   id: number
   name: string
@@ -813,81 +820,20 @@ export function POSView() {
     !user?.permissions ||
     user.permissions.length === 0 ||
     user.permissions.includes('shift_close')
-  // 🏬 (التحديث الرابع عشر) «كل فاتورة لفرعها» — المدير (بدون فرع) في محل فيه
-  // أكتر من فرع لازم يختار «فرع البيع» قبل ما يبيع: الكتالوج بيتفلتر على أصناف
-  // الفرع، والفاتورة بتتسجل عليه — مفيش فاتورة مختلطة أو «بدون فرع» تضيع من
-  // تقارير الفرع وتحصل في خزنة الفرع الغلط. الكاشير التابع لفرع شاشته زي ما هي.
-  const needsSaleBranch =
-    !!user &&
-    (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') &&
-    !user.branchId
-  const [branches, setBranches] = React.useState<{ id: number; name: string; isMain: boolean }[]>([])
-  // 'main' = الفرع الرئيسي (بيعرض كمان أصناف المخزن العام غير المسندة — نفس قاعدة النطاق)
-  const [saleBranch, setSaleBranch] = React.useState<number | 'main' | null>(() => {
-    try {
-      const u = useShopStore.getState().user
-      const raw = u ? window.localStorage.getItem(`pos:saleBranch:v1:${u.tenantId}:${u.userId}`) : null
-      if (!raw) return null
-      if (raw === 'main') return 'main'
-      const n = parseInt(raw, 10)
-      return Number.isFinite(n) && n > 0 ? n : null
-    } catch {
-      return null
-    }
-  })
-  // الفروع متعددة؟ لحد ما القايمة توصل نعتبرها مش متاحة (المحل بفرع واحد = زي ما كان)
-  const multiBranch = branches.length > 1
-  const setSaleBranchPersisted = React.useCallback((v: number | 'main' | null) => {
-    setSaleBranch(v)
-    try {
-      const k = useShopStore.getState().user
-        ? `pos:saleBranch:v1:${useShopStore.getState().user!.tenantId}:${useShopStore.getState().user!.userId}`
-        : null
-      if (!k) return
-      if (v == null) window.localStorage.removeItem(k)
-      else window.localStorage.setItem(k, String(v))
-    } catch {
-      /* ignore */
-    }
-  }, [])
-  // تحميل قايمة الفروع — للمدير بس (الكاشير مش محتاجها)
-  React.useEffect(() => {
-    if (!needsSaleBranch) return
-    let alive = true
-    api<{ id: number; name: string; isMain: boolean }[]>('/api/branches')
-      .then((d) => {
-        if (!alive) return
-        const list = Array.isArray(d) ? d : []
-        setBranches(list)
-        // الاختيار المحفوظ بقى مش موجود (فرع اتحذف)؟ نفضيه — والكتالوج هيوقف لحد اختيار جديد
-        setSaleBranch((cur) => {
-          if (cur == null) return null
-          if (cur === 'main') return list.some((b) => b.isMain) ? 'main' : null
-          return list.some((b) => b.id === cur) ? cur : null
-        })
-      })
-      .catch(() => {})
-    return () => {
-      alive = false
-    }
-  }, [needsSaleBranch])
-  // id فرع البيع اللي هيتبعت للسيرفر ('main' → الـ id الحقيقي للفرع الرئيسي)
-  const saleBranchApiId = React.useMemo(() => {
-    if (!needsSaleBranch || !multiBranch || saleBranch == null) return null
-    if (saleBranch === 'main') return branches.find((b) => b.isMain)?.id ?? null
-    return saleBranch
-  }, [needsSaleBranch, multiBranch, saleBranch, branches])
-  // تغيير الفرع والسلة فيها أصناف → مرفوض (عشان الفاتورة كلها تتبع فرع واحد)
-  const changeSaleBranch = (v: number | 'main') => {
-    if (cartRef.current.length > 0 && v !== saleBranch) {
-      toast.error('فيه أصناف في السلة من فرع تاني — فضّي السلة أو خلّص الفاتورة الأول، عشان الفاتورة كلها تتبع فرع واحد')
-      return
-    }
-    setSaleBranchPersisted(v)
-  }
   const [posReturnOpen, setPosReturnOpen] = React.useState(false)
   const [posReturnSale, setPosReturnSale] = React.useState<SaleLookupSale | null>(null)
   const [shiftCloseOpen, setShiftCloseOpen] = React.useState(false)
+  // 🏬 (التحديث الرابع عشر) «فرع الفاتورة» — اختيار المدير لفرع البيع قبل ما
+  // يبدأ. الاختيار بيفضل محفوظ على الجهاز (آخر فرع اتباع فيه) عشان البيع
+  // السريع ميعيدش الاختيار كل مرة.
+  const [posBranches, setPosBranches] = React.useState<PosBranchInfo[]>([])
+  const [saleBranchId, setSaleBranchId] = React.useState<string>(() => readLS('pos:saleBranch', ''))
+  // 🏬 شريط «فرع الفاتورة» — بيظهر بس للمدير (حساب من غير فرع ثابت) لما المحل
+  // فيه أكتر من فرع. كاشير مرتبط بفرع = شاشته زي ما هي بالظبط مفيش أي تغيير.
+  // الهدف: مفيش فاتورة «بدون فرع» خالص.
+  const isBranchlessUser = !user?.branchId
+  const showSaleBranchPicker = isBranchlessUser && posBranches.length > 1
+  const selectedSaleBranch = posBranches.find((b) => String(b.id) === saleBranchId) ?? null
   // Read once, on mount — before any state below is created.
   const [restored] = React.useState<PosDraft | null>(() => loadDraft())
 
@@ -974,7 +920,7 @@ export function POSView() {
     new Map<number, { t: number; units: PosUnit[]; variants: PosVariant[] }>()
   )
   const barcodeCache = React.useRef(
-    new Map<string, { t: number; b: string; product: ProductLite; variantId: number | null }>()
+    new Map<string, { t: number; product: ProductLite; variantId: number | null }>()
   )
   const gridCache = React.useRef(
     new Map<string, { t: number; tick: number; data: ProductLite[] }>()
@@ -1191,6 +1137,54 @@ export function POSView() {
 
   /* ── data loading ───────────────────────────────────────────── */
 
+  // 🏬 تحميل فروع المحل — للمدير فقط (الموظف المرتبط بفرع مش محتاجها).
+  React.useEffect(() => {
+    if (user?.branchId) return
+    let alive = true
+    api<any[]>('/api/branches')
+      .then((d) => {
+        if (!alive) return
+        const list: PosBranchInfo[] = Array.isArray(d)
+          ? d.map((b: any) => ({ id: Number(b.id), name: String(b.name ?? ''), isMain: b.isMain === true }))
+          : []
+        setPosBranches(list)
+        // لو الفرع المحفوظ على الجهاز اتحذف — نمسح الاختيار بدل ما نفضل على وهم.
+        setSaleBranchId((cur) => (cur && list.some((b) => String(b.id) === cur) ? cur : ''))
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [user?.branchId])
+
+  // 🏬 حفظ اختيار الفرع على الجهاز (آخر فرع اتباع فيه).
+  React.useEffect(() => {
+    try {
+      if (saleBranchId) window.localStorage.setItem('pos:saleBranch', saleBranchId)
+      else window.localStorage.removeItem('pos:saleBranch')
+    } catch {
+      /* storage blocked — الاختيار هيفضل في الجلسة بس */
+    }
+  }, [saleBranchId])
+
+  // 🏬 تغيير فرع البيع: الفاتورة الواحدة لازم تطلع من فرع واحد — فلو السلة
+  // فيها أصناف بنسأل الأول وفضّيها، عشان ميبقاش خلط فروع جوه فاتورة واحدة.
+  const changeSaleBranch = (id: string) => {
+    if (id === saleBranchId) return
+    if (cart.length > 0) {
+      const name = posBranches.find((b) => String(b.id) === id)?.name ?? ''
+      const ok = window.confirm(
+        `تغيير فرع البيع هيفضّي السلة الحالية (${cart.length} صنف) عشان الفاتورة تفضل كلها من فرع واحد — متأكد؟`
+      )
+      if (!ok) return
+      setCart([])
+      setLastAddedKey(null)
+      setExpandedKey(null)
+      toast.info(`اتحولت لفرع: ${name} — والسلة اتفضّت`)
+    }
+    setSaleBranchId(id)
+  }
+
   React.useEffect(() => {
     let alive = true
     api<CustomerLite[]>('/api/customers')
@@ -1214,21 +1208,10 @@ export function POSView() {
   // The grid is always populated: latest products by default, filtered by the
   // search box and the selected category. `search=` is always present in the
   // URL so the offline layer keeps serving it from IndexedDB.
-  //
-  // 🏬 (التحديث الرابع عشر) المدير في محل متعدد الفروع: الكتالوج بيتفلتر على
-  // «فرع البيع» المختار (الرئيسي بيعرض كمان غير المسندة)، ولو مفيش اختيار
-  // لسه مفيش كتالوج خالص — مستحيل تبدأ بيع من غير ما تحدد فرع الفاتورة.
   React.useEffect(() => {
-    if (needsSaleBranch && multiBranch && saleBranch == null) {
-      setProducts([])
-      setProductsLoading(false)
-      setSearchError(false)
-      return
-    }
     const q = query.trim()
-    const branchParam =
-      needsSaleBranch && multiBranch && saleBranch != null ? String(saleBranch) : ''
-    const cacheKey = `${q}|${category}|${branchParam}`
+    // 🏬 مفتاح الكاش بيشمل فرع البيع — كل فرع ليه كتالوجه
+    const cacheKey = `${saleBranchId}|${q}|${category}`
     const hit = gridCache.current.get(cacheKey)
     if (hit && hit.tick === refreshTick && Date.now() - hit.t < 20_000) {
       // Same view seen a moment ago (e.g. right after a scan cleared the box):
@@ -1243,8 +1226,10 @@ export function POSView() {
     const t = setTimeout(async () => {
       const url =
         `/api/products?search=${encodeURIComponent(q)}&limit=100&pos=1` +
-        (branchParam ? `&branchId=${branchParam}` : '') +
-        (category !== 'all' ? `&category=${encodeURIComponent(category)}` : '')
+        (category !== 'all' ? `&category=${encodeURIComponent(category)}` : '') +
+        // 🏬 فلترة الكتالوج على فرع البيع المختار (saleBranch بيستخدم نفس قاعدة
+        // نطاق الفرع: الفرع الرئيسي بيشوف كمان غير المسند) — الفلترة في الـ SQL نفسه.
+        (showSaleBranchPicker && saleBranchId ? `&saleBranch=${saleBranchId}` : '')
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
           const res = await api<{ data: ProductLite[] } | ProductLite[]>(url)
@@ -1271,7 +1256,7 @@ export function POSView() {
       cancelled = true
       clearTimeout(t)
     }
-  }, [query, category, refreshTick, needsSaleBranch, multiBranch, saleBranch])
+  }, [query, category, refreshTick, saleBranchId, showSaleBranchPicker])
 
   const resolvedCustomer = React.useMemo(() => {
     if (selectedCustomerId) return customers.find((x) => x.id === selectedCustomerId) ?? null
@@ -1405,6 +1390,13 @@ export function POSView() {
     // Clicks are guarded against double-taps; scans are serialised by the
     // queue instead, so a fast second scan is never silently dropped.
     if (addingProduct && !opts?.fromScan) return false
+    // 🏬 مدير من غير فرع مختار؟ ممنوع يبدأ سلة قبل ما يحدد فرع الفاتورة —
+    // عشان السلة من أولها تفضل كلها من فرع واحد.
+    if (showSaleBranchPicker && !saleBranchId) {
+      playBeep('err')
+      toast.error('اختار «فرع الفاتورة» الأول من الشريط اللي فوق')
+      return false
+    }
     setAddingProduct(true)
     try {
       let unitData: PosUnit[]
@@ -1493,23 +1485,18 @@ export function POSView() {
   const processScan = async (raw: string, mode: 'scan' | 'manual') => {
     const code = normalizeCode(raw)
     if (!code) return
-    // 🏬 (التحديث الرابع عشر) السكان بيلتزم بفرع البيع المختار:
-    // مفيش بحث من غير فرع (يضيف أصناف فرع تاني) ومفيش إضافة قبل اختيار الفرع.
-    if (needsSaleBranch && multiBranch && saleBranch == null) {
-      playBeep('err')
-      toast.error('اختار «فرع البيع» الأول — من الشريط اللي فوق قايمة الأصناف')
-      return
-    }
-    const scanBranchParam =
-      needsSaleBranch && multiBranch && saleBranch != null ? `&branchId=${String(saleBranch)}` : ''
     try {
       let target: { product: ProductLite; variantId: number | null } | null = null
-      const cached = barcodeCache.current.get(code)
-      if (cached && cached.b === scanBranchParam && Date.now() - cached.t < 60_000) {
+      // 🏬 مفتاح كاش الباركود بيشمل فرع البيع — نفس الباركود ممكن يبقى منتج
+      // مختلف في فرع تاني، فممنوع الكاش يتشارك بين الفروع.
+      const bcacheKey = `${saleBranchId}|${code}`
+      const cached = barcodeCache.current.get(bcacheKey)
+      if (cached && Date.now() - cached.t < 60_000) {
         target = { product: cached.product, variantId: cached.variantId }
       } else {
         const res = await api<{ data: ProductLite[] } | ProductLite[]>(
-          `/api/products?search=${encodeURIComponent(code)}&limit=20&pos=1${scanBranchParam}`
+          `/api/products?search=${encodeURIComponent(code)}&limit=20&pos=1` +
+            (showSaleBranchPicker && saleBranchId ? `&saleBranch=${saleBranchId}` : '')
         )
         const data: ProductLite[] = Array.isArray(res) ? res : (res as any)?.data ?? []
         const exact = data.find((r) => r.barcode === code)
@@ -1532,7 +1519,7 @@ export function POSView() {
         } else {
           return // several name matches: the grid already shows them
         }
-        barcodeCache.current.set(code, { t: Date.now(), b: scanBranchParam, ...target })
+        barcodeCache.current.set(bcacheKey, { t: Date.now(), ...target })
       }
       const added = await handleProductSelect(target.product, target.variantId, { fromScan: true })
       if (added) playBeep('ok')
@@ -1757,9 +1744,10 @@ export function POSView() {
       toast.error('السلة فارغة')
       return
     }
-    // 🏬 (التحديث الرابع عشر) مفيش فاتورة من غير فرع — المدير لازم يختار «فرع البيع» الأول
-    if (needsSaleBranch && multiBranch && saleBranchApiId == null) {
-      toast.error('اختار «فرع البيع» الأول — من الشريط اللي فوق قايمة الأصناف')
+    // 🏬 المدير لازم يكون محدد «فرع الفاتورة» — السيرفر بيرفض كمان لو ناقصة
+    // (الحكم النهائي عنده)، بس الرسالة دي أسرع للكاشير.
+    if (showSaleBranchPicker && !saleBranchId) {
+      toast.error('اختار «فرع الفاتورة» الأول من الشريط اللي فوق')
       return
     }
     if (creditNeedsCustomer) {
@@ -1799,10 +1787,9 @@ export function POSView() {
           customerId,
           paid,
           paymentMethod,
-          // 🏬 (التحديث الرابع عشر) فرع البيع المختار — الفاتورة بتتسجل عليه
-          // والخزنة والورديات بتتبعه. الأوفلاين بيخزن نفس الـ body والمزامنة
-          // بتمر بنفس تحقق السيرفر.
-          ...(saleBranchApiId != null ? { branchId: saleBranchApiId } : {}),
+          // 🏬 فرع الفاتورة المختار (مدير بدون فرع ثابت) — السيرفر بيتحقق إنه
+          // تابع لنفس المحل وإن كل الأصناف منه، والخزنة بتتبع الفرع تلقائي.
+          ...(saleBranchId ? { branchId: Number(saleBranchId) } : {}),
           // 💰 (التحديث الثالث عشر) البائع المستحق للعمولة — بس لو مختار فعلاً.
           // السيرفر هو اللي بيتحقق منه وبيحط لقطة النسبة — العميل ما بيبعتش نسبة.
           ...(sellerId ? { sellerId } : {}),
@@ -1925,7 +1912,8 @@ export function POSView() {
             } else {
               const q = it.product.barcode || it.product.name
               const res = await api<{ data: ProductLite[] } | ProductLite[]>(
-                `/api/products?search=${encodeURIComponent(q)}&limit=50`
+                `/api/products?search=${encodeURIComponent(q)}&limit=50` +
+                  (showSaleBranchPicker && saleBranchId ? `&saleBranch=${saleBranchId}` : '')
               )
               const list: ProductLite[] = Array.isArray(res) ? res : (res as any)?.data ?? []
               const hit = list.find((p) => p.id === id)
@@ -2290,45 +2278,62 @@ export function POSView() {
         </button>
         </div>
 
-        {/* 🏬 (التحديث الرابع عشر) شريط «فرع البيع» — للمدير بس ولما يكون فيه
-            أكتر من فرع. الفاتورة كلها بتتبع الفرع ده: الأصناف والخزنة والتقارير. */}
-        {needsSaleBranch && multiBranch && (
-          <div className="-mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none]">
-            <span className="flex shrink-0 items-center gap-1 text-xs font-bold text-muted-foreground">
-              <Store className="size-3.5" />
-              فرع البيع:
-            </span>
-            {[...branches]
-              .sort((a, b) => (b.isMain ? 1 : 0) - (a.isMain ? 1 : 0))
-              .map((b) => {
-                const val: number | 'main' = b.isMain ? 'main' : b.id
-                const active = saleBranch === val
+        {/* 🏬 (التحديث الرابع عشر) شريط «فرع الفاتورة» — للمدير فقط لما المحل
+            فيه أكتر من فرع: يختار الفرع الأول، والكتالوج بيتفلتر عليه فورًا
+            فمبقى مستحيل تصميميًا فاتورة أصنافها من فروع مختلفة. */}
+        {showSaleBranchPicker && (
+          <div
+            className={cn(
+              'rounded-xl border p-2.5',
+              saleBranchId
+                ? 'border-brand-600/30 bg-brand-600/[0.04]'
+                : 'border-warning/60 bg-warning-subtle/40'
+            )}
+          >
+            <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs font-extrabold">
+              <Store className="size-3.5 shrink-0 text-brand-600" aria-hidden />
+              <span>فرع الفاتورة</span>
+              {selectedSaleBranch ? (
+                <span className="font-semibold text-muted-foreground">
+                  — كل الأصناف هتتسجل على «{selectedSaleBranch.name}»
+                </span>
+              ) : (
+                <span className="text-warning-subtle-foreground">
+                  — لازم تختار فرع قبل إتمام البيع
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {posBranches.map((b) => {
+                const active = saleBranchId === String(b.id)
                 return (
                   <button
                     key={b.id}
                     type="button"
-                    onClick={() => changeSaleBranch(val)}
+                    onClick={() => changeSaleBranch(String(b.id))}
                     aria-pressed={active}
-                    title={
-                      b.isMain
-                        ? 'الفرع الرئيسي — بيعرض كمان أصناف المخزن العام (غير المسندة)'
-                        : undefined
-                    }
                     className={cn(
-                      'flex shrink-0 items-center gap-1.5 rounded-full border-2 px-4 py-1.5 text-sm font-bold transition-colors',
+                      'flex shrink-0 items-center gap-1.5 rounded-full border-2 px-3.5 py-1.5 text-sm font-bold transition-colors',
                       active
                         ? 'border-brand-600 bg-brand-600/10 text-brand-800 shadow-sm dark:text-brand-200'
                         : 'border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground'
                     )}
                   >
-                    {active && <Check className="size-3.5" />}
                     {b.name}
                     {b.isMain && (
-                      <span className="text-[10px] font-bold opacity-70">(الرئيسي)</span>
+                      <span
+                        className={cn(
+                          'rounded px-1 text-[10px] font-extrabold',
+                          active ? 'bg-brand-600/20' : 'bg-muted'
+                        )}
+                      >
+                        الرئيسي
+                      </span>
                     )}
                   </button>
                 )
               })}
+            </div>
           </div>
         )}
 
@@ -2378,21 +2383,7 @@ export function POSView() {
           paged ? 'overflow-hidden overscroll-contain' : cn('lg:overflow-y-auto lg:overscroll-contain', slimScroll)
         )}
       >
-        {needsSaleBranch && multiBranch && saleBranch == null ? (
-          // 🏬 (التحديث الرابع عشر) مفيش بيع من غير فرع — رسالة الاختيار الإجبارية
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <div className="flex size-14 items-center justify-center rounded-2xl bg-brand-600/10">
-              <Store className="size-7 text-brand-600" />
-            </div>
-            <div>
-              <p className="font-bold">اختار «فرع البيع» الأول</p>
-              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                كل فاتورة لازم تتبع فرع محدد عشان المخزون والخزنة والتقارير تفضل منفصلة لكل فرع —
-                اختار الفرع من الشريط اللي فوق، والأصناف هتظهر لفرعك على طول.
-              </p>
-            </div>
-          </div>
-        ) : searchError ? (
+        {searchError ? (
           <div className="flex flex-col items-center gap-2 py-16 text-center">
             <AlertTriangle className="size-8 text-destructive" />
             <p className="text-sm text-destructive">{t('تعذّر تحميل المنتجات — تأكد من الاتصال وجرّب تاني.')}</p>
@@ -3377,6 +3368,12 @@ export function POSView() {
             {typedUnknownCustomer
               ? 'اختار العميل من القائمة عشان نقدر نسجّل الآجل عليه.'
               : 'البيع بالآجل لازم يكون مرتبط بعميل — اختار عميل فوق.'}
+          </p>
+        )}
+        {showSaleBranchPicker && !saleBranchId && (
+          <p className="flex items-start gap-1.5 rounded-lg bg-warning-subtle px-3 py-2 text-xs font-medium text-warning-subtle-foreground">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            اختار «فرع الفاتورة» الأول من الشريط اللي فوق عشان تقدر تكمل البيع.
           </p>
         )}
         <Button

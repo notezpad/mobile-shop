@@ -74,8 +74,6 @@ export interface SaleReturnSaleInfo {
   refunded?: number
   /** طريقة دفع الفاتورة — بتكون الطريقة الافتراضية للرد */
   paymentMethod?: string | null
-  /** 🏬 (التحديث الرابع عشر) فرع الفاتورة — بحث بضاعة الاستبدال بيتفلتر عليه (null/undefined = قديمة أو مفيش فروع) */
-  branchId?: number | null
 }
 
 /** 🖨️ بيانات إيصال الاستبدال — بتتبعت من نقطة البيع وسجل المبيعات
@@ -198,10 +196,7 @@ function ReturnForm({
   const exQty = exLines.reduce((s, l) => s + l.quantity, 0)
   const exUnit = commonUnit(exLines.map((l) => (l.soldByWeight ? null : l.unitLabel)))
 
-  // بحث بضاعة الاستبدال — نفس endpoint نقطة البيع (بيحترم صلاحية ونطاق الفرع).
-  // 🏬 (التحديث الرابع عشر): الفاتورة ليها فرع؟ البحث بيتفلتر على أصناف فرعها
-  // من غير فلتر = مفيش فروع أصلاً في المحل. السيرفر بيفحص برضه عند التأكيد.
-  const exBranchParam = sale.branchId != null ? `&branchId=${sale.branchId}` : ''
+  // بحث بضاعة الاستبدال — نفس endpoint نقطة البيع (بيحترم صلاحية ونطاق الفرع)
   React.useEffect(() => {
     if (!exOn) return
     const q = exQ.trim()
@@ -220,7 +215,7 @@ function ReturnForm({
     const t = window.setTimeout(async () => {
       try {
         const res = await api<{ data: ExProduct[] } | ExProduct[]>(
-          `/api/products?search=${encodeURIComponent(q)}&limit=20&pos=1${exBranchParam}`,
+          `/api/products?search=${encodeURIComponent(q)}&limit=20&pos=1`,
         )
         const data = (Array.isArray(res) ? res : ((res as any)?.data ?? [])) as ExProduct[]
         if (exCache.current.size > 40) exCache.current.clear()
@@ -235,7 +230,7 @@ function ReturnForm({
       }
     }, 250)
     return () => window.clearTimeout(t)
-  }, [exQ, exOn, exBranchParam])
+  }, [exQ, exOn])
 
   const toggleExchange = () =>
     setExOn((v) => {

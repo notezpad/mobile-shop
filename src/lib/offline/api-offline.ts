@@ -464,30 +464,6 @@ async function offlineProductsAnswer<T>(url: string): Promise<T | null> {
     if (status === 'active') list = list.filter((p) => p.active !== false)
     else if (status === 'inactive') list = list.filter((p) => p.active === false)
 
-    // 🏬 (التحديث الرابع عشر) فلتر «فرع البيع» أوفلاين — نفس منطق السيرفر:
-    // 'main' = الفرع الرئيسي + الأصناف غير المسندة، ورقم = فرع محدد.
-    // الأوفلاين ملتزم بنفس القواعد عشان مفيش سلة أوفلاين فيها أصناف من
-    // فرعين — السيرفر هيرفضها وقت المزامنة والفاتورة كلها تبوق.
-    const branchParam = u.searchParams.get('branchId')
-    if (branchParam && branchParam !== 'all') {
-      if (branchParam === 'main') {
-        let mainId: number | null = null
-        try {
-          const cachedBranches = await idb.getCachedByPath('/api/branches')
-          const arr = Array.isArray(cachedBranches?.data) ? cachedBranches.data : []
-          mainId = (arr.find((b: any) => b?.isMain)?.id ?? null) as number | null
-        } catch {
-          /* ignore — بنعتمد غير المسندة بس */
-        }
-        list = list.filter(
-          (p) => p?.branchId == null || (mainId != null && Number(p.branchId) === mainId)
-        )
-      } else {
-        const n = parseInt(branchParam, 10)
-        if (Number.isFinite(n)) list = list.filter((p) => Number(p?.branchId ?? -1) === n)
-      }
-    }
-
     if (q) {
       const nq = q.toLowerCase()
       list = list.filter(

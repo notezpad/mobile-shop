@@ -99,7 +99,7 @@ async function __POST(req: NextRequest) {
     // 🔑 RBAC: تحميل الصلاحيات من الداتابيز وتخزينها في الـ JWT
     const fullUser = await db.user.findUnique({
       where: { id: user.id },
-      select: { permissions: true, canViewProfits: true, isSeller: true },
+      select: { permissions: true, canViewProfits: true },
     })
     const permissions = (() => {
       try { const v = JSON.parse(fullUser?.permissions ?? 'null'); return Array.isArray(v) ? v : null } catch { return null }
@@ -107,11 +107,6 @@ async function __POST(req: NextRequest) {
     const canViewProfits = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN'
       ? true
       : Boolean(fullUser?.canViewProfits)
-    // 💰 (التحديث الثالث عشر) راية «بائع» بتتخزن في التوكن — السايدبار بيفتح
-    // بيها مدخل «عمولتي» من غير استعلام DB، وبتتحدّث عند الدخول الجاي.
-    const isSeller = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN'
-      ? false
-      : Boolean(fullUser?.isSeller)
 
     await createSession({
       id: user.id,
@@ -122,7 +117,6 @@ async function __POST(req: NextRequest) {
       branchId: (user as any).branchId ?? null,
       permissions,
       canViewProfits,
-      isSeller,
     })
 
     return NextResponse.json({
@@ -136,7 +130,6 @@ async function __POST(req: NextRequest) {
         branchId: (user as any).branchId ?? null,
         permissions,
         canViewProfits,
-        isSeller,
       },
     })
   } catch (e: any) {
