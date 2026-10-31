@@ -202,6 +202,20 @@ export interface NormalizeResult {
  *   - «كاش» بتتفرض مفعّلة في الشاشتين — السيرفر بيفرضها حتى لو الطلب عكس.
  */
 export function normalizePaymentMethodsConfig(input: unknown): NormalizeResult {
+  // 🛡️ 2026-11-01 (v15 — إصلاح «شكل وسائل الدفع غير صالح»): صفحة الإعدادات
+  // بتبعت الإعداد **كنص JSON** (نفس شكل التخزين في قاعدة البيانات بالظبط —
+  // TenantData.paymentMethodsConfig نوعه string، وsetPmList بترسّله بـ
+  // serializePaymentMethodsConfig). التحقق هنا كان بيطالب بمصفوفة مباشرة
+  // فأي حفظ فيه تغيير وسائل كان بيرجع 400 دايماً والوسائل عمرها ما بتتحفظ.
+  // بنقبل الشكلين: نص JSON بنفكّه بنفسنا (و failure في الفكّ بنرجّع نفس
+  // رسالة «شكل غير صالح»)، أو مصفوفة زي ما هي.
+  if (typeof input === 'string') {
+    try {
+      input = JSON.parse(input)
+    } catch {
+      return { ok: false, error: 'شكل وسائل الدفع غير صالح' }
+    }
+  }
   if (!Array.isArray(input)) {
     return { ok: false, error: 'شكل وسائل الدفع غير صالح' }
   }
