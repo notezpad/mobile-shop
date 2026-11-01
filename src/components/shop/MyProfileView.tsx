@@ -194,55 +194,55 @@ export function MyProfileView() {
   const isFemale = isFemaleName(me.name)
 
   return (
-    <div className="-mx-3 sm:-mx-6 bg-slate-50 dark:bg-slate-950 min-h-screen pb-12">
+    // شلت الـ -mx-3 عشان المسافات اللي فوق تظبط
+    <div className="w-full bg-slate-50 dark:bg-slate-950 min-h-screen pb-12">
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-8">
         
-        {/* ================= الهيرو (أزرق ملكي مع ذهبي 3D) ================= */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 text-white rounded-3xl shadow-[0_20px_40px_-15px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.1)]">
-          <div aria-hidden className="absolute -top-32 -right-32 size-[400px] rounded-full bg-blue-500/20 blur-[100px]" />
-          <div aria-hidden className="absolute -bottom-32 -left-32 size-[300px] rounded-full bg-amber-500/10 blur-[80px]" />
+        {/* ================= الهيرو (أبيض مع لمسة زرقاء فاتحة) ================= */}
+        <section className="relative overflow-hidden bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800 text-slate-900 dark:text-white rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div aria-hidden className="absolute -top-32 -right-32 size-[400px] rounded-full bg-blue-100/50 blur-[80px] dark:bg-blue-900/20" />
           
           <div className="relative flex flex-col md:flex-row md:items-center gap-6 p-6 sm:p-8">
             {/* الأفاتار 3D */}
             <div className="relative shrink-0 z-10">
-              <div className="size-24 sm:size-28 rounded-[2rem] bg-gradient-to-br from-blue-400 to-indigo-600 p-1.5 shadow-2xl ring-4 ring-white/10 backdrop-blur-md">
-                <div className="size-full rounded-[1.5rem] bg-slate-900/50 flex items-center justify-center text-white shadow-inner backdrop-blur-sm">
-                  {isFemale ? <UserRound className="size-12 sm:size-14 drop-shadow-lg" strokeWidth={2.5} /> : <User className="size-12 sm:size-14 drop-shadow-lg" strokeWidth={2.5} />}
+              <div className="size-24 sm:size-28 rounded-[2rem] bg-gradient-to-br from-blue-400 to-indigo-600 p-1.5 shadow-xl ring-4 ring-white dark:ring-slate-900">
+                <div className="size-full rounded-[1.5rem] bg-white flex items-center justify-center text-blue-600 shadow-inner">
+                  {isFemale ? <UserRound className="size-12 sm:size-14 drop-shadow-md" strokeWidth={2.5} /> : <User className="size-12 sm:size-14 drop-shadow-md" strokeWidth={2.5} />}
                 </div>
               </div>
-              <span className="absolute -bottom-2 -right-2 grid size-8 place-items-center rounded-xl bg-emerald-500 text-white shadow-lg ring-2 ring-slate-950">
+              <span className="absolute -bottom-2 -right-2 grid size-8 place-items-center rounded-xl bg-emerald-500 text-white shadow-md ring-2 ring-white dark:ring-slate-900">
                 <CheckCircle2 className="size-5" />
               </span>
             </div>
 
             {/* البيانات */}
             <div className="flex-1 z-10">
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight drop-shadow-md">{me.name}</h1>
-              <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-300">
-                <Mail className="size-4 text-slate-400" />
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">{me.name}</h1>
+              <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
+                <Mail className="size-4" />
                 {me.email}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white backdrop-blur-md">
-                  <UserCog className="size-3.5 text-blue-300" /> {ROLE_LABELS[me.role] ?? me.role}
+                <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <UserCog className="size-3.5 text-blue-500" /> {ROLE_LABELS[me.role] ?? me.role}
                 </span>
                 {me.branchName && (
-                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white backdrop-blur-md">
-                    <Building2 className="size-3.5 text-blue-300" /> {me.branchName}
+                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                    <Building2 className="size-3.5 text-blue-500" /> {me.branchName}
                   </span>
                 )}
                 {me.isSeller && (
-                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-200 backdrop-blur-md">
-                    <Percent className="size-3.5 text-amber-400" /> بائع
+                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700 shadow-sm">
+                    <Percent className="size-3.5 text-amber-500" /> بائع
                   </span>
                 )}
                 {hr && (
-                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/30 bg-sky-500/20 px-3 py-1 text-xs font-bold text-sky-200 backdrop-blur-md">
-                    <Link2 className="size-3.5 text-sky-400" /> {hr.jobTitle || 'موظف HR'}
+                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700 shadow-sm">
+                    <Link2 className="size-3.5 text-sky-500" /> {hr.jobTitle || 'موظف HR'}
                   </span>
                 )}
                 {!me.active && (
-                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/20 px-3 py-1 text-xs font-bold text-rose-200 backdrop-blur-md">
+                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700 shadow-sm">
                     الحساب موقوف
                   </span>
                 )}
