@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { hrGuard, bad, hrSafe } from '@/lib/hr-route'
-import { hashPin, isDateStr, isValidPin } from '@/lib/hr'
+import { isDateStr, isValidPin } from '@/lib/hr'
+import { hashPinV2 } from '@/lib/hr-pin'
 import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
 import { normalizeShifts } from '@/lib/branch-shifts'
 import { logAudit } from '@/lib/audit'
@@ -103,7 +104,7 @@ async function __PUT(req: NextRequest, { params }: Ctx) {
   if (b.pin !== undefined) {
     if (b.pin === '' || b.pin === null) data.pinHash = null
     else if (!isValidPin(b.pin)) return bad('الـ PIN لازم 4 إلى 6 أرقام')
-    else data.pinHash = await hashPin(session.tenantId, id, String(b.pin))
+    else data.pinHash = await hashPinV2(session.tenantId, id, String(b.pin))
   }
 
   await db.employee.update({ where: { id }, data })

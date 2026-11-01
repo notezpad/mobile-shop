@@ -100,7 +100,9 @@ async function __PUT(req: NextRequest, { params }: Ctx) {
     const bonus = round2(Math.max(0, Number(ed.bonus) || 0))
     const penalty = round2(Math.max(0, Number(ed.penalty) || 0))
     const gross = Math.max(0, round2(p.payableBase - p.absenceDeduction - p.lateDeduction + bonus - penalty + (p.commission || 0)))
-    const advanceDeduction = round2(Math.min(gross, p.advanceDeduction))
+    // القسط المستحق الأصلي (لو متسجّل) — وإلا القيمة المخزّنة (قسايم قديمة)
+    const advanceDue = (p as { advanceDue?: number }).advanceDue || p.advanceDeduction
+    const advanceDeduction = round2(Math.min(gross, advanceDue))
     const net = round2(gross - advanceDeduction)
     updates.push(db.payslip.update({
       where: { id: p.id },

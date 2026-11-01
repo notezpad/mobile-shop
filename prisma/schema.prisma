@@ -1445,6 +1445,9 @@ model Payslip {
   bonus            Float    @default(0)
   penalty          Float    @default(0)
   advanceDeduction Float    @default(0)
+  // 🧾 (v26) القسط المستحق الأصلي وقت التوليد — بيتستخدم لما تعدّل المكافأة/الجزاء
+  // بعد ما الخصم اتقصّ (عشان الخصم يرجع للمستحق الكامل بدل المقصوص)
+  advanceDue       Float    @default(0)
   // 💰 (التحديث الثالث عشر) عمولة البائع المرتبط بحساب الموظف (Employee.userId)
   // — بتتعبّى تلقائياً عند توليد مسودة الرواتب، وبتدخل في الصافي
   commission       Float    @default(0)
@@ -1502,4 +1505,15 @@ model EmployeeEvaluation {
 
   @@unique([employeeId, month])
   @@index([tenantId, month])
+}
+
+
+// 🔐 (v26) عدّاد محاولات PIN كشك الحضور — بديل ذاكرة الـ isolate. الـ SQL: migrations/20261108_hr_pin_attempt
+model HrPinAttempt {
+  tenantId   String
+  employeeId Int
+  fails      Int      @default(0)
+  firstAt    DateTime @default(now())
+
+  @@id([tenantId, employeeId])
 }

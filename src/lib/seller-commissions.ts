@@ -69,7 +69,7 @@ function parseRate(raw: unknown): { ok: true; value: number | null } | { ok: fal
   if (raw === undefined || raw === null || raw === '') return { ok: true, value: null }
   const n = Number(raw)
   if (!Number.isFinite(n) || n <= 0 || n > 100) {
-    return { ok: false, error: 'النسبة لازم تكون من 0 إلى 100 (مثال: 3 يعني 3%)' }
+    return { ok: false, error: 'النسبة لازم تكون أكبر من 0 وحتى 100 (مثال: 3 يعني 3%) — سيب الخانة فاضية لوراثة النسبة العامة' }
   }
   return { ok: true, value: round2(n) }
 }

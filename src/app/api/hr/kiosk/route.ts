@@ -2,16 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { withIdempotency } from '@/lib/idempotency'
 import { hrGuard, bad, loadHrSettings, hrSafe } from '@/lib/hr-route'
-import { countedLate, hashPin, isValidPin, rawLateMinutes, timeToMinutes } from '@/lib/hr'
+import { countedLate, isValidPin, rawLateMinutes, timeToMinutes } from '@/lib/hr'
+import { verifyPin, pinAttemptBegin, pinAttemptClear } from '@/lib/hr-pin'
 import { getSql } from '@/lib/sql'
 import { getTenantTimezone, dateStrInTz, localDateStrToUtcBounds } from '@/lib/tenantTime'
+import { loadEmployeeShift, resolveShiftAnchor } from '@/lib/shift-attendance'
 
 export const dynamic = 'force-dynamic'
-
-/** محاولات PIN غلط (ذاكرة الـ isolate — حماية خفيفة من التخمين على جهاز المحل) */
-const fails = new Map<string, { n: number; at: number }>()
-const WINDOW_MS = 5 * 60_000
-const MAX_FAILS = 5
 
 /** GET → قائمة الموظفين النشطين + حالة اليوم (بدون أي رواتب) */
 async function __GET() {
@@ -53,21 +50,20 @@ async function __POST(req: NextRequest) {
   const employeeId = Number(b?.employeeId)
   if (!Number.isFinite(employeeId) || !isValidPin(b?.pin)) return bad('الموظف والـ PIN مطلوبين')
 
-  const key = `${session.tenantId}:${employeeId}`
-  const f = fails.get(key)
-  if (f && Date.now() - f.at < WINDOW_MS && f.n >= MAX_FAILS) {
-    return bad('محاولات كتير غلط — جرّب بعد شوية', 429)
-  }
-
   const emp = await db.employee.findUnique({ where: { id: employeeId } })
   if (!emp || emp.tenantId !== session.tenantId || !emp.active) return bad('الموظف غير موجود', 404)
   if (!emp.pinHash) return bad('لسه ماتحددش PIN للموظف ده — حدده من شاشة الموظفين')
-  if ((await hashPin(session.tenantId, emp.id, b.pin)) !== emp.pinHash) {
-    const cur = f && Date.now() - f.at < WINDOW_MS ? f : { n: 0, at: Date.now() }
-    fails.set(key, { n: cur.n + 1, at: cur.at })
-    return bad('الـ PIN غير صحيح', 401)
+  // 🔐 العدّ قبل التحقق (ذرّي في الداتابيز) — الزيادة الأخيرة المقفولة بترفض حتى لو الـ PIN صح
+  if ((await pinAttemptBegin(session.tenantId, emp.id)).locked) {
+    return bad('محاولات كتير غلط — جرّب بعد شوية', 429)
   }
-  fails.delete(key)
+  const v = await verifyPin(session.tenantId, emp.id, b.pin, emp.pinHash)
+  if (!v.ok) return bad('الـ PIN غير صحيح', 401)
+  await pinAttemptClear(session.tenantId, emp.id)
+  if (v.upgrade) {
+    // ترقية تجزئة PIN القديم لـ v2 (بصمت)
+    await db.employee.update({ where: { id: emp.id }, data: { pinHash: v.upgrade } }).catch(() => {})
+  }
 
   const [tz, settings] = await Promise.all([getTenantTimezone(session.tenantId), loadHrSettings(session.tenantId)])
   // تسجيل اتحفظ على الجهاز بدون نت: بنستخدم وقته الحقيقي (clientTime) بحدود أمان —
@@ -79,7 +75,10 @@ async function __POST(req: NextRequest) {
     if (t.getTime() < Date.now() - 48 * 3600_000) return bad('التسجيل قديم (أكتر من 48 ساعة) — سجّله يدوي من الحضور', 410)
     now = t
   }
-  const today = dateStrInTz(now, tz)
+  // 🕐 وردية الموظف المحددة (لو موجودة) هي مرجع التأخير وتاريخ السجل؛ وإلا الإعداد العام
+  const empShift = await loadEmployeeShift(session.tenantId, emp)
+  const anchor = empShift ? resolveShiftAnchor(now, tz, empShift.from) : null
+  const today = anchor ? anchor.dateKey : dateStrInTz(now, tz)
   const existing = await db.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId: emp.id, date: today } } })
 
   // ── انصراف ──
@@ -91,9 +90,9 @@ async function __POST(req: NextRequest) {
   }
 
   // ── حضور (جديد، أو بديل لسجل يدوي غياب/إجازة اتعدّل) ──
-  const shiftStartUtc = new Date(
-    localDateStrToUtcBounds(today, 'start', tz).getTime() + timeToMinutes(settings.shiftStart) * 60_000,
-  )
+  const shiftStartUtc = anchor
+    ? anchor.startUtc
+    : new Date(localDateStrToUtcBounds(today, 'start', tz).getTime() + timeToMinutes(settings.shiftStart) * 60_000)
   const lateRaw = rawLateMinutes(now, shiftStartUtc)
   const isLate = countedLate(lateRaw, settings.graceMinutes) > 0
   const status = isLate ? 'late' : 'present'

@@ -10,6 +10,7 @@ import { getTenantTimezone, dateStrInTz } from '@/lib/tenantTime'
 import { loadHrSettings } from '@/lib/hr-route'
 import { computePayslip, countPaidDays, countedLate, monthBounds, type DayRecordStatus } from '@/lib/hr'
 import { getSql } from '@/lib/sql'
+import { findEmployeeShift } from '@/lib/branch-shifts'
 import {
   sellersMonthAggregates,
   applyTargetGate,
@@ -96,6 +97,16 @@ export async function generatePayrollDraft(tenantId: string, month: string, user
     monthPayouts.filter((p) => !p.viaPayroll).map((p) => p.userId),
   )
 
+  // 🕐 ساعات وردية كل موظف (لخصم دقيقة التأخير) — من ورديات فرعه، وإلا الإعداد العام
+  const [branchRows, linkedUsers] = await Promise.all([
+    db.branch.findMany({ where: { tenantId }, select: { id: true, shifts: true } }),
+    linkedUserIds.length
+      ? db.user.findMany({ where: { tenantId, id: { in: linkedUserIds } }, select: { id: true, branchId: true } })
+      : Promise.resolve([] as { id: string; branchId: number | null }[]),
+  ])
+  const shiftsByBranch = new Map(branchRows.map((b) => [b.id, b.shifts]))
+  const branchByUser = new Map(linkedUsers.map((u) => [u.id, u.branchId]))
+
   const rows = employees
     .map((e) => {
       const hire = dateStrInTz(e.hireDate, tz)
@@ -127,8 +138,11 @@ export async function generatePayrollDraft(tenantId: string, month: string, user
           }
         }
       }
+      const effBranch = e.branchId ?? (e.userId ? branchByUser.get(e.userId) ?? null : null)
+      const empShift = effBranch != null ? findEmployeeShift(shiftsByBranch.get(effBranch), e.shiftName) : null
+      const empSettings = empShift ? { ...settings, shiftHours: empShift.hours } : settings
       const calc = computePayslip({
-        baseSalary: e.baseSalary, hireDate: hire, month, settings,
+        baseSalary: e.baseSalary, hireDate: hire, month, settings: empSettings,
         absentDays: absent.get(e.id) ?? 0, lateMinutes: late.get(e.id) ?? 0,
         advanceDue: advDue.get(e.id) ?? 0, bonus, penalty, commission,
         paidDays: paid.paidDays,
@@ -160,6 +174,7 @@ export async function generatePayrollDraft(tenantId: string, month: string, user
         // 💰 العمولة تُحسب fresh في كل توليد مسودة (مش محفوظة زي الحافز)
         commission: r.commission,
         advanceDeduction: r.calc.advanceDeduction,
+        advanceDue: advDue.get(r.e.id) ?? 0,
         net: r.calc.net,
         note: r.note,
       }

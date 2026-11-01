@@ -385,6 +385,20 @@ export function MyProfileView() {
           <DoorOpen className="size-4 text-primary" aria-hidden />
           وردية فرعي
         </h2>
+        {/* 🕐 ورديتي المحددة من HR — ظاهرة دايماً (من غير ما تحتاج صلاحية فتح) */}
+        {hr ? (
+          <div className="mb-3 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-[13px]">
+            <Clock className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+            <span className="font-bold text-muted-foreground">ورديتي:</span>
+            <span className="font-extrabold">
+              {hr.myShift
+                ? shiftLabel(hr.myShift)
+                : hr.shiftName
+                  ? `${hr.shiftName} (مش موجودة في ورديات الفرع دلوقتي)`
+                  : 'لسه متحددتش — اطلب من المدير'}
+            </span>
+          </div>
+        ) : null}
         {openShift ? (
           <div className={cn(
             'rounded-xl border px-3 py-3 text-[13px] leading-relaxed',

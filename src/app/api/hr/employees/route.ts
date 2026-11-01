@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
 import { withIdempotency } from '@/lib/idempotency'
 import { hrGuard, bad, hrSafe } from '@/lib/hr-route'
-import { hashPin, isDateStr, isValidPin } from '@/lib/hr'
+import { isDateStr, isValidPin } from '@/lib/hr'
+import { hashPinV2 } from '@/lib/hr-pin'
 import { getTenantTimezone, dateStrInTz, localDateStrToUtcBounds } from '@/lib/tenantTime'
 import { normalizeShifts } from '@/lib/branch-shifts'
 import { logAudit } from '@/lib/audit'
@@ -153,7 +154,7 @@ async function __POST(req: NextRequest) {
   if (b.pin) {
     await db.employee.update({
       where: { id: emp.id },
-      data: { pinHash: await hashPin(session.tenantId, emp.id, String(b.pin)) },
+      data: { pinHash: await hashPinV2(session.tenantId, emp.id, String(b.pin)) },
     })
   }
   await logAudit({ action: 'hr.employee.create', targetType: 'employee', targetId: emp.id, details: { name, baseSalary } }, req)

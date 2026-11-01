@@ -82,3 +82,21 @@ export function shiftLabel(s: BranchShift): string {
   }
   return `${s.name} · ${fmt(s.from)} → ${fmt(s.to)}`
 }
+
+/** مدة الوردية بالساعات (from === to = 24 ساعة، وردية بتعدّي نص الليل محسوبة صح). */
+export function shiftDurationHours(s: BranchShift): number {
+  const from = shiftToMinutes(s.from)
+  const to = shiftToMinutes(s.to)
+  const mins = from === to ? 1440 : to > from ? to - from : to + 1440 - from
+  return Math.round((mins / 60) * 100) / 100
+}
+
+/** وردية الموظف المحددة من ورديات فرعه — null لو مفيش اسم أو التعريف اتشال. */
+export function findEmployeeShift(
+  branchShifts: unknown,
+  shiftName: string | null | undefined,
+): (BranchShift & { hours: number }) | null {
+  if (!shiftName) return null
+  const s = normalizeShifts(branchShifts).find((x) => x.name === shiftName)
+  return s ? { ...s, hours: shiftDurationHours(s) } : null
+}
