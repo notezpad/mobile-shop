@@ -45,28 +45,6 @@ async function __PUT(req: NextRequest, { params }: Ctx) {
   for (const k of ['phone', 'jobTitle', 'notes'] as const) {
     if (b[k] !== undefined) data[k] = b[k] ? String(b[k]).trim() || null : null
   }
-  // 🕐 (التحديث الحادي والعشرين) وردية الموظف — لازم تكون من ورديات فرعه
-  // المعرّفة (الاسم نص snapshot زي نمط ShiftSession) — والفاضي = بدون وردية.
-  // التحقق على فرع الموظف الحالي (emp.branchId) — تغيير الفرع مش شغل الفورم ده.
-  if (b.shiftName !== undefined) {
-    const rawShift = b.shiftName ? String(b.shiftName).trim().slice(0, 40) : ''
-    if (rawShift) {
-      if (emp.branchId == null) {
-        return bad('حدد فرع الموظف الأول قبل ما تحدد ورديته — الوردية بتتحدد من ورديات الفرع')
-      }
-      const br = await db.branch.findFirst({
-        where: { id: emp.branchId, tenantId: session.tenantId },
-        select: { shifts: true },
-      })
-      const defined = normalizeShifts(br?.shifts)
-      if (!defined.some((s) => s.name === rawShift)) {
-        return bad('الوردية دي مش معرّفة على فرع الموظف — عدّل ورديات الفرع الأول من شاشة الفروع')
-      }
-      data.shiftName = rawShift
-    } else {
-      data.shiftName = null
-    }
-  }
   if (b.active !== undefined) data.active = !!b.active
   // 🔗 (التحديث الثامن عشر) ربط/فك ربط حساب الدخول — مع تحقق التفرد:
   // الحساب لازم يكون في نفس المحل وما يكونش مربوط بموظف تاني
@@ -84,6 +62,43 @@ async function __PUT(req: NextRequest, { params }: Ctx) {
       if (taken) return bad(`الحساب ده مربوط بالفعل بالموظف «${taken.name}» — افصله الأول من ملفه`)
       data.userId = uid
     }
+  }
+  // 🏢 فرع الموظف: صريح من الفورم، أو يورث فرع الحساب المرتبط لو الموظف مالوش فرع
+  let effBranchId: number | null = emp.branchId
+  if (b.branchId !== undefined) {
+    if (b.branchId === null || b.branchId === '') effBranchId = null
+    else {
+      const bid = Number(b.branchId)
+      const okBranch = Number.isFinite(bid)
+        ? await db.branch.findFirst({ where: { id: bid, tenantId: session.tenantId }, select: { id: true } })
+        : null
+      if (!okBranch) return bad('الفرع غير موجود')
+      effBranchId = bid
+    }
+  }
+  if (effBranchId == null) {
+    const linkId = (data.userId as string | null | undefined) !== undefined ? (data.userId as string | null) : emp.userId
+    if (linkId) {
+      const ub = await db.user.findFirst({ where: { id: linkId, tenantId: session.tenantId }, select: { branchId: true } })
+      effBranchId = ub?.branchId ?? null
+    }
+  }
+  if (effBranchId !== emp.branchId) data.branchId = effBranchId
+
+  // 🕐 وردية الموظف — لازم من ورديات فرعه الفعلي، والفاضي = بدون وردية.
+  // لو الفرع اتغيّر ومحدش بعت وردية جديدة → الوردية القديمة بتتفضّى (كانت لفرع تاني)
+  let wantedShift: string | null | undefined = undefined
+  if (b.shiftName !== undefined) wantedShift = b.shiftName ? String(b.shiftName).trim().slice(0, 40) : null
+  else if (effBranchId !== emp.branchId && emp.shiftName) wantedShift = null
+  if (wantedShift !== undefined) {
+    if (wantedShift) {
+      if (effBranchId == null) return bad('حدد فرع الموظف الأول قبل ما تحدد ورديته — الوردية بتتحدد من ورديات الفرع')
+      const br = await db.branch.findFirst({ where: { id: effBranchId, tenantId: session.tenantId }, select: { shifts: true } })
+      if (!normalizeShifts(br?.shifts).some((s) => s.name === wantedShift)) {
+        return bad('الوردية دي مش معرّفة على فرع الموظف — عدّل ورديات الفرع الأول من شاشة الفروع')
+      }
+    }
+    data.shiftName = wantedShift
   }
   if (b.pin !== undefined) {
     if (b.pin === '' || b.pin === null) data.pinHash = null

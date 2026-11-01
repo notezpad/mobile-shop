@@ -21,10 +21,6 @@
  *   5) عمولتي     — لو بائع: أرقام الشهر من نفس API «عمولتي» الحالي
  *   6) ملفي في HR — لو حسابي مربوط بموظف: بياناتي الوظيفية (بورديتي 🕐)
  *      + حضوري الشهر + إجازاتي ورصيدي + آخر قسيمة راتب معتمدة (بالعمولة)
- *
- * 🕐 (التحديث الحادي والعشرين) وردية الموظف — المدير بيحددها من شاشة
- * الموظفين من ورديات الفرع، وبتظهر للموظف: شارة فوق في الهيدر + صف
- * «ورديتي» في بياناته الوظيفية + تلميح في كارت الوردية — زي حضوره وراتبه بالظبط.
  */
 
 import * as React from 'react'
@@ -292,11 +288,10 @@ export function MyProfileView() {
                   {hr.jobTitle || 'موظف — الموارد البشرية'}
                 </span>
               ) : null}
-              {/* 🕐 ورديتي المحددة — شارة فوق زي الفرع والدور بالظبط (التحديث الحادي والعشرين) */}
-              {hr?.myShift ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/15 px-2.5 py-1 text-[11px] font-extrabold text-indigo-700 dark:text-indigo-300">
+              {hr?.shiftName ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300">
                   <Clock className="size-3" aria-hidden />
-                  ورديتي: {shiftLabel(hr.myShift)}
+                  {hr.myShift ? shiftLabel(hr.myShift) : hr.shiftName}
                 </span>
               ) : null}
               {!me.active ? (
@@ -483,15 +478,15 @@ export function MyProfileView() {
                   <LedgerRow label="الراتب الأساسي" value={`${fmt(hr.baseSalary)} ج.م`} icon={Wallet} />
                   <LedgerRow label="الفرع" value={hr.branchName ?? '—'} icon={Building2} />
                   {/* 🕐 ورديتي المحددة في الموارد البشرية (التحديث الحادي والعشرين) */}
-                  {hr.shiftName || hr.myShift ? (
-                    <LedgerRow
-                      label="ورديتي"
-                      value={hr.myShift
-                        ? shiftLabel(hr.myShift)
-                        : `${hr.shiftName} (مش موجودة في ورديات الفرع دلوقتي)`}
-                      icon={Clock}
-                    />
-                  ) : null}
+                  <LedgerRow
+                    label="ورديتي"
+                    value={hr.myShift
+                      ? shiftLabel(hr.myShift)
+                      : hr.shiftName
+                        ? `${hr.shiftName} (مش موجودة في ورديات الفرع دلوقتي)`
+                        : 'لسه متحددتش — اطلب من المدير'}
+                    icon={Clock}
+                  />
                   <LedgerRow label="الراحة الأسبوعية" value={WEEK_DAYS[hr.weeklyOffDay] ?? '—'} icon={CalendarOff} />
                   <LedgerRow label="تاريخ التعيين" value={fmtDay(hr.hireDate)} icon={CalendarDays} />
                 </dl>

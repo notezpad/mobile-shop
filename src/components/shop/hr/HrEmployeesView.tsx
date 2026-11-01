@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { CalendarOff, HandCoins, KeyRound, Loader2, FileSpreadsheet, Phone, Plus, Search, Pencil, UserCheck, UserX, Users, Wallet, User, UserRound, Briefcase, Calendar, Clock, Link2 } from 'lucide-react'
+import { Building2, CalendarOff, HandCoins, KeyRound, Loader2, FileSpreadsheet, Phone, Plus, Search, Pencil, UserCheck, UserX, Users, Wallet, User, UserRound, Briefcase, Calendar, Clock, Link2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -55,8 +55,9 @@ interface FormState {
   pin: string
   userId: string
   shiftName: string
+  branchId: string
 }
-const EMPTY: FormState = { name: '', jobTitle: '', phone: '', baseSalary: '', weeklyOffDay: '5', hireDate: '', pin: '', userId: '', shiftName: '' }
+const EMPTY: FormState = { name: '', jobTitle: '', phone: '', baseSalary: '', weeklyOffDay: '5', hireDate: '', pin: '', userId: '', shiftName: '', branchId: '' }
 
 interface SettlePreview {
   today: string
@@ -494,14 +495,15 @@ function EmployeeDialog({
           baseSalary: String(employee.baseSalary), weeklyOffDay: String(employee.weeklyOffDay),
           hireDate: employee.hireDate, pin: '', userId: employee.userId ?? '',
           shiftName: employee.shiftName ?? '',
+          branchId: employee.branchId != null ? String(employee.branchId) : '',
         }
-      : EMPTY,
+      : { ...EMPTY, branchId: sessionBranchId != null ? String(sessionBranchId) : '' },
   )
   const [saving, setSaving] = React.useState(false)
   // 🔗 (التحديث الثامن عشر) قايمة حسابات الدخول للربط — مأخوذة من شاشة
   // المستخدمين (المدير بس)، والموظفين المرتبطين فعلاً بغير الموظف الحالي
   // بيتستبعدوا من القايمة عشان الربط يفضل واحد لواحد
-  const [users, setUsers] = React.useState<{ id: string; name: string; email: string; isSeller: boolean }[]>([])
+  const [users, setUsers] = React.useState<{ id: string; name: string; email: string; isSeller: boolean; branchId: number | null }[]>([])
   React.useEffect(() => {
     let alive = true
     import('@/lib/api').then(({ api }) =>
@@ -511,7 +513,7 @@ function EmployeeDialog({
           setUsers(
             (Array.isArray(rows) ? rows : [])
               .filter((u) => u && u.active !== false)
-              .map((u) => ({ id: String(u.id), name: String(u.name ?? ''), email: String(u.email ?? ''), isSeller: u.isSeller === true })),
+              .map((u) => ({ id: String(u.id), name: String(u.name ?? ''), email: String(u.email ?? ''), isSeller: u.isSeller === true, branchId: u.branchId != null ? Number(u.branchId) : null })),
           )
         })
         .catch(() => { /* القايمة استكمالية — فشلها مش بيمنع حفظ الباقي */ }),
@@ -523,7 +525,7 @@ function EmployeeDialog({
 
   // 🕐 (التحديث الحادي والعشرين) ورديات فرع الموظف — الجديد بياخد فرع جلسة
   // المدير (نفس قاعدة الحفظ على السيرفر)، والتعديل بياخد فرع الموظف نفسه
-  const branchIdForShift = employee?.branchId ?? sessionBranchId
+  const branchIdForShift = f.branchId ? Number(f.branchId) : null
   const shiftOptions = React.useMemo(
     () => branches.find((b) => b.id === branchIdForShift)?.shifts ?? [],
     [branches, branchIdForShift],
@@ -543,6 +545,8 @@ function EmployeeDialog({
         userId: f.userId || '',
         // 🕐 الوردية: '' = بدون وردية، الاسم = لازم يكون من ورديات فرع الموظف
         shiftName: f.shiftName || '',
+        // 🏢 الفرع: '' = بدون فرع
+        branchId: f.branchId || '',
       }
       if (f.hireDate) body.hireDate = f.hireDate
       if (f.pin) body.pin = f.pin
@@ -613,6 +617,20 @@ function EmployeeDialog({
               />
             </div>
           </div>
+          {/* 🏢 فرع الموظف — منه بتتحدد الورديات المتاحة */}
+          <div className="space-y-1.5">
+            <Label className="flex items-center gap-1.5"><Building2 className="size-3.5" />فرع الموظف</Label>
+            <Select
+              value={f.branchId || 'none'}
+              onValueChange={(v) => setF((s) => ({ ...s, branchId: v === 'none' ? '' : v, shiftName: '' }))}
+            >
+              <SelectTrigger className="shadow-inner"><SelectValue placeholder="اختار الفرع" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">بدون فرع</SelectItem>
+                {branches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
           {/* 🕐 (التحديث الحادي والعشرين) وردية الموظف — من ورديات فرعه المعرّفة */}
           <div className="space-y-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 p-3">
             <Label className="flex items-center gap-1.5">
@@ -634,7 +652,9 @@ function EmployeeDialog({
               </SelectContent>
             </Select>
             <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-              {shiftOptions.length === 0
+              {!f.branchId
+                ? 'اختار فرع الموظف الأول عشان تظهر ورديات الفرع.'
+                : shiftOptions.length === 0
                 ? 'فرع الموظف ده مفيش عليه ورديات معرّفة — ضيفها من شاشة الفروع (صباحي/مسائي/ليلي) وبعدها اختار من هنا.'
                 : 'الوردية دي هتظهر للموظف في صفحة «ملفي» — وبتتختار له تلقائياً لما يفتح وردية شغل باسمه.'}
             </p>
@@ -648,7 +668,13 @@ function EmployeeDialog({
             </Label>
             <Select
               value={f.userId || 'none'}
-              onValueChange={(v) => setF((s) => ({ ...s, userId: v === 'none' ? '' : v }))}
+              onValueChange={(v) => setF((s) => {
+                const uid = v === 'none' ? '' : v
+                const ub = users.find((u) => u.id === uid)?.branchId
+                // 🏢 الحساب المختار له فرع → الموظف ياخد فرعه (والوردية القديمة تتفضّى لو الفرع اتغيّر)
+                if (ub != null && String(ub) !== s.branchId) return { ...s, userId: uid, branchId: String(ub), shiftName: '' }
+                return { ...s, userId: uid }
+              })}
             >
               <SelectTrigger className="shadow-inner bg-white dark:bg-slate-900">
                 <SelectValue placeholder="اختار حساب" />

@@ -58,6 +58,19 @@ export function detectShiftName(shifts: BranchShift[], now: Date = new Date()): 
   return null
 }
 
+/** نفس detectShiftName بس بتوقيت المحل (للسيرفر — ساعته UTC مش ساعة المحل). */
+export function detectShiftNameInTz(shifts: BranchShift[], now: Date, tz: string): string | null {
+  let h = now.getHours()
+  let m = now.getMinutes()
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now)
+    h = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '', 10)
+    m = parseInt(parts.find((p) => p.type === 'minute')?.value ?? '', 10)
+  } catch { /* tz غير صالح — نرجع لساعة الجهاز */ }
+  const local = new Date(2000, 0, 1, Number.isFinite(h) ? h % 24 : now.getHours(), Number.isFinite(m) ? m : now.getMinutes())
+  return detectShiftName(shifts, local)
+}
+
 /** وصف الوردية للعرض: «صباحي · 8:00 ص → 4:00 م» */
 export function shiftLabel(s: BranchShift): string {
   const fmt = (t: string) => {

@@ -237,7 +237,12 @@ async function __POST(req: NextRequest) {
     }
 
     // ── العدّ: رقم حقيقي ≥ 0 (اللي الكاشير عدّاه في الدرج)
-    const counted = Math.round((Number(body?.counted) || NaN) * 100) / 100
+    // ⚠️ الصفر مقبول (درج فاضي) — بس الفاضي/null/undefined مرفوض
+    const rawCounted = body?.counted
+    const counted =
+      rawCounted === undefined || rawCounted === null || rawCounted === ''
+        ? NaN
+        : Math.round(Number(rawCounted) * 100) / 100
     if (!Number.isFinite(counted) || counted < 0 || counted > 999_999_999) {
       return NextResponse.json({ error: 'اكتب المبلغ اللي عدّيته في الدرج' }, { status: 400 })
     }
@@ -303,16 +308,26 @@ async function __POST(req: NextRequest) {
     // اسم الوردية: مع جلسة رسمية = اسم الجلسة (وحدة التدقيق)، وألا اختيار الكاشير
     const finalShiftName = openSession ? openSession.shiftName : shiftName
 
-    await sql`
-      INSERT INTO "ShiftClosure"
-        ("tenantId", "branchId", "shiftName", "userId", "counted", "expected", "variance", "note", "sessionId")
-      VALUES
-        (${tid}, ${branchId}, ${finalShiftName}, ${session.userId}, ${counted}, ${expected}, ${variance}, ${note}, ${sessionId})`
-
-    // 🔗 قفل الجلسة — الفتح الجاي يبدأ من إغلاق جديد
-    if (openSession) {
-      await sql`
-        UPDATE "ShiftSession" SET "closedAt" = NOW() WHERE "id" = ${openSession.id}`
+    // ⚛️ transaction: قفل الجلسة (مرة واحدة بس) + تسجيل الإغلاق مع بعض.
+    // إغلاقين متزامنين: الأول بس بيكسب، والتاني بياخد 409 بدل إغلاق مكرر.
+    const alreadyClosed = await sql.begin(async (tx) => {
+      const t = tx as unknown as Sql
+      if (openSession) {
+        const claimed = await t<{ id: number }[]>`
+          UPDATE "ShiftSession" SET "closedAt" = NOW()
+          WHERE "id" = ${openSession.id} AND "closedAt" IS NULL
+          RETURNING "id"`
+        if (claimed.length === 0) return true
+      }
+      await t`
+        INSERT INTO "ShiftClosure"
+          ("tenantId", "branchId", "shiftName", "userId", "counted", "expected", "variance", "note", "sessionId")
+        VALUES
+          (${tid}, ${branchId}, ${finalShiftName}, ${session.userId}, ${counted}, ${expected}, ${variance}, ${note}, ${sessionId})`
+      return false
+    })
+    if (alreadyClosed) {
+      return NextResponse.json({ error: 'الوردية دي اتقفلت بالفعل — حدّث الصفحة' }, { status: 409 })
     }
 
     // 🛡️ الرد عمداً من غير أي أرقام — الجرد يفضل أعمى. الفارق يشوفه المدير بس.

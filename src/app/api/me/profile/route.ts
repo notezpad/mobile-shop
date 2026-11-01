@@ -148,7 +148,7 @@ export async function GET() {
              e."weeklyOffDay", e."active", b."name" AS "branchName",
              e."shiftName", b."shifts" AS "branchShifts"
       FROM "Employee" e
-      LEFT JOIN "Branch" b ON b."id" = e."branchId"
+      LEFT JOIN "Branch" b ON b."id" = COALESCE(e."branchId", ${me.branchId}::int)
       WHERE e."tenantId" = ${tid} AND e."userId" = ${session.userId}
       ORDER BY e."active" DESC, e."id" DESC
       LIMIT 1`

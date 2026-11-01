@@ -130,7 +130,7 @@ export function ShiftOpenDialog({
           branchId: branch.id,
           shiftName,
           // العهدة اختيارية — الفاضي = السيرفر بيستخدم آخر إغلاق كأساس
-          openingFloat: openingFloat != null && openingFloat > 0 ? openingFloat : undefined,
+          openingFloat: openingFloat != null ? openingFloat : undefined,
           note: note.trim() || undefined,
         },
       })
@@ -138,8 +138,8 @@ export function ShiftOpenDialog({
       onOpenChange(false)
     } catch (e: any) {
       toast.error(e?.message || 'فشل فتح الوردية — جرّب تاني')
-      inFlight.current = false
     } finally {
+      inFlight.current = false
       setSaving(false)
     }
   }
@@ -267,10 +267,18 @@ export function ShiftOpenDialog({
                   <DecimalInput
                     id="shift-opening-float"
                     value={openingFloat ?? 0}
-                    onChange={(n) => setOpeningFloat(n > 0 ? n : null)}
+                    onChange={(n) => setOpeningFloat(n > 0 ? n : openingFloat === 0 ? 0 : null)}
                     min={0}
                     suffix="ج.م"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setOpeningFloat(openingFloat === 0 ? null : 0)}
+                    aria-pressed={openingFloat === 0}
+                    className={cn(pillBtn, openingFloat === 0 ? 'border-emerald-500 bg-emerald-400/15 text-foreground' : 'text-foreground/75')}
+                  >
+                    {openingFloat === 0 ? '✓ الدرج فاضي (العهدة = 0)' : 'الدرج فاضي (العهدة = 0)'}
+                  </button>
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
                     عدّ الأوراق والفكة اللي في الدرج دلوقتي واكتب الرقم — ده الأساس اللي هيتحسب عليه شغل الوردية.
                     لو سبتها فاضية، النظام هيستخدم آخر إغلاق مسجّل للفرع كأساس. الأرقام دي بتظهر للمدير بس.

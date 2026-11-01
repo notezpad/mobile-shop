@@ -132,6 +132,15 @@ async function __PUT(
     data.password = await hashPassword(pw)
   }
 
+  // 🏢 نقل الحساب لفرع تاني → الموظف المرتبط بيتنقل معاه (والوردية القديمة بتتفضّى —
+  // كانت من ورديات الفرع القديم)
+  if (data.branchId !== undefined && data.branchId !== existing.branchId) {
+    await db.employee.updateMany({
+      where: { tenantId: session.tenantId, userId: existing.id },
+      data: { branchId: data.branchId as number | null, shiftName: null },
+    })
+  }
+
   const updated = await db.user.update({
     where: { id },
     data,

@@ -39,13 +39,15 @@ async function __GET() {
   const linkedUsers = linkedIds.length
     ? await db.user.findMany({
         where: { tenantId: session.tenantId, id: { in: linkedIds } },
-        select: { id: true, email: true, isSeller: true },
+        select: { id: true, email: true, isSeller: true, branchId: true },
       })
     : []
   const userById = new Map(linkedUsers.map((u) => [u.id, u]))
 
   const items = rows.map(({ pinHash, hireDate, ...r }) => ({
     ...r,
+    // 🏢 فرع الموظف الفعلي = فرعه المسجل في HR، وإلا فرع حسابه المرتبط
+    branchId: r.branchId ?? (r.userId ? userById.get(r.userId)?.branchId ?? null : null),
     hireDate: dateStrInTz(hireDate, tz),
     hasPin: !!pinHash,
     advanceRemaining: owed.get(r.id) ?? 0,
@@ -88,7 +90,11 @@ async function __POST(req: NextRequest) {
     hireDate = localDateStrToUtcBounds(String(b.hireDate), 'start', tz)
   }
   if (b.pin !== undefined && b.pin !== '' && !isValidPin(b.pin)) return bad('الـ PIN لازم 4 إلى 6 أرقام')
-  const branchId = b.branchId ? Number(b.branchId) : session.branchId ?? null
+  let branchId: number | null = b.branchId ? Number(b.branchId) : null
+  if (branchId != null) {
+    const okBranch = await db.branch.findFirst({ where: { id: branchId, tenantId: session.tenantId }, select: { id: true } })
+    if (!okBranch) return bad('الفرع غير موجود')
+  }
 
   // 🔗 (التحديث الثامن عشر) ربط حساب الدخول — اختياري، مع تحقق التفرد:
   // الحساب لازم يكون في نفس المحل وما يكونش مربوط بموظف تاني
@@ -103,7 +109,13 @@ async function __POST(req: NextRequest) {
     })
     if (taken) return bad(`الحساب ده مربوط بالفعل بالموظف «${taken.name}» — افصله الأول من ملفه`)
     userId = uid
+    // 🏢 مفيش فرع محدد → الموظف ياخد فرع حسابه المرتبط
+    if (branchId == null) {
+      const ub = await db.user.findFirst({ where: { id: uid, tenantId: session.tenantId }, select: { branchId: true } })
+      branchId = ub?.branchId ?? null
+    }
   }
+  if (branchId == null) branchId = session.branchId ?? null
 
   // 🕐 (التحديث الحادي والعشرين) وردية الموظف — لازم تكون من ورديات فرعه
   // المعرّفة (الاسم نص snapshot زي نمط ShiftSession) — والفاضي = بدون وردية

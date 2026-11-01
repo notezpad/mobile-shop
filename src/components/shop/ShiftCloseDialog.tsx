@@ -138,8 +138,8 @@ export function ShiftCloseDialog({
       onOpenChange(false)
     } catch (e: any) {
       toast.error(e?.message || 'فشل تسجيل الإغلاق — جرّب تاني')
-      inFlight.current = false
     } finally {
+      inFlight.current = false
       setSaving(false)
     }
   }

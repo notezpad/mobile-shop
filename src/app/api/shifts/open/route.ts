@@ -4,7 +4,8 @@ import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireShiftOpenAccess, featureErrorResponse } from '@/lib/features'
 import { withSql, type Sql } from '@/lib/sql'
 import { round2 } from '@/lib/purchase-return'
-import { normalizeShifts, detectShiftName, type BranchShift } from '@/lib/branch-shifts'
+import { normalizeShifts, detectShiftNameInTz, type BranchShift } from '@/lib/branch-shifts'
+import { getTenantTimezone } from '@/lib/tenantTime'
 
 export const dynamic = 'force-dynamic'
 
@@ -181,7 +182,8 @@ async function __POST(req: NextRequest) {
       )
     }
     const bodyShift = String(body?.shiftName ?? '').trim().slice(0, 40)
-    const shiftName = bodyShift || detectShiftName(shifts) || ''
+    const tz = await getTenantTimezone(tid)
+    const shiftName = bodyShift || detectShiftNameInTz(shifts, new Date(), tz) || ''
     if (!shifts.some((s: BranchShift) => s.name === shiftName)) {
       return NextResponse.json(
         { error: `اختار وردية من اللي معرفة: ${shifts.map((s: BranchShift) => s.name).join(' / ')}` },
@@ -192,7 +194,8 @@ async function __POST(req: NextRequest) {
     // ── العهدة الافتتاحية: اختيارية — رقم ≥ 0 لو موجودة
     let openingFloat: number | null = null
     if (body?.openingFloat !== undefined && body?.openingFloat !== null && body?.openingFloat !== '') {
-      const f = Math.round((Number(body.openingFloat) || NaN) * 100) / 100
+      // ⚠️ الصفر مقبول (درج فاضي) — مفيش `|| NaN` هنا
+      const f = Math.round(Number(body.openingFloat) * 100) / 100
       if (!Number.isFinite(f) || f < 0 || f > 999_999_999) {
         return NextResponse.json({ error: 'العهدة الافتتاحية لازم تكون رقم صحيح' }, { status: 400 })
       }
@@ -214,7 +217,7 @@ async function __POST(req: NextRequest) {
     if (openNow.length > 0) {
       const s = openNow[0]
       const when = new Date(s.createdAt).toLocaleString('ar-EG', {
-        day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+        day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: tz,
       })
       return NextResponse.json(
         {
@@ -230,12 +233,30 @@ async function __POST(req: NextRequest) {
           SELECT "name" FROM "User" WHERE "id" = ${session.userId} LIMIT 1`
       : []
 
-    await sql`
-      INSERT INTO "ShiftSession"
-        ("tenantId", "branchId", "shiftName", "userId", "userName", "openingFloat", "note")
-      VALUES
-        (${tid}, ${branchId}, ${shiftName}, ${session.userId ?? null},
-         ${me[0]?.name ?? null}, ${openingFloat}, ${note})`
+    // ⚛️ إدخال ذري: بيدخل بس لو مفيش وردية مفتوحة على الفرع (والـ unique index
+    // الجزئي في الداتابيز خط دفاع تاني ضد الضغطتين المتزامنتين)
+    let inserted: { id: number }[] = []
+    try {
+      inserted = await sql<{ id: number }[]>`
+        INSERT INTO "ShiftSession"
+          ("tenantId", "branchId", "shiftName", "userId", "userName", "openingFloat", "note")
+        SELECT ${tid}, ${branchId}::int, ${shiftName}, ${session.userId ?? null},
+               ${me[0]?.name ?? null}, ${openingFloat}::float8, ${note}
+        WHERE NOT EXISTS (
+          SELECT 1 FROM "ShiftSession"
+          WHERE "tenantId" = ${tid} AND "closedAt" IS NULL
+            AND "branchId" IS NOT DISTINCT FROM ${branchId}::int
+        )
+        RETURNING "id"`
+    } catch (e: any) {
+      if (e?.code !== '23505') throw e
+    }
+    if (inserted.length === 0) {
+      return NextResponse.json(
+        { error: 'فيه وردية مفتوحة بالفعل على الفرع ده — اقفلها الأول قبل ما تفتح واحدة جديدة' },
+        { status: 409 },
+      )
+    }
 
     // الرد عمداً من غير أي أرقام — نفس انضباط الإغلاق الأعمي
     return NextResponse.json({ ok: true })
