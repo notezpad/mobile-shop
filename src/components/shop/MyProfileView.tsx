@@ -21,6 +21,10 @@
  *   5) عمولتي     — لو بائع: أرقام الشهر من نفس API «عمولتي» الحالي
  *   6) ملفي في HR — لو حسابي مربوط بموظف: بياناتي الوظيفية (بورديتي 🕐)
  *      + حضوري الشهر + إجازاتي ورصيدي + آخر قسيمة راتب معتمدة (بالعمولة)
+ *
+ * 🕐 (التحديث الحادي والعشرين) وردية الموظف — المدير بيحددها من شاشة
+ * الموظفين من ورديات الفرع، وبتظهر للموظف: شارة فوق في الهيدر + صف
+ * «ورديتي» في بياناته الوظيفية + تلميح في كارت الوردية — زي حضوره وراتبه بالظبط.
  */
 
 import * as React from 'react'
@@ -286,6 +290,13 @@ export function MyProfileView() {
                 <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2.5 py-1 text-[11px] font-extrabold text-sky-700 dark:text-sky-300">
                   <Link2 className="size-3" aria-hidden />
                   {hr.jobTitle || 'موظف — الموارد البشرية'}
+                </span>
+              ) : null}
+              {/* 🕐 ورديتي المحددة — شارة فوق زي الفرع والدور بالظبط (التحديث الحادي والعشرين) */}
+              {hr?.myShift ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/15 px-2.5 py-1 text-[11px] font-extrabold text-indigo-700 dark:text-indigo-300">
+                  <Clock className="size-3" aria-hidden />
+                  ورديتي: {shiftLabel(hr.myShift)}
                 </span>
               ) : null}
               {!me.active ? (
