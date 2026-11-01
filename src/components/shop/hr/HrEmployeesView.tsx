@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { CalendarOff, HandCoins, KeyRound, Loader2, FileSpreadsheet, Phone, Plus, Search, Pencil, UserCheck, UserX, Users, Wallet, User, UserRound, Briefcase, Calendar } from 'lucide-react'
+import { CalendarOff, HandCoins, KeyRound, Loader2, FileSpreadsheet, Phone, Plus, Search, Pencil, UserCheck, UserX, Users, Wallet, User, UserRound, Briefcase, Calendar, Link2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,6 +28,10 @@ interface Employee {
   active: boolean
   hasPin: boolean
   advanceRemaining: number
+  // 🔗 (التحديث الثامن عشر) حساب الدخول المرتبط + شارة البائع
+  userId: string | null
+  userEmail: string | null
+  userIsSeller: boolean
 }
 
 interface FormState {
@@ -38,8 +42,9 @@ interface FormState {
   weeklyOffDay: string
   hireDate: string
   pin: string
+  userId: string
 }
-const EMPTY: FormState = { name: '', jobTitle: '', phone: '', baseSalary: '', weeklyOffDay: '5', hireDate: '', pin: '' }
+const EMPTY: FormState = { name: '', jobTitle: '', phone: '', baseSalary: '', weeklyOffDay: '5', hireDate: '', pin: '', userId: '' }
 
 interface SettlePreview {
   today: string
@@ -297,7 +302,7 @@ export function HrEmployeesView() {
                         
                         {/* الاسم والوظيفة */}
                         <div className="flex flex-col items-start mb-4">
-                          <div className="flex items-center gap-2 mb-0.5">
+                          <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
                             <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 truncate">{e.name}</h3>
                             {e.hasPin ? (
                               <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center gap-1">
@@ -308,11 +313,27 @@ export function HrEmployeesView() {
                                 بدون PIN
                               </span>
                             )}
+                            {e.userIsSeller ? (
+                              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                💰 بائع
+                              </span>
+                            ) : null}
                           </div>
                           <div className="flex items-center gap-1 text-xs text-slate-500">
                             <Briefcase className="size-3.5" />
                             <span>{e.jobTitle || 'موظف'}</span>
                           </div>
+                          {e.userEmail ? (
+                            <div className="flex items-center gap-1 mt-1 text-[11px] text-emerald-700 dark:text-emerald-400" title="حساب الدخول المرتبط">
+                              <Link2 className="size-3" />
+                              <span dir="ltr" className="truncate max-w-[180px]">{e.userEmail}</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 mt-1 text-[11px] text-amber-600/90" title="اربط حساب دخول من زرار التعديل">
+                              <Link2 className="size-3" />
+                              <span>بدون حساب دخول — اربطه من التعديل</span>
+                            </div>
+                          )}
                         </div>
 
                         {/* شبكة البيانات (2x2) مريحة */}
@@ -436,11 +457,32 @@ function EmployeeDialog({
       ? {
           name: employee.name, jobTitle: employee.jobTitle ?? '', phone: employee.phone ?? '',
           baseSalary: String(employee.baseSalary), weeklyOffDay: String(employee.weeklyOffDay),
-          hireDate: employee.hireDate, pin: '',
+          hireDate: employee.hireDate, pin: '', userId: employee.userId ?? '',
         }
       : EMPTY,
   )
   const [saving, setSaving] = React.useState(false)
+  // 🔗 (التحديث الثامن عشر) قايمة حسابات الدخول للربط — مأخوذة من شاشة
+  // المستخدمين (المدير بس)، والموظفين المرتبطين فعلاً بغير الموظف الحالي
+  // بيتستبعدوا من القايمة عشان الربط يفضل واحد لواحد
+  const [users, setUsers] = React.useState<{ id: string; name: string; email: string; isSeller: boolean }[]>([])
+  React.useEffect(() => {
+    let alive = true
+    import('@/lib/api').then(({ api }) =>
+      api<any[]>('/api/users')
+        .then((rows) => {
+          if (!alive) return
+          setUsers(
+            (Array.isArray(rows) ? rows : [])
+              .filter((u) => u && u.active !== false)
+              .map((u) => ({ id: String(u.id), name: String(u.name ?? ''), email: String(u.email ?? ''), isSeller: u.isSeller === true })),
+          )
+        })
+        .catch(() => { /* القايمة استكمالية — فشلها مش بيمنع حفظ الباقي */ }),
+    )
+    return () => { alive = false }
+  }, [employee?.userId])
+  const selectedUser = users.find((u) => u.id === f.userId) ?? null
   const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) => setF((s) => ({ ...s, [k]: e.target.value }))
 
   const save = async () => {
@@ -453,6 +495,8 @@ function EmployeeDialog({
       const body: Record<string, unknown> = {
         name: f.name.trim(), jobTitle: f.jobTitle.trim(), phone: f.phone.trim(),
         baseSalary: salary, weeklyOffDay: Number(f.weeklyOffDay),
+        // 🔗 الربط: '' = فك الربط، id = ربط الحساب (السيرفر بيتحقق من التفرد)
+        userId: f.userId || '',
       }
       if (f.hireDate) body.hireDate = f.hireDate
       if (f.pin) body.pin = f.pin
@@ -522,6 +566,37 @@ function EmployeeDialog({
                 className="shadow-inner"
               />
             </div>
+          </div>
+          {/* 🔗 (التحديث الثامن عشر) ربط حساب الدخول — من خلاله الموظف يشوف
+              «ملفي» (حضوره/إجازاته/راتبه) ولو بائع عمولته بتنزل في راتبه */}
+          <div className="space-y-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 p-3">
+            <Label className="flex items-center gap-1.5">
+              <Link2 className="size-3.5" />
+              حساب الدخول (اختياري — من شاشة المستخدمين)
+            </Label>
+            <Select
+              value={f.userId || 'none'}
+              onValueChange={(v) => setF((s) => ({ ...s, userId: v === 'none' ? '' : v }))}
+            >
+              <SelectTrigger className="shadow-inner bg-white dark:bg-slate-900">
+                <SelectValue placeholder="اختار حساب" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">بدون حساب دخول</SelectItem>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.name} — {u.email}{u.isSeller ? ' (بائع 💰)' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+              الربط هو اللي بيخلي الموظف يشوف من صفحة «ملفي»: حضوره وإجازاته وقسيمة راتبه —
+              {selectedUser?.isSeller
+                ? ' والحساب المختار بائع 💰 فعمولته هتتعبّى تلقائياً في راتبه كل شهر.'
+                : ' ولو الحساب بائع، عمولته هتتعبّى تلقائياً في عمود «عمولة» في راتبه.'}
+              {' '}كل حساب مربوط بموظف واحد بس.
+            </p>
           </div>
         </DialogBody>
         <DialogFooter className="shrink-0 border-t bg-background px-4 py-3 sm:px-6">

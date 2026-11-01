@@ -76,6 +76,7 @@ model Tenant {
   transfers         Transfer[]
   stocktakes        Stocktake[]
   shiftClosures     ShiftClosure[]
+  // 🔗 (التحديث السادس عشر) جلسات الوردية المسجّلة (المحل كله)
   shiftSessions     ShiftSession[]
   // 🫥 (التحديث الحادي عشر) مفتاح «الجرد الأعمى للخزينة» — صاحب المحل هو اللي
   // بيشغّله/يقفله: مفعّل (افتراضي) = الكاشير يعدّ الدرج من غير ما يشوف المتوقع؛
@@ -228,6 +229,7 @@ model Branch {
   maintenanceOrders MaintenanceOrder[]
   cashEntries       CashEntry[]
   shiftClosures     ShiftClosure[]
+  // 🔗 (التحديث السادس عشر) جلسات الوردية المفتوحة على الفرع
   shiftSessions     ShiftSession[]
   cycleCountSchedules CycleCountSchedule[]
   // 🕐 2026-10-31 (التحديث الثامن): تعريف ورديات الفرع — مصفوفة
@@ -858,12 +860,6 @@ model ShiftClosure {
   id        Int      @id @default(autoincrement())
   tenantId  String
   branchId  Int?
-  // 🔗 2026-11-01 (التحديث السادس عشر): جلسة الوردية المفتوحة المرتبطة بالإغلاق —
-  // لما الوردية اتفتحت رسميًا، الإغلاق بيتحسب على أساس عهدة الفتح + حركات الكاش
-  // من وقت الفتح (متوقع الوردية نفسها) بدل رصيد الدرج الكامل. null = إغلاق قديم
-  // أو إغلاق من غير فتح رسمي — نفس سلوك التحديثات اللي فاتت.
-  sessionId Int?
-  session   ShiftSession? @relation(fields: [sessionId], references: [id])
   // اسم الوردية من إعدادات الفرع (صباحي/مسائي/ليلي...)
   shiftName String?
   // مين قفل الوردية (سجل تدقيق)
@@ -877,6 +873,11 @@ model ShiftClosure {
   note      String?
   createdAt DateTime @default(now())
 
+  // 🔗 (التحديث السادس عشر) جلسة الفتح المرتبطة — الإغلاق اللي جاي بعد «فتح
+  // وردية» بيتقفل على الجلسة، وبيتحسب متوقعه من وقت الفتح (على الوردية نفسها)
+  sessionId Int?
+  session   ShiftSession? @relation(fields: [sessionId], references: [id])
+
   tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   branch Branch? @relation(fields: [branchId], references: [id])
 
@@ -884,40 +885,35 @@ model ShiftClosure {
   @@index([tenantId, branchId, createdAt])
 }
 
-// 🔗 2026-11-01 (التحديث السادس عشر) — جلسة وردية: من «فتح الوردية» لحد «إغلاقها».
-// الفجوة اللي بتحلها: لما يكون فيه كذا كاشير على نفس الدرج، الفارق كان بيتحسب
-// على رصيد الدرج الكامل (بيورث عجز الورديات اللي فاتت) ومفيش سجل لمين كان
-// ماسك الدرج. الجلسة بتربط: مين فتح + العهدة الافتتاحية (اختيارية) + مين قفل
-// + متوقع الوردية نفسها (العهدة/آخر إغلاق + حركات الكاش من وقت الفتح) والفارق.
-// الورديات اللي من غير فتح رسمي بتقفل زي الأول — تحديث backward-compatible بالكامل.
+// 🔗 (التحديث السادس عشر) جلسة وردية: من «فتح الوردية» لحد «إغلاقها» —
+// مين فتح، أنهي وردية، العهدة الافتتاحية (اختيارية)، ووقت الفتح.
+// الفجوة اللي بتحلها: كذا كاشير على نفس الدرج — الفارق وقت الإغلاق بيتحسب
+// على الوردية دي بالذات (العهدة + حركات الكاش من وقت الفتح) بدل رصيد
+// الدرج الكامل اللي بيورّث عجز الورديات اللي فاتت.
 model ShiftSession {
-  id           Int       @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
   tenantId     String
   branchId     Int?
-  // اسم الوردية من ورديات الفرع المعرفة (صباحي/مسائي...)
+  // اسم الوردية من إعدادات الفرع وقت الفتح
   shiftName    String
-  // مين فتح — نص خالص بدون FK (نفس نمط التدقيق في ShiftClosure)
+  // مين فتح (سجل تدقيق — وحدة المسؤولية)
   userId       String?
-  userName     String?
-  // العهدة الافتتاحية — اللي فتح عدّها في الدرج وقت الفتح. null = ما عدّش
-  // (السيرفر بيستخدم آخر إغلاق معروف للفرع كأساس وقت الإغلاق، وألا 0).
+  userName     String?  // لقطة اسم الفاتح للعرض
+  // العهدة الافتتاحية — اللي فتح عدّ الدرج وقت الفتح (اختيارية:
+  // NULL = السيرفر بيستخدم آخر إغلاق للفرع كأساس)
   openingFloat Float?
   note         String?
-  // الإغلاق — closedAt null = الوردية لسه مفتوحة (واحدة بس لكل فرع)
+  createdAt    DateTime @default(now())
+  // قفل الجلسة: بيتحطّم لحظة الإغلاق المرتبط (closedAt IS NULL = شغالة)
   closedAt     DateTime?
-  closedById   String?
-  closedByName String?
-  // أرقام الإغلاق (لقطات لحظة القفل — للمدير فقط)
-  counted      Float?
-  expected     Float?
-  variance     Float?
-  createdAt    DateTime  @default(now())
 
-  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  branch   Branch?        @relation(fields: [branchId], references: [id])
-  closures ShiftClosure[]
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch     Branch?        @relation(fields: [branchId], references: [id])
+  // 🔗 الإغلاقات المرتبطة بالجلسة (ShiftClosure.sessionId)
+  closures   ShiftClosure[]
+  // ملاحظة: userId عمود تدقيق نصي زي نمط ShiftClosure — بدون علاقة Prisma
 
-  @@index([tenantId, createdAt])
+  @@index([tenantId])
   @@index([tenantId, branchId, closedAt])
 }
 

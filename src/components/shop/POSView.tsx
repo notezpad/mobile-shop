@@ -12,7 +12,6 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
-  DoorOpen,
   CreditCard,
   Loader2,
   Maximize2,
@@ -33,6 +32,7 @@ import {
   Smartphone,
   Store,
   Trash2,
+  DoorOpen,
   User,
   Volume2,
   VolumeX,
@@ -822,9 +822,9 @@ export function POSView() {
     !user?.permissions ||
     user.permissions.length === 0 ||
     user.permissions.includes('shift_close')
-  // 🔗 (التحديث السادس عشر) فتح الوردية — نفس النمط بالظبط (صلاحية مستقلة
-  // 'shift_open'): بيسجل مين فتح الدرج والعهدة الافتتاحية، عشان الفارق
-  // وقت الإغلاق يتحسب على الوردية نفسها بدل رصيد الدرج الكامل.
+  // 🔗 2026-11-01 (التحديث السادس عشر) — فتح الوردية: نفس النمط بالظبط
+  // (صلاحية مستقلة 'shift_open') — بيسجل جلسة الوردية باسم اللي فتح
+  // عشان الفارق وقت الإغلاق يتحسب على الوردية نفسها
   const canOpenShift =
     user?.role === 'ADMIN' ||
     user?.role === 'SUPER_ADMIN' ||
@@ -834,7 +834,7 @@ export function POSView() {
   const [posReturnOpen, setPosReturnOpen] = React.useState(false)
   const [posReturnSale, setPosReturnSale] = React.useState<SaleLookupSale | null>(null)
   const [shiftCloseOpen, setShiftCloseOpen] = React.useState(false)
-  // 🔗 (v16) دايلوج فتح الوردية
+  // 🔗 دايلوج فتح الوردية (جلسة الفتح)
   const [shiftOpenOpen, setShiftOpenOpen] = React.useState(false)
   // 🏬 (التحديث الرابع عشر) «فرع الفاتورة» — اختيار المدير لفرع البيع قبل ما
   // يبدأ. الاختيار بيفضل محفوظ على الجهاز (آخر فرع اتباع فيه) عشان البيع
@@ -2106,7 +2106,7 @@ export function POSView() {
         <button
           type="button"
           onClick={() => setShiftOpenOpen(true)}
-          title="فتح الوردية — سجل مين ماسك الدرج والعهدة الافتتاحية"
+          title="فتح الوردية — سجّل بداية شغلك على الدرج (مين فتح والعهدة)"
           aria-label="فتح الوردية"
           className={cn(dockBtn, 'border-e border-foreground/15 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300')}
         >
@@ -3594,7 +3594,7 @@ export function POSView() {
       />
       {/* 🕐 إغلاق الوردية بالجرد الأعمى — الكاشير يكتب اللي عدّاه بس */}
       <ShiftCloseDialog open={shiftCloseOpen} onOpenChange={setShiftCloseOpen} />
-      {/* 🔗 فتح الوردية — سجل مين ماسك الدرج والعهدة الافتتاحية */}
+      {/* 🔗 فتح الوردية — جلسة الفتح باسم اللي فتح والعهدة الافتتاحية */}
       <ShiftOpenDialog open={shiftOpenOpen} onOpenChange={setShiftOpenOpen} />
       {posReturnSale && (
         <SaleReturnDialog

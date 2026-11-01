@@ -1,54 +1,48 @@
 /**
- * 🔗 2026-11-01 (التحديث السادس عشر) — حسابات جلسة الوردية (فتح ← إغلاق).
+ * 🔗 2026-11-01 (التحديث السادس عشر) — حسابات جلسة الوردية (مشتركة، قابلة
+ * للاختبار خارج الـ API): أساس الفتح، متوقع الوردية، والفارق.
  *
- * الفجوة: لما يكون فيه كذا كاشير على نفس الدرج، «المتوقع» في الإغلاق كان
- * بيتحسب على رصيد الدرج الكامل (SUM كل قيود الكاش للفرع) — يعني عجز وردية
- * أمس بيتورث لوردية النهاردة، ومفيش سجل لمين كان ماسك الدرج.
+ * الفجوة اللي بتحلها: كان المتوقع بيتحسب على رصيد الدرج الكامل (من أول يوم)
+ * — فعجز وردية أمس بيتورث لوردية النهاردة ومستحيل تعرف مين سببه. مع جلسة
+ * فتح رسمية، المتوقع بيتحسب على الوردية نفسها:
  *
- * الحل: «فتح وردية» بيعمل ShiftSession (مين فتح + عهدة افتتاحية اختيارية)،
- * وعند الإغلاق المتوقع بيحسب على الوردية نفسها:
+ *   الأساس      = العهدة الافتتاحية (لو اللي فتح عدّ) ← ألا آخر إغلاق
+ *                 مسجّل للفرع (اللي الكاشير اللي فات عدّاه) ← ألا صفر
+ *                 (أول يوم شغل). ⚠️ العهدة = 0 مقبولة صراحةً (الدرج فاضي
+ *                 وقت الفتح حقيقة مش نسيان — بنفرّق بين null و 0).
+ *   المتوقع    = الأساس + صافي حركات الكاش من وقت الفتح (داخل − خارج)
+ *   الفارق     = اللي اتعدّى − المتوقع  (موجب = زيادة، سالب = عجز)
  *
- *   متوقع الوردية = الأساس + صافي حركات الكاش من وقت الفتح
- *
- * الأساس (بلترتيب):
- *   1. العهدة الافتتاحية — اللي فتح عدّها في الدرج وقت الفتح (أدق أساس).
- *   2. آخر إغلاق معروف للفرع — اللي الكاشير اللي فات عدّه (لو ساب العهدة فاضية).
- *   3. صفر — أول يوم شغل على الفرع من غير ولا إغلاق ولا عهدة.
- *
- * الملف ده isomorphic بدون أي deps — نفس فلسفة branch-shifts.ts — عشان
- * يشتغل في الـ API وفي الاختبارات من غير أي بيئة.
+ * كده عجز وردية أمس **مش بيتورث** لوردية النهاردة — كل وردية بتبدأ من
+ * أساسها هي، والفارق بيرجع لباش آدمين الوردية دي بالذات.
  */
 
-/** تقريب لخانتين عشريتين — نفس دقة الأموال في باقي النظام. */
-export function round2(n: number): number {
-  return Math.round((Number(n) || 0) * 100) / 100
-}
+/** تقريب على خانتين — نفس عُرف الفلوس في المشروع كله. */
+const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100
 
-export interface SessionBaselineInput {
-  /** العهدة الافتتاحية (null = ما عدّش وقت الفتح) */
+export interface OpeningBaseInput {
+  /** العهدة الافتتاحية من جلسة الفتح — null = مكتوبتش (مش صفر!) */
   openingFloat: number | null
-  /** آخر إغلاق معروف للفرع (counted — null = مفيش إغلاقات لسه) */
-  lastClosureCounted: number | null
+  /** counted آخر إغلاق مسجّل للفرع — null = مفيش إغلاق (أول يوم) */
+  lastClosureCounted?: number | null
 }
 
 /**
- * أساس الوردية — الرصيد اللي كان في الدرج وقت الفتح (بأدق معلومة متاحة).
+ * أساس الوردية: عهدة ← آخر إغلاق ← صفر.
+ * العهدة 0 مقبولة صراحةً (فرق جوهري بين «مكتوبة صفر» و«مكتوبة خالص»).
  */
-export function sessionBaseline({ openingFloat, lastClosureCounted }: SessionBaselineInput): number {
+export function resolveOpeningBase({ openingFloat, lastClosureCounted }: OpeningBaseInput): number {
   if (openingFloat != null && Number.isFinite(openingFloat)) return round2(openingFloat)
   if (lastClosureCounted != null && Number.isFinite(lastClosureCounted)) return round2(lastClosureCounted)
   return 0
 }
 
-/**
- * متوقع الوردية لحظة الإغلاق = الأساس + صافي حركات الكاش من وقت الفتح
- * (net = داخل − خارج، من قيود CashEntry method='cash' أو NULL للفرع).
- */
-export function sessionExpected(baseline: number, cashNetSinceOpen: number): number {
-  return round2(baseline + cashNetSinceOpen)
+/** متوقع الوردية = الأساس + صافي حركات الكاش من وقت الفتح. */
+export function sessionExpected(base: number, netCashSinceOpen: number): number {
+  return round2(base + netCashSinceOpen)
 }
 
-/** فارق الوردية = اللي الكاشير عدّاه − المتوقع (موجب = زيادة، سالب = عجز). */
+/** فارق الوردية = اللي اتعدّى − المتوقع (موجب = زيادة، سالب = عجز). */
 export function sessionVariance(counted: number, expected: number): number {
   return round2(counted - expected)
 }

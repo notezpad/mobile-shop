@@ -1,87 +1,69 @@
 'use client'
 
 /**
- * 🪪 2026-11-01 (التحديث الرابع عشر) — شاشة «ملفي» — الصفحة الشخصية للموظف.
+ * 👤 2026-11-01 (التحديث السابع عشر + الثامن عشر) — «ملفي»: الصفحة الشخصية للموظف.
  *
- * ملف واحد موحّد لكل موظف عنده حساب دخول — الأقسام بتظهر حسب الموجود فعلاً:
- *   - كارت «النهاردة»: حضورك النهاردة (دخول/انصراف/تأخير) + فواتير البائع.
- *   - كارت «عمولتي» (للبائع — بيجيب نفسه من /api/commissions/my).
- *   - «حضوري»: تقويم الشهر يوم بيوم + ملخص.
- *   - «رواتبي»: قسائم الرواتب المعتمدة (بعد الصرف بس).
- *   - «سلفي» + «إجازاتي» + «تقييماتي».
+ * الفجوة: بيانات الموظف وصلاحياته كانت عند المدير بس — والموظف نفسه
+ * ماعندوش مكان يشمّ فيه نفسه: أنا مين في النظام؟ عندي إيه صلاحيات؟
+ * اشتغلت النهاردة كام فاتورة بكام؟ ووردية فرعي مفتوحة ولا لأ؟ ولو
+ * مربوط بملف موظف في الموارد البشرية: حضورك وإجازاتك وقسيمة راتبك
+ * (بالعمولة) بتظهر هنا كمان.
  *
- * 🛡️ الأرقام كلها من /api/me/profile — السيشن هي الهوية (مفيش اختيار
- * مستخدم)، والحساب غير المربوط بسجل موظف يعرض رسالة إرشادية.
+ * المبدأ: السيشن هو مصدر الهوية — كل رقم هنا من شغلي أنا بس (زي
+ * عمولتي بالظبط)، ومفيش أي أرباح أو تكاليف أو بيانات زميل تاني.
+ * كروت الصفحة:
+ *   1) بياناتي    — الاسم/الدور/الفرع/البريد/تاريخ العضوية/آخر دخول
+ *   2) النهاردة   — فواتير اليوم باسمي + الصافي + المرتجع
+ *   3) صلاحياتي   — قائمة الصلاحيات (أو «كل الصلاحيات» لو من غير قائمة)
+ *   4) الوردية    — الوردية المفتوحة على فرعي دلوقتي (ومين فتحها)
+ *   5) عمولتي     — لو بائع: أرقام الشهر من نفس API «عمولتي» الحالي
+ *   6) ملفي في HR — لو حسابي مربوط بموظف: بياناتي الوظيفية + حضوري
+ *      الشهر + إجازاتي ورصيدي + آخر قسيمة راتب معتمدة (بالعمولة)
  */
 
 import * as React from 'react'
 import {
-  BadgeCheck,
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  HandCoins,
-  Info,
-  Loader2,
-  RefreshCw,
-  UserRound,
-  Wallet,
+  CircleUserRound, Mail, Building2, CalendarDays, LogIn, Loader2,
+  ReceiptText, Undo2, ShieldCheck, DoorOpen, Percent, Eye, EyeOff,
+  UserCog, Sparkles, Briefcase, CalendarCheck, CalendarOff, Wallet,
+  HandCoins, BadgeDollarSign, Clock, Link2,
 } from 'lucide-react'
-import { toast } from 'sonner'
+import Link from 'next/link'
 import { api } from '@/lib/api'
-import { formatCurrency } from '@/lib/format'
-import { HR_STATUS_LABEL, weekdayOf, daysInMonthOf, type HrStatus } from '@/lib/hr'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
-import { MyCommissionCard } from './MyCommissionCard'
+import { fmt } from '@/lib/print'
 
-/* ─────────────────────── أنواع البيانات ─────────────────────── */
-
-interface TodayAttendance {
-  status: string
-  checkIn: string | null
-  checkOut: string | null
-  lateMinutes: number
-  note: string | null
+interface MeData {
+  name: string
+  email: string
+  role: string
+  active: boolean
+  branchName: string | null
+  isSeller: boolean
+  canViewProfits: boolean
+  createdAt: string
+  lastLoginAt: string | null
 }
 
-interface AttendanceRec {
-  date: string
-  status: string
-  checkIn: string | null
-  checkOut: string | null
-  lateMinutes: number
-  note: string | null
-}
-
-interface ProfileData {
-  linked: boolean
-  month: string
-  currentMonth: string
-  prevMonth: string
-  nextMonth?: string
-  today: string
-  employee?: {
-    name: string
-    jobTitle: string | null
+interface HrData {
+  employeeId: number
+  name: string
+  jobTitle: string | null
+  baseSalary: number
+  hireDate: string
+  weeklyOffDay: number
+  active: boolean
+  branchName: string | null
+  attendance: { month: string; present: number; late: number; absent: number; leave: number; lateMinutes: number }
+  leaves: {
+    annualTotal: number
+    annualUsed: number
+    annualRemaining: number
+    recent: { type: string; startDate: string; endDate: string; days: number; hours: number | null }[]
+  }
+  payslip: {
+    month: string
     baseSalary: number
-    hireDate: string | null
-    weeklyOffDay: number
-    active: boolean
-  }
-  todayData?: {
-    attendance: TodayAttendance | null
-    sales: { invoices: number; sales: number; returns: number } | null
-  }
-  attendanceMonth?: {
-    month: string
-    summary: { present: number; late: number; absent: number; leave: number; lateMinutesTotal: number }
-    records: AttendanceRec[]
-  }
-  payslips?: {
-    month: string
-    net: number
     payableBase: number
     absentDays: number
     absenceDeduction: number
@@ -91,511 +73,475 @@ interface ProfileData {
     penalty: number
     advanceDeduction: number
     commission: number
-    note: string | null
-    method: string | null
+    net: number
     paidAt: string | null
-  }[]
-  advances?: {
-    id: number
-    amount: number
-    installment: number
-    remaining: number
-    status: string
-    method: string
-    note: string | null
-    createdAt: string | null
-  }[]
-  leaves?: { id: number; type: string; startDate: string; endDate: string; days: number; hours: number | null; note: string | null }[]
-  evaluations?: {
-    month: string
-    overall: number
-    attendanceScore: number
-    perfScore: number
-    customerScore: number
-    teamScore: number
-    bonus: number
-  }[]
+  } | null
 }
 
-/* ─────────────────────── مساعدات العرض ─────────────────────── */
-
-const MONTH_NAMES = [
-  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
-  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
-]
-const WEEKDAYS_SHORT = ['أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت']
-
-function monthLabel(m: string): string {
-  const [y, mm] = m.split('-').map(Number)
-  return `${MONTH_NAMES[mm - 1] ?? mm} ${y}`
+interface ProfileResponse {
+  me: MeData
+  permissions: { unrestricted: boolean; list: string[] }
+  today: { date: string; invoices: number; grossTotal: number; refunded: number; netTotal: number }
+  openShift: { shiftName: string; userName: string | null; createdAt: string; mine: boolean } | null
+  hr: HrData | null
 }
 
-function dateLabelAr(dateStr: string): string {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  if (!y || !m || !d) return dateStr
-  return `${d} ${MONTH_NAMES[m - 1] ?? m} ${y}`
+interface CommissionData {
+  month: string
+  enabled: boolean
+  invoices: number
+  salesTotal: number
+  returnsTotal: number
+  netBase: number
+  commission: number
+  target: number | null
+  targetMet: boolean
+  payout: { amount: number; viaPayroll: boolean; method: string | null; paidAt: string } | null
 }
 
-const PAY_METHOD_LABEL: Record<string, string> = {
-  cash: 'كاش',
-  vodafone_cash: 'محفظة',
-  instapay: 'انستاباي',
-  fawry: 'فوري',
-  bank: 'بنك',
+/** نفس تسميات شاشة المستخدمين بالظبط — عشان الموظف يشوف نفس أسماء صلاحياته */
+const PERM_LABELS: Record<string, string> = {
+  dashboard: 'لوحة المعلومات', pos: 'نقطة البيع', products: 'المنتجات',
+  sales: 'سجل المبيعات', maintenance: 'الصيانة', customers: 'العملاء',
+  suppliers: 'الموردين', purchases: 'المشتريات', inventory: 'المخزون',
+  finance: 'المعاملات المالية', expenses: 'المصروفات', cash: 'الخزنة',
+  reports: 'التقارير', settings: 'الإعدادات', users: 'المستخدمين',
+  branches: 'الفروع', hr: 'الموارد البشرية',
+  returns: 'المرتجعات (من نقطة البيع)',
+  shift_close: 'إغلاق الوردية (جرد الدرج الأعمى)',
+  shift_open: 'فتح الوردية',
+  blind_stocktake: 'الجرد الأعمي',
+  commissions: 'عمولات البائعين',
+  hr_attendance: 'الحضور والإجازات (مشرف)',
+  my_profile: 'ملفي',
 }
 
-const LEAVE_TYPE_LABEL: Record<string, string> = {
-  annual: 'إجازة سنوية (مدفوعة)',
-  sick: 'إجازة مرضية',
-  unpaid: 'إجازة بدون مرتب',
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: 'مدير',
+  EMPLOYEE: 'موظف',
+  SUPER_ADMIN: 'مدير النظام',
+}
+
+const LEAVE_TYPES: Record<string, string> = {
+  annual: 'سنوية (بمرتب)',
+  sick: 'مرضية (بمرتب)',
+  unpaid: 'بدون مرتب',
   permission: 'إذن ساعات',
 }
 
-/** ألوان حالة الحضور — شارة + نقطة يوم في التقويم */
-const STATUS_CHIP: Record<string, string> = {
-  present: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-  late: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400',
-  absent: 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-400',
-  leave: 'border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-400',
-}
-const STATUS_DOT: Record<string, string> = {
-  present: 'bg-emerald-500',
-  late: 'bg-amber-500',
-  absent: 'bg-rose-500',
-  leave: 'bg-sky-500',
-}
+const WEEK_DAYS = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
 
-function statusChipCls(status: string): string {
-  return STATUS_CHIP[status] ?? 'border-border bg-muted/50 text-muted-foreground'
-}
-function statusLabel(status: string): string {
-  return HR_STATUS_LABEL[status as HrStatus] ?? 'بدون سجل'
-}
+const fmtWhen = (iso: string) =>
+  new Date(iso).toLocaleString('ar-EG', {
+    day: 'numeric', month: 'long', year: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  })
 
-/** صف «الاسم ........ القيمة» بخط منقّط — نفس نمط الفواتير */
-function LedgerRow({ label, value, tone = 'default' }: { label: string; value: string; tone?: 'default' | 'plus' | 'minus' }) {
+const fmtDay = (iso: string) =>
+  new Date(iso).toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' })
+
+function LedgerRow({ label, value, icon: Icon, tone }: { label: string; value: string; icon?: React.ElementType; tone?: 'emerald' | 'amber' | 'rose' }) {
   return (
-    <div className="flex items-baseline gap-2 text-[13px]">
+    <div className="flex items-center gap-2 text-[13px]">
+      {Icon ? <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden /> : null}
       <dt className="shrink-0 text-muted-foreground">{label}</dt>
       <span aria-hidden className="flex-1 border-b border-dotted border-border" />
-      <dd
-        className={cn(
-          'shrink-0 font-bold tabular-nums',
-          tone === 'plus' && 'text-emerald-600 dark:text-emerald-400',
-          tone === 'minus' && 'text-rose-600 dark:text-rose-400',
-        )}
-      >
-        {value}
-      </dd>
+      <dd className={cn(
+        'max-w-[60%] truncate font-bold',
+        tone === 'emerald' && 'text-emerald-600 dark:text-emerald-400',
+        tone === 'amber' && 'text-amber-600 dark:text-amber-400',
+        tone === 'rose' && 'text-rose-600 dark:text-rose-400',
+      )}>{value}</dd>
     </div>
   )
 }
 
-function SectionCard({
-  icon,
-  title,
-  desc,
-  children,
-}: {
-  icon: React.ReactNode
-  title: string
-  desc?: string
-  children: React.ReactNode
+function StatTile({ label, value, icon: Icon, tone = 'default' }: {
+  label: string; value: string; icon: React.ElementType; tone?: 'default' | 'amber' | 'emerald' | 'rose'
 }) {
   return (
-    <section className="rounded-2xl border bg-card p-4 shadow-sm">
-      <header className="mb-3 flex items-center gap-2.5">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-          {icon}
-        </span>
-        <div className="min-w-0">
-          <h2 className="text-sm font-extrabold">{title}</h2>
-          {desc && <p className="text-[11px] text-muted-foreground">{desc}</p>}
-        </div>
-      </header>
-      {children}
-    </section>
+    <div className="flex items-center gap-3 rounded-2xl border bg-card p-3.5">
+      <span
+        className={cn(
+          'grid size-10 shrink-0 place-items-center rounded-xl',
+          tone === 'emerald' && 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400',
+          tone === 'amber' && 'bg-amber-500/12 text-amber-600 dark:text-amber-400',
+          tone === 'rose' && 'bg-rose-500/12 text-rose-600 dark:text-rose-400',
+          tone === 'default' && 'bg-primary/10 text-primary',
+        )}
+      >
+        <Icon className="size-5" aria-hidden />
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-[11px] font-bold text-muted-foreground">{label}</p>
+        <p className="truncate text-lg font-extrabold tabular-nums">{value}</p>
+      </div>
+    </div>
   )
 }
 
-/* ─────────────────────── الشاشة ─────────────────────── */
-
 export function MyProfileView() {
-  const [month, setMonth] = React.useState<string>('')
-  const [data, setData] = React.useState<ProfileData | null>(null)
   const [loading, setLoading] = React.useState(true)
-  const [refreshing, setRefreshing] = React.useState(false)
-
-  const load = React.useCallback(async (m: string, silent = false) => {
-    if (silent) setRefreshing(true)
-    else setLoading(true)
-    try {
-      const q = m ? `?month=${encodeURIComponent(m)}` : ''
-      const r = await api<ProfileData>(`/api/me/profile${q}`)
-      setData(r)
-      setMonth(r.month)
-    } catch (e: any) {
-      toast.error(e?.message || 'فشل تحميل ملفك الشخصي')
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }, [])
+  const [error, setError] = React.useState<string | null>(null)
+  const [data, setData] = React.useState<ProfileResponse | null>(null)
+  const [comm, setComm] = React.useState<CommissionData | null>(null)
 
   React.useEffect(() => {
-    void load('')
-  }, [load])
+    let alive = true
+    setLoading(true)
+    setError(null)
+    api<ProfileResponse>('/api/me/profile')
+      .then((res) => {
+        if (!alive) return
+        setData(res)
+        // 💰 بائع؟ نجيب عمولته الشهر الحالية من نفس API «عمولتي»
+        if (res?.me?.isSeller) {
+          api<CommissionData>('/api/commissions/my')
+            .then((c) => { if (alive && c?.enabled) setComm(c) })
+            .catch(() => { /* العمولة استكمالية — فشلها مش بيكسر الصفحة */ })
+        }
+      })
+      .catch((e: any) => {
+        if (alive) setError(e?.message || 'حصل خطأ في تحميل ملفك — جرّب تاني')
+      })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [])
 
   if (loading) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      <div className="flex min-h-[50vh] items-center justify-center" dir="rtl">
+        <Loader2 className="size-6 animate-spin text-primary" />
       </div>
     )
   }
 
-  const emp = data?.employee
-  const att = data?.attendanceMonth
-  const recByDate = new Map<string, AttendanceRec>()
-  if (att) for (const r of att.records) recByDate.set(r.date, r)
-
-  // ─── الحساب مش مربوط بسجل موظف ───
-  if (!data || !data.linked || !emp) {
+  if (error || !data) {
     return (
-      <div className="mx-auto w-full max-w-2xl p-3 sm:p-5" dir="rtl">
-        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed bg-card p-8 text-center">
-          <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <UserRound className="size-6" />
-          </span>
-          <h1 className="text-base font-extrabold">حسابك مش مربوط بسجل موظف</h1>
-          <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
-            «ملفي» بيجمّع حضورك وراتبك وسلفك من سجلك كموظف في مسيير الموظفين.
-            كلّم المدير عشان يربط حسابك: <b>الموارد البشرية ← الموظفين ← تعديل ← حساب الدخول</b> —
-            وبعد كده الصفحة دي هتتعبّى بأرقامك تلقائياً.
-          </p>
-        </div>
+      <div className="mx-auto flex min-h-[50vh] max-w-lg flex-col items-center justify-center gap-3 p-6 text-center" dir="rtl">
+        <CircleUserRound className="size-8 text-muted-foreground" />
+        <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive">
+          {error || 'مفيش بيانات'}
+        </p>
       </div>
     )
   }
 
-  const todayAtt = data?.todayData?.attendance ?? null
-  const todaySales = data?.todayData?.sales ?? null
-  const days = att ? daysInMonthOf(att.month) : 0
-  const firstWeekday = att ? weekdayOf(`${att.month}-01`) : 0
-  const isCurrentMonth = att?.month === data.currentMonth
-  const todayNum = data.today ? Number(data.today.slice(8, 10)) : 0
-  const openAdvances = (data.advances ?? []).filter((v) => v.status === 'open')
+  const { me, permissions, today, openShift, hr } = data
+  const initial = (me.name || '؟').trim().charAt(0)
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-4 p-3 sm:p-5" dir="rtl">
-      {/* ─── الترويسة ─── */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="flex items-center gap-2 text-lg font-extrabold sm:text-xl">
-            <UserRound className="size-5 text-primary" />
-            ملفي
-          </h1>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-            {emp.name}
-            {emp.jobTitle ? ` · ${emp.jobTitle}` : ''}
-            {emp.hireDate ? ` · موظف منذ ${dateLabelAr(emp.hireDate)}` : ''}
-            {' · '}{formatCurrency(emp.baseSalary)} أساسي
-          </p>
-        </div>
-        <Button variant="outline" size="icon" aria-label="تحديث" onClick={() => month && load(month, true)} disabled={refreshing}>
-          {refreshing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-        </Button>
-      </div>
-
-      {/* ─── كارت «النهاردة» ─── */}
-      <section className="overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-bl from-primary/10 via-card to-card p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-              <CalendarDays className="size-[18px]" />
-            </span>
-            <div>
-              <h2 className="text-sm font-extrabold">النهاردة — {dateLabelAr(data.today)}</h2>
-              <p className="text-[11px] text-muted-foreground">
-                {WEEKDAYS_SHORT[weekdayOf(data.today)]}
-                {emp.weeklyOffDay === weekdayOf(data.today) ? ' · يوم راحتك الأسبوعي' : ''}
-              </p>
+      {/* ── الهيرو: أنا مين ── */}
+      <section className="relative overflow-hidden rounded-2xl border bg-card p-5">
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-brand-500/[0.07] to-transparent" />
+        <div className="flex flex-wrap items-center gap-4">
+          <span className="grid size-16 shrink-0 place-items-center rounded-2xl bg-primary text-2xl font-black text-primary-foreground shadow-sm">
+            {initial}
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-xl font-extrabold">{me.name}</h1>
+            <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted-foreground">
+              <Mail className="size-3.5 shrink-0" aria-hidden />
+              {me.email}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-extrabold text-primary">
+                <UserCog className="size-3" aria-hidden />
+                {ROLE_LABELS[me.role] ?? me.role}
+              </span>
+              {me.branchName ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] font-bold text-foreground/80">
+                  <Building2 className="size-3" aria-hidden />
+                  {me.branchName}
+                </span>
+              ) : null}
+              {me.isSeller ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-extrabold text-amber-700 dark:text-amber-400">
+                  <Percent className="size-3" aria-hidden />
+                  بائع
+                </span>
+              ) : null}
+              {hr ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2.5 py-1 text-[11px] font-extrabold text-sky-700 dark:text-sky-300">
+                  <Link2 className="size-3" aria-hidden />
+                  {hr.jobTitle || 'موظف — الموارد البشرية'}
+                </span>
+              ) : null}
+              {!me.active ? (
+                <span className="inline-flex items-center rounded-full bg-destructive/15 px-2.5 py-1 text-[11px] font-extrabold text-destructive">
+                  الحساب موقوف
+                </span>
+              ) : null}
             </div>
           </div>
-          {todayAtt ? (
-            <span className={cn('rounded-full border px-3 py-1 text-xs font-extrabold', statusChipCls(todayAtt.status))}>
-              {statusLabel(todayAtt.status)}
-              {todayAtt.status === 'late' && todayAtt.lateMinutes > 0 ? ` · ${todayAtt.lateMinutes} د تأخير` : ''}
-            </span>
-          ) : (
-            <span className="rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-bold text-muted-foreground">
-              لسه مفيش سجل حضور النهاردة
-            </span>
-          )}
         </div>
-        {(todayAtt?.checkIn || todayAtt?.checkOut) && (
-          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
-            {todayAtt.checkIn && (
-              <span className="flex items-center gap-1.5">
-                <Clock className="size-3.5" /> دخول <b className="tabular-nums text-foreground">{todayAtt.checkIn}</b>
-              </span>
-            )}
-            {todayAtt.checkOut && (
-              <span className="flex items-center gap-1.5">
-                <Clock className="size-3.5" /> انصراف <b className="tabular-nums text-foreground">{todayAtt.checkOut}</b>
-              </span>
-            )}
+      </section>
+
+      {/* ── النهاردة: شغلي أنا بس ── */}
+      <section className="space-y-2">
+        <h2 className="flex items-center gap-1.5 px-1 text-sm font-extrabold">
+          <Sparkles className="size-4 text-primary" aria-hidden />
+          النهاردة
+        </h2>
+        <div className="grid gap-2.5 sm:grid-cols-3">
+          <StatTile
+            label="فواتير سجّلتها"
+            value={String(today.invoices)}
+            icon={ReceiptText}
+            tone="emerald"
+          />
+          <StatTile
+            label="صافي مبيعاتي (ج.م)"
+            value={fmt(today.netTotal)}
+            icon={CircleUserRound}
+          />
+          <StatTile
+            label="مرتجعات (ج.م)"
+            value={fmt(today.refunded)}
+            icon={Undo2}
+            tone={today.refunded > 0 ? 'amber' : 'default'}
+          />
+        </div>
+        <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
+          الأرقام دي من فواتير سجّلتها أنت بس يوم {today.date} بتوقيت المحل — مبيعات زمايلك عند المدير.
+        </p>
+      </section>
+
+      {/* ── بياناتي + صلاحياتي ── */}
+      <div className="grid gap-2.5 md:grid-cols-2">
+        <section className="rounded-2xl border bg-card p-4">
+          <h2 className="mb-3 text-sm font-extrabold">بياناتي</h2>
+          <dl className="space-y-2.5">
+            <LedgerRow label="الاسم" value={me.name} />
+            <LedgerRow label="البريد" value={me.email} icon={Mail} />
+            <LedgerRow label="الدور" value={ROLE_LABELS[me.role] ?? me.role} icon={UserCog} />
+            <LedgerRow label="الفرع" value={me.branchName ?? '— كل الفروع'} icon={Building2} />
+            <LedgerRow
+              label="عرض الأرباح والتكاليف"
+              value={me.canViewProfits ? 'مسموح' : 'مخفي'}
+              icon={me.canViewProfits ? Eye : EyeOff}
+            />
+            <LedgerRow label="عضو منذ" value={fmtDay(me.createdAt)} icon={CalendarDays} />
+            <LedgerRow label="آخر دخول" value={me.lastLoginAt ? fmtWhen(me.lastLoginAt) : '—'} icon={LogIn} />
+          </dl>
+        </section>
+
+        <section className="rounded-2xl border bg-card p-4">
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-extrabold">
+            <ShieldCheck className="size-4 text-primary" aria-hidden />
+            صلاحياتي
+          </h2>
+          {permissions.unrestricted ? (
+            <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-3 text-[13px] font-bold leading-relaxed text-emerald-700 dark:text-emerald-300">
+              عندك كل الصلاحيات — كل شاشات النظام المفتوحة لباقتك متاحة لك.
+            </div>
+          ) : permissions.list.length === 0 ? (
+            <p className="text-[13px] text-muted-foreground">مفيش صلاحيات محددة — كلم المدير.</p>
+          ) : (
+            <ul className="flex flex-wrap gap-1.5">
+              {permissions.list.map((p) => (
+                <li
+                  key={p}
+                  className="rounded-full border bg-muted/60 px-2.5 py-1 text-[11px] font-bold text-foreground/80"
+                >
+                  {PERM_LABELS[p] ?? p}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+
+      {/* ── الوردية المفتوحة على فرعي ── */}
+      <section className="rounded-2xl border bg-card p-4">
+        <h2 className="mb-3 flex items-center gap-1.5 text-sm font-extrabold">
+          <DoorOpen className="size-4 text-primary" aria-hidden />
+          وردية فرعي
+        </h2>
+        {openShift ? (
+          <div className={cn(
+            'rounded-xl border px-3 py-3 text-[13px] leading-relaxed',
+            openShift.mine
+              ? 'border-emerald-500/40 bg-emerald-500/10'
+              : 'border-amber-500/40 bg-amber-500/10',
+          )}>
+            <p className="font-extrabold">
+              {openShift.shiftName}
+              {openShift.mine ? ' — الوردية دي باسمك ✅' : openShift.userName ? ` — فتحها ${openShift.userName}` : ''}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              مفتوحة من {fmtWhen(openShift.createdAt)} · الإغلاق بيحسب على الوردية نفسها وعلى اللي فتحها
+            </p>
           </div>
-        )}
-        {todaySales && (
-          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-dashed border-border pt-3 text-xs">
-            <span className="flex items-center gap-1.5 font-bold text-foreground/80">
-              <HandCoins className="size-3.5 text-amber-600 dark:text-amber-400" />
-              مبيعاتك النهاردة:
-            </span>
-            <span className="tabular-nums">{todaySales.invoices} فاتورة</span>
-            <span className="tabular-nums">{formatCurrency(todaySales.sales)}</span>
-            {todaySales.returns > 0 && (
-              <span className="tabular-nums text-rose-600 dark:text-rose-400">مرتجعات {formatCurrency(todaySales.returns)}</span>
-            )}
-          </div>
+        ) : (
+          <p className="text-[13px] leading-relaxed text-muted-foreground">
+            مفيش وردية مفتوحة على فرعك دلوقتي — افتح وردية باسمك من أدوات نقطة البيع (
+            <Link href="/pos" className="font-bold text-primary underline underline-offset-4">نقطة البيع</Link>
+            ) عشان شغلك على الدرج يتسجل باسمك.
+          </p>
         )}
       </section>
 
-      {/* ─── عمولتي (للبائع — الكارت بيختفي لو مش بائع أو الميزة مقفولة) ─── */}
-      <MyCommissionCard />
+      {/* ── عمولتي (البائع بس) ── */}
+      {me.isSeller && comm ? (
+        <section className="rounded-2xl border bg-card p-4">
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-extrabold">
+            <Percent className="size-4 text-amber-500" aria-hidden />
+            عمولتي — {comm.month}
+          </h2>
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            <StatTile label="مبيعات الشهر (ج.م)" value={fmt(comm.netBase)} icon={ReceiptText} tone="emerald" />
+            <StatTile
+              label="العمولة التقديرية (ج.م)"
+              value={fmt(comm.commission)}
+              icon={Percent}
+              tone={comm.targetMet ? 'emerald' : 'default'}
+            />
+          </div>
+          {comm.target != null ? (
+            <p className={cn('mt-2 px-1 text-[11px] font-bold', comm.targetMet ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
+              التارجت: {fmt(comm.target)} ج.م — {comm.targetMet ? 'حققته 🎉' : 'لسه ماوصلتش'}
+            </p>
+          ) : null}
+          {comm.payout ? (
+            <p className="mt-1.5 px-1 text-[11px] leading-relaxed text-muted-foreground">
+              اتصرفت لك عمولة {fmt(comm.payout.amount)} ج.م عن الشهر ده (
+              {comm.payout.viaPayroll ? 'مع الراتب' : comm.payout.method ?? 'صرف مباشر'})
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
-      {/* ─── حضوري ─── */}
-      {att && (
-        <SectionCard icon={<CalendarDays className="size-4" />} title="حضوري" desc="يوم بيوم — زي ما اتسجل من المدير أو كشك الحضور">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
-              <Button variant="outline" size="icon" aria-label="الشهر السابق" onClick={() => void load(data.prevMonth, true)}>
-                <ChevronRight className="size-4" />
-              </Button>
-              <span className="min-w-24 text-center text-sm font-extrabold">{monthLabel(att.month)}</span>
-              <Button
-                variant="outline"
-                size="icon"
-                aria-label="الشهر التالي"
-                disabled={att.month >= data.currentMonth}
-                onClick={() => void load(data.nextMonth ?? att.month, true)}
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
+      {/* ── 🏢 ملفي في الموارد البشرية (لو حسابي مربوط بموظف) ── */}
+      {hr ? (
+        <>
+          <section className="space-y-2">
+            <h2 className="flex items-center gap-1.5 px-1 text-sm font-extrabold">
+              <Briefcase className="size-4 text-sky-500" aria-hidden />
+              ملفي في الموارد البشرية
+            </h2>
+            <div className="grid gap-2.5 md:grid-cols-2">
+              {/* بياناتي الوظيفية */}
+              <section className="rounded-2xl border bg-card p-4">
+                <h3 className="mb-3 text-sm font-extrabold">بياناتي الوظيفية</h3>
+                <dl className="space-y-2.5">
+                  <LedgerRow label="الاسم في الملف" value={hr.name} />
+                  <LedgerRow label="الوظيفة" value={hr.jobTitle ?? '—'} icon={Briefcase} />
+                  <LedgerRow label="الراتب الأساسي" value={`${fmt(hr.baseSalary)} ج.م`} icon={Wallet} />
+                  <LedgerRow label="الفرع" value={hr.branchName ?? '—'} icon={Building2} />
+                  <LedgerRow label="الراحة الأسبوعية" value={WEEK_DAYS[hr.weeklyOffDay] ?? '—'} icon={CalendarOff} />
+                  <LedgerRow label="تاريخ التعيين" value={fmtDay(hr.hireDate)} icon={CalendarDays} />
+                </dl>
+              </section>
+
+              {/* حضوري الشهر */}
+              <section className="rounded-2xl border bg-card p-4">
+                <h3 className="mb-3 flex items-center gap-1.5 text-sm font-extrabold">
+                  <CalendarCheck className="size-4 text-sky-500" aria-hidden />
+                  حضوري — {hr.attendance.month}
+                </h3>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <StatTile label="أيام حضور" value={String(hr.attendance.present)} icon={CalendarCheck} tone="emerald" />
+                  <StatTile
+                    label="تأخير (دقيقة)"
+                    value={String(hr.attendance.lateMinutes)}
+                    icon={Clock}
+                    tone={hr.attendance.lateMinutes > 0 ? 'amber' : 'default'}
+                  />
+                  <StatTile
+                    label="أيام غياب"
+                    value={String(hr.attendance.absent)}
+                    icon={CalendarOff}
+                    tone={hr.attendance.absent > 0 ? 'rose' : 'default'}
+                  />
+                  <StatTile label="أيام إجازة" value={String(hr.attendance.leave)} icon={CalendarDays} />
+                </div>
+              </section>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
-              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-emerald-700 dark:text-emerald-400">حاضر {att.summary.present}</span>
-              <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-amber-700 dark:text-amber-400">متأخر {att.summary.late}</span>
-              <span className="rounded-full bg-rose-500/10 px-2 py-0.5 text-rose-700 dark:text-rose-400">غائب {att.summary.absent}</span>
-              <span className="rounded-full bg-sky-500/10 px-2 py-0.5 text-sky-700 dark:text-sky-400">إجازة {att.summary.leave}</span>
-              {att.summary.lateMinutesTotal > 0 && (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">تأخير {att.summary.lateMinutesTotal} د</span>
+          </section>
+
+          <div className="grid gap-2.5 md:grid-cols-2">
+            {/* إجازاتي */}
+            <section className="rounded-2xl border bg-card p-4">
+              <h3 className="mb-3 flex items-center gap-1.5 text-sm font-extrabold">
+                <CalendarOff className="size-4 text-sky-500" aria-hidden />
+                إجازاتي
+              </h3>
+              <p className="mb-3 text-[13px] font-bold">
+                رصيد السنة: <span className="text-sky-600 dark:text-sky-400">{hr.leaves.annualRemaining} يوم</span>
+                {' '}متبقي من {hr.leaves.annualTotal} (استخدمت {hr.leaves.annualUsed})
+              </p>
+              {hr.leaves.recent.length === 0 ? (
+                <p className="text-[13px] text-muted-foreground">مفيش إجازات مسجّلة لسه.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {hr.leaves.recent.map((l, i) => (
+                    <li key={i} className="flex items-center justify-between gap-2 rounded-xl border bg-muted/30 px-3 py-2 text-[12px]">
+                      <span className="font-bold">{LEAVE_TYPES[l.type] ?? l.type}</span>
+                      <span className="text-muted-foreground">
+                        {l.startDate}{l.endDate !== l.startDate ? ` ← ${l.endDate}` : ''}
+                        {' · '}{l.hours != null ? `${l.hours} ساعة` : `${l.days} يوم`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               )}
-            </div>
-          </div>
+            </section>
 
-          {/* التقويم: أعمدة أيام الأسبوع + شبكة الأيام */}
-          <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-muted-foreground">
-            {WEEKDAYS_SHORT.map((w) => (
-              <span key={w}>{w}</span>
-            ))}
-          </div>
-          <div className="mt-1 grid grid-cols-7 gap-1">
-            {Array.from({ length: firstWeekday }).map((_, i) => (
-              <span key={`pad-${i}`} />
-            ))}
-            {Array.from({ length: days }).map((_, i) => {
-              const dayNum = i + 1
-              const dateStr = `${att.month}-${String(dayNum).padStart(2, '0')}`
-              const rec = recByDate.get(dateStr)
-              const isToday = isCurrentMonth && dayNum === todayNum
-              const isWeeklyOff = emp.weeklyOffDay === weekdayOf(dateStr)
-              const future = isCurrentMonth ? dayNum > todayNum : att.month > data.currentMonth
-              return (
-                <div
-                  key={dateStr}
-                  title={`${dayNum} ${MONTH_NAMES[Number(att.month.slice(5, 7)) - 1]} — ${rec ? statusLabel(rec.status) : isWeeklyOff ? 'راحة أسبوعية' : 'بدون سجل'}${rec?.checkIn ? ` (دخول ${rec.checkIn})` : ''}`}
-                  className={cn(
-                    'flex flex-col items-center gap-1 rounded-lg border px-0.5 py-1.5 text-[11px] font-bold tabular-nums',
-                    rec ? statusChipCls(rec.status) : 'border-border/60 bg-muted/30 text-muted-foreground',
-                    future && !rec && 'opacity-40',
-                    isToday && 'ring-2 ring-primary/50',
-                  )}
-                >
-                  <span>{dayNum}</span>
-                  <span aria-hidden className={cn('size-1.5 rounded-full', rec ? STATUS_DOT[rec.status] : isWeeklyOff ? 'bg-border' : 'bg-transparent')} />
-                </div>
-              )
-            })}
-          </div>
-          <p className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            <Info className="size-3" />
-            الحالة بتتسجل من المدير أو كشك الحضور — لو سجل غلط كلّم المدير يعدّله.
-          </p>
-        </SectionCard>
-      )}
-
-      {/* ─── رواتبي ─── */}
-      <SectionCard
-        icon={<Wallet className="size-4" />}
-        title="رواتبي"
-        desc="قسائم الشهور المعتمدة (بعد اعتماد الصرف) — المسودة بتظهر عند المالك بس"
-      >
-        {(data.payslips?.length ?? 0) === 0 ? (
-          <p className="rounded-xl border border-dashed bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
-            لسه مفيش قسايم معتمدة — أول ما المالك يعتمد صرف مرتبك هتلاقي القسيمة هنا بالتفاصيل.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {(data.payslips ?? []).map((p) => (
-              <li key={p.month} className="rounded-xl border bg-background/60">
-                <details className="group">
-                  <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 p-3 [&::-webkit-details-marker]:hidden">
-                    <div className="flex items-center gap-2.5">
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
-                        <BadgeCheck className="size-4" />
-                      </span>
-                      <div>
-                        <p className="text-sm font-extrabold">{monthLabel(p.month)}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          تم الصرف{p.paidAt ? ` · ${dateLabelAr(p.paidAt)}` : ''}
-                          {p.method ? ` · ${PAY_METHOD_LABEL[p.method] ?? p.method}` : ''}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-end">
-                      <p className="text-base font-extrabold tabular-nums text-emerald-700 dark:text-emerald-400">{formatCurrency(p.net)}</p>
-                      <p className="text-[10px] font-bold text-muted-foreground">الصافي — اضغط للتفاصيل</p>
-                    </div>
-                  </summary>
-                  <div className="border-t border-dashed border-border px-3 pb-3 pt-2">
-                    <dl className="space-y-1.5">
-                      <LedgerRow label="الأساسي المستحق" value={formatCurrency(p.payableBase)} />
-                      {p.absenceDeduction > 0 && (
-                        <LedgerRow label={`خصم غياب (${p.absentDays} يوم)`} value={`− ${formatCurrency(p.absenceDeduction)}`} tone="minus" />
-                      )}
-                      {p.lateDeduction > 0 && (
-                        <LedgerRow label={`خصم تأخير (${p.lateMinutes} دقيقة)`} value={`− ${formatCurrency(p.lateDeduction)}`} tone="minus" />
-                      )}
-                      {p.bonus > 0 && <LedgerRow label="حافز" value={`+ ${formatCurrency(p.bonus)}`} tone="plus" />}
-                      {p.penalty > 0 && <LedgerRow label="جزاء" value={`− ${formatCurrency(p.penalty)}`} tone="minus" />}
-                      {p.commission > 0 && <LedgerRow label="عمولة مبيعات" value={`+ ${formatCurrency(p.commission)}`} tone="plus" />}
-                      {p.advanceDeduction > 0 && <LedgerRow label="قسط سلفة" value={`− ${formatCurrency(p.advanceDeduction)}`} tone="minus" />}
-                      <LedgerRow label="الصافي المصروف" value={formatCurrency(p.net)} />
-                    </dl>
-                    {p.note && <p className="mt-2 text-[11px] text-muted-foreground">ملاحظة: {p.note}</p>}
-                  </div>
-                </details>
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
-
-      {/* ─── سلفي ─── */}
-      {(data.advances?.length ?? 0) > 0 && (
-        <SectionCard icon={<Wallet className="size-4" />} title="سلفي" desc="السلف المسجلة عليك والأقساط المخصومة من المرتب">
-          <ul className="space-y-2">
-            {(data.advances ?? []).map((v) => {
-              const paid = Math.max(0, v.amount - v.remaining)
-              const pct = v.amount > 0 ? Math.min(100, Math.round((paid / v.amount) * 100)) : 100
-              return (
-                <li key={v.id} className="rounded-xl border bg-background/60 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-extrabold tabular-nums">{formatCurrency(v.amount)}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {v.createdAt ? `سلفة ${dateLabelAr(v.createdAt)}` : 'سلفة'}
-                        {v.note ? ` · ${v.note}` : ''}
-                      </p>
-                    </div>
-                    <span
-                      className={cn(
-                        'rounded-full border px-2.5 py-0.5 text-[11px] font-extrabold',
-                        v.status === 'open'
-                          ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400'
-                          : v.status === 'settled'
-                            ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                            : 'border-border bg-muted/50 text-muted-foreground',
-                      )}
-                    >
-                      {v.status === 'open' ? 'جارية' : v.status === 'settled' ? 'مسددة' : 'ملغاة'}
-                    </span>
-                  </div>
-                  {v.status === 'open' && (
-                    <div className="mt-2">
-                      <div className="mb-1 flex items-center justify-between text-[10px] font-bold text-muted-foreground">
-                        <span>مسدد {formatCurrency(paid)} · قسط شهري {formatCurrency(v.installment)}</span>
-                        <span className="tabular-nums">باقي {formatCurrency(v.remaining)}</span>
-                      </div>
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-          {openAdvances.length === 0 && (
-            <p className="mt-2 text-[11px] text-muted-foreground">مفيش سلف جارية عليك — كله مسدد. ✓</p>
-          )}
-        </SectionCard>
-      )}
-
-      {/* ─── إجازاتي ─── */}
-      {(data.leaves?.length ?? 0) > 0 && (
-        <SectionCard icon={<CalendarDays className="size-4" />} title="إجازاتي" desc="الإجازات والأذونات المسجلة">
-          <ul className="space-y-1.5">
-            {(data.leaves ?? []).map((l) => (
-              <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-background/60 px-3 py-2 text-xs">
-                <div className="min-w-0">
-                  <p className="font-extrabold">{LEAVE_TYPE_LABEL[l.type] ?? l.type}</p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {dateLabelAr(l.startDate)}
-                    {l.endDate !== l.startDate ? ` ← ${dateLabelAr(l.endDate)}` : ''}
-                    {l.type === 'permission' && l.hours ? ` · ${l.hours} ساعات` : ''}
-                    {l.type !== 'permission' ? ` · ${l.days} يوم` : ''}
-                    {l.note ? ` · ${l.note}` : ''}
+            {/* قسيمة راتبي */}
+            <section className="rounded-2xl border bg-card p-4">
+              <h3 className="mb-3 flex items-center gap-1.5 text-sm font-extrabold">
+                <BadgeDollarSign className="size-4 text-sky-500" aria-hidden />
+                قسيمة راتبي
+              </h3>
+              {hr.payslip ? (
+                <>
+                  <p className="mb-2.5 text-[11px] font-bold text-muted-foreground">
+                    شهر {hr.payslip.month} — معتمدة ومدفوعة
+                    {hr.payslip.paidAt ? ` · ${fmtWhen(hr.payslip.paidAt)}` : ''}
                   </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </SectionCard>
-      )}
-
-      {/* ─── تقييماتي ─── */}
-      {(data.evaluations?.length ?? 0) > 0 && (
-        <SectionCard icon={<BadgeCheck className="size-4" />} title="تقييماتي" desc="التقييم الشهري من الإدارة — attendance + أداء + عملاء + تعاون">
-          <ul className="space-y-2">
-            {(data.evaluations ?? []).map((ev) => (
-              <li key={ev.month} className="rounded-xl border bg-background/60 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-extrabold">{monthLabel(ev.month)}</p>
-                  <div className="flex items-center gap-2">
-                    {ev.bonus > 0 && (
-                      <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-400">
-                        حافز {formatCurrency(ev.bonus)}
-                      </span>
-                    )}
-                    <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-extrabold tabular-nums text-primary">
-                      {Math.round(ev.overall)}%
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px] font-bold text-muted-foreground sm:grid-cols-4">
-                  <span className="rounded-lg bg-muted/50 px-2 py-1">حضور {Math.round(ev.attendanceScore)}%</span>
-                  <span className="rounded-lg bg-muted/50 px-2 py-1">أداء {ev.perfScore}/5</span>
-                  <span className="rounded-lg bg-muted/50 px-2 py-1">عملاء {ev.customerScore}/5</span>
-                  <span className="rounded-lg bg-muted/50 px-2 py-1">تعاون {ev.teamScore}/5</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </SectionCard>
-      )}
+                  <dl className="space-y-2">
+                    <LedgerRow label="الأساسي المستحق" value={`${fmt(hr.payslip.payableBase)} ج.م`} icon={Wallet} />
+                    {hr.payslip.absenceDeduction > 0 ? (
+                      <LedgerRow label="خصم الغياب" value={`− ${fmt(hr.payslip.absenceDeduction)}`} tone="rose" />
+                    ) : null}
+                    {hr.payslip.lateDeduction > 0 ? (
+                      <LedgerRow label={`خصم التأخير (${hr.payslip.lateMinutes} دقيقة)`} value={`− ${fmt(hr.payslip.lateDeduction)}`} tone="rose" />
+                    ) : null}
+                    {hr.payslip.bonus > 0 ? (
+                      <LedgerRow label="حوافز" value={`+ ${fmt(hr.payslip.bonus)}`} icon={HandCoins} tone="emerald" />
+                    ) : null}
+                    {hr.payslip.penalty > 0 ? (
+                      <LedgerRow label="جزاءات" value={`− ${fmt(hr.payslip.penalty)}`} tone="rose" />
+                    ) : null}
+                    {/* 💰 عمود العمولة — عمولة مبيعات الشهر نزلت على الراتب */}
+                    {hr.payslip.commission !== 0 ? (
+                      <LedgerRow
+                        label="عمولة المبيعات 💰"
+                        value={hr.payslip.commission > 0 ? `+ ${fmt(hr.payslip.commission)}` : `− ${fmt(Math.abs(hr.payslip.commission))}`}
+                        icon={Percent}
+                        tone={hr.payslip.commission > 0 ? 'emerald' : 'rose'}
+                      />
+                    ) : null}
+                    {hr.payslip.advanceDeduction > 0 ? (
+                      <LedgerRow label="قسط السلف" value={`− ${fmt(hr.payslip.advanceDeduction)}`} icon={HandCoins} tone="amber" />
+                    ) : null}
+                    <div className="border-t pt-2">
+                      <LedgerRow label="الصافي" value={`${fmt(hr.payslip.net)} ج.م`} icon={BadgeDollarSign} tone="emerald" />
+                    </div>
+                  </dl>
+                </>
+              ) : (
+                <p className="text-[13px] leading-relaxed text-muted-foreground">
+                  مفيش قسيمة راتب معتمدة لسه — أول ما المدير يعتمد الرواتب، قسيمتك هتظهر هنا بالتفصيل
+                  (ومنها عمولة مبيعاتك لو بائع).
+                </p>
+              )}
+            </section>
+          </div>
+        </>
+      ) : null}
     </div>
   )
 }

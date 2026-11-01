@@ -965,18 +965,20 @@ const MODULE_LABELS: Record<string, string> = {
   blind_stocktake: 'الجرد الأعمي (عدّ بدون رؤية الأرقام والفروق)',
   // 💰 (التحديث الثالث عشر) صلاحية مستقلة: شاشة عمولات البائعين (تقرير + متابعة)
   commissions: 'عمولات البائعين (متابعة الشهور — الصرف للمالك بس)',
+  // 👤 (التحديث السابع عشر) صلاحية مستقلة: صفحة «ملفي» — بيانات الموظف لنفسه
+  // + شغله النهاردة + وردية فرعه + ملفه في الموارد البشرية (من غير أي بيانات لزميل تاني ولا أرباح)
+  my_profile: 'ملفي (بياناتك وصلاحياتك وشغلك النهاردة)',
   // صلاحية مشرف الفرع: تسجيل الحضور والإجازات فقط، بدون أي مبالغ (مش مرتبطة بصلاحية الموارد البشرية الكاملة)
   hr_attendance: 'الحضور والإجازات (مشرف)',
 }
 // 🔁 'returns' صلاحية مش موديول — بنحطها جنب نقطة البيع عشان السيناريو
 // الطبيعي: كاشير [نقطة البيع + المرتجعات] من غير سجل المبيعات.
 // 🕐 'shift_close' كمان جنبهم: كاشير [نقطة البيع + المرتجعات + إغلاق الوردية].
-// 🔗 'shift_open' قبله: نفس الكاشير بيفتح وردية باسمه أول اليوم.
 // 🫥 'blind_stocktake' معاهم: عدّاد الجرد الأعمي [نقطة البيع + عدّ من غير أرقام].
 const PERM_MODULES: string[] = (() => {
   const arr: string[] = [...ALL_MODULES.filter((m) => m !== 'guide')]
   const i = arr.indexOf('pos')
-  arr.splice(i >= 0 ? i + 1 : arr.length, 0, 'returns', 'shift_open', 'shift_close', 'blind_stocktake', 'commissions')
+  arr.splice(i >= 0 ? i + 1 : arr.length, 0, 'my_profile', 'returns', 'shift_open', 'shift_close', 'blind_stocktake', 'commissions')
   arr.push('hr_attendance')
   return arr
 })()

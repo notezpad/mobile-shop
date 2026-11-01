@@ -45,6 +45,23 @@ async function __PUT(req: NextRequest, { params }: Ctx) {
     if (b[k] !== undefined) data[k] = b[k] ? String(b[k]).trim() || null : null
   }
   if (b.active !== undefined) data.active = !!b.active
+  // 🔗 (التحديث الثامن عشر) ربط/فك ربط حساب الدخول — مع تحقق التفرد:
+  // الحساب لازم يكون في نفس المحل وما يكونش مربوط بموظف تاني
+  if (b.userId !== undefined) {
+    if (b.userId === null || b.userId === '') {
+      data.userId = null
+    } else {
+      const uid = String(b.userId)
+      const u = await db.user.findFirst({ where: { id: uid, tenantId: session.tenantId }, select: { id: true } })
+      if (!u) return bad('حساب الدخول غير موجود')
+      const taken = await db.employee.findFirst({
+        where: { tenantId: session.tenantId, userId: uid, id: { not: id } },
+        select: { id: true, name: true },
+      })
+      if (taken) return bad(`الحساب ده مربوط بالفعل بالموظف «${taken.name}» — افصله الأول من ملفه`)
+      data.userId = uid
+    }
+  }
   if (b.pin !== undefined) {
     if (b.pin === '' || b.pin === null) data.pinHash = null
     else if (!isValidPin(b.pin)) return bad('الـ PIN لازم 4 إلى 6 أرقام')

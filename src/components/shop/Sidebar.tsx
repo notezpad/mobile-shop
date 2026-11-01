@@ -28,7 +28,7 @@ import {
   PackagePlus, Wallet, ReceiptText, Banknote, Warehouse, Building2,
   BarChart3, Settings as SettingsIcon, UserCog, Power, ChevronLeft, ChevronDown, Store,
   Boxes, Activity, ArrowRightLeft, ClipboardCheck, UsersRound, CalendarCheck, HandCoins, BadgeDollarSign, TreePalm as PalmtreeIcon, Award,
-  Percent,
+  Percent, CircleUserRound,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -47,7 +47,8 @@ interface NavItem {
   path: string
   label: string
   icon: LucideIcon
-  module: ViewKey
+  /** موديول الباقة للفلتر — «ملفي» شخصية ومش مربوطة بموديول فبتتعرض يدويًا */
+  module?: ViewKey
   /** Optional tint accent for the icon (defaults to primary emerald). */
   accent?: string
 }
@@ -101,6 +102,18 @@ const MANAGE_GROUP: NavItem[] = [
   { path: '/users', label: 'المستخدمين', icon: UserCog, module: 'users' },
   { path: '/settings', label: 'الإعدادات', icon: SettingsIcon, module: 'settings' },
 ]
+
+/**
+ * 👤 (التحديث السابع عشر) «ملفي» — صفحة شخصية مش موديول: بيانات الموظف
+ * لنفسه + شغله النهاردة + ملفه في الموارد البشرية. مش مربوطة بأي موديول
+ * في الباقة — بتتعرض لكل حد إلا الموظف المقيّد بصلاحيات مخصوصة من غير
+ * 'my_profile' (شوف الفلتر تحت في Sidebar نفسه).
+ */
+const MY_PROFILE_ITEM: NavItem = {
+  path: '/profile',
+  label: 'ملفي',
+  icon: CircleUserRound,
+}
 
 /* ───────────────────────── helpers ───────────────────────── */
 
@@ -885,12 +898,12 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
     return true  // مدير أو موظف بكل الصلاحيات
   }
 
-  const mainItems = MAIN_GROUP.filter((it) => hasModule(it.module))
+  const mainItems = MAIN_GROUP.filter((it) => hasModule(it.module!))
   // 💰 عمولات البائعين: غير الموديول العادي — الموظف اللي عنده صلاحية
   // 'commissions' المستقلة (من غير 'sales') بيشوف المدخل كمان
   const manageItems = MANAGE_GROUP.filter(
     (it) =>
-      hasModule(it.module) ||
+      hasModule(it.module!) ||
       (it.path === '/commissions' && planHasModule('sales') && !!userPermissions?.includes('commissions'))
   )
   const showInventory = hasModule('inventory')
@@ -899,6 +912,8 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
     !showInventory && planHasModule('inventory') && !!userPermissions?.includes('blind_stocktake')
   const hrStaffOnly = !isAdmin && !!user?.permissions?.includes('hr_attendance')
   const showHr = planHasModule('hr') && (isAdmin || hrStaffOnly)
+  // 👤 «ملفي»: شخصية لكل حد — إلا موظف مقيّد بصلاحيات من غير 'my_profile'
+  const showMyProfile = isAdmin || !userPermissions || !!userPermissions.includes('my_profile')
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -972,6 +987,14 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
               />
             ))}
             {showHr && <HrGroup collapsed={collapsed} onNavigate={onNavigate} staffOnly={hrStaffOnly} />}
+            {showMyProfile && (
+              <NavButton
+                item={MY_PROFILE_ITEM}
+                active={isActive('/profile')}
+                collapsed={collapsed}
+                onNavigate={onNavigate}
+              />
+            )}
           </div>
         </nav>
 

@@ -30,11 +30,25 @@ async function __GET() {
     }),
   ])
   const owed = new Map(advances.map((a) => [a.employeeId, a._sum.remaining ?? 0]))
+
+  // 🔗 (التحديث الثامن عشر) بيانات الحساب المرتبط (Employee.userId) — علشان
+  // الكارت يعرض الحساب وشارة البائع (العمولة هتنزل في راتبه تلقائياً)
+  const linkedIds = rows.map((r) => r.userId).filter((v): v is string => !!v)
+  const linkedUsers = linkedIds.length
+    ? await db.user.findMany({
+        where: { tenantId: session.tenantId, id: { in: linkedIds } },
+        select: { id: true, email: true, isSeller: true },
+      })
+    : []
+  const userById = new Map(linkedUsers.map((u) => [u.id, u]))
+
   const items = rows.map(({ pinHash, hireDate, ...r }) => ({
     ...r,
     hireDate: dateStrInTz(hireDate, tz),
     hasPin: !!pinHash,
     advanceRemaining: owed.get(r.id) ?? 0,
+    userEmail: r.userId ? userById.get(r.userId)?.email ?? null : null,
+    userIsSeller: r.userId ? userById.get(r.userId)?.isSeller === true : false,
   }))
   return NextResponse.json({ items })
 }
@@ -61,6 +75,21 @@ async function __POST(req: NextRequest) {
   if (b.pin !== undefined && b.pin !== '' && !isValidPin(b.pin)) return bad('الـ PIN لازم 4 إلى 6 أرقام')
   const branchId = b.branchId ? Number(b.branchId) : session.branchId ?? null
 
+  // 🔗 (التحديث الثامن عشر) ربط حساب الدخول — اختياري، مع تحقق التفرد:
+  // الحساب لازم يكون في نفس المحل وما يكونش مربوط بموظف تاني
+  let userId: string | null = null
+  if (b.userId !== undefined && b.userId !== null && b.userId !== '') {
+    const uid = String(b.userId)
+    const u = await db.user.findFirst({ where: { id: uid, tenantId: session.tenantId }, select: { id: true } })
+    if (!u) return bad('حساب الدخول غير موجود')
+    const taken = await db.employee.findFirst({
+      where: { tenantId: session.tenantId, userId: uid },
+      select: { id: true, name: true },
+    })
+    if (taken) return bad(`الحساب ده مربوط بالفعل بالموظف «${taken.name}» — افصله الأول من ملفه`)
+    userId = uid
+  }
+
   const emp = await db.employee.create({
     data: {
       tenantId: session.tenantId,
@@ -72,6 +101,7 @@ async function __POST(req: NextRequest) {
       weeklyOffDay,
       hireDate,
       notes: b.notes ? String(b.notes).trim() || null : null,
+      userId,
     },
   })
   if (b.pin) {

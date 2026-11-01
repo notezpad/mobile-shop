@@ -11,12 +11,10 @@ export const dynamic = 'force-dynamic'
  * 🕐 2026-10-31 (التحديث الثامن) — تقرير إغلاقات الورديات (للمدير).
  *
  * بيرجّع آخر إغلاقات الورديات بالجرد الأعمى: اللي الكاشير عدّاه، المتوقع
- * (محسوب في السيرفر)، والفارق. وكل إغلاق معاه «نافذة الوردية»: حركات الكاش
- * بينه وبين الإغلاق اللي قبله لنفس الفرع (داخل/خارج/صافي).
- *
- * 🔗 (التحديث السادس عشر): لو الإغلاق مرتبط بجلسة فتح رسمي (ShiftSession)
- * بيرجّع كمان بيانات الجلسة: مين فتح وإمتى وبالعهدة الافتتاحية — سجل
- * مسؤولية كامل للدرج لما يكون فيه كذا كاشير على نفس الدرج.
+ * (رصيد الكاش الورقي للفرع لحظة الإغلاق — محسوب في السيرفر)، والفارق.
+ * وكل إغلاق معاه «نافذة الوردية»: حركات الكاش بينه وبين الإغلاق اللي قبله
+ * لنفس الفرع (داخل/خارج/صافي) — مجرد قراءة من دفتر الخزنة الموجود، من غير
+ * أي كتابة جديدة.
  *
  * الصلاحية: موديول 'cash' (نفس صفحة الخزنة) — ومنscope الفرع: موظف فرع
  * بيشوف إغلاقات فرعه بس، والمدير يقدر يفلتر بـ ?branchId=<id>.
@@ -35,8 +33,9 @@ interface ClosureRow {
   note: string | null
   createdAt: Date
   windowFrom: Date | null
-  // 🔗 (v16) بيانات جلسة الفتح المرتبطة (null = إغلاق من غير فتح رسمي)
-  sessionOpenName: string | null
+  // 🔗 (التحديث السادس عشر) جلسة الفتح المرتبطة (لو الإغلاق جاي بعد فتح رسمي)
+  sessionShiftName: string | null
+  sessionOpenedBy: string | null
   sessionOpenedAt: Date | null
   sessionOpeningFloat: number | null
 }
@@ -76,7 +75,8 @@ export async function GET(req: NextRequest) {
              sc."userId",
              (SELECT u."name" FROM "User" u WHERE u."id" = sc."userId") AS "userName",
              sc."counted", sc."expected", sc."variance", sc."note", sc."createdAt",
-             ss."userName" AS "sessionOpenName",
+             ss."shiftName" AS "sessionShiftName",
+             ss."userName" AS "sessionOpenedBy",
              ss."createdAt" AS "sessionOpenedAt",
              ss."openingFloat" AS "sessionOpeningFloat"
       FROM "ShiftClosure" sc
@@ -97,7 +97,9 @@ export async function GET(req: NextRequest) {
     // القيود غير المسندة (branchId NULL) بتتحسب على الفرع الرئيسي — نفس قاعدة الخزنة
     const eff = (bid: number | null) => bid ?? mainId
 
-    // ── نافذة كل إغلاق: من الإغلاق اللي قبله لنفس الفرع، لحد إغلاقه هو
+    // ── نافذة كل إغلاق: من الإغلاق اللي قبله لنفس الفرع، لحد إغلاقه هو.
+    // 🔗 لو الإغلاق مرتبط بجلسة فتح رسمية — النافذة بتبدأ من وقت الفتح
+    //    (نفس أساس حساب المتوقع بالظبط)
     const display = rows.slice(0, limit)
     const prevMap = new Map<number, Date>()
     for (const r of [...rows].reverse()) {
@@ -105,6 +107,9 @@ export async function GET(req: NextRequest) {
       if (bid == null) continue
       r.windowFrom = prevMap.get(bid) ?? null
       prevMap.set(bid, r.createdAt)
+    }
+    for (const r of display) {
+      if (r.sessionOpenedAt) r.windowFrom = new Date(r.sessionOpenedAt)
     }
 
     // ── حركات الكاش جوه النوافذ دي (استعلام واحد على كل المدى المطلوب)
@@ -188,12 +193,15 @@ export async function GET(req: NextRequest) {
         note: r.note,
         createdAt: new Date(r.createdAt).toISOString(),
         window: windows[idx],
-        // 🔗 جلسة الفتح (لو الإغلاق مربوط بواحدة) — سجل المسؤولية الكامل
-        session: r.sessionOpenedAt
+        // 🔗 سجل المسؤولية الكامل: فتحها مين وإمتى والعهدة — والإغلاقات من
+        // غير جلسة بترجع null (اتحسبت على رصيد الدرج الكامل — السلوك القديم)
+        session: r.sessionShiftName
           ? {
-              openName: r.sessionOpenName,
-              openedAt: new Date(r.sessionOpenedAt).toISOString(),
-              openingFloat: r.sessionOpeningFloat != null ? round2(r.sessionOpeningFloat) : null,
+              shiftName: r.sessionShiftName,
+              openedBy: r.sessionOpenedBy,
+              openedAt: r.sessionOpenedAt ? new Date(r.sessionOpenedAt).toISOString() : null,
+              openingFloat:
+                r.sessionOpeningFloat != null ? round2(Number(r.sessionOpeningFloat)) : null,
             }
           : null,
       })),

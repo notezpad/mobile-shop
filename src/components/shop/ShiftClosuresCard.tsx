@@ -40,10 +40,11 @@ interface Closure {
   note: string | null
   createdAt: string
   window: ClosureWindow | null
-  // 🔗 (v16) جلسة الفتح المرتبطة — سجل المسؤولية الكامل للدرج
+  // 🔗 (التحديث السادس عشر) جلسة الفتح المرتبطة — سجل المسؤولية الكامل
   session: {
-    openName: string | null
-    openedAt: string
+    shiftName: string
+    openedBy: string | null
+    openedAt: string | null
     openingFloat: number | null
   } | null
 }
@@ -160,6 +161,30 @@ export function ShiftClosuresCard({ branchFilter }: { branchFilter: string }) {
 
                 {open && (
                   <div className="space-y-2.5 border-t bg-muted/20 px-3.5 py-3 sm:px-4">
+                    {/* 🔗 سجل المسؤولية: فتحها مين وإمتى والعهدة — أو رصيد الدرج الكامل */}
+                    {c.session ? (
+                      <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2.5">
+                        <p className="text-[11px] font-extrabold text-sky-700 dark:text-sky-300">
+                          🔗 اتحسبت على وردية مفتوحة بجلسة رسمية — المسؤولية كاملة
+                        </p>
+                        <p className="mt-1 text-[11px] leading-relaxed text-sky-700/90 dark:text-sky-300/90">
+                          فتحها <b className="font-extrabold">{c.session.openedBy ?? '—'}</b>
+                          {c.session.openedAt ? ` · ${fmtWhen(c.session.openedAt)}` : ''}
+                          {' · '}العهدة الافتتاحية:{' '}
+                          <b className="font-extrabold">
+                            {c.session.openingFloat != null
+                              ? formatCurrency(c.session.openingFloat)
+                              : 'آخر إغلاق للفرع (اللي الكاشير اللي فات عدّاه)'}
+                          </b>
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="rounded-xl border border-dashed px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                        ⚠️ الإغلاق ده من غير جلسة فتح رسمية — اتحسب على رصيد الدرج الكامل
+                        (بيورث رصيد الإغلاق اللي قبله). شغّل «فتح الوردية» من نقطة البيع
+                        عشان المسؤولية تتحسب على كل وردية لوحدها.
+                      </p>
+                    )}
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs font-medium tabular-nums">
                       <span className="text-foreground/75">
                         عدّى <b className="font-extrabold text-foreground">{formatCurrency(c.counted)}</b>
@@ -179,7 +204,7 @@ export function ShiftClosuresCard({ branchFilter }: { branchFilter: string }) {
                     {c.window ? (
                       <div className="rounded-xl border bg-card px-3 py-2.5">
                         <p className="text-[11px] font-bold text-foreground/70">
-                          نافذة الوردية — حركات الكاش بين الإغلاق ده واللي قبله
+                          {c.session ? 'شغل الوردية — حركات الكاش من وقت الفتح لحد الإغلاق' : 'نافذة الوردية — حركات الكاش بين الإغلاق ده واللي قبله'}
                         </p>
                         <div className="mt-1.5 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs font-medium tabular-nums">
                           <span className="text-emerald-700 dark:text-emerald-400">
@@ -197,27 +222,6 @@ export function ShiftClosuresCard({ branchFilter }: { branchFilter: string }) {
                     ) : (
                       <p className="text-[11px] text-muted-foreground">
                         نافذة الوردية غير متاحة — مفيش إغلاق سابق مسجّل للفرع ده
-                      </p>
-                    )}
-                    {/* 🔗 جلسة الفتح — مين ماسك الدرج من الأول (سجل المسؤولية) */}
-                    {c.session ? (
-                      <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2.5">
-                        <p className="text-[11px] font-bold text-sky-700 dark:text-sky-300">
-                          🔗 وردية مفتوحة رسمياً — سجل المسؤولية الكامل
-                        </p>
-                        <p className="mt-1 text-[11px] leading-relaxed text-foreground/75 tabular-nums">
-                          فتحها <b className="font-extrabold text-foreground">{c.session.openName ?? '—'}</b> ·{' '}
-                          {fmtWhen(c.session.openedAt)}
-                          {c.session.openingFloat != null && (
-                            <> · العهدة الافتتاحية <b className="font-extrabold text-foreground">{formatCurrency(c.session.openingFloat)}</b></>
-                          )}
-                          {c.session.openingFloat == null && ' · من غير عهدة (الأساس = آخر إغلاق)'}
-                          {' '}· غلقها <b className="font-extrabold text-foreground">{c.userName ?? '—'}</b>
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-muted-foreground">
-                        إغلاق من غير فتح رسمي — المتوقع اتحسب على رصيد الدرج الكامل (السلوك القديم)
                       </p>
                     )}
                   </div>
