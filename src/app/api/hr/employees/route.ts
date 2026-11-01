@@ -4,6 +4,7 @@ import { withIdempotency } from '@/lib/idempotency'
 import { hrGuard, bad, hrSafe } from '@/lib/hr-route'
 import { hashPin, isDateStr, isValidPin } from '@/lib/hr'
 import { getTenantTimezone, dateStrInTz, localDateStrToUtcBounds } from '@/lib/tenantTime'
+import { normalizeShifts } from '@/lib/branch-shifts'
 import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
@@ -21,6 +22,7 @@ async function __GET() {
       select: {
         id: true, name: true, phone: true, jobTitle: true, baseSalary: true, hireDate: true,
         weeklyOffDay: true, active: true, notes: true, branchId: true, userId: true, pinHash: true,
+        shiftName: true,
       },
     }),
     db.employeeAdvance.groupBy({
@@ -50,7 +52,20 @@ async function __GET() {
     userEmail: r.userId ? userById.get(r.userId)?.email ?? null : null,
     userIsSeller: r.userId ? userById.get(r.userId)?.isSeller === true : false,
   }))
-  return NextResponse.json({ items })
+
+  // 🕐 (التحديث الحادي والعشرين) ورديات الفروع — عشان فورم الموظف يعرض
+  // اختيار الوردية من ورديات فرعه المعرّفة (صباحي/مسائي/ليلي...)
+  const branchRows = await db.branch.findMany({
+    where: { tenantId: session.tenantId },
+    select: { id: true, name: true, shifts: true },
+    orderBy: [{ isMain: 'desc' }, { id: 'asc' }],
+  })
+  return NextResponse.json({
+    items,
+    branches: branchRows.map((b) => ({ id: b.id, name: b.name, shifts: normalizeShifts(b.shifts) })),
+    // فرع الجلسة — الموظف الجديد بيتحطّم عليه لما المدير ماعندوش فرع محدد
+    sessionBranchId: session.branchId ?? null,
+  })
 }
 
 async function __POST(req: NextRequest) {
@@ -90,10 +105,28 @@ async function __POST(req: NextRequest) {
     userId = uid
   }
 
+  // 🕐 (التحديث الحادي والعشرين) وردية الموظف — لازم تكون من ورديات فرعه
+  // المعرّفة (الاسم نص snapshot زي نمط ShiftSession) — والفاضي = بدون وردية
+  const branchIdNum = Number.isFinite(branchId as number) ? (branchId as number) : null
+  let shiftName: string | null = null
+  const rawShift = b.shiftName ? String(b.shiftName).trim().slice(0, 40) : ''
+  if (rawShift) {
+    if (branchIdNum == null) return bad('حدد فرع الموظف الأول قبل ما تحدد ورديته — الوردية بتتحدد من ورديات الفرع')
+    const br = await db.branch.findFirst({
+      where: { id: branchIdNum, tenantId: session.tenantId },
+      select: { shifts: true },
+    })
+    const defined = normalizeShifts(br?.shifts)
+    if (!defined.some((s) => s.name === rawShift)) {
+      return bad('الوردية دي مش معرّفة على فرع الموظف — عدّل ورديات الفرع الأول من شاشة الفروع')
+    }
+    shiftName = rawShift
+  }
+
   const emp = await db.employee.create({
     data: {
       tenantId: session.tenantId,
-      branchId: Number.isFinite(branchId as number) ? (branchId as number) : null,
+      branchId: branchIdNum,
       name,
       phone: b.phone ? String(b.phone).trim() || null : null,
       jobTitle: b.jobTitle ? String(b.jobTitle).trim() || null : null,
@@ -102,6 +135,7 @@ async function __POST(req: NextRequest) {
       hireDate,
       notes: b.notes ? String(b.notes).trim() || null : null,
       userId,
+      shiftName,
     },
   })
   if (b.pin) {

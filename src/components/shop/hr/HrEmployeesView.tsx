@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { CalendarOff, HandCoins, KeyRound, Loader2, FileSpreadsheet, Phone, Plus, Search, Pencil, UserCheck, UserX, Users, Wallet, User, UserRound, Briefcase, Calendar, Link2 } from 'lucide-react'
+import { CalendarOff, HandCoins, KeyRound, Loader2, FileSpreadsheet, Phone, Plus, Search, Pencil, UserCheck, UserX, Users, Wallet, User, UserRound, Briefcase, Calendar, Clock, Link2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,6 +16,7 @@ import {
   DAY_NAMES, EmptyState, HR_THEMES, ListSkeleton, Pill,
   PAY_METHODS, hrGet, hrSend, money, monthLabel,
 } from './hr-ui'
+import { shiftLabel, type BranchShift } from '@/lib/branch-shifts'
 
 interface Employee {
   id: number
@@ -32,6 +33,16 @@ interface Employee {
   userId: string | null
   userEmail: string | null
   userIsSeller: boolean
+  // 🕐 (التحديث الحادي والعشرين) فرع الموظف + ورديته المحددة من ورديات الفرع
+  branchId: number | null
+  shiftName: string | null
+}
+
+/** فرع مختصر بالورديات المعرّفة — لقائمة اختيار وردية الموظف */
+interface BranchOpt {
+  id: number
+  name: string
+  shifts: BranchShift[]
 }
 
 interface FormState {
@@ -43,8 +54,9 @@ interface FormState {
   hireDate: string
   pin: string
   userId: string
+  shiftName: string
 }
-const EMPTY: FormState = { name: '', jobTitle: '', phone: '', baseSalary: '', weeklyOffDay: '5', hireDate: '', pin: '', userId: '' }
+const EMPTY: FormState = { name: '', jobTitle: '', phone: '', baseSalary: '', weeklyOffDay: '5', hireDate: '', pin: '', userId: '', shiftName: '' }
 
 interface SettlePreview {
   today: string
@@ -81,11 +93,17 @@ export function HrEmployeesView() {
   const [editing, setEditing] = React.useState<Employee | 'new' | null>(null)
   const [importing, setImporting] = React.useState(false)
   const [settling, setSettling] = React.useState<Employee | null>(null)
+  // 🕐 (التحديث الحادي والعشرين) ورديات الفروع — لقائمة اختيار وردية الموظف
+  const [branches, setBranches] = React.useState<BranchOpt[]>([])
+  const [sessionBranchId, setSessionBranchId] = React.useState<number | null>(null)
 
   const load = React.useCallback(async () => {
     try {
-      const d = await hrGet<{ items: Employee[] }>('/api/hr/employees')
+      const d = await hrGet<{ items: Employee[]; branches?: BranchOpt[]; sessionBranchId?: number | null }>('/api/hr/employees')
       setItems(d.items)
+      // ورديات الفروع استكمالية — فشلها/غيابها مش بيمنع عرض الموظفين
+      if (Array.isArray(d.branches)) setBranches(d.branches)
+      if (d.sessionBranchId !== undefined) setSessionBranchId(d.sessionBranchId ?? null)
     } catch (e: any) {
       toast.error(e?.message || 'فشل تحميل الموظفين')
     } finally {
@@ -266,6 +284,10 @@ export function HrEmployeesView() {
                 {visible.map((e, index) => {
                   const theme = CARD_THEMES[index % CARD_THEMES.length]
                   const isFemale = isFemaleName(e.name)
+                  // 🕐 تعريف ورديته من ورديات فرعه — لو التعريف اتشال بنعرض الاسم بس
+                  const empShiftDef = e.shiftName
+                    ? branches.find((b) => b.id === e.branchId)?.shifts.find((s) => s.name === e.shiftName) ?? null
+                    : null
                   
                   return (
                     <div 
@@ -381,6 +403,17 @@ export function HrEmployeesView() {
                               {new Date(e.hireDate).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' })}
                             </div>
                           </div>
+
+                          {/* 🕐 (التحديث الحادي والعشرين) وردية الموظف — بالأوقات من ورديات الفرع */}
+                          <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
+                            <div className="flex items-center justify-between text-[10px] font-semibold text-slate-400 mb-1">
+                              <span>الوردية</span>
+                              <Clock className="size-3.5" />
+                            </div>
+                            <div className="font-bold text-sm text-slate-800 dark:text-slate-200 text-right w-full truncate" title={e.shiftName ?? undefined}>
+                              {empShiftDef ? shiftLabel(empShiftDef) : e.shiftName ?? '—'}
+                            </div>
+                          </div>
                         </div>
 
                         {/* أزرار الإجراءات */}
@@ -441,6 +474,8 @@ export function HrEmployeesView() {
       {editing && (
         <EmployeeDialog
           employee={editing === 'new' ? null : editing}
+          branches={branches}
+          sessionBranchId={sessionBranchId}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); load() }}
         />
@@ -450,14 +485,15 @@ export function HrEmployeesView() {
 }
 
 function EmployeeDialog({
-  employee, onClose, onSaved,
-}: { employee: Employee | null; onClose: () => void; onSaved: () => void }) {
+  employee, branches, sessionBranchId, onClose, onSaved,
+}: { employee: Employee | null; branches: BranchOpt[]; sessionBranchId: number | null; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = React.useState<FormState>(
     employee
       ? {
           name: employee.name, jobTitle: employee.jobTitle ?? '', phone: employee.phone ?? '',
           baseSalary: String(employee.baseSalary), weeklyOffDay: String(employee.weeklyOffDay),
           hireDate: employee.hireDate, pin: '', userId: employee.userId ?? '',
+          shiftName: employee.shiftName ?? '',
         }
       : EMPTY,
   )
@@ -485,6 +521,14 @@ function EmployeeDialog({
   const selectedUser = users.find((u) => u.id === f.userId) ?? null
   const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) => setF((s) => ({ ...s, [k]: e.target.value }))
 
+  // 🕐 (التحديث الحادي والعشرين) ورديات فرع الموظف — الجديد بياخد فرع جلسة
+  // المدير (نفس قاعدة الحفظ على السيرفر)، والتعديل بياخد فرع الموظف نفسه
+  const branchIdForShift = employee?.branchId ?? sessionBranchId
+  const shiftOptions = React.useMemo(
+    () => branches.find((b) => b.id === branchIdForShift)?.shifts ?? [],
+    [branches, branchIdForShift],
+  )
+
   const save = async () => {
     if (!f.name.trim()) return toast.error('اكتب اسم الموظف')
     const salary = Number(f.baseSalary)
@@ -497,6 +541,8 @@ function EmployeeDialog({
         baseSalary: salary, weeklyOffDay: Number(f.weeklyOffDay),
         // 🔗 الربط: '' = فك الربط، id = ربط الحساب (السيرفر بيتحقق من التفرد)
         userId: f.userId || '',
+        // 🕐 الوردية: '' = بدون وردية، الاسم = لازم يكون من ورديات فرع الموظف
+        shiftName: f.shiftName || '',
       }
       if (f.hireDate) body.hireDate = f.hireDate
       if (f.pin) body.pin = f.pin
@@ -566,6 +612,32 @@ function EmployeeDialog({
                 className="shadow-inner"
               />
             </div>
+          </div>
+          {/* 🕐 (التحديث الحادي والعشرين) وردية الموظف — من ورديات فرعه المعرّفة */}
+          <div className="space-y-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 p-3">
+            <Label className="flex items-center gap-1.5">
+              <Clock className="size-3.5" />
+              وردية الموظف (اختياري — من ورديات الفرع)
+            </Label>
+            <Select
+              value={f.shiftName || 'none'}
+              onValueChange={(v) => setF((s) => ({ ...s, shiftName: v === 'none' ? '' : v }))}
+            >
+              <SelectTrigger className="shadow-inner bg-white dark:bg-slate-900">
+                <SelectValue placeholder="اختار الوردية" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">بدون وردية محددة</SelectItem>
+                {shiftOptions.map((s) => (
+                  <SelectItem key={s.name} value={s.name}>{shiftLabel(s)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+              {shiftOptions.length === 0
+                ? 'فرع الموظف ده مفيش عليه ورديات معرّفة — ضيفها من شاشة الفروع (صباحي/مسائي/ليلي) وبعدها اختار من هنا.'
+                : 'الوردية دي هتظهر للموظف في صفحة «ملفي» — وبتتختار له تلقائياً لما يفتح وردية شغل باسمه.'}
+            </p>
           </div>
           {/* 🔗 (التحديث الثامن عشر) ربط حساب الدخول — من خلاله الموظف يشوف
               «ملفي» (حضوره/إجازاته/راتبه) ولو بائع عمولته بتنزل في راتبه */}

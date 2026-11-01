@@ -1338,6 +1338,11 @@ model Employee {
   baseSalary   Float    @default(0)
   hireDate     DateTime @default(now())
   weeklyOffDay Int      @default(5) // 0=الأحد … 6=السبت (الافتراضي الجمعة)
+  // 🕐 (التحديث الحادي والعشرين) وردية الموظف — اسم من ورديات فرعه المعرّفة
+  // (صباحي/مسائي/ليلي...) — المدير بيحددها من شاشة الموظفين، وبتظهر للموظف
+  // في صفحة «ملفي» (بياناتي الوظيفية + كارت الوردية). اسم نصي snapshot زي
+  // نمط ShiftSession — لو تعريف الوردية اتشال من الفرع بتفضل محفوظة باسمها.
+  shiftName    String?
   pinHash      String?  // PIN كشك الحضور (مُجزّأ)
   active       Boolean  @default(true)
   notes        String?

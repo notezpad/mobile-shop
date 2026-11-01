@@ -47,9 +47,13 @@ const pillBtn =
 export function ShiftOpenDialog({
   open,
   onOpenChange,
+  preferredShiftName,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
+  /** 🕐 (التحديث الحادي والعشرين) وردية الموظف المحددة في HR — بتتقدّم
+   *  كاختيار مبدئي بدل الكشف بالساعة لو اتنين مختلفين (اختياري) */
+  preferredShiftName?: string | null
 }) {
   const [loading, setLoading] = React.useState(false)
   const [branches, setBranches] = React.useState<BranchInfo[]>([])
@@ -79,7 +83,13 @@ export function ShiftOpenDialog({
         setBranches(bs)
         const first = bs[0] ?? null
         setBranchId(first?.id ?? null)
-        setShiftName(first ? detectShiftName(first.shifts) : null)
+        // 🕐 ورديته المحددة في HR أولوية — لو مش موجودة/اتشالت بنرجع للكشف بالساعة
+        const detected = first ? detectShiftName(first.shifts) : null
+        const preferred =
+          preferredShiftName && first?.shifts.some((s) => s.name === preferredShiftName)
+            ? preferredShiftName
+            : null
+        setShiftName(preferred ?? detected)
       })
       .catch((e: any) => {
         if (alive) setError(e?.message || 'حصل خطأ — جرّب تاني')
@@ -90,7 +100,7 @@ export function ShiftOpenDialog({
     return () => {
       alive = false
     }
-  }, [open])
+  }, [open, preferredShiftName])
 
   const branch = branches.find((b) => b.id === branchId) ?? null
   const openSession = branch?.openSession ?? null

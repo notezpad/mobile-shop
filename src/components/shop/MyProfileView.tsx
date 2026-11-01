@@ -17,10 +17,10 @@
  *   3) صلاحياتي   — قائمة الصلاحيات (أو «كل الصلاحيات» لو من غير قائمة)
  *   4) الوردية    — الوردية المفتوحة على فرعي دلوقتي (ومين فتحها) —
  *      ومفيش وردية؟ اللي عنده صلاحية الفتح يفتحها من هنا على طول
- *      (نفس دايلوج نقطة البيع) — من غير ما نبعته يدوّر على الشاشات
+ *      (نفس دايلوج نقطة البيع) — وورديته المحددة في HR بتتختار له تلقائياً
  *   5) عمولتي     — لو بائع: أرقام الشهر من نفس API «عمولتي» الحالي
- *   6) ملفي في HR — لو حسابي مربوط بموظف: بياناتي الوظيفية + حضوري
- *      الشهر + إجازاتي ورصيدي + آخر قسيمة راتب معتمدة (بالعمولة)
+ *   6) ملفي في HR — لو حسابي مربوط بموظف: بياناتي الوظيفية (بورديتي 🕐)
+ *      + حضوري الشهر + إجازاتي ورصيدي + آخر قسيمة راتب معتمدة (بالعمولة)
  */
 
 import * as React from 'react'
@@ -33,6 +33,7 @@ import {
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { fmt } from '@/lib/print'
+import { shiftLabel } from '@/lib/branch-shifts'
 import { ShiftOpenDialog } from './ShiftOpenDialog'
 
 interface MeData {
@@ -56,6 +57,10 @@ interface HrData {
   weeklyOffDay: number
   active: boolean
   branchName: string | null
+  // 🕐 (التحديث الحادي والعشرين) ورديتي المحددة — الاسم + تعريفه بأوقاته
+  // (myShift null لو الاسم مش موجود في ورديات الفرع حالياً)
+  shiftName: string | null
+  myShift: { name: string; from: string; to: string } | null
   attendance: { month: string; present: number; late: number; absent: number; leave: number; lateMinutes: number }
   leaves: {
     annualTotal: number
@@ -394,6 +399,12 @@ export function MyProfileView() {
             <p className="text-[13px] leading-relaxed text-muted-foreground">
               مفيش وردية مفتوحة على فرعك دلوقتي — سجّل بداية شغلك من هنا على طول:
             </p>
+            {/* 🕐 ورديتك المحددة في HR بتتختار لك تلقائياً في الدايلوج */}
+            {hr?.myShift ? (
+              <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                ورديتك المحددة: {shiftLabel(hr.myShift)} — هتتختار لك تلقائياً تحت
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={() => setShiftOpenOpen(true)}
@@ -460,6 +471,16 @@ export function MyProfileView() {
                   <LedgerRow label="الوظيفة" value={hr.jobTitle ?? '—'} icon={Briefcase} />
                   <LedgerRow label="الراتب الأساسي" value={`${fmt(hr.baseSalary)} ج.م`} icon={Wallet} />
                   <LedgerRow label="الفرع" value={hr.branchName ?? '—'} icon={Building2} />
+                  {/* 🕐 ورديتي المحددة في الموارد البشرية (التحديث الحادي والعشرين) */}
+                  {hr.shiftName || hr.myShift ? (
+                    <LedgerRow
+                      label="ورديتي"
+                      value={hr.myShift
+                        ? shiftLabel(hr.myShift)
+                        : `${hr.shiftName} (مش موجودة في ورديات الفرع دلوقتي)`}
+                      icon={Clock}
+                    />
+                  ) : null}
                   <LedgerRow label="الراحة الأسبوعية" value={WEEK_DAYS[hr.weeklyOffDay] ?? '—'} icon={CalendarOff} />
                   <LedgerRow label="تاريخ التعيين" value={fmtDay(hr.hireDate)} icon={CalendarDays} />
                 </dl>
@@ -573,13 +594,15 @@ export function MyProfileView() {
         </>
       ) : null}
 
-      {/* 🔗 دايلوج فتح الوردية — نفس دايلوج نقطة البيع بالظبط، وبيتحدّث الكارت بعده */}
+      {/* 🔗 دايلوج فتح الوردية — نفس دايلوج نقطة البيع بالظبط، وبيتحدّث الكارت بعده.
+          🕐 ورديتي المحددة في HR بتتقدّم كاختيار مبدئي جوه الدايلوج */}
       <ShiftOpenDialog
         open={shiftOpenOpen}
         onOpenChange={(o) => {
           setShiftOpenOpen(o)
           if (!o) void reloadAfterShift()
         }}
+        preferredShiftName={hr?.myShift?.name ?? null}
       />
     </div>
   )

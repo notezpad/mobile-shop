@@ -3,6 +3,7 @@ import { db, withDb } from '@/lib/db'
 import { hrGuard, bad, hrSafe } from '@/lib/hr-route'
 import { hashPin, isDateStr, isValidPin } from '@/lib/hr'
 import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
+import { normalizeShifts } from '@/lib/branch-shifts'
 import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
@@ -43,6 +44,28 @@ async function __PUT(req: NextRequest, { params }: Ctx) {
   }
   for (const k of ['phone', 'jobTitle', 'notes'] as const) {
     if (b[k] !== undefined) data[k] = b[k] ? String(b[k]).trim() || null : null
+  }
+  // 🕐 (التحديث الحادي والعشرين) وردية الموظف — لازم تكون من ورديات فرعه
+  // المعرّفة (الاسم نص snapshot زي نمط ShiftSession) — والفاضي = بدون وردية.
+  // التحقق على فرع الموظف الحالي (emp.branchId) — تغيير الفرع مش شغل الفورم ده.
+  if (b.shiftName !== undefined) {
+    const rawShift = b.shiftName ? String(b.shiftName).trim().slice(0, 40) : ''
+    if (rawShift) {
+      if (emp.branchId == null) {
+        return bad('حدد فرع الموظف الأول قبل ما تحدد ورديته — الوردية بتتحدد من ورديات الفرع')
+      }
+      const br = await db.branch.findFirst({
+        where: { id: emp.branchId, tenantId: session.tenantId },
+        select: { shifts: true },
+      })
+      const defined = normalizeShifts(br?.shifts)
+      if (!defined.some((s) => s.name === rawShift)) {
+        return bad('الوردية دي مش معرّفة على فرع الموظف — عدّل ورديات الفرع الأول من شاشة الفروع')
+      }
+      data.shiftName = rawShift
+    } else {
+      data.shiftName = null
+    }
   }
   if (b.active !== undefined) data.active = !!b.active
   // 🔗 (التحديث الثامن عشر) ربط/فك ربط حساب الدخول — مع تحقق التفرد:

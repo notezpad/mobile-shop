@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireMyProfileAccess, featureErrorResponse } from '@/lib/features'
 import { withSql, type Sql } from '@/lib/sql'
+import { normalizeShifts } from '@/lib/branch-shifts'
 import { getTenantTimezone, dateStrInTz } from '@/lib/tenantTime'
 
 export const dynamic = 'force-dynamic'
@@ -24,9 +25,12 @@ export const dynamic = 'force-dynamic'
  *   today:         { date, invoices, netTotal, refunded }   — مبيعاته هو بس,
  *   openShift:     { shiftName, userName, createdAt, mine } | null — وردية فرعه,
  *   hr:            بياناته الوظيفية (لو حسابه مربوط بموظف في الموارد البشرية):
- *                  { jobTitle, baseSalary, hireDate, attendance(الشهر),
- *                    leaves(الرصيد + آخر 5), payslip(آخر قسيمة معتمدة) }
+ *                  { jobTitle, baseSalary, hireDate, shiftName, myShift
+ *                    attendance(الشهر), leaves(الرصيد + آخر 5),
+ *                    payslip(آخر قسيمة معتمدة) }
  *                  — القسيمة المعتمدة بس (المسودة أرقامها مش نهائية)
+ *                  myShift = 🕐 ورديته المحددة بأوقاتها من ورديات الفرع
+ *                  (null لو الاسم مش موجود في تعريفات الفرع حالياً)
  * }
  * عمولته لو بائع بيجيها الواجهة من /api/commissions/my (موجود بالفعل).
  */
@@ -138,9 +142,11 @@ export async function GET() {
     const empRows = await sql<{
       id: number; name: string; jobTitle: string | null; baseSalary: number
       hireDate: Date; weeklyOffDay: number; active: boolean; branchName: string | null
+      shiftName: string | null; branchShifts: unknown
     }[]>`
       SELECT e."id", e."name", e."jobTitle", e."baseSalary", e."hireDate",
-             e."weeklyOffDay", e."active", b."name" AS "branchName"
+             e."weeklyOffDay", e."active", b."name" AS "branchName",
+             e."shiftName", b."shifts" AS "branchShifts"
       FROM "Employee" e
       LEFT JOIN "Branch" b ON b."id" = e."branchId"
       WHERE e."tenantId" = ${tid} AND e."userId" = ${session.userId}
@@ -150,6 +156,13 @@ export async function GET() {
     if (emp) {
       const month = today.slice(0, 7)
       const year = today.slice(0, 4)
+
+      // 🕐 (التحديث الحادي والعشرين) ورديتي المحددة — الاسم المحفوظ على ملفي
+      //    في HR + تعريفه الحالي بأوقاته من ورديات فرعي (لو لسه موجود)
+      const definedShifts = normalizeShifts(emp.branchShifts)
+      const myShift = emp.shiftName
+        ? definedShifts.find((s) => s.name === emp.shiftName) ?? null
+        : null
 
       // 📅 حضوري الشهر (AttendanceRecord.date نص YYYY-MM-DD بتوقيت المحل)
       const attRows = await sql<{ status: string; cnt: number; late: number }[]>`
@@ -208,6 +221,9 @@ export async function GET() {
         weeklyOffDay: emp.weeklyOffDay,
         active: emp.active === true,
         branchName: emp.branchName,
+        // 🕐 ورديتي المحددة (التحديث الحادي والعشرين)
+        shiftName: emp.shiftName,
+        myShift,
         attendance: {
           month,
           present: att.present ?? 0,
