@@ -194,13 +194,13 @@ export function MyProfileView() {
   const isFemale = isFemaleName(me.name)
 
   return (
-    // شلت الـ -mx-3 عشان المسافات اللي فوق تظبط
-    <div className="w-full bg-slate-50 dark:bg-slate-950 min-h-screen pb-12">
+    // شلت الـ -mx والمسافات الغريبة عشان الخلفية الرمادية ميبانش منها حاجة
+    <div className="w-full bg-slate-50/50 dark:bg-slate-950 min-h-screen pb-12">
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-8">
         
-        {/* ================= الهيرو (أبيض مع لمسة زرقاء فاتحة) ================= */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800 text-slate-900 dark:text-white rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div aria-hidden className="absolute -top-32 -right-32 size-[400px] rounded-full bg-blue-100/50 blur-[80px] dark:bg-blue-900/20" />
+        {/* ================= الهيرو (أبيض فاتح جداً) ================= */}
+        <section className="relative overflow-hidden bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div aria-hidden className="absolute -top-32 -right-32 size-[400px] rounded-full bg-blue-50/50 blur-[80px] dark:bg-blue-900/10" />
           
           <div className="relative flex flex-col md:flex-row md:items-center gap-6 p-6 sm:p-8">
             {/* الأفاتار 3D */}
@@ -223,11 +223,11 @@ export function MyProfileView() {
                 {me.email}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                   <UserCog className="size-3.5 text-blue-500" /> {ROLE_LABELS[me.role] ?? me.role}
                 </span>
                 {me.branchName && (
-                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                     <Building2 className="size-3.5 text-blue-500" /> {me.branchName}
                   </span>
                 )}
@@ -366,30 +366,29 @@ export function MyProfileView() {
           )}
         </section>
 
-        {/* ================= عمولتي (البائع) ================= */}
+        {/* ================= عمولتي (البائع) - تم إزالة الأسود ================= */}
         {me.isSeller && comm ? (
-          <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-black rounded-2xl border border-slate-800 p-5 shadow-lg text-white">
-            <div className="absolute -top-10 -right-10 size-32 rounded-full bg-amber-500/20 blur-2xl" />
-            <h2 className="relative mb-4 flex items-center gap-2 text-lg font-black">
-              <Percent className="size-5 text-amber-400" /> عمولتي — {comm.month}
+          <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+            <h2 className="mb-4 flex items-center gap-2 text-base font-black text-slate-800 dark:text-slate-100">
+              <Percent className="size-5 text-amber-500" /> عمولتي — {comm.month}
             </h2>
-            <div className="relative grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl bg-white/5 border border-white/10 p-4">
-                <p className="text-xs font-bold text-slate-400 mb-1">مبيعات الشهر (ج.م)</p>
-                <p className="text-2xl font-black tabular-nums text-emerald-400">{fmt(comm.netBase)}</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-xl bg-slate-50 border border-slate-100 dark:bg-slate-800/50 dark:border-slate-700 p-4">
+                <p className="text-xs font-bold text-slate-500 mb-1">مبيعات الشهر (ج.م)</p>
+                <p className="text-2xl font-black tabular-nums text-emerald-600">{fmt(comm.netBase)}</p>
               </div>
-              <div className="rounded-xl bg-white/5 border border-white/10 p-4">
-                <p className="text-xs font-bold text-slate-400 mb-1">العمولة التقديرية (ج.م)</p>
-                <p className={cn("text-2xl font-black tabular-nums", comm.targetMet ? "text-amber-400" : "text-white")}>{fmt(comm.commission)}</p>
+              <div className="rounded-xl bg-slate-50 border border-slate-100 dark:bg-slate-800/50 dark:border-slate-700 p-4">
+                <p className="text-xs font-bold text-slate-500 mb-1">العمولة التقديرية (ج.م)</p>
+                <p className={cn("text-2xl font-black tabular-nums", comm.targetMet ? "text-amber-600" : "text-slate-800 dark:text-slate-200")}>{fmt(comm.commission)}</p>
               </div>
             </div>
             {comm.target != null && (
-              <p className={cn('mt-3 text-xs font-bold', comm.targetMet ? 'text-emerald-400' : 'text-slate-400')}>
+              <p className={cn('mt-3 text-xs font-bold', comm.targetMet ? 'text-emerald-600' : 'text-slate-500')}>
                 التارجت: {fmt(comm.target)} ج.م — {comm.targetMet ? 'حققته 🎉' : 'لسه ماوصلتش'}
               </p>
             )}
             {comm.payout && (
-              <p className="mt-2 text-xs text-slate-400 leading-relaxed">
+              <p className="mt-2 text-xs text-slate-500 leading-relaxed">
                 اتصرفت لك عمولة {fmt(comm.payout.amount)} ج.م عن الشهر ده ({comm.payout.viaPayroll ? 'مع الراتب' : comm.payout.method ?? 'صرف مباشر'})
               </p>
             )}
