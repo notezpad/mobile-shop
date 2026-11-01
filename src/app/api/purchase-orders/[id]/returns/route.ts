@@ -5,6 +5,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { performPurchaseReturn, PurchaseReturnError } from '@/lib/purchase-return'
+import { PURCHASE_POLICY } from '@/lib/stock-policy'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,6 +70,36 @@ async function __POST(
   const body = await req.json().catch(() => null)
   if (!body || !Array.isArray(body.items) || body.items.length === 0) {
     return NextResponse.json({ error: 'اختر الأصناف المراد إرجاعها' }, { status: 400 })
+  }
+
+  // 🛡️ خ-11 (2026-11-02): سقف قيمة المرتجع للموظف — نفس سياسة أمر الشراء.
+  // القيمة بتتحدد من تكلفة الأصناف المطلوبة (حد أعلى قبل خصم المرتجع السابق).
+  if (session.role !== 'ADMIN' && session.role !== 'SUPER_ADMIN') {
+    const itemIds = body.items
+      .map((i: any) => Number(i?.itemId))
+      .filter((n: number) => Number.isFinite(n))
+    if (itemIds.length > 0) {
+      const itemRows = await db.purchaseOrderItem.findMany({
+        where: {
+          id: { in: itemIds },
+          purchaseOrder: { id: oid, tenantId: session.tenantId },
+        },
+        select: { id: true, cost: true },
+      })
+      const costById = new Map(itemRows.map((r) => [r.id, Number(r.cost) || 0]))
+      let returnValue = 0
+      for (const i of body.items) {
+        const cost = costById.get(Number(i?.itemId)) ?? 0
+        const qty = Math.max(0, Number(i?.quantity) || 0)
+        returnValue += cost * qty
+      }
+      if (Math.round(returnValue * 100) / 100 > PURCHASE_POLICY.employeeMaxReturnValue) {
+        return NextResponse.json(
+          { error: `قيمة المرتجع ده (${Math.round(returnValue * 100) / 100} جنيه) أكبر من الحد المسموح للموظف (${PURCHASE_POLICY.employeeMaxReturnValue} جنيه) — محتاج المدير` },
+          { status: 403 }
+        )
+      }
+    }
   }
 
   try {

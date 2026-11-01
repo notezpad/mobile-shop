@@ -93,7 +93,13 @@ async function __PUT(
               .filter(Boolean)
           )
         : Array.isArray(body.features)
-          ? JSON.stringify(body.features)
+          ? // 🛡️ ص-18: نفس تطبيع features في POST — نصوص نظيفة فقط
+            JSON.stringify(
+              (body.features as unknown[])
+                .map((f) => String(f ?? '').trim().slice(0, 200))
+                .filter(Boolean)
+                .slice(0, 40),
+            )
           : null
   }
 

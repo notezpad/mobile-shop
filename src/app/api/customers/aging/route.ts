@@ -61,7 +61,8 @@ export async function GET() {
         const buckets = { current: 0, d31_60: 0, d61_90: 0, d90plus: 0 }
         let overdue = 0
         for (const s of c.sales) {
-          const remaining = Math.max(0, s.total - s.paid)
+          // 🛡️ المرحلة 4: total/paid/balance/creditLimit بقوا Decimal
+          const remaining = Math.max(0, Number(s.total) - Number(s.paid))
           if (remaining <= 0.005) continue
           const refDate = s.dueDate ?? s.createdAt // تاريخ الاستحقاق لو متحدد، وإلا تاريخ البيع
           const ageDays = Math.floor((today.getTime() - new Date(refDate).getTime()) / DAY_MS)
@@ -79,7 +80,7 @@ export async function GET() {
           phone: c.phone,
           balance: c.balance,
           creditLimit: c.creditLimit,
-          overLimit: c.creditLimit != null && c.balance > c.creditLimit + 0.005,
+          overLimit: c.creditLimit != null && Number(c.balance) > Number(c.creditLimit) + 0.005,
           overdue,
           ...buckets,
           total,

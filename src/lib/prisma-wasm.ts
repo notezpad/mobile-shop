@@ -40,3 +40,41 @@ const prismaClientModule: typeof import('@prisma/client') = isCloudflareWorkers
 
 export const PrismaClient = prismaClientModule.PrismaClient
 export type PrismaClientType = InstanceType<typeof PrismaClient>
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🛡️ المرحلة 4 (2026-11-02) — ج-5: Decimal → number عند حدود الـ JSON
+// ─────────────────────────────────────────────────────────────────────────────
+// حقول المبالغ بقت NUMERIC(12,2) في الداتابيز، و Prisma بيرجّعها
+// Prisma.Decimal. مكتبة decimal.js-light بتحوّل القيمة لـ STRING داخل
+// JSON.stringify — ده كان هيكسر كل الواجهة (مبالغ كنصوص: «15050 + 0 = 150500»).
+//
+// الحل: toJSON يرجّع Number. القيم ≤ 12 خانة (سقف NUMERIC(12,2) ≈ 9.99e9)
+// و double بيمثّل أعداد بهذا الحجم بدقة كافية للعرض والنقل — الحسابات
+// الفعلية بتحصل في SQL أو بـ Decimal قبل الحدّ ده.
+// ─────────────────────────────────────────────────────────────────────────────
+type DecimalProto = {
+  prototype?: {
+    toJSON?: () => unknown
+    toNumber?: () => number
+    toString: () => string
+  }
+}
+function patchDecimalToJson(mod: unknown) {
+  const DecimalCtor = (mod as { Prisma?: { Decimal?: DecimalProto } })?.Prisma?.Decimal
+  if (DecimalCtor?.prototype) {
+    DecimalCtor.prototype.toJSON = function (this: { toNumber?: () => number; toString: () => string }) {
+      return typeof this.toNumber === 'function' ? this.toNumber() : Number(this.toString())
+    }
+  }
+}
+// 1) نسخة العميل اللي بتبني الـ clients فعلًا (wasm في workerd / default في Node)
+patchDecimalToJson(prismaClientModule)
+// 2) في workerd فيه نسخة تانية محمّلة من '@prisma/client' الافتراضية (ملفات
+//    بتستورد { Prisma } منها مباشرة) — نفس المعالجة عليها. في Node دي نفس
+//    الموديل بالفعل فالتغيير لا يذكر.
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  patchDecimalToJson(require('@prisma/client'))
+} catch {
+  /* متاح في workerd فقط — تجاهل */
+}

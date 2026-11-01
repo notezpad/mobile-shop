@@ -69,22 +69,57 @@ export async function GET(req: Request) {
     const chartEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000)
     // All sums are computed inside PostgreSQL — loading every product and
     // sale item into the Worker was exceeding Cloudflare's CPU limit.
+    //
+    // 🛡️ ج-2 (2026-11-02): كل أرقام الإيراد بقت **صافي بعد المرتجعات**
+    // (معادلة netSales الموحدة):
+    //   netSales  = Σ Sale.total (مكتملة + مرتجعة جزئياً)
+    //             − Σ (SaleReturn.total − SaleReturn.exchangeTotal)
+    //   netProfit = Σ (price−cost)×qty للمبيعات
+    //             − Σ (price−cost)×qty لبنود المرتجع (SaleReturnItem)
+    // الفواتير المرتجعة بالكامل ('مرتجعة') مستبعدة من الطرفين — صافيها صفر.
+    // المرتجع بيتحدد بـ createdAt بتوقيت المحل زي باقي الحسابات، والنطاق
+    // الفرعي بنفس شكل نطاق البيع (branchId على صف المرتجع = فرع الفاتورة).
+    const SALE_NET_STATUSES = ['مكتملة', 'مرتجعة جزئياً']
     const profitSince = (since: Date) => db.$queryRaw<{ profit: number }[]>`
       SELECT COALESCE(SUM((i."price" - i."cost") * i."quantity"), 0)::float8 AS profit
       FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
-      WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${since}
+      WHERE s."tenantId" = ${tid} AND s."status" IN (${SALE_NET_STATUSES[0]}, ${SALE_NET_STATUSES[1]}) AND s."createdAt" >= ${since}
         AND (${bid}::int = 0 OR s."branchId" = ${bid}::int OR (s."branchId" IS NULL AND ${bid}::int = ${mainBid}::int))`
+    // خصم ربح المرتجعات: بنود المرتجع محتفظة بـ price/cost وقت البيع (لقططة)
+    const returnProfitSince = (since: Date) => db.$queryRaw<{ profit: number }[]>`
+      SELECT COALESCE(SUM((ri."price" - ri."cost") * ri."quantity"), 0)::float8 AS profit
+      FROM "SaleReturnItem" ri
+      JOIN "SaleReturn" r ON r."id" = ri."saleReturnId"
+      JOIN "Sale" s ON s."id" = r."saleId"
+      WHERE s."tenantId" = ${tid} AND s."status" IN (${SALE_NET_STATUSES[0]}, ${SALE_NET_STATUSES[1]}) AND r."createdAt" >= ${since}
+        AND (${bid}::int = 0 OR s."branchId" = ${bid}::int OR (s."branchId" IS NULL AND ${bid}::int = ${mainBid}::int))`
+    // صافي المرتجع النقدي لليوم/الشهر: قيمة الراجع − قيمة بضاعة الاستبدال اللي خرجت
+    const returnNetAgg = (gte: Date) =>
+      db.saleReturn.aggregate({
+        where: {
+          tenantId: tid,
+          createdAt: { gte },
+          sale: { status: { in: SALE_NET_STATUSES } },
+          ...saleScope,
+        },
+        _sum: { total: true, exchangeTotal: true },
+      })
 
     const [
       todaySalesAgg, todayProfitRows, monthSalesAgg, monthProfitRows, cashAgg,
+      todayReturnAgg, monthReturnAgg, todayReturnProfitRows, monthReturnProfitRows,
       stockRows, lowStockRows, activeMaintenance, activeMaintenanceOrders, last10SalesRaw,
-      topProductRows, customersCount, custAgg, suppAgg, chartRows,
+      topProductRows, customersCount, custAgg, suppAgg, chartRows, returnChartRows,
     ] = await Promise.all([
-      db.sale.aggregate({ where: { ...tenantFilter, ...saleScope, createdAt: { gte: todayStart }, status: 'مكتملة' }, _sum: { total: true }, _count: { id: true } }),
+      db.sale.aggregate({ where: { ...tenantFilter, ...saleScope, createdAt: { gte: todayStart }, status: { in: SALE_NET_STATUSES } }, _sum: { total: true }, _count: { id: true } }),
       profitSince(todayStart),
-      db.sale.aggregate({ where: { ...tenantFilter, ...saleScope, createdAt: { gte: monthStart }, status: 'مكتملة' }, _sum: { total: true }, _count: { id: true } }),
+      db.sale.aggregate({ where: { ...tenantFilter, ...saleScope, createdAt: { gte: monthStart }, status: { in: SALE_NET_STATUSES } }, _sum: { total: true }, _count: { id: true } }),
       profitSince(monthStart),
       db.cashEntry.aggregate({ where: { ...tenantFilter, ...saleScope }, _sum: { amount: true } }),
+      returnNetAgg(todayStart),
+      returnNetAgg(monthStart),
+      returnProfitSince(todayStart),
+      returnProfitSince(monthStart),
       db.$queryRaw<{ vcost: number; vprice: number; low: number }[]>`
         SELECT COALESCE(SUM(p."cost" * p."quantity"), 0)::float8 AS vcost,
                COALESCE(SUM(p."price" * p."quantity"), 0)::float8 AS vprice,
@@ -99,12 +134,30 @@ export async function GET(req: Request) {
       db.maintenanceOrder.count({ where: { ...tenantFilter, status: { in: ['مستلم', 'قيد العمل', 'مكتمل'] } } }),
       db.maintenanceOrder.findMany({ where: { ...tenantFilter, status: { in: ['مستلم', 'قيد العمل', 'مكتمل'] } }, orderBy: { id: 'desc' }, take: 10 }),
       db.sale.findMany({ where: { ...tenantFilter, ...saleScope }, orderBy: { id: 'desc' }, take: 10, select: { id: true, invoiceNo: true, createdAt: true, total: true, paid: true, status: true, customer: { select: { name: true } } } }),
+      // 🛡️ ج-2: أفضل المنتجات صافي بعد المرتجعات — بيع ومرتجع في استعلام واحد
+      // (المرتجع بيتنسب للمنتج من SaleReturnItem، بوقت المرتجع)
       db.$queryRaw<{ name: string; quantity: number; total: number; pieceLabel: string | null }[]>`
-        SELECT MIN(i."name") AS name, MAX(i."pieceLabel") AS "pieceLabel", SUM(i."quantity")::float8 AS quantity, SUM(i."price" * i."quantity")::float8 AS total
-        FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
-        WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${last30Start}
-          AND (${bid}::int = 0 OR s."branchId" = ${bid}::int OR (s."branchId" IS NULL AND ${bid}::int = ${mainBid}::int))
-        GROUP BY COALESCE(i."productId", 0) ORDER BY quantity DESC LIMIT 8`,
+        SELECT MIN(sp.name) AS name, MAX(sp."pieceLabel") AS "pieceLabel",
+               (sp.qty - COALESCE(rr.qty, 0))::float8 AS quantity,
+               (sp.total - COALESCE(rr.total, 0))::float8 AS total
+        FROM (
+          SELECT COALESCE(i."productId", 0) AS pid, MIN(i."name") AS name, MAX(i."pieceLabel") AS "pieceLabel",
+                 SUM(i."quantity") AS qty, SUM(i."price" * i."quantity") AS total
+          FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
+          WHERE s."tenantId" = ${tid} AND s."status" IN (${SALE_NET_STATUSES[0]}, ${SALE_NET_STATUSES[1]}) AND s."createdAt" >= ${last30Start}
+            AND (${bid}::int = 0 OR s."branchId" = ${bid}::int OR (s."branchId" IS NULL AND ${bid}::int = ${mainBid}::int))
+          GROUP BY 1
+        ) sp
+        LEFT JOIN (
+          SELECT COALESCE(ri."productId", 0) AS pid, SUM(ri."quantity") AS qty, SUM(ri."price" * ri."quantity") AS total
+          FROM "SaleReturnItem" ri
+          JOIN "SaleReturn" r ON r."id" = ri."saleReturnId"
+          JOIN "Sale" s ON s."id" = r."saleId"
+          WHERE s."tenantId" = ${tid} AND s."status" IN (${SALE_NET_STATUSES[0]}, ${SALE_NET_STATUSES[1]}) AND r."createdAt" >= ${last30Start}
+            AND (${bid}::int = 0 OR s."branchId" = ${bid}::int OR (s."branchId" IS NULL AND ${bid}::int = ${mainBid}::int))
+          GROUP BY 1
+        ) rr ON rr.pid = sp.pid
+        ORDER BY quantity DESC LIMIT 8`,
       db.customer.count({ where: tenantFilter }),
       db.customer.aggregate({ where: { ...tenantFilter, balance: { gt: 0 } }, _sum: { balance: true } }),
       db.supplier.aggregate({ where: { ...tenantFilter, balance: { gt: 0 } }, _sum: { balance: true } }),
@@ -124,20 +177,35 @@ export async function GET(req: Request) {
           SELECT i."saleId", SUM((i."price" - i."cost") * i."quantity") AS profit
           FROM "SaleItem" i
           JOIN "Sale" s2 ON s2."id" = i."saleId"
-          WHERE s2."tenantId" = ${tid} AND s2."status" = 'مكتملة' AND s2."createdAt" >= ${lastNStart} AND s2."createdAt" < ${chartEnd}
+          WHERE s2."tenantId" = ${tid} AND s2."status" IN (${SALE_NET_STATUSES[0]}, ${SALE_NET_STATUSES[1]}) AND s2."createdAt" >= ${lastNStart} AND s2."createdAt" < ${chartEnd}
           GROUP BY i."saleId"
         ) ip ON ip."saleId" = s."id"
-        WHERE s."tenantId" = ${tid} AND s."status" = 'مكتملة' AND s."createdAt" >= ${lastNStart} AND s."createdAt" < ${chartEnd}
+        WHERE s."tenantId" = ${tid} AND s."status" IN (${SALE_NET_STATUSES[0]}, ${SALE_NET_STATUSES[1]}) AND s."createdAt" >= ${lastNStart} AND s."createdAt" < ${chartEnd}
+          AND (${bid}::int = 0 OR s."branchId" = ${bid}::int OR (s."branchId" IS NULL AND ${bid}::int = ${mainBid}::int))
+        GROUP BY 1 ORDER BY 1`,
+      // 🛡️ ج-2: مرتجعات كل يوم (بتوقيت المرتجع) — بتتطرح من نقط المنحنى
+      db.$queryRaw<{ date: string; net: number; profit: number }[]>`
+        SELECT to_char(r."createdAt" AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS date,
+               COALESCE(SUM(r."total" - r."exchangeTotal"), 0)::float8 AS net,
+               COALESCE(SUM((ri."price" - ri."cost") * ri."quantity"), 0)::float8 AS profit
+        FROM "SaleReturn" r
+        JOIN "Sale" s ON s."id" = r."saleId"
+        LEFT JOIN "SaleReturnItem" ri ON ri."saleReturnId" = r."id"
+        WHERE s."tenantId" = ${tid} AND s."status" IN (${SALE_NET_STATUSES[0]}, ${SALE_NET_STATUSES[1]}) AND r."createdAt" >= ${lastNStart} AND r."createdAt" < ${chartEnd}
           AND (${bid}::int = 0 OR s."branchId" = ${bid}::int OR (s."branchId" IS NULL AND ${bid}::int = ${mainBid}::int))
         GROUP BY 1 ORDER BY 1`,
     ])
 
     const n = (v: unknown) => Number(v ?? 0)
-    const todaySalesTotal = todaySalesAgg._sum.total ?? 0
+    // 🛡️ ج-2: صافي الإيراد والربح بعد خصم المرتجعات
+    // (قيمة المرتجع الصافية = total − exchangeTotal — بضاعة الاستبدال خرجت فعلًا)
+    const returnNetOf = (a: { _sum: { total: unknown; exchangeTotal: unknown } }) =>
+      n(a._sum.total) - n(a._sum.exchangeTotal)
+    const todaySalesTotal = Math.round((n(todaySalesAgg._sum.total) - returnNetOf(todayReturnAgg)) * 100) / 100
     const todaySalesCount = todaySalesAgg._count.id
-    const todayProfit = n(todayProfitRows[0]?.profit)
-    const monthSalesTotal = monthSalesAgg._sum.total ?? 0
-    const monthProfit = n(monthProfitRows[0]?.profit)
+    const todayProfit = Math.round((n(todayProfitRows[0]?.profit) - n(todayReturnProfitRows[0]?.profit)) * 100) / 100
+    const monthSalesTotal = Math.round((n(monthSalesAgg._sum.total) - returnNetOf(monthReturnAgg)) * 100) / 100
+    const monthProfit = Math.round((n(monthProfitRows[0]?.profit) - n(monthReturnProfitRows[0]?.profit)) * 100) / 100
     const cashBalance = cashAgg._sum.amount ?? 0
     const lowStockCount = n(stockRows[0]?.low)
     const stockValueCost = n(stockRows[0]?.vcost)
@@ -159,7 +227,12 @@ export async function GET(req: Request) {
       const slot = dayMap.get(toDdMm(r.date))
       if (slot) { slot.total += n(r.total); slot.profit += n(r.profit) }
     }
-    const last7DaysSales = Array.from(dayMap.entries()).map(([date, v]) => ({ date, ...v }))
+    // 🛡️ ج-2: خصم مرتجعات كل يوم من نقط المنحنى (بتوقيت المرتجع)
+    for (const r of returnChartRows) {
+      const slot = dayMap.get(toDdMm(r.date))
+      if (slot) { slot.total -= n(r.net); slot.profit -= n(r.profit) }
+    }
+    const last7DaysSales = Array.from(dayMap.entries()).map(([date, v]) => ({ date, total: Math.round(v.total * 100) / 100, profit: Math.round(v.profit * 100) / 100 }))
 
     const topProducts = topProductRows.map((r) => ({ name: r.name, quantity: n(r.quantity), total: n(r.total), unitLabel: r.pieceLabel ?? null }))
     const lowStockAlerts = lowStockRows.map((p) => ({ id: n(p.id), name: p.name, quantity: n(p.quantity), minQuantity: n(p.minQuantity), unitLabel: p.unitLabel ?? null }))
@@ -249,7 +322,7 @@ export async function GET(req: Request) {
       .map((s) => ({
         id: s.id,
         invoiceNo: s.invoiceNo,
-        remaining: Math.max(0, s.total - s.paid),
+        remaining: Math.max(0, Number(s.total) - Number(s.paid)),
         dueDate: s.dueDate ? s.dueDate.toISOString() : null,
         customerName: s.customer?.name ?? null,
         customerPhone: s.customer?.phone ?? null,
@@ -282,6 +355,8 @@ export async function GET(req: Request) {
       activeMaintenanceOrders: activeMaintenanceList,
       overdueInvoices,
       canViewProfits, // بعتهاله الفرونت عشان يعرف يخفي UI الأرباح
+      // 🛡️ ج-2: كل أرقام الإيراد فوق صافي بعد المرتجعات — للعرض في الواجهة
+      salesAreNet: true,
     })
     if (shouldRunChecks) {
       res.cookies.set('notif_checked_at', String(Date.now()), {

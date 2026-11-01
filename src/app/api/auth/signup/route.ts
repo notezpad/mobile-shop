@@ -149,7 +149,7 @@ async function __POST(req: NextRequest) {
       trialPlan &&
       (!trialPlan.isActive ||
         (trialPlan as any).visibility === 'hidden' ||
-        (trialPlan.priceMonthly === 0 && trialPlan.priceYearly === 0))
+        (Number(trialPlan.priceMonthly) === 0 && Number(trialPlan.priceYearly) === 0))
     ) {
       trialPlan = null
     }
@@ -160,7 +160,7 @@ async function __POST(req: NextRequest) {
       const fallbackPlan = await db.plan.findUnique({ where: { code: 'electronics-basic' } })
       // الباقة الاحتياطية لازم تكون مفعّلة ومدفوعة برضه — وإلا نسيبها null
       // عشان الـ last-resort تحت ينشئ نسخة سليمة مفعّلة.
-      trialPlan = fallbackPlan && fallbackPlan.isActive && (fallbackPlan.priceMonthly > 0 || fallbackPlan.priceYearly > 0)
+      trialPlan = fallbackPlan && fallbackPlan.isActive && (Number(fallbackPlan.priceMonthly) > 0 || Number(fallbackPlan.priceYearly) > 0)
         ? fallbackPlan
         : null
     }

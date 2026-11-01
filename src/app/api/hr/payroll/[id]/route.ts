@@ -99,9 +99,11 @@ async function __PUT(req: NextRequest, { params }: Ctx) {
     if (!p) return bad('قسيمة غير موجودة')
     const bonus = round2(Math.max(0, Number(ed.bonus) || 0))
     const penalty = round2(Math.max(0, Number(ed.penalty) || 0))
-    const gross = Math.max(0, round2(p.payableBase - p.absenceDeduction - p.lateDeduction + bonus - penalty + (p.commission || 0)))
+    // 🛡️ المرحلة 4: حقول الفلوس في القسيمة بقوا Decimal — تحويل قبل الحساب
+    const gross = Math.max(0, round2(Number(p.payableBase) - Number(p.absenceDeduction) - Number(p.lateDeduction) + bonus - penalty + (p.commission ? Number(p.commission) : 0)))
     // القسط المستحق الأصلي (لو متسجّل) — وإلا القيمة المخزّنة (قسايم قديمة)
-    const advanceDue = (p as { advanceDue?: number }).advanceDue || p.advanceDeduction
+    const advanceDueRaw = (p as { advanceDue?: unknown }).advanceDue
+    const advanceDue = Number(advanceDueRaw ?? p.advanceDeduction ?? 0)
     const advanceDeduction = round2(Math.min(gross, advanceDue))
     const net = round2(gross - advanceDeduction)
     updates.push(db.payslip.update({

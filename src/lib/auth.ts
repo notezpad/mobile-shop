@@ -150,21 +150,40 @@ export async function createSession(user: {
   })
 }
 
-/**
- * true لو كلمة مرور الحساب اتغيرت بعد إصدار التوكن ده.
- * بيفشل مفتوحًا (false) لو العمود لسه مش موجود (قبل تشغيل الـ migration).
- */
-async function isSessionRevoked(userId: string, iat: number | undefined): Promise<boolean> {
-  if (!iat) return true
+// 🛡️ خ-6 (2026-11-02): إبطال الجلسة لكل الأدوار + الحقول الحية من الداتابيز.
+// قبل كده فحص passwordChangedAt كان لدور SUPER_ADMIN فقط — والموظف الموقوف
+// (active=false) كان يفضل شغال بالتوكن القديم لحد 7 أيام، وpermissions/
+// canViewProfits كانت مجمّدة جوه الـ JWT: سحب صلاحية أو موديول من موظف مبيأثرش
+// غير لما يعمل خروج ودخول بنفسه.
+//
+// استعلام واحد بالـ PK (رخيص) بيرجّع:
+//  - active          → جلسة أي دور لحساب معطّل تُرفض فورًا
+//  - passwordChangedAt → الباسورد اتغير بعد إصدار التوكن → تُرفض
+//  - branchId / permissions / canViewProfits → القيم الحية (نفس نمط branchId القديم)
+//
+// لو الاستعلام فشل نكمل بقيم التوكن (fail-open) — نفس سلوك النسخة القديمة،
+// ولو صف المستخدم اتمسح من الداتابيز نكمل كذلك (الحذف soft-delete في النظام).
+type SessionUserRow = {
+  active: boolean
+  changed: Date | null
+  branchId: number | null
+  permissions: string | null
+  can_view_profits: boolean
+}
+
+async function sessionUserRow(userId: string): Promise<SessionUserRow | null> {
   try {
     const sql = getSql()
-    const rows = await sql<{ changed: Date | null }[]>`
-      SELECT "passwordChangedAt" AS changed FROM "User" WHERE "id" = ${userId} LIMIT 1`
-    const changed = rows[0]?.changed
-    // هامش ثانية واحدة عشان الجلسة اللي اتصدرت مع تغيير الباسورد نفسه
-    return !!changed && changed.getTime() - 1000 > iat * 1000
+    const rows = await sql<SessionUserRow[]>`
+      SELECT "active" AS active,
+             "passwordChangedAt" AS changed,
+             "branchId" AS branchId,
+             "permissions" AS permissions,
+             "canViewProfits" AS can_view_profits
+      FROM "User" WHERE "id" = ${userId} LIMIT 1`
+    return rows[0] ?? null
   } catch {
-    return false
+    return null
   }
 }
 
@@ -174,32 +193,50 @@ export async function getSession(): Promise<Session | null> {
   if (!token) return null
   try {
     const { payload: decoded } = await jwtVerify(token, getJwtSecret(), { algorithms: ['HS256'] })
-    // 🛡️ إبطال الجلسات القديمة لحساب SUPER_ADMIN بعد تغيير كلمة المرور
-    // (استعلام واحد خفيف للأدمن فقط — الموظفين/المحلات مش بيتأثروا).
-    if (decoded.role === 'SUPER_ADMIN' && (await isSessionRevoked(decoded.userId as string, decoded.iat))) {
-      return null
+    const userId = decoded.userId as string
+    const iat = decoded.iat
+    // توكن من غير iat = مش صادر من النظام ده أصلًا
+    if (!iat) return null
+
+    // 🛡️ خ-6: استعلام واحد لكل الأدوار — إبطال الجلسة + الحقول الحية
+    const row = await sessionUserRow(userId)
+    if (row) {
+      if (!row.active) return null // حساب معطّل → الجلسة باطلة فورًا (كل الأدوار)
+      // هامش ثانية واحدة عشان الجلسة اللي اتصدرت مع تغيير الباسورد نفسه
+      if (row.changed && row.changed.getTime() - 1000 > iat * 1000) return null
     }
-    // 🏬 فرع الموظف بيتقرا من الداتابيز مش من التوكن: التوكن بيعيش 7 أيام، فلو المدير
-    // سنّد الموظف لفرع (أو غيّره) بعد ما سجّل دخول كان بيفضل شايف كل المحل لحد ما يعمل
-    // خروج ودخول. استعلام واحد بالـ PK للأدوار غير الأدمن بس، ولو فشل بنرجع لقيمة التوكن.
+
+    const isAdmin = decoded.role === 'ADMIN' || decoded.role === 'SUPER_ADMIN'
     let branchId = (decoded.branchId as number | null) ?? null
-    if (decoded.role !== 'ADMIN' && decoded.role !== 'SUPER_ADMIN') {
-      try {
-        const sql = getSql()
-        const rows = await sql<{ branchId: number | null }[]>`
-          SELECT "branchId" FROM "User" WHERE "id" = ${decoded.userId as string} LIMIT 1`
-        if (rows.length > 0) branchId = rows[0].branchId ?? null
-      } catch { /* نكمل بقيمة التوكن */ }
+    let permissions = (decoded.permissions as string[] | null) ?? null
+    let canViewProfits = Boolean(decoded.canViewProfits)
+
+    if (row && !isAdmin) {
+      // 🏬 القيم الحية من الداتابيز (نفس نمط branchId القديم) — المدير unrestricted
+      // فقيم التوكن بتاعته صحيحة دايمًا (permissions=null, canViewProfits=true)
+      branchId = row.branchId ?? null
+      canViewProfits = Boolean(row.can_view_profits)
+      if (row.permissions) {
+        try {
+          const parsed = JSON.parse(row.permissions)
+          permissions = Array.isArray(parsed) && parsed.length > 0 ? (parsed as string[]) : null
+        } catch {
+          permissions = null // قيمة تالفة = صلاحيات كاملة (نفس دلالة null)
+        }
+      } else {
+        permissions = null
+      }
     }
+
     return {
-      userId: decoded.userId as string,
+      userId,
       tenantId: decoded.tenantId as string,
       role: decoded.role as Session['role'],
       name: decoded.name as string,
       email: decoded.email as string,
       branchId,
-      permissions: (decoded.permissions as string[] | null) ?? null,
-      canViewProfits: Boolean(decoded.canViewProfits),
+      permissions,
+      canViewProfits,
     }
   } catch {
     return null
@@ -211,6 +248,54 @@ export async function clearSession() {
   cookieStore.delete('shop_session')
   cookieStore.delete('impersonate_tenant')
   cookieStore.delete('sub_ok')
+}
+
+// ─── 🛡️ ج-1 (2026-11-02): كوكي sub_ok بقى موقّع بـ HMAC ─────────────────────
+// قبل كده القيمة كانت tenantId نص عادي — أي حد عنده حساب صالح (حتى موظف)
+// يقدر يبعت Cookie: sub_ok=<tenantId> من curl/Postman ويتخطى فحص الاشتراك
+// المنتهي والمحل الموقوف نهائيًا. دلوقتي القيمة =
+//   "<tenantId>:<expiryEpoch>.<HMAC-SHA256(JWT_SECRET, payload)>"
+// والسيرفر بيتحقق من التوقيع + الصلاحية بنفسه — الـ maxAge إجراء متصفح بس،
+// والتحقق الحقيقي بيقارن expiryEpoch المخزّن في الـ payload الموقّع.
+const SUB_OK_TTL_SECONDS = 300
+
+async function hmacSha256Hex(secret: Uint8Array, message: string): Promise<string> {
+  // 🛡️ (tsc): WebCrypto بيطلب BufferSource مدعوم بـ ArrayBuffer فعلي —
+  // النسخة الجديدة بـ ArrayBuffer مضمون (نفس نمط إصلاح pbkdf2Derive).
+  const keyBytes = new Uint8Array(secret) // copy → buffer: ArrayBuffer
+  const key = await crypto.subtle.importKey(
+    'raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  )
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message))
+  return toHex(new Uint8Array(sig))
+}
+
+/** مقارنة ثابتة الزمن لتوقيعي HMAC (نفس نمط verifyPassword). */
+function signaturesEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
+async function signSubOk(tenantId: string): Promise<string> {
+  const exp = Math.floor(Date.now() / 1000) + SUB_OK_TTL_SECONDS
+  const payload = `${tenantId}:${exp}`
+  return `${payload}.${await hmacSha256Hex(getJwtSecret(), payload)}`
+}
+
+/** true فقط لو الكوكي موقّع صح لنفس الـ tenantId ولسه صالح — أي حاجة تانية false. */
+async function verifySubOk(cookieValue: string | undefined, tenantId: string): Promise<boolean> {
+  if (!cookieValue) return false
+  const dot = cookieValue.lastIndexOf('.')
+  const colon = cookieValue.lastIndexOf(':')
+  if (dot === -1 || colon === -1 || colon > dot) return false
+  const payload = cookieValue.slice(0, dot)
+  const tid = payload.slice(0, colon)
+  const exp = Number(payload.slice(colon + 1))
+  if (tid !== tenantId || !Number.isInteger(exp) || exp * 1000 < Date.now()) return false
+  const expected = await hmacSha256Hex(getJwtSecret(), payload)
+  return signaturesEqual(expected, cookieValue.slice(dot + 1))
 }
 
 /** Returns the active subscription for a tenant, or null if none. */
@@ -240,9 +325,9 @@ const COUNTABLE_SUB_STATUSES = ['active', 'expired']
 export async function requireActiveSubscription(tenantId: string) {
   const cookieStore = await cookies()
 
-  // Fast path: sub_ok cookie present → skip all DB queries
-  const subOk = cookieStore.get('sub_ok')?.value
-  if (subOk === tenantId) return null
+  // 🛡️ ج-1: Fast path بقبول الكوكي الموقّع فقط — توقيع صحيح لنفس الـ tenant
+  // ولسه داخل مدة الصلاحية. أي كوكي مزوّر/قديم/بتنسيق قديم بيسقط للفحص الكامل.
+  if (await verifySubOk(cookieStore.get('sub_ok')?.value, tenantId)) return null
 
   const sql = getSql()
   type Row = {
@@ -285,11 +370,11 @@ export async function requireActiveSubscription(tenantId: string) {
     if (row.tenant_status !== 'active') throw new Error('SUBSCRIPTION_EXPIRED')
     // Allow if tenant marked active but no subscription yet (legacy)
     // Set sub_ok so we don't re-query for the next 5 minutes
-    cookieStore.set('sub_ok', tenantId, {
+    cookieStore.set('sub_ok', await signSubOk(tenantId), {
       httpOnly: true,
       secure: await isRequestSecure(),
       sameSite: 'lax',
-      maxAge: 300, // 5 minutes
+      maxAge: SUB_OK_TTL_SECONDS, // 5 minutes
       path: '/',
     })
     return null
@@ -328,11 +413,11 @@ export async function requireActiveSubscription(tenantId: string) {
   }
 
   // Subscription is valid — cache for 5 minutes to avoid DB hit on every request
-  cookieStore.set('sub_ok', tenantId, {
+  cookieStore.set('sub_ok', await signSubOk(tenantId), {
     httpOnly: true,
     secure: await isRequestSecure(),
     sameSite: 'lax',
-    maxAge: 300, // 5 minutes
+    maxAge: SUB_OK_TTL_SECONDS, // 5 minutes
     path: '/',
   })
 

@@ -19,9 +19,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useShopStore } from '@/lib/store'
+import { api } from '@/lib/api'
 import { exportSimpleExcel, excelFileName } from '@/lib/excel'
 import { StockTab } from './StockTab'
 import { useInventoryData } from './useInventoryData'
+import type { InventoryProduct } from './types'
 import { InventoryCrossNav, InventoryStyles, LoadErrorBanner, SectionBoundary, num } from './shared'
 
 export function StockPage() {
@@ -33,48 +35,86 @@ export function StockPage() {
 
   const { branches, products, transfers, stocktakes, loading, noData, stats, reload, loadErrors } = useInventoryData()
 
-  const exportExcel = () => {
-    if (products.length === 0) return
-    const branchName = (id: number | null) =>
-      id ? branches.find((b) => b.id === id)?.name ?? '-' : 'كل الفروع'
-    exportSimpleExcel({
-      fileName: excelFileName('حالة-المخزون'),
-      shop: {
-        name: shopName,
-        phone: shopBranding.phone || undefined,
-        address: shopBranding.address || undefined,
-      },
-      documentTitle: 'حالة المخزون',
-      sheetName: 'المخزون',
-      columns: [
-        { header: 'المنتج', key: 'name', format: 'text' },
-        { header: 'الباركود', key: 'barcode', format: 'text' },
-        { header: 'التصنيف', key: 'category', format: 'text' },
-        { header: 'الفرع', key: 'branch', format: 'text' },
-        { header: 'الكمية', key: 'quantity', format: 'int' },
-        { header: 'الحد الأدنى', key: 'minQuantity', format: 'int' },
-        // 🔒 RBAC: أعمدة التكلفة تختفي لمن لا يملك صلاحية رؤية الأرباح
-        ...(stats.canSeeCost ? [{ header: 'التكلفة', key: 'cost', format: 'currency' as const }] : []),
-        { header: 'سعر البيع', key: 'price', format: 'currency' },
-        ...(stats.canSeeCost ? [{ header: 'قيمة المخزون (تكلفة)', key: 'stockValue', format: 'currency' as const }] : []),
-      ],
-      rows: products.map((p) => ({
-        name: p.name,
-        barcode: p.barcode || '-',
-        category: p.category || '-',
-        branch: branchName(p.branchId),
-        quantity: p.quantity,
-        minQuantity: p.minQuantity,
-        cost: p.cost,
-        price: p.price,
-        stockValue: p.quantity * p.cost,
-      })),
-      totals: {
-        name: 'الإجمالي',
-        quantity: products.reduce((s, p) => s + p.quantity, 0),
-        ...(stats.canSeeCost ? { stockValue: products.reduce((s, p) => s + p.quantity * p.cost, 0) } : {}),
-      },
-    })
+  const [exporting, setExporting] = React.useState(false)
+
+  // 🛡️ خ-7 (2026-11-02): التصدير بيجيب **كل** الأصناف بترقيم داخلي (مش المصفوفة
+  // المحلية المقصوصة عند 100) — قبل كده الملف كان بيطلع بأول 100 كأنهم الكل.
+  const exportExcel = async () => {
+    if (exporting) return
+    setExporting(true)
+    try {
+      type Row = InventoryProduct
+      const all: Row[] = []
+      let total = Infinity
+      for (let page = 1; all.length < total && page <= 200; page++) {
+        const res = await api<{ data: Row[]; total: number }>(
+          `/api/products?limit=100&status=all&page=${page}`,
+        )
+        const list = Array.isArray(res) ? (res as unknown as Row[]) : (res?.data ?? [])
+        all.push(...list)
+        total = Number((res as any)?.total ?? all.length)
+        if (list.length === 0) break
+      }
+      if (all.length === 0) return
+      const branchName = (id: number | null) =>
+        id ? branches.find((b) => b.id === id)?.name ?? '-' : 'كل الفروع'
+      exportSimpleExcel({
+        fileName: excelFileName('حالة-المخزون'),
+        shop: {
+          name: shopName,
+          phone: shopBranding.phone || undefined,
+          address: shopBranding.address || undefined,
+        },
+        documentTitle: 'حالة المخزون',
+        sheetName: 'المخزون',
+        columns: [
+          { header: 'المنتج', key: 'name', format: 'text' },
+          { header: 'الباركود', key: 'barcode', format: 'text' },
+          { header: 'التصنيف', key: 'category', format: 'text' },
+          { header: 'الفرع', key: 'branch', format: 'text' },
+          { header: 'الكمية', key: 'quantity', format: 'int' },
+          { header: 'الحد الأدنى', key: 'minQuantity', format: 'int' },
+          // 🔒 RBAC: أعمدة التكلفة تختفي لمن لا يملك صلاحية رؤية الأرباح
+          ...(stats.canSeeCost ? [{ header: 'التكلفة', key: 'cost', format: 'currency' as const }] : []),
+          { header: 'سعر البيع', key: 'price', format: 'currency' },
+          ...(stats.canSeeCost ? [{ header: 'قيمة المخزون (تكلفة)', key: 'stockValue', format: 'currency' as const }] : []),
+        ],
+        rows: all.map((p) => ({
+          name: p.name,
+          barcode: p.barcode || '-',
+          category: p.category || '-',
+          branch: branchName(p.branchId),
+          quantity: p.quantity,
+          minQuantity: p.minQuantity,
+          cost: p.cost,
+          price: p.price,
+          stockValue: p.quantity * p.cost,
+        })),
+        totals: {
+          name: 'الإجمالي',
+          quantity: all.reduce((s, p) => s + p.quantity, 0),
+          ...(stats.canSeeCost ? { stockValue: all.reduce((s, p) => s + p.quantity * p.cost, 0) } : {}),
+        },
+      })
+    } catch {
+      // فشل الجلب الكامل → نرجّع للتصدير المحلي كحل أخير بدل مفيش حاجة
+      if (products.length > 0) {
+        exportSimpleExcel({
+          fileName: excelFileName('حالة-المخزون'),
+          shop: { name: shopName, phone: shopBranding.phone || undefined, address: shopBranding.address || undefined },
+          documentTitle: 'حالة المخزون (محمّل جزئياً)',
+          sheetName: 'المخزون',
+          columns: [
+            { header: 'المنتج', key: 'name', format: 'text' },
+            { header: 'الكمية', key: 'quantity', format: 'int' },
+          ],
+          rows: products.map((p) => ({ name: p.name, quantity: p.quantity })),
+          totals: { name: 'الإجمالي', quantity: products.reduce((s, p) => s + p.quantity, 0) },
+        })
+      }
+    } finally {
+      setExporting(false)
+    }
   }
 
   // رفوف المستودع: ٤٠ خلية تمثّل نسب الأصناف (سليم / منخفض / نفد)
@@ -149,9 +189,9 @@ export function StockPage() {
                   {branches.find((b) => b.id === userBranchId)?.name ?? '—'}
                 </span>
               )}
-              <Button variant="outline" size="sm" onClick={exportExcel} className="ms-auto h-9 lg:ms-2">
+              <Button variant="outline" size="sm" onClick={() => void exportExcel()} disabled={exporting} className="ms-auto h-9 lg:ms-2">
                 <FileSpreadsheet className="size-4" />
-                تصدير Excel
+                {exporting ? 'جارٍ التصدير…' : 'تصدير Excel'}
               </Button>
             </div>
 
@@ -279,6 +319,14 @@ export function StockPage() {
           message={loadErrors.products}
           onRetry={reload}
         />
+      )}
+
+      {/* 🛡️ خ-7: بانر القص — القايمة بتعرض أول 100 بس والأرقام فوق من كل الأصناف */}
+      {!loading && stats.totalItems > products.length && (
+        <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-300">
+          الأرقام فوق محسوبة على كل الأصناف ({num(stats.totalItems)} صنف) من السيرفر —
+          القايمة تحت بتعرض أول {num(products.length)} صنف للتصفّح السريع.
+        </p>
       )}
 
       {/* ═════════ قائمة الأصناف ═════════ */}

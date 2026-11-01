@@ -101,7 +101,8 @@ async function __GET(req: NextRequest) {
     db.subscription.count({ where: { ...baseWhere, createdAt: { gte: from, lte: to } } }),
   ])
 
-  const n = (v: number | null | undefined) => v ?? 0
+  // 🛡️ المرحلة 4: amountPaid بقى Decimal — التحويل موحّد هنا
+  const n = (v: unknown) => Number(v ?? 0)
   const totalRevenue = n(rangeAgg._sum.amountPaid)
   const dailyRevenue = n(dailyAgg._sum.amountPaid)
   const monthlyRevenue = n(monthlyAgg._sum.amountPaid)

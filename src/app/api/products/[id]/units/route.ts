@@ -85,6 +85,11 @@ async function __POST(
   if (isNaN(pid)) return NextResponse.json({ error: 'معرف غير صالح' }, { status: 400 })
   const prod = await loadTenantProduct(session.tenantId, pid)
   if (!prod) return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
+  // 🛡️ مت-7 (2026-11-02): فحص الفرع في الكتابة — القراءة اتصحت (2026-10-31)
+  // بس POST كان بيتحقق من المحل بس: موظف فرع كان يقدر يضيف وحدة لمنتج فرع تاني.
+  if (!(await canAccessProductBranch(session.tenantId, prod.branchId, session.branchId))) {
+    return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
+  }
 
   const body = await req.json().catch(() => null)
   if (!body?.name || !String(body.name).trim()) {

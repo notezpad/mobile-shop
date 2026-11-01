@@ -56,6 +56,18 @@ export function isBuiltinMethodId(id: string): boolean {
   return (BUILTIN_PAYMENT_METHOD_IDS as readonly string[]).includes(id)
 }
 
+/**
+ * 🛡️ خ-3 (2026-11-02): المصدر الموحد للتحقق من وسيلة الدفع — بيع ومرتجع على حد سواء.
+ * قبل كده مجموعة الرد في sale-return كانت ثابتة (cash/vodafone_cash/instapay/fawry)
+ * بدون «بطاقة» ولا الوسائل المخصصة custom_* — ففاتورة اتدفعت ببطاقة ماكانش لها
+ * رد غير «كاش»، وده بينقص درج الورقي بفلوس ما دخلتوش ويظهر عجز وهمي في
+ * إغلاق الوردية (المتوقع بيتحسب من قيود method='cash' فقط).
+ * القاعدة: أي وسيلة صالحة للبيع صالحة للرد.
+ */
+export function isValidSaleMethodId(m: string): boolean {
+  return isBuiltinMethodId(m) || /^custom_[a-z0-9]{4,30}$/.test(m)
+}
+
 /** أي id مخصص بيتولد بصيغة موحدة عشان الـ API يعرف يميّزه */
 export function customMethodId(): string {
   return `custom_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`

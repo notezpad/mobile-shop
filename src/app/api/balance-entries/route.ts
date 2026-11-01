@@ -127,13 +127,13 @@ async function __POST(req: NextRequest) {
         const c = await tx.customer.findUnique({ where: { id: refId }, select: { id: true, name: true, balance: true } })
         if (!c) throw new BalanceEntryError('العميل غير موجود', 404)
         // 🛠️ تأمين القفل: الرصيد الحالي مختلف عن اللي شافه المستخدم؟ ارفض.
-        if (hasExpected && Math.abs(c.balance - (expectedBalance as number)) > 0.005) {
+        if (hasExpected && Math.abs(Number(c.balance) - (expectedBalance as number)) > 0.005) {
           throw new BalanceEntryError(
             'الرصيد اتغيّر أثناء التسجيل (حركات جديدة وصلت) — حدّث الشاشة وجرّب تاني بأحدث رصيد',
             409,
           )
         }
-        const delta = hasNew ? Math.round(((newBalance as number) - c.balance + Number.EPSILON) * 100) / 100 : (deltaInput as number)
+        const delta = hasNew ? Math.round(((newBalance as number) - Number(c.balance) + Number.EPSILON) * 100) / 100 : (deltaInput as number)
         if (Math.abs(delta) < 0.005) throw new BalanceEntryError('الرصيد الحالي منضبط على القيمة المطلوبة أصلاً', 409)
         const entry = await tx.balanceEntry.create({
           data: {
@@ -178,13 +178,13 @@ async function __POST(req: NextRequest) {
         const s = await tx.supplier.findUnique({ where: { id: refId }, select: { id: true, name: true, balance: true } })
         if (!s) throw new BalanceEntryError('المورد غير موجود', 404)
         // 🛠️ نفس تأمين القفل للمورد
-        if (hasExpected && Math.abs(s.balance - (expectedBalance as number)) > 0.005) {
+        if (hasExpected && Math.abs(Number(s.balance) - (expectedBalance as number)) > 0.005) {
           throw new BalanceEntryError(
             'الرصيد اتغيّر أثناء التسجيل (حركات جديدة وصلت) — حدّث الشاشة وجرّب تاني بأحدث رصيد',
             409,
           )
         }
-        const delta = hasNew ? Math.round(((newBalance as number) - s.balance + Number.EPSILON) * 100) / 100 : (deltaInput as number)
+        const delta = hasNew ? Math.round(((newBalance as number) - Number(s.balance) + Number.EPSILON) * 100) / 100 : (deltaInput as number)
         if (Math.abs(delta) < 0.005) throw new BalanceEntryError('الرصيد الحالي منضبط على القيمة المطلوبة أصلاً', 409)
         const entry = await tx.balanceEntry.create({
           data: {

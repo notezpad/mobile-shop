@@ -19,7 +19,7 @@ async function __GET(req: NextRequest) {
     include: { employee: { select: { name: true } } },
   })
   const items = rows.map(({ employee, ...a }) => ({ ...a, employeeName: employee.name }))
-  const totalRemaining = items.filter((a) => a.status === 'open').reduce((s, a) => s + a.remaining, 0)
+  const totalRemaining = items.filter((a) => a.status === 'open').reduce((s, a) => s + Number(a.remaining), 0)
   return NextResponse.json({ items, totalRemaining })
 }
 

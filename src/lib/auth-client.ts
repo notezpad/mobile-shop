@@ -101,7 +101,13 @@ async function readCachedSessionUser(): Promise<AuthUser | null> {
  * من v10 الكاش المحلي (ميموري + IDB) بقى بيتخدم للعرض الفوري (SWR)، فلازم
  * لما الحساب يتغيّر نمنع أي بيانات تينانت قديم من تظهر للحساب الجديد على
  * نفس الجهاز. بنمسح: صفوف كاش الـ API + منتجات بحث الـ POS أوفلاين + كاش
- * الميموري — وده مش بيأثر على الـ outbox (كتابات معلقة متتلمسش هنا).
+ * الميموري.
+ *
+ * 🛡️ خ-4 (2026-11-02): الدالة دي بقت كمان بتمسح **طابور الأوفلاين (outbox)**
+ * — قبل كده كان بيفضل حي بعد الخروج، وعمليات محل A المتعثرة كانت ترجع تتبعت
+ * بعد رجوع النت بكوكي جلسة محل B (فاتورة تتحول لمحل تاني بالكامل)، وكاش
+ * الـ Service Worker كان بيمسح عند الخروج بس مش عند الدخول. الدالة بتتنادى
+ * من الخروج والدخول والتسجيل — فالبابين اتقفلوا بنفس السطر.
  */
 async function clearLocalAccountData(): Promise<void> {
   try {
@@ -109,9 +115,35 @@ async function clearLocalAccountData(): Promise<void> {
       import('./offline/idb'),
       import('./offline/api-offline'),
     ])
+    // 🛡️ خ-4: عدّ القيود المعلقة قبل المسح (للتحذير عند الخروج) ثم امسحهم —
+    // مع مسح كاش الـ SW بنفس المنطق (نفس postMessage بتاع clearAuthSnapshot).
+    const pendingCount = await idb.pendingCount().catch(() => 0)
     clearMemoryApiCache()
     await idb.clearCache()
     await idb.replaceProducts([])
+    await idb.clearOutbox()
+    try {
+      if (
+        typeof navigator !== 'undefined' &&
+        'serviceWorker' in navigator &&
+        navigator.serviceWorker.controller
+      ) {
+        navigator.serviceWorker.controller.postMessage({ type: 'PURGE_API_CACHE' })
+      }
+    } catch {
+      /* ignore — الـ SW مش إله داعي بالأمان هنا */
+    }
+    if (pendingCount > 0 && typeof window !== 'undefined') {
+      try {
+        const { toast } = await import('sonner')
+        toast.warning(
+          `تم مسح ${pendingCount} عملية كانت بانتظار المزامنة ولم تُرسل —
+دي كانت لِحساب تاني على نفس الجهاز، إرسالها للحساب الجديد بيبوّظ بياناته`,
+        )
+      } catch {
+        /* التوست مش حرج */
+      }
+    }
   } catch {
     /* ignore */
   }
@@ -181,6 +213,21 @@ export async function apiLogout(): Promise<void> {
     await clearLocalAccountData()
     // ⚡ fast-boot: خروج → ريفرش جاي يرجع للسلوك الطبيعي (لاندنج أولاً)
     clearHomeGateBootCache()
+    // 🛡️ خ-4 (2026-11-02): طابور كشك الحضور في localStorage بيخزّن PIN الموظف
+    // نص صريح + تسجيلات معلقة — بيمسح عند الخروج عشان مايفضلش على جهاز
+    // مشترك بعد تسجيل الخروج (الكشك بيعيد تحميل موظفيه لما يتفتح تاني).
+    try {
+      if (typeof window !== 'undefined') {
+        const doomed: string[] = []
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const k = window.localStorage.key(i)
+          if (k && k.startsWith('hr-kiosk-')) doomed.push(k)
+        }
+        doomed.forEach((k) => window.localStorage.removeItem(k))
+      }
+    } catch {
+      /* ignore */
+    }
   }
 }
 

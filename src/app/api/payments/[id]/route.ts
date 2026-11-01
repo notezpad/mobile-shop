@@ -105,7 +105,7 @@ async function __DELETE(
         },
       })
       const linkedEntries = candidates.filter((e) =>
-        e.source === 'payment' ? e.amount > 0 : commissionNote.test(e.note ?? ''),
+        e.source === 'payment' ? Number(e.amount) > 0 : commissionNote.test(e.note ?? ''),
       )
 
       for (const entry of linkedEntries) {

@@ -148,14 +148,15 @@ export async function performPurchaseReturn(
   }
 
   // ── 2. Money
+  // 🛡️ المرحلة 4: cost بقى Decimal من الداتابيز — بيتحول number للحساب
   let returnValue = 0
   for (const [itemId, qty] of wanted) {
-    returnValue += itemById.get(itemId)!.cost * qty
+    returnValue += Number(itemById.get(itemId)!.cost) * qty
   }
   returnValue = round2(returnValue)
 
   const hasSupplier = order.supplierId != null
-  const paidNotRefunded = Math.max(0, round2(order.paid - order.refunded))
+  const paidNotRefunded = Math.max(0, round2(Number(order.paid) - Number(order.refunded)))
   let refund: number
   if (input.refund === undefined || input.refund === null) {
     // 🛡️ 2026-09-30: NEVER assume the supplier handed the money back. Before,
@@ -301,12 +302,12 @@ export async function performPurchaseReturn(
         }
       }
       const qBefore = Math.max(0, cur?.quantity ?? 0)
-      const cBefore = Math.max(0, cur?.cost ?? 0)
+      const cBefore = Math.max(0, Number(cur?.cost ?? 0))
       const remaining = qBefore - qty
       if (remaining > 0 && qBefore > 0) {
         const newCost = Math.max(
           0,
-          round2((qBefore * cBefore - qty * Math.max(0, it.cost)) / remaining),
+          round2((qBefore * cBefore - qty * Math.max(0, Number(it.cost))) / remaining),
         )
         if (newCost !== cBefore) {
           await tx.product.update({
@@ -344,13 +345,13 @@ export async function performPurchaseReturn(
         data: { balance: { decrement: net } },
         select: { balance: true },
       })
-      supplierBalance = sup.balance
+      supplierBalance = Number(sup.balance)
     } else {
       const sup = await tx.supplier.findUnique({
         where: { id: order.supplierId },
         select: { balance: true },
       })
-      supplierBalance = sup?.balance ?? null
+      supplierBalance = sup ? Number(sup.balance) : null
     }
   }
 

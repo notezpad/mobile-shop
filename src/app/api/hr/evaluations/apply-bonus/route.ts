@@ -34,11 +34,14 @@ async function __POST(req: NextRequest) {
     let n = 0
     for (const ev of evals) {
       const p = (await tx<any[]>`
-        SELECT "id","payableBase","absenceDeduction","lateDeduction","bonus","penalty","advanceDeduction"
+        SELECT "id","payableBase","absenceDeduction","lateDeduction","bonus","penalty","commission","advanceDeduction"
         FROM "Payslip" WHERE "runId" = ${run.id} AND "employeeId" = ${ev.employeeId} FOR UPDATE`)[0]
       if (!p) continue // موظف مالوش قسيمة في الدورة دي
       const bonus = round2(p.bonus + ev.bonus)
-      const gross = Math.max(0, round2(p.payableBase - p.absenceDeduction - p.lateDeduction + bonus - p.penalty))
+      // 🛡️ خ-1 (2026-11-02): العمولة بتدخل في الإجمالي — قبل كده كانت مش متجيبة
+      // في الـ SELECT أصلاً فبتطير من الصافي مع إنها ظاهرة في الشاشة
+      // (نفس معادلة تعديل المرتبات في hr/payroll/[id]: + (p.commission || 0)).
+      const gross = Math.max(0, round2(p.payableBase - p.absenceDeduction - p.lateDeduction + bonus - p.penalty + (p.commission || 0)))
       const adv = round2(Math.min(gross, p.advanceDeduction))
       const net = round2(gross - adv)
       await tx`UPDATE "Payslip" SET "bonus" = ${bonus}, "advanceDeduction" = ${adv}, "net" = ${net} WHERE "id" = ${p.id}`

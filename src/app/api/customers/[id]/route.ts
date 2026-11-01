@@ -81,21 +81,22 @@ async function __GET(
   const activeSales = customer.sales.filter((s) => s.status !== 'مرتجعة')
   const activePayments = customer.payments.filter((p) => p.status !== 'cancelled')
 
-  const grossPurchases = activeSales.reduce((s, x) => s + x.total, 0)
-  const totalReturns = customer.saleReturns.reduce((s, r) => s + r.total, 0)
+  // 🛡️ المرحلة 4: total/amount/paid/refunded بقوا Decimal — تحويل قبل الجمع
+  const grossPurchases = activeSales.reduce((s, x) => s + Number(x.total), 0)
+  const totalReturns = customer.saleReturns.reduce((s, r) => s + Number(r.total), 0)
   const totalPurchases = Math.max(0, grossPurchases - totalReturns)
 
   // المدفوع الصافي: (المدفوع وقت البيع − المسترد − الدفعات المرتبطة) + دفعات الحساب المستحقة
   // (الدفعات المرتبطة محسوبة جوه Sale.paid — بنخصمها هنا عشان ما تتحسبش مرتين مع دفعات الحساب).
   const linkedTotal = activeSales.reduce(
-    (s, x) => s + x.payments.reduce((ps, sp) => ps + sp.amount, 0),
+    (s, x) => s + x.payments.reduce((ps, sp) => ps + Number(sp.amount), 0),
     0,
   )
   const saleTimePaid = activeSales.reduce(
-    (s, x) => s + Math.max(0, x.paid - x.refunded),
+    (s, x) => s + Math.max(0, Number(x.paid) - Number(x.refunded)),
     0,
   )
-  const accountPayments = activePayments.reduce((s, p) => s + p.amount, 0)
+  const accountPayments = activePayments.reduce((s, p) => s + Number(p.amount), 0)
   const totalPaid = Math.max(0, saleTimePaid - linkedTotal) + accountPayments
 
   return NextResponse.json({
@@ -193,7 +194,8 @@ async function __PUT(
     return NextResponse.json({ error: 'الاسم مطلوب' }, { status: 400 })
   }
   // 🛡️ 2026-09-30 (M10): الحد الائتماني اختياري — null/'' يمسحه، رقم سالب مرفوض.
-  let creditLimit = existing.creditLimit
+  // 🛡️ المرحلة 4: النوع صريح number — creditLimit بقى Decimal في الداتابيز
+  let creditLimit: number | null | undefined = existing.creditLimit != null ? Number(existing.creditLimit) : existing.creditLimit
   if (body.creditLimit !== undefined) {
     if (body.creditLimit === null || body.creditLimit === '') {
       creditLimit = null
@@ -270,11 +272,13 @@ async function __DELETE(
       if (!customer) throw new CustomerDeleteError('العميل غير موجود', 404)
 
       // 1. رصيد ≠ 0 → ممنوع (قرار تجاري: ممنوع نهائياً — مهما كانت الصلاحية).
-      if (Math.abs(customer.balance) > 0.005) {
+      // 🛡️ المرحلة 4: balance بقى Decimal — تحويل قبل الفحص والنص
+      const balance = Number(customer.balance)
+      if (Math.abs(balance) > 0.005) {
         throw new CustomerDeleteError(
-          customer.balance > 0
-            ? `العميل ${customer.name} عليه مديونية (${customer.balance.toFixed(2)}) — صفّي الحساب الأول (تحصيل أو مرتجع) قبل الحذف`
-            : `العميل ${customer.name} له رصيد دائن (${Math.abs(customer.balance).toFixed(2)} لصالحه) — ارجع له الفلوس أو اخصمها قبل الحذف`,
+          balance > 0
+            ? `العميل ${customer.name} عليه مديونية (${balance.toFixed(2)}) — صفّي الحساب الأول (تحصيل أو مرتجع) قبل الحذف`
+            : `العميل ${customer.name} له رصيد دائن (${Math.abs(balance).toFixed(2)} لصالحه) — ارجع له الفلوس أو اخصمها قبل الحذف`,
           409,
         )
       }

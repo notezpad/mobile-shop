@@ -72,7 +72,7 @@ async function __POST(req: NextRequest) {
     return NextResponse.json({ error: 'الباقة غير متاحة' }, { status: 404 })
   }
   // 🛡️ Reject zero-price plans — user must pick a real paid plan
-  if (plan.priceMonthly === 0 && plan.priceYearly === 0) {
+  if (Number(plan.priceMonthly) === 0 && Number(plan.priceYearly) === 0) {
     return NextResponse.json(
       { error: 'لا يمكن بدء تجربة على باقة مجانية — اختر باقة مدفوعة' },
       { status: 400 },

@@ -77,7 +77,7 @@ async function __DELETE(
         where: { tenantId: session.tenantId, source: 'transaction', refId: tid },
         orderBy: { id: 'asc' },
       })
-      if (principalEntry && principalEntry.amount !== 0) {
+      if (principalEntry && Number(principalEntry.amount) !== 0) {
         await tx.cashEntry.create({
           data: {
             tenantId: session.tenantId,
@@ -97,7 +97,7 @@ async function __DELETE(
             tenantId: session.tenantId,
             source: 'transaction',
             refId: tid,
-            amount: -sign * txn.amount,
+            amount: -sign * Number(txn.amount),
             method: txn.method,
             note: `إلغاء ${txn.kind === 'deposit' ? 'إيداع' : 'سحب'} ${methodName} - ${txn.amount}`,
             userId: session.userId,

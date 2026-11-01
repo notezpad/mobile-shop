@@ -1,7 +1,7 @@
 import { withDb } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { paymobVerifyHmacAsync } from '@/lib/paymob'
+import { paymobVerifyHmacAsync, toCents } from '@/lib/paymob'
 import { readEnv } from '@/lib/env'
 import { computeEndDate, computeAmount } from '@/lib/admin-utils'
 import { runNonBlocking, trackServerEvent } from '@/lib/tracking/server'
@@ -101,8 +101,38 @@ async function __POST(req: NextRequest) {
 
     if (success && !isVoided && !isRefunded) {
       // ── Payment succeeded — activate subscription ──
+      // 🛡️ خ-10 (2026-11-02): أربع حماية قبل التفعيل:
+      //  (أ) تحقق المبلغ من Paymob مقابل سعر الباقة المخزّن للفترة
+      //      (سماحية قرش واحد للتقريب) — عدم التطابق: سجل للمراجعة اليدوية
+      //      وارفض التفعيل. قبل كده المبلغ كان بيتخزن زي ما جاي بدون مقارنة.
       const amountCents = Number(obj.amount_cents ?? 0)
-      const amount = amountCents / 100
+      const expectedCents = toCents(Number(sub.period === 'yearly' ? sub.plan.priceYearly : sub.plan.priceMonthly))
+      if (expectedCents > 0 && Math.abs(amountCents - expectedCents) > 1) {
+        console.warn(`[paymob/webhook] Sub ${subscriptionId} amount mismatch: got ${amountCents}, expected ${expectedCents} — manual review`)
+        if (sub.status === 'pending' && !(sub.paymentNote ?? '').includes(`paymob-txn:${txnId}`)) {
+          await db.subscription.update({
+            where: { id: subscriptionId },
+            data: { paymentNote: `paymob-txn:${txnId}|amount-mismatch:got-${amountCents}-expected-${expectedCents}` },
+          })
+        }
+        return NextResponse.json({ ok: true }) // 200 عشان Paymob مايعيدش — الحالة للمراجعة اليدوية
+      }
+
+      //  (أ-2) ربط جلسة الدفع: لو الـ payload فيه مرجع intention والمخزّن في
+      //      paymentNote مختلف → رفض. (merchant_order_id=sub-<id> هو الرابط
+      //      الأساسي أصلًا — ده طبقة تحقق إضافية لو الحقل موجود)
+      const storedIntention = (sub.paymentNote ?? '').match(/paymob-intention:([^|]+)/)?.[1]
+      const payloadIntention = String(obj.intention_id ?? obj.order?.intention_id ?? '')
+      if (storedIntention && payloadIntention && payloadIntention !== storedIntention) {
+        console.warn(`[paymob/webhook] Sub ${subscriptionId} intention mismatch: payload=${payloadIntention}, stored=${storedIntention}`)
+        if (sub.status === 'pending' && !(sub.paymentNote ?? '').includes(`paymob-txn:${txnId}`)) {
+          await db.subscription.update({
+            where: { id: subscriptionId },
+            data: { paymentNote: `paymob-txn:${txnId}|intention-mismatch:got-${payloadIntention}-expected-${storedIntention}` },
+          })
+        }
+        return NextResponse.json({ ok: true })
+      }
 
       // Use our helper to compute the proper end date. If the user already has
       // an active subscription that hasn't expired, EXTEND the end date
@@ -116,9 +146,14 @@ async function __POST(req: NextRequest) {
       })
       const baseDate = currentActive && currentActive.endDate > now ? currentActive.endDate : now
       const newEndDate = computeEndDate(baseDate, sub.period as 'monthly' | 'yearly', sub.plan.trialDays)
+      const amount = amountCents / 100
 
-      await db.subscription.update({
-        where: { id: subscriptionId },
+      //  (ب+ج) التفعيل بـ UPDATE شرطي واحد — بيقفل السباق (webhookان متزامنان
+      //      بيقرأوا pending ويفعّلا مرتين) والـ replay (webhook قديم معاد إرساله
+      //      بعد ما الاشتراك بقى expired/cancelled هيعيد تفعيله) وإحياء الملغي
+      //      مرة واحدة: الحالة لازم تفضل 'pending' لحظة التحديث، count≠1 = رفض.
+      const activated = await db.subscription.updateMany({
+        where: { id: subscriptionId, status: 'pending' },
         data: {
           status: 'active',
           startDate: now,
@@ -128,14 +163,22 @@ async function __POST(req: NextRequest) {
           paymentNote: `paymob-txn:${txnId}|order:${obj.order?.id ?? ''}`,
         },
       })
+      if (activated.count !== 1) {
+        console.log(`[paymob/webhook] Subscription ${subscriptionId} not pending (status=${sub.status}) — ignoring duplicate/replayed callback`)
+        return NextResponse.json({ ok: true })
+      }
 
-      // Reactivate the tenant too (in case it was marked expired)
-      await db.tenant.update({
-        where: { id: sub.tenantId },
-        data: { status: 'active' },
-      })
+      //  (د) رفع حالة المحل: فقط لو كانت 'expired' (تجديد ذاتي مشروع).
+      //      المحل الموقوف إداريًا (suspended/cancelled) مابيرفعش إيقافه بالدفع —
+      //      الاشتراك بيتفعّل (سجل الدفع حقيقي) ورفع الإيقاف قرار أدمن.
+      if (sub.tenant.status === 'expired') {
+        await db.tenant.update({
+          where: { id: sub.tenantId },
+          data: { status: 'active' },
+        })
+      }
 
-      console.log(`[paymob/webhook] Subscription ${subscriptionId} activated — end ${newEndDate.toISOString()}`)
+      console.log(`[paymob/webhook] Subscription ${subscriptionId} activated — end ${newEndDate.toISOString()} (tenant was ${sub.tenant.status})`)
 
       // ═══ 📊 Tracking: Purchase — تأكيد الدفع الحقيقي ═══
       // الشرط الوحيد لإطلاق Purchase: HMAC موثق + success=true

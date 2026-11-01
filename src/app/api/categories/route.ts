@@ -104,13 +104,16 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'التصنيف غير موجود' }, { status: 404 })
     }
     const oldName = cat.name
-    await db.$transaction([
-      db.category.update({ where: { id }, data: { name: newName } }),
-      db.product.updateMany({
+    // 🛡️ مت-8 (2026-11-02): تحويل الترانزاكشن لصيغة تفاعلية — صيغة الـ Array
+    // موثّقة في products/[id] إنها بتتكسر مع الـ Proxy وبتشتغل غير ذرية،
+    // فاسم التصنيف كان ممكن يتغير من غير تحديث منتجاته.
+    await db.$transaction(async (tx) => {
+      await tx.category.update({ where: { id }, data: { name: newName } })
+      await tx.product.updateMany({
         where: { tenantId: session.tenantId, category: oldName },
         data: { category: newName },
-      }),
-    ])
+      })
+    })
     // ⚡ v9: مسح كاش الكتالوج — إعادة التسمية بتغير صفوف المنتجات كمان
     await purgeCatalogCaches(session.tenantId, session.branchId)
     return NextResponse.json({ ok: true })
@@ -141,13 +144,14 @@ export async function DELETE(req: NextRequest) {
     if (!cat || cat.tenantId !== session.tenantId) {
       return NextResponse.json({ error: 'التصنيف غير موجود' }, { status: 404 })
     }
-    await db.$transaction([
-      db.product.updateMany({
+    // 🛡️ مت-8 (2026-11-02): تحويل الترانزاكشن لصيغة تفاعلية — نفس سبب PUT
+    await db.$transaction(async (tx) => {
+      await tx.product.updateMany({
         where: { tenantId: session.tenantId, category: cat.name },
         data: { category: null },
-      }),
-      db.category.delete({ where: { id } }),
-    ])
+      })
+      await tx.category.delete({ where: { id } })
+    })
     // ⚡ v9: مسح كاش الكتالوج — الحذف بيصفّر تصنيف منتجات كمان
     await purgeCatalogCaches(session.tenantId, session.branchId)
     return NextResponse.json({ ok: true })

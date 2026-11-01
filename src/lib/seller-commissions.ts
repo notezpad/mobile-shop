@@ -200,6 +200,13 @@ export async function sellersMonthAggregates(
   timeZone: string,
 ): Promise<Map<string, SellerMonthNumbers>> {
   const { gte, lte } = monthRangeUtc(month, timeZone)
+  // 🛡️ ج-3 (2026-11-02): استثناء مرتجعات «مسار حذف الفاتورة» من أساس العمولة.
+  // الحذف بيرجّع فلوس العميل ويحوّل الفاتورة لـ status='مرتجعة' من غير ما ينشئ
+  // صف SaleReturn — وخصم المرتجعات هنا بيقرأ من SaleReturn، فالفاتورة كانت
+  // بتتفصل عمولتها كاملة. الشرط: نستبعد 'مرتجعة' فقط لو ماعندهاش صف SaleReturn.
+  // المرتجع العادي (له صف SaleReturn) بيفضل محسوب زي ما هو — الفاتورة تُجمع
+  // وصف المرتجع يطرح؛ لو استبعدنا الفاتورة نفسها هيتطرح المرتجع مرتين
+  // وعمولة البائع تبقى سالبة غلط.
   const [salesRows, returnRows] = await Promise.all([
     sql<{ uid: string; invoices: number; sales: number; comm: number }[]>`
       SELECT "sellerId" AS uid,
@@ -209,6 +216,8 @@ export async function sellersMonthAggregates(
       FROM "Sale"
       WHERE "tenantId" = ${tenantId} AND "sellerId" IS NOT NULL
         AND "createdAt" >= ${gte} AND "createdAt" <= ${lte}
+        AND ("status" <> 'مرتجعة' OR EXISTS (
+              SELECT 1 FROM "SaleReturn" sr WHERE sr."saleId" = "Sale"."id"))
       GROUP BY "sellerId"`,
     sql<{ uid: string; rets: number; ret: number; retcomm: number }[]>`
       SELECT s."sellerId" AS uid,

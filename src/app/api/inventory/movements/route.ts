@@ -223,7 +223,7 @@ async function __POST(req: NextRequest) {
     reason,
     extraNote,
     qty: Math.abs(qty),
-    unitCost: product.cost,
+    unitCost: Number(product.cost),
     role: s.role,
   })
   if (!policy.ok) {
@@ -279,7 +279,7 @@ async function __POST(req: NextRequest) {
   // لأن مفيش فلوس خرجت من الخزنة (الخسارة في البضاعة نفسها).
   // 📋 2026-10-18: الخسارة بتتسجل لكل سبب سياسته «loss» (هالك + هدايا/عينات صادرة)
   const lossValue =
-    policy.recordLoss ? Math.round(Math.abs(delta) * Math.max(0, product.cost) * 100) / 100 : 0
+    policy.recordLoss ? Math.round(Math.abs(delta) * Math.max(0, Number(product.cost)) * 100) / 100 : 0
 
   try {
     const result = await db.$transaction(async (tx) => {

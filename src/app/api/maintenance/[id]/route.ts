@@ -67,7 +67,7 @@ async function __PUT(
         deliveredAt: becomingDelivered ? new Date() : existing.deliveredAt,
       },
     })
-    if (becomingDelivered && ord.cost > 0) {
+    if (becomingDelivered && Number(ord.cost) > 0) {
       // 🛡️ 2026-09-30 (X1): قيد واحد بس لكل أوردر — قبل كده لو الحالة رجعت
       // مستلم ورجعت مُسلّم تاني، قيد خزنة تاني كان بيتسجل (الخزنة بتتضخم).
       const existingEntry = await tx.cashEntry.findFirst({
@@ -139,7 +139,7 @@ async function __DELETE(
       },
       orderBy: { id: 'desc' },
     })
-    if (entry && entry.amount > 0) {
+    if (entry && Number(entry.amount) > 0) {
       await tx.cashEntry.create({
         data: {
           tenantId: session.tenantId,

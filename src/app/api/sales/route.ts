@@ -7,6 +7,7 @@ import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 import { withSql, isUniqueViolation, type Sql } from '@/lib/sql'
 import { productBranchScopeSql, branchScopeSql } from '@/lib/branch-scope'
 import { resolveSellerRate } from '@/lib/seller-commissions'
+import { isValidSaleMethodId } from '@/lib/payment-methods'
 
 export const dynamic = 'force-dynamic'
 
@@ -210,9 +211,10 @@ export async function POST(req: NextRequest) {
   // عشان الخزنة تتفصل كاش / محافظ / انستاباي على أكبر تدفق فلوس في النظام.
   // 💳 2026-10-31: الوسائل بقت إعداد لكل محل — المدمجة + المخصصة (custom_*)
   // اللي بتتضاف من الإعدادات → «وسائل الدفع».
-  const SALE_METHODS = new Set(['cash', 'card', 'vodafone_cash', 'instapay', 'fawry'])
-  const isValidSaleMethod = (m: string) =>
-    SALE_METHODS.has(m) || /^custom_[a-z0-9]{4,30}$/.test(m)
+  // 🛡️ خ-3 (2026-11-02): المصدر بقى موحّد (isValidSaleMethodId من
+  // payment-methods.ts) — نفس الدالة اللي بتفحص رد المرتجع، فأي وسيلة
+  // صالحة للبيع صالحة للرد.
+  const isValidSaleMethod = isValidSaleMethodId
   const paymentMethod = body.paymentMethod === undefined || body.paymentMethod === null || body.paymentMethod === ''
     ? 'cash'
     : String(body.paymentMethod)

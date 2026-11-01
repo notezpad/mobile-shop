@@ -59,7 +59,7 @@ async function __PUT(
       data: {
         endDate: newEnd,
         status: 'active',
-        amountPaid: existing.amountPaid + amountPaid,
+        amountPaid: Number(existing.amountPaid) + amountPaid,
         paymentMethod: paymentMethod ?? existing.paymentMethod,
         paymentNote: body.paymentNote
           ? String(body.paymentNote)

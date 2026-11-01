@@ -102,7 +102,7 @@ async function __DELETE(
         },
       })
       const linked = candidates.filter((e) => {
-        if (e.source === 'supplier_payment') return e.amount < 0 // originals only
+        if (e.source === 'supplier_payment') return Number(e.amount) < 0 // originals only
         return commissionNote.test(e.note ?? '')
       })
 

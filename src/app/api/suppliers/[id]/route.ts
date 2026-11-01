@@ -236,11 +236,13 @@ async function __DELETE(
       const supplier = await tx.supplier.findUnique({ where: { id: sid } })
       if (!supplier) return { blocked: '__404__' }
 
-      if (Math.abs(supplier.balance) > 0.005) {
-        const amount = Math.abs(supplier.balance).toFixed(2)
+      // 🛡️ المرحلة 4: balance بقى Decimal — تحويل قبل الفحص والنص
+      const balance = Number(supplier.balance)
+      if (Math.abs(balance) > 0.005) {
+        const amount = Math.abs(balance).toFixed(2)
         return {
           blocked:
-            supplier.balance > 0
+            balance > 0
               ? `لا يمكن حذف المورد: عليك له رصيد ${amount}. سدّد الحساب أولاً.`
               : `لا يمكن حذف المورد: له عندك رصيد دائن ${amount}. سوِّ الحساب أولاً.`,
         }

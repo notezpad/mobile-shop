@@ -39,6 +39,8 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useShopStore } from '@/lib/store'
+import { defaultPaymentMethodsConfig } from '@/lib/payment-methods'
 import { DecimalInput, DialogHero, MethodPills, SectionTitle, Stepper } from './sale-dialog-ui'
 import { POSVariantPickerDialog, type PickerVariantLite } from './POSVariantPickerDialog'
 import {
@@ -173,6 +175,19 @@ function ReturnForm({
   // واجهة فقط: هل المستخدم اختار "رجّع للعميل فلوس"؟
   const [cashMode, setCashMode] = React.useState(false)
   const [refundMethod, setRefundMethod] = React.useState(sale.paymentMethod || 'cash')
+  // 💳 خ-3 (2026-11-02): طرق الرد = وسائل المحل المفعّلة (بطاقة + مخصصة) — موحّدة
+  // مع البيع. الافتراضي (طريقة الفاتورة نفسها) بيفضل ظاهر حتى لو مش في القائمة.
+  const pmList = useShopStore((s) => s.branding.paymentMethods)
+  const refundMethodItems = React.useMemo(() => {
+    const usable = (pmList.length > 0 ? pmList : defaultPaymentMethodsConfig())
+      .filter((m) => m.pos || m.collect)
+      .map((m) => ({ value: m.id, label: m.label }))
+    const def = sale.paymentMethod
+    if (def && !usable.some((i) => i.value === def)) usable.push({ value: def, label: def })
+    return usable
+  }, [pmList, sale.paymentMethod])
+  const refundMethodLabel = (id: string) =>
+    refundMethodItems.find((i) => i.value === id)?.label ?? id
   const [note, setNote] = React.useState('')
   const [itemQ, setItemQ] = React.useState('')
   const [onlySel, setOnlySel] = React.useState(false)
@@ -1004,6 +1019,7 @@ function ReturnForm({
                           value={refundMethod}
                           onChange={setRefundMethod}
                           label="طريقة تحصيل الفرق"
+                          items={refundMethodItems}
                         />
                       </div>
                     </div>
@@ -1087,7 +1103,20 @@ function ReturnForm({
                 {refundNum > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs font-bold">رجّعت الفلوس للعميل إزاي؟</p>
-                    <MethodPills value={refundMethod} onChange={setRefundMethod} label="طريقة رد المبلغ" />
+                    <MethodPills
+                      value={refundMethod}
+                      onChange={setRefundMethod}
+                      label="طريقة رد المبلغ"
+                      items={refundMethodItems}
+                    />
+                    {/* 🛡️ خ-3: تحذير لو الرد بطريقة مختلفة عن طريقة دفع الفاتورة الأصلية */}
+                    {sale.paymentMethod && refundMethod !== sale.paymentMethod && (
+                      <div className="flex items-start gap-2.5 rounded-xl bg-amber-500/10 p-3 text-xs font-semibold leading-relaxed text-amber-700 dark:text-amber-300">
+                        <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+                        الفاتورة اتدفعت بـ «{refundMethodLabel(sale.paymentMethod)}» — والمرتجع
+                        هيتسجل رد بـ «{refundMethodLabel(refundMethod)}». اتأكد إن ده مقصود.
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

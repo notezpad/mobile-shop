@@ -107,7 +107,14 @@ async function __PUT(req: NextRequest, { params }: Ctx) {
     else data.pinHash = await hashPinV2(session.tenantId, id, String(b.pin))
   }
 
-  await db.employee.update({ where: { id }, data })
+  try {
+    await db.employee.update({ where: { id }, data })
+  } catch (e: any) {
+    // 🛡️ مت-11 (2026-11-02): القيد الفريد Employee_userId_key — سباق ربط
+    // نفس الحساب بموظفين في نفس اللحظة. نفس رسالة الفحص المسبق.
+    if (e?.code === 'P2002') return bad('الحساب مربوط بموظف تاني — افصله الأول من ملفه')
+    throw e
+  }
   const { pin: _pin, ...safe } = b
   await logAudit(
     { action: 'hr.employee.update', targetType: 'employee', targetId: id, details: { ...safe, pinChanged: b.pin !== undefined } },

@@ -149,7 +149,20 @@ const EMPTY_LOAD_ERRORS: InventoryLoadErrors = {
   stocktakes: null,
 }
 
-type SourceKey = 'branches' | 'products' | 'movements' | 'transfers' | 'stocktake'
+type SourceKey = 'branches' | 'products' | 'movements' | 'transfers' | 'stocktake' | 'stats'
+
+/** 🛡️ خ-7: شكل رد /api/products/stats (إحصائيات السيرفر على كل الأصناف) */
+interface ServerInventoryStats {
+  totalItems: number
+  lowStock: number
+  outOfStock: number
+  totalValueCost: number | null
+  totalValuePrice: number
+  warehouseItems: number
+  warehousePieces: number
+  warehouseValue: number | null
+  canSeeCost: boolean
+}
 
 export function useInventoryData(opts?: { light?: boolean }): InventoryData {
   // 🫥 (التحديث الحادي عشر) الوضع الخفيف للعدّاد الأعمي: بيجيب الفروع + أوراق
@@ -161,6 +174,10 @@ export function useInventoryData(opts?: { light?: boolean }): InventoryData {
   const [movements, setMovements] = React.useState<Movement[]>([])
   const [transfers, setTransfers] = React.useState<Transfer[]>([])
   const [stocktakes, setStocktakes] = React.useState<Stocktake[]>([])
+  // 🛡️ خ-7 (2026-11-02): الإحصائيات من السيرفر — البطاقات كانت بتتحسب من
+  // أول 100 منتج بس (السيرفر بيقص limit عند 100 دايمًا) — دلوقتي الأرقام
+  // من استعلام SQL على كل الأصناف، والمصفوفة المحلية للعرض بس.
+  const [serverStats, setServerStats] = React.useState<ServerInventoryStats | null>(null)
   const [loading, setLoading] = React.useState(true)
   // 🛡️ v14: الكائن موجود من أول رندر — الصفحات بتفكّه وتقرأ مفاتيحه فوراً
   const [loadErrors, setLoadErrors] = React.useState<InventoryLoadErrors>(EMPTY_LOAD_ERRORS)
@@ -185,6 +202,10 @@ export function useInventoryData(opts?: { light?: boolean }): InventoryData {
         const r = await apiSafe<{ data: InventoryProduct[] } | InventoryProduct[]>('/api/products?limit=1000&status=all', [])
         setProducts(asArray<InventoryProduct>(r.data))
         setLoadErrors((p) => ({ ...p, products: r.error }))
+      } else if (k === 'stats') {
+        // 🛡️ خ-7: بطاقات الأرقام من السيرفر (كل الأصناف مش أول 100)
+        const r = await apiSafe<ServerInventoryStats | null>('/api/products/stats', null)
+        if (r.data) setServerStats(r.data)
       } else if (k === 'movements') {
         const r = await apiSafe<Movement[]>('/api/inventory/movements', [])
         setMovements(asArray<Movement>(r.data))
@@ -201,6 +222,7 @@ export function useInventoryData(opts?: { light?: boolean }): InventoryData {
     }
 
     // المرحلة 1: الفروع + القائمة الأساسية حسب الصفحة المستدعية
+    // 🛡️ خ-7: إحصائيات السيرفر مع المرحلة الأولى (استعلام تجميعي خفيف)
     const priority: SourceKey = light
       ? 'stocktake' // 🫥 العدّاد الأعمي: الجرد هو الأساس — مفيش منتجات أصلاً
       : pathname === '/inventory/movements'
@@ -210,11 +232,14 @@ export function useInventoryData(opts?: { light?: boolean }): InventoryData {
           : pathname === '/inventory/stocktake'
             ? 'stocktake'
             : 'products' // /inventory — القائمة الأساسية هي المنتجات
-    const first: SourceKey[] = light ? ['branches', 'stocktake'] : ['branches', priority]
+    // 🛡️ خ-7: إحصائيات السيرفر في المرحلة الأولى (غير الوضع الخفيف — أمان العدّاد الأعمي)
+    const first: SourceKey[] = light
+      ? ['branches', 'stocktake']
+      : ['branches', priority, 'stats']
     const rest: SourceKey[] = (
       light
         ? (['branches', 'stocktake'] as SourceKey[]) // 🫥 الوضع الخفيف: مصدرين بس
-        : (['branches', 'products', 'movements', 'transfers', 'stocktake'] as SourceKey[])
+        : (['branches', 'products', 'movements', 'transfers', 'stocktake', 'stats'] as SourceKey[])
     ).filter((k) => !first.includes(k))
 
     try {
@@ -234,24 +259,32 @@ export function useInventoryData(opts?: { light?: boolean }): InventoryData {
   useDataRefresh(['inventory', 'products', 'branches'], load)
 
   const stats = React.useMemo<InventoryStats>(() => {
-    const totalItems = products.length
-    const lowStock = products.filter((p) => p.quantity <= p.minQuantity).length
-    const outOfStock = products.filter((p) => p.quantity <= 0).length
+    // 🛡️ خ-7: أرقام البطاقات من السيرفر (كل الأصناف) لما تكون متاحة —
+    // الحساب المحلي فضل fallback (لوفِشل استعلام الإحصائيات أو الوضع الخفيف).
+    const sv = serverStats
+    const totalItems = sv ? sv.totalItems : products.length
+    const lowStock = sv ? sv.lowStock : products.filter((p) => p.quantity <= p.minQuantity).length
+    const outOfStock = sv ? sv.outOfStock : products.filter((p) => p.quantity <= 0).length
     // 🔒 RBAC: الـ API بيبدّل cost بـ null لمن لا يملك canViewProfits. قبل الإصلاح
     // quantity * null = 0 فكانت «قيمة البضاعة» صفر و«الربح المتوقع» = كامل سعر البيع.
-    const canSeeCost = products.every((p) => p.cost != null)
-    const totalValueCost = canSeeCost
-      ? products.reduce((s, p) => s + p.quantity * p.cost, 0)
-      : null
-    const totalValuePrice = products.reduce((s, p) => s + p.quantity * p.price, 0)
+    const canSeeCost = sv ? sv.canSeeCost : products.every((p) => p.cost != null)
+    const totalValueCost = sv
+      ? sv.totalValueCost
+      : canSeeCost
+        ? products.reduce((s, p) => s + p.quantity * p.cost, 0)
+        : null
+    const totalValuePrice = sv ? sv.totalValuePrice : products.reduce((s, p) => s + p.quantity * p.price, 0)
     const pendingTransfers = transfers.filter((t) => t.status === 'pending').length
     const draftStocktakes = stocktakes.filter((s) => s.status === 'draft').length
     // 👕 المخزن الداخلي: اللي معروضه أقل من إجماليه (الباقي في الكراتين)
     const stored = products.filter((p) => (p.displayQty ?? p.quantity) < p.quantity)
-    const warehousePieces = stored.reduce((s, p) => s + (p.quantity - (p.displayQty ?? p.quantity)), 0)
-    const warehouseValue = canSeeCost
-      ? stored.reduce((s, p) => s + (p.quantity - (p.displayQty ?? p.quantity)) * (p.cost ?? 0), 0)
-      : null
+    const warehousePieces = sv ? sv.warehousePieces : stored.reduce((s, p) => s + (p.quantity - (p.displayQty ?? p.quantity)), 0)
+    const warehouseValue = sv
+      ? sv.warehouseValue
+      : canSeeCost
+        ? stored.reduce((s, p) => s + (p.quantity - (p.displayQty ?? p.quantity)) * (p.cost ?? 0), 0)
+        : null
+    const warehouseItems = sv ? sv.warehouseItems : stored.length
     return {
       totalItems,
       lowStock,
@@ -267,9 +300,9 @@ export function useInventoryData(opts?: { light?: boolean }): InventoryData {
       pendingTotal: pendingTransfers + draftStocktakes,
       warehousePieces: Math.round(warehousePieces * 1000) / 1000,
       warehouseValue: warehouseValue === null ? null : Math.round(warehouseValue * 100) / 100,
-      warehouseItems: stored.length,
+      warehouseItems,
     }
-  }, [products, transfers, stocktakes])
+  }, [products, transfers, stocktakes, serverStats])
 
   return {
     branches,

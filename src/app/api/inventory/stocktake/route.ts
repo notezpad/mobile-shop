@@ -147,12 +147,30 @@ async function __POST(req: NextRequest) {
   }
 
   // 🎨 بنود الجرد: منتج + (لون/مقاس لو المنتج له ألوان ومقاسات)
-  const lines = items.map((it: any) => ({
+  const rawLines = items.map((it: any) => ({
     productId: parseInt(it.productId, 10),
     variantId: it.variantId != null && it.variantId !== '' ? parseInt(it.variantId, 10) : (null as number | null),
     // 🥬 2026-10-12: الجرد بالكيلو بكسور (محصى 44.25)
     counted: Math.round((Number(it.countedQty) || 0) * 1000) / 1000,
   }))
+  // 🛡️ ج-4 (2026-11-02): دمج البنود المكررة لنفس (productId, variantId) قبل
+  // الاعتماد — قبل كده كل سطر بيطبّق فرقه (counted − systemQty) على ناتج
+  // السطر اللي قبله، فالأساس النظامي بيتخصم مرتين وصفوف مكررة بتضيع مخزون
+  // بصمت (نظامي 20 + عدّ 10 ثم 5 كانت بتطلع صفر بدل 15). بنجمع المعدود
+  // ونقرأ systemQty مرة واحدة — نفس منطق دمج الاعتماد المحفوظ في [id].
+  const mergedLines = new Map<string, { productId: number; variantId: number | null; counted: number }>()
+  let mergedDuplicates = 0
+  for (const l of rawLines) {
+    const key = `${l.productId}:${l.variantId ?? '-'}`
+    const prev = mergedLines.get(key)
+    if (prev) {
+      prev.counted = Math.round((prev.counted + l.counted) * 1000) / 1000
+      mergedDuplicates++
+    } else {
+      mergedLines.set(key, { ...l })
+    }
+  }
+  const lines = [...mergedLines.values()]
   for (const l of lines) {
     if (!l.productId || (l.variantId !== null && Number.isNaN(l.variantId))) {
       return NextResponse.json({ error: 'بيانات أصناف غير صالحة' }, { status: 400 })
@@ -246,6 +264,8 @@ async function __POST(req: NextRequest) {
     return NextResponse.json(
       {
         ...created,
+        // 🛡️ ج-4: عدد البنود المكررة اللي اتمدمجت قبل الحفظ (شفافية)
+        mergedDuplicates,
         items: created.items.map((it) => ({
           id: it.id,
           stocktakeId: it.stocktakeId,
@@ -257,7 +277,7 @@ async function __POST(req: NextRequest) {
       { status: 201 },
     )
   }
-  return NextResponse.json(created, { status: 201 })
+  return NextResponse.json({ ...created, mergedDuplicates }, { status: 201 })
 }
 
 class StocktakeNegativeError extends Error {}

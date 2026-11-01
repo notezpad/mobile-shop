@@ -60,19 +60,20 @@ async function __GET() {
       .map(([id, n]) => ({ kind: 'attendance' as const, id, name: nameOf.get(id)!, text: `${n} مرات تأخير أو غياب في آخر 7 أيام` })),
   ]
   // سلفة متبقية أكبر من راتب شهر كامل = تستاهل متابعة
-  const salaryOf = new Map(employees.map((e) => [e.id, e.baseSalary]))
+  const salaryOf = new Map(employees.map((e) => [e.id, Number(e.baseSalary)]))
   for (const a of advByEmp) {
     const sal = salaryOf.get(a.employeeId)
-    if (sal && nameOf.has(a.employeeId) && (a._sum.remaining ?? 0) > sal) {
+    if (sal && nameOf.has(a.employeeId) && Number(a._sum.remaining ?? 0) > sal) {
       alerts.push({ kind: 'advance', id: a.employeeId, name: nameOf.get(a.employeeId)!, text: `سلفة متبقية أكبر من راتب شهر كامل` })
     }
   }
 
-  const estimated = employees.reduce((s, e) => s + e.baseSalary, 0)
+  // 🛡️ المرحلة 4: baseSalary/net/advanceDeduction بقوا Decimal — تحويل قبل الحساب
+  const estimated = employees.reduce((s, e) => s + Number(e.baseSalary), 0)
   const laborCost = run?.status === 'paid'
-    ? run.payslips.reduce((s, p) => s + p.net + p.advanceDeduction, 0)
+    ? run.payslips.reduce((s, p) => s + Number(p.net) + Number(p.advanceDeduction), 0)
     : estimated
-  const salesTotal = sales._sum.total ?? 0
+  const salesTotal = Number(sales._sum.total ?? 0)
 
   return NextResponse.json({
     today, month,
@@ -80,7 +81,7 @@ async function __GET() {
     present: todayRecs.filter((r) => r.status === 'present').length,
     late: list('late'), absent: list('absent'), leave: list('leave'),
     onOff, notRecorded,
-    advances: { count: advAgg._count, remaining: advAgg._sum.remaining ?? 0 },
+    advances: { count: advAgg._count, remaining: Number(advAgg._sum.remaining ?? 0) },
     payroll: { runId: run?.id ?? null, status: run?.status ?? null, estimated, laborCost, isEstimate: run?.status !== 'paid' },
     salesThisMonth: salesTotal,
     laborPct: salesTotal > 0 ? Math.round((laborCost / salesTotal) * 1000) / 10 : null,

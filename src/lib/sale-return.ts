@@ -52,6 +52,7 @@ import type { Prisma } from '@prisma/client'
 import { createPrincipalCashEntry } from '@/lib/commission'
 import { round2 } from '@/lib/purchase-return'
 import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
+import { isValidSaleMethodId } from '@/lib/payment-methods'
 
 export class SaleReturnError extends Error {
   status: number
@@ -174,9 +175,10 @@ export async function performSaleReturn(
   }
 
   // ── 2. Money — computed by the SERVER, never trusted from the client
+  // 🛡️ المرحلة 4: price بقى Decimal من الداتابيز — بيتحوّل number للحساب هنا
   let total = 0
   for (const [itemId, qty] of wanted) {
-    total += itemById.get(itemId)!.price * qty
+    total += Number(itemById.get(itemId)!.price) * qty
   }
   total = round2(total)
 
@@ -233,7 +235,7 @@ export async function performSaleReturn(
       }
       const exLabel = exVariant ? [exVariant.color, exVariant.size].filter(Boolean).join(' / ') || `#${exVariant.id}` : null
       const exPrice = ex.price === undefined || ex.price === null
-        ? p.price
+        ? Number(p.price)
         : Number(ex.price)
       if (!Number.isFinite(exPrice) || exPrice < 0) {
         throw new SaleReturnError('سعر بضاعة الاستبدال غير صالح', 400)
@@ -272,7 +274,7 @@ export async function performSaleReturn(
         variantId: exVariant?.id ?? null,
         name: exLabel ? `${p.name} — ${exLabel}` : p.name,
         price: exPrice,
-        cost: p.cost,
+        cost: Number(p.cost),
         quantity: qty,
       })
       exchangeTotal += exPrice * qty
@@ -284,7 +286,7 @@ export async function performSaleReturn(
 
   // ── 4. Split the money — bounded, server-side
   const hasCustomer = sale.customerId != null
-  const paidNotRefunded = Math.max(0, round2(sale.paid - sale.refunded))
+  const paidNotRefunded = Math.max(0, round2(Number(sale.paid) - Number(sale.refunded)))
   let refund = 0
   let creditApplied = 0
   let charge = 0
@@ -327,7 +329,11 @@ export async function performSaleReturn(
   }
 
   const refundMethod = input.refundMethod ?? sale.paymentMethod ?? 'cash'
-  if (refund > 0 && !REFUND_METHOD_SET.has(refundMethod)) {
+  // 🛡️ خ-3 (2026-11-02): التحقق بقى بنفس دالة البيع (isValidSaleMethodId) —
+  // أي وسيلة صالحة للبيع صالحة للرد: بطاقة، محافظ، انستاباي، فوري، ووسائل
+  // المحل المخصصة custom_*. قبل كده المجموعة كانت أربعة بدون card، ففاتورة
+  // بطاقة ماكانش لها رد غير «كاش» — والكاش بينقص درج الورقي بفلوس ما خرجتش منه.
+  if (refund > 0 && !isValidSaleMethodId(refundMethod)) {
     throw new SaleReturnError('طريقة رد المبلغ غير صالحة', 400)
   }
 
@@ -409,11 +415,11 @@ export async function performSaleReturn(
           data: {
             quantity: variantSum,
             displayQty: Math.min(displaySum, variantSum),
-            ...(costReweight(cur, qty, it.cost) ?? {}),
+            ...(costReweight(cur, qty, Number(it.cost)) ?? {}),
           },
         })
       } else {
-        const patch = costReweight(cur, qty, it.cost)
+        const patch = costReweight(cur, qty, Number(it.cost))
         await tx.product.update({
           where: { id: it.productId },
           data: { quantity: { increment: qty }, displayQty: { increment: qty }, ...(patch ?? {}) },
@@ -455,6 +461,8 @@ export async function performSaleReturn(
     await tx.saleItem.create({
       data: {
         saleId,
+        // 🛡️ مت-15: tenantId مُلوّن — العزل شغّال حتى في جدول التفاصيل
+        tenantId,
         productId: ex.productId,
         variantId: ex.variantId,
         name: ex.name + ' (استبدال)',
@@ -475,13 +483,13 @@ export async function performSaleReturn(
         data: { balance: { increment: delta } },
         select: { balance: true },
       })
-      customerBalance = cust.balance
+      customerBalance = Number(cust.balance)
     } else {
       const cust = await tx.customer.findUnique({
         where: { id: sale.customerId },
         select: { balance: true },
       })
-      customerBalance = cust?.balance ?? null
+      customerBalance = cust ? Number(cust.balance) : null
     }
   }
 
@@ -528,21 +536,20 @@ export async function performSaleReturn(
   return { returnId: created.id, total, exchangeTotal, refund, creditApplied, charge, status, customerBalance }
 }
 
-const REFUND_METHOD_SET = new Set(['cash', 'vodafone_cash', 'instapay', 'fawry'])
-
 /**
  * 🛡️ 2026-09-30: weighted-average re-weight when goods re-enter stock.
  *   newCost = (Q_before × C_before + qty × lineCost) / (Q_before + qty)
  * Returns the patch object for product.update, or null when nothing changes.
+ * 🛡️ المرحلة 4: cost بقى Decimal في الداتابيز — بيُقبل Decimal أو number.
  */
 function costReweight(
-  cur: { quantity: number; cost: number } | null,
+  cur: { quantity: number; cost: number | Prisma.Decimal } | null,
   qty: number,
   lineCost: number,
 ): { cost: number } | null {
   if (!cur) return null
   const qBefore = Math.max(0, cur.quantity)
-  const cBefore = Math.max(0, cur.cost)
+  const cBefore = Math.max(0, Number(cur.cost))
   const qAfter = qBefore + qty
   if (qAfter <= 0) return null
   const newCost = Math.max(0, round2((qBefore * cBefore + qty * Math.max(0, lineCost)) / qAfter))

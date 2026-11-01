@@ -73,7 +73,8 @@ export async function generatePayrollDraft(tenantId: string, month: string, user
   }
   const advDue = new Map<number, number>()
   for (const a of advances) {
-    advDue.set(a.employeeId, (advDue.get(a.employeeId) ?? 0) + Math.min(a.installment, a.remaining))
+    // 🛡️ المرحلة 4: installment/remaining بقوا Decimal — بيتحولوا number
+    advDue.set(a.employeeId, (advDue.get(a.employeeId) ?? 0) + Math.min(Number(a.installment), Number(a.remaining)))
   }
 
   // 💰 عمولات البائعين للشهر — استعلام SQL واحد للمبيعات + واحد للمرتجعات
@@ -89,7 +90,13 @@ export async function generatePayrollDraft(tenantId: string, month: string, user
       }),
     ])
     aggByUser = sqlAgg
-    sellerUsersById = new Map(sellerUsers.map((u) => [u.id, u]))
+    // 🛡️ المرحلة 4: sellerCommissionTarget بقى Decimal — بيتحول number للواجهة الداخلية
+    sellerUsersById = new Map(
+      sellerUsers.map((u) => [u.id, {
+        ...u,
+        sellerCommissionTarget: u.sellerCommissionTarget == null ? null : Number(u.sellerCommissionTarget),
+      }]),
+    )
   }
   // عمولة اتصرفت منفصلة (payout يدوي من تقرير العمولات)؟ → مبيتدفعش تاني في
   // القسيمة. حجوزات viaPayroll بتتحسب fresh كل توليد — مش بتمنع الحساب.
@@ -111,8 +118,9 @@ export async function generatePayrollDraft(tenantId: string, month: string, user
     .map((e) => {
       const hire = dateStrInTz(e.hireDate, tz)
       const p = prev.get(e.id)
-      const bonus = p?.bonus ?? 0
-      const penalty = p?.penalty ?? 0
+      // 🛡️ المرحلة 4: bonus/penalty من قسيمة سابقة بقوا Decimal — بيتحولوا number
+      const bonus = p?.bonus != null ? Number(p.bonus) : 0
+      const penalty = p?.penalty != null ? Number(p.penalty) : 0
       const paid = countPaidDays({
         month, today, hireDate: hire, weeklyOffDay: e.weeklyOffDay,
         records: recsByEmp.get(e.id) ?? new Map(),
@@ -124,7 +132,7 @@ export async function generatePayrollDraft(tenantId: string, month: string, user
       const sellerUser = e.userId ? sellerUsersById.get(e.userId) : null
       if (sellerUser && sellerUser.isSeller && e.userId && !paidOutUsers.has(e.userId)) {
         const nums = aggByUser.get(e.userId)
-        const target = resolveSellerTarget(sellerUser.sellerCommissionTarget, commissionsCfg?.sellerCommissionTarget ?? null)
+        const target = resolveSellerTarget(sellerUser.sellerCommissionTarget, commissionsCfg?.sellerCommissionTarget != null ? Number(commissionsCfg.sellerCommissionTarget) : null)
         const gate = applyTargetGate(nums?.grossCommission ?? 0, nums?.netBase ?? 0, target)
         commission = gate.commission
         if (gate.targetMet && commission !== 0) {
@@ -142,7 +150,7 @@ export async function generatePayrollDraft(tenantId: string, month: string, user
       const empShift = effBranch != null ? findEmployeeShift(shiftsByBranch.get(effBranch), e.shiftName) : null
       const empSettings = empShift ? { ...settings, shiftHours: empShift.hours } : settings
       const calc = computePayslip({
-        baseSalary: e.baseSalary, hireDate: hire, month, settings: empSettings,
+        baseSalary: Number(e.baseSalary), hireDate: hire, month, settings: empSettings,
         absentDays: absent.get(e.id) ?? 0, lateMinutes: late.get(e.id) ?? 0,
         advanceDue: advDue.get(e.id) ?? 0, bonus, penalty, commission,
         paidDays: paid.paidDays,

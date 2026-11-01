@@ -1,7 +1,19 @@
 // pg-cloudflare MUST be imported before any pg usage so it can monkey-patch
 // Node's net/tls modules for the Cloudflare Workers runtime.
 import 'pg-cloudflare'
+import pgModule from 'pg'
 import { applySecurityHeaders } from './security-headers'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🛡️ المرحلة 4 (2026-11-02) — ج-5: NUMERIC → number في $queryRaw
+// ─────────────────────────────────────────────────────────────────────────────
+// بعد تحويل حقول المبالغ من float8 إلى NUMERIC(12,2)، الـ pg driver بيرجّع
+// عمود NUMERIC كـ STRING افتراضيًا — يعني كل SUM(total)/amount في
+// $queryRaw كان هيرجّع نصوص («1200.50» بدل 1200.5). بنضبط الـ type parser
+// مرة واحدة هنا: NUMERIC(12,2) سقفه 12 خانة والتحويل لـ double دقيق بالكامل
+// للنطاق ده. (pg واحد hoisted — نفس الـ instance اللي بيستخدمه adapter-pg.)
+// ─────────────────────────────────────────────────────────────────────────────
+pgModule.types.setTypeParser(pgModule.types.builtins.NUMERIC, (v: string) => parseFloat(v))
 
 import { PrismaClient, type PrismaClientType } from './prisma-wasm'
 import { PrismaPg } from '@prisma/adapter-pg'

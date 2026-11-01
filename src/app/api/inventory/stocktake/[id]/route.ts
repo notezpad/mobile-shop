@@ -23,7 +23,26 @@ async function __POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }
   const body = await req.json().catch(() => null)
   const recordLoss = body?.recordLoss !== false
   const extraNote = body?.note ? String(body.note).trim() : (st.note ?? '')
-  const shrink = await computeStocktakeShrink(db, s.tenantId, st.items.map((i) => ({ productId: i.productId, diff: i.diff })))
+  // 🛡️ ج-4 (2026-11-02): دمج الصفوف المكررة المحفوظة لنفس (productId, variantId)
+  // قبل حساب العجز والتطبيق — نفس منطق دمج الإنشاء في POST. لو الصفوف اتطبّقت
+  // كل واحدة بفرقها، الأساس النظامي بيتخصم مرتين والمخزون بيفسد.
+  const mergedItems = new Map<string, { productId: number; variantId: number | null; counted: number; sys: number }>()
+  for (const it of st.items) {
+    if (it.productId == null) continue // صفوف منتجات محذوفة — بتتسكب
+    const key = `${it.productId}:${it.variantId ?? '-'}`
+    const prev = mergedItems.get(key)
+    if (prev) {
+      prev.counted = Math.round((prev.counted + it.countedQty) * 1000) / 1000
+    } else {
+      mergedItems.set(key, { productId: it.productId, variantId: it.variantId, counted: it.countedQty, sys: it.systemQty })
+    }
+  }
+  const applyList = [...mergedItems.values()].map((m) => ({
+    productId: m.productId,
+    variantId: m.variantId,
+    diff: Math.round((m.counted - m.sys) * 1000) / 1000,
+  }))
+  const shrink = await computeStocktakeShrink(db, s.tenantId, applyList)
   if (shrink.value >= STOCK_POLICY.stocktakeNoteThreshold && extraNote.trim().length < 3) {
     return NextResponse.json(
       { error: `عجز الجرد ${shrink.value} جنيه — اكتب ملاحظة توضّح السبب قبل الاعتماد` },
@@ -40,7 +59,7 @@ async function __POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }
         data: { status: 'committed', committedAt: new Date() },
       })
       if (claimed.count !== 1) throw new AlreadyCommitted()
-      for (const it of st.items) {
+      for (const it of applyList) {
         // 🛡️ FIX (tsc): productId Int? — صفوف بقيت بعد حذف المنتج بتتسكب
         // (مفيش مخزون نعدّله لمنتج اتمسح).
         if (it.productId == null) continue

@@ -4,6 +4,8 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { createPrincipalCashEntry } from '@/lib/commission'
+import { PURCHASE_POLICY } from '@/lib/stock-policy'
+import { logAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,6 +93,15 @@ async function __POST(req: NextRequest) {
     )
   }
 
+  // 🛡️ خ-11 (2026-11-02): دفع فلوس للمورد بتقلل الخزنة والرصيد — للموظف سقف
+  // قيمة (نفس نمط سياسة المخزون)، فوقه المدير.
+  if (session.role !== 'ADMIN' && session.role !== 'SUPER_ADMIN' && amount > PURCHASE_POLICY.employeeMaxPaymentValue) {
+    return NextResponse.json(
+      { error: `الدفعة دي (${amount} جنيه) أكبر من الحد المسموح للموظف (${PURCHASE_POLICY.employeeMaxPaymentValue} جنيه) — محتاج المدير` },
+      { status: 403 }
+    )
+  }
+
   // method must be valid
   const method = String(body.method ?? '')
   if (!VALID_METHODS.has(method)) {
@@ -147,6 +158,16 @@ async function __POST(req: NextRequest) {
       linkedCashEntryId: principalEntry.id,
     }
   })
+
+  // 🛡️ خ-11 (2026-11-02): كل دفعة فوق العتبة تتسجل في AuditLog
+  if (created?.id && amount >= PURCHASE_POLICY.auditLogThreshold) {
+    await logAudit({
+      action: 'supplier.payment.create',
+      targetType: 'supplier_payment',
+      targetId: Number(created.id),
+      details: { amount, method, supplierId, supplierName },
+    }, req)
+  }
 
   return NextResponse.json(created, { status: 201 })
 }

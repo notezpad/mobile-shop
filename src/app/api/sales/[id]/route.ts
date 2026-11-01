@@ -147,10 +147,11 @@ async function __DELETE(
 
   // 🛡️ C1 fix — paidAtSale excludes the linked post-sale payments (they
   // incremented Sale.paid when they were linked).
-  const linkedTotal = sale.payments.reduce((sum, p) => sum + p.amount, 0)
-  const paidAtSale = sale.paid - linkedTotal
-  const creditReversal = Math.max(0, sale.total - paidAtSale)
-  const totalCashRefund = sale.paid // everything that entered the drawer for this sale
+  // 🛡️ المرحلة 4: amount/paid/total بقوا Decimal — تحويل قبل الحساب
+  const linkedTotal = sale.payments.reduce((sum, p) => sum + Number(p.amount), 0)
+  const paidAtSale = Number(sale.paid) - linkedTotal
+  const creditReversal = Math.max(0, Number(sale.total) - paidAtSale)
+  const totalCashRefund = Number(sale.paid) // everything that entered the drawer for this sale
 
   class AlreadyReturned extends Error {}
 

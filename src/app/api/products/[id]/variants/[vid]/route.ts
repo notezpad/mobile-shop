@@ -1,18 +1,24 @@
 import { findBarcodeConflict, barcodeConflictMessage } from '@/lib/barcode-conflict'
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withDb } from '@/lib/db'
-import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireCapability, featureErrorResponse, requireModuleWritePermission } from '@/lib/features'
 import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
 import { normalizeBarcode } from '@/lib/barcode'
+import { canAccessProductBranch } from '@/lib/branch-scope-db'
 
 export const dynamic = 'force-dynamic'
 
-async function loadOwned(tenantId: string, pid: number, vid: number) {
+async function loadOwned(tenantId: string, pid: number, vid: number, sessionBranchId?: number | null) {
   const v = await db.productVariant.findUnique({ where: { id: vid } })
   if (!v || v.productId !== pid) return null
   const p = await db.product.findUnique({ where: { id: pid } })
   if (!p || p.tenantId !== tenantId) return null
+  // 🛡️ مت-7 (2026-11-02): فحص فرع المنتج — قبل كده المحل بس، فموظف فرع A
+  // كان يقدر يعدّل/يمسح متغير منتج فرع B لو عرف الـ id.
+  if (sessionBranchId && !(await canAccessProductBranch(tenantId, p.branchId, sessionBranchId))) {
+    return null
+  }
   return v
 }
 
@@ -37,7 +43,7 @@ async function __PUT(
   const { id, vid } = await params
   const pid = parseInt(id, 10)
   const vId = parseInt(vid, 10)
-  const owned = await loadOwned(session.tenantId, pid, vId)
+  const owned = await loadOwned(session.tenantId, pid, vId, session.branchId)
   if (!owned) return NextResponse.json({ error: 'غير موجود' }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
@@ -46,7 +52,28 @@ async function __PUT(
   if (body.color !== undefined) data.color = body.color ? String(body.color).trim() : null
   if (body.barcode !== undefined) data.barcode = normalizeBarcode(body.barcode)
   if (body.quantity !== undefined) {
-    data.quantity = parseInt(body.quantity, 10) || 0
+    // 🛡️ خ-2 (2026-11-02): رفض صريح للقيم غير الصالحة والسالبة — قبل كده
+    // parseInt(...) || 0 كان بيمسك NaN بس ويسيب الكمية السالبة تعدّي فيبقى
+    // المخزون سالب بدون أي قيد.
+    const q = parseInt(body.quantity, 10)
+    if (!Number.isFinite(q) || q < 0) {
+      return NextResponse.json({ error: 'الكمية ممنوع تكون سالبة' }, { status: 400 })
+    }
+    // 🛡️ خ-2: تعديل الكمية اليدوي قرار مخزني حساس — أدمن فقط، زي تعديل
+    // كمية المنتج الأب بالظبط (الموظف يستخدم حركات المخزون الوارد/الصرف).
+    try {
+      await requireAdmin()
+    } catch (e) {
+      const err = authErrorResponse(e)
+      if (err) {
+        return NextResponse.json(
+          { error: 'تعديل كمية اللون/المقاس يدوي للأدمن فقط — استخدم حركات المخزون (وارد/صرف) عشان السجل يفضل موثق' },
+          { status: err.status },
+        )
+      }
+      throw e
+    }
+    data.quantity = q
     // 👕 التعديل اليدوي لكمية المقاس = البضاعة دي على الرف (معروضة بالكامل) —
     // التقسيمة الدقيقة بيتظبطها إغلاق/فتح الموسم وحركات المخزون بعد كده
     data.displayQty = data.quantity
@@ -60,28 +87,34 @@ async function __PUT(
     if (owner) return NextResponse.json({ error: barcodeConflictMessage(owner) }, { status: 400 })
   }
   try {
-    const updated = await db.productVariant.update({ where: { id: vId }, data })
-    if (data.quantity !== undefined) {
-      await syncProductQuantityFromVariants(db, pid)
-      // 📒 2026-10-18: تعديل كمية لون/مقاس مباشرة يتسجل في سجل الحركات (كان بيتغير من غير أثر)
-      const delta = data.quantity - owned.quantity
-      if (delta !== 0) {
-        const prodRow = await db.product.findUnique({ where: { id: pid }, select: { branchId: true } })
-        await db.stockMovement.create({
-          data: {
-            tenantId: session.tenantId,
-            branchId: prodRow?.branchId ?? null,
-            productId: pid,
-            variantId: vId,
-            type: delta > 0 ? 'in' : 'out',
-            quantity: delta,
-            refType: 'manual',
-            note: `تعديل كمية — ${[updated.color, updated.size].filter(Boolean).join(' / ')}`,
-            userId: session.userId,
-          },
-        })
+    // 🛡️ خ-2: العمليات التلاتة (تحديث المقاس → مزامنة كمية الأب → تسجيل الحركة)
+    // في transaction واحدة — قبل كده لو تسجيل الحركة فشل يبقى الرصيد اتغير
+    // من غير أثر في الدفتر.
+    const updated = await db.$transaction(async (tx) => {
+      const row = await tx.productVariant.update({ where: { id: vId }, data })
+      if (data.quantity !== undefined) {
+        await syncProductQuantityFromVariants(tx, pid)
+        // 📒 2026-10-18: تعديل كمية لون/مقاس مباشرة يتسجل في سجل الحركات (كان بيتغير من غير أثر)
+        const delta = data.quantity - owned.quantity
+        if (delta !== 0) {
+          const prodRow = await tx.product.findUnique({ where: { id: pid }, select: { branchId: true } })
+          await tx.stockMovement.create({
+            data: {
+              tenantId: session.tenantId,
+              branchId: prodRow?.branchId ?? null,
+              productId: pid,
+              variantId: vId,
+              type: delta > 0 ? 'in' : 'out',
+              quantity: delta,
+              refType: 'manual',
+              note: `تعديل كمية — ${[row.color, row.size].filter(Boolean).join(' / ')}`,
+              userId: session.userId,
+            },
+          })
+        }
       }
-    }
+      return row
+    })
     return NextResponse.json(updated)
   } catch (e: any) {
     if (e?.code === 'P2002' || String(e?.message ?? '').includes('نفس الفرع')) {
@@ -108,7 +141,7 @@ async function __DELETE(
   const { id, vid } = await params
   const pid = parseInt(id, 10)
   const vId = parseInt(vid, 10)
-  const owned = await loadOwned(session.tenantId, pid, vId)
+  const owned = await loadOwned(session.tenantId, pid, vId, session.branchId)
   if (!owned) return NextResponse.json({ error: 'غير موجود' }, { status: 404 })
   await db.productVariant.delete({ where: { id: vId } })
   await syncProductQuantityFromVariants(db, pid)

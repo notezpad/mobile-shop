@@ -37,12 +37,15 @@ export function CategoryManagerDialog({ open, onOpenChange, onChanged }: Props) 
     setLoading(true)
     try {
       const data = await api<{ id: number; name: string }[]>('/api/categories')
-      // also fetch products to compute usage counts
-      const _rawProd = await api<{ data: { category: string | null }[] } | { category: string | null }[]>('/api/products?category=all&limit=1000')
-      const products = Array.isArray(_rawProd) ? _rawProd : (_rawProd as any)?.data ?? []
-      const counts = new Map<string, number>()
-      for (const p of products) {
-        if (p.category) counts.set(p.category, (counts.get(p.category) ?? 0) + 1)
+      // 🛡️ خ-7 (2026-11-02): عدد الاستخدام من السيرفر (GROUP BY على كل المنتجات)
+      // — قبل كده كان بيجيب /api/products?limit=1000 والسيرفر بيقص عند 100،
+      // فتصنيفات منتجاتها بعد الصف الأول كانت بتظهر بعدم استخدام غلط.
+      let counts = new Map<string, number>()
+      try {
+        const usage = await api<{ category: string; count: number }[]>('/api/categories/usage')
+        counts = new Map((usage ?? []).map((u) => [u.category, Number(u.count)]))
+      } catch {
+        /* لو فشل العدّاد — التصنيفات نفسها بتشتغل من غير أعداد */
       }
       setCats(
         data.map((c) => ({ ...c, count: counts.get(c.name) ?? 0 }))

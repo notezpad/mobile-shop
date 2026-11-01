@@ -130,6 +130,10 @@ async function __PUT(
       )
     }
     data.password = await hashPassword(pw)
+    // 🛡️ خ-6 (2026-11-02): ضبط passwordChangedAt مع أي تغيير كلمة مرور —
+    // قبل كده الجلسات القديمة للموظف كانت فضل شغالة لحد 7 أيام (الإبطال
+    // كان شغال للأدمن-بلاتفورم بس). نفس نمط reset-password وadmin/settings.
+    data.passwordChangedAt = new Date()
   }
 
   // 🏢 نقل الحساب لفرع تاني → الموظف المرتبط بيتنقل معاه (والوردية القديمة بتتفضّى —

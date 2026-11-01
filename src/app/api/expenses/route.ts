@@ -86,9 +86,10 @@ async function __GET(req: NextRequest) {
     userName: r.userId ? (userNameById.get(r.userId) ?? null) : null,
   }))
 
-  const total = rows.reduce((s, r) => s + r.amount, 0)
+  // 🛡️ المرحلة 4: amount بقى Decimal — تحويل قبل الجمع
+  const total = rows.reduce((s, r) => s + Number(r.amount), 0)
   const byCategory = rows.reduce((acc: Record<string, number>, r) => {
-    acc[r.category] = (acc[r.category] ?? 0) + r.amount
+    acc[r.category] = (acc[r.category] ?? 0) + Number(r.amount)
     return acc
   }, {})
 

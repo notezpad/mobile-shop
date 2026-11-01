@@ -254,14 +254,20 @@ export function MethodPills({
   value,
   onChange,
   label,
+  items,
 }: {
   value: string
   onChange: (v: string) => void
   label: string
+  /** 💳 خ-3 (2026-11-02): قائمة مخصصة {value,label} — بتسمح بوسائل المحل
+   *  (بطاقة + الوسائل المخصصة من الإعدادات) بدل المجموعة الثابتة.
+   *  الافتراضي: PAY_METHODS زي ما هي (توافق خلفي كامل). */
+  items?: { value: string; label: string }[]
 }) {
+  const list = items ?? PAY_METHODS
   return (
     <div role="radiogroup" aria-label={label} className="grid grid-cols-2 gap-2">
-      {PAY_METHODS.map((m) => {
+      {list.map((m) => {
         const on = value === m.value
         return (
           <button

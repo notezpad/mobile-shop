@@ -92,7 +92,7 @@ async function __GET(_req: NextRequest) {
   const customerCredit = r2(cAgg[0]?.credit ?? 0)
   const supplierDebt = r2(sAgg[0]?.debt ?? 0)
   const supplierCredit = r2(sAgg[0]?.credit ?? 0)
-  const cashBalance = r2(cashAgg._sum?.amount ?? 0)
+  const cashBalance = r2(Number(cashAgg._sum?.amount ?? 0))
   const customersWithBalance = Number(cAgg[0]?.withBalance ?? 0)
   const suppliersWithBalance = Number(sAgg[0]?.withBalance ?? 0)
 

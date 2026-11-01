@@ -81,14 +81,16 @@ export async function PUT(
     // دلوقتي: الاتنين أدمن بس، وأي تغيير كمية بيتوثق كحركة 'adjust'.
     // 🥬 2026-10-12: الكمية بقيت Float (منتجات البيع بالوزن بالكيلو بكسور)
     // — المقارنة بقت بتفاوت عشري آمن (1e-9) بدل === الصارم.
-    const newCost = body.cost !== undefined ? Number(body.cost) || 0 : existing.cost
+    // 🛡️ المرحلة 4: existing.cost بقى Decimal — التحويل عند الاشتقاق
+    const newCost = body.cost !== undefined ? Number(body.cost) || 0 : Number(existing.cost)
     const newQty =
       body.quantity !== undefined
         ? Number.isFinite(Number(body.quantity))
           ? Math.round((Number(body.quantity) || 0) * 1000) / 1000
           : existing.quantity
         : existing.quantity
-    const costChanged = Math.abs(newCost - existing.cost) > 1e-9
+    // 🛡️ المرحلة 4: cost/price بقوا Decimal — تحويل قبل المقارنة
+    const costChanged = Math.abs(newCost - Number(existing.cost)) > 1e-9
     const qtyChanged = Math.abs(newQty - existing.quantity) > 1e-9
     // 🎨 2026-10-18: المنتج اللي له ألوان/مقاسات كميته = مجموع مقاساته دايماً.
     // تعديل الكمية الإجمالية من هنا كان بيتمسح عند أول بيعة (المزامنة بتعيد
@@ -256,7 +258,7 @@ export async function PUT(
     // عند تغيير سعر البيع: إعادة حساب أسعار الوحدات تلقائياً (سعر × factor).
     // يمكن تعطيلها بإرسال recomputeUnitPrices=false.
     const shouldRecompute =
-      price !== existing.price && body.recomputeUnitPrices !== false
+      price !== Number(existing.price) && body.recomputeUnitPrices !== false
     if (shouldRecompute) {
       const units = await db.productUnit.findMany({ where: { productId: pid } })
       await Promise.all(

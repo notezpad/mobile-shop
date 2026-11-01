@@ -43,28 +43,29 @@ async function __POST(req: NextRequest, { params }: { params: Promise<{ id: stri
     if (claimed.count === 0) return null
 
     const label = run.month
-    const withCost = run.payslips.filter((p) => p.net + p.advanceDeduction > 0)
+    // 🛡️ المرحلة 4: net/advanceDeduction بقوا Decimal — تحويل قبل الحساب
+    const withCost = run.payslips.filter((p) => Number(p.net) + Number(p.advanceDeduction) > 0)
     if (withCost.length > 0) {
       await tx.expense.createMany({
         data: withCost.map((p) => ({
           tenantId: session.tenantId,
           branchId: branchOf.get(p.employeeId) ?? null,
           category: HR_EXPENSE_CATEGORY,
-          amount: round2(p.net + p.advanceDeduction),
+          amount: round2(Number(p.net) + Number(p.advanceDeduction)),
           note: `راتب ${p.employeeName} — ${label}`,
           userId: session.userId,
           source: 'payroll',
         })),
       })
     }
-    const paying = run.payslips.filter((p) => p.net > 0)
+    const paying = run.payslips.filter((p) => Number(p.net) > 0)
     if (paying.length > 0) {
       await tx.cashEntry.createMany({
         data: paying.map((p) => ({
           tenantId: session.tenantId,
           source: 'payroll',
           refId: p.id,
-          amount: -p.net,
+          amount: -Number(p.net),
           method,
           note: `راتب ${p.employeeName} — ${label}`,
           userId: session.userId,
@@ -74,7 +75,7 @@ async function __POST(req: NextRequest, { params }: { params: Promise<{ id: stri
 
     // خصم أقساط السلف (الأقدم أولًا) بقدر خصم كل قسيمة
     for (const p of run.payslips) {
-      let left = p.advanceDeduction
+      let left = Number(p.advanceDeduction)
       if (left <= 0) continue
       const open = await tx.employeeAdvance.findMany({
         where: { tenantId: session.tenantId, employeeId: p.employeeId, status: 'open', remaining: { gt: 0 } },
@@ -82,8 +83,8 @@ async function __POST(req: NextRequest, { params }: { params: Promise<{ id: stri
       })
       for (const a of open) {
         if (left <= 0.005) break
-        const take = round2(Math.min(left, a.remaining, a.installment > 0 ? a.installment : a.remaining))
-        const remaining = round2(a.remaining - take)
+        const take = round2(Math.min(left, Number(a.remaining), Number(a.installment) > 0 ? Number(a.installment) : Number(a.remaining)))
+        const remaining = round2(Number(a.remaining) - take)
         await tx.employeeAdvance.update({
           where: { id: a.id },
           data: { remaining, status: remaining <= 0.005 ? 'settled' : 'open' },

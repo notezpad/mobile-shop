@@ -75,18 +75,28 @@ async function __GET(req: NextRequest) {
   // All heavy math runs inside PostgreSQL (aggregates) — the Worker only
   // receives small result sets. Loading every sale/item/product into memory
   // was exceeding the Cloudflare CPU limit (Error 1102 / 500).
+  //
+  // 🛡️ ج-2 (2026-11-02): كل أرقام الإيراد بقت **صافي بعد المرتجعات** —
+  // نفس معادلة الداشبورد الموحدة:
+  //   netSales  = Σ Sale.total (مكتملة + مرتجعة جزئياً) − Σ (SaleReturn.total − exchangeTotal)
+  //   netProfit = Σ (price−cost)×qty للمبيعات − Σ (price−cost)×qty لبنود المرتجع
+  // الفواتير المرتجعة بالكامل ('مرتجعة') مستبعدة من الطرفين، والمرتجع بيتبع
+  // فترته بـ createdAt بتوقيت المحل (نفس سلوك مرتجعات المشتريات في الملف ده).
+  const SALE_NET_STATUSES_SQL = `s."status" IN ('مكتملة', 'مرتجعة جزئياً')`
   const saleAgg = (gte: Date, lt: Date) => db.$queryRaw<{ total: number; profit: number; cnt: number }[]>`
     SELECT
-      COALESCE((SELECT SUM(s."total") FROM "Sale" s WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND s."status" = 'مكتملة' AND s."createdAt" >= ${gte} AND s."createdAt" < ${lt}), 0)::float8 AS total,
-      COALESCE((SELECT SUM((i."price" - i."cost") * i."quantity") FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId" WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND s."status" = 'مكتملة' AND s."createdAt" >= ${gte} AND s."createdAt" < ${lt}), 0)::float8 AS profit,
-      (SELECT COUNT(*) FROM "Sale" s WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND s."status" = 'مكتملة' AND s."createdAt" >= ${gte} AND s."createdAt" < ${lt})::int AS cnt`
+      COALESCE((SELECT SUM(s."total") FROM "Sale" s WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND ${SALE_NET_STATUSES_SQL} AND s."createdAt" >= ${gte} AND s."createdAt" < ${lt}), 0)::float8
+    - COALESCE((SELECT SUM(r."total" - r."exchangeTotal") FROM "SaleReturn" r JOIN "Sale" s ON s."id" = r."saleId" WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND ${SALE_NET_STATUSES_SQL} AND r."createdAt" >= ${gte} AND r."createdAt" < ${lt}), 0)::float8 AS total,
+      COALESCE((SELECT SUM((i."price" - i."cost") * i."quantity") FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId" WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND ${SALE_NET_STATUSES_SQL} AND s."createdAt" >= ${gte} AND s."createdAt" < ${lt}), 0)::float8
+    - COALESCE((SELECT SUM((ri."price" - ri."cost") * ri."quantity") FROM "SaleReturnItem" ri JOIN "SaleReturn" r ON r."id" = ri."saleReturnId" JOIN "Sale" s ON s."id" = r."saleId" WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND ${SALE_NET_STATUSES_SQL} AND r."createdAt" >= ${gte} AND r."createdAt" < ${lt}), 0)::float8 AS profit,
+      (SELECT COUNT(*) FROM "Sale" s WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND ${SALE_NET_STATUSES_SQL} AND s."createdAt" >= ${gte} AND s."createdAt" < ${lt})::int AS cnt`
   const branchWhere = branchId ? { branchId } : {}
 
   const [
     cur, prev, maintenanceCount, maintAgg, prevMaintAgg, finIn, finOut, cashAgg,
     stockRows, lowStockRows, expAgg, prevExpAgg, expByCat, purchAgg, custAgg, suppAgg,
     branches,
-    trendRows, topProductRows, categoryRows, topCustomerRows, methodRows, commissionAgg,
+    trendRows, returnTrendRows, topProductRows, categoryRows, topCustomerRows, methodRows, commissionAgg,
   ] = await Promise.all([
     saleAgg(from, to),
     hasBoundedRange ? saleAgg(prevFrom, prevTo) : Promise.resolve([{ total: 0, profit: 0, cnt: 0 }]),
@@ -116,8 +126,7 @@ async function __GET(req: NextRequest) {
     db.customer.aggregate({ where: { tenantId: tid, balance: { gt: 0 } }, _sum: { balance: true } }),
     db.supplier.aggregate({ where: { tenantId: tid, balance: { gt: 0 } }, _sum: { balance: true } }),
     db.branch.findMany({ where: { tenantId: tid }, orderBy: [{ isMain: 'desc' }, { id: 'asc' }], select: { id: true, name: true } }),
-    // 🛡️ FIX (tsc): pieceLabel جزء من شكل الرد المتوقع في salesTrend (بيترجع
-    // undefined من الاستعلام حاليًا فيتحول null بـ ?? — نفس السلوك بالظبط).
+    // 🛡️ ج-2: المنحنى اليومي صافي — بيع + مرتجع كل يوم (بتوقيت المحل)
     db.$queryRaw<{ date: string; total: number; profit: number; pieceLabel: string | null }[]>`
       -- 🕐 التجميع اليومي بتوقيت المحل (AT TIME ZONE بيتعامل مع التوقيت الصيفي تلقائياً)
       -- ⚡ v9: subquery الربح مقيّد بنفس النافذة (JOIN على Sale) بدل GROUP BY
@@ -130,29 +139,88 @@ async function __GET(req: NextRequest) {
         SELECT i."saleId", SUM((i."price" - i."cost") * i."quantity") AS profit
         FROM "SaleItem" i
         JOIN "Sale" s2 ON s2."id" = i."saleId"
-        WHERE s2."tenantId" = ${tid} AND (${bid}::int IS NULL OR s2."branchId" = ${bid}::int) AND s2."status" = 'مكتملة' AND s2."createdAt" >= ${from} AND s2."createdAt" < ${to}
+        WHERE s2."tenantId" = ${tid} AND (${bid}::int IS NULL OR s2."branchId" = ${bid}::int) AND ${SALE_NET_STATUSES_SQL.replace(/s\./g, 's2.')} AND s2."createdAt" >= ${from} AND s2."createdAt" < ${to}
         GROUP BY i."saleId"
       ) ip ON ip."saleId" = s."id"
-      WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND s."status" = 'مكتملة' AND s."createdAt" >= ${from} AND s."createdAt" < ${to}
+      WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND ${SALE_NET_STATUSES_SQL} AND s."createdAt" >= ${from} AND s."createdAt" < ${to}
       GROUP BY 1 ORDER BY 1`,
+    db.$queryRaw<{ date: string; net: number; profit: number }[]>`
+      -- 🛡️ ج-2: مرتجعات كل يوم في نافذة التقرير — بتتطرح من نقطة اليوم بتوقيت المرتجع
+      SELECT to_char(r."createdAt" AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS date,
+             COALESCE(SUM(r."total" - r."exchangeTotal"), 0)::float8 AS net,
+             COALESCE(SUM((ri."price" - ri."cost") * ri."quantity"), 0)::float8 AS profit
+      FROM "SaleReturn" r
+      JOIN "Sale" s ON s."id" = r."saleId"
+      LEFT JOIN "SaleReturnItem" ri ON ri."saleReturnId" = r."id"
+      WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND ${SALE_NET_STATUSES_SQL} AND r."createdAt" >= ${from} AND r."createdAt" < ${to}
+      GROUP BY 1 ORDER BY 1`,
+    // 🛡️ ج-2: أفضل المنتجات صافي بعد المرتجعات (بيع − مرتجع لكل منتج)
     db.$queryRaw<{ name: string; qty: number; total: number; profit: number; pieceLabel: string | null }[]>`
-      SELECT MIN(i."name") AS name, MAX(i."pieceLabel") AS "pieceLabel", SUM(i."quantity")::float8 AS qty,
-             SUM(i."price" * i."quantity")::float8 AS total,
-             SUM((i."price" - i."cost") * i."quantity")::float8 AS profit
-      FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
-      WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND s."status" = 'مكتملة' AND s."createdAt" >= ${from} AND s."createdAt" < ${to}
-      GROUP BY COALESCE(i."productId", 0) ORDER BY qty DESC LIMIT 8`,
+      SELECT MIN(sp.name) AS name, MAX(sp."pieceLabel") AS "pieceLabel",
+             (sp.qty - COALESCE(rr.qty, 0))::float8 AS qty,
+             (sp.total - COALESCE(rr.total, 0))::float8 AS total,
+             (sp.profit - COALESCE(rr.profit, 0))::float8 AS profit
+      FROM (
+        SELECT COALESCE(i."productId", 0) AS pid, MIN(i."name") AS name, MAX(i."pieceLabel") AS "pieceLabel",
+               SUM(i."quantity") AS qty, SUM(i."price" * i."quantity") AS total,
+               SUM((i."price" - i."cost") * i."quantity") AS profit
+        FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId"
+        WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND ${SALE_NET_STATUSES_SQL} AND s."createdAt" >= ${from} AND s."createdAt" < ${to}
+        GROUP BY 1
+      ) sp
+      LEFT JOIN (
+        SELECT COALESCE(ri."productId", 0) AS pid, SUM(ri."quantity") AS qty, SUM(ri."price" * ri."quantity") AS total,
+               SUM((ri."price" - ri."cost") * ri."quantity") AS profit
+        FROM "SaleReturnItem" ri
+        JOIN "SaleReturn" r ON r."id" = ri."saleReturnId"
+        JOIN "Sale" s ON s."id" = r."saleId"
+        WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND ${SALE_NET_STATUSES_SQL} AND r."createdAt" >= ${from} AND r."createdAt" < ${to}
+        GROUP BY 1
+      ) rr ON rr.pid = sp.pid
+      ORDER BY qty DESC LIMIT 8`,
+    // 🛡️ ج-2: التصنيفات صافي بعد المرتجعات (المرتجع بيتنسب للتصنيف من منتج البند)
     db.$queryRaw<{ category: string; total: number }[]>`
-      SELECT CASE WHEN i."productId" IS NULL THEN 'منتجات محذوفة' ELSE COALESCE(NULLIF(p."category", ''), 'بدون تصنيف') END AS category,
-             SUM(i."price" * i."quantity")::float8 AS total
-      FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId" LEFT JOIN "Product" p ON p."id" = i."productId"
-      WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND s."status" = 'مكتملة' AND s."createdAt" >= ${from} AND s."createdAt" < ${to}
-      GROUP BY 1 ORDER BY total DESC LIMIT 8`,
+      SELECT sp.category,
+             (sp.total - COALESCE(rr.total, 0))::float8 AS total
+      FROM (
+        SELECT CASE WHEN i."productId" IS NULL THEN 'منتجات محذوفة' ELSE COALESCE(NULLIF(p."category", ''), 'بدون تصنيف') END AS category,
+               SUM(i."price" * i."quantity") AS total
+        FROM "SaleItem" i JOIN "Sale" s ON s."id" = i."saleId" LEFT JOIN "Product" p ON p."id" = i."productId"
+        WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND ${SALE_NET_STATUSES_SQL} AND s."createdAt" >= ${from} AND s."createdAt" < ${to}
+        GROUP BY 1
+      ) sp
+      LEFT JOIN (
+        SELECT CASE WHEN ri."productId" IS NULL THEN 'منتجات محذوفة' ELSE COALESCE(NULLIF(p2."category", ''), 'بدون تصنيف') END AS category,
+               SUM(ri."price" * ri."quantity") AS total
+        FROM "SaleReturnItem" ri
+        JOIN "SaleReturn" r ON r."id" = ri."saleReturnId"
+        JOIN "Sale" s ON s."id" = r."saleId"
+        LEFT JOIN "Product" p2 ON p2."id" = ri."productId"
+        WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND ${SALE_NET_STATUSES_SQL} AND r."createdAt" >= ${from} AND r."createdAt" < ${to}
+        GROUP BY 1
+      ) rr ON rr.category = sp.category
+      ORDER BY total DESC LIMIT 8`,
+    // 🛡️ ج-2: أفضل العملاء صافي — المرتجع ليه customerId مباشرة على صف المرتجع
     db.$queryRaw<{ name: string; total: number; salesCount: number }[]>`
-      SELECT c."name", SUM(s."total")::float8 AS total, COUNT(*)::int AS "salesCount"
-      FROM "Sale" s JOIN "Customer" c ON c."id" = s."customerId"
-      WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND s."status" = 'مكتملة' AND s."createdAt" >= ${from} AND s."createdAt" < ${to}
-      GROUP BY c."id", c."name" ORDER BY total DESC LIMIT 6`,
+      SELECT c."name",
+             (COALESCE(sagg.stotal, 0) - COALESCE(ragg.rtotal, 0))::float8 AS total,
+             COALESCE(sagg.scnt, 0)::int AS "salesCount"
+      FROM "Customer" c
+      LEFT JOIN (
+        SELECT s."customerId" AS cid, SUM(s."total") AS stotal, COUNT(*) AS scnt
+        FROM "Sale" s
+        WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND ${SALE_NET_STATUSES_SQL} AND s."createdAt" >= ${from} AND s."createdAt" < ${to}
+        GROUP BY s."customerId"
+      ) sagg ON sagg.cid = c."id"
+      LEFT JOIN (
+        SELECT r."customerId" AS cid, SUM(r."total" - r."exchangeTotal") AS rtotal
+        FROM "SaleReturn" r
+        JOIN "Sale" s ON s."id" = r."saleId"
+        WHERE s."tenantId" = ${tid} AND (${bid}::int IS NULL OR s."branchId" = ${bid}::int) AND ${SALE_NET_STATUSES_SQL} AND r."createdAt" >= ${from} AND r."createdAt" < ${to}
+        GROUP BY r."customerId"
+      ) ragg ON ragg.cid = c."id"
+      WHERE COALESCE(sagg.scnt, 0) > 0
+      ORDER BY total DESC LIMIT 6`,
     db.transaction.groupBy({ by: ['method'], where: { tenantId: tid, createdAt: dateRange, kind: 'deposit' }, _sum: { amount: true } }),
     // 🛡️ 2026-09-30 (X7): عمولة المحفظة (إيراد فعلي للمحل) كانت مش داخلة
     // في صافي الربح — محل بيكسب 1% على كل معاملات المحفظة كان ربحه بيطلع أقل من الحقيقي.
@@ -196,7 +264,17 @@ async function __GET(req: NextRequest) {
   const customersReceivable = n(custAgg._sum.balance)
   const suppliersPayable = n(suppAgg._sum.balance)
 
-  const salesTrend = trendRows.map((r) => ({ date: r.date, total: n(r.total), profit: canViewProfits ? n(r.profit) : null, unitLabel: r.pieceLabel ?? null }))
+  // 🛡️ ج-2: نقط المنحنى صافي بعد خصم مرتجعات كل يوم (بتوقيت المرتجع)
+  const returnTrendMap = new Map(returnTrendRows.map((r) => [r.date, r]))
+  const salesTrend = trendRows.map((r) => {
+    const ret = returnTrendMap.get(r.date)
+    return {
+      date: r.date,
+      total: Math.round((n(r.total) - n(ret?.net)) * 100) / 100,
+      profit: canViewProfits ? Math.round((n(r.profit) - n(ret?.profit)) * 100) / 100 : null,
+      unitLabel: r.pieceLabel ?? null,
+    }
+  })
   const topProducts = topProductRows.map((r) => ({ name: r.name, qty: n(r.qty), total: n(r.total), profit: canViewProfits ? n(r.profit) : null }))
   const categoryBreakdown = categoryRows.map((r) => ({ category: r.category, total: n(r.total) }))
   const topCustomers = topCustomerRows.map((r) => ({ name: r.name, total: n(r.total), salesCount: n(r.salesCount) }))

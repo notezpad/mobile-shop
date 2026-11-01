@@ -87,7 +87,7 @@ async function __GET(req: NextRequest) {
           eventName: TRACKING_EVENTS.Purchase,
           eventId: `purchase-sub-${full.id}`,
           params: {
-            value: full.amountPaid,
+            value: Number(full.amountPaid),
             currency: 'EGP',
             transactionId: String(txnMatch?.[1] || full.id),
             contentName: full.plan.name, contentType: 'subscription_plan',

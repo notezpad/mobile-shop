@@ -1,37 +1,52 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- ⚡ create_sale(payload jsonb) — حفظ فاتورة البيع في استدعاء واحد (2026-10-17)
+-- ⚡ create_sale(payload jsonb) — الملف الرسمي الموحّد لدوال RPC الخاصة بالبيع
 -- ─────────────────────────────────────────────────────────────────────────────
--- POST /api/sales كان أثقل مسار في الموقع (Prisma + $transaction كبيرة:
--- فاتورة + أصناف + خصم مخزون + دين عميل + خزنة) — كل استعلام منهم بياكل CPU
--- من حصة الـ 10ms بتاعة Workers المجانية → 503 عشوائي وقت الضغط.
+-- 📌 مت-6 (2026-11-02): هذا هو المصدر الوحيد للحقيقة — آخر نسخة منشورة:
+--      v5 — نُشرت 2026-11-02 (المرحلة 4 من تقرير التدقيق)
+--    السوابق: v1 2026-10-17 (الإنشاء) → v2 2026-10-22 (المواسم displayQty)
+--    → v3 2026-10-23 (تلميع) → v4 2026-10-24 (فهارس) → v5 هذه.
+--    النسخة القديمة في seasonal-v1.sql اتشالت — أي تعديل مستقبلي يتعامل
+--    مع الملف ده فقط، وبعد كل تعديل يتطبق بـ CREATE OR REPLACE على كل
+--    البيئات (إنتاج + اختبار + أي قاعدة جديدة) — مت-5.
 --
+-- ── الجديد في v5 (مت-5 + مت-15 + ج-5) ──
+--   1) INSERT INTO "SaleItem" بقى يكتب "tenantId" (مت-15: عمود مُلوَّحن —
+--      العزل شغّال حتى في جدول التفاصيل لو join اتسرب أو SQL خام جديد).
+--   2) INSERT INTO "StockMovement" بقى يكتب "variantId" (مت-5: كل بيعة
+--      variant بتسيب حركة مرتبطة باللون/المقاس — فحوصات سلامة المخزون
+--      مابتقعدش فجوات).
+--   3) get_sale_full بيرجّع sellerId و commissionRate في جسم الفاتورة (مت-5)
+--      و tenantId في كل صنف (مت-15).
+--   4) أنواع المبالغ بقت numeric بدل float8 (ج-5: أعمدة الفلوس NUMERIC(12,2)
+--      — المرور بـ numeric يحافظ على الدقة العشرية بالكامل).
+--   5) منطق خصم displayQty (المواسم) محفوظ من v2 زي ما هو.
+--
+-- ── الخلفية (v1) ──
+-- POST /api/sales كان أثقل مسار في الموقع (Prisma + $transaction كبيرة:
+-- فاتورة + أصناف + خصم مخزون + دين عميل + خزنة) — كل استعلام بياكل CPU
+-- من حصة الـ 10ms بتاعة Workers المجانية → 503 عشوائي وقت الضغط.
 -- الدالة بتعمل بالترتيب نفس اللي كان بيحصل حرفيًا في route.ts:
 --   1) توليد رقم الفاتورة (أعلى رقم لسنة المحل + 1 — جوه نفس الاستدعاء)
 --   2) إنشاء الفاتورة + الأصناف
 --   3) خصم المخزون ذريًا لكل صنف (منتج عادي / وحدة جملة / لون-مقاس)
 --      بنفس رسائل الخطأ العربية بتاعة deductStock حرفيًا
---   4) Product.quantity = مجموع المتغيرات (لو البيع من لون/مقاس)
+--   4) Product.quantity/displayQty = مجموع المتغيرات (لو البيع من لون/مقاس)
 --   5) حركة مخزون type='sale' لكل صنف
 --   6) دين العميل (لو بيع آجل) + قيد الخزنة بطريقة الدفع
 -- وترجّع نفس شكل الرد القديم بالظبط (sale + items[] + variant + customer).
 --
--- ملاحظة مهمة: جدول SaleItem **مفيهوش** عمود createdAt (النسخة الأولى من
--- السكريبت ده غلطت فيه وفشلت) — التاريخ على الفاتورة الأم Sale فقط.
--- كل التواريخ بترجع بصيغة Prisma بالظبط: "2026-10-17T09:00:00.000Z".
+-- ملاحظة مهمة: جدول SaleItem **مفيهوش** عمود createdAt — التاريخ على
+-- الفاتورة الأم Sale فقط. كل التواريخ بترجع بصيغة Prisma:
+-- "2026-10-17T09:00:00.000Z".
 --
 -- عدم التكرار (أوفلاين): الفهارس الفريدة @@unique([tenantId, invoiceNo])
 -- و @@unique([tenantId, clientRef]) هي الضمانة — أي تضارب بيرجع SQLSTATE
--- 23505 والـ route يرجّع الفاتورة الأصلية أو يعيد المحاولة برقم أعلى
--- (بديل P2002 بتاع Prisma).
---
--- التركيب (مرة واحدة): الصق الملف ده كله في Supabase → SQL Editor → Run
--- (نفس اللي عملناه مع create-purchase-order.sql بالظبط).
+-- 23505 والـ route يرجّع الفاتورة الأصلية أو يعيد المحاولة برقم أعلى.
 -- ═══════════════════════════════════════════════════════════════════════════
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 1) بنّاء شكل الرد — نفس Prisma:
 --    sale.create({ include: { items: { include: { variant: true } }, customer: true } })
--- كل حقل موجود بالاسم الحقيقي من schema.prisma — لا أكثر ولا أقل.
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION get_sale_full(p_tenantId text, p_saleId int)
 RETURNS jsonb
@@ -48,6 +63,9 @@ BEGIN
     'invoiceNo',    s."invoiceNo",
     'customerId',   s."customerId",
     'userId',       s."userId",
+    -- 🛡️ مت-5: بيانات البائع رجعت مع الفاتورة (كانت ناقصة من الرد)
+    'sellerId',     s."sellerId",
+    'commissionRate', s."commissionRate",
     'total',        s."total",
     'paid',         s."paid",
     'paymentMethod', s."paymentMethod",
@@ -61,6 +79,8 @@ BEGIN
       SELECT jsonb_agg(jsonb_build_object(
                'id',           i."id",
                'saleId',       i."saleId",
+               -- 🛡️ مت-15: tenantId مُلوَّحن في جدول التفاصيل
+               'tenantId',     i."tenantId",
                'productId',    i."productId",
                'name',         i."name",
                'price',        i."price",
@@ -110,8 +130,7 @@ $$;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2) البحث عن فاتورة بمفتاح الأوفلاين clientRef — بيرجّع نفس شكل get_sale_full
---    أو NULL لو مفيش. الـ route بيستخدمها في فحص التكرار قبل الحفظ
---    وعند التضارب (23505) — بديل sale.findUnique({ where: tenantId_clientRef }).
+--    أو NULL لو مفيش.
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION get_sale_by_ref(p_tenantId text, p_ref text)
 RETURNS jsonb
@@ -136,8 +155,9 @@ DECLARE
   v_branchId   int       := (payload->>'branchId')::int;
   v_userId     text      := payload->>'userId';
   v_customerId int       := (payload->>'customerId')::int;
-  v_total      float8    := (payload->>'total')::float8;
-  v_paid       float8    := (payload->>'paid')::float8;
+  -- 🛡️ ج-5: المبالغ numeric — دقة عشرية كاملة (كانت float8)
+  v_total      numeric   := (payload->>'total')::numeric;
+  v_paid       numeric   := (payload->>'paid')::numeric;
   v_method     text      := COALESCE(payload->>'paymentMethod', 'cash');
   -- ISO مع Z → UTC wall-clock (أعمدة Prisma timestamp بدون منطقة زمنية)
   v_dueDate    timestamp := (NULLIF(payload->>'dueDate', ''))::timestamptz AT TIME ZONE 'UTC';
@@ -153,10 +173,7 @@ DECLARE
   it           record;
 BEGIN
   -- ── 1) رقم الفاتورة: أعلى رقم موجود لسنة المحل + 1 (نفس nextInvoiceNo:
-  --       قراءة آخر فاتورة بالفهرس مش عدّ كل فواتير السنة)
-  --       استخلاص الرقم بدون regexp: LTRIM بيشيل الأرقام البادئة، والفرق
-  --       في الطول بيحدد العدد — نفس parseInt(اللاحقة) || 0 بتاعة JS حرفيًا
-  --       ('00042abc' → 42، 'abc' → 0، '' → 0) ──
+  --       قراءة آخر فاتورة بالفهرس مش عدّ كل فواتير السنة) ──
   v_lastSeq := COALESCE((
     SELECT NULLIF(LEFT(t.sfx, LENGTH(t.sfx) - LENGTH(LTRIM(t.sfx, '0123456789'))), '')::int
     FROM (
@@ -184,15 +201,16 @@ BEGIN
     SELECT x."productId", x."name", x."price", x."cost", x."quantity",
            x."unitId", x."unitLabel", x."unitQuantity", x."pieceLabel", x."variantId"
     FROM jsonb_to_recordset(payload->'items')
-      AS x("productId" int, "name" text, "price" float8, "cost" float8,
+      AS x("productId" int, "name" text, "price" numeric, "cost" numeric,
            "quantity" float8, "unitId" int, "unitLabel" text,
            "unitQuantity" float8, "pieceLabel" text, "variantId" int)
   LOOP
     INSERT INTO "SaleItem"
-      ("saleId", "productId", "name", "price", "quantity", "cost",
+      ("saleId", "tenantId", "productId", "name", "price", "quantity", "cost",
        "unitId", "unitLabel", "unitQuantity", "pieceLabel", "variantId")
     VALUES
-      (v_saleId, it."productId", it."name", it."price", it."quantity", it."cost",
+      -- 🛡️ مت-15: tenantId مُلوَّحن — دايمًا من الجلسة، عمره ما من الـ payload
+      (v_saleId, v_tenantId, it."productId", it."name", it."price", it."quantity", it."cost",
        it."unitId", it."unitLabel", it."unitQuantity", it."pieceLabel", it."variantId");
 
     -- إجمالي القطع (الفاكتور مضروب مسبقًا في الـ route — نفس ناتج
@@ -216,9 +234,11 @@ BEGIN
         RAISE EXCEPTION 'المتغير (اللون/المقاس) مش موجود أو غير مرتبط بالمنتج';
       END IF;
 
-      -- 🛡️ خصم ذري: UPDATE بشرط quantity >= المطلوب (نفس updateMany)
+      -- 👕 خصم ذري: الكمية + المعروض (البيع يخصم من المعروض الأول —
+      --    لو المعروض أقل من المطلوب فالباقي جاي من المخزن الداخلي)
       UPDATE "ProductVariant"
-      SET "quantity" = "quantity" - v_toDeduct
+      SET "quantity"   = "quantity" - v_toDeduct,
+          "displayQty" = GREATEST(0, "displayQty" - LEAST(v_toDeduct, "displayQty"))
       WHERE "id" = it."variantId" AND "quantity" >= v_toDeduct;
       IF NOT FOUND THEN
         SELECT "quantity" INTO v_curQty FROM "ProductVariant" WHERE "id" = it."variantId";
@@ -226,16 +246,18 @@ BEGIN
           COALESCE(v_curQty, 0), v_toDeduct;
       END IF;
 
-      -- 🛡️ syncProductQuantityFromVariants: مجمع المنتج = مجموع متغيراته
+      -- 👕 مجمع المنتج = مجموع المقاسات (الكمية + المعروض)
       UPDATE "Product" p
-      SET "quantity" = COALESCE(agg.s, 0)
-      FROM (SELECT SUM("quantity") AS s
+      SET "quantity"   = COALESCE(agg.s, 0),
+          "displayQty" = COALESCE(agg.d, 0)
+      FROM (SELECT SUM("quantity") AS s, SUM("displayQty") AS d
             FROM "ProductVariant" WHERE "productId" = it."productId") agg
       WHERE p."id" = it."productId";
     ELSE
-      -- 🛡️ خصم ذري للمنتج العادي (نفس updateMany بالظبط)
+      -- 👕 خصم ذري للمنتج العادي (كمية + معروض بنفس قاعدة المعروض الأول)
       UPDATE "Product"
-      SET "quantity" = "quantity" - v_toDeduct
+      SET "quantity"   = "quantity" - v_toDeduct,
+          "displayQty" = GREATEST(0, "displayQty" - LEAST(v_toDeduct, "displayQty"))
       WHERE "id" = it."productId" AND "quantity" >= v_toDeduct;
       IF NOT FOUND THEN
         SELECT "quantity" INTO v_curQty FROM "Product" WHERE "id" = it."productId";
@@ -247,11 +269,12 @@ BEGIN
     END IF;
 
     -- حركة المخزون (نفس stockMovement.create: type='sale'، الكمية بالسالب)
+    -- 🛡️ مت-5: عمود variantId بقى بيتكتب — حركة كل بيعة لون/مقاس مربوطة بيه
     INSERT INTO "StockMovement"
-      ("tenantId", "branchId", "productId", "type", "quantity",
+      ("tenantId", "branchId", "productId", "variantId", "type", "quantity",
        "refType", "refId", "note", "userId")
     VALUES
-      (v_tenantId, v_branchId, it."productId", 'sale', -it."quantity",
+      (v_tenantId, v_branchId, it."productId", it."variantId", 'sale', -it."quantity",
        'sale', v_saleId, 'فاتورة ' || v_invoiceNo || ' — ' || it."name", v_userId);
   END LOOP;
 

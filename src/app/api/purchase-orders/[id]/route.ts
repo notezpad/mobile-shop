@@ -5,6 +5,7 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireModulePermission, featureErrorResponse } from '@/lib/features'
 import { performPurchaseReturn, PurchaseReturnError } from '@/lib/purchase-return'
+import { PURCHASE_POLICY } from '@/lib/stock-policy'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,6 +59,15 @@ async function __DELETE(
   }
   try { requireModulePermission(session, 'purchases') } catch (e) {
     const fe = featureErrorResponse(e); if (fe) return NextResponse.json(fe.body, { status: fe.status }); throw e
+  }
+  // 🛡️ خ-11 (2026-11-02): المرتجع الكامل (كل الكميات القابلة للإرجاع بأمر واحد
+  // مع رجوع الفلوس للمحل) = للمدير فقط — نفس سياسة الهالك. الموظف عنده
+  // المرتجع الجزئي بحدود PURCHASE_POLICY في مسار /returns.
+  if (PURCHASE_POLICY.fullReturnAdminOnly && session.role !== 'ADMIN' && session.role !== 'SUPER_ADMIN') {
+    return NextResponse.json(
+      { error: 'المرتجع الكامل متاح للمدير فقط — استخدم مرتجع جزئي أو اطلب من المدير' },
+      { status: 403 }
+    )
   }
 
   const { id } = await params

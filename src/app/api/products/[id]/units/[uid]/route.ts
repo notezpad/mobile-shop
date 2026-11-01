@@ -4,14 +4,20 @@ import { db, withDb } from '@/lib/db'
 import { requireAuth, authErrorResponse } from '@/lib/auth'
 import { requireCapability, featureErrorResponse, requireModuleWritePermission } from '@/lib/features'
 import { normalizeBarcode } from '@/lib/barcode'
+import { canAccessProductBranch } from '@/lib/branch-scope-db'
 
 export const dynamic = 'force-dynamic'
 
-async function loadOwned(tenantId: string, pid: number, uid: number) {
+async function loadOwned(tenantId: string, pid: number, uid: number, sessionBranchId?: number | null) {
   const u = await db.productUnit.findUnique({ where: { id: uid } })
   if (!u || u.productId !== pid) return null
   const p = await db.product.findUnique({ where: { id: pid } })
   if (!p || p.tenantId !== tenantId) return null
+  // 🛡️ مت-7 (2026-11-02): فحص فرع المنتج — قبل كده المحل بس، فموظف فرع A
+  // كان يقدر يعدّل/يمسح وحدة منتج فرع B لو عرف الـ id.
+  if (sessionBranchId && !(await canAccessProductBranch(tenantId, p.branchId, sessionBranchId))) {
+    return null
+  }
   return u
 }
 
@@ -36,7 +42,7 @@ async function __PATCH(
   const { id, uid } = await params
   const pid = parseInt(id, 10)
   const uId = parseInt(uid, 10)
-  const owned = await loadOwned(session.tenantId, pid, uId)
+  const owned = await loadOwned(session.tenantId, pid, uId, session.branchId)
   if (!owned) return NextResponse.json({ error: 'غير موجود' }, { status: 404 })
   const body = await req.json().catch(() => null)
   if (!body || typeof body !== 'object') {
@@ -90,7 +96,7 @@ async function __DELETE(
   const { id, uid } = await params
   const pid = parseInt(id, 10)
   const uId = parseInt(uid, 10)
-  const owned = await loadOwned(session.tenantId, pid, uId)
+  const owned = await loadOwned(session.tenantId, pid, uId, session.branchId)
   if (!owned) return NextResponse.json({ error: 'غير موجود' }, { status: 404 })
   try {
     await db.productUnit.delete({ where: { id: uId } })

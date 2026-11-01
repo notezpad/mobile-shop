@@ -118,12 +118,13 @@ async function computeSettlement(
         permissionDates: permsByMonth.get(cur),
       })
       const calc = computePayslip({
-        baseSalary: employee.baseSalary, hireDate: hire, month: cur, settings,
+        baseSalary: Number(employee.baseSalary), hireDate: hire, month: cur, settings,
         absentDays: 0, // مبيتحسبش — الخصم على (أيام الخدمة − الأيام المدفوعة)
         lateMinutes: lateByMonth.get(cur) ?? 0,
         advanceDue: 0, // السلف بتتخصم كلها مرة واحدة في الآخر
-        bonus: slip?.bonus ?? 0,
-        penalty: slip?.penalty ?? 0,
+        // 🛡️ المرحلة 4: bonus/penalty بقوا Decimal من القسيمة
+        bonus: slip?.bonus != null ? Number(slip.bonus) : 0,
+        penalty: slip?.penalty != null ? Number(slip.penalty) : 0,
         paidDays: paid.paidDays,
       })
       months.push({
@@ -132,8 +133,8 @@ async function computeSettlement(
         paidDays: paid.paidDays,
         lateMinutes: lateByMonth.get(cur) ?? 0,
         lateDeduction: calc.lateDeduction,
-        bonus: slip?.bonus ?? 0,
-        penalty: slip?.penalty ?? 0,
+        bonus: slip?.bonus != null ? Number(slip.bonus) : 0,
+        penalty: slip?.penalty != null ? Number(slip.penalty) : 0,
         net: round2(calc.net),
       })
     }
@@ -143,7 +144,7 @@ async function computeSettlement(
   }
 
   const totalGross = round2(months.reduce((s, m) => s + m.net, 0))
-  const advanceRemaining = round2(advances.reduce((s, a) => s + a.remaining, 0))
+  const advanceRemaining = round2(advances.reduce((s, a) => s + Number(a.remaining), 0))
   const advanceDeduction = round2(Math.min(totalGross, advanceRemaining))
   const net = round2(totalGross - advanceDeduction)
 
@@ -177,7 +178,7 @@ async function __GET(req: NextRequest, { params }: Ctx) {
   if (q > today) return bad('آخر يوم شغل ممكن يكون النهارده كأقصى حد')
 
   try {
-    const p = await computeSettlement(session.tenantId, emp, q, today)
+    const p = await computeSettlement(session.tenantId, { ...emp, baseSalary: Number(emp.baseSalary) }, q, today)
     const { draftRunIds, ...preview } = p
     return NextResponse.json({
       employee: { id: emp.id, name: emp.name, baseSalary: emp.baseSalary, weeklyOffDay: emp.weeklyOffDay },
@@ -215,7 +216,7 @@ async function __POST(req: NextRequest, { params }: Ctx) {
 
   let preview: Awaited<ReturnType<typeof computeSettlement>>
   try {
-    preview = await computeSettlement(session.tenantId, emp, lastWorkDay, today)
+    preview = await computeSettlement(session.tenantId, { ...emp, baseSalary: Number(emp.baseSalary) }, lastWorkDay, today)
   } catch (e: any) {
     if (e?.message === 'BAD_DATE_BEFORE_HIRE') return bad('آخر يوم شغل قبل تاريخ التعيين')
     throw e
@@ -269,8 +270,8 @@ async function __POST(req: NextRequest, { params }: Ctx) {
       })
       for (const a of open) {
         if (left <= 0.005) break
-        const take = round2(Math.min(left, a.remaining))
-        const remaining = round2(a.remaining - take)
+        const take = round2(Math.min(left, Number(a.remaining)))
+        const remaining = round2(Number(a.remaining) - take)
         await tx.employeeAdvance.update({
           where: { id: a.id },
           data: { remaining, status: remaining <= 0.005 ? 'settled' : 'open' },
@@ -286,7 +287,7 @@ async function __POST(req: NextRequest, { params }: Ctx) {
         const rest = await tx.payslip.findMany({ where: { runId }, select: { net: true } })
         await tx.payrollRun.update({
           where: { id: runId },
-          data: { totalNet: round2(rest.reduce((s, p) => s + p.net, 0)) },
+          data: { totalNet: round2(rest.reduce((s, p) => s + Number(p.net), 0)) },
         })
       }
     }

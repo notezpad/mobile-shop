@@ -57,14 +57,16 @@ export function computeEndDate(
 }
 
 /** Default amount based on plan + period (zero for trial). */
+// 🛡️ المرحلة 4 (2026-11-02): أسعار الباقات بقيت Decimal من الداتابيز —
+// القبول unknown والتحويل number هنا مرة واحدة بدل كل مسارات الاستدعاء.
 export function computeAmount(
-  plan: { priceMonthly: number; priceYearly: number },
+  plan: { priceMonthly: unknown; priceYearly: unknown },
   period: 'monthly' | 'yearly' | 'trial',
   override?: number
 ): number {
   if (override !== undefined && !Number.isNaN(override)) return Number(override)
-  if (period === 'monthly') return plan.priceMonthly
-  if (period === 'yearly') return plan.priceYearly
+  if (period === 'monthly') return Number(plan.priceMonthly ?? 0)
+  if (period === 'yearly') return Number(plan.priceYearly ?? 0)
   return 0
 }
 

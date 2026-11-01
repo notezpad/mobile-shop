@@ -61,7 +61,7 @@ async function __GET() {
     // Estimated monthly recurring revenue: trials pay nothing, yearly subs
     // contribute priceYearly / 12, everything else the monthly price.
     const mrr = Math.round(
-      monthlyCount * p.priceMonthly + (yearlyCount * p.priceYearly) / 12
+      monthlyCount * Number(p.priceMonthly) + (yearlyCount * Number(p.priceYearly)) / 12
     )
     const expiringSoonCount = subs.filter(
       (s) => s.endDate >= now && s.endDate <= expiringLimit
@@ -132,8 +132,15 @@ async function __POST(req: NextRequest) {
     return NextResponse.json({ error: 'كود الباقة موجود بالفعل' }, { status: 400 })
   }
 
+  // 🛡️ ص-18 (2026-11-02): features مصفوفة نصوص نظيفة فقط — أي عنصر غريب
+  // (object/number) بيتحول لنص مقصوص بدل ما يتخزن JSON غير متوقع
   const features = Array.isArray(body.features)
-    ? JSON.stringify(body.features)
+    ? JSON.stringify(
+        body.features
+          .map((f: unknown) => String(f ?? '').trim().slice(0, 200))
+          .filter(Boolean)
+          .slice(0, 40),
+      )
     : typeof body.features === 'string'
       ? JSON.stringify(
           String(body.features)

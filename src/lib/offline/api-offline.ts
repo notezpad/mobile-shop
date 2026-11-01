@@ -630,6 +630,16 @@ export async function offlineFetch<T = any>(
             'لا يوجد اتصال بالإنترنت — استيراد الإكسيل بيتم أونلاين فقط لأن التحليل بيه على السيرفر. اتأكد من الاتصال وجرب تاني',
           )
         }
+        // 🛡️ خ-12 (2026-11-02): الورديات أونلاين فقط — فتح/قفل الوردية بيقفل
+        // فترة كاش كاملة في الخزنة وبيحسب «المتوقع» في لحظة التنفيذ؛ لو القفل
+        // اتنفذ متأخر من طابور الأوفلاين بإيقاع مزروع، أي قيد كاش دخل بعد
+        // الـ GET بيتحسب جوه الفترة غلط ويظهر عجز/زيادة وهمية في الفارق.
+        // بنرجّع الخطأ للمستخدم بدل نجاح كاذب — زي balance-entries بالظبط.
+        if (/^\/api\/shifts(?:\/|\?|$)/.test(url)) {
+          throw new Error(
+            'لا يوجد اتصال بالإنترنت — فتح وقفل الوردية بيتم أونلاين فقط لأنه بيقفل فترة الكاش. اتأكد من الاتصال وحاول تاني',
+          )
+        }
         // 🛡️ 2026-09-30 (M7): idempotency for queued sales — a network error
         // AFTER the server committed used to keep the outbox entry and re-POST
         // it later, creating a duplicate invoice (double stock/till/debt).
@@ -646,11 +656,19 @@ export async function offlineFetch<T = any>(
                 : `offline-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`),
           }
         }
+        // 🛡️ خ-4 (2026-11-02): وسم القيد بـ tenantId الجلسة الحالية (من كاش
+        // السيشن في IDB) — وقت الـ flush أي قيد لحساب مختلف بيرفض ويروح
+        // لقائمة «العمليات الفاشلة» بدل ما فواتير محل تتبعت بكوكي محل تاني.
+        const sessionTid = await idb
+          .getCached<{ user?: { tenantId?: string } }>('/api/auth/me')
+          .then((c) => c?.data?.user?.tenantId)
+          .catch(() => undefined)
         const outboxEntry = await idb.addToOutbox({
           url, method,
           body: queuedBody,
           label: getOperationLabel(url, method, queuedBody),
           idempotencyKey: idemKey,
+          tenantId: sessionTid || undefined,
         })
         // 🛡️ v11 (LOCAL-FIRST ROOT FIX — قصّ جذر "كل حاجة صفر + الإجراء مش
         // بيظهر إلا بعد المزامنة"):

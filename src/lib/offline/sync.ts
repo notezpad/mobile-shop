@@ -8,7 +8,7 @@
  *   4. Retry failed entries up to 5 times
  */
 
-import { idb, type OutboxEntry } from './idb'
+import { idb, type OutboxEntry, type RejectedOp } from './idb'
 import { isOnline, isNetworkError, hashStr } from './api-offline'
 import { prewarmAll } from './prewarm'
 import { emitDataChanged } from './data-events'
@@ -50,6 +50,25 @@ function remapLocalProductIds(body: any, map: Record<string, number>): any {
     return v
   }
   return walk(body)
+}
+
+/**
+ * 🛡️ مت-17 (2026-11-02): تحويل قيد أوفلاين مرفوض لصف «عمليات فاشلة» —
+ * بنحتفظ بالـ body عشان زر إعادة الإرسال يقدر يعيد القيد زي ما هو.
+ */
+function toRejectedOp(entry: OutboxEntry, reason: string): RejectedOp {
+  return {
+    id: entry.id,
+    url: entry.url,
+    method: entry.method,
+    label: entry.label,
+    reason: String(reason || 'مرفوضة'),
+    createdAt: entry.createdAt,
+    rejectedAt: Date.now(),
+    tries: entry.tries,
+    body: entry.body,
+    idempotencyKey: entry.idempotencyKey,
+  }
 }
 
 export type SyncState = {
@@ -102,11 +121,29 @@ export function flushOutbox(): Promise<{ done: number; failed: number }> {
 
     try {
       const entries = await idb.getOutbox()
+      // 🛡️ خ-4 (2026-11-02): tenantId الجلسة الحالية (من كاش السيشن) — أي قيد
+      // موسوم لحساب مختلف مابيتبعتش، بيتنقل لقائمة «العمليات الفاشلة» مباشرة.
+      // القيود القديمة بدون وسم بتكمل عادي (توافق خلفي — مفيش فقدان بيانات
+      // عند أول مزامنة بعد النشر).
+      const sessionTid = await idb
+        .getCached<{ user?: { tenantId?: string } }>('/api/auth/me')
+        .then((c) => c?.data?.user?.tenantId)
+        .catch(() => undefined)
+      const tenantMismatch = (entry: OutboxEntry): boolean =>
+        Boolean(entry.tenantId && sessionTid && entry.tenantId !== sessionTid)
       // 🛡️ v5: خريطة المنتجات المضافة أوفلاين (localRef → realId) — بتُستخدم
       // لاستبدال الـ ids السالبة في أي عملية قبل إرسالها (شوف remapLocalProductIds).
       const localMap = await idb.getLocalProductMap().catch(() => ({}) as Record<string, number>)
 
       for (const entry of entries) {
+        // 🛡️ خ-4: قيد لحساب مختلف؟ ميروحش للسيرفر نهائيًا — بيتنقل للمرفوضة
+        // برسالة واضحة عشان صاحبه يشوفه (فاتورة محل تاني ماتتبعتش بخطأ).
+        if (tenantMismatch(entry)) {
+          await idb.removeFromOutbox(entry.id)
+          await idb.addRejectedOp(toRejectedOp(entry, 'عملية لحساب مختلف — اتوقفت حماية للحساب الحالي'))
+          failed++
+          continue
+        }
         try {
           const mappedBody =
             entry.body !== undefined ? remapLocalProductIds(entry.body, localMap) : undefined
@@ -130,11 +167,16 @@ export function flushOutbox(): Promise<{ done: number; failed: number }> {
               set({ syncing: false, lastError: err?.error || `خطأ في الخادم (${res.status})` })
               return { done, failed }
             }
-            // 4xx → invalid operation, discard after 5 tries
+            // 4xx → عملية مرفوضة — بعد 5 محاولات بتتنقل لقائمة «العمليات الفاشلة»
+            // 🛡️ مت-17 (2026-11-02): قبل كده كانت بتمسح نهائيًا والبيانات بتضيع
+            // والتوست بيقول كذب «هتتجرب تاني». دلوقتي بتفضل موجودة يظهرها
+            // المستخدم ويعيد إرسالها أو يحذفها.
             entry.tries += 1
-            entry.lastError = err?.error || `خطأ (${res.status})`
+            const rejectReason = err?.error || `خطأ (${res.status})`
+            entry.lastError = rejectReason
             if (entry.tries >= 5) {
               await idb.removeFromOutbox(entry.id)
+              await idb.addRejectedOp(toRejectedOp(entry, rejectReason))
               failed++
             } else {
               await idb.updateOutboxEntry(entry)
@@ -172,6 +214,7 @@ export function flushOutbox(): Promise<{ done: number; failed: number }> {
           entry.lastError = String(err?.message || err)
           if (entry.tries >= 5) {
             await idb.removeFromOutbox(entry.id)
+            await idb.addRejectedOp(toRejectedOp(entry, entry.lastError))
             failed++
           } else {
             await idb.updateOutboxEntry(entry)

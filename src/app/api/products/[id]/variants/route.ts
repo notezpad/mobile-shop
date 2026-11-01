@@ -6,6 +6,7 @@ import { requireCapability, featureErrorResponse, requireModule, requireModuleWr
 import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
 import { withSql } from '@/lib/sql'
 import { normalizeBarcode } from '@/lib/barcode'
+import { canAccessProductBranch } from '@/lib/branch-scope-db'
 
 export const dynamic = 'force-dynamic'
 
@@ -118,6 +119,12 @@ async function __POST(
   if (isNaN(pid)) return NextResponse.json({ error: 'معرف غير صالح' }, { status: 400 })
   const prod = await loadTenantProduct(session.tenantId, pid)
   if (!prod) return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
+  // 🛡️ مت-7 (2026-11-02): فحص الفرع في الكتابة — القراءة اتصحت (2026-10-31) بس
+  // الكتابة كانت بتتحقق من المحل بس: موظف فرع A كان يقدر يضيف variant لمنتج
+  // فرع B لو عرف الـ id. نفس دالة مسارات القراءة.
+  if (!(await canAccessProductBranch(session.tenantId, prod.branchId, session.branchId))) {
+    return NextResponse.json({ error: 'المنتج غير موجود' }, { status: 404 })
+  }
 
   const body = await req.json().catch(() => null)
   const size = body?.size ? String(body.size).trim() || null : null

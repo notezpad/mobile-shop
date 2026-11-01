@@ -72,7 +72,35 @@ export interface OutboxEntry {
   lastError?: string
   /** 🔁 مفتاح منع التكرار — نفس القيمة اللي اتبعتت في المحاولة الأولى (السيرفر بيتجاهل التكرار) */
   idempotencyKey?: string
+  /**
+   * 🛡️ خ-4 (2026-11-02): tenantId للحساب اللي القيود اتعملت تحت — بيتقيد وقت
+   * الإضافة ويتفحص وقت الـ flush؛ أي قيود لحساب مختلف مابتتبعتش
+   * (بيانات محل ما تتحولش لمحل تاني على نفس الجهاز).
+   */
+  tenantId?: string
 }
+
+/**
+ * 🛡️ مت-17 (2026-11-02): عملية أوفلاين اترفضت نهائيًا (4xx × 5 أو حساب مختلف)
+ * — بتتحفظ في «قائمة العمليات الفاشلة» بدل ما تترمي بصمت، والمستخدم يشوفها
+ * ويعيد إرسالها أو يحذفها (نفس نمط RejectedPunch في كشك الحضور).
+ */
+export interface RejectedOp {
+  id: string
+  url: string
+  method: string
+  label: string
+  /** آخر رسالة خطأ من السيرفر (سبب الرفض) */
+  reason: string
+  createdAt: number
+  rejectedAt: number
+  tries: number
+  body?: any
+  idempotencyKey?: string
+}
+
+const REJECTED_OPS_KEY = 'rejectedOps'
+const REJECTED_OPS_MAX = 50
 
 export const idb = {
   // ── rows store (cached API responses by URL) ──
@@ -376,6 +404,31 @@ export const idb = {
     if (!idbAvailable()) return
     await tx('outbox', 'readwrite', (s) => s.clear() as IDBRequest).catch(() => {})
     notifyOutboxChange()
+  },
+
+  // ── 🛡️ مت-17: مخزن «العمليات الفاشلة» (في meta — من غير تغيير schema الـ IDB) ──
+  async getRejectedOps(): Promise<RejectedOp[]> {
+    const list = await this.getMeta<RejectedOp[]>(REJECTED_OPS_KEY)
+    return Array.isArray(list) ? list : []
+  },
+
+  async addRejectedOp(op: RejectedOp): Promise<void> {
+    const list = await this.getRejectedOps()
+    // الأحدث الأول + سقف 50 عملية عشان التخزين مينفجعش
+    const next = [op, ...list.filter((x) => x.id !== op.id)].slice(0, REJECTED_OPS_MAX)
+    await this.setMeta(REJECTED_OPS_KEY, next)
+    try { window.dispatchEvent(new Event('rejected-ops-changed')) } catch { /* ignore */ }
+  },
+
+  async removeRejectedOp(id: string): Promise<void> {
+    const list = await this.getRejectedOps()
+    await this.setMeta(REJECTED_OPS_KEY, list.filter((x) => x.id !== id))
+    try { window.dispatchEvent(new Event('rejected-ops-changed')) } catch { /* ignore */ }
+  },
+
+  async clearRejectedOps(): Promise<void> {
+    await this.setMeta(REJECTED_OPS_KEY, [])
+    try { window.dispatchEvent(new Event('rejected-ops-changed')) } catch { /* ignore */ }
   },
 
   // ── meta store ──

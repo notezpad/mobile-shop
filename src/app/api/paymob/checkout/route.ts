@@ -69,8 +69,17 @@ async function __POST(req: NextRequest) {
     if (!hasPlan) return NextResponse.json({ error: 'الباقة غير متاحة' }, { status: 404 })
   }
   if (!tenant) return NextResponse.json({ error: 'المحل غير موجود' }, { status: 404 })
+  // 🛡️ خ-10 (2026-11-02): المحل الموقوف إداريًا مابدفعش من قناة الدفع الذاتي —
+  // الإيقاف قرار أدمن ومابيرفعش بالدفع. الاشتراك المنتهي (expired) بيدفع عادي.
+  if (tenant.status === 'suspended' || tenant.status === 'cancelled') {
+    return NextResponse.json(
+      { error: 'هذا المحل موقوف إداريًا — تواصل مع الدعم لتجديد الاشتراك' },
+      { status: 403 }
+    )
+  }
 
-  const amount = period === 'yearly' ? plan.priceYearly : plan.priceMonthly
+  // 🛡️ المرحلة 4: priceYearly/priceMonthly بقوا Decimal — تحويل واحد هنا
+  const amount = Number(period === 'yearly' ? plan.priceYearly : plan.priceMonthly)
   if (amount <= 0) {
     return NextResponse.json(
       { error: 'لا يمكن الدفع لهذه الباقة — السعر صفر' },

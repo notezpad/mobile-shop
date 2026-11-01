@@ -515,6 +515,10 @@ export function DashboardView() {
               <p className="mt-6 flex items-center gap-2 text-sm font-medium text-muted-foreground">
                 <span className="size-2 rounded-full bg-primary" />
                 مبيعات اليوم
+                {/* 🛡️ ج-2: الأرقام صافي بعد المرتجعات — عشان المدير يعرف المعيار */}
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                  صافي بعد المرتجعات
+                </span>
               </p>
               {loadingFirst ? (
                 <Skeleton className="mt-3 h-14 w-56" />
@@ -716,6 +720,7 @@ export function DashboardView() {
             className="border-b lg:border-b-0 lg:border-e"
             label="مبيعات الشهر"
             value={formatCurrency(data?.monthSales ?? 0)}
+            foot="صافي بعد المرتجعات"
             loading={loadingFirst}
             dot="bg-primary"
           />

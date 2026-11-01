@@ -54,31 +54,61 @@ export async function GET() {
     const scope = s.branchId ? branches.filter((b) => b.id === s.branchId) : branches
 
     // 2) Aggregate sales totals per branch (1 query, no rows fetched)
+    //    🛡️ ج-2 (2026-11-02): صافي بعد المرتجعات — الفواتير المرتجعة جزئياً
+    //    بتحسب بقيمتها الفعلية المتبقية (الإجمالي − المرتجع + الاستبدال)،
+    //    والمرتجعة بالكامل مستبعدة من الطرفين (صافيها صفر).
     //    Returns rows: { branchId: number|null, salesCount: bigint, totalSales: number }
     const salesAgg = await db.$queryRaw<
       Array<{ branchId: number | null; salesCount: bigint; totalSales: number }>
     >`
       SELECT
-        "branchId",
-        COUNT(*)::bigint AS "salesCount",
-        COALESCE(SUM(total), 0)::float8 AS "totalSales"
-      FROM "Sale"
-      WHERE "tenantId" = ${s.tenantId} AND status = 'مكتملة'
-      GROUP BY "branchId"
+        agg."branchId",
+        agg."salesCount",
+        (agg."salesTotal" - COALESCE(ret."returnsNet", 0))::float8 AS "totalSales"
+      FROM (
+        SELECT "branchId",
+               COUNT(*)::bigint AS "salesCount",
+               COALESCE(SUM(total), 0)::float8 AS "salesTotal"
+        FROM "Sale"
+        WHERE "tenantId" = ${s.tenantId} AND status IN ('مكتملة', 'مرتجعة جزئياً')
+        GROUP BY "branchId"
+      ) agg
+      LEFT JOIN (
+        SELECT s2."branchId",
+               COALESCE(SUM(r."total" - r."exchangeTotal"), 0)::float8 AS "returnsNet"
+        FROM "SaleReturn" r
+        JOIN "Sale" s2 ON s2."id" = r."saleId"
+        WHERE s2."tenantId" = ${s.tenantId} AND s2.status IN ('مكتملة', 'مرتجعة جزئياً')
+        GROUP BY s2."branchId"
+      ) ret ON ret."branchId" IS NOT DISTINCT FROM agg."branchId"
     `
 
     // 3) Aggregate profit per branch (1 query, JOIN SaleItem → Sale)
+    //    🛡️ ج-2: صافي بعد ربح المرتجعات (من بنود المرتجع بأسعار وقت البيع)
     //    Returns rows: { branchId: number|null, totalProfit: number }
     const profitAgg = await db.$queryRaw<
       Array<{ branchId: number | null; totalProfit: number }>
     >`
       SELECT
-        s."branchId",
-        COALESCE(SUM((si.price - si.cost) * si.quantity), 0)::float8 AS "totalProfit"
-      FROM "SaleItem" si
-      JOIN "Sale" s ON s.id = si."saleId"
-      WHERE s."tenantId" = ${s.tenantId} AND s.status = 'مكتملة'
-      GROUP BY s."branchId"
+        agg."branchId",
+        (agg."soldProfit" - COALESCE(ret."returnsProfit", 0))::float8 AS "totalProfit"
+      FROM (
+        SELECT s."branchId",
+               COALESCE(SUM((si.price - si.cost) * si.quantity), 0)::float8 AS "soldProfit"
+        FROM "SaleItem" si
+        JOIN "Sale" s ON s.id = si."saleId"
+        WHERE s."tenantId" = ${s.tenantId} AND s.status IN ('مكتملة', 'مرتجعة جزئياً')
+        GROUP BY s."branchId"
+      ) agg
+      LEFT JOIN (
+        SELECT s."branchId",
+               COALESCE(SUM((ri."price" - ri."cost") * ri."quantity"), 0)::float8 AS "returnsProfit"
+        FROM "SaleReturnItem" ri
+        JOIN "SaleReturn" r ON r."id" = ri."saleReturnId"
+        JOIN "Sale" s ON s."id" = r."saleId"
+        WHERE s."tenantId" = ${s.tenantId} AND s.status IN ('مكتملة', 'مرتجعة جزئياً')
+        GROUP BY s."branchId"
+      ) ret ON ret."branchId" IS NOT DISTINCT FROM agg."branchId"
     `
 
     // 4) Product count per branch (1 groupBy query)

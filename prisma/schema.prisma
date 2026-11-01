@@ -87,7 +87,7 @@ model Tenant {
   // لكل بائع استثناء بنفس الحقول على User (null = وراثة العام).
   sellerCommissionsEnabled Boolean @default(false)
   sellerCommissionRate     Float?  // % مثل 3 = 3% — مطلوب عند التفعيل
-  sellerCommissionTarget   Float?  // تارجت مبيعات شهري (null = بدون تارجت)
+  sellerCommissionTarget   Decimal? @db.Decimal(12,2)  // تارجت مبيعات شهري (null = بدون تارجت)
   // 🔄 (التحديث الثاني عشر) الجرد الدوري المجدول — جداول «كل سبت: إكسسوارات أعمي»
   cycleCountSchedules CycleCountSchedule[]
   // 💰 (التحديث الثالث عشر) تسويات عمولات البائعين
@@ -101,6 +101,11 @@ model Tenant {
   hrEmployees       Employee[]
   hrSettings        HrSettings?
   payrollRuns       PayrollRun[]
+  // 🛡️ المرحلة 4 (2026-11-02): علاقات ص-13/مت-15 — FK لجداول التفاصيل والحماية
+  saleItems         SaleItem[]
+  balanceEntries    BalanceEntry[]
+  idempotencyKeys   IdempotencyKey[]
+  hrPinAttempts     HrPinAttempt[]
 
   // Notification preferences
   notifyLowStock            Boolean @default(true)
@@ -113,8 +118,8 @@ model Plan {
   code           String   @unique
   name           String
   description    String?
-  priceMonthly   Float    @default(0)
-  priceYearly    Float    @default(0)
+  priceMonthly   Decimal @db.Decimal(12,2)    @default(0)
+  priceYearly    Decimal @db.Decimal(12,2)    @default(0)
   maxUsers       Int      @default(1)
   maxProducts    Int      @default(50)
   maxBranches    Int      @default(1)
@@ -153,7 +158,7 @@ model Subscription {
   startDate     DateTime @default(now())
   endDate       DateTime
   period        String   @default("monthly")
-  amountPaid    Float    @default(0)
+  amountPaid    Decimal @db.Decimal(12,2)    @default(0)
   paymentMethod String?
   paymentNote   String?
   createdAt     DateTime @default(now())
@@ -256,7 +261,7 @@ model User {
   // isSeller + استثناء نسبة/تارجت (null = وراثة إعدادات المحل العامة).
   isSeller               Boolean @default(false)
   sellerCommissionRate   Float?  // % — استثناء عن النسبة العامة
-  sellerCommissionTarget Float?  // استثناء عن التارجت العام
+  sellerCommissionTarget Decimal? @db.Decimal(12,2)  // استثناء عن التارجت العام
   lastLoginAt    DateTime?
   passwordChangedAt DateTime? // يُبطل جلسات SUPER_ADMIN الأقدم منه
   createdAt      DateTime  @default(now())
@@ -278,8 +283,8 @@ model Product {
   // الفريدية بتتفرض بـ partial unique index في migration 20261018_branch_barcodes...
   // (Prisma مابيعبّرش عن expression index، فمفيش @unique هنا)
   barcode     String?
-  price       Float    @default(0)
-  cost        Float    @default(0)
+  price       Decimal @db.Decimal(12,2)    @default(0)
+  cost        Decimal @db.Decimal(12,2)    @default(0)
   // 🥬 2026-10-12 (food vertical): الكمية بقى Float عشان منتجات البيع بالوزن
   // (لحمة/فراخ/بهارات/أجبان...) تتحسب بالكيلو بكسور — 45.5 كيلو مخزون،
   // بيعة 1.65 كيلو. منتجات القطع العادية بتفضل أعداد صحيحة (45.0) فمفيش
@@ -339,7 +344,7 @@ model ProductUnit {
   id        Int    @id @default(autoincrement())
   productId Int
   name      String
-  price     Float?
+  price     Decimal? @db.Decimal(12,2)
   // 🏬 2026-11-03: كان @unique على مستوى النظام كله — دلوقتي فريد جوه (المحل + الفرع) زي باقي الباركودات:
   // index جوه المنتج + trigger جوه نفس الفرع (migration 20261103_scope_unit_barcode)
   barcode   String?
@@ -392,10 +397,10 @@ model Customer {
   tenantId      String
   name          String
   phone         String?
-  balance       Float    @default(0)
+  balance       Decimal @db.Decimal(12,2)    @default(0)
   // 🛡️ 2026-09-30: حد ائتماني اختياري — لو متحدد، بيع آجل يخلي الرصيد يتعداه
   // بيت refused من الـ API (مفيش فرض تلقائي).
-  creditLimit   Float?
+  creditLimit   Decimal? @db.Decimal(12,2)
   createdAt     DateTime @default(now())
 
   tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -412,7 +417,7 @@ model Payment {
   id         Int      @id @default(autoincrement())
   tenantId   String
   customerId Int
-  amount     Float
+  amount     Decimal @db.Decimal(12,2)
   method     String   @default("cash")
   note       String?
   // 🛡️ 2026-09-30: إلغاء ناعم بدل الحذف — نفس موك SupplierPayment:
@@ -440,7 +445,7 @@ model Supplier {
   tenantId  String
   name      String
   phone     String?
-  balance   Float    @default(0) // amount the shop OWES this supplier (credit purchases)
+  balance   Decimal @db.Decimal(12,2)    @default(0) // amount the shop OWES this supplier (credit purchases)
   createdAt DateTime @default(now())
 
   tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -456,7 +461,7 @@ model SupplierPayment {
   id         Int      @id @default(autoincrement())
   tenantId   String
   supplierId Int
-  amount     Float
+  amount     Decimal @db.Decimal(12,2)
   method     String   @default("cash")
   note       String?
   // 🛡️ 2026-09-30: a cancelled payment is no longer deleted — it is marked
@@ -485,14 +490,14 @@ model PurchaseOrder {
   orderNo    String?
   supplierId Int?
   userId     String?
-  total      Float    @default(0)
-  paid       Float    @default(0)
+  total      Decimal @db.Decimal(12,2)    @default(0)
+  paid       Decimal @db.Decimal(12,2)    @default(0)
   // 🛡️ 2026-09-30: how the `paid` amount left the shop (cash | vodafone_cash |
   // instapay | fawry). Used for the till entry and as the default refund method.
   paymentMethod String  @default("cash")
   // 🛡️ 2026-09-29: cash actually received back from the supplier through
   // returns of this order (used to cap the default refund of later returns).
-  refunded   Float    @default(0)
+  refunded   Decimal @db.Decimal(12,2)    @default(0)
   status     String   @default("مكتملة") // مكتملة | مرتجعة جزئياً | مرتجعة
   createdAt  DateTime @default(now())
 
@@ -523,7 +528,7 @@ model PurchaseOrderItem {
   // دخل مخزونه (بدون FK عشان حذف الـ variant ما يمسحش تاريخ الشراء).
   variantId       Int?
   name            String
-  cost            Float
+  cost            Decimal @db.Decimal(12,2)
   // 🥬 2026-10-12: Float — شراء لحمة 45.5 كيلو من المورد
   quantity        Float
   // 🛡️ 2026-09-29: how many pieces of THIS line were already returned to the
@@ -548,8 +553,8 @@ model PurchaseReturn {
   branchId        Int?
   purchaseOrderId Int
   supplierId      Int?
-  total           Float    @default(0)
-  refund          Float    @default(0)
+  total           Decimal @db.Decimal(12,2)    @default(0)
+  refund          Decimal @db.Decimal(12,2)    @default(0)
   refundMethod    String?
   note            String?
   userId          String?
@@ -570,7 +575,7 @@ model PurchaseReturnItem {
   productId           Int?
   variantId           Int?
   name                String
-  cost                Float
+  cost                Decimal @db.Decimal(12,2)
   // 🥬 2026-10-12: Float — مرتجع مورد بالوزن (3.5 كيلو)
   quantity            Float
 
@@ -586,15 +591,15 @@ model Sale {
   invoiceNo  String?
   customerId Int?
   userId     String?
-  total      Float    @default(0)
-  paid       Float    @default(0)
+  total      Decimal @db.Decimal(12,2)    @default(0)
+  paid       Decimal @db.Decimal(12,2)    @default(0)
   // 🛡️ 2026-09-30: طريقة دفع المبلغ المدفوع في البيع (cash | vodafone_cash |
   // instapay | fawry) — نفس عمود PurchaseOrder.paymentMethod، عشان الخزنة
   // تتفصل كاش/محافظ/انستاباي على التدفق الأكبر في النظام.
   paymentMethod String @default("cash")
   // 🛡️ 2026-09-30: الكاش اللي ردّه المحل فعلاً للعميل عبر مرتجعات هذه الفاتورة
   // (بيد Cap للمرتجعات: مفيش رد أكبر من اللي اتدفعت فعلاً).
-  refunded   Float    @default(0)
+  refunded   Decimal @db.Decimal(12,2)    @default(0)
   // 🛡️ 2026-09-30: تاريخ استحقاق الفاتورة الآجلة (اختياري) — للتقادم والتنبيهات.
   dueDate    DateTime?
   // 🛡️ 2026-09-30: معرف رسالة مكرر من الأوفلاين (idempotency key) — retry
@@ -624,6 +629,10 @@ model Sale {
   @@index([branchId])
   // 💰 (التحديث الثالث عشر): تقرير عمولات الشهر بيقري بالبائع + الشهر
   @@index([tenantId, sellerId, createdAt])
+  // ⚡ مت-14 (2026-11-02): فهارس المسارات الساخنة — آجلة الفواتير (tenantId + dueDate)
+  // وتقارير الفرع بفلتر تاريخ (tenantId + branchId + createdAt).
+  @@index([tenantId, dueDate])
+  @@index([tenantId, branchId, createdAt])
   // 🛡️ 2026-09-30: رقم الفاتورة فريد داخل المحل — الضمانة الأخيرة ضد تكرار
   // الأرقام مع فواتير متزامنة (التوليد نفسه جوه الـ tx + retry على P2002).
   // الـ NULLs (فواتير قديمة قبل نظام الأرقام) مسموحة في Postgres.
@@ -642,16 +651,16 @@ model CommissionPayout {
   userId   String
   // الشهر YYYY-MM بتوقيت المحل (Tenant.timezone)
   month    String
-  salesTotal   Float  @default(0) // إجمالي مبيعات الشهر وقت الصرف
-  returnsTotal Float  @default(0) // إجمالي مرتجعات الشهر (بتوقيت المرتجع)
-  netBase      Float  @default(0) // الصافي الخاضع للعمولة
+  salesTotal   Decimal @db.Decimal(12,2)  @default(0) // إجمالي مبيعات الشهر وقت الصرف
+  returnsTotal Decimal @db.Decimal(12,2)  @default(0) // إجمالي مرتجعات الشهر (بتوقيت المرتجع)
+  netBase      Decimal @db.Decimal(12,2)  @default(0) // الصافي الخاضع للعمولة
   rate         Float  @default(0) // النسبة الفعلية المطبقة (%)
-  target       Float?             // التارجت وقت الصرف (null = بدون تارجت)
+  target       Decimal? @db.Decimal(12,2)             // التارجت وقت الصرف (null = بدون تارجت)
   targetMet    Boolean @default(true)
   // إضافات/خصومات يدوية (+/-) يحطها المالك وقت الصرف (سلف على العمولة مثلاً)
-  adjustments  Float  @default(0)
+  adjustments  Decimal @db.Decimal(12,2)  @default(0)
   // العمولة النهائية المصروفة = commission المحسوبة + adjustments (ممكن سالبة)
-  amount       Float  @default(0)
+  amount       Decimal @db.Decimal(12,2)  @default(0)
   // اتصرفت جوه مسير الرواتب (محجوزة في قسيمة الراتب)؟
   viaPayroll   Boolean @default(false)
   method       String?            // كاش / محفظة / انستاباي... (سجل فقط)
@@ -677,14 +686,14 @@ model SaleItem {
   // drawer + accounting stay correct.
   productId Int?
   name      String
-  price     Float
+  price     Decimal @db.Decimal(12,2)
   // 🥬 2026-10-12: Float — منتجات البيع بالوزن بتتباع بكسور (1.65 كيلو)
   // والوحدات بتتبقى أعداد صحيحة برضه متوافقة.
   quantity  Float        // total pieces (kept for legacy reports)
   // 🛡️ 2026-09-30: كام قطعة من هذا السطر رجعت بالفعل عبر مرتجع البيع.
   // Invariant: 0 <= returnedQty <= quantity (مطالبة ذرية في src/lib/sale-return.ts).
   returnedQty Float  @default(0)
-  cost      Float  @default(0)
+  cost      Decimal @db.Decimal(12,2)  @default(0)
 
   // Optional wholesale-unit metadata — for invoice display
   unitId       Int?
@@ -699,21 +708,28 @@ model SaleItem {
   // Optional link to the specific size/color variant sold
   variantId Int?
 
+  // 🛡️ مت-15 (2026-11-02): tenantId مُلَوْحَن (denormalized) في جدول التفاصيل
+  // — عزل حتى لو join اتسرب أو SQL خام جديد اتكتب من غير فلتر.
+  // القيمة بتتظبط دايمًا من السيرفر من sale.tenantId وقت الإنشاء.
+  tenantId String
+
   sale    Sale            @relation(fields: [saleId], references: [id], onDelete: Cascade)
   product Product?        @relation(fields: [productId], references: [id])
   unit    ProductUnit?    @relation(fields: [unitId], references: [id])
   variant ProductVariant? @relation(fields: [variantId], references: [id])
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([saleId])
   @@index([productId])
   @@index([unitId])
   @@index([variantId])
+  @@index([tenantId])
 }
 
 model SalePayment {
   id        Int      @id @default(autoincrement())
   saleId    Int
-  amount    Float
+  amount    Decimal @db.Decimal(12,2)
   note      String?
   // 🛡️ 2026-09-15 (v2): link to the CashEntry created when this payment
   // was recorded. This lets the DELETE sale endpoint reverse each payment's
@@ -740,11 +756,11 @@ model SaleReturn {
   branchId      Int?
   saleId        Int
   customerId    Int?
-  total         Float    @default(0)
-  exchangeTotal Float    @default(0)
-  refund        Float    @default(0)
+  total         Decimal @db.Decimal(12,2)    @default(0)
+  exchangeTotal Decimal @db.Decimal(12,2)    @default(0)
+  refund        Decimal @db.Decimal(12,2)    @default(0)
   refundMethod  String?
-  creditApplied Float    @default(0)
+  creditApplied Decimal @db.Decimal(12,2)    @default(0)
   note          String?
   userId        String?
   createdAt     DateTime @default(now())
@@ -765,8 +781,8 @@ model SaleReturnItem {
   saleItemId   Int?
   productId    Int?
   name         String
-  price        Float
-  cost         Float  @default(0)
+  price        Decimal @db.Decimal(12,2)
+  cost         Decimal @db.Decimal(12,2)  @default(0)
   // 🥬 2026-10-12: Float — مرتجع بيع بالوزن (0.5 كيلو لحمة)
   quantity     Float
 
@@ -782,7 +798,7 @@ model MaintenanceOrder {
   phone        String?
   device       String
   issue        String    @default("")
-  cost         Float     @default(0)
+  cost         Decimal @db.Decimal(12,2)     @default(0)
   status       String    @default("مستلم")
   receivedAt   DateTime  @default(now())
   deliveredAt  DateTime?
@@ -803,8 +819,8 @@ model Transaction {
   tenantId   String
   method     String
   kind       String
-  amount     Float
-  commission Float    @default(0)
+  amount     Decimal @db.Decimal(12,2)
+  commission Decimal @db.Decimal(12,2)    @default(0)
   note       String?
   userId     String?
   // 🛡️ 2026-09-30: إلغاء ناعم لمعاملة المحفظة بدل ما تفضل للأبد — نفس موك الدفعات.
@@ -824,7 +840,7 @@ model CashEntry {
   tenantId  String
   source    String
   refId     Int?
-  amount    Float
+  amount    Decimal @db.Decimal(12,2)
   note      String?
   userId    String?
   // 🛡️ 2026-09-15 (v3): payment method for this cash entry — 'cash' |
@@ -865,11 +881,11 @@ model ShiftClosure {
   // مين قفل الوردية (سجل تدقيق)
   userId    String?
   // اللي الكاشير عدّاه في الدرج
-  counted   Float
+  counted   Decimal @db.Decimal(12,2)
   // المتوقع — snapshot لحظة الإغلاق، للمدير فقط
-  expected  Float
+  expected  Decimal @db.Decimal(12,2)
   // counted − expected (موجب = زيادة، سالب = عجز)
-  variance  Float
+  variance  Decimal @db.Decimal(12,2)
   note      String?
   createdAt DateTime @default(now())
 
@@ -901,7 +917,7 @@ model ShiftSession {
   userName     String?  // لقطة اسم الفاتح للعرض
   // العهدة الافتتاحية — اللي فتح عدّ الدرج وقت الفتح (اختيارية:
   // NULL = السيرفر بيستخدم آخر إغلاق للفرع كأساس)
-  openingFloat Float?
+  openingFloat Decimal? @db.Decimal(12,2)
   note         String?
   createdAt    DateTime @default(now())
   // قفل الجلسة: بيتحطّم لحظة الإغلاق المرتبط (closedAt IS NULL = شغالة)
@@ -923,7 +939,7 @@ model Expense {
   tenantId  String
   branchId  Int?
   category  String
-  amount    Float
+  amount    Decimal @db.Decimal(12,2)
   note      String?
   userId    String?
   // 🛡️ 2026-09-30: مصدر المصروف لو اتولد آلياً ('damage' = خسارة هالك من
@@ -1114,6 +1130,8 @@ model Notification {
   @@index([userId])
   @@index([isRead])
   @@index([createdAt])
+  // ⚡ مت-14: جرس الإشعارات بيقري (tenantId + isRead + createdAt) كل 3 دقائق
+  @@index([tenantId, isRead, createdAt])
 }
 
 // ================= Marketing & Tracking =================
@@ -1290,10 +1308,13 @@ model BalanceEntry {
   tenantId  String
   kind      String   // customer | supplier
   refId     Int      // customerId أو supplierId
-  delta     Float    // موقّع: + = رصيد زاد (دين على العميل / علينا للمورد)، − = رصيد قلل
+  delta     Decimal @db.Decimal(12,2)    // موقّع: + = رصيد زاد (دين على العميل / علينا للمورد)، − = رصيد قلل
   reason    String   // سبب إجباري — مثال: «رصيد افتتاحي — ترحيل من النظام القديم»
   createdBy String?  // اسم من نفذ الحركة
   createdAt DateTime @default(now())
+
+  // 🛡️ ص-13 (2026-11-02): كان بدون FK — قيود الخزنة/الأرصدة بتتبني مع المحل
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, kind, refId])
   @@index([tenantId, createdAt])
@@ -1317,6 +1338,9 @@ model IdempotencyKey {
   contentType String?
   createdAt   DateTime @default(now())
 
+  // 🛡️ ص-13 (2026-11-02): كان بدون FK — مفاتيح الأوفلاين بتتمسح مع المحل
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@unique([tenantId, key], map: "IdempotencyKey_tenant_key_key")
   @@index([createdAt], map: "IdempotencyKey_createdAt_idx")
 }
@@ -1335,7 +1359,7 @@ model Employee {
   name         String
   phone        String?
   jobTitle     String?
-  baseSalary   Float    @default(0)
+  baseSalary   Decimal @db.Decimal(12,2)    @default(0)
   hireDate     DateTime @default(now())
   weeklyOffDay Int      @default(5) // 0=الأحد … 6=السبت (الافتراضي الجمعة)
   // 🕐 (التحديث الحادي والعشرين) وردية الموظف — اسم من ورديات فرعه المعرّفة
@@ -1354,6 +1378,7 @@ model Employee {
   payslips   Payslip[]
   leaves     LeaveRequest[]
   evaluations EmployeeEvaluation[]
+  hrPinAttempts HrPinAttempt[] // 🛡️ ص-13: عدادات PIN بتتمسح مع الموظف
 
   @@index([tenantId])
   @@index([tenantId, active])
@@ -1398,9 +1423,9 @@ model EmployeeAdvance {
   id          Int      @id @default(autoincrement())
   tenantId    String
   employeeId  Int
-  amount      Float
-  installment Float    // القسط الشهري
-  remaining   Float
+  amount      Decimal @db.Decimal(12,2)
+  installment Decimal @db.Decimal(12,2)    // القسط الشهري
+  remaining   Decimal @db.Decimal(12,2)
   status      String   @default("open") // open | settled | cancelled
   method      String   @default("cash")
   note        String?
@@ -1418,7 +1443,7 @@ model PayrollRun {
   tenantId  String
   month     String    // YYYY-MM
   status    String    @default("draft") // draft | paid
-  totalNet  Float     @default(0)
+  totalNet  Decimal @db.Decimal(12,2)     @default(0)
   method    String?
   paidAt    DateTime?
   createdBy String?
@@ -1436,22 +1461,22 @@ model Payslip {
   tenantId         String
   employeeId       Int
   employeeName     String
-  baseSalary       Float
-  payableBase      Float    // الأساسي بعد التناسب (تعيين وسط الشهر)
+  baseSalary       Decimal @db.Decimal(12,2)
+  payableBase      Decimal @db.Decimal(12,2)    // الأساسي بعد التناسب (تعيين وسط الشهر)
   absentDays       Float    @default(0)
-  absenceDeduction Float    @default(0)
+  absenceDeduction Decimal @db.Decimal(12,2)    @default(0)
   lateMinutes      Int      @default(0)
-  lateDeduction    Float    @default(0)
-  bonus            Float    @default(0)
-  penalty          Float    @default(0)
-  advanceDeduction Float    @default(0)
+  lateDeduction    Decimal @db.Decimal(12,2)    @default(0)
+  bonus            Decimal @db.Decimal(12,2)    @default(0)
+  penalty          Decimal @db.Decimal(12,2)    @default(0)
+  advanceDeduction Decimal @db.Decimal(12,2)    @default(0)
   // 🧾 (v26) القسط المستحق الأصلي وقت التوليد — بيتستخدم لما تعدّل المكافأة/الجزاء
   // بعد ما الخصم اتقصّ (عشان الخصم يرجع للمستحق الكامل بدل المقصوص)
-  advanceDue       Float    @default(0)
+  advanceDue       Decimal @db.Decimal(12,2)    @default(0)
   // 💰 (التحديث الثالث عشر) عمولة البائع المرتبط بحساب الموظف (Employee.userId)
   // — بتتعبّى تلقائياً عند توليد مسودة الرواتب، وبتدخل في الصافي
-  commission       Float    @default(0)
-  net              Float    @default(0)
+  commission       Decimal @db.Decimal(12,2)    @default(0)
+  net              Decimal @db.Decimal(12,2)    @default(0)
   note             String?
 
   run      PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
@@ -1494,7 +1519,7 @@ model EmployeeEvaluation {
   customerScore   Int      // 1-5 التعامل مع العملاء
   teamScore       Int      // 1-5 الالتزام والتعاون
   overall         Float    // 0-100 الدرجة النهائية
-  bonus           Float    @default(0) // حافز مقترح من التقييم
+  bonus           Decimal @db.Decimal(12,2)    @default(0) // حافز مقترح من التقييم
   bonusApplied    Boolean  @default(false) // اتحط في مسودة المرتبات؟
   note            String?
   createdBy       String?
@@ -1514,6 +1539,11 @@ model HrPinAttempt {
   employeeId Int
   fails      Int      @default(0)
   firstAt    DateTime @default(now())
+
+  // 🛡️ ص-13 (2026-11-02): عداد PIN بيتنضف مع المحل ومع الموظف (كان بدون FK
+  // — موظف جديد بنفس id كان يرث عداد إغلاق PIN الموظف القديم)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@id([tenantId, employeeId])
 }

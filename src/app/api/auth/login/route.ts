@@ -49,6 +49,24 @@ async function __POST(req: NextRequest) {
         { status: 403 }
       )
     }
+    // 🛡️ ج-1 (2026-11-02): فحص حالة المحل عند الدخول — قبل كده صفحة الدخول
+    // كانت بتفحص user.active بس، فالمستخدم كان يدخل عادي لمحل موقوف إداريًا
+    // وبعدين يلف فحص الاشتراك في باقي المسارات. المحل الموقوف/الملغي ميدخلش أصلاً.
+    // ملاحظة: الاشتراك المنتهي مقصود مش بيتمنع هنا — المستخدم لازم يدخل يشوف
+    // حالته ويجدد (صفحة الاشتراك والإعدادات شغالة حتى مع انتهاء الاشتراك)،
+    // والمسارات التانية بتمنعه عادي بـ 402.
+    if (user.role !== 'SUPER_ADMIN') {
+      const tenant = await db.tenant.findUnique({
+        where: { id: user.tenantId },
+        select: { status: true },
+      })
+      if (tenant && (tenant.status === 'suspended' || tenant.status === 'cancelled')) {
+        return NextResponse.json(
+          { error: 'هذا المحل موقوف — تواصل مع الدعم' },
+          { status: 403 }
+        )
+      }
+    }
     await clearLoginFailures(keys.emailKey)
     if (user.role === 'SUPER_ADMIN') {
       await logAudit({ action: 'auth.admin_login', targetType: 'user', targetId: user.id, actor: { id: user.id, email: user.email } }, req)

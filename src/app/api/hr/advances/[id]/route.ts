@@ -15,7 +15,7 @@ async function __DELETE(req: NextRequest, { params }: { params: Promise<{ id: st
 
   const adv = await db.employeeAdvance.findUnique({ where: { id }, include: { employee: { select: { name: true } } } })
   if (!adv || adv.tenantId !== session.tenantId) return bad('السلفة غير موجودة', 404)
-  if (adv.status !== 'open' || Math.abs(adv.remaining - adv.amount) > 0.005) {
+  if (adv.status !== 'open' || Math.abs(Number(adv.remaining) - Number(adv.amount)) > 0.005) {
     return bad('لا يمكن إلغاء سلفة اتخصم منها بالفعل أو انتهت', 409)
   }
 

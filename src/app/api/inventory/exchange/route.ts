@@ -180,7 +180,7 @@ async function __POST(req: NextRequest) {
   }
 
   // قيم التكلفة الحالية (المتوسط المرجح — من مستوى المنتج)
-  const costOf = (pid: number) => Math.max(0, productMap.get(pid)?.cost ?? 0)
+  const costOf = (pid: number) => Math.max(0, Number(productMap.get(pid)?.cost ?? 0))
   const nameOf = (pid: number) => productMap.get(pid)?.name ?? `#${pid}`
   const valueOut = round2(outLines.reduce((sum, l) => sum + costOf(l.productId) * l.quantity, 0))
   const valueIn = round2(inLines.reduce((sum, l) => sum + costOf(l.productId) * l.quantity, 0))
@@ -276,7 +276,7 @@ async function __POST(req: NextRequest) {
           data: { balance: { increment: diff } },
           select: { balance: true },
         })
-        supplierBalance = sup.balance
+        supplierBalance = Number(sup.balance)
       }
 
       return { valueOut, valueIn, diff, supplierBalance }

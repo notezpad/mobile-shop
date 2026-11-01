@@ -4,6 +4,8 @@ import { requireAuth, authErrorResponse } from '@/lib/auth'
 import type { Session } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { round2, REFUND_METHODS } from '@/lib/purchase-return'
+import { PURCHASE_POLICY } from '@/lib/stock-policy'
+import { logAudit } from '@/lib/audit'
 import { getTenantTimezone, dateStrInTz, localDateStrToUtcBounds } from '@/lib/tenantTime'
 import { withSql, isUniqueViolation } from '@/lib/sql'
 import { branchScopeSql, getMainBranchIdSql } from '@/lib/branch-scope'
@@ -269,6 +271,16 @@ async function __POST(req: NextRequest) {
 
     total = round2(total)
 
+    // 🛡️ خ-11 (2026-11-02): أمر الشراء المدفوع كاش بينشئ قيد خزنة سالب —
+    // نفس سياسة حركات المخزون اليدوية: للموظف سقف قيمة، فوقه العملية للمدير.
+    const isStaff = session.role !== 'ADMIN' && session.role !== 'SUPER_ADMIN'
+    if (isStaff && total > PURCHASE_POLICY.employeeMaxOrderValue) {
+      return NextResponse.json(
+        { error: `أمر الشراء ده بقيمة ${total} جنيه — أكبر من الحد المسموح للموظف (${PURCHASE_POLICY.employeeMaxOrderValue} جنيه). اطلب من المدير تسجيله` },
+        { status: 403 }
+      )
+    }
+
     // 🏬 فرع أمر الشراء: المخزون بيدخل على صف المنتج نفسه، فكل أصناف الأمر لازم تكون
     // تبع فرع واحد. موظف الفرع = فرعه. الأدمن = الفرع اللي اختاره (body.branchId)
     // أو فرع الأصناف لو كلها من فرع واحد. المنتج غير المسند = الفرع الرئيسي.
@@ -378,6 +390,17 @@ async function __POST(req: NextRequest) {
         }
         throw e
       }
+    }
+
+    // 🛡️ خ-11 (2026-11-02): كل أمر شراء فوق العتبة يتسجل في AuditLog بتفاصيله
+    // (قيمة، مدفوع، مورد، عدد الأصناف) — دفتر مراجعة للمدير.
+    if (order?.id && total >= PURCHASE_POLICY.auditLogThreshold) {
+      await logAudit({
+        action: 'purchase.order.create',
+        targetType: 'purchase_order',
+        targetId: Number(order.id),
+        details: { total, paid, supplierId, items: itemsData.length, branchId: poBranchId },
+      }, req)
     }
 
     return NextResponse.json(order, { status: 201 })

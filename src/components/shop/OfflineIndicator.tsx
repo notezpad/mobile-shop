@@ -1,8 +1,18 @@
 'use client'
 
 import * as React from 'react'
-import { WifiOff, RefreshCw, CloudUpload, CheckCircle2, AlertCircle } from 'lucide-react'
-import { useSyncState, usePendingOperations, syncNow, getSyncState } from '@/lib/offline/use-offline'
+import { WifiOff, RefreshCw, CloudUpload, CheckCircle2, AlertCircle, AlertTriangle, RotateCcw, X, ChevronDown } from 'lucide-react'
+import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import {
+  useSyncState,
+  usePendingOperations,
+  useRejectedOperations,
+  retryRejectedOp,
+  discardRejectedOp,
+  syncNow,
+  getSyncState,
+} from '@/lib/offline/use-offline'
 
 /**
  * OfflineIndicator — floating status toasts (bottom-center overlay):
@@ -25,6 +35,8 @@ import { useSyncState, usePendingOperations, syncNow, getSyncState } from '@/lib
 export function OfflineIndicator() {
   const sync = useSyncState()
   const { entries } = usePendingOperations()
+  const rejectedOps = useRejectedOperations()
+  const [rejectedOpen, setRejectedOpen] = React.useState(false)
   const [syncResult, setSyncResult] = React.useState<{ done: number; failed: number; error?: string } | null>(null)
 
   // 🛡️ PWA OFFLINE ROOT FIX (2026-10-07): دفعة فحص تحديث الـ Service Worker.
@@ -136,7 +148,7 @@ export function OfflineIndicator() {
   }, [])
 
   // Don't show anything if everything is fine
-  if (sync.online && !sync.syncing && sync.pending === 0 && !syncResult) {
+  if (sync.online && !sync.syncing && sync.pending === 0 && !syncResult && rejectedOps.length === 0) {
     return null
   }
 
@@ -217,13 +229,16 @@ export function OfflineIndicator() {
   }
 
   // Pending operations + online → light glass card with "Sync now" action
+  // 🛡️ مت-17: الكروت بتتكدّس في fragment — العمليات المعلقة + نتيجة المزامنة
+  // + قائمة العمليات الفاشلة ممكن تظهر مع بعض (الحاوية flex-col gap-2).
+  const cards: React.ReactNode[] = []
   if (sync.pending > 0) {
     const labelPreview =
       entries.length > 0 && entries.length <= 3
         ? entries.map((e) => e.label).join('، ')
         : ''
-    return (
-      <div className="pointer-events-auto flex w-full max-w-[min(92vw,460px)] items-center gap-2.5 rounded-2xl bg-white/95 py-2.5 pe-2.5 ps-3 text-slate-800 shadow-xl shadow-slate-900/10 ring-1 ring-slate-900/10 backdrop-blur-xl animate-in slide-in-from-bottom-4 fade-in duration-300">
+    cards.push(
+      <div key="pending" className="pointer-events-auto flex w-full max-w-[min(92vw,460px)] items-center gap-2.5 rounded-2xl bg-white/95 py-2.5 pe-2.5 ps-3 text-slate-800 shadow-xl shadow-slate-900/10 ring-1 ring-slate-900/10 backdrop-blur-xl animate-in slide-in-from-bottom-4 fade-in duration-300">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
           <CloudUpload className="size-[18px]" />
         </div>
@@ -239,13 +254,13 @@ export function OfflineIndicator() {
           </p>
         </div>
         <button
-          onClick={handleSyncNow}
+          onClick={() => void handleSyncNow()}
           className="flex h-8 shrink-0 items-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-bold text-white shadow-sm shadow-blue-600/30 transition-all hover:bg-blue-700 active:scale-95"
         >
           <RefreshCw className="size-3.5" />
           مزامنة الآن
         </button>
-      </div>
+      </div>,
     )
   }
 
@@ -256,8 +271,9 @@ export function OfflineIndicator() {
     // 🛡️ ROOT FIX («0 عنصر»): لو الضغطة مالقاش حاجة تستنى (المزامنة التلقائية
     // رفعتها قبلها) نطمنّ رسالة صريحة بدل «تمت مزامنة 0 عملية» المحيّرة.
     const nothing = ok && syncResult.done === 0
-    return (
+    cards.push(
       <div
+        key="result"
         role="status"
         className={`pointer-events-auto flex w-full max-w-[min(92vw,460px)] items-center gap-2.5 rounded-2xl py-2.5 pe-3 ps-3 shadow-xl ring-1 backdrop-blur-xl animate-in slide-in-from-bottom-4 fade-in duration-300 ${
           ok
@@ -279,11 +295,101 @@ export function OfflineIndicator() {
               ? 'كل البيانات متزامنة بالفعل — مفيش حاجة في الانتظار'
               : ok
                 ? `تمت مزامنة ${syncResult.done} عملية بنجاح`
-                : `تمت مزامنة ${syncResult.done}، وفشلت ${syncResult.failed} — هتتجرب تاني تلقائياً`}
+                : `تمت مزامنة ${syncResult.done}، وفشلت ${syncResult.failed} — راجع قائمة العمليات الفاشلة تحت`}
         </p>
-      </div>
+      </div>,
     )
   }
 
-  return null
+  // 🛡️ مت-17 (2026-11-02): كارت «عمليات فاشلة» — قيود اترفضت من السيرفر
+  // (4xx × 5 أو حساب مختلف) بتفضل موجودة للمستخدم مع سبب الرفض وزر
+  // إعادة إرسال / حذف — بدل ما كانت تتمسح بصمت والتوست يقول كذب.
+  if (rejectedOps.length > 0) {
+    cards.push(
+      <div
+        key="rejected"
+        role="status"
+        className="pointer-events-auto w-full max-w-[min(92vw,520px)] rounded-2xl bg-rose-50/95 text-rose-900 shadow-xl shadow-rose-900/10 ring-1 ring-rose-600/20 backdrop-blur-xl animate-in slide-in-from-bottom-4 fade-in duration-300"
+      >
+        <div className="flex items-center gap-2.5 py-2.5 pe-2.5 ps-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
+            <AlertTriangle className="size-[18px]" />
+          </div>
+          <button
+            type="button"
+            onClick={() => setRejectedOpen((o) => !o)}
+            className="min-w-0 flex-1 text-start leading-tight"
+          >
+            <p className="truncate text-[13px] font-extrabold">
+              <span className="tabular-nums">{rejectedOps.length}</span>{' '}
+              {rejectedOps.length === 1 ? 'عملية فاشلة' : 'عمليات فاشلة'} لم تُرسل — راجعها
+            </p>
+            <p className="truncate text-[11px] font-medium text-rose-700/80">
+              اترفضت من السيرفر — اعيد إرسالها أو احذفها (دوس للتفاصيل)
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setRejectedOpen((o) => !o)}
+            aria-label={rejectedOpen ? 'إخفاء التفاصيل' : 'عرض التفاصيل'}
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-rose-600 hover:bg-rose-100"
+          >
+            <ChevronDown className={cn('size-4 transition-transform', rejectedOpen && 'rotate-180')} />
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSyncNow()}
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-xl bg-rose-600 px-3 text-xs font-bold text-white shadow-sm shadow-rose-600/30 transition-all hover:bg-rose-700 active:scale-95"
+          >
+            <RefreshCw className="size-3.5" />
+            مزامنة
+          </button>
+        </div>
+        {rejectedOpen && (
+          <ul className="max-h-64 space-y-2 overflow-y-auto border-t border-rose-600/15 p-3">
+            {rejectedOps.map((op) => (
+              <li key={op.id} className="rounded-xl border border-rose-600/20 bg-white/70 p-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-bold">{op.label || op.url}</p>
+                    <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-rose-700/90">
+                      السبب: {op.reason}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-rose-600/70">
+                      {new Date(op.rejectedAt).toLocaleString('ar-EG')}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await retryRejectedOp(op)
+                        toast.success('رجعت العملية لطابور المزامنة')
+                        void handleSyncNow()
+                      }}
+                      className="flex h-7 items-center gap-1 rounded-lg bg-rose-600 px-2 text-[11px] font-bold text-white hover:bg-rose-700"
+                    >
+                      <RotateCcw className="size-3" />
+                      إعادة
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void discardRejectedOp(op.id)}
+                      className="flex size-7 items-center justify-center rounded-lg border border-rose-600/30 text-rose-600 hover:bg-rose-100"
+                      aria-label="حذف العملية"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>,
+    )
+  }
+
+  if (cards.length === 0) return null
+  return <>{cards}</>
 }

@@ -136,21 +136,29 @@ async function __POST(req: NextRequest) {
     shiftName = rawShift
   }
 
-  const emp = await db.employee.create({
-    data: {
-      tenantId: session.tenantId,
-      branchId: branchIdNum,
-      name,
-      phone: b.phone ? String(b.phone).trim() || null : null,
-      jobTitle: b.jobTitle ? String(b.jobTitle).trim() || null : null,
-      baseSalary,
-      weeklyOffDay,
-      hireDate,
-      notes: b.notes ? String(b.notes).trim() || null : null,
-      userId,
-      shiftName,
-    },
-  })
+  let emp
+  try {
+    emp = await db.employee.create({
+      data: {
+        tenantId: session.tenantId,
+        branchId: branchIdNum,
+        name,
+        phone: b.phone ? String(b.phone).trim() || null : null,
+        jobTitle: b.jobTitle ? String(b.jobTitle).trim() || null : null,
+        baseSalary,
+        weeklyOffDay,
+        hireDate,
+        notes: b.notes ? String(b.notes).trim() || null : null,
+        userId,
+        shiftName,
+      },
+    })
+  } catch (e: any) {
+    // 🛡️ مت-11 (2026-11-02): القيد الفريد Employee_userId_key في الداتابيز —
+    // سباق طلبين متوازيين يربطان نفس الحساب بموظفين. نفس رسالة الفحص المسبق.
+    if (e?.code === 'P2002') return bad('الحساب مربوط بموظف تاني — افصله الأول من ملفه')
+    throw e
+  }
   if (b.pin) {
     await db.employee.update({
       where: { id: emp.id },

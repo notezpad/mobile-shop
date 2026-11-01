@@ -10,6 +10,11 @@ import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
  * دي ما بترجعش للمخزن بالغلط. والنتيجة مابتنزلش تحت الصفر.
  *
  * منتج له ألوان/مقاسات: الفرق بيتطبق على الـ variant نفسه وكمية المنتج = مجموعهم.
+ *
+ * 🛡️ ج-4 (2026-11-02): الكتابة بقت **تحديث ذري شرطي** (UPDATE ... SET quantity =
+ * GREATEST(0, quantity + diff)) بدل read-modify-write — النمط الوحيد في النظام
+ * اللي كان بيكتب قيمة مطلقة بعد قراءة، فبيعة تتزامن في نافذة الميلي‌ثانية بينسبها
+ * كانت بترجع بالقيمة القديمة (lost update). الفرق بيتضاف جوه الداتابيز نفسها.
  */
 type Tx = Prisma.TransactionClient
 
@@ -29,21 +34,24 @@ export async function applyStocktakeDiff(
   if (it.diff === 0) return
 
   if (it.variantId != null) {
-    const cur = await tx.productVariant.findFirst({
-      where: { id: it.variantId, productId: it.productId },
-      select: { quantity: true, displayQty: true },
-    })
-    if (!cur) return // اللون/المقاس اتمسح بعد العدّ — مفيش مخزون نعدّله
-    const next = Math.max(0, Math.round(cur.quantity + it.diff))
-    // 👕 المعروض بيفضل زي ما هو (الفارق بيتقيد في المخزن الداخلي/العرض حسب اتجاهه)
-    const nextDisplay = Math.min(cur.displayQty, next)
-    await tx.productVariant.update({ where: { id: it.variantId }, data: { quantity: next, displayQty: nextDisplay } })
+    // 🛡️ ج-4: تحديث ذري شرطي — الإضافة/الخصم بيحصل جوه نفس جملة الـ UPDATE
+    // (وليس قراءة ثم كتابة قيمة مطلقة). LEAST(displayQty, الجديد) بتحافظ على
+    // 0 ≤ displayQty ≤ quantity — كل التعبيرات بتستخدم القيمة القديمة (معايير SQL).
+    // مفيش صف راجع = اللون/المقاس اتمسح بعد العدّ — مفيش مخزون نعدّله.
+    const updated = await tx.$queryRaw<{ quantity: number; displayQty: number }[]>`
+      UPDATE "ProductVariant"
+      SET "quantity" = GREATEST(0, "quantity" + ${it.diff}),
+          "displayQty" = LEAST("displayQty", GREATEST(0, "quantity" + ${it.diff}))
+      WHERE "id" = ${it.variantId} AND "productId" = ${it.productId}
+      RETURNING "quantity", "displayQty"`
+    if (updated.length === 0) return
     await syncProductQuantityFromVariants(tx, it.productId)
   } else {
-    const cur = await tx.product.findUnique({ where: { id: it.productId }, select: { quantity: true, displayQty: true } })
-    const next = Math.max(0, Math.round(((cur?.quantity ?? 0) + it.diff) * 1000) / 1000)
-    const nextDisplay = Math.min(cur?.displayQty ?? 0, next)
-    await tx.product.update({ where: { id: it.productId }, data: { quantity: next, displayQty: nextDisplay } })
+    await tx.$queryRaw`
+      UPDATE "Product"
+      SET "quantity" = GREATEST(0, "quantity" + ${it.diff}),
+          "displayQty" = LEAST("displayQty", GREATEST(0, "quantity" + ${it.diff}))
+      WHERE "id" = ${it.productId}`
   }
 
   await tx.stockMovement.create({
@@ -88,7 +96,8 @@ export async function computeStocktakeShrink(
     where: { id: { in: ids }, tenantId },
     select: { id: true, cost: true },
   })
-  const costOf = new Map(costs.map((c) => [c.id, Math.max(0, c.cost)]))
+  // 🛡️ المرحلة 4: cost بقى Decimal — تحويل قبل الاستخدام
+  const costOf = new Map(costs.map((c) => [c.id, Math.max(0, Number(c.cost))]))
   let qty = 0
   let value = 0
   for (const i of short) {

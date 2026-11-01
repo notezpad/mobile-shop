@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withIdempotency } from '@/lib/idempotency'
 import { db, withDb } from '@/lib/db'
-import { requireAuth, authErrorResponse } from '@/lib/auth'
+import { requireAuth, requireAdmin, authErrorResponse } from '@/lib/auth'
 import { requireModule, featureErrorResponse } from '@/lib/features'
 import { recordCommission, createPrincipalCashEntry } from '@/lib/commission'
 import { getTenantTimezone, localDateStrToUtcBounds } from '@/lib/tenantTime'
@@ -105,7 +105,10 @@ async function __GET(req: NextRequest, sql: Sql) {
 async function __POST(req: NextRequest) {
   let session
   try {
-    session = await requireAuth()
+    // 🛡️ خ-11 (2026-11-02): إيداع/سحب محفظة الوكيل بعمولة وقيد خزنة = «أخطر
+    // شاشة فلوس» — كانت متاحة لأي موظف unrestricted فيما حركة الخزنة اليدوية
+    // admin-فقط! نفس حماية إلغاء المعاملة في finance/[id] (requireAdmin).
+    session = await requireAdmin()
     await requireModule(session, 'finance')
   } catch (e) {
     const fErr = featureErrorResponse(e)
