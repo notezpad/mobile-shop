@@ -62,6 +62,21 @@ export default function LoginPage() {
     };
   }, []);
 
+  // 🏠 صفحة البداية بعد الدخول (2026-11-01):
+  // - صاحب المحل/المدير → لوحة المعلومات زي الأول.
+  // - الموظف (بائع/كاشير) → «ملفي» على طول: بياناته وحضاره وإجازاته وعمولته —
+  //   ده ملفه الشخصي في الموارد البشرية، مش لوحة صاحب المحل.
+  // - موظف مقيّد بصلاحيات من غير 'my_profile' → الداشبورد (نفس شرط ظهور
+  //   مدخل «ملفي» في السايدبار عشان مايجيدرش يدخل على صفحة مرفوضة).
+  const landingFor = (u: { role?: string; permissions?: string[] | null }) => {
+    if (u.role === "SUPER_ADMIN") return "/";
+    if (u.role === "EMPLOYEE") {
+      const p = u.permissions;
+      return !p || p.length === 0 || p.includes("my_profile") ? "/profile" : "/dashboard";
+    }
+    return "/dashboard";
+  };
+
   const enterWithSavedSession = () => {
     if (!savedUser) return;
     setUser(savedUser);
@@ -69,7 +84,7 @@ export default function LoginPage() {
     // أما full load فبيخدمها الـ SW من كاش الصفحات مباشرة. مقصودة — نتخطى
     // تحذير القاعدة هنا عشان router.push هيغير السلوك المجرّب.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.assign("/dashboard");
+    window.location.assign(landingFor(savedUser));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -96,7 +111,7 @@ export default function LoginPage() {
         // لدخول أوفلاين ناجح بعدها في أي وقت.
         void saveAuthSnapshot(data.user as AuthUser);
         toast.success(`أهلاً بك ${data.user.name ?? ""}`);
-        router.push(data.user.role === "SUPER_ADMIN" ? "/" : "/dashboard");
+        router.push(landingFor(data.user));
         router.refresh();
       } else {
         setError({ message: data?.error ?? "فشل تسجيل الدخول" });
