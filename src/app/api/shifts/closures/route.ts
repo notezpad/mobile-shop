@@ -11,10 +11,12 @@ export const dynamic = 'force-dynamic'
  * 🕐 2026-10-31 (التحديث الثامن) — تقرير إغلاقات الورديات (للمدير).
  *
  * بيرجّع آخر إغلاقات الورديات بالجرد الأعمى: اللي الكاشير عدّاه، المتوقع
- * (رصيد الكاش الورقي للفرع لحظة الإغلاق — محسوب في السيرفر)، والفارق.
- * وكل إغلاق معاه «نافذة الوردية»: حركات الكاش بينه وبين الإغلاق اللي قبله
- * لنفس الفرع (داخل/خارج/صافي) — مجرد قراءة من دفتر الخزنة الموجود، من غير
- * أي كتابة جديدة.
+ * (محسوب في السيرفر)، والفارق. وكل إغلاق معاه «نافذة الوردية»: حركات الكاش
+ * بينه وبين الإغلاق اللي قبله لنفس الفرع (داخل/خارج/صافي).
+ *
+ * 🔗 (التحديث السادس عشر): لو الإغلاق مرتبط بجلسة فتح رسمي (ShiftSession)
+ * بيرجّع كمان بيانات الجلسة: مين فتح وإمتى وبالعهدة الافتتاحية — سجل
+ * مسؤولية كامل للدرج لما يكون فيه كذا كاشير على نفس الدرج.
  *
  * الصلاحية: موديول 'cash' (نفس صفحة الخزنة) — ومنscope الفرع: موظف فرع
  * بيشوف إغلاقات فرعه بس، والمدير يقدر يفلتر بـ ?branchId=<id>.
@@ -33,6 +35,10 @@ interface ClosureRow {
   note: string | null
   createdAt: Date
   windowFrom: Date | null
+  // 🔗 (v16) بيانات جلسة الفتح المرتبطة (null = إغلاق من غير فتح رسمي)
+  sessionOpenName: string | null
+  sessionOpenedAt: Date | null
+  sessionOpeningFloat: number | null
 }
 
 export async function GET(req: NextRequest) {
@@ -69,9 +75,13 @@ export async function GET(req: NextRequest) {
       SELECT sc."id", sc."branchId", b."name" AS "branchName", sc."shiftName",
              sc."userId",
              (SELECT u."name" FROM "User" u WHERE u."id" = sc."userId") AS "userName",
-             sc."counted", sc."expected", sc."variance", sc."note", sc."createdAt"
+             sc."counted", sc."expected", sc."variance", sc."note", sc."createdAt",
+             ss."userName" AS "sessionOpenName",
+             ss."createdAt" AS "sessionOpenedAt",
+             ss."openingFloat" AS "sessionOpeningFloat"
       FROM "ShiftClosure" sc
       LEFT JOIN "Branch" b ON b."id" = sc."branchId"
+      LEFT JOIN "ShiftSession" ss ON ss."id" = sc."sessionId"
       WHERE sc."tenantId" = ${tid}
         AND ${branchScopeSql(sql, tid, filterBranch, 'sc."branchId"')}
       ORDER BY sc."id" DESC
@@ -178,6 +188,14 @@ export async function GET(req: NextRequest) {
         note: r.note,
         createdAt: new Date(r.createdAt).toISOString(),
         window: windows[idx],
+        // 🔗 جلسة الفتح (لو الإغلاق مربوط بواحدة) — سجل المسؤولية الكامل
+        session: r.sessionOpenedAt
+          ? {
+              openName: r.sessionOpenName,
+              openedAt: new Date(r.sessionOpenedAt).toISOString(),
+              openingFloat: r.sessionOpeningFloat != null ? round2(r.sessionOpeningFloat) : null,
+            }
+          : null,
       })),
     })
   })

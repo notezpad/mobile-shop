@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
+  DoorOpen,
   CreditCard,
   Loader2,
   Maximize2,
@@ -58,6 +59,7 @@ import { POSVariantPickerDialog } from './POSVariantPickerDialog'
 import { POSReturnLookupDialog } from './POSReturnLookupDialog'
 import { SaleReturnDialog } from './SaleReturnDialog'
 import { ShiftCloseDialog } from './ShiftCloseDialog'
+import { ShiftOpenDialog } from './ShiftOpenDialog'
 import type { SaleLookupSale } from './pos-return-types'
 import { Swatch } from '@/lib/color-swatch'
 
@@ -820,9 +822,20 @@ export function POSView() {
     !user?.permissions ||
     user.permissions.length === 0 ||
     user.permissions.includes('shift_close')
+  // 🔗 (التحديث السادس عشر) فتح الوردية — نفس النمط بالظبط (صلاحية مستقلة
+  // 'shift_open'): بيسجل مين فتح الدرج والعهدة الافتتاحية، عشان الفارق
+  // وقت الإغلاق يتحسب على الوردية نفسها بدل رصيد الدرج الكامل.
+  const canOpenShift =
+    user?.role === 'ADMIN' ||
+    user?.role === 'SUPER_ADMIN' ||
+    !user?.permissions ||
+    user.permissions.length === 0 ||
+    user.permissions.includes('shift_open')
   const [posReturnOpen, setPosReturnOpen] = React.useState(false)
   const [posReturnSale, setPosReturnSale] = React.useState<SaleLookupSale | null>(null)
   const [shiftCloseOpen, setShiftCloseOpen] = React.useState(false)
+  // 🔗 (v16) دايلوج فتح الوردية
+  const [shiftOpenOpen, setShiftOpenOpen] = React.useState(false)
   // 🏬 (التحديث الرابع عشر) «فرع الفاتورة» — اختيار المدير لفرع البيع قبل ما
   // يبدأ. الاختيار بيفضل محفوظ على الجهاز (آخر فرع اتباع فيه) عشان البيع
   // السريع ميعيدش الاختيار كل مرة.
@@ -2087,6 +2100,17 @@ export function POSView() {
           className={cn(dockBtn, 'border-e border-foreground/15 text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300')}
         >
           <RotateCcw className="size-4" />
+        </button>
+      )}
+      {canOpenShift && (
+        <button
+          type="button"
+          onClick={() => setShiftOpenOpen(true)}
+          title="فتح الوردية — سجل مين ماسك الدرج والعهدة الافتتاحية"
+          aria-label="فتح الوردية"
+          className={cn(dockBtn, 'border-e border-foreground/15 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300')}
+        >
+          <DoorOpen className="size-4" />
         </button>
       )}
       {canCloseShift && (
@@ -3570,6 +3594,8 @@ export function POSView() {
       />
       {/* 🕐 إغلاق الوردية بالجرد الأعمى — الكاشير يكتب اللي عدّاه بس */}
       <ShiftCloseDialog open={shiftCloseOpen} onOpenChange={setShiftCloseOpen} />
+      {/* 🔗 فتح الوردية — سجل مين ماسك الدرج والعهدة الافتتاحية */}
+      <ShiftOpenDialog open={shiftOpenOpen} onOpenChange={setShiftOpenOpen} />
       {posReturnSale && (
         <SaleReturnDialog
           open

@@ -18,7 +18,7 @@
  */
 
 import * as React from 'react'
-import { Loader2, LockKeyhole, RotateCcw, Eye } from 'lucide-react'
+import { Loader2, LockKeyhole, RotateCcw, Eye, DoorOpen } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -33,8 +33,18 @@ interface BranchInfo {
   isMain: boolean
   shifts: BranchShift[]
   lastClosure: { shiftName: string | null; userName: string | null; createdAt: string } | null
+  // 🔗 (v16) الوردية المفتوحة على الفرع (لو فيه فتح رسمي) — الإغلاق بيتحسب عليها
+  openSession?: {
+    id: number
+    shiftName: string
+    userName: string | null
+    openingFloat: number | null
+    createdAt: string
+  } | null
   // 🫥 الوضع التقليدي بس (مفتاح الجرد الأعمى متوقّف) — المتوقع في الدرج
   expectedCash?: number
+  // 🔗 الوضع التقليدي + وردية مفتوحة — متوقع الوردية نفسها (عهدة الفتح + حركاتها)
+  sessionExpectedCash?: number
 }
 
 const pillBtn =
@@ -81,9 +91,14 @@ export function ShiftCloseDialog({
         setBranches(bs)
         const first = bs[0] ?? null
         setBranchId(first?.id ?? null)
-        setShiftName(first ? detectShiftName(first.shifts) : null)
-        // 🫥 الوضع التقليدي: الحقل متعبّي بالمترقب من الأول
-        if (!bc && first && typeof first.expectedCash === 'number') setCounted(first.expectedCash)
+        // 🔗 وردية مفتوحة؟ اسمها هو الحاكم (وحدة التدقيق هي الجلسة)
+        setShiftName(first ? (first.openSession?.shiftName ?? detectShiftName(first.shifts)) : null)
+        // 🫥 الوضع التقليدي: الحقل متعبّي بالمترقب من الأول —
+        // 🔗 ولو فيه وردية مفتوحة: بمتوقع الوردية نفسها (مش الدرج كله)
+        if (!bc && first) {
+          const exp = first.openSession ? first.sessionExpectedCash : first.expectedCash
+          if (typeof exp === 'number') setCounted(exp)
+        }
       })
       .catch((e: any) => {
         if (alive) setError(e?.message || 'حصل خطأ — جرّب تاني')
@@ -100,12 +115,17 @@ export function ShiftCloseDialog({
 
   const pickBranch = (id: number) => {
     setBranchId(id)
-    setShiftName(detectShiftName(branches.find((b) => b.id === id)?.shifts ?? []))
+    const b = branches.find((x) => x.id === id)
+    // 🔗 وردية مفتوحة؟ اسمها هو الحاكم
+    setShiftName(b?.openSession?.shiftName ?? detectShiftName(b?.shifts ?? []))
     setZeroArmed(false)
-    // 🫥 الوضع التقليدي: تعبئة الحقل بمتوقع الفرع الجديد
+    // 🫥 الوضع التقليدي: تعبئة الحقل بمتوقع الفرع الجديد —
+    // 🔗 ولو فيه وردية مفتوحة: بمتوقع الوردية نفسها
     if (!blindCash) {
-      const b = branches.find((x) => x.id === id)
-      if (b && typeof b.expectedCash === 'number') setCounted(b.expectedCash)
+      if (b) {
+        const exp = b.openSession ? b.sessionExpectedCash : b.expectedCash
+        if (typeof exp === 'number') setCounted(exp)
+      }
     }
   }
 
@@ -146,6 +166,9 @@ export function ShiftCloseDialog({
       hour: 'numeric',
       minute: '2-digit',
     })
+
+  // 🔗 الوردية المفتوحة للفرع المختار (لو فيه)
+  const openSession = branch?.openSession ?? null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -217,30 +240,53 @@ export function ShiftCloseDialog({
               </div>
             )}
 
-            {/* اختيار الوردية — متحددة تلقائياً من الساعة */}
+            {/* 🔗 الوردية المفتوحة — سجل المسؤولية: الفارق هيتحسب على الوردية دي نفسها */}
+            {openSession && (
+              <div className="rounded-xl border border-sky-500/40 bg-sky-500/10 px-3 py-2.5">
+                <p className="flex items-center gap-2 text-xs font-extrabold text-sky-700 dark:text-sky-300">
+                  <DoorOpen className="size-4" />
+                  الوردية دي مفتوحة رسمياً — الفارق هيتحسب عليها لوحدها
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-sky-700/90 dark:text-sky-200/90">
+                  <b className="font-extrabold">{openSession.shiftName}</b>
+                  {openSession.userName ? ` — فتحها ${openSession.userName}` : ''} · {fmtLast(openSession.createdAt)}
+                  {' '}· مبنية على عهدة افتتاحية{' '}
+                  {openSession.openingFloat != null ? 'مسجّلة' : 'من آخر إغلاق'}.
+                </p>
+              </div>
+            )}
+
+            {/* اختيار الوردية — متحددة تلقائياً من الساعة،
+                🔗 ولو فيه وردية مفتوحة اسمها هو المقفول (وحدة التدقيق) */}
             <div className="space-y-2">
               <p className="text-xs font-bold text-foreground/80">الوردية</p>
               <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="الوردية">
-                {branch.shifts.map((s) => (
-                  <button
-                    key={s.name}
-                    type="button"
-                    role="radio"
-                    aria-checked={shiftName === s.name}
-                    onClick={() => {
-                      setShiftName(s.name)
-                      setZeroArmed(false)
-                    }}
-                    className={cn(
-                      pillBtn,
-                      shiftName === s.name
-                        ? 'border-emerald-500 bg-emerald-400/15 text-foreground'
-                        : 'text-foreground/75'
-                    )}
-                  >
-                    {shiftLabel(s)}
-                  </button>
-                ))}
+                {branch.shifts.map((s) => {
+                  const locked = !!openSession && openSession.shiftName !== s.name
+                  return (
+                    <button
+                      key={s.name}
+                      type="button"
+                      role="radio"
+                      aria-checked={shiftName === s.name}
+                      aria-disabled={locked || undefined}
+                      onClick={() => {
+                        if (locked) return
+                        setShiftName(s.name)
+                        setZeroArmed(false)
+                      }}
+                      className={cn(
+                        pillBtn,
+                        shiftName === s.name
+                          ? 'border-emerald-500 bg-emerald-400/15 text-foreground'
+                          : 'text-foreground/75',
+                        locked && 'cursor-not-allowed opacity-40 hover:bg-transparent'
+                      )}
+                    >
+                      {shiftLabel(s)}
+                    </button>
+                  )
+                })}
               </div>
               {branch.lastClosure && (
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
@@ -254,15 +300,16 @@ export function ShiftCloseDialog({
               )}
             </div>
 
-            {/* 🫥 الوضع التقليدي (مفتاح المالك متوقّف): المتوقع ظاهر في صندوق مستقل */}
-            {!blindCash && branch && typeof branch.expectedCash === 'number' && (
+            {/* 🫥 الوضع التقليدي (مفتاح المالك متوقّف): المتوقع ظاهر في صندوق مستقل —
+                🔗 ولو فيه وردية مفتوحة: بمتوقع الوردية نفسها */}
+            {!blindCash && branch && typeof (openSession ? branch.sessionExpectedCash : branch.expectedCash) === 'number' && (
               <div className="flex items-center justify-between rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2.5">
                 <span className="flex items-center gap-2 text-xs font-bold text-sky-700 dark:text-sky-300">
                   <Eye className="size-4" />
-                  المتوقع في الدرج (حسب النظام)
+                  {openSession ? 'المتوقع للوردية دي (عهدة الفتح + حركاتها)' : 'المتوقع في الدرج (حسب النظام)'}
                 </span>
                 <b dir="ltr" className="font-mono text-lg font-black tabular-nums text-sky-700 dark:text-sky-300">
-                  {branch.expectedCash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {((openSession ? branch.sessionExpectedCash : branch.expectedCash) ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </b>
               </div>
             )}

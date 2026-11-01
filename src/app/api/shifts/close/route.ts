@@ -6,6 +6,7 @@ import { withSql, type Sql } from '@/lib/sql'
 import { branchScopeSql } from '@/lib/branch-scope'
 import { round2 } from '@/lib/purchase-return'
 import { normalizeShifts, type BranchShift } from '@/lib/branch-shifts'
+import { sessionBaseline, sessionExpected } from '@/lib/shift-sessions'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +29,14 @@ export const dynamic = 'force-dynamic'
  *        يشوف المتوقع ويأكد عليه. مفعّل (الافتراضي) = مفيش أي رقم راجع.
  * POST → { branchId?, shiftName, counted, note? } → { ok: true }
  *        الحساب والفارق على السيرفر في الوضعين — المفتاح بيغير العرض بس.
+ *
+ * 🔗 (التحديث السادس عشر): لو الفرع عليه **وردية مفتوحة** (فتح رسمي من
+ *        /api/shifts/open)، المتوقع بيتحسب على **الوردية نفسها**:
+ *        عهدة الفتح (ألا آخر إغلاق للفرع، ألا صفر) + صافي حركات الكاش من
+ *        وقت الفتح — عشان الفارق يرجع لوردية بعينها مش على الدرج الكامل
+ *        (كذا كاشير على نفس الدرج = عجز الوردية اللي فاتت مبيتوّرش على اللي بعدها).
+ *        الإغلاق بيقفل الجلسة ويربط نفسيه فيها (ShiftClosure.sessionId).
+ *        من غير وردية مفتوحة = نفس السلوك القديم بالظبط (رصيد الدرج الكامل).
  *
  * الصلاحية: requireShiftCloseAccess — مدير، أو موظف من غير قيود، أو موظف
  * عنده 'shift_close'. الفرع: موظف الفرع بيقفل درج فرعه بس.
@@ -80,15 +89,17 @@ async function __GET() {
     }
 
     // آخر إغلاق لكل فرع — اسم الوردية والوقت والمستخدم فقط، بدون مبالغ
+    // 🔗 (v16): + counted — عشان الأساس الاحتياطي لمتوقع الوردية المفتوحة
     const lastRows = await sql<{
       branchId: number | null
       shiftName: string | null
       userName: string | null
+      counted: number
       createdAt: Date
     }[]>`
       SELECT sc."branchId", sc."shiftName",
              (SELECT u."name" FROM "User" u WHERE u."id" = sc."userId") AS "userName",
-             sc."createdAt"
+             sc."counted", sc."createdAt"
       FROM "ShiftClosure" sc
       WHERE sc."tenantId" = ${tid}
       ORDER BY sc."id" DESC
@@ -106,6 +117,26 @@ async function __GET() {
     // الوضع التقليدي (المفتاح متوقّف): الكاشير بيشوف المتوقع ويأكد —
     // بنجيب رصيد الكاش الورقي لكل فرع ظاهر (نفس حساب الـ POST بالظبط)
     const expectedByBranch = new Map<number, number>()
+    // 🔗 (v16) متوقع الوردية المفتوحة — بس للفروع عليها جلسة فتح رسمي
+    const sessionExpectedByBranch = new Map<number, number>()
+    // الورديات المفتوحة حالياً (واحدة لكل فرع بالتصميم)
+    const openRows = await sql<{
+      id: number
+      branchId: number | null
+      shiftName: string
+      userName: string | null
+      openingFloat: number | null
+      createdAt: Date
+    }[]>`
+      SELECT "id", "branchId", "shiftName", "userName", "openingFloat", "createdAt"
+      FROM "ShiftSession"
+      WHERE "tenantId" = ${tid} AND "closedAt" IS NULL
+      ORDER BY "id" DESC
+      LIMIT 40`
+    const openByBranch = new Map<number, (typeof openRows)[number]>()
+    for (const r of openRows) {
+      if (r.branchId != null && !openByBranch.has(r.branchId)) openByBranch.set(r.branchId, r)
+    }
     if (!blindCash) {
       for (const b of visible) {
         const bal = await sql<{ expected: number }[]>`
@@ -115,6 +146,22 @@ async function __GET() {
             AND ("method" = 'cash' OR "method" IS NULL)
             AND ${branchScopeSql(sql, tid, b.id, 'branchId')}`
         expectedByBranch.set(b.id, round2(Number(bal[0]?.expected ?? 0)))
+        // 🔗 الوردية المفتوحة؟ متوقعها = عهدة الفتح/آخر إغلاق + حركات الكاش من وقت الفتح
+        const os = openByBranch.get(b.id)
+        if (os) {
+          const net = await sql<{ net: number }[]>`
+            SELECT COALESCE(SUM("amount"), 0)::float8 AS net
+            FROM "CashEntry"
+            WHERE "tenantId" = ${tid}
+              AND ("method" = 'cash' OR "method" IS NULL)
+              AND "createdAt" >= ${os.createdAt}
+              AND ${branchScopeSql(sql, tid, b.id, 'branchId')}`
+          const baseline = sessionBaseline({
+            openingFloat: os.openingFloat,
+            lastClosureCounted: lastByBranch.get(b.id)?.counted ?? null,
+          })
+          sessionExpectedByBranch.set(b.id, sessionExpected(baseline, Number(net[0]?.net ?? 0)))
+        }
       }
     }
 
@@ -122,6 +169,7 @@ async function __GET() {
       blindCash,
       branches: visible.map((b) => {
         const last = lastByBranch.get(b.id) ?? null
+        const os = openByBranch.get(b.id) ?? null
         return {
           id: b.id,
           name: b.name,
@@ -130,8 +178,24 @@ async function __GET() {
           lastClosure: last
             ? { shiftName: last.shiftName, userName: last.userName, createdAt: last.createdAt }
             : null,
+          // 🔗 الوردية المفتوحة دلوقتي (لو فيه) — الدايلوج بيعرضها ويحذّر
+          openSession: os
+            ? {
+                id: os.id,
+                shiftName: os.shiftName,
+                userName: os.userName,
+                openingFloat: os.openingFloat,
+                createdAt: new Date(os.createdAt).toISOString(),
+              }
+            : null,
           // 🫥 الوضع التقليدي بس — في الوضع الأعمي الحقل ده مش موجود أصلاً
-          ...(blindCash ? {} : { expectedCash: expectedByBranch.get(b.id) ?? 0 }),
+          ...(blindCash
+            ? {}
+            : {
+                expectedCash: expectedByBranch.get(b.id) ?? 0,
+                // 🔗 متوقع الوردية نفسها (لو مفتوحة) — ده اللي الإغلاق هيقيس عليه
+                ...(os ? { sessionExpectedCash: sessionExpectedByBranch.get(b.id) ?? 0 } : {}),
+              }),
         }
       }),
     })
@@ -207,21 +271,85 @@ async function __POST(req: NextRequest) {
 
     const note = body?.note ? String(body.note).trim().slice(0, 200) : null
 
-    // ── المتوقع: رصيد الكاش الورقي للفرع لحظة الإغلاق (method='cash' أو NULL)
-    const balRows = await sql<{ expected: number }[]>`
-      SELECT COALESCE(SUM("amount"), 0)::float8 AS expected
-      FROM "CashEntry"
+    // ── 🔗 (v16) الوردية المفتوحة للفرع (لو فيه)؟ الإغلاق بيتحسب على الوردية
+    //    نفسها: عهدة الفتح (ألا آخر إغلاق قبلها، ألا صفر) + صافي حركات الكاش
+    //    من وقت الفتح. من غير جلسة مفتوحة = نفس السلوك القديم (رصيد الدرج كله).
+    const openSession = await sql<{
+      id: number
+      shiftName: string
+      openingFloat: number | null
+      createdAt: Date
+    }[]>`
+      SELECT "id", "shiftName", "openingFloat", "createdAt"
+      FROM "ShiftSession"
       WHERE "tenantId" = ${tid}
-        AND ("method" = 'cash' OR "method" IS NULL)
-        AND ${branchScopeSql(sql, tid, branchId, 'branchId')}`
-    const expected = round2(Number(balRows[0]?.expected ?? 0))
+        AND "closedAt" IS NULL
+        AND "branchId" IS NOT DISTINCT FROM ${branchId}
+      ORDER BY "id" DESC
+      LIMIT 1`
+
+    let expected: number
+    let sessionId: number | null = null
+    let finalShiftName = shiftName
+    if (openSession.length > 0) {
+      const s = openSession[0]
+      sessionId = s.id
+      // اسم الوردية في الإغلاق = اسم جلسة الفتح (وحدة التدقيق هي الجلسة)
+      finalShiftName = s.shiftName
+      const lastC = await sql<{ counted: number }[]>`
+        SELECT "counted" FROM "ShiftClosure"
+        WHERE "tenantId" = ${tid}
+          AND "branchId" IS NOT DISTINCT FROM ${branchId}
+          AND "createdAt" <= ${s.createdAt}
+        ORDER BY "id" DESC
+        LIMIT 1`
+      const baseline = sessionBaseline({
+        openingFloat: s.openingFloat,
+        lastClosureCounted: lastC[0]?.counted ?? null,
+      })
+      const netRows = await sql<{ net: number }[]>`
+        SELECT COALESCE(SUM("amount"), 0)::float8 AS net
+        FROM "CashEntry"
+        WHERE "tenantId" = ${tid}
+          AND ("method" = 'cash' OR "method" IS NULL)
+          AND "createdAt" >= ${s.createdAt}
+          AND ${branchScopeSql(sql, tid, branchId, 'branchId')}`
+      expected = sessionExpected(baseline, Number(netRows[0]?.net ?? 0))
+    } else {
+      // ── المتوقع (السلوك القديم): رصيد الكاش الورقي للفرع لحظة الإغلاق
+      //    (method='cash' أو NULL)
+      const balRows = await sql<{ expected: number }[]>`
+        SELECT COALESCE(SUM("amount"), 0)::float8 AS expected
+        FROM "CashEntry"
+        WHERE "tenantId" = ${tid}
+          AND ("method" = 'cash' OR "method" IS NULL)
+          AND ${branchScopeSql(sql, tid, branchId, 'branchId')}`
+      expected = round2(Number(balRows[0]?.expected ?? 0))
+    }
     const variance = round2(counted - expected)
 
     await sql`
       INSERT INTO "ShiftClosure"
-        ("tenantId", "branchId", "shiftName", "userId", "counted", "expected", "variance", "note")
+        ("tenantId", "branchId", "sessionId", "shiftName", "userId", "counted", "expected", "variance", "note")
       VALUES
-        (${tid}, ${branchId}, ${shiftName}, ${session.userId}, ${counted}, ${expected}, ${variance}, ${note})`
+        (${tid}, ${branchId}, ${sessionId}, ${finalShiftName}, ${session.userId}, ${counted}, ${expected}, ${variance}, ${note})`
+
+    // 🔗 قفل الجلسة — سجل المسؤولية الكامل: فتح فلان ← غلق فلان + أرقام الوردية
+    if (sessionId != null) {
+      const closer = session.userId
+        ? await sql<{ name: string }[]>`
+            SELECT "name" FROM "User" WHERE "id" = ${session.userId} LIMIT 1`
+        : []
+      await sql`
+        UPDATE "ShiftSession"
+        SET "closedAt" = now(),
+            "closedById" = ${session.userId ?? null},
+            "closedByName" = ${closer[0]?.name ?? null},
+            "counted" = ${counted},
+            "expected" = ${expected},
+            "variance" = ${variance}
+        WHERE "id" = ${sessionId} AND "tenantId" = ${tid}`
+    }
 
     // 🛡️ الرد عمداً من غير أي أرقام — الجرد يفضل أعمى. الفارق يشوفه المدير بس.
     return NextResponse.json({ ok: true })

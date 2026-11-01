@@ -40,6 +40,12 @@ interface Closure {
   note: string | null
   createdAt: string
   window: ClosureWindow | null
+  // 🔗 (v16) جلسة الفتح المرتبطة — سجل المسؤولية الكامل للدرج
+  session: {
+    openName: string | null
+    openedAt: string
+    openingFloat: number | null
+  } | null
 }
 
 const fmtWhen = (iso: string) =>
@@ -191,6 +197,27 @@ export function ShiftClosuresCard({ branchFilter }: { branchFilter: string }) {
                     ) : (
                       <p className="text-[11px] text-muted-foreground">
                         نافذة الوردية غير متاحة — مفيش إغلاق سابق مسجّل للفرع ده
+                      </p>
+                    )}
+                    {/* 🔗 جلسة الفتح — مين ماسك الدرج من الأول (سجل المسؤولية) */}
+                    {c.session ? (
+                      <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2.5">
+                        <p className="text-[11px] font-bold text-sky-700 dark:text-sky-300">
+                          🔗 وردية مفتوحة رسمياً — سجل المسؤولية الكامل
+                        </p>
+                        <p className="mt-1 text-[11px] leading-relaxed text-foreground/75 tabular-nums">
+                          فتحها <b className="font-extrabold text-foreground">{c.session.openName ?? '—'}</b> ·{' '}
+                          {fmtWhen(c.session.openedAt)}
+                          {c.session.openingFloat != null && (
+                            <> · العهدة الافتتاحية <b className="font-extrabold text-foreground">{formatCurrency(c.session.openingFloat)}</b></>
+                          )}
+                          {c.session.openingFloat == null && ' · من غير عهدة (الأساس = آخر إغلاق)'}
+                          {' '}· غلقها <b className="font-extrabold text-foreground">{c.userName ?? '—'}</b>
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">
+                        إغلاق من غير فتح رسمي — المتوقع اتحسب على رصيد الدرج الكامل (السلوك القديم)
                       </p>
                     )}
                   </div>

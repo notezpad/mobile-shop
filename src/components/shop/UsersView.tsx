@@ -957,6 +957,9 @@ const MODULE_LABELS: Record<string, string> = {
   // 🕐 صلاحية مستقلة: إغلاق الوردية بالجرد الأعمى — الكاشير يكتب اللي عدّاه
   // في الدرج من غير ما يشوف المتوقع، والفارق يظهر للمدير بس في الخزنة
   shift_close: 'إغلاق الوردية (جرد الدرج الأعمى)',
+  // 🔗 (التحديث السادس عشر) صلاحية مستقلة: فتح الوردية — بيسجل مين فتح
+  // والعهدة الافتتاحية، عشان الفارق وقت الإغلاق يتحسب على الوردية نفسها
+  shift_open: 'فتح الوردية (سجل بداية شغلك على الدرج)',
   // 🫥 (التحديث الحادي عشر) صلاحية مستقلة: عدّ الجرد الأعمي — الموظف يفتح
   // محطة الجرد بس ويعدّ من غير رؤية أي أرقام، والاعتماد للمدير
   blind_stocktake: 'الجرد الأعمي (عدّ بدون رؤية الأرقام والفروق)',
@@ -968,11 +971,12 @@ const MODULE_LABELS: Record<string, string> = {
 // 🔁 'returns' صلاحية مش موديول — بنحطها جنب نقطة البيع عشان السيناريو
 // الطبيعي: كاشير [نقطة البيع + المرتجعات] من غير سجل المبيعات.
 // 🕐 'shift_close' كمان جنبهم: كاشير [نقطة البيع + المرتجعات + إغلاق الوردية].
+// 🔗 'shift_open' قبله: نفس الكاشير بيفتح وردية باسمه أول اليوم.
 // 🫥 'blind_stocktake' معاهم: عدّاد الجرد الأعمي [نقطة البيع + عدّ من غير أرقام].
 const PERM_MODULES: string[] = (() => {
   const arr: string[] = [...ALL_MODULES.filter((m) => m !== 'guide')]
   const i = arr.indexOf('pos')
-  arr.splice(i >= 0 ? i + 1 : arr.length, 0, 'returns', 'shift_close', 'blind_stocktake', 'commissions')
+  arr.splice(i >= 0 ? i + 1 : arr.length, 0, 'returns', 'shift_open', 'shift_close', 'blind_stocktake', 'commissions')
   arr.push('hr_attendance')
   return arr
 })()

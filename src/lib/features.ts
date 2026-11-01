@@ -293,6 +293,24 @@ export function requireShiftCloseAccess(
 }
 
 /**
+ * 🔗 2026-11-01 (التحديث السادس عشر): صلاحية فتح الوردية — نفس نمط
+ * requireShiftCloseAccess بالظبط: مدير، أو موظف من غير قيود، أو موظف
+ * عنده 'shift_open' (صلاحية مستقلة جنب 'shift_close' في شاشة المستخدمين).
+ * الفتح بيسجل جلسة الوردية (مين فتح + العهدة الافتتاحية) عشان الفارق
+ * وقت الإغلاق يتحسب على الوردية نفسها بدل رصيد الدرج الكامل.
+ */
+export function requireShiftOpenAccess(
+  session: { role: string; permissions?: string[] | null },
+) {
+  if (session.role !== 'EMPLOYEE') return
+  const p = session.permissions
+  if (!p || p.length === 0) return
+  if (!p.includes('shift_open')) {
+    throw new FeatureError('ليس لديك صلاحية لهذه العملية', 403)
+  }
+}
+
+/**
  * 🫥 2026-10-31 (التحديث الحادي عشر): صلاحية «إجراء الجرد الأعمي» —
  * نفس النمط بالظبط: مدير، أو موظف من غير قائمة صلاحيات، أو موظف عنده
  * 'blind_stocktake' (صلاحية مستقلة مش موديول — جنب نقطة البيع في شاشة
