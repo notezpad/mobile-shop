@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { HandCoins, Loader2, Plus, Undo2, Wallet, TrendingDown, Calendar, User, UserRound, CheckCircle2 } from 'lucide-react'
+import { HandCoins, Loader2, Plus, Undo2, Wallet, TrendingDown, Calendar, User, UserRound, CheckCircle2, Minus, Banknote, MessageSquareText } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -291,57 +291,146 @@ function AdvanceDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
     }
   }
 
+  const SEC = 'relative overflow-hidden rounded-2xl border border-slate-100 bg-white p-4 pt-5 shadow-[0_5px_0_rgba(15,23,42,0.06),0_14px_24px_-14px_rgba(0,0,0,0.18)] dark:border-slate-800 dark:bg-slate-900'
+  const FIELD = 'h-11 rounded-xl border-slate-200 bg-slate-50 text-sm font-semibold shadow-inner dark:border-slate-700 dark:bg-slate-800/50'
+  const QUICK_AMOUNTS = [100, 250, 500, 1000, 2000]
+  const MONTH_CHIPS = [1, 2, 3, 6, 12]
+  const chip = (on: boolean) => cn(
+    'h-9 rounded-xl border px-3 text-xs font-extrabold tabular-nums transition-all active:translate-y-[3px] active:shadow-none',
+    on
+      ? 'border-rose-400 bg-gradient-to-b from-rose-50 to-rose-100 text-rose-700 shadow-[0_3px_0_rgb(225,29,72)] dark:from-rose-950/40 dark:to-rose-950/20 dark:text-rose-300'
+      : 'border-slate-200 bg-white text-slate-600 shadow-[0_3px_0_rgb(226,232,240)] hover:bg-rose-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:shadow-[0_3px_0_rgb(15,23,42)]',
+  )
+  const Head = ({ icon: Icon, grad, shadow, title, hint }: { icon: React.ElementType; grad: string; shadow: string; title: React.ReactNode; hint?: string }) => (
+    <div className="mb-3 flex items-center gap-3">
+      <span aria-hidden className={cn('relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br text-white shadow-lg ring-1 ring-inset ring-white/25', grad, shadow)}>
+        <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+        <Icon className="relative size-[18px] drop-shadow-md" strokeWidth={2.3} />
+      </span>
+      <div className="min-w-0">
+        <h3 className="text-[15px] font-black leading-tight">{title}</h3>
+        {hint ? <p className="text-[11px] font-medium text-muted-foreground">{hint}</p> : null}
+      </div>
+    </div>
+  )
+  const setM = (n: number) => setMonths(String(Math.min(60, Math.max(1, n))))
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-md" dir="rtl">
-        <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
-          <DialogTitle className="flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-xl bg-rose-600 text-white shadow-md">
-              <HandCoins className="size-4" />
+      <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden border-0 bg-slate-50 p-0 dark:bg-slate-950 sm:max-w-lg" dir="rtl">
+        {/* ================= الهيدر: نفس هيرو صفحة السلف ================= */}
+        <DialogHeader className="relative shrink-0 gap-0 overflow-hidden bg-gradient-to-br from-rose-600 via-red-600 to-pink-700 px-4 pb-5 pt-7 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3)] sm:px-6 sm:pt-6">
+          <div aria-hidden className="absolute -top-24 -right-24 size-64 rounded-full bg-white/25 blur-[60px]" />
+          <div aria-hidden className="absolute -bottom-24 -left-24 size-56 rounded-full bg-pink-300/30 blur-[60px]" />
+          <div className="relative flex items-center gap-4">
+            <span className="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-[22px] border border-t-white/50 border-l-white/30 border-b-black/20 border-r-black/10 bg-gradient-to-br from-white/35 to-white/10 text-white shadow-[0_14px_28px_rgba(0,0,0,0.3),inset_0_2px_8px_rgba(255,255,255,0.45)] ring-1 ring-white/30 backdrop-blur-md">
+              <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/30 to-transparent" />
+              <HandCoins className="relative size-8 drop-shadow-lg" strokeWidth={2} />
             </span>
-            سلفة جديدة
-          </DialogTitle>
-          <DialogDescription>المبلغ هيخرج من الخزنة فورًا.</DialogDescription>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-[11px] font-bold backdrop-blur-md">
+                <Wallet className="size-3" />
+                العهد والخصومات
+              </div>
+              <DialogTitle className="truncate text-xl font-extrabold leading-tight drop-shadow-md sm:text-2xl">سلفة جديدة</DialogTitle>
+              <DialogDescription className="mt-1 text-sm text-rose-50/90">المبلغ هيخرج من الخزنة فورًا.</DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
-        <DialogBody className="space-y-3.5 py-4">
-          <div className="space-y-1.5">
-            <Label>الموظف</Label>
+
+        <DialogBody className="space-y-4 bg-slate-50 px-4 py-5 dark:bg-slate-950 sm:px-6">
+          {/* الموظف */}
+          <section className={SEC}>
+            <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-emerald-400 to-emerald-600" />
+            <Head icon={User} grad="from-emerald-400 to-emerald-600" shadow="shadow-emerald-500/35" title="الموظف" />
             <Select value={employeeId} onValueChange={setEmployeeId}>
-              <SelectTrigger className="shadow-inner"><SelectValue placeholder="اختر الموظف" /></SelectTrigger>
+              <SelectTrigger className={cn(FIELD, 'w-full')}><SelectValue placeholder="اختر الموظف" /></SelectTrigger>
               <SelectContent>{emps.map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>)}</SelectContent>
             </Select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>المبلغ</Label>
-              <Input type="number" inputMode="decimal" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} dir="ltr" className="shadow-inner font-bold" />
+          </section>
+
+          {/* المبلغ */}
+          <section className={SEC}>
+            <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-rose-400 to-rose-600" />
+            <Head icon={HandCoins} grad="from-rose-400 to-rose-600" shadow="shadow-rose-500/35" title="مبلغ السلفة" hint="اكتب المبلغ أو اختار رقم سريع" />
+            <div className="relative">
+              <Input type="number" inputMode="decimal" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} dir="ltr" placeholder="0" className="h-14 rounded-xl border-slate-200 bg-slate-50 pe-16 text-center text-3xl font-black tabular-nums shadow-inner dark:border-slate-700 dark:bg-slate-800/50 md:text-3xl" />
+              <span className="pointer-events-none absolute inset-y-0 end-4 flex items-center text-sm font-extrabold text-slate-400">ج.م</span>
             </div>
-            <div className="space-y-1.5">
-              <Label>تتخصم على كام شهر</Label>
-              <Input type="number" inputMode="numeric" min={1} max={60} value={months} onChange={(e) => setMonths(e.target.value)} dir="ltr" className="shadow-inner font-bold" />
+            <div className="mt-3 flex flex-wrap gap-2">
+              {QUICK_AMOUNTS.map((v) => (
+                <button key={v} type="button" onClick={() => setAmount(String(v))} className={chip(amt === v)}>{v.toLocaleString('en-US')}</button>
+              ))}
             </div>
-          </div>
-          {installment > 0 && (
-            <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-800 font-bold border border-rose-100">
-              القسط الشهري: <b>{money(installment)}</b>
-            </p>
-          )}
-          <div className="space-y-1.5">
-            <Label>اتصرفت من</Label>
-            <Select value={method} onValueChange={setMethod}>
-              <SelectTrigger className="shadow-inner"><SelectValue /></SelectTrigger>
-              <SelectContent>{PAY_METHODS.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>ملاحظة (اختياري)</Label>
-            <Input value={note} onChange={(e) => setNote(e.target.value)} className="shadow-inner" />
-          </div>
+          </section>
+
+          {/* مدة التقسيط */}
+          <section className={SEC}>
+            <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-violet-400 to-violet-600" />
+            <Head icon={Calendar} grad="from-violet-400 to-violet-600" shadow="shadow-violet-500/35" title="تتخصم على كام شهر" />
+            <div className="flex items-center gap-3" dir="ltr">
+              <button type="button" aria-label="شهر أقل" onClick={() => setM(m - 1)} disabled={m <= 1} className="grid size-11 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-[0_4px_0_rgb(226,232,240)] transition-all hover:bg-rose-50 active:translate-y-[4px] active:shadow-none disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:shadow-[0_4px_0_rgb(15,23,42)]">
+                <Minus className="size-5" />
+              </button>
+              <Input type="number" inputMode="numeric" min={1} max={60} value={months} onChange={(e) => setMonths(e.target.value)} dir="ltr" className="h-11 flex-1 rounded-xl border-slate-200 bg-slate-50 text-center text-xl font-black tabular-nums shadow-inner dark:border-slate-700 dark:bg-slate-800/50" />
+              <button type="button" aria-label="شهر أكتر" onClick={() => setM(m + 1)} disabled={m >= 60} className="grid size-11 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-[0_4px_0_rgb(226,232,240)] transition-all hover:bg-rose-50 active:translate-y-[4px] active:shadow-none disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:shadow-[0_4px_0_rgb(15,23,42)]">
+                <Plus className="size-5" />
+              </button>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {MONTH_CHIPS.map((v) => (
+                <button key={v} type="button" onClick={() => setM(v)} className={chip(m === v)}>{v === 1 ? 'شهر' : `${v} شهور`}</button>
+              ))}
+            </div>
+            {installment > 0 ? (
+              <div className="relative mt-4 flex items-center justify-between gap-3 overflow-hidden rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 px-4 py-3.5 text-white shadow-[0_5px_0_rgba(159,18,57,0.55),inset_0_1px_0_rgba(255,255,255,0.35)]">
+                <div aria-hidden className="absolute -top-12 -right-10 size-32 rounded-full bg-white/25 blur-[40px]" />
+                <span className="relative flex items-center gap-2 text-sm font-bold text-rose-50">
+                  <TrendingDown className="size-5" aria-hidden />
+                  القسط الشهري
+                </span>
+                <span className="relative text-2xl font-black tabular-nums drop-shadow-md">{money(installment)}</span>
+              </div>
+            ) : null}
+          </section>
+
+          {/* طريقة الصرف */}
+          <section className={SEC}>
+            <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-amber-400 to-amber-600" />
+            <Head icon={Banknote} grad="from-amber-400 to-amber-600" shadow="shadow-amber-500/35" title="اتصرفت من" />
+            <div role="radiogroup" aria-label="طريقة الصرف" className="grid grid-cols-2 gap-2.5 min-[420px]:grid-cols-3">
+              {PAY_METHODS.map((p) => (
+                <button
+                  key={p.value} type="button" role="radio" aria-checked={method === p.value}
+                  onClick={() => setMethod(p.value)}
+                  className={cn(
+                    'flex min-h-11 items-center justify-center rounded-xl border px-2 py-2 text-center text-xs font-extrabold leading-tight transition-all active:translate-y-[3px] active:shadow-none',
+                    method === p.value
+                      ? 'border-amber-400 bg-gradient-to-b from-amber-50 to-amber-100 text-amber-800 shadow-[0_3px_0_rgb(217,119,6)] dark:from-amber-950/40 dark:to-amber-950/20 dark:text-amber-300'
+                      : 'border-slate-200 bg-white text-slate-600 shadow-[0_3px_0_rgb(226,232,240)] hover:bg-amber-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:shadow-[0_3px_0_rgb(15,23,42)]',
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* ملاحظة */}
+          <section className={SEC}>
+            <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-sky-400 to-sky-600" />
+            <Head icon={MessageSquareText} grad="from-sky-400 to-sky-600" shadow="shadow-sky-500/35" title={<>ملاحظة <span className="text-[11px] font-medium text-muted-foreground">(اختياري)</span></>} />
+            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="سبب السلفة أو أي تفاصيل..." className={FIELD} />
+          </section>
         </DialogBody>
-        <DialogFooter className="shrink-0 border-t bg-background px-4 py-3 sm:px-6">
-          <Button variant="outline" onClick={onClose}>إلغاء</Button>
-          <Button onClick={save} disabled={saving} className="gap-1.5 bg-rose-600 hover:bg-rose-700 text-white shadow-[0_4px_0_rgb(159,18,57)] hover:shadow-[0_2px_0_rgb(159,18,57)] hover:translate-y-[2px] transition-all">
-            {saving && <Loader2 className="size-4 animate-spin" />}
+
+        <DialogFooter className="shrink-0 flex-row justify-end gap-3 border-t bg-background px-4 py-3.5 sm:px-6">
+          <Button variant="outline" onClick={onClose} className="h-11 rounded-xl px-6 font-bold shadow-[0_4px_0_rgba(15,23,42,0.08)] transition-all hover:translate-y-[2px] hover:shadow-[0_2px_0_rgba(15,23,42,0.08)]">إلغاء</Button>
+          <Button
+            onClick={save} disabled={saving}
+            className="h-11 gap-2 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 px-8 font-extrabold text-white shadow-[0_5px_0_rgb(159,18,57)] transition-all hover:translate-y-[3px] hover:from-rose-500 hover:to-pink-600 hover:shadow-[0_2px_0_rgb(159,18,57)] disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <HandCoins className="size-4" />}
             تسجيل السلفة
           </Button>
         </DialogFooter>

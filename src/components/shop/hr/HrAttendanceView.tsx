@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { CalendarDays, ChevronLeft, ChevronRight, Delete, Loader2, MonitorSmartphone, UserCheck, Users, Clock, CalendarX, Plane, User, UserRound, Briefcase, Plus, Minus } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Delete, Loader2, MonitorSmartphone, UserCheck, Users, Clock, CalendarX, Plane, User, UserRound, Briefcase, Plus, Minus, CheckCircle2, CloudUpload, KeyRound, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -507,28 +507,62 @@ function KioskDialog({ onClose }: { onClose: () => void }) {
 
   const press = (d: string) => setPin((p) => (p.length < 6 ? p + d : p))
 
+  const pickedTheme = picked ? AVATAR_THEMES[picked.id % AVATAR_THEMES.length] : null
+  const KEY_CLS =
+    'relative grid h-14 place-items-center rounded-2xl border border-slate-200 bg-white text-2xl font-black text-slate-800 shadow-[0_5px_0_rgb(203,213,225)] transition-all hover:bg-emerald-50 active:translate-y-[5px] active:shadow-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:shadow-[0_5px_0_rgb(15,23,42)] dark:hover:bg-slate-700 disabled:opacity-50'
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl bg-slate-50">
-        <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5 bg-white">
-          <DialogTitle className="flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-xl bg-emerald-500 text-white shadow-md">
-              <MonitorSmartphone className="size-4" />
+      <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden border-0 bg-slate-50 p-0 dark:bg-slate-950 sm:max-w-2xl" dir="rtl">
+        {/* ================= الهيدر: نفس هيرو صفحة الحضور ================= */}
+        <DialogHeader className="relative shrink-0 gap-0 overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 px-4 pb-5 pt-7 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3)] sm:px-6 sm:pt-6">
+          <div aria-hidden className="absolute -top-24 -right-24 size-64 rounded-full bg-white/20 blur-[60px]" />
+          <div aria-hidden className="absolute -bottom-24 -left-24 size-56 rounded-full bg-emerald-300/30 blur-[60px]" />
+          <div className="relative flex items-center gap-4">
+            <span className="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-[22px] border border-t-white/50 border-l-white/30 border-b-black/20 border-r-black/10 bg-gradient-to-br from-white/35 to-white/10 text-white shadow-[0_14px_28px_rgba(0,0,0,0.3),inset_0_2px_8px_rgba(255,255,255,0.45)] ring-1 ring-white/30 backdrop-blur-md">
+              <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/30 to-transparent" />
+              {picked ? (
+                isFemaleName(picked.name) ? <UserRound className="relative size-8 drop-shadow-lg" strokeWidth={2} /> : <User className="relative size-8 drop-shadow-lg" strokeWidth={2} />
+              ) : (
+                <MonitorSmartphone className="relative size-8 drop-shadow-lg" strokeWidth={2} />
+              )}
             </span>
-            كشك الحضور
-          </DialogTitle>
-          <DialogDescription>اختار اسمك واكتب الـ PIN. أول مرة النهارده = حضور، وبعدها = انصراف.</DialogDescription>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-[11px] font-bold backdrop-blur-md">
+                <Clock className="size-3" />
+                {picked ? 'اكتب الـ PIN' : 'السجل اليومي'}
+              </div>
+              <DialogTitle className="truncate text-xl font-extrabold leading-tight drop-shadow-md sm:text-2xl">
+                {picked ? picked.name : 'كشك الحضور'}
+              </DialogTitle>
+              <DialogDescription className="mt-1 text-sm leading-relaxed text-emerald-50/90">
+                {picked
+                  ? (picked.jobTitle || 'موظف')
+                  : 'اختار اسمك واكتب الـ PIN. أول مرة النهارده = حضور، وبعدها = انصراف.'}
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           {offline && !done && (
-            <p className="mb-3 rounded-xl bg-sky-500/10 px-3 py-2 text-sm font-bold text-sky-700">
+            <p className="mb-3 rounded-2xl border border-sky-500/25 bg-sky-500/10 px-3.5 py-2.5 text-sm font-bold text-sky-700 dark:text-sky-300">
               مفيش اتصال — تقدر تسجّل عادي، والتسجيلات هتتبعت لما النت يرجع.
             </p>
           )}
           {!done && <KioskQueueBanner />}
           {done ? (
-            <div className={cn('rounded-2xl p-10 text-center text-xl font-extrabold shadow-sm', done.tone === 'late' ? 'bg-amber-100 text-amber-700' : done.tone === 'queued' ? 'bg-sky-100 text-sky-700' : 'bg-emerald-100 text-emerald-700')}>
-              {done.text}
+            <div className={cn(
+              'relative overflow-hidden rounded-3xl px-6 py-10 text-center text-white shadow-[0_6px_0_rgba(0,0,0,0.18),0_20px_40px_-15px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.35)]',
+              done.tone === 'late' ? 'bg-gradient-to-br from-amber-400 to-orange-600'
+                : done.tone === 'queued' ? 'bg-gradient-to-br from-sky-400 to-blue-600'
+                : 'bg-gradient-to-br from-emerald-500 to-teal-700',
+            )}>
+              <div aria-hidden className="absolute -top-16 -right-16 size-48 rounded-full bg-white/25 blur-[50px]" />
+              <span className="relative mx-auto mb-4 grid size-20 place-items-center overflow-hidden rounded-3xl border border-white/30 bg-gradient-to-br from-white/35 to-white/10 shadow-[inset_0_2px_8px_rgba(255,255,255,0.4)] backdrop-blur-md">
+                {done.tone === 'late' ? <Clock className="size-10 drop-shadow-md" /> : done.tone === 'queued' ? <CloudUpload className="size-10 drop-shadow-md" /> : <CheckCircle2 className="size-10 drop-shadow-md" />}
+              </span>
+              <p className="relative text-xl font-extrabold leading-relaxed drop-shadow-md sm:text-2xl">{done.text}</p>
             </div>
           ) : !picked ? (
             items === null ? (
@@ -536,40 +570,76 @@ function KioskDialog({ onClose }: { onClose: () => void }) {
             ) : items.length === 0 ? (
               <EmptyState title="مفيش موظفين" />
             ) : (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {items.map((raw) => { const e = effective(raw); return (
-                  <button
-                    key={e.id} type="button" disabled={!e.hasPin}
-                    onClick={() => { setPicked(raw); setPin('') }}
-                    className="rounded-2xl border border-slate-200 bg-white p-4 text-start shadow-sm transition-all hover:border-emerald-500/50 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <div className="truncate font-bold text-lg">{e.name}</div>
-                    <div className="mt-1 text-xs font-semibold text-slate-500">
-                      {!e.hasPin ? 'بدون PIN' : e.checkOut ? 'انصرف' : e.checkIn ? 'حاضر — سجل انصراف' : 'اضغط لتسجيل الحضور'}
-                    </div>
-                  </button>
-                ) })}
+              <div className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 sm:grid-cols-3">
+                {items.map((raw) => {
+                  const e = effective(raw)
+                  const theme = AVATAR_THEMES[e.id % AVATAR_THEMES.length]
+                  const female = isFemaleName(e.name)
+                  const state = !e.hasPin
+                    ? { text: 'بدون PIN', cls: 'bg-slate-100 text-slate-500 dark:bg-slate-800' }
+                    : e.checkOut
+                      ? { text: 'انصرف', cls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' }
+                      : e.checkIn
+                        ? { text: 'حاضر — سجل انصراف', cls: 'bg-amber-500/10 text-amber-700 dark:text-amber-300' }
+                        : { text: 'اضغط لتسجيل الحضور', cls: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' }
+                  return (
+                    <button
+                      key={e.id} type="button" disabled={!e.hasPin}
+                      onClick={() => { setPicked(raw); setPin('') }}
+                      className="group relative flex flex-col items-center gap-3 overflow-hidden rounded-2xl border border-slate-100 bg-white px-3 pb-4 pt-6 text-center shadow-[0_5px_0_rgba(15,23,42,0.08),0_14px_24px_-12px_rgba(0,0,0,0.18)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_5px_0_rgba(16,185,129,0.35),0_18px_28px_-12px_rgba(16,185,129,0.35)] active:translate-y-[3px] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 dark:border-slate-800 dark:bg-slate-900"
+                    >
+                      <span aria-hidden className={cn('absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l', theme.bg)} />
+                      <span className={cn('relative grid size-14 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br text-white shadow-lg ring-1 ring-inset ring-white/25', theme.bg, theme.shadow)}>
+                        <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+                        {female ? <UserRound className="relative size-7 drop-shadow-md" strokeWidth={2.2} /> : <User className="relative size-7 drop-shadow-md" strokeWidth={2.2} />}
+                      </span>
+                      <div className="w-full min-w-0">
+                        <div className="truncate text-lg font-black text-slate-800 dark:text-slate-100">{e.name}</div>
+                        {e.jobTitle ? <div className="truncate text-xs font-medium text-slate-500">{e.jobTitle}</div> : null}
+                      </div>
+                      <span className={cn('rounded-lg px-2.5 py-1 text-[11px] font-bold', state.cls)}>{state.text}</span>
+                    </button>
+                  )
+                })}
               </div>
             )
           ) : (
-            <div className="mx-auto max-w-xs text-center bg-white p-6 rounded-3xl shadow-sm border">
-              <div className="mb-2 text-2xl font-black">{picked.name}</div>
-              <div className="mb-6 flex justify-center gap-2" dir="ltr" aria-label="PIN">
+            <div className="relative mx-auto max-w-xs overflow-hidden rounded-3xl border border-slate-100 bg-white p-5 text-center shadow-[0_6px_0_rgba(15,23,42,0.08),0_20px_40px_-18px_rgba(0,0,0,0.25)] dark:border-slate-800 dark:bg-slate-900">
+              <span aria-hidden className={cn('absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l', pickedTheme?.bg)} />
+              <p className="mb-3 mt-1 flex items-center justify-center gap-1.5 text-xs font-bold text-slate-500">
+                <KeyRound className="size-3.5" />
+                اكتب الـ PIN (4 إلى 6 أرقام)
+              </p>
+              <div className="mb-6 flex justify-center gap-3" dir="ltr" aria-label="PIN">
                 {Array.from({ length: Math.max(4, pin.length) }).map((_, i) => (
-                  <span key={i} className={cn('size-4 rounded-full border-2 transition-colors', i < pin.length ? 'bg-emerald-500 border-emerald-500' : 'bg-slate-100 border-slate-200')} />
+                  <span
+                    key={i}
+                    className={cn(
+                      'size-4 rounded-full border-2 transition-all duration-150',
+                      i < pin.length
+                        ? 'scale-110 border-emerald-500 bg-gradient-to-br from-emerald-400 to-teal-600 shadow-[0_0_0_4px_rgba(16,185,129,0.18)]'
+                        : 'border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800',
+                    )}
+                  />
                 ))}
               </div>
               <div className="grid grid-cols-3 gap-3" dir="ltr">
                 {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
-                  <Button key={d} variant="outline" className="h-14 text-2xl font-bold shadow-[0_4px_0_rgb(226,232,240)] active:translate-y-[4px] active:shadow-none" onClick={() => press(d)}>{d}</Button>
+                  <button key={d} type="button" className={KEY_CLS} onClick={() => press(d)}>{d}</button>
                 ))}
-                <Button variant="ghost" className="h-14 text-sm font-bold" onClick={() => { setPicked(null); setPin('') }}>رجوع</Button>
-                <Button variant="outline" className="h-14 text-2xl font-bold shadow-[0_4px_0_rgb(226,232,240)] active:translate-y-[4px] active:shadow-none" onClick={() => press('0')}>0</Button>
-                <Button variant="ghost" className="h-14" aria-label="مسح" onClick={() => setPin((p) => p.slice(0, -1))}><Delete className="size-6 text-slate-400" /></Button>
+                <button type="button" className="grid h-14 place-items-center rounded-2xl text-sm font-extrabold text-slate-500 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => { setPicked(null); setPin('') }}>رجوع</button>
+                <button type="button" className={KEY_CLS} onClick={() => press('0')}>0</button>
+                <button type="button" aria-label="مسح" className="grid h-14 place-items-center rounded-2xl text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/30" onClick={() => setPin((p) => p.slice(0, -1))}><Delete className="size-6" /></button>
               </div>
-              <Button className="mt-6 h-14 w-full gap-1.5 text-lg font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-[0_6px_0_rgb(4,120,87)] hover:shadow-[0_2px_0_rgb(4,120,87)] hover:translate-y-[4px] transition-all" disabled={pin.length < 4 || busy} onClick={() => submit(pin)}>
-                {busy && <Loader2 className="size-5 animate-spin" />}تأكيد الحضور
-              </Button>
+              <button
+                type="button"
+                disabled={pin.length < 4 || busy}
+                onClick={() => submit(pin)}
+                className="mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-lg font-extrabold text-white shadow-[0_6px_0_rgb(4,120,87)] transition-all hover:translate-y-[3px] hover:shadow-[0_3px_0_rgb(4,120,87)] active:translate-y-[6px] active:shadow-none disabled:translate-y-0 disabled:opacity-50 disabled:shadow-[0_6px_0_rgb(4,120,87)]"
+              >
+                {busy ? <Loader2 className="size-5 animate-spin" /> : <ShieldCheck className="size-5" />}
+                تأكيد الحضور
+              </button>
             </div>
           )}
         </div>

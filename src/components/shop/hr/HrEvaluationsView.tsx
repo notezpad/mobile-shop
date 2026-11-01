@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Award, CalendarRange, Loader2, MessageCircleQuestion, Star, Trophy, Users, Wallet, Sparkles, User, UserRound, Briefcase, TrendingUp, Gift } from 'lucide-react'
+import { Award, CalendarRange, Loader2, MessageCircleQuestion, Star, Trophy, Users, Wallet, Sparkles, User, UserRound, Briefcase, TrendingUp, Gift, MessageSquareText } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -292,6 +292,64 @@ export function HrEvaluationsView() {
   )
 }
 
+/* ───────────── نجوم ذهبية حقيقية (SVG بتدرّج معدني + لمعة + حافة) ───────────── */
+const STAR_PATH = 'M12 2.4l2.95 6.2 6.8.85-5 4.7 1.3 6.75L12 17.5l-6.05 3.4 1.3-6.75-5-4.7 6.8-.85z'
+const STAR_LABELS = ['', 'ضعيف', 'مقبول', 'جيد', 'جيد جدًا', 'ممتاز']
+
+/** تعريفات التدرّجات — بتتحط مرة واحدة جوه الدايلوج */
+function GoldDefs() {
+  return (
+    <svg width="0" height="0" className="absolute" aria-hidden focusable="false">
+      <defs>
+        <linearGradient id="evGold" x1="0.15" y1="0" x2="0.85" y2="1">
+          <stop offset="0" stopColor="#FFF4B8" />
+          <stop offset="0.28" stopColor="#FFD84D" />
+          <stop offset="0.62" stopColor="#F2A900" />
+          <stop offset="1" stopColor="#B96F00" />
+        </linearGradient>
+        <linearGradient id="evGoldShine" x1="0" y1="0" x2="0.9" y2="0.9">
+          <stop offset="0" stopColor="#fff" stopOpacity="0.85" />
+          <stop offset="0.45" stopColor="#fff" stopOpacity="0.12" />
+          <stop offset="0.5" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="evEmpty" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#E2E8F0" />
+          <stop offset="1" stopColor="#CBD5E1" />
+        </linearGradient>
+      </defs>
+    </svg>
+  )
+}
+
+function GoldStar({ on, className }: { on: boolean; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={cn('transition-all duration-200', on ? 'drop-shadow-[0_3px_5px_rgba(217,119,6,0.55)]' : 'drop-shadow-[0_1px_1px_rgba(15,23,42,0.15)]', className)} aria-hidden>
+      <path d={STAR_PATH} fill={on ? 'url(#evGold)' : 'url(#evEmpty)'} stroke={on ? '#B45309' : '#94A3B8'} strokeWidth="0.9" strokeLinejoin="round" />
+      {on ? <path d={STAR_PATH} fill="url(#evGoldShine)" /> : null}
+    </svg>
+  )
+}
+
+/** صف نجوم تفاعلي: hover بيعاين، والضغط بيثبّت — وبيرجّع نفس القيمة 1..5 */
+function StarRating({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) {
+  const [hover, setHover] = React.useState(0)
+  const shown = hover || value
+  return (
+    <div role="radiogroup" aria-label={label} className="flex items-center justify-between gap-1.5" onMouseLeave={() => setHover(0)}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n} type="button" role="radio" aria-checked={value === n} aria-label={`${n} من 5`}
+          onMouseEnter={() => setHover(n)}
+          onClick={() => onChange(n)}
+          className="group grid flex-1 place-items-center rounded-xl py-1 outline-none transition-transform duration-150 hover:-translate-y-0.5 focus-visible:ring-[3px] focus-visible:ring-amber-400/50 active:scale-90"
+        >
+          <GoldStar on={shown >= n} className={cn('size-10 sm:size-11', shown >= n && 'scale-105')} />
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function EvalDialog({ item, month, onClose, onSaved }: { item: Item; month: string; onClose: () => void; onSaved: () => void }) {
   const ev = item.evaluation
   const [scores, setScores] = React.useState<Record<EvalCriterionKey, number>>({
@@ -316,72 +374,141 @@ function EvalDialog({ item, month, onClose, onSaved }: { item: Item; month: stri
     finally { setSaving(false) }
   }
 
+  const avgStars = ready ? (scores.perfScore + scores.customerScore + scores.teamScore) / 3 : 0
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent mobileSheet className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-md" dir="rtl">
-        <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
-          <DialogTitle className="flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-xl bg-slate-900 text-amber-400 shadow-md">
-              <Award className="size-4" />
+      <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden border-0 bg-slate-50 p-0 dark:bg-slate-950 sm:max-w-lg" dir="rtl">
+        <GoldDefs />
+        {/* ================= الهيدر: أسود ملكي + ذهبي (نفس هيرو صفحة التقييمات) ================= */}
+        <DialogHeader className="relative shrink-0 gap-0 overflow-hidden bg-gradient-to-br from-slate-900 via-slate-950 to-black px-4 pb-5 pt-7 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] sm:px-6 sm:pt-6">
+          <div aria-hidden className="absolute -top-24 -right-24 size-64 rounded-full bg-amber-500/25 blur-[70px]" />
+          <div aria-hidden className="absolute -bottom-24 -left-24 size-56 rounded-full bg-yellow-500/15 blur-[60px]" />
+          <div className="relative flex items-center gap-4">
+            <span className="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-[22px] border border-amber-200/40 bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-600 text-amber-950 shadow-[0_14px_28px_rgba(245,158,11,0.35),inset_0_2px_8px_rgba(255,255,255,0.6)] ring-1 ring-amber-200/40">
+              <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/50 to-transparent" />
+              <Award className="relative size-8 drop-shadow" strokeWidth={2} />
             </span>
-            تقييم {item.name}
-          </DialogTitle>
-          <DialogDescription>{monthLabel(month)} — درجة الحضور التلقائية: {item.attendanceScore}%</DialogDescription>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-bold text-amber-200 backdrop-blur-md">
+                <Trophy className="size-3" />
+                تقييم الأداء والتميز
+              </div>
+              <DialogTitle className="truncate text-xl font-extrabold leading-tight drop-shadow-md sm:text-2xl">
+                تقييم <span className="bg-gradient-to-r from-amber-200 to-yellow-500 bg-clip-text text-transparent">{item.name}</span>
+              </DialogTitle>
+              <DialogDescription className="mt-1 text-sm text-slate-300">
+                {monthLabel(month)} — درجة الحضور التلقائية: <b className="text-amber-300">{item.attendanceScore}%</b>
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
-        <DialogBody className="space-y-4 py-4">
+
+        <DialogBody className="space-y-4 bg-slate-50 px-4 py-5 dark:bg-slate-950 sm:px-6">
           {EVAL_CRITERIA.map((c) => (
-            <div key={c.key} className="space-y-1.5">
-              <Label>{c.label}</Label>
-              <div className="flex gap-1.5">
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <button
-                    key={n} type="button" aria-label={`${n} من 5`}
-                    onClick={() => setScores((s) => ({ ...s, [c.key]: n }))}
-                    className={cn(
-                      "flex h-11 flex-1 items-center justify-center gap-1 rounded-xl border text-sm font-bold transition-all duration-200",
-                      scores[c.key] >= n 
-                        ? 'border-amber-400 bg-amber-50 text-amber-600 shadow-[0_4px_0_rgb(251,191,36)] active:translate-y-[4px] active:shadow-none' 
-                        : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 shadow-[0_2px_0_rgb(226,232,240)] active:translate-y-[2px] active:shadow-none'
-                    )}
-                  >
-                    <Star className={cn("size-4", scores[c.key] >= n ? 'fill-amber-500 text-amber-500' : '')} />{n}
-                  </button>
-                ))}
+            <section key={c.key} className="relative overflow-hidden rounded-2xl border border-slate-100 bg-white px-4 pb-3 pt-5 shadow-[0_5px_0_rgba(15,23,42,0.06),0_14px_24px_-14px_rgba(0,0,0,0.18)] dark:border-slate-800 dark:bg-slate-900">
+              <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-amber-300 via-yellow-400 to-amber-600" />
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <h3 className="text-[15px] font-black">{c.label}</h3>
+                <span className={cn(
+                  'rounded-lg px-2.5 py-1 text-[11px] font-extrabold tabular-nums transition-colors',
+                  scores[c.key] > 0 ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-slate-100 text-slate-400 dark:bg-slate-800',
+                )}>
+                  {scores[c.key] > 0 ? `${scores[c.key]}/5 — ${STAR_LABELS[scores[c.key]]}` : 'لسه ماتقيّمش'}
+                </span>
+              </div>
+              <StarRating label={c.label} value={scores[c.key]} onChange={(n) => setScores((s) => ({ ...s, [c.key]: n }))} />
+            </section>
+          ))}
+
+          {grade && overall != null ? (
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-950 to-black px-5 py-4 text-white shadow-[0_6px_0_rgba(0,0,0,0.35),0_20px_40px_-15px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.12)]">
+              <div aria-hidden className="absolute -top-16 -right-10 size-44 rounded-full bg-amber-500/25 blur-[50px]" />
+              <div className="relative flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-300">الدرجة النهائية</p>
+                  <p className="mt-0.5 flex items-baseline gap-1 text-4xl font-black tabular-nums leading-none">
+                    <span className="bg-gradient-to-b from-amber-200 to-yellow-500 bg-clip-text text-transparent">{overall}</span>
+                    <span className="text-xl font-extrabold text-amber-400">%</span>
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-1.5">
+                  <span className={cn(
+                    'rounded-lg px-3 py-1 text-xs font-extrabold',
+                    grade.tone === 'emerald' && 'bg-emerald-500/20 text-emerald-300',
+                    grade.tone === 'sky' && 'bg-sky-500/20 text-sky-300',
+                    grade.tone === 'amber' && 'bg-amber-500/20 text-amber-300',
+                    grade.tone === 'rose' && 'bg-rose-500/20 text-rose-300',
+                  )}>{grade.label}</span>
+                  <div className="flex items-center gap-0.5" aria-label={`متوسط تقييمك ${avgStars.toFixed(1)} من 5`}>
+                    {[1, 2, 3, 4, 5].map((n) => <GoldStar key={n} on={avgStars >= n - 0.25} className="size-5" />)}
+                  </div>
+                </div>
               </div>
             </div>
-          ))}
-          
-          {grade && (
-            <div className="flex items-center justify-between rounded-xl bg-amber-50 px-3 py-2 border border-amber-100">
-              <span className="text-sm font-bold text-amber-900">الدرجة النهائية:</span>
-              <span className="text-lg font-black text-amber-600">{overall}% <span className={cn("ml-2 px-2 py-0.5 rounded text-[10px]", `bg-${grade.tone}-100 text-${grade.tone}-700`)}>{grade.label}</span></span>
-            </div>
-          )}
+          ) : null}
 
-          <div className="space-y-1.5">
-            <Label>حافز مرتبط بالتقييم (اختياري)</Label>
-            <Input type="number" inputMode="decimal" dir="ltr" min={0} disabled={locked} value={bonus} onChange={(e) => setBonus(e.target.value)} className="shadow-inner font-bold" />
+          <section className="relative overflow-hidden rounded-2xl border border-slate-100 bg-white p-4 pt-5 shadow-[0_5px_0_rgba(15,23,42,0.06),0_14px_24px_-14px_rgba(0,0,0,0.18)] dark:border-slate-800 dark:bg-slate-900">
+            <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-emerald-400 to-emerald-600" />
+            <div className="mb-3 flex items-center gap-3">
+              <span aria-hidden className="relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-lg shadow-emerald-500/35 ring-1 ring-inset ring-white/25">
+                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+                <Gift className="relative size-[18px] drop-shadow-md" strokeWidth={2.3} />
+              </span>
+              <div>
+                <h3 className="text-[15px] font-black leading-tight">حافز مرتبط بالتقييم</h3>
+                <p className="text-[11px] font-medium text-muted-foreground">اختياري — بينزل في مسودة الرواتب</p>
+              </div>
+            </div>
+            <div className="relative">
+              <Input type="number" inputMode="decimal" dir="ltr" min={0} disabled={locked} value={bonus} onChange={(e) => setBonus(e.target.value)} placeholder="0" className="h-11 rounded-xl border-slate-200 bg-slate-50 pe-14 text-base font-black tabular-nums shadow-inner dark:border-slate-700 dark:bg-slate-800/50" />
+              <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-xs font-bold text-slate-400">جنيه</span>
+            </div>
             {locked ? (
-              <p className="text-xs text-muted-foreground">الحافز اتضاف للمرتبات بالفعل.</p>
+              <p className="mt-2 text-xs text-muted-foreground">الحافز اتضاف للمرتبات بالفعل.</p>
             ) : (
-              <div className="flex gap-1.5">
-                {[0, 5, 10].map((p) => (
-                  <Button key={p} type="button" size="sm" variant="outline" onClick={() => setBonus(p ? String(Math.round((item.baseSalary * p) / 100)) : '')} className="h-8 text-xs font-bold bg-slate-50 hover:bg-slate-100">
-                    {p ? `${p}% من الراتب` : 'بدون'}
-                  </Button>
-                ))}
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {[0, 5, 10].map((p) => {
+                  const val = p ? String(Math.round((item.baseSalary * p) / 100)) : ''
+                  const active = bonus === val
+                  return (
+                    <button
+                      key={p} type="button" onClick={() => setBonus(val)}
+                      className={cn(
+                        'h-10 rounded-xl border text-xs font-extrabold transition-all active:translate-y-[3px] active:shadow-none',
+                        active
+                          ? 'border-amber-400 bg-gradient-to-b from-amber-100 to-amber-200 text-amber-800 shadow-[0_3px_0_rgb(217,119,6)]'
+                          : 'border-slate-200 bg-white text-slate-600 shadow-[0_3px_0_rgb(226,232,240)] hover:bg-amber-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:shadow-[0_3px_0_rgb(15,23,42)]',
+                      )}
+                    >
+                      {p ? `${p}% من الراتب` : 'بدون'}
+                    </button>
+                  )
+                })}
               </div>
             )}
-          </div>
-          <div className="space-y-1.5">
-            <Label>ملاحظة (اختياري)</Label>
-            <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} className="shadow-inner" />
-          </div>
+          </section>
+
+          <section className="relative overflow-hidden rounded-2xl border border-slate-100 bg-white p-4 pt-5 shadow-[0_5px_0_rgba(15,23,42,0.06),0_14px_24px_-14px_rgba(0,0,0,0.18)] dark:border-slate-800 dark:bg-slate-900">
+            <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-sky-400 to-sky-600" />
+            <div className="mb-3 flex items-center gap-3">
+              <span aria-hidden className="relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-sky-400 to-sky-600 text-white shadow-lg shadow-sky-500/35 ring-1 ring-inset ring-white/25">
+                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+                <MessageSquareText className="relative size-[18px] drop-shadow-md" strokeWidth={2.3} />
+              </span>
+              <h3 className="text-[15px] font-black leading-tight">ملاحظة <span className="text-[11px] font-medium text-muted-foreground">(اختياري)</span></h3>
+            </div>
+            <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="اكتب ملاحظتك على أداء الشهر..." className="h-11 rounded-xl border-slate-200 bg-slate-50 text-sm font-semibold shadow-inner dark:border-slate-700 dark:bg-slate-800/50" />
+          </section>
         </DialogBody>
-        <DialogFooter className="shrink-0 border-t bg-background px-4 py-3 sm:px-6">
-          <Button variant="outline" onClick={onClose}>إلغاء</Button>
-          <Button onClick={save} disabled={saving || !ready} className="gap-1.5 bg-slate-900 hover:bg-slate-800 text-white shadow-[0_4px_0_rgb(15,23,42)] hover:shadow-[0_2px_0_rgb(15,23,42)] hover:translate-y-[2px] transition-all">
-            {saving && <Loader2 className="size-4 animate-spin" />}حفظ التقييم
+
+        <DialogFooter className="shrink-0 flex-row justify-end gap-3 border-t bg-background px-4 py-3.5 sm:px-6">
+          <Button variant="outline" onClick={onClose} className="h-11 rounded-xl px-6 font-bold shadow-[0_4px_0_rgba(15,23,42,0.08)] transition-all hover:translate-y-[2px] hover:shadow-[0_2px_0_rgba(15,23,42,0.08)]">إلغاء</Button>
+          <Button
+            onClick={save} disabled={saving || !ready}
+            className="h-11 gap-2 rounded-xl bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-500 px-8 font-extrabold text-amber-950 shadow-[0_5px_0_rgb(180,83,9)] transition-all hover:translate-y-[3px] hover:from-amber-300 hover:via-yellow-400 hover:to-amber-500 hover:shadow-[0_2px_0_rgb(180,83,9)] disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Award className="size-4" />}حفظ التقييم
           </Button>
         </DialogFooter>
       </DialogContent>

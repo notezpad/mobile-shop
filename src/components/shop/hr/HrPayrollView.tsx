@@ -3,7 +3,7 @@
 import * as React from 'react'
 import {
   CalendarRange, Clock, FileSpreadsheet, Loader2, MessageCircle,
-  RefreshCw, Settings2, Trash2, Wallet, Users, HandCoins, CheckCircle2, FileText, Copy
+  RefreshCw, Settings2, Trash2, Wallet, Users, HandCoins, CheckCircle2, FileText, Copy, Timer, Calculator, Plane, Info, BanknoteX
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -631,68 +631,166 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
       setSaving(false)
     }
   }
+  const SEC = 'relative overflow-hidden rounded-2xl border border-slate-100 bg-white p-4 pt-5 shadow-[0_5px_0_rgba(15,23,42,0.06),0_14px_24px_-14px_rgba(0,0,0,0.18)] dark:border-slate-800 dark:bg-slate-900'
+  const FIELD = 'h-11 rounded-xl border-slate-200 bg-slate-50 text-sm font-bold shadow-inner tabular-nums dark:border-slate-700 dark:bg-slate-800/50'
+  const lbl = 'mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-300'
+  const chip = (on: boolean) => cn(
+    'h-9 rounded-xl border px-3 text-xs font-extrabold tabular-nums transition-all active:translate-y-[3px] active:shadow-none',
+    on
+      ? 'border-blue-400 bg-gradient-to-b from-blue-50 to-blue-100 text-blue-700 shadow-[0_3px_0_rgb(37,99,235)] dark:from-blue-950/40 dark:to-blue-950/20 dark:text-blue-300'
+      : 'border-slate-200 bg-white text-slate-600 shadow-[0_3px_0_rgb(226,232,240)] hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:shadow-[0_3px_0_rgb(15,23,42)]',
+  )
+  const tile = (on: boolean) => cn(
+    'flex flex-col items-center justify-center gap-0.5 rounded-xl border px-2 py-3 text-center transition-all active:translate-y-[3px] active:shadow-none',
+    on
+      ? 'border-blue-400 bg-gradient-to-b from-blue-50 to-blue-100 text-blue-800 shadow-[0_4px_0_rgb(37,99,235)] dark:from-blue-950/40 dark:to-blue-950/20 dark:text-blue-200'
+      : 'border-slate-200 bg-white text-slate-600 shadow-[0_4px_0_rgb(226,232,240)] hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:shadow-[0_4px_0_rgb(15,23,42)]',
+  )
+  const Head = ({ icon: Icon, grad, shadow, title, hint }: { icon: React.ElementType; grad: string; shadow: string; title: string; hint?: string }) => (
+    <div className="mb-3 flex items-center gap-3">
+      <span aria-hidden className={cn('relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br text-white shadow-lg ring-1 ring-inset ring-white/25', grad, shadow)}>
+        <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+        <Icon className="relative size-[18px] drop-shadow-md" strokeWidth={2.3} />
+      </span>
+      <div className="min-w-0">
+        <h3 className="text-[15px] font-black leading-tight">{title}</h3>
+        {hint ? <p className="text-[11px] font-medium text-muted-foreground">{hint}</p> : null}
+      </div>
+    </div>
+  )
+  // وقت نهاية الشغل = البداية + الساعات (للمعاينة بس)
+  const endLabel = (() => {
+    if (!s) return ''
+    const [h, m] = (s.shiftStart || '00:00').split(':').map(Number)
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return ''
+    const total = (h * 60 + m + Math.round((s.shiftHours || 0) * 60)) % 1440
+    const hh = Math.floor(total / 60), mm = total % 60
+    const h12 = hh % 12 === 0 ? 12 : hh % 12
+    return `${h12}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'ص' : 'م'}`
+  })()
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-md" dir="rtl">
-        <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
-          <DialogTitle className="flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-xl bg-blue-600 text-white shadow-md">
-              <Settings2 className="size-4" />
+      <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden border-0 bg-slate-50 p-0 dark:bg-slate-950 sm:max-w-lg" dir="rtl">
+        {/* ================= الهيدر: نفس هيرو صفحة الرواتب ================= */}
+        <DialogHeader className="relative shrink-0 gap-0 overflow-hidden bg-gradient-to-br from-blue-950 via-indigo-950 to-slate-950 px-4 pb-5 pt-7 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] sm:px-6 sm:pt-6">
+          <div aria-hidden className="absolute -top-24 -right-24 size-64 rounded-full bg-blue-500/30 blur-[70px]" />
+          <div aria-hidden className="absolute -bottom-24 -left-24 size-56 rounded-full bg-indigo-400/20 blur-[60px]" />
+          <div className="relative flex items-center gap-4">
+            <span className="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-[22px] border border-t-white/40 border-l-white/25 border-b-black/20 border-r-black/10 bg-gradient-to-br from-blue-400 to-indigo-600 text-white shadow-[0_14px_28px_rgba(37,99,235,0.4),inset_0_2px_8px_rgba(255,255,255,0.45)] ring-1 ring-white/25">
+              <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+              <Settings2 className="relative size-8 drop-shadow-lg" strokeWidth={2} />
             </span>
-            قواعد الحساب
-          </DialogTitle>
-          <DialogDescription>القيم الافتراضية مناسبة لأغلب المحلات. الحساب دايمًا على الأيام الفعلية المسجّلة.</DialogDescription>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-blue-300/25 bg-blue-400/10 px-2.5 py-0.5 text-[11px] font-bold text-blue-100 backdrop-blur-md">
+                <Wallet className="size-3" />
+                الإدارة المالية
+              </div>
+              <DialogTitle className="truncate text-xl font-extrabold leading-tight drop-shadow-md sm:text-2xl">قواعد الحساب</DialogTitle>
+              <DialogDescription className="mt-1 text-sm leading-relaxed text-blue-100/80">
+                القيم الافتراضية مناسبة لأغلب المحلات. الحساب دايمًا على الأيام الفعلية المسجّلة.
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
-        <DialogBody className="space-y-4 py-5">
+
+        <DialogBody className="space-y-4 bg-slate-50 px-4 py-5 dark:bg-slate-950 sm:px-6">
           {!s ? <ListSkeleton rows={3} /> : (
             <>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>بداية الشغل</Label>
-                  <Input type="time" dir="ltr" value={s.shiftStart} onChange={(e) => setS({ ...s, shiftStart: e.target.value })} className="shadow-inner" />
+              {/* مواعيد الشغل */}
+              <section className={SEC}>
+                <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-sky-400 to-sky-600" />
+                <Head icon={Clock} grad="from-sky-400 to-sky-600" shadow="shadow-sky-500/35" title="مواعيد الشغل" hint="بتحدد إمتى التأخير بيبدأ" />
+                <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
+                  <div>
+                    <label className={lbl}>بداية الشغل</label>
+                    <Input type="time" dir="ltr" value={s.shiftStart} onChange={(e) => setS({ ...s, shiftStart: e.target.value })} className={FIELD} />
+                  </div>
+                  <div>
+                    <label className={lbl}>ساعات الشغل في اليوم</label>
+                    <Input type="number" dir="ltr" min={1} max={24} value={s.shiftHours} onChange={(e) => setS({ ...s, shiftHours: Number(e.target.value) })} className={FIELD} />
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>ساعات الشغل في اليوم</Label>
-                  <Input type="number" dir="ltr" min={1} max={24} value={s.shiftHours} onChange={(e) => setS({ ...s, shiftHours: Number(e.target.value) })} className="shadow-inner" />
+                {endLabel ? (
+                  <p className="mt-3 flex items-center gap-2 rounded-xl bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-700 dark:text-sky-300">
+                    <Clock className="size-4 shrink-0" />
+                    الشغل بيخلص الساعة {endLabel}
+                  </p>
+                ) : null}
+              </section>
+
+              {/* فترة السماح */}
+              <section className={SEC}>
+                <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-amber-400 to-amber-600" />
+                <Head icon={Timer} grad="from-amber-400 to-amber-600" shadow="shadow-amber-500/35" title="فترة السماح للتأخير" hint="بالدقيقة" />
+                <Input type="number" dir="ltr" min={0} max={240} value={s.graceMinutes} onChange={(e) => setS({ ...s, graceMinutes: Number(e.target.value) })} className={cn(FIELD, 'h-12 text-center text-xl font-black')} />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {[0, 5, 10, 15, 30].map((v) => (
+                    <button key={v} type="button" onClick={() => setS({ ...s, graceMinutes: v })} className={chip(s.graceMinutes === v)}>{v === 0 ? 'بدون سماح' : `${v} دقيقة`}</button>
+                  ))}
                 </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>فترة السماح للتأخير (دقيقة)</Label>
-                <Input type="number" dir="ltr" min={0} max={240} value={s.graceMinutes} onChange={(e) => setS({ ...s, graceMinutes: Number(e.target.value) })} className="shadow-inner" />
-                <p className="text-xs text-slate-500">لو التأخير أقل من أو يساوي الرقم ده مفيش خصم. لو أكتر بيتخصم كله.</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label>خصم التأخير</Label>
-                <Select value={s.lateMode} onValueChange={(v) => setS({ ...s, lateMode: v as Settings['lateMode'] })}>
-                  <SelectTrigger className="shadow-inner"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="per_minute">بالدقيقة</SelectItem>
-                    <SelectItem value="none">بدون خصم</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>قيمة اليوم = الراتب ÷</Label>
-                <Select value={String(s.dayDivisor)} onValueChange={(v) => setS({ ...s, dayDivisor: Number(v) })}>
-                  <SelectTrigger className="shadow-inner"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="30">30 يوم</SelectItem>
-                    <SelectItem value="26">26 يوم عمل</SelectItem>
-                    <SelectItem value="0">أيام الشهر الفعلية</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>رصيد الإجازة السنوية (يوم)</Label>
-                <Input type="number" dir="ltr" min={0} max={90} value={s.annualLeaveDays} onChange={(e) => setS({ ...s, annualLeaveDays: Number(e.target.value) })} className="shadow-inner" />
-              </div>
+                <p className="mt-3 flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-500 dark:bg-slate-800/50 dark:text-slate-400">
+                  <Info className="mt-0.5 size-3.5 shrink-0 text-slate-400" />
+                  لو التأخير أقل من أو يساوي الرقم ده مفيش خصم. لو أكتر بيتخصم كله.
+                </p>
+              </section>
+
+              {/* خصم التأخير */}
+              <section className={SEC}>
+                <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-rose-400 to-rose-600" />
+                <Head icon={BanknoteX} grad="from-rose-400 to-rose-600" shadow="shadow-rose-500/35" title="خصم التأخير" />
+                <div role="radiogroup" aria-label="خصم التأخير" className="grid grid-cols-2 gap-2.5">
+                  <button type="button" role="radio" aria-checked={s.lateMode === 'per_minute'} onClick={() => setS({ ...s, lateMode: 'per_minute' })} className={tile(s.lateMode === 'per_minute')}>
+                    <span className="text-sm font-extrabold">بالدقيقة</span>
+                    <span className="text-[11px] font-medium opacity-70">يتخصم بقدر التأخير</span>
+                  </button>
+                  <button type="button" role="radio" aria-checked={s.lateMode === 'none'} onClick={() => setS({ ...s, lateMode: 'none' })} className={tile(s.lateMode === 'none')}>
+                    <span className="text-sm font-extrabold">بدون خصم</span>
+                    <span className="text-[11px] font-medium opacity-70">التأخير للمتابعة بس</span>
+                  </button>
+                </div>
+              </section>
+
+              {/* قيمة اليوم */}
+              <section className={SEC}>
+                <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-violet-400 to-violet-600" />
+                <Head icon={Calculator} grad="from-violet-400 to-violet-600" shadow="shadow-violet-500/35" title="قيمة اليوم = الراتب ÷" />
+                <div role="radiogroup" aria-label="قيمة اليوم" className="grid grid-cols-3 gap-2.5">
+                  {[
+                    { v: 30, big: '30', sub: 'يوم' },
+                    { v: 26, big: '26', sub: 'يوم عمل' },
+                    { v: 0, big: 'فعلي', sub: 'أيام الشهر' },
+                  ].map((o) => (
+                    <button key={o.v} type="button" role="radio" aria-checked={s.dayDivisor === o.v} onClick={() => setS({ ...s, dayDivisor: o.v })} className={tile(s.dayDivisor === o.v)}>
+                      <span className="text-xl font-black tabular-nums leading-none">{o.big}</span>
+                      <span className="text-[11px] font-bold opacity-70">{o.sub}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {/* رصيد الإجازة */}
+              <section className={SEC}>
+                <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-emerald-400 to-emerald-600" />
+                <Head icon={Plane} grad="from-emerald-400 to-emerald-600" shadow="shadow-emerald-500/35" title="رصيد الإجازة السنوية" hint="بالأيام لكل موظف" />
+                <Input type="number" dir="ltr" min={0} max={90} value={s.annualLeaveDays} onChange={(e) => setS({ ...s, annualLeaveDays: Number(e.target.value) })} className={cn(FIELD, 'h-12 text-center text-xl font-black')} />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {[15, 21, 30].map((v) => (
+                    <button key={v} type="button" onClick={() => setS({ ...s, annualLeaveDays: v })} className={chip(s.annualLeaveDays === v)}>{v} يوم</button>
+                  ))}
+                </div>
+              </section>
             </>
           )}
         </DialogBody>
-        <DialogFooter className="shrink-0 border-t bg-background px-4 py-3 sm:px-6">
-          <Button variant="outline" onClick={onClose}>إلغاء</Button>
-          <Button onClick={save} disabled={saving || !s} className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shadow-[0_4px_0_rgb(30,58,138)] hover:shadow-[0_2px_0_rgb(30,58,138)] hover:translate-y-[2px] transition-all font-bold">
-            {saving && <Loader2 className="size-4 animate-spin" />}حفظ القواعد
+
+        <DialogFooter className="shrink-0 flex-row justify-end gap-3 border-t bg-background px-4 py-3.5 sm:px-6">
+          <Button variant="outline" onClick={onClose} className="h-11 rounded-xl px-6 font-bold shadow-[0_4px_0_rgba(15,23,42,0.08)] transition-all hover:translate-y-[2px] hover:shadow-[0_2px_0_rgba(15,23,42,0.08)]">إلغاء</Button>
+          <Button
+            onClick={save} disabled={saving || !s}
+            className="h-11 gap-2 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 px-8 font-extrabold text-white shadow-[0_5px_0_rgb(30,58,138)] transition-all hover:translate-y-[3px] hover:from-blue-500 hover:to-indigo-600 hover:shadow-[0_2px_0_rgb(30,58,138)] disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Settings2 className="size-4" />}حفظ القواعد
           </Button>
         </DialogFooter>
       </DialogContent>

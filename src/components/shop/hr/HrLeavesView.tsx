@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { CalendarDays, CalendarPlus, Loader2, Undo2, Users, Plane, Stethoscope, Banknote, Clock, User, UserRound } from 'lucide-react'
+import { CalendarDays, CalendarPlus, Loader2, Undo2, Users, Plane, Stethoscope, Banknote, Clock, User, UserRound, Info, MessageSquareText, CalendarRange } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -277,65 +277,173 @@ function LeaveDialog({ balances, onClose, onSaved }: { balances: Balance[]; onCl
     finally { setSaving(false) }
   }
 
+  const TypeIcon = LEAVE_ICONS[type]
+  const typeTheme = LEAVE_THEMES[type]
+  const isPerm = type === 'permission'
+  // مدة تقريبية بالأيام التقويمية (السيرفر بيتخطى الراحة الأسبوعية وقت الحفظ)
+  const spanDays = !isPerm && start && (end || start) >= start
+    ? Math.round((new Date(`${end || start}T12:00:00Z`).getTime() - new Date(`${start}T12:00:00Z`).getTime()) / 86400000) + 1
+    : 0
+  const SEC = 'relative overflow-hidden rounded-2xl border border-slate-100 bg-white p-4 pt-5 shadow-[0_5px_0_rgba(15,23,42,0.06),0_14px_24px_-14px_rgba(0,0,0,0.18)] dark:border-slate-800 dark:bg-slate-900'
+  const FIELD = 'h-11 rounded-xl border-slate-200 bg-slate-50 text-sm font-semibold shadow-inner dark:border-slate-700 dark:bg-slate-800/50'
+  const lbl = 'mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-300'
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-md" dir="rtl">
-        <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
-          <DialogTitle className="flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-xl bg-cyan-600 text-white shadow-md">
-              <CalendarPlus className="size-4" />
+      <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden border-0 bg-slate-50 p-0 dark:bg-slate-950 sm:max-w-lg" dir="rtl">
+        {/* ================= الهيدر: نفس هيرو صفحة الإجازات ================= */}
+        <DialogHeader className="relative shrink-0 gap-0 overflow-hidden bg-gradient-to-br from-sky-500 via-cyan-600 to-teal-600 px-4 pb-5 pt-7 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3)] sm:px-6 sm:pt-6">
+          <div aria-hidden className="absolute -top-24 -right-24 size-64 rounded-full bg-white/25 blur-[60px]" />
+          <div aria-hidden className="absolute -bottom-24 -left-24 size-56 rounded-full bg-teal-300/30 blur-[60px]" />
+          <div className="relative flex items-center gap-4">
+            <span className="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-[22px] border border-t-white/50 border-l-white/30 border-b-black/20 border-r-black/10 bg-gradient-to-br from-white/35 to-white/10 text-white shadow-[0_14px_28px_rgba(0,0,0,0.3),inset_0_2px_8px_rgba(255,255,255,0.45)] ring-1 ring-white/30 backdrop-blur-md">
+              <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/30 to-transparent" />
+              <CalendarPlus className="relative size-8 drop-shadow-lg" strokeWidth={2} />
             </span>
-            إجازة / إذن جديد
-          </DialogTitle>
-          <DialogDescription>أيام الإجازة الأسبوعية بتتخطى تلقائي.</DialogDescription>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-[11px] font-bold backdrop-blur-md">
+                <CalendarDays className="size-3" />
+                إدارة الوقت
+              </div>
+              <DialogTitle className="truncate text-xl font-extrabold leading-tight drop-shadow-md sm:text-2xl">إجازة / إذن جديد</DialogTitle>
+              <DialogDescription className="mt-1 text-sm text-cyan-50/90">أيام الإجازة الأسبوعية بتتخطى تلقائي.</DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
-        <DialogBody className="space-y-3.5 py-4">
-          <div className="space-y-1.5">
-            <Label>الموظف</Label>
+
+        <DialogBody className="space-y-4 bg-slate-50 px-4 py-5 dark:bg-slate-950 sm:px-6">
+          {/* الموظف */}
+          <section className={SEC}>
+            <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-emerald-400 to-emerald-600" />
+            <div className="mb-3 flex items-center gap-3">
+              <span aria-hidden className="relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-lg shadow-emerald-500/35 ring-1 ring-inset ring-white/25">
+                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+                <User className="relative size-[18px] drop-shadow-md" strokeWidth={2.3} />
+              </span>
+              <h3 className="text-[15px] font-black">الموظف</h3>
+            </div>
             <Select value={employeeId} onValueChange={setEmployeeId}>
-              <SelectTrigger className="shadow-inner"><SelectValue placeholder="اختر الموظف" /></SelectTrigger>
+              <SelectTrigger className={cn(FIELD, 'w-full')}><SelectValue placeholder="اختر الموظف" /></SelectTrigger>
               <SelectContent>{balances.map((b) => <SelectItem key={b.employeeId} value={String(b.employeeId)}>{b.name}</SelectItem>)}</SelectContent>
             </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>النوع</Label>
-            <Select value={type} onValueChange={(v) => setType(v as LeaveType)}>
-              <SelectTrigger className="shadow-inner"><SelectValue /></SelectTrigger>
-              <SelectContent>{LEAVE_TYPES.map((t) => <SelectItem key={t} value={t}>{LEAVE_TYPE_LABEL[t]}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>{type === 'permission' ? 'يوم الإذن' : 'من'}</Label>
-              <Input type="date" dir="ltr" value={start} onChange={(e) => setStart(e.target.value)} className="shadow-inner" />
+            {type === 'annual' && bal ? (() => {
+              const pct = bal.allowance > 0 ? Math.min(100, Math.round((bal.used / bal.allowance) * 100)) : 0
+              const out = bal.remaining <= 0
+              return (
+                <div className={cn('mt-3 rounded-xl border px-3.5 py-3', out ? 'border-rose-500/30 bg-rose-500/10' : 'border-cyan-500/25 bg-cyan-500/10')}>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">رصيده المتبقي</span>
+                    <span className={cn('text-2xl font-black tabular-nums', out ? 'text-rose-600' : 'text-cyan-700 dark:text-cyan-300')}>{bal.remaining} <span className="text-xs font-bold">يوم من {bal.allowance}</span></span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/70 ring-1 ring-inset ring-black/5 dark:bg-slate-800">
+                    <div className={cn('h-full rounded-full bg-gradient-to-l transition-all', out ? 'from-rose-400 to-rose-600' : 'from-cyan-400 to-sky-500')} style={{ width: `${pct}%` }} />
+                  </div>
+                  {out ? <p className="mt-2 text-xs font-bold text-rose-700 dark:text-rose-300">هيتخطى الرصيد السنوي.</p> : null}
+                </div>
+              )
+            })() : null}
+          </section>
+
+          {/* النوع — 4 كروت 3D */}
+          <section className={SEC}>
+            <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-sky-400 to-blue-600" />
+            <div className="mb-3 flex items-center gap-3">
+              <span aria-hidden className={cn('relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br text-white shadow-lg ring-1 ring-inset ring-white/25', typeTheme.bg, typeTheme.shadow)}>
+                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+                <TypeIcon className="relative size-[18px] drop-shadow-md" strokeWidth={2.3} />
+              </span>
+              <h3 className="text-[15px] font-black">النوع</h3>
             </div>
-            {type === 'permission' ? (
-              <div className="space-y-1.5">
-                <Label>عدد الساعات</Label>
-                <Input type="number" inputMode="decimal" dir="ltr" min={0.5} max={12} step={0.5} value={hours} onChange={(e) => setHours(e.target.value)} className="shadow-inner" />
+            <div role="radiogroup" aria-label="نوع الإجازة" className="grid grid-cols-2 gap-2.5">
+              {LEAVE_TYPES.map((t) => {
+                const Ic = LEAVE_ICONS[t]
+                const th = LEAVE_THEMES[t]
+                const on = type === t
+                return (
+                  <button
+                    key={t} type="button" role="radio" aria-checked={on}
+                    onClick={() => setType(t)}
+                    className={cn(
+                      'flex items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-start transition-all active:translate-y-[3px] active:shadow-none',
+                      on
+                        ? 'border-cyan-500 bg-cyan-50 shadow-[0_4px_0_rgb(8,145,178)] dark:bg-cyan-950/30'
+                        : 'border-slate-200 bg-white shadow-[0_4px_0_rgb(226,232,240)] hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:shadow-[0_4px_0_rgb(15,23,42)]',
+                    )}
+                  >
+                    <span className={cn('relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-lg bg-gradient-to-br text-white shadow-md ring-1 ring-inset ring-white/25', th.bg, th.shadow, !on && 'opacity-80')}>
+                      <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+                      <Ic className="relative size-[18px] drop-shadow" strokeWidth={2.3} />
+                    </span>
+                    <span className={cn('text-[13px] font-extrabold leading-tight', on ? 'text-cyan-800 dark:text-cyan-200' : 'text-slate-700 dark:text-slate-200')}>{LEAVE_TYPE_LABEL[t]}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+
+          {/* التواريخ */}
+          <section className={SEC}>
+            <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-violet-400 to-violet-600" />
+            <div className="mb-3 flex items-center gap-3">
+              <span aria-hidden className="relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 text-white shadow-lg shadow-violet-500/35 ring-1 ring-inset ring-white/25">
+                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+                <CalendarRange className="relative size-[18px] drop-shadow-md" strokeWidth={2.3} />
+              </span>
+              <h3 className="text-[15px] font-black">{isPerm ? 'يوم الإذن ومدته' : 'الفترة'}</h3>
+            </div>
+            <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
+              <div>
+                <label className={lbl}>{isPerm ? 'يوم الإذن' : 'من'}</label>
+                <Input type="date" dir="ltr" value={start} onChange={(e) => setStart(e.target.value)} className={FIELD} />
               </div>
-            ) : (
-              <div className="space-y-1.5">
-                <Label>إلى</Label>
-                <Input type="date" dir="ltr" min={start} value={end} onChange={(e) => setEnd(e.target.value)} className="shadow-inner" />
-              </div>
-            )}
-          </div>
-          {type === 'annual' && bal && (
-            <p className={`rounded-xl px-3 py-2 text-sm ${bal.remaining <= 0 ? 'bg-rose-50 text-rose-700' : 'bg-cyan-50 text-cyan-800'}`}>
-              رصيده المتبقي: <b>{bal.remaining}</b> يوم {bal.remaining <= 0 && '— هيتخطى الرصيد'}
-            </p>
-          )}
-          {type === 'permission' && <p className="text-xs text-muted-foreground">الإذن سجل متابعة فقط ومالوش أثر على الراتب.</p>}
-          <div className="space-y-1.5">
-            <Label>ملاحظة (اختياري)</Label>
-            <Input value={note} onChange={(e) => setNote(e.target.value)} className="shadow-inner" />
-          </div>
+              {isPerm ? (
+                <div>
+                  <label className={lbl}>عدد الساعات</label>
+                  <Input type="number" inputMode="decimal" dir="ltr" min={0.5} max={12} step={0.5} value={hours} onChange={(e) => setHours(e.target.value)} placeholder="1.5" className={cn(FIELD, 'tabular-nums')} />
+                </div>
+              ) : (
+                <div>
+                  <label className={lbl}>إلى</label>
+                  <Input type="date" dir="ltr" min={start} value={end} onChange={(e) => setEnd(e.target.value)} className={FIELD} />
+                </div>
+              )}
+            </div>
+            {spanDays > 0 ? (
+              <p className="mt-3 flex items-center gap-2 rounded-xl bg-violet-500/10 px-3 py-2 text-xs font-bold text-violet-700 dark:text-violet-300">
+                <CalendarDays className="size-4 shrink-0" />
+                المدة: {spanDays} {spanDays === 1 ? 'يوم' : 'يوم'} (قبل تخطي الراحة الأسبوعية)
+              </p>
+            ) : null}
+            {isPerm ? (
+              <p className="mt-3 flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-500 dark:bg-slate-800/50 dark:text-slate-400">
+                <Info className="mt-0.5 size-3.5 shrink-0 text-slate-400" />
+                الإذن سجل متابعة فقط ومالوش أثر على الراتب.
+              </p>
+            ) : null}
+          </section>
+
+          {/* ملاحظة */}
+          <section className={SEC}>
+            <span aria-hidden className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l from-amber-400 to-amber-600" />
+            <div className="mb-3 flex items-center gap-3">
+              <span aria-hidden className="relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-lg shadow-amber-500/35 ring-1 ring-inset ring-white/25">
+                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+                <MessageSquareText className="relative size-[18px] drop-shadow-md" strokeWidth={2.3} />
+              </span>
+              <h3 className="text-[15px] font-black">ملاحظة <span className="text-[11px] font-medium text-muted-foreground">(اختياري)</span></h3>
+            </div>
+            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="سبب الإجازة أو أي تفاصيل..." className={FIELD} />
+          </section>
         </DialogBody>
-        <DialogFooter className="shrink-0 border-t bg-background px-4 py-3 sm:px-6">
-          <Button variant="outline" onClick={onClose}>إلغاء</Button>
-          <Button onClick={save} disabled={saving} className="gap-1.5 bg-cyan-600 hover:bg-cyan-700 text-white shadow-[0_4px_0_rgb(8,145,178)] hover:shadow-[0_2px_0_rgb(8,145,178)] hover:translate-y-[2px] transition-all">
-            {saving && <Loader2 className="size-4 animate-spin" />}تسجيل
+
+        <DialogFooter className="shrink-0 flex-row justify-end gap-3 border-t bg-background px-4 py-3.5 sm:px-6">
+          <Button variant="outline" onClick={onClose} className="h-11 rounded-xl px-6 font-bold shadow-[0_4px_0_rgba(15,23,42,0.08)] transition-all hover:translate-y-[2px] hover:shadow-[0_2px_0_rgba(15,23,42,0.08)]">إلغاء</Button>
+          <Button
+            onClick={save} disabled={saving}
+            className="h-11 gap-2 rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 px-8 font-extrabold text-white shadow-[0_5px_0_rgb(8,116,144)] transition-all hover:translate-y-[3px] hover:from-sky-500 hover:to-cyan-600 hover:shadow-[0_2px_0_rgb(8,116,144)] disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <CalendarPlus className="size-4" />}
+            {isPerm ? 'تسجيل الإذن' : 'تسجيل الإجازة'}
           </Button>
         </DialogFooter>
       </DialogContent>

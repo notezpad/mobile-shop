@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Building2, CalendarOff, HandCoins, KeyRound, Loader2, FileSpreadsheet, Phone, Plus, Search, Pencil, UserCheck, UserX, Users, Wallet, User, UserRound, Briefcase, Calendar, Clock, Link2 } from 'lucide-react'
+import { Building2, CalendarOff, HandCoins, KeyRound, Loader2, FileSpreadsheet, Phone, Plus, Search, Pencil, UserCheck, UserX, Users, Wallet, User, UserRound, Briefcase, Calendar, Clock, Link2, UserPlus, Info } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -485,6 +485,69 @@ export function HrEmployeesView() {
   )
 }
 
+type DlgTone = 'sky' | 'violet' | 'teal' | 'amber' | 'emerald'
+const DLG_TONES: Record<DlgTone, { grad: string; shadow: string }> = {
+  sky: { grad: 'from-sky-400 to-sky-600', shadow: 'shadow-sky-500/35' },
+  violet: { grad: 'from-violet-400 to-violet-600', shadow: 'shadow-violet-500/35' },
+  teal: { grad: 'from-teal-400 to-teal-600', shadow: 'shadow-teal-500/35' },
+  amber: { grad: 'from-amber-400 to-amber-600', shadow: 'shadow-amber-500/35' },
+  emerald: { grad: 'from-emerald-400 to-emerald-600', shadow: 'shadow-emerald-500/35' },
+}
+
+/** أيقونة 3D صغيرة — نفس لغة كروت صفحة الموظفين (تدرّج + لمعة + ظل ملوّن) */
+function DlgIcon({ icon: Icon, tone }: { icon: React.ElementType; tone: DlgTone }) {
+  const t = DLG_TONES[tone]
+  return (
+    <span aria-hidden className={cn('relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br text-white shadow-lg ring-1 ring-inset ring-white/25', t.grad, t.shadow)}>
+      <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+      <Icon className="relative size-[18px] drop-shadow-md" strokeWidth={2.3} />
+    </span>
+  )
+}
+
+/** قسم في الدايلوج: كارت أبيض بحافة ملوّنة علوية + أيقونة 3D + عنوان */
+function DlgSection({ icon, tone, title, hint, children }: {
+  icon: React.ElementType; tone: DlgTone; title: string; hint?: string; children: React.ReactNode
+}) {
+  return (
+    <section className="relative overflow-hidden rounded-2xl border border-slate-100 bg-white p-4 pt-5 shadow-[0_4px_0_rgba(15,23,42,0.05),0_12px_24px_-14px_rgba(0,0,0,0.15)] dark:border-slate-800 dark:bg-slate-900">
+      <span aria-hidden className={cn('absolute inset-x-0 top-0 h-1 bg-gradient-to-l', DLG_TONES[tone].grad)} />
+      <div className="mb-3.5 flex items-center gap-3">
+        <DlgIcon icon={icon} tone={tone} />
+        <div className="min-w-0">
+          <h3 className="text-[15px] font-black leading-tight">{title}</h3>
+          {hint ? <p className="mt-0.5 text-[11px] font-medium text-muted-foreground">{hint}</p> : null}
+        </div>
+      </div>
+      <div className="space-y-3.5">{children}</div>
+    </section>
+  )
+}
+
+const FIELD_CLS = 'h-11 rounded-xl border-slate-200 bg-slate-50 text-sm font-semibold shadow-inner focus-visible:bg-white dark:border-slate-700 dark:bg-slate-800/50 dark:focus-visible:bg-slate-900'
+const TRIGGER_CLS = 'h-11 w-full rounded-xl border-slate-200 bg-slate-50 text-sm font-semibold shadow-inner dark:border-slate-700 dark:bg-slate-800/50'
+
+function Field({ label, icon: Icon, children }: { label: string; icon?: React.ElementType; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0 space-y-1.5">
+      <Label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300">
+        {Icon ? <Icon className="size-3.5 text-slate-400" /> : null}
+        {label}
+      </Label>
+      {children}
+    </div>
+  )
+}
+
+function Note({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-500 dark:bg-slate-800/50 dark:text-slate-400">
+      <Info className="mt-0.5 size-3.5 shrink-0 text-slate-400" />
+      <span>{children}</span>
+    </p>
+  )
+}
+
 function EmployeeDialog({
   employee, branches, sessionBranchId, onClose, onSaved,
 }: { employee: Employee | null; branches: BranchOpt[]; sessionBranchId: number | null; onClose: () => void; onSaved: () => void }) {
@@ -561,147 +624,173 @@ function EmployeeDialog({
     }
   }
 
+  const previewName = f.name.trim()
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-lg" dir="rtl">
-        <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-6 sm:px-6 sm:pt-5">
-          <DialogTitle className="flex items-center gap-2">
-            <span className={`grid size-8 place-items-center rounded-xl shadow-md ${HR_THEMES.employees.solid} ${HR_THEMES.employees.solidFg}`}>
-              {employee ? <Pencil className="size-4" /> : <Plus className="size-4" />}
+      <DialogContent mobileSheet className="flex flex-col gap-0 overflow-hidden border-0 p-0 sm:max-w-2xl" dir="rtl">
+        {/* ================= الهيدر: نفس هيرو صفحة الموظفين ================= */}
+        <DialogHeader className="relative shrink-0 gap-0 overflow-hidden bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700 px-4 pb-5 pt-7 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3)] sm:px-6 sm:pt-6">
+          <div aria-hidden className="absolute -top-24 -right-24 size-64 rounded-full bg-white/20 blur-[60px]" />
+          <div aria-hidden className="absolute -bottom-24 -left-24 size-56 rounded-full bg-cyan-300/30 blur-[60px]" />
+          <div className="relative flex items-center gap-4">
+            <span className="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-[22px] border border-t-white/50 border-l-white/30 border-b-black/20 border-r-black/10 bg-gradient-to-br from-white/35 to-white/10 text-white shadow-[0_14px_28px_rgba(0,0,0,0.3),inset_0_2px_8px_rgba(255,255,255,0.45)] ring-1 ring-white/30 backdrop-blur-md">
+              <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/30 to-transparent" />
+              {employee ? <Pencil className="relative size-7 drop-shadow-lg" strokeWidth={2} /> : <UserPlus className="relative size-7 drop-shadow-lg" strokeWidth={2} />}
             </span>
-            {employee ? 'تعديل بيانات الموظف' : 'موظف جديد'}
-          </DialogTitle>
-          <DialogDescription>الاسم والراتب كفاية للبداية.</DialogDescription>
-        </DialogHeader>
-        <DialogBody className="space-y-3.5 py-4">
-          <div className="space-y-1.5">
-            <Label>الاسم</Label>
-            <Input value={f.name} onChange={set('name')} autoFocus className="shadow-inner" />
-          </div>
-          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>الراتب الشهري (جنيه)</Label>
-              <Input type="number" inputMode="decimal" min={0} value={f.baseSalary} onChange={set('baseSalary')} dir="ltr" className="shadow-inner" />
+            <div className="min-w-0 flex-1">
+              <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-[11px] font-bold backdrop-blur-md">
+                <Users className="size-3" />
+                إدارة الفريق
+              </div>
+              <DialogTitle className="truncate text-xl font-extrabold leading-tight drop-shadow-md sm:text-2xl">
+                {employee ? 'تعديل بيانات الموظف' : 'موظف جديد'}
+              </DialogTitle>
+              <DialogDescription className="mt-1 truncate text-sm text-blue-50/90">
+                {previewName || 'الاسم والراتب كفاية للبداية.'}
+              </DialogDescription>
             </div>
-            <div className="space-y-1.5">
-              <Label>يوم الإجازة الأسبوعية</Label>
-              <Select value={f.weeklyOffDay} onValueChange={(v) => setF((s) => ({ ...s, weeklyOffDay: v }))}>
-                <SelectTrigger className="shadow-inner"><SelectValue /></SelectTrigger>
+          </div>
+        </DialogHeader>
+
+        {/* ================= الجسم: أقسام بكروت 3D ================= */}
+        <DialogBody className="space-y-4 bg-slate-50 px-4 py-5 dark:bg-slate-950 sm:px-6">
+          <DlgSection icon={User} tone="sky" title="البيانات الأساسية" hint="المطلوب للحفظ: الاسم والراتب">
+            <Field label="الاسم">
+              <Input value={f.name} onChange={set('name')} autoFocus placeholder="اسم الموظف بالكامل" className={FIELD_CLS} />
+            </Field>
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field label="الراتب الشهري" icon={Wallet}>
+                <div className="relative">
+                  <Input type="number" inputMode="decimal" min={0} value={f.baseSalary} onChange={set('baseSalary')} dir="ltr" placeholder="0" className={cn(FIELD_CLS, 'pe-14 tabular-nums')} />
+                  <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-xs font-bold text-slate-400">ج.م</span>
+                </div>
+              </Field>
+              <Field label="يوم الإجازة الأسبوعية" icon={CalendarOff}>
+                <Select value={f.weeklyOffDay} onValueChange={(v) => setF((s) => ({ ...s, weeklyOffDay: v }))}>
+                  <SelectTrigger className={TRIGGER_CLS}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {DAY_NAMES.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+          </DlgSection>
+
+          <DlgSection icon={Briefcase} tone="violet" title="الوظيفة والتواصل" hint="اختياري">
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field label="الوظيفة" icon={Briefcase}>
+                <Input value={f.jobTitle} onChange={set('jobTitle')} placeholder="كاشير / بائع / مخزن" className={FIELD_CLS} />
+              </Field>
+              <Field label="الموبايل" icon={Phone}>
+                <Input value={f.phone} onChange={set('phone')} dir="ltr" inputMode="tel" placeholder="01xxxxxxxxx" className={FIELD_CLS} />
+              </Field>
+            </div>
+            <Field label="تاريخ التعيين" icon={Calendar}>
+              <Input type="date" value={f.hireDate} onChange={set('hireDate')} dir="ltr" className={FIELD_CLS} />
+            </Field>
+          </DlgSection>
+
+          <DlgSection icon={Building2} tone="teal" title="الفرع والوردية" hint="الفرع بيحدد الورديات المتاحة">
+            <Field label="فرع الموظف" icon={Building2}>
+              <Select
+                value={f.branchId || 'none'}
+                onValueChange={(v) => setF((s) => ({ ...s, branchId: v === 'none' ? '' : v, shiftName: '' }))}
+              >
+                <SelectTrigger className={TRIGGER_CLS}><SelectValue placeholder="اختار الفرع" /></SelectTrigger>
                 <SelectContent>
-                  {DAY_NAMES.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}
+                  <SelectItem value="none">بدون فرع</SelectItem>
+                  {branches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>الوظيفة (اختياري)</Label>
-              <Input value={f.jobTitle} onChange={set('jobTitle')} placeholder="كاشير / بائع / مخزن" className="shadow-inner" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>الموبايل (اختياري)</Label>
-              <Input value={f.phone} onChange={set('phone')} dir="ltr" inputMode="tel" className="shadow-inner" />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>تاريخ التعيين (اختياري)</Label>
-              <Input type="date" value={f.hireDate} onChange={set('hireDate')} dir="ltr" className="shadow-inner" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5"><KeyRound className="size-3.5" />PIN الحضور (4 إلى 6 أرقام)</Label>
-              <Input
-                value={f.pin} onChange={set('pin')} dir="ltr" inputMode="numeric" maxLength={6}
-                placeholder={employee?.hasPin ? 'سيبه فاضي للإبقاء على الحالي' : 'اختياري'}
-                className="shadow-inner"
-              />
-            </div>
-          </div>
-          {/* 🏢 فرع الموظف — منه بتتحدد الورديات المتاحة */}
-          <div className="space-y-1.5">
-            <Label className="flex items-center gap-1.5"><Building2 className="size-3.5" />فرع الموظف</Label>
-            <Select
-              value={f.branchId || 'none'}
-              onValueChange={(v) => setF((s) => ({ ...s, branchId: v === 'none' ? '' : v, shiftName: '' }))}
-            >
-              <SelectTrigger className="shadow-inner"><SelectValue placeholder="اختار الفرع" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">بدون فرع</SelectItem>
-                {branches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          {/* 🕐 (التحديث الحادي والعشرين) وردية الموظف — من ورديات فرعه المعرّفة */}
-          <div className="space-y-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 p-3">
-            <Label className="flex items-center gap-1.5">
-              <Clock className="size-3.5" />
-              وردية الموظف (اختياري — من ورديات الفرع)
-            </Label>
-            <Select
-              value={f.shiftName || 'none'}
-              onValueChange={(v) => setF((s) => ({ ...s, shiftName: v === 'none' ? '' : v }))}
-            >
-              <SelectTrigger className="shadow-inner bg-white dark:bg-slate-900">
-                <SelectValue placeholder="اختار الوردية" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">بدون وردية محددة</SelectItem>
-                {shiftOptions.map((s) => (
-                  <SelectItem key={s.name} value={s.name}>{shiftLabel(s)}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+            </Field>
+            {/* 🕐 وردية الموظف — من ورديات فرعه المعرّفة */}
+            <Field label="وردية الموظف (من ورديات الفرع)" icon={Clock}>
+              <Select
+                value={f.shiftName || 'none'}
+                onValueChange={(v) => setF((s) => ({ ...s, shiftName: v === 'none' ? '' : v }))}
+              >
+                <SelectTrigger className={TRIGGER_CLS}>
+                  <SelectValue placeholder="اختار الوردية" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">بدون وردية محددة</SelectItem>
+                  {shiftOptions.map((s) => (
+                    <SelectItem key={s.name} value={s.name}>{shiftLabel(s)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Note>
               {!f.branchId
                 ? 'اختار فرع الموظف الأول عشان تظهر ورديات الفرع.'
                 : shiftOptions.length === 0
                 ? 'فرع الموظف ده مفيش عليه ورديات معرّفة — ضيفها من شاشة الفروع (صباحي/مسائي/ليلي) وبعدها اختار من هنا.'
                 : 'الوردية دي هتظهر للموظف في صفحة «ملفي» — وبتتختار له تلقائياً لما يفتح وردية شغل باسمه.'}
-            </p>
-          </div>
-          {/* 🔗 (التحديث الثامن عشر) ربط حساب الدخول — من خلاله الموظف يشوف
-              «ملفي» (حضوره/إجازاته/راتبه) ولو بائع عمولته بتنزل في راتبه */}
-          <div className="space-y-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 p-3">
-            <Label className="flex items-center gap-1.5">
-              <Link2 className="size-3.5" />
-              حساب الدخول (اختياري — من شاشة المستخدمين)
-            </Label>
-            <Select
-              value={f.userId || 'none'}
-              onValueChange={(v) => setF((s) => {
-                const uid = v === 'none' ? '' : v
-                const ub = users.find((u) => u.id === uid)?.branchId
-                // 🏢 الحساب المختار له فرع → الموظف ياخد فرعه (والوردية القديمة تتفضّى لو الفرع اتغيّر)
-                if (ub != null && String(ub) !== s.branchId) return { ...s, userId: uid, branchId: String(ub), shiftName: '' }
-                return { ...s, userId: uid }
-              })}
-            >
-              <SelectTrigger className="shadow-inner bg-white dark:bg-slate-900">
-                <SelectValue placeholder="اختار حساب" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">بدون حساب دخول</SelectItem>
-                {users.map((u) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.name} — {u.email}{u.isSeller ? ' (بائع 💰)' : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+            </Note>
+          </DlgSection>
+
+          <DlgSection icon={KeyRound} tone="amber" title="كشك الحضور" hint="PIN من 4 إلى 6 أرقام — اختياري">
+            <Field label="PIN الحضور" icon={KeyRound}>
+              <Input
+                value={f.pin} onChange={set('pin')} dir="ltr" inputMode="numeric" maxLength={6}
+                placeholder={employee?.hasPin ? 'سيبه فاضي للإبقاء على الحالي' : '••••'}
+                className={cn(FIELD_CLS, 'tracking-[0.3em] tabular-nums')}
+              />
+            </Field>
+          </DlgSection>
+
+          {/* 🔗 ربط حساب الدخول — من خلاله الموظف يشوف «ملفي» ولو بائع عمولته بتنزل في راتبه */}
+          <DlgSection icon={Link2} tone="emerald" title="حساب الدخول" hint="اختياري — من شاشة المستخدمين">
+            <Field label="الحساب المرتبط" icon={Link2}>
+              <Select
+                value={f.userId || 'none'}
+                onValueChange={(v) => setF((s) => {
+                  const uid = v === 'none' ? '' : v
+                  const ub = users.find((u) => u.id === uid)?.branchId
+                  // 🏢 الحساب المختار له فرع → الموظف ياخد فرعه (والوردية القديمة تتفضّى لو الفرع اتغيّر)
+                  if (ub != null && String(ub) !== s.branchId) return { ...s, userId: uid, branchId: String(ub), shiftName: '' }
+                  return { ...s, userId: uid }
+                })}
+              >
+                <SelectTrigger className={TRIGGER_CLS}>
+                  <SelectValue placeholder="اختار حساب" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">بدون حساب دخول</SelectItem>
+                  {users.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.name} — {u.email}{u.isSeller ? ' (بائع 💰)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Note>
               الربط هو اللي بيخلي الموظف يشوف من صفحة «ملفي»: حضوره وإجازاته وقسيمة راتبه —
               {selectedUser?.isSeller
                 ? ' والحساب المختار بائع 💰 فعمولته هتتعبّى تلقائياً في راتبه كل شهر.'
                 : ' ولو الحساب بائع، عمولته هتتعبّى تلقائياً في عمود «عمولة» في راتبه.'}
               {' '}كل حساب مربوط بموظف واحد بس.
-            </p>
-          </div>
+            </Note>
+          </DlgSection>
         </DialogBody>
-        <DialogFooter className="shrink-0 border-t bg-background px-4 py-3 sm:px-6">
-          <Button variant="outline" onClick={onClose}>إلغاء</Button>
-          <Button onClick={save} disabled={saving} className="gap-1.5 shadow-[0_4px_0_rgba(0,0,0,0.1)] hover:shadow-[0_2px_0_rgba(0,0,0,0.1)] hover:translate-y-[2px] transition-all">
-            {saving && <Loader2 className="size-4 animate-spin" />}
-            حفظ
+
+        <DialogFooter className="shrink-0 flex-row justify-end gap-3 border-t bg-background px-4 py-3.5 sm:px-6">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="h-11 rounded-xl px-6 font-bold shadow-[0_4px_0_rgba(15,23,42,0.08)] transition-all hover:translate-y-[2px] hover:shadow-[0_2px_0_rgba(15,23,42,0.08)]"
+          >
+            إلغاء
+          </Button>
+          <Button
+            onClick={save}
+            disabled={saving}
+            className="h-11 gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-8 font-extrabold text-white shadow-[0_5px_0_rgba(67,56,202,0.55)] transition-all hover:translate-y-[3px] hover:from-indigo-500 hover:to-violet-600 hover:shadow-[0_2px_0_rgba(67,56,202,0.55)] disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="size-4 animate-spin" /> : employee ? <Pencil className="size-4" /> : <UserPlus className="size-4" />}
+            {employee ? 'حفظ التعديلات' : 'إضافة الموظف'}
           </Button>
         </DialogFooter>
       </DialogContent>
