@@ -89,6 +89,19 @@ const utcDateType = {
     ),
 }
 
+/**
+ * 🔢 إصلاح (2026-11-02): بعد المرحلة 4 أعمدة الفلوس بقت NUMERIC(12,2).
+ * postgres.js مع fetch_types:false بيرجّع NUMERIC (OID 1700) كـ STRING،
+ * فالواجهة بتجمع نصوص ("0"+"350.00"+... = "0350.002050.00...") وبتطلع NaN.
+ * الـ patch بتاع Prisma.Decimal مبيغطيش الـ SQL المباشر، فهنا بنحوّلها Number.
+ */
+const numericType = {
+  to: 1700,
+  from: [1700],
+  serialize: (x: unknown) => String(x),
+  parse: (x: string) => Number(x),
+}
+
 function createSql(): Sql {
   const connectionString = resolveConnectionString()
   if (!connectionString) {
@@ -112,7 +125,7 @@ function createSql(): Sql {
     idle_timeout: 5,
     // لو الـ pooler/الشبكة قطعت: خطأ سريع يرجع retry بدل تعليق → 503.
     max_lifetime: 60 * 30,
-    types: { date: utcDateType },
+    types: { date: utcDateType, numeric: numericType },
   })
 }
 
