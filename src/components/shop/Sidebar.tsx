@@ -1,26 +1,7 @@
 'use client'
 
-/**
- * Sidebar — Premium 2026 Edition
- * ==================================================
- * Re-designed to match the rest of the in-app pages:
- *  • Brand block with gradient ring + glow on the avatar
- *  • Section labels (uppercase, letter-spaced, muted)
- *  • Nav items with: hover lift, active emerald tint + right rail + glow
- *  • Inventory sub-group with collapsible children and color dots
- *  • Footer card: "النظام يعمل" status + plan pill + logout button
- *  • Collapsed mode (md–lg): 64px icon rail with tooltips
- *
- * All colors come from the design tokens already defined in globals.css:
- *   --sidebar, --sidebar-foreground, --sidebar-accent, --sidebar-border,
- *   --primary, --primary-subtle, --brand-500/600, --success, --destructive
- *
- * Keeps the existing API (props: collapsed, onNavigate, className) and the
- * existing module-gating logic from useShopStore + plan-constants.
- */
-
 import * as React from 'react'
-import { useVocab, foodTerm } from '@/lib/vocab'
+import { useVocab } from '@/lib/vocab'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
@@ -47,17 +28,9 @@ interface NavItem {
   path: string
   label: string
   icon: LucideIcon
-  /** موديول الباقة للفلتر — «ملفي» شخصية ومش مربوطة بموديول فبتتعرض يدويًا */
   module?: ViewKey
-  /** Optional tint accent for the icon (defaults to primary emerald). */
-  accent?: string
 }
 
-/**
- * Inventory sub-pages — each keeps its own color identity (matches the
- * page-level hero tints in InventoryView/MovementsPage/TransfersPage/
- * StocktakePage so the sidebar dot == the page accent).
- */
 const INVENTORY_CHILDREN: { path: string; label: string; color: string; icon: LucideIcon }[] = [
   { path: '/inventory', label: 'حالة المخزون', color: '#10b981', icon: Boxes },
   { path: '/inventory/movements', label: 'الحركات', color: '#0ea5e9', icon: Activity },
@@ -65,7 +38,6 @@ const INVENTORY_CHILDREN: { path: string; label: string; color: string; icon: Lu
   { path: '/inventory/stocktake', label: 'الجرد', color: '#0d9488', icon: ClipboardCheck },
 ]
 
-/** الموارد البشرية — شاشات قليلة وبسيطة (كل واحدة بلونها زي المخزون) */
 const HR_CHILDREN: { path: string; label: string; color: string; icon: LucideIcon }[] = [
   { path: '/hr', label: 'نظرة عامة', color: '#0ea5e9', icon: UsersRound },
   { path: '/hr/employees', label: 'الموظفين', color: '#10b981', icon: UserCog },
@@ -76,7 +48,6 @@ const HR_CHILDREN: { path: string; label: string; color: string; icon: LucideIco
   { path: '/hr/payroll', label: 'الرواتب', color: '#0d9488', icon: BadgeDollarSign },
 ]
 
-/** صفحات مشرف الفرع (صلاحية hr_attendance) */
 const HR_STAFF_PATHS = ['/hr/attendance', '/hr/leaves']
 
 const MAIN_GROUP: NavItem[] = [
@@ -94,8 +65,6 @@ const MANAGE_GROUP: NavItem[] = [
   { path: '/finance', label: 'المعاملات المالية', icon: Wallet, module: 'finance' },
   { path: '/expenses', label: 'المصروفات', icon: ReceiptText, module: 'expenses' },
   { path: '/cash', label: 'الخزنة', icon: Banknote, module: 'cash' },
-  // 💰 (التحديث الثالث عشر) عمولات البائعين — بتركب على موديول 'sales'،
-  // والموظف اللي عنده صلاحية 'commissions' المستقلة بيشوفها كمان (شوف الفلتر تحت)
   { path: '/commissions', label: 'عمولات البائعين', icon: Percent, module: 'sales' },
   { path: '/reports', label: 'التقارير', icon: BarChart3, module: 'reports' },
   { path: '/branches', label: 'الفروع', icon: Building2, module: 'branches' },
@@ -103,19 +72,11 @@ const MANAGE_GROUP: NavItem[] = [
   { path: '/settings', label: 'الإعدادات', icon: SettingsIcon, module: 'settings' },
 ]
 
-/**
- * 👤 (التحديث السابع عشر) «ملفي» — صفحة شخصية مش موديول: بيانات الموظف
- * لنفسه + شغله النهاردة + ملفه في الموارد البشرية. مش مربوطة بأي موديول
- * في الباقة — بتتعرض لكل حد إلا الموظف المقيّد بصلاحيات مخصوصة من غير
- * 'my_profile' (شوف الفلتر تحت في Sidebar نفسه).
- */
 const MY_PROFILE_ITEM: NavItem = {
   path: '/profile',
   label: 'ملفي',
   icon: CircleUserRound,
 }
-
-/* ───────────────────────── helpers ───────────────────────── */
 
 function useActivePath() {
   const pathname = usePathname() ?? ''
@@ -140,18 +101,10 @@ function NavButton({
   const t = useVocab()
   const Icon = item.icon
 
-  // ⚡ PERF FIX: التنزيل يبدأ من لحظة اللمس/الهوفر بدل الانتظار بعد الكليك.
-  // (راجع src/lib/view-preload.ts للشرح الكامل للسلسلة المتسلسلة)
   const warmup = React.useCallback(() => {
     if (!shouldSkipPreload()) preloadView(item.path)
   }, [item.path])
 
-  // ⚡ 2026-10-17 (تقليل CPU — الخطوة 3): prefetch={false} بدل viewport-prefetch
-  // — كل لينك في القايمة كان بيطلع طلب RSC للـ Worker أول ما يدخل الشاشة
-  // (20+ استدعاء Worker مع كل فتح صفحة) حتى لو المستخدم مش هيضغط. دلوقتي
-  // التنزيل يحصل عند الهوفر/الكليك بس — نفس سرعة التنقل تقريبًا (الصفحات كلها
-  // prerendered)، والأوفلاين مش متأثر لأنه معتمد على كاش الـ SW للصفحات
-  // (PRECACHE_URLS) مش على prefetch الراوتر.
   const linkEl = (
     <Link
       prefetch={false}
@@ -162,43 +115,34 @@ function NavButton({
       onClick={onNavigate}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        // base
-        'group relative flex w-full items-center gap-3 rounded-xl text-right transition-all duration-base ease-out',
-        'min-h-[40px] px-3 py-1.5 text-sm font-medium',
-        // active vs default
+        'group relative flex w-full items-center gap-3 rounded-xl transition-all duration-200',
+        'min-h-[48px] px-3 py-2 text-[15px]',
         active
-          ? 'bg-primary-subtle text-primary-subtle-foreground'
-          : [
-              'text-sidebar-foreground/70',
-              'hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
-            ].join(' '),
+          ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-100 font-bold shadow-sm ring-1 ring-emerald-500/20'
+          : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200 font-semibold',
         collapsed && 'justify-center px-0',
       )}
     >
+      {/* 🛑 خط ملون يمتد بطول التاب النشط ليعطيه ثباتاً وقوة */}
+      {active && !collapsed && (
+        <span className="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-xl bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.6)]" />
+      )}
+
       <span
         className={cn(
-          'relative grid place-items-center size-8 shrink-0 rounded-lg transition-all duration-base',
+          'relative grid place-items-center size-9 shrink-0 rounded-lg transition-all duration-200',
           active
-            ? 'bg-primary text-primary-foreground shadow-sm'
-            : 'text-muted-foreground/75 group-hover:text-sidebar-accent-foreground group-hover:bg-sidebar-accent/80',
+            ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-sm shadow-emerald-500/30'
+            : 'bg-transparent text-slate-400 group-hover:text-emerald-500 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-500/10',
         )}
       >
-        {/* subtle ring on hover for affordance */}
-        <span
-          aria-hidden
-          className={cn(
-            'pointer-events-none absolute inset-0 rounded-lg ring-1 transition-opacity',
-            active ? 'opacity-0' : 'ring-foreground/5 opacity-0 group-hover:opacity-100',
-          )}
-        />
-        <Icon
-          strokeWidth={active ? 2.2 : 2}
-          className="size-[18px]"
-        />
+        <Icon strokeWidth={active ? 2.5 : 2.2} className="size-5" />
       </span>
 
       {!collapsed && (
-        <span className="flex-1 truncate">{t(item.label)}</span>
+        <span className="flex-1 truncate">
+          {t(item.label)}
+        </span>
       )}
     </Link>
   )
@@ -217,7 +161,7 @@ function NavButton({
   return linkEl
 }
 
-/* ───────────────────────── Inventory group (collapsible) ───────────────────────── */
+/* ───────────────────────── Groups ───────────────────────── */
 
 function InventoryGroup({
   collapsed,
@@ -226,30 +170,23 @@ function InventoryGroup({
 }: {
   collapsed?: boolean
   onNavigate?: () => void
-  /** 🫥 عدّاد الجرد الأعمي: موظف بصلاحية العدّ الأعمي بدون موديول المخزون —
-   *  بيشوف مدخل «الجرد الأعمي» بس (مش صفحات المخزون بأرقامها) */
   blindOnly?: boolean
 }) {
   const router = useRouter()
-  const { pathname, isActive } = useActivePath()
+  const { pathname } = useActivePath()
   const inInventory = pathname.startsWith('/inventory')
-  const parentActive = pathname === '/inventory'
-
-  // Auto-open when entering inventory from outside, but respect manual close
-  // when navigating *between* inventory sub-pages.
   const [open, setOpen] = React.useState(inInventory)
   const wasInInventory = React.useRef(inInventory)
+
   React.useEffect(() => {
     if (inInventory && !wasInInventory.current) setOpen(true)
     wasInInventory.current = inInventory
   }, [inInventory])
 
-  // ⚡ PERF FIX: warm-up موحّد لكل روابط المخزون (راجع src/lib/view-preload.ts)
   const warmInventory = React.useCallback(() => {
     if (!shouldSkipPreload()) preloadView('/inventory')
   }, [])
 
-  /* ── Collapsed mode: single icon link + tooltip ── */
   if (collapsed) {
     const linkEl = (
       <Link
@@ -261,22 +198,13 @@ function InventoryGroup({
         onClick={onNavigate}
         aria-label="المخزون"
         className={cn(
-          'group relative grid size-10 place-items-center rounded-xl transition-all duration-base',
+          'group relative grid size-12 place-items-center rounded-xl transition-all duration-200',
           inInventory
-            ? 'bg-primary-subtle text-primary-subtle-foreground ring-1 ring-primary/15'
-            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+            ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600'
+            : 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50',
         )}
       >
-        {inInventory && (
-          <span
-            aria-hidden
-            className="absolute right-0 top-1/2 -translate-y-1/2 h-7 w-[3px] rounded-l-full bg-gradient-to-b from-brand-400 to-brand-600 shadow-[0_0_8px_0px] shadow-brand-500/60"
-          />
-        )}
-        <Warehouse
-          strokeWidth={inInventory ? 2.4 : 2}
-          className={cn('size-[18px]', inInventory && 'text-primary')}
-        />
+        <Warehouse strokeWidth={inInventory ? 2.4 : 2} className="size-6" />
       </Link>
     )
     return (
@@ -289,10 +217,7 @@ function InventoryGroup({
     )
   }
 
-  /* ── Expanded mode: parent row (toggle) + connected sub-pages ── */
   const onParentClick = () => {
-    // أول ضغطة من برّه المخزون: افتح القايمة وروح لحالة المخزون مباشرة.
-    // بعد كده الضغطة بتفتح/تقفل القايمة بس — من غير زرار × منفصل.
     if (!inInventory) {
       setOpen(true)
       warmInventory()
@@ -311,53 +236,36 @@ function InventoryGroup({
         onMouseEnter={warmInventory}
         onFocus={warmInventory}
         aria-expanded={open}
-        aria-controls="inventory-subnav"
         className={cn(
-          'group relative flex min-h-[40px] w-full items-center gap-3 rounded-xl px-3 py-1.5 text-right text-sm font-medium transition-all duration-base',
+          'group relative flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3 py-2 text-right text-[15px] transition-all duration-200',
           inInventory
-            ? 'bg-primary-subtle text-primary-subtle-foreground ring-1 ring-primary/15'
-            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+            ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-100 font-bold shadow-sm ring-1 ring-emerald-500/20'
+            : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 font-semibold',
         )}
       >
         {inInventory && (
-          <span
-            aria-hidden
-            className="pointer-events-none absolute right-0 top-1/2 h-7 w-[3px] -translate-y-1/2 rounded-l-full bg-gradient-to-b from-brand-400 to-brand-600 shadow-[0_0_8px_0px] shadow-brand-500/60"
-          />
+          <span className="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-xl bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.6)]" />
         )}
         <span
           className={cn(
-            'relative grid size-8 shrink-0 place-items-center rounded-lg transition-all',
+            'relative grid size-9 shrink-0 place-items-center rounded-lg transition-all duration-200',
             inInventory
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground/75 group-hover:bg-sidebar-accent/80 group-hover:text-sidebar-accent-foreground',
+              ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-sm shadow-emerald-500/30'
+              : 'text-slate-400 group-hover:text-emerald-500 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-500/10',
           )}
         >
-          <Warehouse strokeWidth={inInventory ? 2.2 : 2} className="size-[18px]" />
+          <Warehouse strokeWidth={inInventory ? 2.5 : 2.2} className="size-5" />
         </span>
         <span className="flex-1 truncate">المخزون</span>
-        <ChevronDown
-          aria-hidden
-          className={cn(
-            'size-4 shrink-0 opacity-60 transition-transform duration-base ease-out group-hover:opacity-100',
-            open && 'rotate-180',
-          )}
-        />
+        <ChevronDown className={cn('size-4 shrink-0 opacity-60 transition-transform duration-200', open && 'rotate-180')} />
       </button>
 
-      {/* Sub-pages — display:none toggling for zero-empty-space collapse */}
       <div
-        id="inventory-subnav"
         style={{ display: open ? 'block' : 'none' }}
-        className={open ? 'submenu-in' : undefined}
+        className={open ? 'animate-in slide-in-from-top-1 fade-in duration-200' : undefined}
       >
-        <div className="relative mt-1.5 mb-1 space-y-1 pe-0">
-          {/* العمود الفقري: خط رأسي يمرّ من تحت أيقونة المخزون */}
-          <span
-            aria-hidden
-            className="absolute bottom-5 top-0 w-px bg-sidebar-border"
-            style={{ insetInlineStart: '27px' }}
-          />
+        <div className="relative mt-1 space-y-1 pe-0 pb-1">
+          <span className="absolute bottom-2 top-0 w-px bg-slate-200 dark:bg-slate-800" style={{ insetInlineStart: '24px' }} />
           {(blindOnly ? INVENTORY_CHILDREN.filter((c) => c.path === '/inventory/stocktake') : INVENTORY_CHILDREN).map((child) => {
             const active = pathname === child.path
             const ChildIcon = child.icon
@@ -371,39 +279,19 @@ function InventoryGroup({
                 onPointerDown={warm}
                 onFocus={warm}
                 onClick={onNavigate}
-                aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'group/child relative flex min-h-[44px] items-center gap-3 rounded-xl py-1.5 pe-3 text-sm transition-all duration-base',
-                  'ps-[46px]',
+                  'group/child relative flex min-h-[42px] items-center gap-3 rounded-lg py-1.5 pe-2 text-sm transition-all duration-200 ps-[42px]',
                   active
-                    ? 'font-bold text-sidebar-foreground'
-                    : 'font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+                    ? 'bg-emerald-50/50 dark:bg-emerald-500/5 font-bold text-emerald-800 dark:text-emerald-200'
+                    : 'font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/30',
                 )}
-                style={
-                  active
-                    ? { backgroundColor: `${child.color}1a`, boxShadow: `inset 0 0 0 1px ${child.color}40` }
-                    : undefined
-                }
               >
-                {/* وصلة أفقية من العمود الفقري للصفحة */}
+                <span className="absolute top-1/2 h-px w-[12px]" style={{ insetInlineStart: '24px', backgroundColor: active ? child.color : 'var(--border)' }} />
                 <span
-                  aria-hidden
-                  className="absolute top-1/2 h-px w-[14px] transition-colors"
-                  style={{
-                    insetInlineStart: '27px',
-                    backgroundColor: active ? child.color : 'var(--sidebar-border)',
-                  }}
-                />
-                {/* بلاطة الأيقونة — ملوّنة بهوية الصفحة دايمًا، وتتملّى لما تكون الصفحة الحالية */}
-                <span
-                  className="relative grid size-8 shrink-0 place-items-center rounded-lg transition-all duration-base group-hover/child:scale-105"
-                  style={
-                    active
-                      ? { backgroundColor: child.color, color: '#fff', boxShadow: `0 4px 12px -2px ${child.color}80` }
-                      : { backgroundColor: `${child.color}1f`, color: child.color }
-                  }
+                  className="relative grid size-8 shrink-0 place-items-center rounded-md transition-all duration-200 group-hover/child:scale-105"
+                  style={active ? { backgroundColor: child.color, color: '#fff', boxShadow: `0 2px 8px -2px ${child.color}80` } : { backgroundColor: `${child.color}15`, color: child.color }}
                 >
-                  <ChildIcon strokeWidth={active ? 2.3 : 2} className="size-[17px]" />
+                  <ChildIcon strokeWidth={active ? 2.4 : 2.2} className="size-4" />
                 </span>
                 <span className="relative flex-1 truncate">{child.label}</span>
               </Link>
@@ -415,38 +303,24 @@ function InventoryGroup({
   )
 }
 
-function HrGroup({
-  collapsed,
-  onNavigate,
-  staffOnly,
-}: {
-  collapsed?: boolean
-  onNavigate?: () => void
-  /** مشرف الفرع: الحضور والإجازات فقط (مفيش مبالغ) */
-  staffOnly?: boolean
-}) {
+function HrGroup({ collapsed, onNavigate, staffOnly }: { collapsed?: boolean; onNavigate?: () => void; staffOnly?: boolean }) {
   const homePath = staffOnly ? '/hr/attendance' : '/hr'
   const children = staffOnly ? HR_CHILDREN.filter((c) => HR_STAFF_PATHS.includes(c.path)) : HR_CHILDREN
   const router = useRouter()
-  const { pathname, isActive } = useActivePath()
+  const { pathname } = useActivePath()
   const inHr = pathname.startsWith('/hr')
-  const parentActiveHr = pathname === '/hr'
-
-  // Auto-open when entering inventory from outside, but respect manual close
-  // when navigating *between* inventory sub-pages.
   const [open, setOpen] = React.useState(inHr)
   const wasInHr = React.useRef(inHr)
+
   React.useEffect(() => {
     if (inHr && !wasInHr.current) setOpen(true)
     wasInHr.current = inHr
   }, [inHr])
 
-  // ⚡ PERF FIX: warm-up موحّد لكل روابط الموارد البشرية (راجع src/lib/view-preload.ts)
   const warmHr = React.useCallback(() => {
     if (!shouldSkipPreload()) preloadView('/hr')
   }, [])
 
-  /* ── Collapsed mode: single icon link + tooltip ── */
   if (collapsed) {
     const linkEl = (
       <Link
@@ -458,22 +332,13 @@ function HrGroup({
         onClick={onNavigate}
         aria-label="الموارد البشرية"
         className={cn(
-          'group relative grid size-10 place-items-center rounded-xl transition-all duration-base',
+          'group relative grid size-12 place-items-center rounded-xl transition-all duration-200',
           inHr
-            ? 'bg-primary-subtle text-primary-subtle-foreground ring-1 ring-primary/15'
-            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+            ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600'
+            : 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50',
         )}
       >
-        {inHr && (
-          <span
-            aria-hidden
-            className="absolute right-0 top-1/2 -translate-y-1/2 h-7 w-[3px] rounded-l-full bg-gradient-to-b from-brand-400 to-brand-600 shadow-[0_0_8px_0px] shadow-brand-500/60"
-          />
-        )}
-        <UsersRound
-          strokeWidth={inHr ? 2.4 : 2}
-          className={cn('size-[18px]', inHr && 'text-primary')}
-        />
+        <UsersRound strokeWidth={inHr ? 2.4 : 2} className="size-6" />
       </Link>
     )
     return (
@@ -486,10 +351,7 @@ function HrGroup({
     )
   }
 
-  /* ── Expanded mode: parent row (toggle) + connected sub-pages ── */
   const onParentClick = () => {
-    // أول ضغطة من برّه الموارد البشرية: افتح القايمة وروح لحالة الموارد البشرية مباشرة.
-    // بعد كده الضغطة بتفتح/تقفل القايمة بس — من غير زرار × منفصل.
     if (!inHr) {
       setOpen(true)
       warmHr()
@@ -508,53 +370,33 @@ function HrGroup({
         onMouseEnter={warmHr}
         onFocus={warmHr}
         aria-expanded={open}
-        aria-controls="hr-subnav"
         className={cn(
-          'group relative flex min-h-[40px] w-full items-center gap-3 rounded-xl px-3 py-1.5 text-right text-sm font-medium transition-all duration-base',
+          'group relative flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3 py-2 text-right text-[15px] transition-all duration-200',
           inHr
-            ? 'bg-primary-subtle text-primary-subtle-foreground ring-1 ring-primary/15'
-            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+            ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-100 font-bold shadow-sm ring-1 ring-emerald-500/20'
+            : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 font-semibold',
         )}
       >
         {inHr && (
-          <span
-            aria-hidden
-            className="pointer-events-none absolute right-0 top-1/2 h-7 w-[3px] -translate-y-1/2 rounded-l-full bg-gradient-to-b from-brand-400 to-brand-600 shadow-[0_0_8px_0px] shadow-brand-500/60"
-          />
+          <span className="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-xl bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.6)]" />
         )}
         <span
           className={cn(
-            'relative grid size-8 shrink-0 place-items-center rounded-lg transition-all',
+            'relative grid size-9 shrink-0 place-items-center rounded-lg transition-all duration-200',
             inHr
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground/75 group-hover:bg-sidebar-accent/80 group-hover:text-sidebar-accent-foreground',
+              ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-sm shadow-emerald-500/30'
+              : 'text-slate-400 group-hover:text-emerald-500 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-500/10',
           )}
         >
-          <UsersRound strokeWidth={inHr ? 2.2 : 2} className="size-[18px]" />
+          <UsersRound strokeWidth={inHr ? 2.5 : 2.2} className="size-5" />
         </span>
         <span className="flex-1 truncate">الموارد البشرية</span>
-        <ChevronDown
-          aria-hidden
-          className={cn(
-            'size-4 shrink-0 opacity-60 transition-transform duration-base ease-out group-hover:opacity-100',
-            open && 'rotate-180',
-          )}
-        />
+        <ChevronDown className={cn('size-4 shrink-0 opacity-60 transition-transform duration-200', open && 'rotate-180')} />
       </button>
 
-      {/* Sub-pages — display:none toggling for zero-empty-space collapse */}
-      <div
-        id="hr-subnav"
-        style={{ display: open ? 'block' : 'none' }}
-        className={open ? 'submenu-in' : undefined}
-      >
-        <div className="relative mt-1.5 mb-1 space-y-1 pe-0">
-          {/* العمود الفقري: خط رأسي يمرّ من تحت أيقونة الموارد البشرية */}
-          <span
-            aria-hidden
-            className="absolute bottom-5 top-0 w-px bg-sidebar-border"
-            style={{ insetInlineStart: '27px' }}
-          />
+      <div style={{ display: open ? 'block' : 'none' }} className={open ? 'animate-in slide-in-from-top-1 fade-in duration-200' : undefined}>
+        <div className="relative mt-1 space-y-1 pe-0 pb-1">
+          <span className="absolute bottom-2 top-0 w-px bg-slate-200 dark:bg-slate-800" style={{ insetInlineStart: '24px' }} />
           {children.map((child) => {
             const active = pathname === child.path
             const ChildIcon = child.icon
@@ -568,39 +410,19 @@ function HrGroup({
                 onPointerDown={warm}
                 onFocus={warm}
                 onClick={onNavigate}
-                aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'group/child relative flex min-h-[44px] items-center gap-3 rounded-xl py-1.5 pe-3 text-sm transition-all duration-base',
-                  'ps-[46px]',
+                  'group/child relative flex min-h-[42px] items-center gap-3 rounded-lg py-1.5 pe-2 text-sm transition-all duration-200 ps-[42px]',
                   active
-                    ? 'font-bold text-sidebar-foreground'
-                    : 'font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+                    ? 'bg-emerald-50/50 dark:bg-emerald-500/5 font-bold text-emerald-800 dark:text-emerald-200'
+                    : 'font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/30',
                 )}
-                style={
-                  active
-                    ? { backgroundColor: `${child.color}1a`, boxShadow: `inset 0 0 0 1px ${child.color}40` }
-                    : undefined
-                }
               >
-                {/* وصلة أفقية من العمود الفقري للصفحة */}
+                <span className="absolute top-1/2 h-px w-[12px]" style={{ insetInlineStart: '24px', backgroundColor: active ? child.color : 'var(--border)' }} />
                 <span
-                  aria-hidden
-                  className="absolute top-1/2 h-px w-[14px] transition-colors"
-                  style={{
-                    insetInlineStart: '27px',
-                    backgroundColor: active ? child.color : 'var(--sidebar-border)',
-                  }}
-                />
-                {/* بلاطة الأيقونة — ملوّنة بهوية الصفحة دايمًا، وتتملّى لما تكون الصفحة الحالية */}
-                <span
-                  className="relative grid size-8 shrink-0 place-items-center rounded-lg transition-all duration-base group-hover/child:scale-105"
-                  style={
-                    active
-                      ? { backgroundColor: child.color, color: '#fff', boxShadow: `0 4px 12px -2px ${child.color}80` }
-                      : { backgroundColor: `${child.color}1f`, color: child.color }
-                  }
+                  className="relative grid size-8 shrink-0 place-items-center rounded-md transition-all duration-200 group-hover/child:scale-105"
+                  style={active ? { backgroundColor: child.color, color: '#fff', boxShadow: `0 2px 8px -2px ${child.color}80` } : { backgroundColor: `${child.color}15`, color: child.color }}
                 >
-                  <ChildIcon strokeWidth={active ? 2.3 : 2} className="size-[17px]" />
+                  <ChildIcon strokeWidth={active ? 2.4 : 2.2} className="size-4" />
                 </span>
                 <span className="relative flex-1 truncate">{child.label}</span>
               </Link>
@@ -612,36 +434,20 @@ function HrGroup({
   )
 }
 
-/* ───────────────────────── Brand block ───────────────────────── */
+/* ───────────────────────── Brand & Header ───────────────────────── */
 
 function ShopAvatar({ logoPath, collapsed }: { logoPath?: string | null; collapsed?: boolean }) {
   if (logoPath) {
     return (
-      <div
-        className={cn(
-          'shrink-0 overflow-hidden rounded-2xl shadow-md ring-1 ring-sidebar-border',
-          collapsed ? 'size-10' : 'size-11',
-        )}
-      >
+      <div className={cn('shrink-0 overflow-hidden rounded-xl shadow-md ring-1 ring-white/20', collapsed ? 'size-10' : 'size-11')}>
         <img src={logoPath} alt="شعار المحل" className="h-full w-full object-cover" />
       </div>
     )
   }
   return (
-    <div
-      className={cn(
-        'relative grid shrink-0 place-items-center overflow-hidden rounded-2xl',
-        'bg-gradient-to-br from-brand-500 via-brand-600 to-brand-800',
-        'shadow-md ring-1 ring-brand-400/30',
-        collapsed ? 'size-10' : 'size-11',
-      )}
-    >
-      {/* subtle inner glow */}
-      <span
-        aria-hidden
-        className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/20"
-      />
-      <Store className="relative size-5 text-white" strokeWidth={1.9} />
+    <div className={cn('relative grid shrink-0 place-items-center overflow-hidden rounded-xl', 'bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-700', 'shadow-lg shadow-emerald-500/30 ring-2 ring-white/20', collapsed ? 'size-10' : 'size-11')}>
+      <span className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/10 to-white/30" />
+      <Store className="relative size-5 text-white drop-shadow-md" strokeWidth={2.2} />
     </div>
   )
 }
@@ -649,22 +455,18 @@ function ShopAvatar({ logoPath, collapsed }: { logoPath?: string | null; collaps
 function Brand({ collapsed }: { collapsed?: boolean }) {
   const shopName = useShopStore((s) => s.shopName)
   const logoPath = useShopStore((s) => s.branding?.logoPath)
+  
   return (
-    <div
-      className={cn(
-        'flex items-center gap-2.5 border-b border-sidebar-border px-3 py-3',
-        collapsed && 'justify-center px-0',
-      )}
-    >
+    <div className={cn('flex items-center gap-3 border-b border-slate-200/60 dark:border-slate-800/60 px-4 py-3', collapsed && 'justify-center px-0 py-4')}>
       <ShopAvatar logoPath={logoPath} collapsed={collapsed} />
       {!collapsed && (
-        <div className="min-w-0 flex-1">
-          <p
-            className="truncate whitespace-nowrap text-[17px] font-bold leading-[1.4] text-sidebar-foreground"
-            style={{ fontFamily: 'var(--font-brand), var(--font-cairo), sans-serif' }}
+        <div className="min-w-0 flex-1 flex flex-col justify-center">
+          <p 
+            className="truncate whitespace-nowrap text-xl font-bold leading-tight text-black dark:text-white" 
             title={shopName}
+            style={{ fontFamily: 'Tajawal, Cairo, sans-serif' }}
           >
-            {shopName || <span className="inline-block h-4 w-28 animate-pulse rounded bg-sidebar-foreground/10 align-middle" />}
+            {shopName || <span className="inline-block h-6 w-28 animate-pulse rounded bg-slate-200 dark:bg-slate-700 align-middle" />}
           </p>
         </div>
       )}
@@ -672,23 +474,21 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
   )
 }
 
-/* ───────────────────────── Section label ───────────────────────── */
-
 function SectionLabel({ label }: { label: string }) {
   return (
-    <p className="select-none px-3 pb-1.5 pt-1 text-[11px] font-bold text-muted-foreground/70">
-      {label}
-    </p>
+    <div className="flex items-center gap-2 px-2 pb-1.5 pt-4">
+      <p className="select-none text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+        {label}
+      </p>
+      <div className="h-px flex-1 bg-slate-100 dark:bg-slate-800/60" />
+    </div>
   )
 }
 
 /* ───────────────────────── Footer ───────────────────────── */
 
-/* بداية الجلسة = وقت تحميل التطبيق (واحد لكل النسخ: عادي / مطوي / موبايل) */
-const SESSION_START = typeof window === 'undefined' ? 0 : Date.now()
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
 
-/** حالة الشبكة الحقيقية من المتصفح — من غير أي ريكويست للسيرفر */
 function subscribeNetwork(cb: () => void) {
   const conn = (navigator as any).connection
   window.addEventListener('online', cb)
@@ -716,7 +516,8 @@ function useNetwork() {
 function useSessionClock() {
   const [secs, setSecs] = React.useState(0)
   React.useEffect(() => {
-    const id = setInterval(() => setSecs(Math.floor((Date.now() - SESSION_START) / 1000)), 1000)
+    const start = Date.now()
+    const id = setInterval(() => setSecs(Math.floor((Date.now() - start) / 1000)), 1000)
     return () => clearInterval(id)
   }, [])
   const p = (n: number) => String(n).padStart(2, '0')
@@ -724,27 +525,20 @@ function useSessionClock() {
 }
 
 function Led({ online }: { online: boolean }) {
-  const c = online ? 'bg-emerald-400' : 'bg-amber-400'
+  const c = online ? 'bg-emerald-500' : 'bg-amber-500'
   return (
-    <span className="relative grid size-7 shrink-0 place-items-center">
-      {online && <span className={cn('absolute inline-flex size-3 animate-ping rounded-full opacity-60', c)} />}
-      <span
-        className={cn('relative inline-flex size-2.5 rounded-full', c)}
-        style={{ boxShadow: `0 0 6px 0 ${online ? 'rgba(52,211,153,.6)' : 'rgba(251,191,36,.55)'}` }}
-      />
+    <span className="relative grid size-6 shrink-0 place-items-center">
+      {online && <span className={cn('absolute inline-flex size-2.5 animate-ping rounded-full opacity-60', c)} />}
+      <span className={cn('relative inline-flex size-2 rounded-full', c)} style={{ boxShadow: `0 0 8px 0 ${online ? 'rgba(16,185,129,0.8)' : 'rgba(245,158,11,0.8)'}` }} />
     </span>
   )
 }
 
 function SignalBars({ level }: { level: number }) {
   return (
-    <span aria-hidden dir="ltr" className="flex h-4 shrink-0 items-end gap-[3px]">
-      {[5, 8, 11, 14].map((h, i) => (
-        <span
-          key={h}
-          className={cn('w-[3px] rounded-[1px] transition-colors', i < level ? 'bg-emerald-500' : 'bg-foreground/15')}
-          style={{ height: h }}
-        />
+    <span aria-hidden dir="ltr" className="flex h-3.5 shrink-0 items-end gap-[2px]">
+      {[4, 7, 10, 13].map((h, i) => (
+        <span key={h} className={cn('w-[2.5px] rounded-sm transition-colors', i < level ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700')} style={{ height: h }} />
       ))}
     </span>
   )
@@ -760,7 +554,7 @@ function StatusCard({ collapsed }: { collapsed?: boolean }) {
       <div className="flex justify-center">
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="grid size-11 place-items-center rounded-xl border border-sidebar-border bg-muted/50">
+            <span className="grid size-10 place-items-center rounded-lg border border-slate-200/60 bg-slate-50 dark:border-slate-800/60 dark:bg-slate-900/50 shadow-inner">
               <Led online={online} />
             </span>
           </TooltipTrigger>
@@ -773,14 +567,10 @@ function StatusCard({ collapsed }: { collapsed?: boolean }) {
   }
 
   return (
-    <div className="flex h-10 items-center gap-1.5 rounded-xl border border-sidebar-border bg-muted/50 px-2">
+    <div className="flex h-10 items-center gap-2 rounded-lg border border-slate-200/60 bg-white dark:border-slate-800/60 dark:bg-slate-900/50 px-2.5 shadow-sm backdrop-blur-md">
       <Led online={online} />
-      <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-foreground">{label}</span>
-      {online && (
-        <span dir="ltr" className="text-[10.5px] tabular-nums text-muted-foreground" style={{ fontFamily: MONO }}>
-          {clock}
-        </span>
-      )}
+      <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-slate-700 dark:text-slate-300">{label}</span>
+      {online && <span dir="ltr" className="text-[10px] tabular-nums font-semibold text-slate-400 dark:text-slate-500" style={{ fontFamily: MONO }}>{clock}</span>}
       <SignalBars level={bars} />
     </div>
   )
@@ -790,14 +580,8 @@ function LogoutButton({ collapsed }: { collapsed?: boolean }) {
   const logout = useShopStore((s) => s.logout)
 
   const iconTile = (size: string) => (
-    <span
-      className={cn(
-        'grid shrink-0 place-items-center rounded-xl bg-gradient-to-br from-red-500 to-red-700 text-white ring-1 ring-white/20',
-        'shadow-[0_4px_10px_-3px_rgba(239,68,68,0.65)] transition-transform duration-base group-hover:scale-105',
-        size,
-      )}
-    >
-      <Power className="size-4" strokeWidth={2.4} />
+    <span className={cn('grid shrink-0 place-items-center rounded-lg bg-gradient-to-br from-rose-400 to-rose-600 text-white ring-1 ring-white/20', 'shadow-[0_4px_10px_-3px_rgba(225,29,72,0.5)] transition-transform duration-200 group-hover:scale-105', size)}>
+      <Power className="size-3.5" strokeWidth={2.4} />
     </span>
   )
 
@@ -807,19 +591,17 @@ function LogoutButton({ collapsed }: { collapsed?: boolean }) {
       onClick={logout}
       aria-label="تسجيل الخروج"
       className={cn(
-        'group relative flex w-full items-center overflow-hidden rounded-2xl border transition-all duration-base ease-out',
-        'border-red-500/30 bg-gradient-to-l from-red-500/12 to-red-500/[0.03] text-red-600 dark:text-red-400',
-        'hover:border-red-500 hover:from-red-600 hover:to-red-500 hover:text-white',
-        'hover:shadow-[0_10px_24px_-10px_rgba(239,68,68,0.7)] active:scale-[0.985]',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50',
-        collapsed ? 'size-11 justify-center rounded-xl' : 'min-h-[44px] gap-3 p-1.5 pe-3',
+        'group relative flex w-full items-center overflow-hidden rounded-xl border transition-all duration-200 ease-out',
+        'border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-900/30 dark:bg-rose-950/20 dark:text-rose-400',
+        'hover:border-rose-300 hover:bg-rose-100 hover:text-rose-700 hover:shadow-[0_4px_12px_-4px_rgba(225,29,72,0.4)] active:scale-[0.98]',
+        collapsed ? 'size-10 justify-center rounded-lg' : 'min-h-[44px] gap-2.5 p-1.5 pe-2.5',
       )}
     >
-      {collapsed ? iconTile('size-8') : (
+      {collapsed ? iconTile('size-7') : (
         <>
           {iconTile('size-8')}
-          <span className="flex-1 text-right text-sm font-bold">تسجيل الخروج</span>
-          <ChevronLeft className="size-4 opacity-50 transition-transform duration-base group-hover:-translate-x-1 group-hover:opacity-100" />
+          <span className="flex-1 text-right text-[13px] font-bold">تسجيل الخروج</span>
+          <ChevronLeft className="size-3.5 opacity-50 transition-transform duration-200 group-hover:-translate-x-0.5 group-hover:opacity-100" />
         </>
       )}
     </button>
@@ -842,7 +624,7 @@ function LogoutButton({ collapsed }: { collapsed?: boolean }) {
 
 function SidebarFooter({ collapsed }: { collapsed?: boolean }) {
   return (
-    <div className="space-y-1.5 border-t border-sidebar-border px-2.5 py-2.5">
+    <div className="space-y-2 border-t border-slate-200/60 dark:border-slate-800/60 px-3 py-3">
       <LogoutButton collapsed={collapsed} />
       <StatusCard collapsed={collapsed} />
     </div>
@@ -862,12 +644,12 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
   const navRef = React.useRef<HTMLElement>(null)
   const [moreBelow, setMoreBelow] = React.useState(false)
 
-  // لو في عناصر تحت لسه ما ظهرتش: نضيف تلاشي أسفل القايمة يدل على السكرول
   const measure = React.useCallback(() => {
     const el = navRef.current
     if (!el) return
     setMoreBelow(el.scrollHeight - el.scrollTop - el.clientHeight > 6)
   }, [])
+
   React.useEffect(() => {
     const el = navRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
@@ -876,124 +658,73 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
     Array.from(el.children).forEach((c) => ro.observe(c))
     return () => ro.disconnect()
   }, [measure])
+
   const enabledModules = useShopStore((s) => s.plan.enabledModules)
   const user = useShopStore((s) => s.user)
 
-  // 🔑 RBAC: تحديد إمكانية الوصول للموديول
-  // - المدير: يشوف كل ما تسمح به الباقة
-  // - الموظف بدون permissions: يشوف كل ما تسمح به الباقة (الوضع الافتراضي)
-  // - الموظف بـ permissions: يشوف الـ permissions الخاصة بيه فقط
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN'
-  const userPermissions = (!isAdmin && user?.permissions && user.permissions.length > 0)
-    ? user.permissions
-    : null
+  const userPermissions = (!isAdmin && user?.permissions && user.permissions.length > 0) ? user.permissions : null
 
-  const planHasModule = (key: string) =>
-    enabledModules.includes(key) ||
-    (CRITICAL_MODULES as readonly string[]).includes(key)
+  const planHasModule = (key: string) => enabledModules.includes(key) || (CRITICAL_MODULES as readonly string[]).includes(key)
 
   const hasModule = (key: string) => {
-    if (!planHasModule(key)) return false    // الباقة مش بتسمح → مخفي دايمًا
-    if (userPermissions) return userPermissions.includes(key) // موظف بصلاحيات محددة
-    return true  // مدير أو موظف بكل الصلاحيات
+    if (!planHasModule(key)) return false
+    if (userPermissions) return userPermissions.includes(key)
+    return true
   }
 
   const mainItems = MAIN_GROUP.filter((it) => hasModule(it.module!))
-  // 💰 عمولات البائعين: غير الموديول العادي — الموظف اللي عنده صلاحية
-  // 'commissions' المستقلة (من غير 'sales') بيشوف المدخل كمان
-  const manageItems = MANAGE_GROUP.filter(
-    (it) =>
-      hasModule(it.module!) ||
-      (it.path === '/commissions' && planHasModule('sales') && !!userPermissions?.includes('commissions'))
-  )
+  const manageItems = MANAGE_GROUP.filter((it) => hasModule(it.module!) || (it.path === '/commissions' && planHasModule('sales') && !!userPermissions?.includes('commissions')))
   const showInventory = hasModule('inventory')
-  // 🫥 العدّاد الأعمي: صلاحية العدّ بدون موديول المخزون → مدخل الجرد الأعمي بس
-  const showBlindStocktake =
-    !showInventory && planHasModule('inventory') && !!userPermissions?.includes('blind_stocktake')
+  const showBlindStocktake = !showInventory && planHasModule('inventory') && !!userPermissions?.includes('blind_stocktake')
   const hrStaffOnly = !isAdmin && !!user?.permissions?.includes('hr_attendance')
   const showHr = planHasModule('hr') && (isAdmin || hrStaffOnly)
-  // 👤 «ملفي»: شخصية لكل حد — إلا موظف مقيّد بصلاحيات من غير 'my_profile'
   const showMyProfile = isAdmin || !userPermissions || !!userPermissions.includes('my_profile')
 
   return (
     <TooltipProvider delayDuration={200}>
       <aside
         className={cn(
-          'flex h-full flex-col bg-sidebar border-l border-sidebar-border',
+          'flex h-full flex-col bg-white dark:bg-slate-950 border-l border-slate-200/60 dark:border-slate-800/60',
           'relative isolate',
-          collapsed ? 'w-[68px]' : 'w-[260px]',
+          collapsed ? 'w-[72px]' : 'w-[250px]', // 🛑 تم تقليل العرض من 280 إلى 250
           className,
         )}
       >
-        {/* Subtle ambient glow at the top — adds depth without distracting */}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-32 bg-gradient-to-b from-brand-500/[0.04] to-transparent"
-        />
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-32 bg-gradient-to-b from-slate-50 to-transparent dark:from-slate-900/50" />
 
         <Brand collapsed={collapsed} />
 
         <nav
           ref={navRef}
           onScroll={measure}
-          style={
-            moreBelow
-              ? {
-                  WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 36px), transparent)',
-                  maskImage: 'linear-gradient(to bottom, #000 calc(100% - 36px), transparent)',
-                }
-              : undefined
-          }
-          className={cn(
-            'sidebar-nav flex-1 overflow-y-auto overflow-x-hidden',
-            'px-2 py-2.5',
-          )}
+          style={moreBelow ? { WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 36px), transparent)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 36px), transparent)' } : undefined}
+          className={cn('sidebar-nav flex-1 overflow-y-auto overflow-x-hidden', 'px-2.5 py-2')}
           aria-label="القائمة الرئيسية"
         >
-          {/* Main section */}
           {!collapsed && <SectionLabel label="الرئيسية" />}
-          <div className="space-y-0.5">
+          <div className="space-y-1">
             {mainItems.map((it) => (
-              <NavButton
-                key={it.path}
-                item={it}
-                active={isActive(it.path)}
-                collapsed={collapsed}
-                onNavigate={onNavigate}
-              />
+              <NavButton key={it.path} item={it} active={isActive(it.path)} collapsed={collapsed} onNavigate={onNavigate} />
             ))}
             {(showInventory || showBlindStocktake) && (
               <InventoryGroup collapsed={collapsed} onNavigate={onNavigate} blindOnly={!showInventory} />
             )}
           </div>
 
-          {/* Manage section */}
           {!collapsed ? (
-            <div className="mt-3">
-              <SectionLabel label="الإدارة" />
-            </div>
+            <div className="mt-1"><SectionLabel label="الإدارة" /></div>
           ) : (
-            <div className="my-3 mx-auto h-px w-7 bg-sidebar-border" />
+            <div className="my-3 mx-auto h-px w-6 bg-slate-200 dark:bg-slate-800" />
           )}
 
-          <div className="space-y-0.5">
+          <div className="space-y-1">
             {manageItems.map((it) => (
-              <NavButton
-                key={it.path}
-                item={it}
-                active={isActive(it.path)}
-                collapsed={collapsed}
-                onNavigate={onNavigate}
-              />
+              <NavButton key={it.path} item={it} active={isActive(it.path)} collapsed={collapsed} onNavigate={onNavigate} />
             ))}
             {showHr && <HrGroup collapsed={collapsed} onNavigate={onNavigate} staffOnly={hrStaffOnly} />}
             {showMyProfile && (
-              <NavButton
-                item={MY_PROFILE_ITEM}
-                active={isActive('/profile')}
-                collapsed={collapsed}
-                onNavigate={onNavigate}
-              />
+              <NavButton item={MY_PROFILE_ITEM} active={isActive('/profile')} collapsed={collapsed} onNavigate={onNavigate} />
             )}
           </div>
         </nav>
