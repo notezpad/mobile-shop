@@ -60,6 +60,8 @@ interface Props {
   branches: Branch[]
   isEmployee: boolean
   userBranchId: number | null
+  /** 🏬 فرع مختار من تبويبات الفروع فوق (all أو رقم). لو موجود بنخفي قائمة الفرع الداخلية */
+  scopeBranch?: string
   onChanged: () => void
 }
 
@@ -180,9 +182,10 @@ function SortHead({
   )
 }
 
-export function StockTab({ products, branches, isEmployee, userBranchId, onChanged }: Props) {
+export function StockTab({ products, branches, isEmployee, userBranchId, scopeBranch, onChanged }: Props) {
   const [search, setSearch] = React.useState('')
-  const [branchFilter, setBranchFilter] = React.useState<string>('all')
+  const [branchFilterState, setBranchFilter] = React.useState<string>('all')
+  const branchFilter = scopeBranch ?? branchFilterState
   const [statusFilter, setStatusFilter] = React.useState<string>('all')
   const [adjOpen, setAdjOpen] = React.useState<{ product: InventoryProduct; type: 'in' | 'out' | 'damage' } | null>(null)
   const [exchangeOpen, setExchangeOpen] = React.useState(false)
@@ -273,7 +276,7 @@ export function StockTab({ products, branches, isEmployee, userBranchId, onChang
               </button>
             )}
           </div>
-          {!isEmployee && (
+          {!isEmployee && scopeBranch === undefined && (
             <Select value={branchFilter} onValueChange={setBranchFilter}>
               <SelectTrigger
                 aria-label="الفرع"

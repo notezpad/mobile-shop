@@ -67,6 +67,8 @@ interface Props {
   branches: Branch[]
   isEmployee: boolean
   userBranchId: number | null
+  /** 🏬 فرع مختار من تبويبات الفروع فوق (all أو رقم) */
+  scopeBranch?: string
   onChanged: () => void
 }
 
@@ -116,9 +118,10 @@ function periodRange(p: Period): { from: string; to: string } {
   return { from: toISODate(new Date(now.getFullYear(), now.getMonth(), 1)), to }
 }
 
-export function MovementsTab({ movements, meta, branches, isEmployee, userBranchId: _userBranchId, onChanged: _onChanged }: Props) {
+export function MovementsTab({ movements, meta, branches, isEmployee, userBranchId: _userBranchId, scopeBranch, onChanged: _onChanged }: Props) {
   const [search, setSearch] = React.useState('')
-  const [branchFilter, setBranchFilter] = React.useState<string>('all')
+  const [branchFilterState, setBranchFilter] = React.useState<string>('all')
+  const branchFilter = scopeBranch ?? branchFilterState
   const [typeFilter, setTypeFilter] = React.useState<string>('all')
   // 📋 «تحتاج مراجعة»: حركات الموظفين اليدوية اللي المدير لسه ماراجعهاش
   const [reviewOnly, setReviewOnly] = React.useState(false)
@@ -361,7 +364,7 @@ export function MovementsTab({ movements, meta, branches, isEmployee, userBranch
               className="h-10 rounded-xl border-transparent bg-muted/60 pr-9 focus-visible:bg-background"
             />
           </div>
-          {!isEmployee && (
+          {!isEmployee && scopeBranch === undefined && (
             <Select value={branchFilter} onValueChange={setBranchFilter}>
               <SelectTrigger className="h-10 w-full rounded-xl sm:w-44"><SelectValue /></SelectTrigger>
               <SelectContent>

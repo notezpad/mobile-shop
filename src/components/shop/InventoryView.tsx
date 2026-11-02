@@ -117,6 +117,8 @@ export function InventoryView() {
   const [stocktakes, setStocktakes] = React.useState<Stocktake[]>([])
   const [loading, setLoading] = React.useState(true)
   const [tab, setTab] = React.useState('stock')
+  // 🏬 تبويبات الفروع (للمدير فقط): 'all' = المخزون كله، أو رقم الفرع كنص
+  const [activeBranch, setActiveBranch] = React.useState<string>('all')
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -156,17 +158,39 @@ export function InventoryView() {
   // from the Products page, changes stock shown here too.
   useDataRefresh(['inventory', 'products', 'branches'], load)
 
+  // 🏬 تبويبات الفروع: بتظهر للمدير بس، ولما يبقى فيه أكتر من فرع
+  const branchTabs = React.useMemo(() => branches.filter((b) => b.active !== false), [branches])
+  const showBranchTabs = !isEmployee && branchTabs.length > 1
+  // لو الفرع المختار اتحذف/اتعطّل نرجع «المخزون كله»
+  React.useEffect(() => {
+    if (activeBranch !== 'all' && !branchTabs.some((b) => String(b.id) === activeBranch)) setActiveBranch('all')
+  }, [branchTabs, activeBranch])
+  const scopeId = showBranchTabs && activeBranch !== 'all' ? parseInt(activeBranch, 10) : null
+
+  const scopedProducts = React.useMemo(
+    () => (scopeId == null ? products : products.filter((p) => p.branchId === scopeId)),
+    [products, scopeId],
+  )
+  const scopedTransfers = React.useMemo(
+    () => (scopeId == null ? transfers : transfers.filter((t) => t.fromBranchId === scopeId || t.toBranchId === scopeId)),
+    [transfers, scopeId],
+  )
+  const scopedStocktakes = React.useMemo(
+    () => (scopeId == null ? stocktakes : stocktakes.filter((s) => s.branchId === scopeId)),
+    [stocktakes, scopeId],
+  )
+
   // ----- Derived summary stats -----
   const stats = React.useMemo(() => {
-    const totalItems = products.length
-    const lowStock = products.filter(p => p.quantity <= p.minQuantity).length
-    const outOfStock = products.filter(p => p.quantity <= 0).length
-    const totalValueCost = products.reduce((s, p) => s + p.quantity * p.cost, 0)
-    const totalValuePrice = products.reduce((s, p) => s + p.quantity * p.price, 0)
-    const pendingTransfers = transfers.filter(t => t.status === 'pending').length
-    const draftStocktakes = stocktakes.filter(s => s.status === 'draft').length
+    const totalItems = scopedProducts.length
+    const lowStock = scopedProducts.filter(p => p.quantity <= p.minQuantity).length
+    const outOfStock = scopedProducts.filter(p => p.quantity <= 0).length
+    const totalValueCost = scopedProducts.reduce((s, p) => s + p.quantity * p.cost, 0)
+    const totalValuePrice = scopedProducts.reduce((s, p) => s + p.quantity * p.price, 0)
+    const pendingTransfers = scopedTransfers.filter(t => t.status === 'pending').length
+    const draftStocktakes = scopedStocktakes.filter(s => s.status === 'draft').length
     return { totalItems, lowStock, outOfStock, totalValueCost, totalValuePrice, pendingTransfers, draftStocktakes }
-  }, [products, transfers, stocktakes])
+  }, [scopedProducts, scopedTransfers, scopedStocktakes])
 
   const TYPE_LABELS: Record<string, string> = {
     in: 'وارد', out: 'صادر', adjust: 'تعديل يدوي', sale: 'بيع', return: 'مرتجع',
@@ -314,18 +338,18 @@ export function InventoryView() {
     { value: 'movements', label: 'الحركات', icon: ArrowUpDown, color: ACCENT.movements, sub: `${num(movementMeta?.total ?? movements.length)} حركة`, alert: false },
     {
       value: 'transfers', label: 'التحويلات', icon: Truck, color: ACCENT.transfers,
-      sub: stats.pendingTransfers > 0 ? `${num(stats.pendingTransfers)} معلّق` : `${num(transfers.length)} تحويل`,
+      sub: stats.pendingTransfers > 0 ? `${num(stats.pendingTransfers)} معلّق` : `${num(scopedTransfers.length)} تحويل`,
       alert: stats.pendingTransfers > 0,
     },
     {
       value: 'stocktake', label: 'الجرد', icon: ScanLine, color: ACCENT.stocktake,
-      sub: stats.draftStocktakes > 0 ? `${num(stats.draftStocktakes)} مسودة` : `${num(stocktakes.length)} عملية`,
+      sub: stats.draftStocktakes > 0 ? `${num(stats.draftStocktakes)} مسودة` : `${num(scopedStocktakes.length)} عملية`,
       alert: stats.draftStocktakes > 0,
     },
   ]
 
   const strip = [
-    { icon: Package, color: '#10b981', label: 'إجمالي الأصناف', value: stats.totalItems, hint: `في ${num(branches.length)} فرع` },
+    { icon: Package, color: '#10b981', label: 'إجمالي الأصناف', value: stats.totalItems, hint: scopeId == null ? `في ${num(branches.length)} فرع` : (branches.find((b) => b.id === scopeId)?.name ?? '') },
     { icon: AlertTriangle, color: '#f59e0b', label: 'قاربت على النفاذ', value: lowOnly, hint: 'عند الحد الأدنى أو أقل' },
     { icon: PackageX, color: '#f43f5e', label: 'نفدت كميتها', value: stats.outOfStock, hint: stats.outOfStock > 0 ? 'محتاجة توريد' : 'كله متوفر' },
     { icon: Hourglass, color: '#8b5cf6', label: 'بانتظار إجراء', value: pending, hint: `${num(stats.pendingTransfers)} تحويل · ${num(stats.draftStocktakes)} جرد` },
@@ -334,6 +358,50 @@ export function InventoryView() {
   return (
     <div className="space-y-5">
       <InventoryStyles />
+
+      {/* ═════════ تبويبات الفروع (المدير) ═════════ */}
+      {showBranchTabs && (
+        <div
+          role="tablist"
+          aria-label="الفروع"
+          dir="rtl"
+          className="flex gap-2 overflow-x-auto rounded-2xl border bg-card p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {[{ id: 'all', name: 'المخزون كله', count: products.length }, ...branchTabs.map((b) => ({
+            id: String(b.id),
+            name: b.name,
+            count: products.filter((p) => p.branchId === b.id).length,
+          }))].map((b) => {
+            const active = activeBranch === b.id
+            return (
+              <button
+                key={b.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveBranch(b.id)}
+                className={cn(
+                  'flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold transition-all',
+                  active
+                    ? 'bg-emerald-500 text-white shadow-sm'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+              >
+                {b.id === 'all' ? <Warehouse className="size-4" /> : <MapPin className="size-4" />}
+                {b.name}
+                <span
+                  className={cn(
+                    'rounded-full px-2 py-0.5 text-[11px] tabular-nums',
+                    active ? 'bg-white/25 text-white' : 'bg-muted text-muted-foreground',
+                  )}
+                >
+                  {num(b.count)}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* ═════════ لوحة المستودع ═════════ */}
       <section className="animate-in-up relative overflow-hidden rounded-3xl border bg-card">
@@ -500,6 +568,7 @@ export function InventoryView() {
             */}
             <TabsContent value="stock" forceMount className="space-y-0">
               <StockTab
+                scopeBranch={showBranchTabs ? activeBranch : undefined}
                 products={products}
                 branches={branches}
                 isEmployee={isEmployee}
@@ -509,6 +578,7 @@ export function InventoryView() {
             </TabsContent>
             <TabsContent value="movements" forceMount className="space-y-0">
               <MovementsTab
+                scopeBranch={showBranchTabs ? activeBranch : undefined}
                 movements={movements}
                 meta={movementMeta}
                 branches={branches}
@@ -519,7 +589,7 @@ export function InventoryView() {
             </TabsContent>
             <TabsContent value="transfers" forceMount className="space-y-0">
               <TransfersTab
-                transfers={transfers}
+                transfers={scopedTransfers}
                 branches={branches}
                 products={products}
                 userBranchId={userBranchId}
@@ -528,7 +598,7 @@ export function InventoryView() {
             </TabsContent>
             <TabsContent value="stocktake" forceMount className="space-y-0">
               <StocktakeTab
-                stocktakes={stocktakes}
+                stocktakes={scopedStocktakes}
                 branches={branches}
                 products={products}
                 userBranchId={userBranchId}
