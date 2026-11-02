@@ -456,17 +456,31 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
   const shopName = useShopStore((s) => s.shopName)
   const logoPath = useShopStore((s) => s.branding?.logoPath)
   
+  // 🛑 الفكرة الذكية 1: تصغير الخط تلقائياً بناءً على عدد الحروف
+  const nameLength = shopName?.length || 0
+  const fontSizeClass = nameLength > 22 ? 'text-sm' : nameLength > 14 ? 'text-base' : 'text-xl'
+
   return (
-    <div className={cn('flex items-center gap-3 border-b border-slate-200/60 dark:border-slate-800/60 px-4 py-3', collapsed && 'justify-center px-0 py-4')}>
+    <div className={cn('flex items-center gap-2.5 border-b border-slate-200/60 dark:border-slate-800/60 px-3 py-3', collapsed && 'justify-center px-0 py-4')}>
       <ShopAvatar logoPath={logoPath} collapsed={collapsed} />
       {!collapsed && (
-        <div className="min-w-0 flex-1 flex flex-col justify-center">
+        <div 
+          className="min-w-0 flex-1 flex flex-col justify-center overflow-hidden"
+          style={{
+            // 🛑 الفكرة الذكية 2: تلاشي النص بنعومة من اليسار بدلاً من القطع المفاجئ (...)
+            maskImage: 'linear-gradient(to left, #000 80%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to left, #000 80%, transparent 100%)'
+          }}
+        >
           <p 
-            className="truncate whitespace-nowrap text-xl font-bold leading-tight text-black dark:text-white" 
-            title={shopName}
+            className={cn(
+              'truncate whitespace-nowrap font-bold leading-tight text-black dark:text-white transition-all duration-300',
+              fontSizeClass
+            )} 
+            title={shopName} // 🛑 الفكرة الذكية 3: إظهار الاسم بالكامل عند وضع الماوس
             style={{ fontFamily: 'Tajawal, Cairo, sans-serif' }}
           >
-            {shopName || <span className="inline-block h-6 w-28 animate-pulse rounded bg-slate-200 dark:bg-slate-700 align-middle" />}
+            {shopName || <span className="inline-block h-5 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-700 align-middle" />}
           </p>
         </div>
       )}
