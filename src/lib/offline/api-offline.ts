@@ -19,7 +19,7 @@
  */
 
 import { idb, idbAvailable, onOutboxChange, type OutboxEntry } from './idb'
-import { emitDataChanged } from './data-events'
+import { emitDataChanged, lastDataChangeAt } from './data-events'
 import { findVariantByBarcode, getVariantsOfProduct, upsertProductVariants } from './variants-index'
 
 /**
@@ -68,6 +68,21 @@ function notifySessionExpired() {
  *     so a page that mounts several widgets pointing at the same endpoint no
  *     longer multiplies server load.
  */
+/**
+ * 🛡️ ROOT FIX (2026-11-02): «بعمل إيداع/سحب/أي إجراء ومش بيظهر إلا بعد ريفرش».
+ * بعض الـ GET endpoints (المعاملات المالية، المصروفات، التقارير، حركات المخزون،
+ * الداشبورد…) متخزنة على حافة Cloudflare 15–45 ثانية بمفتاح فيه الفلاتر
+ * (from/to/...)، والـ purge بعد الكتابة بيمسح مفاتيح محددة بس — فأي فلتر مش مطابق
+ * كان بيرجّع النسخة القديمة رغم إن الواجهة أعادت الجلب فعلاً.
+ * الحل: بعد أي تغيير بيانات من المتصفح ده، وطول نافذة الكاش، كل GET بيطلب
+ * `x-fresh: 1` والسيرفر (edgeCache.matchEdgeCache) بيتخطى نسخة الحافة ويحدّثها.
+ * (أطول TTL على الحافة 45 ثانية → النافذة 50.)
+ */
+const EDGE_FRESH_WINDOW_MS = 50_000
+function wantsEdgeFresh(): boolean {
+  return Date.now() - lastDataChangeAt() < EDGE_FRESH_WINDOW_MS
+}
+
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504])
 const REQUEST_TIMEOUT_MS = 20000
 
@@ -248,7 +263,11 @@ async function revalidateGet(url: string): Promise<void> {
   if (!isOnline()) return
   getStore().revalidating.add(url)
   try {
-    const res = await fetch(url, { method: 'GET', cache: 'no-store' })
+    const res = await fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      ...(wantsEdgeFresh() ? { headers: { 'x-fresh': '1' } } : {}),
+    })
     if (!res.ok) return
     const text = await res.text()
     let data: any = null
@@ -749,7 +768,11 @@ async function runGet<T>(
   try {
     const res = await fetchWithRetry(
       url,
-      { method: 'GET', cache: 'default' },
+      {
+        method: 'GET',
+        cache: 'default',
+        ...(wantsEdgeFresh() ? { headers: { 'x-fresh': '1' } } : {}),
+      },
       2,
       options?.signal,
     )

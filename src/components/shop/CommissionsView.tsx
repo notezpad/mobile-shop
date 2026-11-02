@@ -40,6 +40,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useShopStore } from '@/lib/store'
 import { formatCurrency } from '@/lib/format'
+import { useDataRefresh } from '@/lib/offline/data-events'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -446,6 +447,9 @@ export function CommissionsView() {
       setRefreshing(false)
     }
   }, [])
+
+  // 🔄 بيع جديد أو صرف عمولة → التقرير يتحدث لحظياً (بدون سبينر)
+  useDataRefresh(['commissions'], () => void load(month, true))
 
   React.useEffect(() => {
     // أول تحميل: الشهر الحالي — الـ API بيرجّع الشهر الصحيح بتوقيت المحل لو فاضية

@@ -46,6 +46,8 @@ export type DataTag =
   | 'users'
   | 'dashboard'
   | 'settings'
+  | 'shifts'
+  | 'commissions'
 
 export interface DataChangedDetail {
   tags: DataTag[]
@@ -134,6 +136,14 @@ export function resourceTagsForUrl(url: string): DataTag[] {
     tags.add('customers')
     tags.add('cash')
   }
+  // 🆕 فتح/قفل الورديات — كارت «إغلاقات الورديات» في الخزنة كان مالوش tag فمكانش بيتحدث لحظياً
+  if (has('/api/shifts')) {
+    tags.add('shifts')
+    tags.add('hr') // الوردية بتتسجّل في الحضور
+  }
+  // 🆕 العمولات: أي بيع بيغيّر أرقام البائعين، وصرف/إعدادات العمولة بتغيّرها
+  if (has('/api/commissions')) tags.add('commissions')
+  if (has('/api/sales')) tags.add('commissions')
   if (has('/api/notifications')) tags.add('notifications')
   if (has('/api/branches')) tags.add('branches')
   if (has('/api/hr')) {
@@ -193,10 +203,21 @@ export async function withDataBatch<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * 🕐 آخر مرة حصل فيها تغيير بيانات في المتصفح ده (كتابة أونلاين / أوفلاين / مزامنة).
+ * api-offline بيستخدمها: لو لسه جوه نافذة الكاش على الحافة (≤ أطول TTL) بيطلب
+ * الـ GET بـ `x-fresh: 1` فالسيرفر يتخطى نسخة الحافة القديمة. مخزّنة على globalThis
+ * عشان كل نسخ الموديول (chunks) تشوف نفس القيمة.
+ */
+export function lastDataChangeAt(): number {
+  return ((globalThis as any).__nezamLastDataChange as number | undefined) ?? 0
+}
+
 export function emitDataChanged(url: string, method: string) {
   if (typeof window === 'undefined') return
   const tags = resourceTagsForUrl(url)
   if (tags.length === 0) return
+  ;(globalThis as any).__nezamLastDataChange = Date.now()
   if (batchDepth > 0) {
     tags.forEach((t) => batchedTags.add(t))
     batchedMeta = { url, method }

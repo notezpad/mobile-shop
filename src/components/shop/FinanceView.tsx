@@ -510,7 +510,7 @@ export function FinanceView() {
             </Button>
             <button
               type="button"
-              onClick={load}
+              onClick={() => void load()}
               disabled={loading}
               className="mx-auto mt-1 inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
             >

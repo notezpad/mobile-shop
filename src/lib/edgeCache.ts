@@ -22,6 +22,8 @@
  * (الـ response اللي بيوصل للمتصفح دايماً no-store).
  */
 
+import { headers } from 'next/headers'
+
 const CACHE_HOST = 'edge-cache.internal'
 
 /** true لو شغالين داخل Cloudflare Workers (workerd) وليس Node dev */
@@ -46,6 +48,20 @@ function buildKey(pathname: string, rawQuery: string, tenantId: number | string,
   return new Request(`https://${CACHE_HOST}${pathname}${q}#tenant=${tenantId}&v=${v}`)
 }
 
+/**
+ * 🛡️ الطلب جاي بـ `x-fresh: 1`؟ (المتصفح لسه عامل كتابة من أقل من ~50 ثانية —
+ * شوف api-offline.ts). ساعتها نتخطى نسخة الحافة ونحسب من القاعدة، وputEdgeCache
+ * بعدها بيكتب النسخة الجديدة فوق القديمة (فباقي الأجهزة كمان بتتصلح).
+ */
+async function requestWantsFresh(): Promise<boolean> {
+  try {
+    const h = await headers()
+    return h.get('x-fresh') === '1'
+  } catch {
+    return false // خارج نطاق طلب
+  }
+}
+
 /** رد مخزن؟ يرجع نسخة جاهزة للإرجاع للمتصفح (Cache-Control: no-store) */
 export async function matchEdgeCache(
   pathname: string,
@@ -54,6 +70,7 @@ export async function matchEdgeCache(
   v: number | string = '1'
 ): Promise<Response | null> {
   if (!edgeCacheAvailable()) return null
+  if (await requestWantsFresh()) return null
   try {
     const hit = await (globalThis as unknown as { caches: { default: Cache } }).caches.default.match(
       buildKey(pathname, rawQuery, tenantId, v)
@@ -98,6 +115,28 @@ export async function putEdgeCache(
   }
 }
 
+/**
+ * توسيع مفتاح مسح لكل المفاتيح الفعلية اللي ممكن تكون متخزنة تحته.
+ * (الـ purge بيمسح مفتاح بالظبط — فلو المفتاح المخزن فيه لاحقة أو نسخة تانية
+ * كان المسح بيروح في الفاضي.)
+ *  - /api/dashboard: المفتاح الفعلي `days=N&p=0|1` (p = صلاحية رؤية الأرباح)
+ *  - /api/reports/branches: النسخة '1' (يشوف الربح) و'1n' (ما يشوفوش)
+ */
+function expandPurgeEntry(
+  e: { pathname: string; rawQuery?: string },
+  v: number | string
+): Array<{ rawQuery: string; v: number | string }> {
+  const raw = e.rawQuery ?? ''
+  const out: Array<{ rawQuery: string; v: number | string }> = [{ rawQuery: raw, v }]
+  if (e.pathname === '/api/dashboard' && /^days=\d+$/.test(raw)) {
+    out.push({ rawQuery: `${raw}&p=1`, v }, { rawQuery: `${raw}&p=0`, v })
+  }
+  if (e.pathname === '/api/reports/branches') {
+    out.push({ rawQuery: raw, v: '1' }, { rawQuery: raw, v: '1n' })
+  }
+  return out
+}
+
 /** مسح مفاتيح بعد mutations — فورية، عشان البيانات تفضل دقيقة 100% */
 export async function purgeEdgeCache(
   entries: Array<{ pathname: string; rawQuery?: string }>,
@@ -108,10 +147,12 @@ export async function purgeEdgeCache(
   try {
     const cache = (globalThis as unknown as { caches: { default: Cache } }).caches.default
     await Promise.all(
-      entries.map((e) =>
-        cache
-          .delete(buildKey(e.pathname, e.rawQuery ?? '', tenantId, v))
-          .catch(() => undefined)
+      entries.flatMap((e) =>
+        expandPurgeEntry(e, v).map((k) =>
+          cache
+            .delete(buildKey(e.pathname, k.rawQuery, tenantId, k.v))
+            .catch(() => undefined)
+        )
       )
     )
   } catch {

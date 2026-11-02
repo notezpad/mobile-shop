@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
+import { useDataRefresh } from '@/lib/offline/data-events'
 import { toast } from 'sonner'
 import type { Branch, Movement } from '../InventoryView'
 import {
@@ -146,6 +147,11 @@ export function MovementsTab({ movements, meta, branches, isEmployee, userBranch
     if (!hasActiveFilters) setLiveMovements(movements)
   }, [movements, hasActiveFilters])
 
+  // 🔄 مع الفلاتر القائمة بتتجاب مستقلة عن الأب — أي حركة جديدة/تحويل/بيع لازم
+  // يعيد جلبها (قبل كده كانت تفضل قديمة لحد ما تغيّر فلتر أو تعمل ريفرش).
+  const [refetchTick, setRefetchTick] = React.useState(0)
+  useDataRefresh(['inventory', 'sales', 'purchase-orders'], () => setRefetchTick((t) => t + 1), hasActiveFilters)
+
   // فيه فلاتر؟ نجيب القائمة المفلترة من السيرفر — نفس where القديم حرفياً
   React.useEffect(() => {
     if (!hasActiveFilters) return
@@ -173,7 +179,7 @@ export function MovementsTab({ movements, meta, branches, isEmployee, userBranch
       } catch {}
     }, 250)
     return () => { alive = false; clearTimeout(t) }
-  }, [branchFilter, typeFilter, from, to, search, hasActiveFilters, reviewOnly])
+  }, [branchFilter, typeFilter, from, to, search, hasActiveFilters, reviewOnly, refetchTick])
 
   const filtered = liveMovements
 

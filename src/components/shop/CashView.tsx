@@ -6,6 +6,7 @@ import {
   ArrowLeftRight,
   ArrowUpRight,
   Banknote,
+  Building2,
   CalendarDays,
   Clock,
   Coins,
@@ -14,6 +15,7 @@ import {
   FileText,
   HandCoins,
   Landmark,
+  Layers,
   Loader2,
   Percent,
   PencilLine,
@@ -24,6 +26,7 @@ import {
   Search,
   ShoppingCart,
   Smartphone,
+  Star,
   StickyNote,
   Truck,
   Users,
@@ -404,34 +407,84 @@ export function CashView() {
   const topShare = stats.top && stats.totalIn ? (stats.top[1] / stats.totalIn) * 100 : 0
   const weekMax = Math.max(1, ...stats.week.map((d) => Math.max(d.inn, d.out)))
 
+  // 🏬 تابات الفروع (للمدير فقط لما يكون عنده أكتر من فرع)
+  const branchTabs = React.useMemo(() => {
+    const bs = data?.branches ?? []
+    if (bs.length <= 1) return []
+    return [
+      { id: 'all', name: 'كل الفروع', balance: bs.reduce((a, b) => a + b.balance, 0), isMain: false },
+      ...bs.map((b) => ({ id: String(b.id), name: b.name, balance: b.balance, isMain: b.isMain })),
+    ]
+  }, [data?.branches])
+  const activeBranchName = branchFilter === 'all' ? null : branchTabs.find((b) => b.id === branchFilter)?.name ?? null
+
   return (
     <div className="space-y-4">
-      {/* ═══════════════ خزنة كل فرع (للمدير) ═══════════════ */}
-      {(data?.branches?.length ?? 0) > 1 && (
-        <div className="flex flex-wrap gap-2">
-          {[{ id: 'all', name: 'كل الفروع', balance: data!.branches!.reduce((a, b) => a + b.balance, 0) },
-            ...data!.branches!.map((b) => ({ id: String(b.id), name: b.name, balance: b.balance }))].map((b) => (
-            <button
-              key={b.id}
-              type="button"
-              onClick={() => setBranchFilter(b.id)}
-              className={`rounded-xl border px-3 py-2 text-start text-xs transition sm:text-sm ${
-                branchFilter === b.id ? 'border-emerald-500 bg-emerald-500/10 font-bold' : 'bg-card hover:bg-muted'
-              }`}
-            >
-              <span className="block">{b.name}</span>
-              <span className={`block tabular-nums ${b.balance < 0 ? 'text-rose-600' : 'text-muted-foreground'}`}>
-                {formatCurrency(b.balance)}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* ═══════════════ الهيرو ═══════════════ */}
       <section className="relative overflow-hidden rounded-3xl border bg-gradient-to-br from-emerald-50 via-white to-amber-50 p-4 dark:from-emerald-950/40 dark:via-card dark:to-amber-950/25 sm:p-7">
         {/* علامة مائية: الخزنة */}
         <Vault className="pointer-events-none absolute -bottom-8 -start-6 size-56 text-emerald-600/[0.05] dark:text-emerald-400/[0.06]" strokeWidth={1} />
+
+        {/* 🏬 تابات الفروع — فلتر الخزنة كلها (الرصيد والرسم والدفتر والإغلاقات) */}
+        {branchTabs.length > 0 && (
+          <div className="relative mb-5 border-b border-emerald-900/10 pb-4 dark:border-white/10">
+            <div className="mb-2.5 flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+              <Building2 className="size-3.5" />
+              اختر الخزنة
+            </div>
+            <div
+              role="tablist"
+              aria-label="اختيار خزنة الفرع"
+              className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {branchTabs.map((b) => {
+                const active = branchFilter === b.id
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setBranchFilter(b.id)}
+                    className={cn(
+                      'group flex min-w-[148px] shrink-0 items-center gap-2.5 rounded-2xl border px-3 py-2.5 text-start transition-all sm:min-w-[170px]',
+                      active
+                        ? 'border-emerald-500 bg-emerald-500/10 shadow-sm ring-1 ring-emerald-500/30'
+                        : 'bg-background/70 hover:border-emerald-500/40 hover:bg-background'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors',
+                        active
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-muted text-muted-foreground group-hover:text-foreground'
+                      )}
+                    >
+                      {b.id === 'all' ? <Layers className="size-4" /> : <Building2 className="size-4" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className={cn('truncate text-sm', active ? 'font-extrabold' : 'font-bold')}>{b.name}</span>
+                        {b.isMain && (
+                          <Star className="size-3 shrink-0 fill-amber-400 text-amber-500" aria-label="الفرع الرئيسي" />
+                        )}
+                      </span>
+                      <span
+                        className={cn(
+                          'block truncate text-xs font-semibold tabular-nums',
+                          b.balance < 0 ? 'text-rose-600 dark:text-rose-400' : active ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'
+                        )}
+                      >
+                        <Amt value={b.balance} />
+                      </span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="relative grid items-center gap-5 lg:grid-cols-[1fr_minmax(0,1.1fr)_auto] lg:gap-6">
           {/* الرصيد */}
@@ -440,7 +493,7 @@ export function CashView() {
               <span className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 sm:size-8 dark:text-emerald-400">
                 <Vault className="size-3.5 sm:size-4" />
               </span>
-              الخزنة
+              الخزنة{activeBranchName ? <span className="font-bold text-foreground"> — {activeBranchName}</span> : null}
             </div>
             {loading ? (
               <Skeleton className="mt-3 h-14 w-56" />
@@ -552,6 +605,9 @@ export function CashView() {
           />
         </div>
       </section>
+
+      {/* 🕐 إغلاقات الورديات — الجرد الأعمى: رقابة المدير على درج كل وردية (فوق الدفتر عشان توصلها بسرعة) */}
+      <ShiftClosuresCard branchFilter={branchFilter} />
 
       {/* ═══════════════ الصف الثاني ═══════════════ */}
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -924,9 +980,6 @@ export function CashView() {
           </div>
         </aside>
       </div>
-
-      {/* 🕐 إغلاقات الورديات — الجرد الأعمى (التحديث الثامن): رقابة المدير على درج كل وردية */}
-      <ShiftClosuresCard branchFilter={branchFilter} />
 
       <ManualDialog open={dialogOpen} onOpenChange={setDialogOpen} onSaved={load} balance={balance} branches={data?.branches ?? []} defaultBranch={branchFilter} />
     </div>

@@ -137,8 +137,8 @@ async function __DELETE(
     throw e
   }
 
-  // ⚡ القايمة اتغيرت (status='cancelled' + قيود عكسية في الخزنة) — نمسح كاش
-  // قائمة التمويل الافتراضية؛ أي فلاتر تانية بتنضفي بالـ TTL (20 ثانية).
+  // ⚡ القايمة اتغيرت (status='cancelled' + قيود عكسية) — المسح هنا للمفتاح بدون
+  // فلاتر بس؛ الجهاز اللي نفّذ بيتخطى الكاش بهيدر x-fresh، والباقي بالـ TTL (20 ثانية).
   await purgeEdgeCache([{ pathname: '/api/finance', rawQuery: '' }], session.tenantId, '1')
 
   return NextResponse.json({ ok: true })

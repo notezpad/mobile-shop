@@ -12,6 +12,7 @@
 import * as React from 'react'
 import { HandCoins } from 'lucide-react'
 import { api } from '@/lib/api'
+import { useDataRefresh } from '@/lib/offline/data-events'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -32,21 +33,28 @@ export function MyCommissionCard() {
   const [data, setData] = React.useState<MyCommissionData | null>(null)
   const [loading, setLoading] = React.useState(true)
 
-  React.useEffect(() => {
-    let alive = true
+  const aliveRef = React.useRef(true)
+  const load = React.useCallback(() => {
     api<MyCommissionData>('/api/commissions/my')
       .then((d) => {
-        if (!alive) return
-        setData(d)
+        if (aliveRef.current) setData(d)
       })
       .catch(() => null)
       .finally(() => {
-        if (alive) setLoading(false)
+        if (aliveRef.current) setLoading(false)
       })
-    return () => {
-      alive = false
-    }
   }, [])
+
+  React.useEffect(() => {
+    aliveRef.current = true
+    load()
+    return () => {
+      aliveRef.current = false
+    }
+  }, [load])
+
+  // 🔄 كل بيعة بتزوّد عمولة البائع — الكارت يتحدث لحظياً
+  useDataRefresh(['commissions'], load)
 
   // ⚡ أثناء التحميل ما نرسمش أي حاجة: الكارت أصلاً بيختفي لأغلب المستخدمين (مدير/كاشير مش بائع)،
   // ولو رسمنا placeholder هيظهر 3 ثواني وبعدين المحتوى كله يقفز لفوق (layout shift).
