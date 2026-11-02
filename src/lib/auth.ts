@@ -177,7 +177,7 @@ async function sessionUserRow(userId: string): Promise<SessionUserRow | null> {
     const rows = await sql<SessionUserRow[]>`
       SELECT "active" AS active,
              "passwordChangedAt" AS changed,
-             "branchId" AS branchId,
+             "branchId" AS "branchId",
              "permissions" AS permissions,
              "canViewProfits" AS can_view_profits
       FROM "User" WHERE "id" = ${userId} LIMIT 1`

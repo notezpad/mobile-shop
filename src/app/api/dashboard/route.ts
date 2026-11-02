@@ -137,7 +137,7 @@ export async function GET(req: Request) {
       // 🛡️ ج-2: أفضل المنتجات صافي بعد المرتجعات — بيع ومرتجع في استعلام واحد
       // (المرتجع بيتنسب للمنتج من SaleReturnItem، بوقت المرتجع)
       db.$queryRaw<{ name: string; quantity: number; total: number; pieceLabel: string | null }[]>`
-        SELECT MIN(sp.name) AS name, MAX(sp."pieceLabel") AS "pieceLabel",
+        SELECT sp.name AS name, sp."pieceLabel" AS "pieceLabel",
                (sp.qty - COALESCE(rr.qty, 0))::float8 AS quantity,
                (sp.total - COALESCE(rr.total, 0))::float8 AS total
         FROM (
