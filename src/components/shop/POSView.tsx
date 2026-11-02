@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronDown,
   ChevronRight,
+  ChevronsUpDown,
   ClipboardCheck,
   CreditCard,
   Loader2,
@@ -44,6 +45,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { arEG } from 'react-day-picker/locale'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { toast } from 'sonner'
@@ -797,6 +799,13 @@ function useMediaQuery(query: string) {
    Main view
    ──────────────────────────────────────────────────────────────── */
 
+// 💰 أول حرفين من أول كلمتين في الاسم — أفاتار البائع (محمد كمال جمال → «مك»)
+function sellerInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  const letters = parts.slice(0, 2).map((w) => Array.from(w)[0] ?? '')
+  return letters.join('') || '؟'
+}
+
 export function POSView() {
   const t = useVocab()
   const user = useShopStore((s) => s.user)
@@ -888,6 +897,9 @@ export function POSView() {
   const sellerCommissionsEnabled = useShopStore((s) => s.branding.sellerCommissionsEnabled)
   const [sellers, setSellers] = React.useState<{ id: string; name: string }[]>([])
   const [sellerId, setSellerId] = React.useState('')
+  // 💰 قايمة اختيار البائع (Popover فيه بحث) — الأسماء ممكن تبقى رباعية وعددهم كبير
+  const [sellerOpen, setSellerOpen] = React.useState(false)
+  const selectedSeller = sellers.find((x) => x.id === sellerId) ?? null
   const [received, setReceived] = React.useState<number | ''>('')
   const [submitting, setSubmitting] = React.useState(false)
   const [customersVersion, setCustomersVersion] = React.useState(0)
@@ -1407,7 +1419,7 @@ export function POSView() {
     // عشان السلة من أولها تفضل كلها من فرع واحد.
     if (showSaleBranchPicker && !saleBranchId) {
       playBeep('err')
-      toast.error('اختار «فرع الفاتورة» الأول من الشريط اللي فوق')
+      toast.error('اختار «الفرع» الأول من أعلى قائمة المنتجات')
       return false
     }
     setAddingProduct(true)
@@ -1760,7 +1772,7 @@ export function POSView() {
     // 🏬 المدير لازم يكون محدد «فرع الفاتورة» — السيرفر بيرفض كمان لو ناقصة
     // (الحكم النهائي عنده)، بس الرسالة دي أسرع للكاشير.
     if (showSaleBranchPicker && !saleBranchId) {
-      toast.error('اختار «فرع الفاتورة» الأول من الشريط اللي فوق')
+      toast.error('اختار «الفرع» الأول من أعلى قائمة المنتجات')
       return
     }
     if (creditNeedsCustomer) {
@@ -2252,6 +2264,59 @@ export function POSView() {
           }
         />
 
+        {/* 🏬 «فرع الفاتورة» — للمدير فقط لما المحل فيه أكتر من فرع.
+            سطر واحد مدمج (Segmented control) أول ما تفتح الكتالوج: يختار الفرع
+            والكتالوج بيتفلتر عليه فورًا، فمستحيل فاتورة أصنافها من فروع مختلفة.
+            شكله متفرّق عن فلاتر التصنيفات (دي كبسولات) عشان ما يتلخبطوش. */}
+        {showSaleBranchPicker && (
+          <div
+            role="radiogroup"
+            aria-label="فرع الفاتورة"
+            className={cn(
+              'flex items-center gap-1.5 rounded-xl border p-1 transition-colors',
+              saleBranchId
+                ? 'border-border bg-muted/50'
+                : 'border-warning/60 bg-warning-subtle/50 ring-2 ring-warning/20'
+            )}
+          >
+            <span className="flex shrink-0 items-center gap-1.5 ps-2 pe-1 text-xs font-extrabold text-muted-foreground">
+              <Store className="size-4 text-brand-600" aria-hidden />
+              الفرع
+            </span>
+            <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto [scrollbar-width:none]">
+              {posBranches.map((b) => {
+                const active = saleBranchId === String(b.id)
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => changeSaleBranch(String(b.id))}
+                    className={cn(
+                      'flex h-9 min-w-fit flex-1 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-bold transition-colors',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40',
+                      active
+                        ? 'bg-brand-600 text-white shadow-sm'
+                        : 'text-muted-foreground hover:bg-card hover:text-foreground'
+                    )}
+                  >
+                    {b.name}
+                    {b.isMain && (
+                      <span className={cn('text-[10px] font-semibold', active ? 'text-white/80' : 'text-muted-foreground/70')}>
+                        · رئيسي
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            {!saleBranchId && (
+              <span className="shrink-0 pe-2 text-[11px] font-extrabold text-warning-subtle-foreground">اختر الفرع</span>
+            )}
+          </div>
+        )}
+
         <div className="flex items-stretch gap-2">
         <form onSubmit={handleSearchSubmit} className="min-w-0 flex-1">
           <div className="relative">
@@ -2301,65 +2366,6 @@ export function POSView() {
           <span className="hidden 2xl:inline">{t('منتج جديد')}</span>
         </button>
         </div>
-
-        {/* 🏬 (التحديث الرابع عشر) شريط «فرع الفاتورة» — للمدير فقط لما المحل
-            فيه أكتر من فرع: يختار الفرع الأول، والكتالوج بيتفلتر عليه فورًا
-            فمبقى مستحيل تصميميًا فاتورة أصنافها من فروع مختلفة. */}
-        {showSaleBranchPicker && (
-          <div
-            className={cn(
-              'rounded-xl border p-2.5',
-              saleBranchId
-                ? 'border-brand-600/30 bg-brand-600/[0.04]'
-                : 'border-warning/60 bg-warning-subtle/40'
-            )}
-          >
-            <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs font-extrabold">
-              <Store className="size-3.5 shrink-0 text-brand-600" aria-hidden />
-              <span>فرع الفاتورة</span>
-              {selectedSaleBranch ? (
-                <span className="font-semibold text-muted-foreground">
-                  — كل الأصناف هتتسجل على «{selectedSaleBranch.name}»
-                </span>
-              ) : (
-                <span className="text-warning-subtle-foreground">
-                  — لازم تختار فرع قبل إتمام البيع
-                </span>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {posBranches.map((b) => {
-                const active = saleBranchId === String(b.id)
-                return (
-                  <button
-                    key={b.id}
-                    type="button"
-                    onClick={() => changeSaleBranch(String(b.id))}
-                    aria-pressed={active}
-                    className={cn(
-                      'flex shrink-0 items-center gap-1.5 rounded-full border-2 px-3.5 py-1.5 text-sm font-bold transition-colors',
-                      active
-                        ? 'border-brand-600 bg-brand-600/10 text-brand-800 shadow-sm dark:text-brand-200'
-                        : 'border-border bg-card text-muted-foreground hover:border-foreground/40 hover:text-foreground'
-                    )}
-                  >
-                    {b.name}
-                    {b.isMain && (
-                      <span
-                        className={cn(
-                          'rounded px-1 text-[10px] font-extrabold',
-                          active ? 'bg-brand-600/20' : 'bg-muted'
-                        )}
-                      >
-                        الرئيسي
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
 
         {categories.length > 0 && (
           <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none]">
@@ -3034,6 +3040,12 @@ export function POSView() {
       <Check className="size-3" strokeWidth={3} />
     </span>
   )
+  // ✅ علامة صح داخل السطر (مش absolute) — للأزرار الصغيرة زي البائع عشان ما تغطيش النص
+  const inlineCheck = (
+    <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white">
+      <Check className="size-3" strokeWidth={3} />
+    </span>
+  )
   const payBtn = cn(
     'rounded-lg border border-foreground/25 bg-card px-3 text-sm font-semibold tabular-nums transition-colors hover:border-foreground/50 hover:bg-muted disabled:opacity-40',
     d >= 1 ? 'py-1' : 'py-1.5'
@@ -3046,7 +3058,22 @@ export function POSView() {
   const renderPaymentPanel = (inSheet: boolean) => (
     <section className={cn(panelCls, inSheet && 'min-h-0 flex-1 rounded-none border-0 shadow-none')}>
       <header className={cn('border-b border-border px-3.5', d === 2 ? 'py-2.5' : 'py-3')}>
-        <PanelHead n={3} tag="Checkout" title="ادفع" aside={statusChip} />
+        <PanelHead
+          n={3}
+          tag="Checkout"
+          title="ادفع"
+          aside={
+            <div className="flex items-center gap-1.5">
+              {showSaleBranchPicker && selectedSaleBranch && (
+                <span className="inline-flex max-w-28 items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
+                  <Store className="size-3 shrink-0" aria-hidden />
+                  <span className="truncate">{selectedSaleBranch.name}</span>
+                </span>
+              )}
+              {statusChip}
+            </div>
+          }
+        />
       </header>
 
       <div
@@ -3201,35 +3228,106 @@ export function POSView() {
             أحسن من تخمين صامت. */}
         {sellerCommissionsEnabled && sellers.length > 0 && (
           <div className="space-y-1.5">
-            <p className="text-sm font-bold text-foreground/75">البائع (العمولة)</p>
-            <div role="radiogroup" aria-label="البائع" className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={sellerId === ''}
-                onClick={() => setSellerId('')}
-                className={cn(choiceCls(sellerId === ''), 'h-9 px-3 text-sm')}
-              >
-                {sellerId === '' && checkMark}
-                بدون بائع
-              </button>
-              {sellers.map((s) => {
-                const active = sellerId === s.id
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    onClick={() => setSellerId(s.id)}
-                    className={cn(choiceCls(active), 'h-9 px-3 text-sm')}
+            <p className="flex items-center gap-1.5 text-sm font-bold text-foreground/75">
+              البائع (العمولة)
+              <span className="text-xs font-medium text-muted-foreground">— اختياري</span>
+            </p>
+            <Popover open={sellerOpen} onOpenChange={setSellerOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  role="combobox"
+                  aria-expanded={sellerOpen}
+                  aria-label="اختيار البائع"
+                  title={selectedSeller?.name}
+                  className={cn(
+                    'flex w-full items-center gap-2.5 rounded-xl border-2 px-2.5 text-start transition-colors',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40',
+                    d >= 1 ? 'h-10' : 'h-11',
+                    selectedSeller
+                      ? 'border-brand-600 bg-brand-600/10'
+                      : 'border-foreground/25 bg-card hover:border-foreground/40'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold',
+                      selectedSeller ? 'bg-brand-600 text-white' : 'bg-muted text-muted-foreground'
+                    )}
+                    aria-hidden
                   >
-                    {active && checkMark}
-                    <span className="max-w-32 truncate">{s.name}</span>
-                  </button>
-                )
-              })}
-            </div>
+                    {selectedSeller ? sellerInitials(selectedSeller.name) : <User className="size-4" />}
+                  </span>
+                  <span
+                    className={cn(
+                      'min-w-0 flex-1 truncate text-sm',
+                      selectedSeller ? 'font-extrabold text-brand-800 dark:text-brand-200' : 'font-medium text-muted-foreground'
+                    )}
+                  >
+                    {selectedSeller ? selectedSeller.name : 'بدون بائع — اضغط للاختيار'}
+                  </span>
+                  {selectedSeller ? (
+                    <span
+                      role="button"
+                      aria-label="إلغاء اختيار البائع"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSellerId('')
+                      }}
+                      className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+                    >
+                      <X className="size-4" />
+                    </span>
+                  ) : (
+                    <ChevronsUpDown className="size-4 shrink-0 opacity-50" aria-hidden />
+                  )}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" collisionPadding={12} className="w-[--radix-popover-trigger-width] min-w-64 p-0">
+                <Command>
+                  {sellers.length > 5 && <CommandInput placeholder="ابحث باسم البائع…" />}
+                  <CommandList className="max-h-64">
+                    <CommandEmpty>مفيش بائع بالاسم ده</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value="بدون بائع"
+                        onSelect={() => {
+                          setSellerId('')
+                          setSellerOpen(false)
+                        }}
+                        className="gap-2.5 py-2"
+                      >
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                          <User className="size-4" />
+                        </span>
+                        <span className="flex-1 text-sm font-semibold">بدون بائع (من غير عمولة)</span>
+                        {sellerId === '' && <Check className="size-4 shrink-0 text-brand-600" strokeWidth={3} />}
+                      </CommandItem>
+                      {sellers.map((sl) => (
+                        <CommandItem
+                          key={sl.id}
+                          value={`${sl.name} ${sl.id}`}
+                          onSelect={() => {
+                            setSellerId(sl.id)
+                            setSellerOpen(false)
+                          }}
+                          className="items-center gap-2.5 py-2"
+                        >
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-600/15 text-[11px] font-extrabold text-brand-800 dark:text-brand-200">
+                            {sellerInitials(sl.name)}
+                          </span>
+                          {/* الاسم كامل حتى لو رباعي — بيلف على سطرين بدل ما يتقص */}
+                          <span className="min-w-0 flex-1 whitespace-normal break-words text-sm font-semibold leading-snug">
+                            {sl.name}
+                          </span>
+                          {sellerId === sl.id && <Check className="size-4 shrink-0 text-brand-600" strokeWidth={3} />}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
         )}
 
@@ -3397,7 +3495,7 @@ export function POSView() {
         {showSaleBranchPicker && !saleBranchId && (
           <p className="flex items-start gap-1.5 rounded-lg bg-warning-subtle px-3 py-2 text-xs font-medium text-warning-subtle-foreground">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-            اختار «فرع الفاتورة» الأول من الشريط اللي فوق عشان تقدر تكمل البيع.
+            اختار «الفرع» من أعلى قائمة المنتجات عشان تقدر تكمل البيع.
           </p>
         )}
         <Button

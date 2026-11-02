@@ -33,7 +33,47 @@ export function StockPage() {
   const isEmployee = user?.role === 'EMPLOYEE'
   const userBranchId = user?.branchId ?? null
 
-  const { branches, products, transfers, stocktakes, loading, noData, stats, reload, loadErrors } = useInventoryData()
+  const { branches, products, transfers, stocktakes, loading, noData, stats: baseStats, reload, loadErrors } = useInventoryData()
+
+  // 🏬 تبويبات الفروع (للمدير فقط، ولما يكون فيه أكتر من فرع):
+  // «المخزون كله» + تبويب لكل فرع — الاختيار بيفلتر الأرقام فوق وقائمة الأصناف.
+  const [activeBranch, setActiveBranch] = React.useState<string>('all')
+  const showBranchTabs = !isEmployee && branches.length > 1
+  React.useEffect(() => {
+    if (activeBranch !== 'all' && !branches.some((b) => String(b.id) === activeBranch)) setActiveBranch('all')
+  }, [branches, activeBranch])
+  const scopeId = showBranchTabs && activeBranch !== 'all' ? parseInt(activeBranch, 10) : null
+
+  const stats = React.useMemo(() => {
+    if (scopeId == null) return baseStats
+    const ps = products.filter((p) => p.branchId === scopeId)
+    const canSeeCost = baseStats.canSeeCost
+    const totalItems = ps.length
+    const lowStock = ps.filter((p) => p.quantity <= p.minQuantity).length
+    const outOfStock = ps.filter((p) => p.quantity <= 0).length
+    const totalValueCost = canSeeCost ? ps.reduce((a, p) => a + p.quantity * (p.cost ?? 0), 0) : null
+    const totalValuePrice = ps.reduce((a, p) => a + p.quantity * p.price, 0)
+    const stored = ps.filter((p) => (p.displayQty ?? p.quantity) < p.quantity)
+    const warehousePieces = stored.reduce((a, p) => a + (p.quantity - (p.displayQty ?? p.quantity)), 0)
+    const warehouseValue = canSeeCost
+      ? stored.reduce((a, p) => a + (p.quantity - (p.displayQty ?? p.quantity)) * (p.cost ?? 0), 0)
+      : null
+    const pendingTransfers = transfers.filter(
+      (t) => t.status === 'pending' && (t.fromBranchId === scopeId || t.toBranchId === scopeId),
+    ).length
+    const draftStocktakes = stocktakes.filter((x) => x.status === 'draft' && x.branchId === scopeId).length
+    return {
+      ...baseStats,
+      totalItems, lowStock, outOfStock, totalValueCost, totalValuePrice,
+      expectedProfit: totalValueCost === null ? null : totalValuePrice - totalValueCost,
+      healthyCount: Math.max(0, totalItems - lowStock),
+      lowOnly: Math.max(0, lowStock - outOfStock),
+      pendingTransfers, draftStocktakes, pendingTotal: pendingTransfers + draftStocktakes,
+      warehousePieces: Math.round(warehousePieces * 1000) / 1000,
+      warehouseValue: warehouseValue === null ? null : Math.round(warehouseValue * 100) / 100,
+      warehouseItems: stored.length,
+    }
+  }, [baseStats, scopeId, products, transfers, stocktakes])
 
   const [exporting, setExporting] = React.useState(false)
 
@@ -48,7 +88,7 @@ export function StockPage() {
       let total = Infinity
       for (let page = 1; all.length < total && page <= 200; page++) {
         const res = await api<{ data: Row[]; total: number }>(
-          `/api/products?limit=100&status=all&page=${page}`,
+          `/api/products?limit=100&status=all&page=${page}${scopeId != null ? `&branchId=${scopeId}` : ''}`,
         )
         const list = Array.isArray(res) ? (res as unknown as Row[]) : (res?.data ?? [])
         all.push(...list)
@@ -148,7 +188,7 @@ export function StockPage() {
   } as const
 
   const strip = [
-    { icon: Package, color: '#10b981', label: 'إجمالي الأصناف', value: stats.totalItems, hint: `في ${num(branches.length)} فرع` },
+    { icon: Package, color: '#10b981', label: 'إجمالي الأصناف', value: stats.totalItems, hint: scopeId == null ? `في ${num(branches.length)} فرع` : (branches.find((b) => b.id === scopeId)?.name ?? '') },
     { icon: AlertTriangle, color: '#f59e0b', label: 'قاربت على النفاذ', value: stats.lowOnly, hint: 'عند الحد الأدنى أو أقل' },
     { icon: PackageX, color: '#f43f5e', label: 'نفدت كميتها', value: stats.outOfStock, hint: stats.outOfStock > 0 ? 'محتاجة توريد' : 'كله متوفر' },
     { icon: Hourglass, color: '#8b5cf6', label: 'بانتظار إجراء', value: stats.pendingTotal, hint: `${num(stats.pendingTransfers)} تحويل · ${num(stats.draftStocktakes)} جرد` },
@@ -157,6 +197,52 @@ export function StockPage() {
   return (
     <div className="space-y-5">
       <InventoryStyles />
+
+      {/* ═════════ تبويبات الفروع (المدير) ═════════ */}
+      {showBranchTabs && (
+        <div
+          role="tablist"
+          aria-label="الفروع"
+          className="flex gap-2 overflow-x-auto rounded-2xl border bg-card p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {[
+            { id: 'all', name: 'المخزون كله', count: products.length },
+            ...branches.map((b) => ({
+              id: String(b.id),
+              name: b.active === false ? `${b.name} (معطّل)` : b.name,
+              count: products.filter((p) => p.branchId === b.id).length,
+            })),
+          ].map((b) => {
+            const active = activeBranch === b.id
+            return (
+              <button
+                key={b.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveBranch(b.id)}
+                className={
+                  'flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold transition-all ' +
+                  (active
+                    ? 'bg-emerald-500 text-white shadow-sm'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground')
+                }
+              >
+                {b.id === 'all' ? <Warehouse className="size-4" /> : <MapPin className="size-4" />}
+                {b.name}
+                <span
+                  className={
+                    'rounded-full px-2 py-0.5 text-[11px] tabular-nums ' +
+                    (active ? 'bg-white/25 text-white' : 'bg-muted text-muted-foreground')
+                  }
+                >
+                  {num(b.count)}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* ═════════ لوحة المستودع — هوية المخزون الخضراء ═════════ */}
       <section className="animate-in-up relative overflow-hidden rounded-3xl border bg-card">
@@ -338,6 +424,7 @@ export function StockPage() {
       ) : (
         <SectionBoundary label="قائمة الأصناف حصل فيها خطأ">
           <StockTab
+            scopeBranch={showBranchTabs ? activeBranch : undefined}
             products={products}
             branches={branches}
             isEmployee={isEmployee}
