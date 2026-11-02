@@ -124,6 +124,8 @@ export async function GET(req: NextRequest) {
       {
         month,
         currentMonth: dateStrInTz(new Date(), tz).slice(0, 7),
+        // اليوم بتوقيت المحل (YYYY-MM-DD) — الواجهة بتستخدمه لتحديد «مبلغ مبدئي»
+        today: dateStrInTz(new Date(), tz),
         prevMonth: shiftMonth(month, -1),
         nextMonth: shiftMonth(month, 1),
         enabled: tenantCfg.sellerCommissionsEnabled === true,

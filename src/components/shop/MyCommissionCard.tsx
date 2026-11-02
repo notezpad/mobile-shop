@@ -10,7 +10,7 @@
  */
 
 import * as React from 'react'
-import { HandCoins, Loader2 } from 'lucide-react'
+import { HandCoins } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -48,13 +48,9 @@ export function MyCommissionCard() {
     }
   }, [])
 
-  if (loading) {
-    return (
-      <div className="flex h-24 items-center justify-center rounded-2xl border bg-card text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" />
-      </div>
-    )
-  }
+  // ⚡ أثناء التحميل ما نرسمش أي حاجة: الكارت أصلاً بيختفي لأغلب المستخدمين (مدير/كاشير مش بائع)،
+  // ولو رسمنا placeholder هيظهر 3 ثواني وبعدين المحتوى كله يقفز لفوق (layout shift).
+  if (loading) return null
   // 🛡️ الميزة مقفولة أو المستخدم مش بائع → الكارت مش بيظهر خالص
   if (!data || !data.enabled || !data.isSeller) return null
 

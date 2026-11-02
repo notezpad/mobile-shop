@@ -200,6 +200,9 @@ export async function sellersMonthAggregates(
   timeZone: string,
 ): Promise<Map<string, SellerMonthNumbers>> {
   const { gte, lte } = monthRangeUtc(month, timeZone)
+  // 🛡️ مت-4 (الاستبدال): صافي المرتجع = SaleReturn.total − exchangeTotal (نفس قاعدة
+  // التقارير واللوحة). قطعة الاستبدال بتتباع بنفس نسبة الفاتورة الأصلية، فالخصم
+  // بيكون على الفرق الصافي بس — مرتجع 100 باستبدال بـ120 يبقى +20 مش −100.
   // 🛡️ ج-3 (2026-11-02): استثناء مرتجعات «مسار حذف الفاتورة» من أساس العمولة.
   // الحذف بيرجّع فلوس العميل ويحوّل الفاتورة لـ status='مرتجعة' من غير ما ينشئ
   // صف SaleReturn — وخصم المرتجعات هنا بيقرأ من SaleReturn، فالفاتورة كانت
@@ -222,8 +225,8 @@ export async function sellersMonthAggregates(
     sql<{ uid: string; rets: number; ret: number; retcomm: number }[]>`
       SELECT s."sellerId" AS uid,
              COUNT(*)::int AS rets,
-             COALESCE(SUM(r."total"), 0) AS ret,
-             COALESCE(SUM(r."total" * COALESCE(s."commissionRate", 0) / 100.0), 0) AS retcomm
+             COALESCE(SUM(r."total" - r."exchangeTotal"), 0) AS ret,
+             COALESCE(SUM((r."total" - r."exchangeTotal") * COALESCE(s."commissionRate", 0) / 100.0), 0) AS retcomm
       FROM "SaleReturn" r
       JOIN "Sale" s ON s."id" = r."saleId"
       WHERE r."tenantId" = ${tenantId} AND s."sellerId" IS NOT NULL
