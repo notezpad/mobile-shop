@@ -37,6 +37,7 @@ import {
   Wallet,
   Wrench,
   X,
+  ChevronLeft,
   type LucideIcon,
 } from 'lucide-react'
 import {
@@ -60,9 +61,6 @@ import { useShopStore } from '@/lib/store'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { ShiftClosuresCard, type ShiftClosuresSummary } from './ShiftClosuresCard'
 
-/* ================================================================== */
-/*  الأنواع والثوابت                                                   */
-/* ================================================================== */
 interface Entry {
   id: number
   source: string
@@ -86,7 +84,6 @@ type Tone =
   | 'emerald' | 'orange' | 'sky' | 'violet' | 'slate' | 'teal'
   | 'amber' | 'indigo' | 'lime' | 'fuchsia' | 'rose'
 
-// (classes مكتوبة كاملة عشان Tailwind يلقطها)
 const TONES: Record<Tone, { tile: string; dot: string; hex: string }> = {
   emerald: { tile: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500', hex: '#10b981' },
   orange: { tile: 'bg-orange-500/12 text-orange-600 dark:text-orange-400', dot: 'bg-orange-500', hex: '#f97316' },
@@ -178,19 +175,7 @@ const timeLabel = (iso: string) => {
   return `${h % 12 || 12}:${m} ${h >= 12 ? 'م' : 'ص'}`
 }
 
-/**
- * مبلغ بالترتيب العربي الطبيعي (نفس المصروفات): العلامة ← الرقم ← جنيه
- * من اليمين لليسار. الرقم نفسه معزول LTR عشان الأرقام ما تتلخبطش.
- */
-function Amt({
-  value,
-  sign = false,
-  className,
-}: {
-  value: number
-  sign?: boolean
-  className?: string
-}) {
+function Amt({ value, sign = false, className }: { value: number, sign?: boolean, className?: string }) {
   const s = value < 0 ? '−' : sign ? '+' : ''
   return (
     <span dir="rtl" style={{ unicodeBidi: 'isolate' }} className={cn('whitespace-nowrap tabular-nums', className)}>
@@ -200,22 +185,17 @@ function Amt({
   )
 }
 
-/* ================================================================== */
-/*  الصفحة                                                             */
-/* ================================================================== */
 export function CashView() {
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
-  // 💳 أسماء وسائل المحل (بما فيها المخصصة من «وسائل الدفع») عشان شارة
-  // وسيلة الدفع في قيود الخزنة تعرض «أمان» بدل custom_xxx.
   const pmLabelMap = React.useMemo(
     () => Object.fromEntries(shopBranding.paymentMethods.map((p) => [p.id, p.label])),
     [shopBranding.paymentMethods]
   )
   const [data, setData] = React.useState<{ balance: number; entries: Entry[]; branches?: CashBranch[] } | null>(null)
-  // 🏬 المدير: فلتر خزنة فرع واحد ('all' = كل الفروع)
   const [branchFilter, setBranchFilter] = React.useState<string>('all')
   const [loading, setLoading] = React.useState(true)
+  const [isFetching, setIsFetching] = React.useState(false)
   const [dialogOpen, setDialogOpen] = React.useState(false)
 
   const [period, setPeriod] = React.useState<Period>('all')
@@ -226,7 +206,7 @@ export function CashView() {
   const [from, setFrom] = React.useState('')
   const [to, setTo] = React.useState('')
   const [donutTab, setDonutTab] = React.useState<'in' | 'out'>('in')
-  // 🗂️ تابات الصفحة: دفتر الخزنة (الافتراضي) | إغلاقات الورديات
+
   const [view, setView] = React.useState<'ledger' | 'shifts'>('ledger')
   const [shiftSummary, setShiftSummary] = React.useState<ShiftClosuresSummary>({ total: 0, shortCount: 0 })
   const tabsRef = React.useRef<HTMLDivElement>(null)
@@ -235,8 +215,13 @@ export function CashView() {
     requestAnimationFrame(() => tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
 
-  const load = React.useCallback(async () => {
-    setLoading(true)
+  // ✅ ref لتتبع أول تحميل فقط — يمنع الـ infinite loop عند تغيير الفرع
+  const initialLoadRef = React.useRef(true)
+
+  const load = React.useCallback(async (silent = false) => {
+    if (!silent && initialLoadRef.current) setLoading(true)
+    else setIsFetching(true)
+
     try {
       const d = await api<{ balance: number; entries: Entry[]; branches?: CashBranch[] }>(
         branchFilter === 'all' ? '/api/cash' : `/api/cash?branchId=${branchFilter}`,
@@ -245,22 +230,23 @@ export function CashView() {
     } catch (e: any) {
       toast.error(e?.message || 'فشل التحميل')
     } finally {
+      initialLoadRef.current = false
       setLoading(false)
+      setIsFetching(false)
     }
-  }, [branchFilter])
+  }, [branchFilter]) // ✅ dependency واحد بس — لا يوجد data هنا
 
   React.useEffect(() => {
     load()
   }, [load])
 
-  // 🛡️ ROOT FIX (2026-09-27): live refresh, see data-events.ts
-  useDataRefresh(['cash'], load)
+  const onRefresh = React.useCallback(() => load(true), [load])
+  useDataRefresh(['cash'], onRefresh)
 
-  // Entries come newest-first from the API, and `data.balance` is the
-  // authoritative running total (sum of ALL entries, not just the visible
-  // page). To get a correct "balance after this row" per row even when
-  // there are more than the fetched 200 entries, walk backwards from the
-  // known-correct current balance, subtracting each row's amount as we go.
+  const handleSummary = React.useCallback((s: ShiftClosuresSummary) => {
+    setShiftSummary((prev) => (prev.total === s.total && prev.shortCount === s.shortCount ? prev : s))
+  }, [])
+
   const runningBalances = React.useMemo(() => {
     if (!data) return []
     let running = data.balance
@@ -271,7 +257,6 @@ export function CashView() {
     })
   }, [data])
 
-  /* ---------- إحصائيات كل الحركات المحمّلة ---------- */
   const stats = React.useMemo(() => {
     const entries = data?.entries ?? []
     const todayK = dayKey(new Date())
@@ -306,7 +291,6 @@ export function CashView() {
     return { totalIn, totalOut, countIn, countOut, todayNet, todayCount, week, bySrcIn, bySrcOut, byMethod, top }
   }, [data])
 
-  /* ---------- الفلترة ---------- */
   const rows = React.useMemo(() => {
     const q = query.trim().toLowerCase()
     const todayK = dayKey(new Date())
@@ -342,7 +326,6 @@ export function CashView() {
   const rowsIn = rows.filter((r) => r.e.amount >= 0).reduce((s, r) => s + r.e.amount, 0)
   const rowsOut = rows.filter((r) => r.e.amount < 0).reduce((s, r) => s + Math.abs(r.e.amount), 0)
 
-  // تجميع الحركات باليوم
   const groups = React.useMemo(() => {
     const map = new Map<string, { key: string; items: typeof rows; net: number; inn: number; out: number }>()
     for (const r of rows) {
@@ -363,7 +346,6 @@ export function CashView() {
     return `${DAY_NAMES[new Date(k + 'T00:00:00').getDay()]} ${formatArabicDate(new Date(k + 'T00:00:00'))}`
   }
 
-  /* ---------- الدونات ---------- */
   const donutMap = donutTab === 'in' ? stats.bySrcIn : stats.bySrcOut
   const donutData = Object.entries(donutMap).sort((a, b) => b[1] - a[1])
   const donutTotal = donutData.reduce((s, [, v]) => s + v, 0)
@@ -418,7 +400,6 @@ export function CashView() {
   const topShare = stats.top && stats.totalIn ? (stats.top[1] / stats.totalIn) * 100 : 0
   const weekMax = Math.max(1, ...stats.week.map((d) => Math.max(d.inn, d.out)))
 
-  // 🏬 تابات الفروع (للمدير فقط لما يكون عنده أكتر من فرع)
   const branchTabs = React.useMemo(() => {
     const bs = data?.branches ?? []
     if (bs.length <= 1) return []
@@ -430,23 +411,22 @@ export function CashView() {
   const activeBranchName = branchFilter === 'all' ? null : branchTabs.find((b) => b.id === branchFilter)?.name ?? null
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 transition-opacity duration-300" style={{ scrollbarGutter: 'stable', opacity: isFetching ? 0.6 : 1, pointerEvents: isFetching ? 'none' : 'auto' }}>
       {/* ═══════════════ الهيرو ═══════════════ */}
       <section className="relative overflow-hidden rounded-3xl border bg-gradient-to-br from-emerald-50 via-white to-amber-50 p-4 dark:from-emerald-950/40 dark:via-card dark:to-amber-950/25 sm:p-7">
-        {/* علامة مائية: الخزنة */}
         <Vault className="pointer-events-none absolute -bottom-8 -start-6 size-56 text-emerald-600/[0.05] dark:text-emerald-400/[0.06]" strokeWidth={1} />
 
-        {/* 🏬 تابات الفروع — فلتر الخزنة كلها (الرصيد والرسم والدفتر والإغلاقات) */}
         {branchTabs.length > 0 && (
           <div className="relative mb-5 border-b border-emerald-900/10 pb-4 dark:border-white/10">
-            <div className="mb-2.5 flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
-              <Building2 className="size-3.5" />
+            <div className="mb-3 flex items-center gap-2 text-sm font-black text-slate-800 dark:text-slate-100">
+              <Building2 className="size-4 text-emerald-600" />
               اختر الخزنة
             </div>
+
             <div
               role="tablist"
               aria-label="اختيار خزنة الفرع"
-              className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
               {branchTabs.map((b) => {
                 const active = branchFilter === b.id
@@ -458,33 +438,40 @@ export function CashView() {
                     aria-selected={active}
                     onClick={() => setBranchFilter(b.id)}
                     className={cn(
-                      'group flex min-w-[148px] shrink-0 items-center gap-2.5 rounded-2xl border px-3 py-2.5 text-start transition-all sm:min-w-[170px]',
+                      // ✅ زي الأصل — min-w بدل عرض ثابت عشان الرئيسي ميهتزش
+                      'group flex min-w-[160px] shrink-0 items-center gap-3 rounded-2xl border px-4 py-3 text-start transition-colors duration-200 sm:min-w-[180px]',
                       active
-                        ? 'border-emerald-500 bg-emerald-500/10 shadow-sm ring-1 ring-emerald-500/30'
-                        : 'bg-background/70 hover:border-emerald-500/40 hover:bg-background'
+                        ? 'border-emerald-600 bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-md shadow-emerald-500/20'
+                        : 'border-slate-200/60 bg-white/80 dark:border-slate-800/60 dark:bg-slate-900/80 backdrop-blur-sm hover:border-emerald-500/30 hover:bg-white dark:hover:bg-slate-900'
                     )}
                   >
                     <span
                       className={cn(
-                        'flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors',
+                        'flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors',
                         active
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-muted text-muted-foreground group-hover:text-foreground'
+                          ? 'bg-white/20 text-white shadow-inner'
+                          : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 group-hover:text-emerald-600'
                       )}
                     >
-                      {b.id === 'all' ? <Layers className="size-4" /> : <Building2 className="size-4" />}
+                      {b.id === 'all' ? <Layers className="size-5" /> : <Building2 className="size-5" />}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
-                        <span className={cn('truncate text-sm', active ? 'font-extrabold' : 'font-bold')}>{b.name}</span>
+                        <span className={cn('truncate text-sm', active ? 'font-black text-white' : 'font-bold text-slate-700 dark:text-slate-200')}>
+                          {b.name}
+                        </span>
                         {b.isMain && (
-                          <Star className="size-3 shrink-0 fill-amber-400 text-amber-500" aria-label="الفرع الرئيسي" />
+                          <Star className={cn("size-3 shrink-0", active ? "fill-white text-white" : "fill-amber-400 text-amber-500")} aria-label="الفرع الرئيسي" />
                         )}
                       </span>
                       <span
                         className={cn(
-                          'block truncate text-xs font-semibold tabular-nums',
-                          b.balance < 0 ? 'text-rose-600 dark:text-rose-400' : active ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'
+                          'block truncate text-xs font-bold tabular-nums mt-0.5',
+                          active
+                            ? 'text-emerald-50'
+                            : b.balance < 0
+                              ? 'text-rose-600 dark:text-rose-400'
+                              : 'text-emerald-600 dark:text-emerald-400'
                         )}
                       >
                         <Amt value={b.balance} />
@@ -498,14 +485,14 @@ export function CashView() {
         )}
 
         <div className="relative grid items-center gap-5 lg:grid-cols-[1fr_minmax(0,1.1fr)_auto] lg:gap-6">
-          {/* الرصيد */}
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground sm:text-sm">
+            <div className="flex items-center gap-2 text-sm font-black text-slate-800 dark:text-slate-200 sm:text-base">
               <span className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 sm:size-8 dark:text-emerald-400">
-                <Vault className="size-3.5 sm:size-4" />
+                <Vault className="size-4 sm:size-4.5" />
               </span>
-              الخزنة{activeBranchName ? <span className="font-bold text-foreground"> — {activeBranchName}</span> : null}
+              الخزنة {activeBranchName && <span className="text-emerald-600 dark:text-emerald-400"> — {activeBranchName}</span>}
             </div>
+
             {loading ? (
               <Skeleton className="mt-3 h-14 w-56" />
             ) : (
@@ -535,19 +522,26 @@ export function CashView() {
                 'الرصيد الحالي بعد كل الحركات'
               )}
             </p>
+
             {shiftSummary.shortCount > 0 && (
               <button
                 type="button"
                 onClick={openShifts}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-500/15 dark:text-rose-400"
+                className="group relative mt-4 flex w-full max-w-sm items-center gap-3 overflow-hidden rounded-2xl border border-rose-200 bg-rose-50 p-3 text-start shadow-sm transition-all hover:border-rose-300 hover:shadow-md dark:border-rose-900/30 dark:bg-rose-950/20"
               >
-                <AlertTriangle className="size-3.5 shrink-0" />
-                {shiftSummary.shortCount} عجز في إغلاقات الورديات — اعرض
+                <span className="absolute inset-y-0 right-0 w-1.5 bg-rose-500" />
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-600 dark:bg-rose-900/50 dark:text-rose-400">
+                  <AlertTriangle className="size-5" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-black text-rose-900 dark:text-rose-100">تنبيه عجز في الورديات</p>
+                  <p className="text-xs font-bold text-rose-600/80 dark:text-rose-400/80">يوجد {shiftSummary.shortCount} إغلاق وردية به عجز</p>
+                </div>
+                <ChevronLeft className="size-5 text-rose-400 transition-transform group-hover:-translate-x-1" />
               </button>
             )}
           </div>
 
-          {/* رسم آخر 7 أيام */}
           <div className="min-w-0">
             <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
               <span>آخر ٧ أيام</span>
@@ -581,7 +575,6 @@ export function CashView() {
             </div>
           </div>
 
-          {/* الأزرار — 📱 شبكة 2 أعمدة على الجوال */}
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap lg:flex-col">
             <Button onClick={() => setDialogOpen(true)} className="w-full sm:w-auto">
               <Plus className="size-4 shrink-0" />
@@ -594,7 +587,6 @@ export function CashView() {
           </div>
         </div>
 
-        {/* كروت KPI */}
         <div className="relative mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
             tone="emerald" icon={ArrowDownLeft} loading={loading}
@@ -627,12 +619,13 @@ export function CashView() {
         </div>
       </section>
 
-      {/* ═══════════════ التابات: الدفتر | إغلاقات الورديات ═══════════════ */}
+      {/* ═══════════════ التابات ═══════════════ */}
       <div
         ref={tabsRef}
         role="tablist"
         aria-label="أقسام الخزنة"
-        className="inline-flex w-full scroll-mt-4 gap-1 rounded-2xl border bg-muted/40 p-1 sm:w-auto"
+        className="flex w-full scroll-mt-4 p-1.5 bg-slate-100/90 dark:bg-slate-900/80 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-md shadow-inner"
+        dir="rtl"
       >
         {([
           { k: 'ledger', label: 'دفتر الخزنة', icon: BookOpen, badge: 0 },
@@ -647,14 +640,16 @@ export function CashView() {
               aria-selected={active}
               onClick={() => setView(t.k)}
               className={cn(
-                'flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm transition-all sm:flex-none',
-                active ? 'bg-card font-extrabold text-foreground shadow-sm' : 'font-semibold text-muted-foreground hover:text-foreground'
+                'flex flex-1 items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm transition-all duration-200',
+                active
+                  ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-900/5 dark:bg-slate-800 dark:text-white dark:ring-white/10'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 dark:text-slate-400 dark:hover:text-slate-200'
               )}
             >
-              <t.icon className={cn('size-4 shrink-0', active && t.k === 'shifts' && 'text-sky-600 dark:text-sky-400', active && t.k === 'ledger' && 'text-emerald-600 dark:text-emerald-400')} />
+              <t.icon className={cn('size-4 shrink-0 transition-colors', active && t.k === 'shifts' ? 'text-sky-600 dark:text-sky-400' : active && t.k === 'ledger' ? 'text-emerald-600 dark:text-emerald-400' : '')} />
               <span className="whitespace-nowrap">{t.label}</span>
               {t.badge > 0 && (
-                <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-extrabold leading-none text-white">
+                <span className="inline-flex min-w-[20px] h-5 items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-black leading-none text-white shadow-sm">
                   {t.badge}
                 </span>
               )}
@@ -663,16 +658,14 @@ export function CashView() {
         })}
       </div>
 
-      {/* 🕐 إغلاقات الورديات — دايماً mounted (عشان الشارة والعدّاد) ومخفي لما التاب التاني نشط */}
-      <div role="tabpanel" className={cn(view !== 'shifts' && 'hidden')}>
-        <ShiftClosuresCard branchFilter={branchFilter} onSummary={setShiftSummary} />
+      {/* 🕐 إغلاقات الورديات — min-h لحجز مساحة ثابتة */}
+      <div role="tabpanel" className={cn('min-h-[300px]', view !== 'shifts' && 'hidden')}>
+        <ShiftClosuresCard branchFilter={branchFilter} onSummary={handleSummary} />
       </div>
 
       {/* ═══════════════ الصف الثاني (دفتر الخزنة) ═══════════════ */}
       <div role="tabpanel" className={cn('grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]', view !== 'ledger' && 'hidden')}>
-        {/* ----- العمود الرئيسي: فلاتر + دفتر ----- */}
         <div className="min-w-0 space-y-4">
-          {/* الفلاتر */}
           <div className="space-y-3 rounded-2xl border bg-card p-3.5 sm:p-4">
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative w-full min-w-0 sm:min-w-[200px] sm:flex-1">
@@ -736,200 +729,194 @@ export function CashView() {
             )}
           </div>
 
-          {/* الدفتر */}
-          {loading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[72px] w-full rounded-xl" />)}
-            </div>
-          ) : groups.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 rounded-2xl border bg-card px-4 py-14 text-center">
-              <div className="flex size-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                <Vault className="size-7" />
+          {/* ✅ min-h لحجز مساحة — يمنع النطة الرأسية عند تغيير الفرع */}
+          <div className="flex min-h-[500px] flex-col">
+            {loading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[72px] w-full rounded-xl" />)}
               </div>
-              <p className="font-semibold">{data?.entries.length ? 'لا توجد حركات مطابقة للفلاتر' : 'الخزنة فاضية — لا توجد حركات بعد'}</p>
-              <p className="text-xs text-muted-foreground">
-                {data?.entries.length ? 'جرّب تغيير الفلاتر أو كلمة البحث' : 'أي بيع أو مصروف أو حركة يدوية هتظهر هنا'}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* رأس أعمدة الدفتر */}
-              <div className="hidden rounded-xl border bg-muted/50 px-4 py-2.5 text-xs font-bold text-muted-foreground lg:grid lg:grid-cols-[minmax(0,1fr)_150px_180px_160px] lg:gap-3">
-                <span>البيان</span>
-                <span>بواسطة</span>
-                <span className="text-center">المبلغ</span>
-                <span className="text-end">الرصيد بعد الحركة</span>
+            ) : groups.length === 0 ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-2xl border bg-card px-4 py-14 text-center">
+                <div className="flex size-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <Vault className="size-7" />
+                </div>
+                <p className="font-semibold">{data?.entries.length ? 'لا توجد حركات مطابقة للفلاتر' : 'الخزنة فاضية — لا توجد حركات بعد'}</p>
+                <p className="text-xs text-muted-foreground">
+                  {data?.entries.length ? 'جرّب تغيير الفلاتر أو كلمة البحث' : 'أي بيع أو مصروف أو حركة يدوية هتظهر هنا'}
+                </p>
               </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="hidden rounded-xl border bg-muted/50 px-4 py-2.5 text-xs font-bold text-muted-foreground lg:grid lg:grid-cols-[minmax(0,1fr)_150px_180px_160px] lg:gap-3">
+                  <span>البيان</span>
+                  <span>بواسطة</span>
+                  <span className="text-center">المبلغ</span>
+                  <span className="text-end">الرصيد بعد الحركة</span>
+                </div>
 
-              {groups.map((g) => {
-                const isToday = g.key === dayKey(new Date())
-                return (
-                  <div
-                    key={g.key}
-                    className={cn(
-                      'overflow-hidden rounded-2xl border bg-card shadow-sm',
-                      isToday && 'border-emerald-500/30 shadow-md'
-                    )}
-                  >
-                    {/* رأس اليوم */}
+                {groups.map((g) => {
+                  const isToday = g.key === dayKey(new Date())
+                  return (
                     <div
+                      key={g.key}
                       className={cn(
-                        'flex flex-wrap items-center justify-between gap-2 border-b px-3.5 py-3 sm:gap-3 sm:px-4',
-                        isToday
-                          ? 'bg-gradient-to-l from-emerald-500/10 via-transparent to-amber-500/5'
-                          : 'bg-muted/40'
+                        'overflow-hidden rounded-2xl border bg-card shadow-sm',
+                        isToday && 'border-emerald-500/30 shadow-md'
                       )}
                     >
-                      <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-                        <span
-                          className={cn(
-                            'flex size-9 shrink-0 items-center justify-center rounded-xl sm:size-10',
-                            isToday ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-muted text-muted-foreground'
-                          )}
-                        >
-                          <CalendarDays className="size-4 sm:size-5" />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-extrabold leading-tight sm:text-base">{dayTitle(g.key)}</p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {g.items.length} حركة
-                            {(isToday || dayTitle(g.key) === 'أمس') && (
-                              <> • {formatArabicDate(new Date(g.key + 'T00:00:00'))}</>
+                      <div
+                        className={cn(
+                          'flex flex-wrap items-center justify-between gap-2 border-b px-3.5 py-3 sm:gap-3 sm:px-4',
+                          isToday
+                            ? 'bg-gradient-to-l from-emerald-500/10 via-transparent to-amber-500/5'
+                            : 'bg-muted/40'
+                        )}
+                      >
+                        <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+                          <span
+                            className={cn(
+                              'flex size-9 shrink-0 items-center justify-center rounded-xl sm:size-10',
+                              isToday ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-muted text-muted-foreground'
                             )}
-                          </p>
+                          >
+                            <CalendarDays className="size-4 sm:size-5" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-extrabold leading-tight sm:text-base">{dayTitle(g.key)}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {g.items.length} حركة
+                              {(isToday || dayTitle(g.key) === 'أمس') && (
+                                <> • {formatArabicDate(new Date(g.key + 'T00:00:00'))}</>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex w-full flex-wrap items-center gap-1.5 text-[11px] font-bold sm:w-auto sm:gap-2 sm:text-xs">
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2 py-1 text-emerald-700 sm:px-2.5 sm:py-1.5 dark:text-emerald-400">
+                            <ArrowDownLeft className="size-3 shrink-0 sm:size-3.5" />
+                            وارد <Amt value={g.inn} />
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-rose-500/10 px-2 py-1 text-rose-700 sm:px-2.5 sm:py-1.5 dark:text-rose-400">
+                            <ArrowUpRight className="size-3 shrink-0 sm:size-3.5" />
+                            صادر <Amt value={g.out} />
+                          </span>
+                          <span
+                            className={cn(
+                              'inline-flex items-center gap-1 rounded-lg border px-2 py-1 sm:px-2.5 sm:py-1.5',
+                              g.net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+                            )}
+                          >
+                            <Scale className="size-3 shrink-0 sm:size-3.5" />
+                            الصافي <Amt value={g.net} sign />
+                          </span>
                         </div>
                       </div>
 
-                      <div className="flex w-full flex-wrap items-center gap-1.5 text-[11px] font-bold sm:w-auto sm:gap-2 sm:text-xs">
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2 py-1 text-emerald-700 sm:px-2.5 sm:py-1.5 dark:text-emerald-400">
-                          <ArrowDownLeft className="size-3 shrink-0 sm:size-3.5" />
-                          وارد <Amt value={g.inn} />
-                        </span>
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-rose-500/10 px-2 py-1 text-rose-700 sm:px-2.5 sm:py-1.5 dark:text-rose-400">
-                          <ArrowUpRight className="size-3 shrink-0 sm:size-3.5" />
-                          صادر <Amt value={g.out} />
-                        </span>
-                        <span
-                          className={cn(
-                            'inline-flex items-center gap-1 rounded-lg border px-2 py-1 sm:px-2.5 sm:py-1.5',
-                            g.net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
-                          )}
-                        >
-                          <Scale className="size-3 shrink-0 sm:size-3.5" />
-                          الصافي <Amt value={g.net} sign />
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* الحركات */}
-                    <div className="divide-y">
-                      {g.items.map(({ e, after }) => {
-                        const isIn = e.amount >= 0
-                        const sm = srcMeta(e.source)
-                        const SI = sm.icon
-                        return (
-                          <div
-                            key={e.id}
-                            className="group relative grid grid-cols-2 items-center gap-x-3 gap-y-3 px-3.5 py-3.5 transition-colors hover:bg-muted/40 sm:px-4 sm:py-4 lg:grid-cols-[minmax(0,1fr)_150px_180px_160px]"
-                          >
-                            <span
-                              className={cn(
-                                'absolute inset-y-3 start-0 w-1 rounded-e-full transition-all group-hover:inset-y-1',
-                                isIn ? 'bg-emerald-500' : 'bg-rose-500'
-                              )}
-                            />
-
-                            {/* البيان */}
-                            <div className="col-span-2 flex min-w-0 items-start gap-3 sm:gap-3.5 lg:col-span-1">
-                              <div className="relative shrink-0">
-                                <span className={cn('flex size-10 items-center justify-center rounded-2xl sm:size-12', TONES[sm.tone].tile)}>
-                                  <SI className="size-5 sm:size-6" />
-                                </span>
-                                <span
-                                  className={cn(
-                                    'absolute -bottom-1 -end-1 flex size-4 items-center justify-center rounded-full text-white ring-2 ring-card sm:size-5',
-                                    isIn ? 'bg-emerald-500' : 'bg-rose-500'
-                                  )}
-                                >
-                                  {isIn ? <ArrowDownLeft className="size-2.5 sm:size-3" /> : <ArrowUpRight className="size-2.5 sm:size-3" />}
-                                </span>
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                  <p className="text-sm font-extrabold leading-tight sm:text-base">{sm.label}</p>
-                                  <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:text-[11px]">
-                                    <Clock className="size-3 shrink-0" />
-                                    <span dir="ltr" style={{ unicodeBidi: 'isolate' }}>{timeLabel(e.createdAt)}</span>
-                                  </span>
-                                  {e.method && e.method !== 'cash' && (
-                                    <span className="rounded-md border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:text-[11px]">
-                                      {pmLabelMap[e.method] ?? mtdMeta(e.method).label}
-                                    </span>
-                                  )}
-                                </div>
-                                {e.note ? (
-                                  <p className="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground sm:text-sm">
-                                    <StickyNote className="mt-0.5 size-3.5 shrink-0 opacity-60" />
-                                    <span className="line-clamp-2">{e.note}</span>
-                                  </p>
-                                ) : null}
-                                {(data?.branches?.length ?? 0) > 1 && e.branchName && (
-                                  <span className="mt-1 inline-block rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-                                    {e.branchName}
-                                  </span>
-                                )}
-                                {/* الموظف — للموبايل والتابلت فقط */}
-                                {e.userName && (
-                                  <p className="mt-1 truncate text-xs text-muted-foreground lg:hidden">بواسطة: {e.userName}</p>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* بواسطة — شاشات كبيرة */}
-                            <div className="hidden items-center gap-2 lg:flex">
-                              {e.userName ? (
-                                <>
-                                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                                    {e.userName.trim().charAt(0)}
-                                  </span>
-                                  <span className="truncate text-sm font-medium">{e.userName}</span>
-                                </>
-                              ) : (
-                                <span className="text-sm text-muted-foreground">—</span>
-                              )}
-                            </div>
-
-                            {/* المبلغ */}
-                            <div className="min-w-0 lg:text-center">
+                      <div className="divide-y">
+                        {g.items.map(({ e, after }) => {
+                          const isIn = e.amount >= 0
+                          const sm = srcMeta(e.source)
+                          const SI = sm.icon
+                          return (
+                            <div
+                              key={e.id}
+                              className="group relative grid grid-cols-2 items-center gap-x-3 gap-y-3 px-3.5 py-3.5 transition-colors hover:bg-muted/40 sm:px-4 sm:py-4 lg:grid-cols-[minmax(0,1fr)_150px_180px_160px]"
+                            >
                               <span
                                 className={cn(
-                                  'inline-flex max-w-full items-center rounded-xl px-2.5 py-1.5 text-sm font-black sm:px-3.5 sm:py-2 sm:text-base lg:text-lg',
-                                  isIn
-                                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                                    : 'bg-rose-500/10 text-rose-700 dark:text-rose-400'
+                                  'absolute inset-y-3 start-0 w-1 rounded-e-full transition-all group-hover:inset-y-1',
+                                  isIn ? 'bg-emerald-500' : 'bg-rose-500'
                                 )}
-                              >
-                                <Amt value={e.amount} sign />
-                              </span>
-                            </div>
-
-                            {/* الرصيد بعد الحركة */}
-                            <div className="min-w-0 text-end">
-                              <p className="text-[10px] font-medium text-muted-foreground lg:hidden">الرصيد بعد الحركة</p>
-                              <Amt
-                                value={after}
-                                className={cn('text-sm font-bold', after < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-foreground/80')}
                               />
+
+                              <div className="col-span-2 flex min-w-0 items-start gap-3 sm:gap-3.5 lg:col-span-1">
+                                <div className="relative shrink-0">
+                                  <span className={cn('flex size-10 items-center justify-center rounded-2xl sm:size-12', TONES[sm.tone].tile)}>
+                                    <SI className="size-5 sm:size-6" />
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      'absolute -bottom-1 -end-1 flex size-4 items-center justify-center rounded-full text-white ring-2 ring-card sm:size-5',
+                                      isIn ? 'bg-emerald-500' : 'bg-rose-500'
+                                    )}
+                                  >
+                                    {isIn ? <ArrowDownLeft className="size-2.5 sm:size-3" /> : <ArrowUpRight className="size-2.5 sm:size-3" />}
+                                  </span>
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                    <p className="text-sm font-extrabold leading-tight sm:text-base">{sm.label}</p>
+                                    <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:text-[11px]">
+                                      <Clock className="size-3 shrink-0" />
+                                      <span dir="ltr" style={{ unicodeBidi: 'isolate' }}>{timeLabel(e.createdAt)}</span>
+                                    </span>
+                                    {e.method && e.method !== 'cash' && (
+                                      <span className="rounded-md border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:text-[11px]">
+                                        {pmLabelMap[e.method] ?? mtdMeta(e.method).label}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {e.note ? (
+                                    <p className="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground sm:text-sm">
+                                      <StickyNote className="mt-0.5 size-3.5 shrink-0 opacity-60" />
+                                      <span className="line-clamp-2">{e.note}</span>
+                                    </p>
+                                  ) : null}
+                                  {(data?.branches?.length ?? 0) > 1 && e.branchName && (
+                                    <span className="mt-1 inline-block rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                                      {e.branchName}
+                                    </span>
+                                  )}
+                                  {e.userName && (
+                                    <p className="mt-1 truncate text-xs text-muted-foreground lg:hidden">بواسطة: {e.userName}</p>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="hidden items-center gap-2 lg:flex">
+                                {e.userName ? (
+                                  <>
+                                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                                      {e.userName.trim().charAt(0)}
+                                    </span>
+                                    <span className="truncate text-sm font-medium">{e.userName}</span>
+                                  </>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">—</span>
+                                )}
+                              </div>
+
+                              <div className="min-w-0 lg:text-center">
+                                <span
+                                  className={cn(
+                                    'inline-flex max-w-full items-center rounded-xl px-2.5 py-1.5 text-sm font-black sm:px-3.5 sm:py-2 sm:text-base lg:text-lg',
+                                    isIn
+                                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                                      : 'bg-rose-500/10 text-rose-700 dark:text-rose-400'
+                                  )}
+                                >
+                                  <Amt value={e.amount} sign />
+                                </span>
+                              </div>
+
+                              <div className="min-w-0 text-end">
+                                <p className="text-[10px] font-medium text-muted-foreground lg:hidden">الرصيد بعد الحركة</p>
+                                <Amt
+                                  value={after}
+                                  className={cn('text-sm font-bold', after < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-foreground/80')}
+                                />
+                              </div>
                             </div>
-                          </div>
-                        )
-                      })}
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+                  )
+                })}
+              </div>
+            )}
+          </div>
 
           {!loading && data && data.entries.length >= 200 && (
             <p className="text-xs text-muted-foreground">
@@ -938,9 +925,7 @@ export function CashView() {
           )}
         </div>
 
-        {/* ----- العمود الجانبي: دونات + طرق الدفع ----- */}
         <aside className="space-y-4 lg:sticky lg:top-4">
-          {/* توزيع الحركات */}
           <div className="rounded-2xl border bg-card p-3.5 sm:p-4">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -1004,7 +989,6 @@ export function CashView() {
             </div>
           </div>
 
-          {/* الرصيد حسب طريقة الدفع */}
           <div className="rounded-2xl border bg-card p-3.5 sm:p-4">
             <h3 className="text-sm font-bold sm:text-base">الرصيد حسب طريقة الدفع</h3>
             <p className="truncate text-xs text-muted-foreground">النقدي الفعلي منفصل عن المحافظ والبنك</p>
@@ -1045,9 +1029,6 @@ export function CashView() {
   )
 }
 
-/* ================================================================== */
-/*  مكوّنات مساعدة                                                     */
-/* ================================================================== */
 function Pill({
   active, onClick, children, dot, tone,
 }: {
@@ -1168,9 +1149,6 @@ function Donut({
   )
 }
 
-/* ================================================================== */
-/*  نافذة الحركة اليدوية                                               */
-/* ================================================================== */
 interface ManualProps {
   open: boolean
   onOpenChange: (o: boolean) => void
@@ -1238,7 +1216,6 @@ function ManualDialog({ open, onOpenChange, onSaved, balance, branches = [], def
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-[520px]">
-        {/* الهيدر */}
         <DialogHeader className="border-b bg-gradient-to-l from-emerald-50 via-white to-amber-50 px-4 py-3.5 text-start sm:px-5 sm:py-4 dark:from-emerald-950/40 dark:via-card dark:to-amber-950/25">
           <div className="flex items-center gap-3">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 sm:size-11 dark:text-emerald-400">
@@ -1252,7 +1229,6 @@ function ManualDialog({ open, onOpenChange, onSaved, balance, branches = [], def
         </DialogHeader>
 
         <div className="max-h-[70vh] space-y-5 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
-          {/* الاتجاه */}
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -1278,7 +1254,6 @@ function ManualDialog({ open, onOpenChange, onSaved, balance, branches = [], def
             </button>
           </div>
 
-          {/* المبلغ */}
           <div className="space-y-2">
             <Label htmlFor="m-amount">المبلغ</Label>
             <div className="relative">
@@ -1309,7 +1284,6 @@ function ManualDialog({ open, onOpenChange, onSaved, balance, branches = [], def
             </div>
           </div>
 
-          {/* 🏬 الفرع (للمدير لما يكون فيه فروع) */}
           {branches.length > 1 && (
             <div className="space-y-2">
               <Label htmlFor="m-branch">خزنة أنهي فرع؟</Label>
@@ -1326,7 +1300,6 @@ function ManualDialog({ open, onOpenChange, onSaved, balance, branches = [], def
             </div>
           )}
 
-          {/* السبب — كتابة يدوية (إجباري) */}
           <div className="space-y-2">
             <Label htmlFor="m-note">
               السبب <span className="text-destructive">*</span>
@@ -1340,7 +1313,6 @@ function ManualDialog({ open, onOpenChange, onSaved, balance, branches = [], def
             />
           </div>
 
-          {/* ملخص الحركة */}
           <div className="rounded-xl border border-dashed bg-muted/40 p-3 text-sm">
             <div className="flex items-center justify-between text-muted-foreground">
               <span>الرصيد الحالي</span>
