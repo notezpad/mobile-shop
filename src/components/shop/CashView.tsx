@@ -5,8 +5,11 @@ import {
   ArrowDownLeft,
   ArrowLeftRight,
   ArrowUpRight,
+  AlertTriangle,
   Banknote,
+  BookOpen,
   Building2,
+  ClipboardCheck,
   CalendarDays,
   Clock,
   Coins,
@@ -55,7 +58,7 @@ import { cn } from '@/lib/utils'
 import { printListReportHtml, openPrintWindow, printLtr } from '@/lib/print'
 import { useShopStore } from '@/lib/store'
 import { useDataRefresh } from '@/lib/offline/data-events'
-import { ShiftClosuresCard } from './ShiftClosuresCard'
+import { ShiftClosuresCard, type ShiftClosuresSummary } from './ShiftClosuresCard'
 
 /* ================================================================== */
 /*  الأنواع والثوابت                                                   */
@@ -223,6 +226,14 @@ export function CashView() {
   const [from, setFrom] = React.useState('')
   const [to, setTo] = React.useState('')
   const [donutTab, setDonutTab] = React.useState<'in' | 'out'>('in')
+  // 🗂️ تابات الصفحة: دفتر الخزنة (الافتراضي) | إغلاقات الورديات
+  const [view, setView] = React.useState<'ledger' | 'shifts'>('ledger')
+  const [shiftSummary, setShiftSummary] = React.useState<ShiftClosuresSummary>({ total: 0, shortCount: 0 })
+  const tabsRef = React.useRef<HTMLDivElement>(null)
+  const openShifts = () => {
+    setView('shifts')
+    requestAnimationFrame(() => tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -524,6 +535,16 @@ export function CashView() {
                 'الرصيد الحالي بعد كل الحركات'
               )}
             </p>
+            {shiftSummary.shortCount > 0 && (
+              <button
+                type="button"
+                onClick={openShifts}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-500/15 dark:text-rose-400"
+              >
+                <AlertTriangle className="size-3.5 shrink-0" />
+                {shiftSummary.shortCount} عجز في إغلاقات الورديات — اعرض
+              </button>
+            )}
           </div>
 
           {/* رسم آخر 7 أيام */}
@@ -606,11 +627,49 @@ export function CashView() {
         </div>
       </section>
 
-      {/* 🕐 إغلاقات الورديات — الجرد الأعمى: رقابة المدير على درج كل وردية (فوق الدفتر عشان توصلها بسرعة) */}
-      <ShiftClosuresCard branchFilter={branchFilter} />
+      {/* ═══════════════ التابات: الدفتر | إغلاقات الورديات ═══════════════ */}
+      <div
+        ref={tabsRef}
+        role="tablist"
+        aria-label="أقسام الخزنة"
+        className="inline-flex w-full scroll-mt-4 gap-1 rounded-2xl border bg-muted/40 p-1 sm:w-auto"
+      >
+        {([
+          { k: 'ledger', label: 'دفتر الخزنة', icon: BookOpen, badge: 0 },
+          { k: 'shifts', label: 'إغلاقات الورديات', icon: ClipboardCheck, badge: shiftSummary.shortCount },
+        ] as const).map((t) => {
+          const active = view === t.k
+          return (
+            <button
+              key={t.k}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setView(t.k)}
+              className={cn(
+                'flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm transition-all sm:flex-none',
+                active ? 'bg-card font-extrabold text-foreground shadow-sm' : 'font-semibold text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <t.icon className={cn('size-4 shrink-0', active && t.k === 'shifts' && 'text-sky-600 dark:text-sky-400', active && t.k === 'ledger' && 'text-emerald-600 dark:text-emerald-400')} />
+              <span className="whitespace-nowrap">{t.label}</span>
+              {t.badge > 0 && (
+                <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-extrabold leading-none text-white">
+                  {t.badge}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
 
-      {/* ═══════════════ الصف الثاني ═══════════════ */}
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+      {/* 🕐 إغلاقات الورديات — دايماً mounted (عشان الشارة والعدّاد) ومخفي لما التاب التاني نشط */}
+      <div role="tabpanel" className={cn(view !== 'shifts' && 'hidden')}>
+        <ShiftClosuresCard branchFilter={branchFilter} onSummary={setShiftSummary} />
+      </div>
+
+      {/* ═══════════════ الصف الثاني (دفتر الخزنة) ═══════════════ */}
+      <div role="tabpanel" className={cn('grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]', view !== 'ledger' && 'hidden')}>
         {/* ----- العمود الرئيسي: فلاتر + دفتر ----- */}
         <div className="min-w-0 space-y-4">
           {/* الفلاتر */}

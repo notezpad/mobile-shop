@@ -113,7 +113,19 @@ function Stat({
   )
 }
 
-export function ShiftClosuresCard({ branchFilter }: { branchFilter: string }) {
+export interface ShiftClosuresSummary {
+  total: number
+  shortCount: number
+}
+
+export function ShiftClosuresCard({
+  branchFilter,
+  onSummary,
+}: {
+  branchFilter: string
+  /** بيبلّغ الأب بعدد الإغلاقات وحالات العجز (للشارة في التاب والهيرو) */
+  onSummary?: (s: ShiftClosuresSummary) => void
+}) {
   const [closures, setClosures] = React.useState<Closure[] | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -156,6 +168,12 @@ export function ShiftClosuresCard({ branchFilter }: { branchFilter: string }) {
     }
     return { total: list.length, match, shortTotal, overTotal, shortCount }
   }, [closures])
+
+  const reportRef = React.useRef(onSummary)
+  React.useEffect(() => { reportRef.current = onSummary })
+  React.useEffect(() => {
+    if (closures) reportRef.current?.({ total: summary.total, shortCount: summary.shortCount })
+  }, [closures, summary.total, summary.shortCount])
 
   const filtered = React.useMemo(
     () => (closures ?? []).filter((c) => !onlyIssues || kindOf(c.variance) !== 'match'),
