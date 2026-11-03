@@ -98,13 +98,6 @@ const metaOf = (cat: string) =>
 
 const FORM_CATEGORIES = CATEGORIES.filter((c) => c !== 'هالك وتالف')
 
-/**
- * 🛡️ خ-5 (2026-11-02): ميزانية الأنواع والمصروفات المتكررة معلنة في الشاشة
- * بدون backend (405) — مخفيين لحد ما جداول budgets/recurring تتنفذ.
- * PATCH تعديل المصروف اتنفّذ فعليًا — لاحظ إن التعديل الأوفلاين بقى شغال.
- */
-const BUDGETS_AND_RECURRING_ENABLED = false
-
 const QUICK_AMOUNTS = [50, 100, 200, 500, 1000]
 
 // ترتيب شرائح الفلتر — بنوزّع الطويلة على الصفوف عشان الصف الأخير ميبقاش فيه شريحة لوحدها
@@ -284,7 +277,6 @@ export function ExpensesView() {
   }, [load])
 
   const loadBudgets = React.useCallback(async () => {
-    if (!BUDGETS_AND_RECURRING_ENABLED) return // 🛡️ خ-5: مفيش backend — متبعتش 405
     try {
       const r = await api<{ budgets: BudgetRow[] }>('/api/expenses/budgets')
       setBudgets(r?.budgets ?? [])
@@ -294,7 +286,6 @@ export function ExpensesView() {
   }, [])
 
   const loadRecurring = React.useCallback(async () => {
-    if (!BUDGETS_AND_RECURRING_ENABLED) return // 🛡️ خ-5: مفيش backend — متبعتش 405
     try {
       const r = await api<{ items: RecurringItem[] }>('/api/expenses/recurring')
       setRecurring(r?.items ?? [])
@@ -1365,12 +1356,6 @@ export function ExpensesView() {
             </CardContent>
           </Card>
 
-          {/* 🛡️ خ-5 (2026-11-02): كروت الميزانية والمصروفات المتكررة مخفيين مؤقتًا —
-              الـ backend بتاعهم (budgets/recurring) مش موجود أصلًا (405)، والوعد
-              بميزة فلوس غير موجودة أخطر من غيابها. التعديل (PATCH) اتنفّذ فعليًا.
-              لما الجداول تتنفذ في مرحلة لاحقة: رجّع العلم لـ true. */}
-          {BUDGETS_AND_RECURRING_ENABLED && (
-          <>
           <Card className="animate-in-up stagger-3 gap-4 py-5">
             <CardContent className="space-y-4 px-4 sm:px-5">
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1495,8 +1480,6 @@ export function ExpensesView() {
               )}
             </CardContent>
           </Card>
-          </>
-          )}
         </aside>
       </div>
 
