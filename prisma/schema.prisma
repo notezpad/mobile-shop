@@ -663,7 +663,7 @@ model CommissionPayout {
   amount       Decimal @db.Decimal(12,2)  @default(0)
   // اتصرفت جوه مسير الرواتب (محجوزة في قسيمة الراتب)؟
   viaPayroll   Boolean @default(false)
-  method       String?            // كاش / محفظة / انستاباي... (سجل فقط)
+  method       String?            // كاش / محفظة / انستاباي... وسيلة الصرف (بتحدد درج الخصم لو الصرف اتخصم من الخزنة)
   note         String?
   paidById     String?
   paidAt       DateTime @default(now())

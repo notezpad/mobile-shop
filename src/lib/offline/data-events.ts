@@ -143,6 +143,11 @@ export function resourceTagsForUrl(url: string): DataTag[] {
   }
   // 🆕 العمولات: أي بيع بيغيّر أرقام البائعين، وصرف/إعدادات العمولة بتغيّرها
   if (has('/api/commissions')) tags.add('commissions')
+  // 💵 صرف/إلغاء صرف العمولة بيتخصم من الخزنة وبيسجّل/يشيل مصروف — الخزنة والمصروفات والتقارير لازم تتحدث
+  if (has('/api/commissions/payout')) {
+    tags.add('cash')
+    tags.add('expenses')
+  }
   if (has('/api/sales')) tags.add('commissions')
   if (has('/api/notifications')) tags.add('notifications')
   if (has('/api/branches')) tags.add('branches')

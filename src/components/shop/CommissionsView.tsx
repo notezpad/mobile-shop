@@ -5,13 +5,13 @@
  *
  * تقرير شهري لكل بائع: عدد الفواتير، المبيعات، المرتجعات، الصافي، النسبة،
  * التارجت (لو موجود)، العمولة المستحقة، وحالة التسوية — مع زر «صرف»
- * يسجل التسوية النهائية (لقطة مغلقة مينفعش تتصرّف تاني).
+ * يسجل التسوية النهائية (لقطة مغلقة — لو اتسجلت بالغلط الأدمن يلغيها من «إلغاء الصرف»).
  *
  * 🛡️ كل الأرقام بتتيجي من /api/commissions/report (بتتحسب على السيرفر من
  * سجلات المبيعات والمرتجعات نفسها) — والصرف عبر /api/commissions/payout
  * (أدمن بس على السيرفر، قيد فريد لكل بائع/شهر).
- * الصرف هنا **سجل تسوية** — مش حركة خزنة (الفلوس ممكن تتدفع برا النظام
- * أو مع الراتب).
+ * الصرف بيخصم من الخزنة افتراضياً (مصروف + حركة خزنة صادرة بوسيلة الصرف)،
+ * والمالك يقدر يلغي الخصم لو الدفع حصل برا النظام (تحويل بنكي مثلاً).
  */
 
 import * as React from 'react'
@@ -54,6 +54,16 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 interface SellerRow {
   userId: string
@@ -431,6 +441,30 @@ export function CommissionsView() {
   const [loading, setLoading] = React.useState(true)
   const [refreshing, setRefreshing] = React.useState(false)
   const [payTarget, setPayTarget] = React.useState<SellerRow | null>(null)
+  const [voidTarget, setVoidTarget] = React.useState<SellerRow | null>(null)
+  const [voiding, setVoiding] = React.useState(false)
+
+  const doVoid = async () => {
+    if (!voidTarget || voiding) return
+    setVoiding(true)
+    try {
+      const r = await api<{ cashReversed: boolean }>(
+        `/api/commissions/payout?userId=${encodeURIComponent(voidTarget.userId)}&month=${encodeURIComponent(month)}`,
+        { method: 'DELETE' },
+      )
+      toast.success(
+        r?.cashReversed
+          ? `اتلغى صرف ${voidTarget.name} ورجعت الفلوس للخزنة`
+          : `اتلغى صرف ${voidTarget.name} — تقدر تصرف تاني دلوقتي`,
+      )
+      setVoidTarget(null)
+      if (month) void load(month, true)
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل إلغاء الصرف')
+    } finally {
+      setVoiding(false)
+    }
+  }
 
   const load = React.useCallback(async (m: string, silent = false) => {
     if (silent) setRefreshing(true)
@@ -832,6 +866,7 @@ export function CommissionsView() {
                     {(paid || isAdmin) && (
                       <div className="mt-4 border-t pt-4">
                         {paid ? (
+                          <>
                           <div className="flex items-center justify-between gap-3 rounded-2xl border border-violet-500/30 bg-violet-500/10 px-3.5 py-2.5">
                             <span className="flex items-center gap-2 text-sm font-extrabold text-violet-700 dark:text-violet-300">
                               <Lock className="size-4" />
@@ -846,6 +881,16 @@ export function CommissionsView() {
                               </span>
                             )}
                           </div>
+                          {isAdmin && !s.payout!.viaPayroll && (
+                            <button
+                              type="button"
+                              onClick={() => setVoidTarget(s)}
+                              className="mt-2 text-[11px] font-bold text-rose-600 underline-offset-2 hover:underline dark:text-rose-400"
+                            >
+                              إلغاء الصرف (صُرف بالغلط أو بدري؟)
+                            </button>
+                          )}
+                          </>
                         ) : (
                           <button
                             type="button"
@@ -882,6 +927,33 @@ export function CommissionsView() {
           ))}
       </div>
 
+      <AlertDialog open={voidTarget !== null} onOpenChange={(o) => !o && !voiding && setVoidTarget(null)}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>إلغاء صرف عمولة {voidTarget?.name}؟</AlertDialogTitle>
+            <AlertDialogDescription className="leading-relaxed">
+              {voidTarget?.payout
+                ? `هيتلغي صرف ${formatCurrency(voidTarget.payout.amount)} المسجّل عن ${month ? monthLabel(month) : 'الشهر ده'}، والشهر هيتفتح تاني للصرف بالرقم الحالي. `
+                : ''}
+              لو الصرف كان متخصم من الخزنة، الفلوس هترجع لها والمصروف هيتشال. ولو كنت فعلاً سلّمت للبائع جزء من الفلوس،
+              استخدم «إضافات / خصومات» بالسالب مع ملاحظة (سلفة) وقت الصرف الجديد.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={voiding}>تراجع</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={voiding}
+              onClick={(e) => {
+                e.preventDefault()
+                void doVoid()
+              }}
+            >
+              {voiding ? 'جاري الإلغاء…' : 'إلغاء الصرف'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <PayoutDialog
         target={payTarget}
         month={month}
@@ -917,10 +989,14 @@ function PayoutDialog({
   const [adjustments, setAdjustments] = React.useState('')
   const [method, setMethod] = React.useState('cash')
   const [note, setNote] = React.useState('')
+  const [deduct, setDeduct] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   // 🛡️ تأكيد صريح لو الرقم مبدئي + قفل متزامن ضد الضغطتين المتتاليتين (state لوحده مش كفاية قبل إعادة الرسم)
   const [ack, setAck] = React.useState(false)
   const busyRef = React.useRef(false)
+  // 👥 «مع الراتب» مش خيار صرف يدوي: النزول على قسيمة الراتب بيتم تلقائي من كشف الرواتب (HR — احترافي فقط).
+  // لو اتسجّل صرف منفصل بالاسم ده، كشف الرواتب هيشوف الشهر مصروف ويحط العمولة صفر في القسيمة.
+  const hasHr = useShopStore((s) => s.plan.enabledModules).includes('hr')
 
   React.useEffect(() => {
     if (target) {
@@ -928,6 +1004,7 @@ function PayoutDialog({
       setAdjustments('')
       setMethod('cash')
       setNote('')
+      setDeduct(true)
     }
   }, [target])
 
@@ -957,9 +1034,14 @@ function PayoutDialog({
           adjustments: Number.isFinite(adjNum) ? adjNum : 0,
           method,
           note: note.trim() || null,
+          deductFromCash: deduct && finalAmount > 0,
         },
       })
-      toast.success(`تم تسجيل صرف عمولة ${target.name} عن ${monthLabel}`)
+      toast.success(
+        deduct && finalAmount > 0
+          ? `تم صرف عمولة ${target.name} عن ${monthLabel} وخصمها من الخزنة`
+          : `تم تسجيل صرف عمولة ${target.name} عن ${monthLabel}`,
+      )
       onDone()
     } catch (e: any) {
       const msg: string = e?.message || ''
@@ -990,7 +1072,7 @@ function PayoutDialog({
             </div>
           </div>
           <p className="relative mt-3 text-[11px] leading-relaxed text-emerald-50/90">
-            بتسجل لقطة نهائية مغلقة: الأرقام بتتحسب لحظة التأكيد، والشهر بيتقفل للبائع ده (مستحيل يتصرّف تاني).
+            بتسجل لقطة نهائية مغلقة: الأرقام بتتحسب لحظة التأكيد، والشهر بيتقفل للبائع ده. الأفضل تصرف بعد آخر الشهر (لو صرفت بدري ممكن تلغي الصرف وتصرف تاني).
           </p>
         </div>
 
@@ -1023,13 +1105,37 @@ function PayoutDialog({
               <Select value={method} onValueChange={setMethod}>
                 <SelectTrigger className="h-11 rounded-xl bg-slate-50 font-semibold shadow-inner dark:bg-slate-800/50"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {PAYOUT_METHODS.map((m) => (
+                  {PAYOUT_METHODS.filter((m) => m.id !== 'with_salary').map((m) => (
                     <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {hasHr && (
+                <p className="text-[11px] font-semibold text-muted-foreground">
+                  عايز العمولة تنزل على الراتب؟ سيبها من غير صرف هنا — بتتضاف تلقائي في كشف الرواتب.
+                </p>
+              )}
             </div>
           </div>
+
+          {finalAmount > 0 && (
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-2xl border bg-muted/30 p-3 shadow-inner">
+              <input
+                type="checkbox"
+                checked={deduct}
+                onChange={(e) => setDeduct(e.target.checked)}
+                className="mt-0.5 size-4 accent-emerald-600"
+              />
+              <span className="text-xs leading-relaxed">
+                <b>خصم {formatCurrency(finalAmount)} من الخزنة</b>
+                <span className="block font-semibold text-muted-foreground">
+                  {deduct
+                    ? 'هيتسجل كمصروف وحركة خزنة صادرة بوسيلة الصرف المختارة.'
+                    : 'سجل صرف بس — الخزنة والمصروفات مش هيتأثروا. استخدمها لو الدفع حصل برا النظام.'}
+                </span>
+              </span>
+            </label>
+          )}
 
           <div className="space-y-1.5">
             <Label className="text-xs font-bold">ملاحظة (إجبارية مع الخصم)</Label>

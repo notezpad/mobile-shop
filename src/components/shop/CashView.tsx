@@ -52,6 +52,7 @@ const SOURCES: Record<string, { label: string; icon: LucideIcon; tone: Tone }> =
   purchase_refund: { label: 'مرتجع شراء', icon: RotateCcw, tone: 'lime' }, supplier_payment: { label: 'دفعة لمورد', icon: Truck, tone: 'fuchsia' },
   expense: { label: 'مصروف', icon: Receipt, tone: 'rose' }, payroll: { label: 'راتب موظف', icon: Users, tone: 'indigo' },
   advance: { label: 'سلفة موظف', icon: HandCoins, tone: 'amber' },
+  seller_commission: { label: 'عمولة بائع', icon: HandCoins, tone: 'lime' },
 }
 const srcMeta = (s: string) => SOURCES[s] ?? { label: s, icon: Wallet, tone: 'slate' as Tone }
 

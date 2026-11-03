@@ -65,6 +65,16 @@ async function __DELETE(
     )
   }
 
+  // 💵 مصروف عمولة البائع بيتولّد من صرف العمولة (حركة الخزنة مرتبطة بسجل الصرف
+  // نفسه refId=payout.id) — حذفه من هنا كان هيرجّع الفلوس للخزنة ويسيب سجل الصرف
+  // ظاهر «مصروف» من غير مقابل.
+  if ((expense as any).source === 'seller_commission') {
+    return NextResponse.json(
+      { error: 'مصروف عمولة البائع مرتبط بسجل صرف العمولة ولا يمكن حذفه من هنا' },
+      { status: 409 },
+    )
+  }
+
   await db.$transaction(async (tx) => {
     // 🛡️ 2026-09-30 (X10): حماية الضغط المزدوج — لو فيه قيد استرداد موجود
     // بالفعل للمصروف ده، يبقى اتمسح قبل كده ومفيش استرداد تاني.
@@ -148,6 +158,12 @@ async function __PATCH(
   if ((expense as any).source === 'payroll') {
     return NextResponse.json(
       { error: 'مصروف المرتبات مرتبط بدورة رواتب ولا يمكن تعديله من هنا' },
+      { status: 409 },
+    )
+  }
+  if ((expense as any).source === 'seller_commission') {
+    return NextResponse.json(
+      { error: 'مصروف عمولة البائع مرتبط بسجل صرف العمولة ولا يمكن تعديله من هنا' },
       { status: 409 },
     )
   }

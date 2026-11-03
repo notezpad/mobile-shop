@@ -51,6 +51,8 @@ export function planBenefitItems(code: string): PlanFeatureItem[] {
       { ok: true, label: 'كل ميزات نقطة البيع' },
       { ok: true, label: 'إدارة المخزون والعملاء' },
       { ok: true, label: 'المعاملات المالية والخزنة' },
+      { ok: true, label: 'عمولات البائعين' },
+      { ok: false, label: 'الموارد البشرية (حضور ورواتب)' },
       { ok: false, label: 'تقارير متقدمة' },
       { ok: false, label: 'بيع بالجملة' },
     ]
@@ -58,6 +60,7 @@ export function planBenefitItems(code: string): PlanFeatureItem[] {
   if (code.endsWith('-pro')) {
     return [
       { ok: true, label: 'كل ميزات الباقة الأساسية' },
+      { ok: true, label: 'الموارد البشرية: حضور وإجازات ورواتب' },
       { ok: true, label: 'تقارير متقدمة + Excel' },
       { ok: true, label: 'بيع بالجملة (وحدات وقسم)' },
     ]
