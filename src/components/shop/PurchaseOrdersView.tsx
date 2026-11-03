@@ -191,6 +191,9 @@ const supplierKey = (o: PurchaseOrder) => o.supplier?.name ?? NO_SUPPLIER
 export function PurchaseOrdersView() {
   const [orders, setOrders] = React.useState<PurchaseOrder[]>([])
   const [loading, setLoading] = React.useState(true)
+  // 🛡️ 2026-11-03: منع قفز التخطيط — السكيليتون لأول تحميل بس؛ التحديثات الخلفية
+  // والفلاتر بتحافظ على القايمة القديمة بدل طيّها في سكيليتون ونبنيها تاني.
+  const loadedOnceRef = React.useRef(false)
 
   const [period, setPeriod] = React.useState<Period>('all')
   const [from, setFrom] = React.useState('')
@@ -235,7 +238,7 @@ export function PurchaseOrdersView() {
   const shopBranding = useShopStore((s) => s.branding)
 
   const load = React.useCallback(async (f?: string, t?: string) => {
-    setLoading(true)
+    if (!loadedOnceRef.current) setLoading(true)
     try {
       const params = new URLSearchParams()
       if (f) params.set('from', f)
@@ -245,6 +248,7 @@ export function PurchaseOrdersView() {
     } catch (e: any) {
       toast.error(e?.message || 'فشل تحميل المشتريات')
     } finally {
+      loadedOnceRef.current = true
       setLoading(false)
     }
   }, [])
@@ -822,7 +826,7 @@ export function PurchaseOrdersView() {
       )}
 
       {/* ═════════ السجل ═════════ */}
-      {loading ? (
+      {!loadedOnceRef.current && loading ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-28 w-full rounded-2xl" />

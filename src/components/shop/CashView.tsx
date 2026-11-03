@@ -279,17 +279,28 @@ export function CashView() {
               {negative ? <span className="font-medium text-rose-600 dark:text-rose-400">الرصيد بالسالب — راجع حركات الصادر</span> : 'الرصيد الحالي بعد كل الحركات'}
             </p>
             
-            {shiftSummary.shortCount > 0 && (
-              <button type="button" onClick={() => setView('shifts')} className="group relative mt-4 flex w-full max-w-sm items-center gap-3 overflow-hidden rounded-2xl border border-rose-200 bg-rose-50 p-3 text-start shadow-sm transition-all hover:border-rose-300 hover:shadow-md dark:border-rose-900/30 dark:bg-rose-950/20">
-                <span className="absolute inset-y-0 right-0 w-1.5 bg-rose-500" />
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-600 dark:bg-rose-900/50 dark:text-rose-400"><AlertTriangle className="size-5" /></div>
-                <div className="flex-1">
-                  <p className="text-sm font-black text-rose-900 dark:text-rose-100">تنبيه عجز في الورديات</p>
-                  <p className="text-xs font-bold text-rose-600/80 dark:text-rose-400/80">يوجد {shiftSummary.shortCount} إغلاق وردية به عجز</p>
-                </div>
-                <ChevronLeft className="size-5 text-rose-400 transition-transform group-hover:-translate-x-1" />
-              </button>
-            )}
+            {/* ⚡ 2026-11-03: توسيع/طيّ ناعم بـ grid-rows بدل الظهور/الاختفاء المفاجئ —
+                البانر كان يدفع التبويبات والدفتر لتحت ويرجّعهم (layout-shift عند السكرول). */}
+            <div
+              className={cn(
+                'grid transition-[grid-template-rows] duration-300 ease-out',
+                shiftSummary.shortCount > 0 ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+              )}
+            >
+              <div className="min-h-0 overflow-hidden">
+                {shiftSummary.shortCount > 0 && (
+                  <button type="button" onClick={() => setView('shifts')} className="group relative mt-4 flex w-full max-w-sm items-center gap-3 overflow-hidden rounded-2xl border border-rose-200 bg-rose-50 p-3 text-start shadow-sm transition-all hover:border-rose-300 hover:shadow-md dark:border-rose-900/30 dark:bg-rose-950/20">
+                    <span className="absolute inset-y-0 right-0 w-1.5 bg-rose-500" />
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-600 dark:bg-rose-900/50 dark:text-rose-400"><AlertTriangle className="size-5" /></div>
+                    <div className="flex-1">
+                      <p className="text-sm font-black text-rose-900 dark:text-rose-100">تنبيه عجز في الورديات</p>
+                      <p className="text-xs font-bold text-rose-600/80 dark:text-rose-400/80">يوجد {shiftSummary.shortCount} إغلاق وردية به عجز</p>
+                    </div>
+                    <ChevronLeft className="size-5 text-rose-400 transition-transform group-hover:-translate-x-1" />
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="min-w-0">

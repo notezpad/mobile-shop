@@ -116,12 +116,15 @@ export function InventoryView() {
   const [transfers, setTransfers] = React.useState<Transfer[]>([])
   const [stocktakes, setStocktakes] = React.useState<Stocktake[]>([])
   const [loading, setLoading] = React.useState(true)
+  // 🛡️ 2026-11-03: منع قفز التخطيط — السكيليتون لأول تحميل بس، والتحديثات
+  // الخلفية (useDataRefresh) بتحافظ على المحتوى القديم بدل طيّه في سكيليتون.
+  const loadedOnceRef = React.useRef(false)
   const [tab, setTab] = React.useState('stock')
   // 🏬 تبويبات الفروع (للمدير فقط): 'all' = المخزون كله، أو رقم الفرع كنص
   const [activeBranch, setActiveBranch] = React.useState<string>('all')
 
   const load = React.useCallback(async () => {
-    setLoading(true)
+    if (!loadedOnceRef.current) setLoading(true)
     try {
       const [bs, ps, mv, tf, st] = await Promise.all([
         apiSafe<Branch[]>('/api/branches', []),
@@ -149,6 +152,7 @@ export function InventoryView() {
         })
       }
     } finally {
+      loadedOnceRef.current = true
       setLoading(false)
     }
   }, [])
@@ -553,7 +557,7 @@ export function InventoryView() {
           ))}
         </TabsList>
 
-        {loading ? (
+        {!loadedOnceRef.current && loading ? (
           <div className="space-y-3">
             <Skeleton className="h-28 w-full rounded-3xl" />
             <Skeleton className="h-64 w-full rounded-3xl" />
