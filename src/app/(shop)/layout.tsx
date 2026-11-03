@@ -341,7 +341,8 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           <Link
             href="/dashboard"
             aria-label="الرئيسية — لوحة المعلومات"
-            className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-500/20 ring-1 ring-white/20 transition-transform active:scale-90 hover:scale-105"
+            // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-500/20 ring-1 ring-white/20 transition-transform active:scale-90"
           >
             <Home className="size-[18px]" strokeWidth={1.9} />
           </Link>

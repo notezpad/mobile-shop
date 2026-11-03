@@ -845,12 +845,13 @@ export function SuppliersView() {
               />
             ))}
             {!hasFilters && (
+              // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
               <button
                 type="button"
                 onClick={openAdd}
-                className="animate-in-up motion-reduce:animate-none group flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-border bg-card/40 p-6 text-center transition-all duration-base ease-out hover:-translate-y-1.5 hover:border-orange-500/60 hover:bg-orange-500/5 focus-visible:ring-[3px] focus-visible:ring-orange-500/40 focus-visible:outline-none"
+                className="animate-in-up motion-reduce:animate-none group flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-border bg-card/40 p-6 text-center transition-all duration-base ease-out hover:border-orange-500/60 hover:bg-orange-500/5 focus-visible:ring-[3px] focus-visible:ring-orange-500/40 focus-visible:outline-none"
               >
-                <span className="flex size-14 items-center justify-center rounded-2xl bg-orange-600 text-white shadow-lg shadow-orange-600/25 transition-transform duration-base group-hover:scale-110 group-hover:rotate-90">
+                <span className="flex size-14 items-center justify-center rounded-2xl bg-orange-600 text-white shadow-lg shadow-orange-600/25">
                   <Plus className="size-6" />
                 </span>
                 <span>
@@ -1439,7 +1440,7 @@ function SupplierSlip({
 
   return (
     <article
-      className="animate-in-up motion-reduce:animate-none group relative flex flex-col rounded-3xl border bg-card shadow-sm transition-all duration-base ease-out hover:-translate-y-1.5 hover:shadow-2xl"
+      className="animate-in-up motion-reduce:animate-none group relative flex flex-col rounded-3xl border bg-card shadow-sm transition-all duration-base ease-out hover:shadow-2xl"
       style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
     >
       {/* ═══ رأس البوليصة ═══ */}
@@ -1481,7 +1482,7 @@ function SupplierSlip({
             {/* الختم */}
             <span
               aria-hidden
-              className="shrink-0 -rotate-6 rounded-lg border-2 px-2.5 py-1 text-[11px] font-extrabold tracking-wide transition-transform duration-base group-hover:-rotate-3 group-hover:scale-105"
+              className="shrink-0 -rotate-6 rounded-lg border-2 px-2.5 py-1 text-[11px] font-extrabold tracking-wide"
               style={{ color: t.color, borderColor: t.color, backgroundColor: `${t.color}10` }}
             >
               {t.label}

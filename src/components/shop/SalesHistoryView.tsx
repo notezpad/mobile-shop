@@ -737,7 +737,8 @@ export function SalesHistoryView() {
                             'sm:min-h-[84px] sm:grid-cols-[104px_minmax(0,1fr)_auto]',
                             // 🖥️ @xl: نضيف عمود حالة الدفع
                             '@xl:grid-cols-[112px_minmax(0,1fr)_170px_136px]',
-                            'hover:-translate-y-px hover:border-yellow-400/70 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/60',
+                            // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
+                            'hover:border-yellow-400/70 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/60',
                             active && 'border-yellow-400 shadow-[0_8px_24px_-12px_rgb(250_204_21/0.7)]',
                             ret && 'text-muted-foreground'
                           )}

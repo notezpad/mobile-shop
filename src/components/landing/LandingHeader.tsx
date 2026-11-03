@@ -80,10 +80,11 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           {/* Logo */}
           <a href="#top" className="group flex items-center gap-3">
+            {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
             <img
               src="/logo.svg" alt="Nezam POS" width={42} height={42}
               draggable={false}
-              className="size-[42px] select-none rounded-[14px] shadow-lg shadow-[#00402a]/40 ring-2 ring-white/90 transition-transform duration-300 group-hover:-rotate-3 group-hover:scale-105"
+              className="size-[42px] select-none rounded-[14px] shadow-lg shadow-[#00402a]/40 ring-2 ring-white/90"
               style={{ WebkitUserDrag: 'none' } as React.CSSProperties}
             />
             <span className="flex flex-col leading-tight">
@@ -199,7 +200,7 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
                         <span className="max-w-full text-[14px] font-extrabold leading-snug text-white">شاهد العرض التوضيحي</span>
                         <span className="max-w-full text-[11px] font-medium leading-snug text-[#ffe27a]/80">شرح النظام بالكامل في فيديو</span>
                       </span>
-                      <ArrowLeft className="size-4 shrink-0 text-[#ffe27a] transition-transform duration-300 group-hover:-translate-x-1" aria-hidden />
+                      <ArrowLeft className="size-4 shrink-0 text-[#ffe27a]" aria-hidden />
                     </button>
 
                     {NAV_ITEMS.map(({ item, Icon }, i) => (
@@ -232,7 +233,7 @@ export function LandingHeader({ onOpenAuth }: LandingHeaderProps) {
                       className="nz-cta-primary group"
                     >
                       <span>ابدأ مجاناً</span>
-                      <ArrowLeft className="size-4 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden />
+                      <ArrowLeft className="size-4" aria-hidden />
                     </button>
                     <button
                       onClick={() => {

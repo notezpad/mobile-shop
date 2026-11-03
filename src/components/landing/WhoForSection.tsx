@@ -62,7 +62,8 @@ export function WhoForSection() {
                 className="glass-card group rounded-2xl p-4 sm:p-7"
               >
                 <div className="mb-3 flex items-center gap-3 sm:mb-4">
-                  <span className="landing-tile is-deep size-10 shrink-0 sm:size-11 text-base font-black transition-transform duration-300 group-hover:scale-110">
+                  {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
+                  <span className="landing-tile is-deep size-10 shrink-0 sm:size-11 text-base font-black">
                     {i + 1}
                   </span>
                   <h3 className="text-base font-extrabold leading-snug text-[#0b2a20] sm:text-xl">{p.title}</h3>

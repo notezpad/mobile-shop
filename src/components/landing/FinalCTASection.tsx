@@ -91,10 +91,11 @@ export function FinalCTASection({ onOpenAuth }: FinalCTASectionProps) {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="mt-6 flex justify-center sm:mt-9"
         >
+          {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
           <Button
             size="lg"
             onClick={() => onOpenAuth('signup')}
-            className="cta-shine h-13 w-full gap-2 rounded-2xl bg-white px-4 text-base sm:h-14 sm:w-auto sm:gap-2.5 sm:px-10 sm:text-lg font-extrabold text-[#00573f] shadow-2xl shadow-[#00301f]/40 transition-transform hover:-translate-y-0.5 hover:bg-[#effcf7] focus-visible:ring-4 focus-visible:ring-white/40"
+            className="cta-shine h-13 w-full gap-2 rounded-2xl bg-white px-4 text-base sm:h-14 sm:w-auto sm:gap-2.5 sm:px-10 sm:text-lg font-extrabold text-[#00573f] shadow-2xl shadow-[#00301f]/40 hover:bg-[#effcf7] focus-visible:ring-4 focus-visible:ring-white/40"
           >
             <Rocket className="size-5" />
             ابدأ تجربتك المجانية لمدة 14 يوم

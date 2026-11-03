@@ -162,7 +162,8 @@ function StatCard({
   return (
     <div
       className={cn(
-        'relative flex min-w-0 flex-col justify-between overflow-hidden rounded-2xl border border-s-4 bg-card p-4 transition-all duration-300 hover:-translate-y-1 sm:p-5',
+        // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
+        'relative flex min-w-0 flex-col justify-between overflow-hidden rounded-2xl border border-s-4 bg-card p-4 transition-all duration-300 sm:p-5',
         'shadow-[0_10px_40px_-10px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.9)] dark:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.08)]',
         TONES[tone].border,
         className,
@@ -217,7 +218,7 @@ function ProgressRing({ value, size = 112, stroke = 11 }: { value: number; size?
 /** زرار تنقّل زجاجي 3D للهيرو */
 const GLASS_BTN =
   'grid size-10 shrink-0 place-items-center rounded-xl border border-white/30 bg-white/10 text-white backdrop-blur-md transition-all ' +
-  'shadow-[0_5px_0_rgba(255,255,255,0.12)] hover:bg-white/20 hover:translate-y-[2px] hover:shadow-[0_3px_0_rgba(255,255,255,0.12)] ' +
+  'shadow-[0_5px_0_rgba(255,255,255,0.12)] hover:bg-white/20 hover:shadow-[0_3px_0_rgba(255,255,255,0.12)] ' +
   'active:translate-y-[5px] active:shadow-none disabled:pointer-events-none disabled:opacity-40'
 
 const MEDALS = [
@@ -542,7 +543,7 @@ export function CommissionsView() {
                   type="button"
                   disabled={loading}
                   onClick={() => goMonth(currentMonth)}
-                  className="h-10 rounded-xl bg-white px-4 text-xs font-extrabold text-teal-700 shadow-[0_5px_0_rgb(203,213,225)] transition-all hover:translate-y-[2px] hover:shadow-[0_3px_0_rgb(203,213,225)] active:translate-y-[5px] active:shadow-none disabled:opacity-50"
+                  className="h-10 rounded-xl bg-white px-4 text-xs font-extrabold text-teal-700 shadow-[0_5px_0_rgb(203,213,225)] transition-all hover:shadow-[0_3px_0_rgb(203,213,225)] active:translate-y-[5px] active:shadow-none disabled:opacity-50"
                 >
                   الشهر الحالي
                 </button>
@@ -675,7 +676,7 @@ export function CommissionsView() {
                   <article
                     key={s.userId}
                     className={cn(
-                      'relative overflow-hidden rounded-3xl border bg-card p-4 transition-all duration-300 hover:-translate-y-1 sm:p-5',
+                      'relative overflow-hidden rounded-3xl border bg-card p-4 transition-all duration-300 sm:p-5',
                       'shadow-[0_4px_0_rgba(15,23,42,0.05),0_18px_36px_-18px_rgba(0,0,0,0.25)] dark:shadow-[0_4px_0_rgba(0,0,0,0.3),0_18px_36px_-18px_rgba(0,0,0,0.6)]',
                       !s.active && 'opacity-80',
                     )}
@@ -858,7 +859,7 @@ export function CommissionsView() {
                                   : 'مفيش عمولة تتصرف'
                                 : undefined
                             }
-                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 py-2.5 text-sm font-extrabold text-white shadow-[0_5px_0_rgb(15,118,110)] transition-all hover:translate-y-[2px] hover:shadow-[0_3px_0_rgb(15,118,110)] active:translate-y-[5px] active:shadow-none disabled:translate-y-0 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:text-white/90 disabled:shadow-[0_5px_0_rgb(148,163,184)] dark:disabled:from-slate-600 dark:disabled:to-slate-700 dark:disabled:shadow-[0_5px_0_rgb(51,65,85)]"
+                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 py-2.5 text-sm font-extrabold text-white shadow-[0_5px_0_rgb(15,118,110)] transition-all hover:shadow-[0_3px_0_rgb(15,118,110)] active:translate-y-[5px] active:shadow-none disabled:translate-y-0 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:text-white/90 disabled:shadow-[0_5px_0_rgb(148,163,184)] dark:disabled:from-slate-600 dark:disabled:to-slate-700 dark:disabled:shadow-[0_5px_0_rgb(51,65,85)]"
                           >
                             <BadgeDollarSign className="size-4" />
                             صرف العمولة
@@ -1079,7 +1080,7 @@ function PayoutDialog({
               type="button"
               onClick={submit}
               disabled={saving || (!!provisional && !ack)}
-              className="flex h-11 min-w-36 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 px-5 text-sm font-extrabold text-white shadow-[0_5px_0_rgb(15,118,110)] transition-all hover:translate-y-[2px] hover:shadow-[0_3px_0_rgb(15,118,110)] active:translate-y-[5px] active:shadow-none disabled:translate-y-0 disabled:opacity-60 disabled:shadow-[0_5px_0_rgb(15,118,110)]"
+              className="flex h-11 min-w-36 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 px-5 text-sm font-extrabold text-white shadow-[0_5px_0_rgb(15,118,110)] transition-all hover:shadow-[0_3px_0_rgb(15,118,110)] active:translate-y-[5px] active:shadow-none disabled:translate-y-0 disabled:opacity-60 disabled:shadow-[0_5px_0_rgb(15,118,110)]"
             >
               {saving ? <Loader2 className="size-4 animate-spin" /> : <HandCoins className="size-4" />}
               تأكيد صرف {formatCurrency(finalAmount)}

@@ -365,9 +365,9 @@ function SkylineTowers({
             >
               <span
                 className={cn(
-                  'relative block w-full rounded-t-[3px] transition-[filter,transform] group-active:brightness-125',
+                  'relative block w-full rounded-t-[3px] transition-[filter] group-active:brightness-125',
                   !isZero && 'group-hover:brightness-125 group-focus-visible:brightness-125',
-                  isNow && 'group-hover:-translate-y-0.5',
+                  // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
                 )}
                 style={{
                   height: `${pct}%`,

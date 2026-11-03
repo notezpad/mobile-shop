@@ -187,7 +187,8 @@ export function HrEvaluationsView() {
                     </p>
                   </div>
                 </div>
-                <Button onClick={applyBonuses} disabled={applying} className="z-10 gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-[0_4px_0_rgb(180,83,9)] hover:shadow-[0_2px_0_rgb(180,83,9)] hover:translate-y-[2px] transition-all font-bold px-5">
+                {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
+                <Button onClick={applyBonuses} disabled={applying} className="z-10 gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-[0_4px_0_rgb(180,83,9)] hover:shadow-[0_2px_0_rgb(180,83,9)] transition-all font-bold px-5">
                   {applying ? <Loader2 className="size-4 animate-spin" /> : <Wallet className="size-4" />}أضفهم لمسودة المرتبات
                 </Button>
               </div>
@@ -222,7 +223,7 @@ export function HrEvaluationsView() {
                 const theme = AVATAR_THEMES[index % AVATAR_THEMES.length]
 
                 return (
-                  <div key={i.employeeId} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 flex flex-col transition-all hover:shadow-md hover:-translate-y-1">
+                  <div key={i.employeeId} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 flex flex-col transition-all hover:shadow-md">
                     
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
@@ -275,7 +276,7 @@ export function HrEvaluationsView() {
                         ) : <span className="text-[11px] text-slate-400">بدون حافز</span>}
                       </div>
                       
-                      <Button variant={ev ? 'outline' : 'default'} size="sm" onClick={() => setEditing(i)} className={cn("h-8 gap-1.5 text-xs px-4", !ev && "bg-slate-900 hover:bg-slate-800 text-white shadow-[0_4px_0_rgb(15,23,42)] hover:translate-y-[2px] hover:shadow-[0_2px_0_rgb(15,23,42)]")}>
+                      <Button variant={ev ? 'outline' : 'default'} size="sm" onClick={() => setEditing(i)} className={cn("h-8 gap-1.5 text-xs px-4", !ev && "bg-slate-900 hover:bg-slate-800 text-white shadow-[0_4px_0_rgb(15,23,42)] hover:shadow-[0_2px_0_rgb(15,23,42)]")}>
                         <Award className="size-3.5 text-amber-400" />{ev ? 'تعديل' : 'قيّم الآن'}
                       </Button>
                     </div>
@@ -341,7 +342,7 @@ function StarRating({ value, onChange, label }: { value: number; onChange: (n: n
           key={n} type="button" role="radio" aria-checked={value === n} aria-label={`${n} من 5`}
           onMouseEnter={() => setHover(n)}
           onClick={() => onChange(n)}
-          className="group grid flex-1 place-items-center rounded-xl py-1 outline-none transition-transform duration-150 hover:-translate-y-0.5 focus-visible:ring-[3px] focus-visible:ring-amber-400/50 active:scale-90"
+          className="group grid flex-1 place-items-center rounded-xl py-1 outline-none transition-transform duration-150 focus-visible:ring-[3px] focus-visible:ring-amber-400/50 active:scale-90"
         >
           <GoldStar on={shown >= n} className={cn('size-10 sm:size-11', shown >= n && 'scale-105')} />
         </button>
@@ -503,10 +504,10 @@ function EvalDialog({ item, month, onClose, onSaved }: { item: Item; month: stri
         </DialogBody>
 
         <DialogFooter className="shrink-0 flex-row justify-end gap-3 border-t bg-background px-4 py-3.5 sm:px-6">
-          <Button variant="outline" onClick={onClose} className="h-11 rounded-xl px-6 font-bold shadow-[0_4px_0_rgba(15,23,42,0.08)] transition-all hover:translate-y-[2px] hover:shadow-[0_2px_0_rgba(15,23,42,0.08)]">إلغاء</Button>
+          <Button variant="outline" onClick={onClose} className="h-11 rounded-xl px-6 font-bold shadow-[0_4px_0_rgba(15,23,42,0.08)] transition-all hover:shadow-[0_2px_0_rgba(15,23,42,0.08)]">إلغاء</Button>
           <Button
             onClick={save} disabled={saving || !ready}
-            className="h-11 gap-2 rounded-xl bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-500 px-8 font-extrabold text-amber-950 shadow-[0_5px_0_rgb(180,83,9)] transition-all hover:translate-y-[3px] hover:from-amber-300 hover:via-yellow-400 hover:to-amber-500 hover:shadow-[0_2px_0_rgb(180,83,9)] disabled:opacity-50"
+            className="h-11 gap-2 rounded-xl bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-500 px-8 font-extrabold text-amber-950 shadow-[0_5px_0_rgb(180,83,9)] transition-all hover:from-amber-300 hover:via-yellow-400 hover:to-amber-500 hover:shadow-[0_2px_0_rgb(180,83,9)] disabled:opacity-50"
           >
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Award className="size-4" />}حفظ التقييم
           </Button>

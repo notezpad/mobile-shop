@@ -44,9 +44,10 @@ export default function AuthShell({
 
             <div className="relative space-y-4">
               <Link href="/" className="group inline-flex items-center gap-3" aria-label="Nezam POS">
+                {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
                 <img
                   src="/logo.svg" alt="" width={40} height={40}
-                  className="size-10 rounded-[14px] shadow-lg shadow-[#00c98b]/35 ring-2 ring-white transition-transform group-hover:-rotate-3 group-hover:scale-105"
+                  className="size-10 rounded-[14px] shadow-lg shadow-[#00c98b]/35 ring-2 ring-white"
                 />
                 <div className="leading-none">
                   <p dir="ltr" className="text-right text-[18px] font-black tracking-tight text-foreground">

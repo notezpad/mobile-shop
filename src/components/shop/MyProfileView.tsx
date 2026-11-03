@@ -245,7 +245,8 @@ function StatTile({ label, value, icon, tone = 'sky', foot, compact }: {
 }) {
   return (
     <div className={cn(
-      'relative flex min-w-0 overflow-hidden rounded-2xl border border-slate-100 bg-white transition-all duration-300 hover:-translate-y-0.5 dark:border-slate-800 dark:bg-slate-900',
+      // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
+      'relative flex min-w-0 overflow-hidden rounded-2xl border border-slate-100 bg-white transition-all duration-300 dark:border-slate-800 dark:bg-slate-900',
       compact ? 'items-center gap-3 px-3.5 pb-3.5 pt-5' : 'flex-col items-center gap-3 px-3 pb-5 pt-7 text-center',
       'shadow-[0_5px_0_rgba(15,23,42,0.08),0_14px_24px_-12px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,1)] dark:shadow-[0_5px_0_rgba(0,0,0,0.35),0_14px_24px_-12px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.08)]',
     )}>
@@ -588,7 +589,7 @@ export function MyProfileView() {
                     <button
                       type="button"
                       onClick={() => setShiftOpenOpen(true)}
-                      className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-extrabold text-primary-foreground shadow-[0_5px_0_rgba(0,0,0,0.15)] transition-all hover:translate-y-[3px] hover:bg-primary/90 hover:shadow-[0_2px_0_rgba(0,0,0,0.15)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-emerald-400/40"
+                      className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-extrabold text-primary-foreground shadow-[0_5px_0_rgba(0,0,0,0.15)] transition-all hover:bg-primary/90 hover:shadow-[0_2px_0_rgba(0,0,0,0.15)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-emerald-400/40"
                     >
                       <DoorOpen className="size-4" aria-hidden />
                       افتح وردية

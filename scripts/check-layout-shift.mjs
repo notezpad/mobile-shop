@@ -15,6 +15,10 @@
  *       استثناء: محتوى Dialogs (Portal فوق الصفحة — مؤثرها محدود) → تحذير فقط.
  *  P3 — استخدام كلاس `cv-heavy` في أي .tsx → فشل (content-visibility بدون
  *       contain-intrinsic-size مقاس بدقة = قفزات عند السكرول في الأقسام الطويلة).
+ *  P5 — أي كلاس hover:translate/scale/rotate أو group-hover:translate/scale/rotate
+ *       في أي .tsx → فشل (حركة العنصر عند مرور الماوس أثناء سكرول العجلة بتعمل
+ *       «قفزات محتوى» على الكمبيوتر). حالات active:/focus-visible:/disabled:/motion-reduce
+ *       مش بتتحسب — القاعدة بتطلب بادئة hover: صريحة.
  *
  * التشغيل:  npm run check:layout      (أو: node scripts/check-layout-shift.mjs [dir])
  * الخروج:  0 = سليم، 1 = فيه مخالفات.
@@ -33,6 +37,11 @@ const GATE_RE = /\{[^\n?]*\b(loading|isLoading)\b[^\n?]*\?/
 const SKELETON_RE = /<Skeleton[\s>/]/
 // P1: return null أثناء التحميل (بحث نصي خام)
 const P1_RE = /if \((?:loading|isLoading)\) return null/
+// P5: حركات hover — بادئة hover: صريحة (ولو بعد أي variant) + translate/scale/rotate
+// ملاحظة: active:translate-y / focus-visible: / disabled:translate-y-0 / motion-reduce:animate-none
+// مش بيمشي معاها لأن الـ regex بيطلب «hover:» حرفيًا.
+const P5_HOVER_TRANSFORM_RE = /(?:[\w-]+:)*hover:[-]?(?:translate|scale|rotate)[^\s"'`}]+/
+const P5_GROUP_HOVER_RE = /group-hover:[-]?(?:translate|scale|rotate)/
 
 function walk(dir, out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -91,6 +100,16 @@ for (const file of walk(ROOT).sort()) {
   if (/cv-heavy/.test(stripped)) {
     const lineNo = lines.findIndex((l) => stripComments(l).includes('cv-heavy')) + 1
     fails.push(`P3  ${file}:${lineNo} — استخدام كلاس «cv-heavy» (content-visibility:auto): الارتفاع التقديري بيتبدل بالحقيقي عند الاقتراب = قفزات عند السكرول في الأقسام الطويلة. لا يُستخدم إلا على أقسام ارتفاعها المقاس مضبوط بـ contain-intrinsic-size.`)
+  }
+
+  // ── P5: hover translate/scale/rotate في .tsx — فشل (قفزات محتوى أثناء سكرول العجلة على الكمبيوتر)
+  if (/\.tsx$/.test(file)) {
+    lines.forEach((line, i) => {
+      const s = stripComments(line)
+      if (P5_HOVER_TRANSFORM_RE.test(s) || P5_GROUP_HOVER_RE.test(s)) {
+        fails.push(`P5  ${file}:${i + 1} — كلاس hover:translate/scale/rotate (حركة عند مرور الماوس): لما المستخدم ي سكرول بالعجلة والماوس ثابت، العنصر بيتحرك كام بكسل ويرجع = المحتوى بيبان بيقفز. ممنوع إضافة hover:translate/scale/rotate على عناصر الصفحات — استخدم ظل/لون فقط (hover:shadow-*/hover:bg-*/hover:border-*)، وحالات active:/focus-visible مسموحة.`)
+      }
+    })
   }
 }
 

@@ -605,12 +605,13 @@ export function CustomersView() {
             />
           ))}
           {!hasFilters && (
+            // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
             <button
               type="button"
               onClick={openAdd}
-              className="animate-in-up group flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-border bg-card/40 p-6 text-center transition-all duration-base ease-out hover:-translate-y-1.5 hover:border-sky-500/60 hover:bg-sky-500/5"
+              className="animate-in-up group flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-border bg-card/40 p-6 text-center transition-all duration-base ease-out hover:border-sky-500/60 hover:bg-sky-500/5"
             >
-              <span className="flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-500 text-white shadow-lg shadow-sky-500/25 transition-transform duration-base group-hover:scale-110 group-hover:rotate-90">
+              <span className="flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-500 text-white shadow-lg shadow-sky-500/25">
                 <Plus className="size-6" />
               </span>
               <span>
@@ -1059,7 +1060,7 @@ function CustomerCard({
 
   return (
     <article
-      className="animate-in-up group flex flex-col overflow-hidden rounded-3xl border bg-card shadow-sm transition-all duration-base ease-out hover:-translate-y-1.5 hover:shadow-2xl"
+      className="animate-in-up group flex flex-col overflow-hidden rounded-3xl border bg-card shadow-sm transition-all duration-base ease-out hover:shadow-2xl"
       style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
     >
       {/* ═══ وجه البطاقة ═══ */}
@@ -1071,7 +1072,7 @@ function CustomerCard({
         style={{ background: `linear-gradient(135deg, ${color} 0%, ${shade(color, 0.38)} 100%)` }}
       >
         {/* زخارف */}
-        <span aria-hidden className="absolute -top-16 -left-12 size-48 rounded-full bg-white/10 transition-transform duration-slow ease-out group-hover:scale-110" />
+        <span aria-hidden className="absolute -top-16 -left-12 size-48 rounded-full bg-white/10" />
         <span aria-hidden className="absolute -bottom-24 right-6 size-56 rounded-full bg-white/[0.07]" />
         <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
 

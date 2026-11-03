@@ -229,8 +229,9 @@ export function KpiCard({
   return (
     <div
       className={cn(
+        // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
         PANEL,
-        'group relative min-w-0 overflow-hidden rounded-2xl p-4 transition-all duration-300 hover:-translate-y-0.5 sm:p-5',
+        'group relative min-w-0 overflow-hidden rounded-2xl p-4 transition-all duration-300 hover:shadow-md sm:p-5',
         className,
       )}
     >

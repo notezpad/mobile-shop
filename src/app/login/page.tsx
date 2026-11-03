@@ -169,9 +169,10 @@ export default function LoginPage() {
               <div className="relative space-y-3 sm:space-y-5">
                 {/* اللوجو الحقيقي للموقع */}
                 <Link href="/" className="inline-flex items-center gap-3 group" aria-label="Nezam POS">
+                  {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
                   <img
                     src="/logo.svg" alt="" width={46} height={46}
-                    className="size-[38px] sm:size-[46px] rounded-[15px] shadow-lg shadow-[#00c98b]/35 ring-2 ring-white transition-transform group-hover:scale-105 group-hover:-rotate-3"
+                    className="size-[38px] sm:size-[46px] rounded-[15px] shadow-lg shadow-[#00c98b]/35 ring-2 ring-white"
                   />
                   <div className="leading-none">
                     <p dir="ltr" className="text-[19px] font-black tracking-tight text-foreground text-right">
@@ -334,14 +335,14 @@ export default function LoginPage() {
             {/* Signup CTA */}
             <Link href="/signup" className="block group">
               <div className="flex items-center gap-3 rounded-xl border border-[#00c98b]/35 bg-[#effcf7] px-3.5 py-2 sm:py-3 transition-all group-hover:border-[#00c98b] group-hover:bg-white group-hover:shadow-md group-hover:shadow-[#00c98b]/15">
-                <span className="flex size-9 sm:size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#19e0a2] to-[#00c98b] text-white shadow-md shadow-[#00c98b]/30 transition-transform group-hover:scale-105">
+                <span className="flex size-9 sm:size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#19e0a2] to-[#00c98b] text-white shadow-md shadow-[#00c98b]/30">
                   <UserPlus className="size-5" />
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-foreground">إنشاء حساب جديد</p>
                   <p className="text-[11px] leading-snug text-muted-foreground text-balance">جرّب 14 يوم مجاناً بدون بطاقة ائتمان</p>
                 </div>
-                <ArrowRight className="size-4 shrink-0 text-[#00946a] rtl:rotate-180 transition-transform rtl:group-hover:-translate-x-1" />
+                <ArrowRight className="size-4 shrink-0 text-[#00946a] rtl:rotate-180" />
               </div>
             </Link>
 

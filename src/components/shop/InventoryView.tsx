@@ -532,7 +532,8 @@ export function InventoryView() {
               style={{ ['--tab' as string]: t.color }}
               className={cn(
                 'group relative h-auto flex-row justify-start gap-3 overflow-hidden rounded-2xl border bg-card px-3.5 py-3 text-start shadow-xs',
-                'transition-all hover:-translate-y-0.5 hover:shadow-md',
+                // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
+                'transition-all hover:shadow-md',
                 'data-[state=active]:border-[color:var(--tab)] data-[state=active]:bg-[color-mix(in_oklab,var(--tab)_9%,var(--card))] data-[state=active]:shadow-md',
                 'dark:data-[state=active]:border-[color:var(--tab)] dark:data-[state=active]:bg-[color-mix(in_oklab,var(--tab)_14%,var(--card))]',
               )}

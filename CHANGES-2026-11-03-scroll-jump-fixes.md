@@ -113,3 +113,54 @@ const load = React.useCallback(async (...) => {
 - `npx tsc --noEmit` → نجاح (0 أخطاء).
 - `npm run check:layout` → ✅ سليم (0 مخالفات؛ تحذيرات معلومة عن أنماط مشروعة/داخل Dialogs).
 - `npm run build` (`prisma generate && next build`) → نجاح.
+
+---
+
+## تحديث 2 — قفزات التمرير على الكمبيوتر (hover-lift) — 2026-11-03
+
+### بلاغ المستخدم (متابعة)
+
+> «لسه فيه قفزات على الكمبيوتر أثناء السكرول بالعجلة — الكروت والأرقام والصفوف بتتحرك قدام عيني مع كل لفة عجلة.»
+
+### السبب الجذري
+
+المستخدم كان يسكول بالعجلة والمؤشر ثابت في مكانه على الشاشة. مع نزول الصفحة، المؤشر بيعدي فوق الكروت/الأزرار/الصفوف واحد ورا التاني، وده بيشغّل تأثيرات `hover:` اللي بتغير مكان العنصر:
+
+- `hover:-translate-y-*` و `hover:translate-y-[Npx]` (رفع الكارت/الزر كام بكسل)
+- `group-hover:scale-*` و `group-hover:rotate-*` (تكبير/دوران الأيقونات والزخارف)
+
+كل عنصر بيعدي عليه المؤشر بيتحرك كام بكسل ويرجع — فعلى مستوى الصفحة كلها ده بيبان كأن **المحتوى نفسه بيقفز** مع كل لفة عجلة. الأثر كان واضح في: كروت KPI الداشبورد، بلاطات الخزنة (ShiftClosuresCard)، صفوف المبيعات، كروت العملاء/الموردين/العمولات/الموظفين/المخزون، وكل شاشات HR.
+
+### الإصلاح
+
+1. **إزالة كل حركات hover** (`hover:`/`group-hover:` + `translate/scale/rotate`) من عناصر الصفحات — في ~30 ملف تحت `src/` (شاشات المحل + HR + كروت الداشبورد + السايدبار + الشاشات المشتركة، وكمان شاشات الأدمن/اللاندينج/لوغين عشان الفاحص يغطي `src/` كلها).
+2. **التغذية الراجعة بقت بالظل/اللون فقط:** أُبقيت `hover:bg-*` / `hover:text-*` / `hover:border-*` / `hover:opacity-*` / `group-hover:opacity-*`، وتعميق الظل (`hover:shadow-md` وأخف) أو استبدال ظل الزر ثلاثي الأبعاد `shadow-[0_Npx_0_color]` → `hover:shadow-[0_2px_0_color]` — دي بتدي إحساس الضغط من غير أي حركة.
+3. **الإصلاح (حماية السلوك):** حالات `active:translate-y-*` / `active:scale-*` (ضغطة المستخدم الفعلية) و`focus-visible:ring-*` وحالات `disabled:` أُبقيت كما هي.
+4. **كروت تفقدت كل تغذية راجعة بعد إزالة الحركة** اتضاف ليها `hover:shadow-md` بسيط.
+5. **تنظيف:** أزيلت الكلاسات الميتة اللي كانت بتتصرف حركات hover المزالة: `disabled:hover:translate-y-0` / `motion-reduce:hover:translate-y-0`، و`transition-transform` اللي مبقاش له لازمة، و`transition-[...transform]` بقت `transition-[border-color,box-shadow]` / `transition-[filter]`.
+6. **بونص — كارت «عمولات البائعين» في الإعدادات (`SellerCommissionsCard.tsx`):** كان يعمل `if (loading) return null` فيقفز المحتوى عند ظهوره. بقى يرسم حاوية الكارت دايمًا مع Skeletons أثناء التحميل (على نفس نمط `MyCommissionCard.tsx`).
+
+### الفاحص — قاعدة جديدة P5
+
+`scripts/check-layout-shift.mjs` اتضاف له **P5**: يفحص أي `.tsx` تحت `src/` بحثًا عن أي كلاس مطابق:
+
+```
+/(?:[\w-]+:)*hover:[-]?(?:translate|scale|rotate)[^\s"'`}]+/  أو  /group-hover:[-]?(?:translate|scale|rotate)/
+```
+
+- أي تطابق = طباعة `file:line` مع رسالة عربية و**فشل (exit 1)**.
+- حالات `active:translate-y` / `focus-visible:` / `motion-reduce:animate-none` / `disabled:translate-y-0` **مش بتتحسب** — الـ regex بيطلب بادئة `hover:` صريحة.
+- اتعمل اختبار على fixture في `/tmp` (خارج `src/`): الملفات المخالفة اتشالت واتطبع الـ P5 صح، والملف النظيف عدّى بخروج 0.
+
+### 📏 قاعدة للمطورين (مهمة)
+
+> **«ممنوع إضافة hover:translate/scale/rotate على عناصر الصفحات — استخدم ظل/لون فقط.»**
+
+لما تحب تدي إحساس تفاعل عند المرور بالماوس: `hover:shadow-md` / `hover:bg-*` / `hover:border-*` / `hover:text-*`. حركة العنصر نفسه (translate/scale/rotate) مسموحة **فقط** على `active:` (ضغط فعلي) أو `focus-visible:`، أو خارج تدفق سكرول الصفحة (Dialog/Portal).
+
+### التحقق (التحديث 2)
+
+- `npx tsc --noEmit` → 0 أخطاء.
+- `npm run check:layout` → ✅ سليم (0 مخالفات، بمن فيهم P5 الجديد).
+- `npm run build` → نجاح.
+- `grep -rEn "(group-)?hover:[-]?(translate|scale|rotate)" src/ --include="*.tsx"` → فاضي تمامًا.

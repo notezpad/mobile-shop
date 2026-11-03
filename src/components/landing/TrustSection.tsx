@@ -87,7 +87,8 @@ export function TrustSection() {
                 className="glass-card group flex flex-col gap-3 rounded-2xl p-6 sm:gap-4 sm:p-7"
               >
                 <div className="flex shrink-0 items-center justify-between gap-3">
-                  <span className="landing-tile size-11 transition-transform duration-300 sm:size-12 group-hover:scale-110 group-hover:-rotate-3">
+                  {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
+                  <span className="landing-tile size-11 sm:size-12">
                     <Icon className="size-5.5" />
                   </span>
                   <span
