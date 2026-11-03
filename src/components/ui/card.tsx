@@ -21,12 +21,11 @@ function Card({
     <div
       data-slot="card"
       className={cn(
-        // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
         "flex flex-col gap-6 rounded-xl py-6 transition-all duration-base ease-out",
         variant === "default" &&
           "bg-card text-card-foreground border border-border shadow-xs",
         variant === "bento" &&
-          "bg-card text-card-foreground border border-border shadow-sm hover:shadow-md hover:border-brand-200 dark:hover:border-brand-800",
+          "bg-card text-card-foreground border border-border shadow-sm hover:shadow-md hover:border-brand-200 dark:hover:border-brand-800 hover:-translate-y-0.5",
         variant === "elevated" &&
           "bg-card text-card-foreground border border-border shadow-lg hover:shadow-xl",
         variant === "subtle" && "bg-card-muted text-card-foreground border border-transparent",

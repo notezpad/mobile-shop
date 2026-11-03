@@ -2461,8 +2461,7 @@ export function POSView() {
                     onClick={() => void handleProductSelect(p, p.matchedVariantId)}
                     className={cn(
                       'group relative w-full rounded-xl border bg-background text-right transition-all',
-                      // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
-                      'hover:border-brand-600/60 hover:shadow-md active:translate-y-0 active:scale-[0.98]',
+                      'hover:-translate-y-0.5 hover:border-brand-600/60 hover:shadow-md active:translate-y-0 active:scale-[0.98]',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40',
                       inCart > 0 ? 'border-brand-600/50 bg-brand-600/[0.04]' : 'border-border',
                       out && 'opacity-55 grayscale',

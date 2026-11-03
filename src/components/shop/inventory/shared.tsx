@@ -100,8 +100,7 @@ export function InventoryCrossNav({
             style={{ ['--tab' as string]: p.color }}
             className={cn(
               'group relative flex flex-row items-center justify-start gap-3 overflow-hidden rounded-2xl border bg-card px-3.5 py-3 text-start shadow-xs',
-              // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
-              'transition-all hover:shadow-md',
+              'transition-all hover:-translate-y-0.5 hover:shadow-md',
               isActive
                 ? 'border-[color:var(--tab)] bg-[color-mix(in_oklab,var(--tab)_9%,var(--card))] shadow-md dark:bg-[color-mix(in_oklab,var(--tab)_14%,var(--card))]'
                 : 'hover:border-[color-mix(in_oklab,var(--tab)_45%,var(--border))]',
@@ -132,7 +131,7 @@ export function InventoryCrossNav({
             <span
               className={cn(
                 'absolute inset-x-0 bottom-0 h-[3px] origin-center bg-[color:var(--tab)] transition-transform duration-base',
-                isActive ? 'scale-x-100' : 'scale-x-0',
+                isActive ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-50',
               )}
             />
           </Link>

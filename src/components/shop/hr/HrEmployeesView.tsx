@@ -163,17 +163,16 @@ export function HrEmployeesView() {
             </div>
 
             <div className="z-10 flex flex-wrap gap-3">
-              {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
               <Button 
                 variant="outline" 
                 onClick={() => setImporting(true)} 
-                className="border-white/30 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 hover:text-white hover:border-white/40 gap-1.5 shadow-[0_6px_0_rgba(255,255,255,0.1)] hover:shadow-[0_2px_0_rgba(255,255,255,0.1)] transition-all"
+                className="border-white/30 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 hover:text-white hover:border-white/40 gap-1.5 shadow-[0_6px_0_rgba(255,255,255,0.1)] hover:shadow-[0_2px_0_rgba(255,255,255,0.1)] hover:translate-y-[4px] transition-all"
               >
                 <FileSpreadsheet className="size-4" />استيراد Excel
               </Button>
               <Button 
                 onClick={() => setEditing('new')} 
-                className="bg-white text-indigo-700 font-bold hover:bg-white hover:text-indigo-700 shadow-[0_6px_0_rgb(226,232,240)] hover:shadow-[0_2px_0_rgb(226,232,240)] transition-all gap-1.5"
+                className="bg-white text-indigo-700 font-bold hover:bg-white hover:text-indigo-700 shadow-[0_6px_0_rgb(226,232,240)] hover:shadow-[0_2px_0_rgb(226,232,240)] hover:translate-y-[4px] transition-all gap-1.5"
               >
                 <Plus className="size-4" />موظف جديد
               </Button>
@@ -202,7 +201,7 @@ export function HrEmployeesView() {
                 { label: 'السلف الجارية', val: money(activeItems.reduce((s, e) => s + e.advanceRemaining, 0)), icon: HandCoins, tone: 'amber', foot: `مستحقة على ${activeItems.filter((e) => e.advanceRemaining > 0).length} موظف` },
               ].map((stat, i) => (
                 <div key={i} className={cn(
-                  'relative flex flex-col justify-between overflow-hidden rounded-2xl border border-s-4 bg-white dark:bg-slate-900 p-5 transition-all duration-300',
+                  'relative flex flex-col justify-between overflow-hidden rounded-2xl border border-s-4 bg-white dark:bg-slate-900 p-5 transition-all duration-300 hover:-translate-y-1',
                   'shadow-[0_10px_40px_-10px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,1)] dark:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.1)]',
                   stat.tone === 'sky' ? 'border-s-sky-500' : stat.tone === 'emerald' ? 'border-s-emerald-500' : stat.tone === 'violet' ? 'border-s-violet-500' : 'border-s-amber-500'
                 )}>
@@ -296,7 +295,7 @@ export function HrEmployeesView() {
                       key={e.id} 
                       dir="rtl"
                       className={cn(
-                        'relative flex flex-col rounded-[1.5rem] bg-white dark:bg-slate-900 overflow-hidden transition-all duration-300 hover:shadow-xl',
+                        'relative flex flex-col rounded-[1.5rem] bg-white dark:bg-slate-900 overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl',
                         'shadow-[0_8px_30px_-12px_rgba(0,0,0,0.1)] border border-slate-100 dark:border-slate-800',
                         e.active ? '' : 'opacity-60 grayscale-[40%]'
                       )}
@@ -781,14 +780,14 @@ function EmployeeDialog({
           <Button
             variant="outline"
             onClick={onClose}
-            className="h-11 rounded-xl px-6 font-bold shadow-[0_4px_0_rgba(15,23,42,0.08)] transition-all hover:shadow-[0_2px_0_rgba(15,23,42,0.08)]"
+            className="h-11 rounded-xl px-6 font-bold shadow-[0_4px_0_rgba(15,23,42,0.08)] transition-all hover:translate-y-[2px] hover:shadow-[0_2px_0_rgba(15,23,42,0.08)]"
           >
             إلغاء
           </Button>
           <Button
             onClick={save}
             disabled={saving}
-            className="h-11 gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-8 font-extrabold text-white shadow-[0_5px_0_rgba(67,56,202,0.55)] transition-all hover:from-indigo-500 hover:to-violet-600 hover:shadow-[0_2px_0_rgba(67,56,202,0.55)] disabled:opacity-60"
+            className="h-11 gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-8 font-extrabold text-white shadow-[0_5px_0_rgba(67,56,202,0.55)] transition-all hover:translate-y-[3px] hover:from-indigo-500 hover:to-violet-600 hover:shadow-[0_2px_0_rgba(67,56,202,0.55)] disabled:opacity-60"
           >
             {saving ? <Loader2 className="size-4 animate-spin" /> : employee ? <Pencil className="size-4" /> : <UserPlus className="size-4" />}
             {employee ? 'حفظ التعديلات' : 'إضافة الموظف'}
@@ -946,7 +945,7 @@ function SettleDialog({
         </DialogBody>
         <DialogFooter className="shrink-0 border-t bg-background px-4 py-3 sm:px-6">
           <Button variant="outline" onClick={onClose} disabled={busy}>رجوع</Button>
-          <Button onClick={pay} disabled={busy || loading || !preview || !!err} className="gap-1.5 shadow-[0_4px_0_rgba(0,0,0,0.1)] hover:shadow-[0_2px_0_rgba(0,0,0,0.1)] transition-all">
+          <Button onClick={pay} disabled={busy || loading || !preview || !!err} className="gap-1.5 shadow-[0_4px_0_rgba(0,0,0,0.1)] hover:shadow-[0_2px_0_rgba(0,0,0,0.1)] hover:translate-y-[2px] transition-all">
             {busy && <Loader2 className="size-4 animate-spin" />}
             اتصرف واقفل حسابه
           </Button>

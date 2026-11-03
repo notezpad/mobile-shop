@@ -116,15 +116,12 @@ export function InventoryView() {
   const [transfers, setTransfers] = React.useState<Transfer[]>([])
   const [stocktakes, setStocktakes] = React.useState<Stocktake[]>([])
   const [loading, setLoading] = React.useState(true)
-  // 🛡️ 2026-11-03: منع قفز التخطيط — السكيليتون لأول تحميل بس، والتحديثات
-  // الخلفية (useDataRefresh) بتحافظ على المحتوى القديم بدل طيّه في سكيليتون.
-  const loadedOnceRef = React.useRef(false)
   const [tab, setTab] = React.useState('stock')
   // 🏬 تبويبات الفروع (للمدير فقط): 'all' = المخزون كله، أو رقم الفرع كنص
   const [activeBranch, setActiveBranch] = React.useState<string>('all')
 
   const load = React.useCallback(async () => {
-    if (!loadedOnceRef.current) setLoading(true)
+    setLoading(true)
     try {
       const [bs, ps, mv, tf, st] = await Promise.all([
         apiSafe<Branch[]>('/api/branches', []),
@@ -152,7 +149,6 @@ export function InventoryView() {
         })
       }
     } finally {
-      loadedOnceRef.current = true
       setLoading(false)
     }
   }, [])
@@ -532,8 +528,7 @@ export function InventoryView() {
               style={{ ['--tab' as string]: t.color }}
               className={cn(
                 'group relative h-auto flex-row justify-start gap-3 overflow-hidden rounded-2xl border bg-card px-3.5 py-3 text-start shadow-xs',
-                // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
-                'transition-all hover:shadow-md',
+                'transition-all hover:-translate-y-0.5 hover:shadow-md',
                 'data-[state=active]:border-[color:var(--tab)] data-[state=active]:bg-[color-mix(in_oklab,var(--tab)_9%,var(--card))] data-[state=active]:shadow-md',
                 'dark:data-[state=active]:border-[color:var(--tab)] dark:data-[state=active]:bg-[color-mix(in_oklab,var(--tab)_14%,var(--card))]',
               )}
@@ -558,7 +553,7 @@ export function InventoryView() {
           ))}
         </TabsList>
 
-        {!loadedOnceRef.current && loading ? (
+        {loading ? (
           <div className="space-y-3">
             <Skeleton className="h-28 w-full rounded-3xl" />
             <Skeleton className="h-64 w-full rounded-3xl" />

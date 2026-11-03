@@ -22,7 +22,6 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { Skeleton } from '@/components/ui/skeleton'
 
 export function SellerCommissionsCard() {
   const [loading, setLoading] = React.useState(true)
@@ -84,44 +83,7 @@ export function SellerCommissionsCard() {
     }
   }
 
-  // 🛡️ 2026-11-03: أثناء التحميل منرسمش null — بنحجز مكان الكارت بسكيليتون بنفس التصميم
-  // عشان لما الرد يوصل صفحة الإعدادات ميقفزش المحتوى لتحت (كان بيعمل pop-in/layout-shift).
-  if (loading) {
-    return (
-      <section className="rounded-2xl border bg-card p-4 sm:p-5" aria-label="عمولات البائعين" aria-busy="true">
-        <header className="mb-3 flex items-start gap-3">
-          <Skeleton className="size-9 shrink-0 rounded-full" />
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <Skeleton className="h-4 w-56 rounded-md" />
-            <Skeleton className="h-3 w-full max-w-md rounded-md" />
-          </div>
-        </header>
-        <div className="space-y-3.5">
-          <div className="flex items-start justify-between gap-3 rounded-xl border bg-background p-3.5">
-            <div className="min-w-0 flex-1 space-y-1.5">
-              <Skeleton className="h-4 w-40 rounded-md" />
-              <Skeleton className="h-3 w-full max-w-sm rounded-md" />
-            </div>
-            <Skeleton className="h-6 w-11 shrink-0 rounded-full" />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Skeleton className="h-3.5 w-28 rounded-md" />
-              <Skeleton className="h-9 w-full rounded-md" />
-            </div>
-            <div className="space-y-1.5">
-              <Skeleton className="h-3.5 w-40 rounded-md" />
-              <Skeleton className="h-9 w-full rounded-md" />
-            </div>
-          </div>
-          <Skeleton className="h-12 w-full rounded-xl border border-dashed" />
-          <div className="flex justify-end">
-            <Skeleton className="h-9 w-28 rounded-md" />
-          </div>
-        </div>
-      </section>
-    )
-  }
+  if (loading) return null
 
   return (
     <section className="rounded-2xl border bg-card p-4 sm:p-5" aria-label="عمولات البائعين">

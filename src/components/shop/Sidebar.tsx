@@ -473,8 +473,7 @@ function HrGroup({ collapsed, onNavigate, staffOnly }: { collapsed?: boolean; on
 
 function ShopAvatar({ logoPath, collapsed }: { logoPath?: string | null; collapsed?: boolean }) {
   const baseClass = cn(
-    // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
-    'shrink-0 overflow-hidden rounded-xl cursor-pointer',
+    'shrink-0 overflow-hidden rounded-xl transition-transform duration-300 hover:scale-105 cursor-pointer',
     collapsed ? 'size-10' : 'size-11'
   )
 
@@ -627,7 +626,7 @@ function LogoutButton({ collapsed }: { collapsed?: boolean }) {
   const logout = useShopStore((s) => s.logout)
 
   const iconTile = (size: string) => (
-    <span className={cn('grid shrink-0 place-items-center rounded-lg bg-gradient-to-br from-rose-400 to-rose-600 text-white ring-1 ring-white/20', 'shadow-[0_4px_10px_-3px_rgba(225,29,72,0.5)]', size)}>
+    <span className={cn('grid shrink-0 place-items-center rounded-lg bg-gradient-to-br from-rose-400 to-rose-600 text-white ring-1 ring-white/20', 'shadow-[0_4px_10px_-3px_rgba(225,29,72,0.5)] transition-transform duration-200 group-hover:scale-105', size)}>
       <Power className="size-3.5" strokeWidth={2.4} />
     </span>
   )
@@ -648,7 +647,7 @@ function LogoutButton({ collapsed }: { collapsed?: boolean }) {
         <>
           {iconTile('size-8')}
           <span className="flex-1 text-right text-sm font-bold">تسجيل الخروج</span>
-          <ChevronLeft className="size-3.5 opacity-50 group-hover:opacity-100" />
+          <ChevronLeft className="size-3.5 opacity-50 transition-transform duration-200 group-hover:-translate-x-0.5 group-hover:opacity-100" />
         </>
       )}
     </button>

@@ -524,7 +524,7 @@ export function AdminSettingsView() {
             <Button
               onClick={save}
               disabled={saving || !dirty}
-              className="h-11 gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-6 font-black text-white shadow-[0_8px_30px_rgba(99,102,241,0.5)] transition-all hover:from-indigo-400 hover:to-sky-400 hover:shadow-[0_8px_30px_rgba(99,102,241,0.7)] active:translate-y-0 active:scale-[0.98] disabled:opacity-50"
+              className="h-11 gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-6 font-black text-white shadow-[0_8px_30px_rgba(99,102,241,0.5)] transition-all hover:from-indigo-400 hover:to-sky-400 hover:shadow-[0_8px_30px_rgba(99,102,241,0.7)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] disabled:opacity-50 disabled:hover:translate-y-0"
             >
               {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
               حفظ الإعدادات

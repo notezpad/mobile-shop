@@ -15,7 +15,6 @@ import { api } from '@/lib/api'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Chip, Icon3D, Meter, PANEL } from './dashboard-ui'
 
 interface MyCommissionData {
@@ -58,46 +57,10 @@ export function MyCommissionCard() {
   // 🔄 كل بيعة بتزوّد عمولة البائع — الكارت يتحدث لحظياً
   useDataRefresh(['commissions'], load)
 
-  // 🛡️ 2026-11-03: أثناء التحميل منرسمش null — بنحجز مكان الكارت بسكيليتون بنفس
-  // التصميم، عشان لما الرد يوصل الداشبورد ميقفزش لتحت (كان بيعمل layout-shift).
-  if (loading) {
-    return (
-      <section
-        className={cn(
-          PANEL,
-          'relative overflow-hidden border-emerald-500/20 bg-gradient-to-bl from-emerald-500/[0.07] via-card to-card p-4 sm:p-5',
-        )}
-        aria-label="عمولتي هذا الشهر"
-        aria-busy="true"
-      >
-        <span
-          aria-hidden
-          className="pointer-events-none absolute -end-12 -top-12 size-40 rounded-full bg-emerald-400/15 blur-3xl"
-        />
-        <header className="relative flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <Skeleton className="size-11 rounded-xl" />
-            <div className="min-w-0 space-y-1.5">
-              <Skeleton className="h-4 w-32 rounded-md" />
-              <Skeleton className="h-3 w-44 rounded-md" />
-            </div>
-          </div>
-          <div className="flex flex-col items-end gap-1.5">
-            <Skeleton className="h-8 w-28 rounded-lg" />
-            <Skeleton className="h-4 w-20 rounded-md" />
-          </div>
-        </header>
-        <div className="relative mt-4 rounded-2xl border bg-background/60 p-3.5">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <Skeleton className="h-3.5 w-28 rounded-md" />
-            <Skeleton className="h-3.5 w-40 rounded-md" />
-          </div>
-          <Skeleton className="h-2.5 w-full rounded-full" />
-        </div>
-      </section>
-    )
-  }
-  // 🛡️ الميزة مقفولة أو المستخدم مش بائع → الكارت مش بيظهر خالص (سلوك مقصود بعد التحميل)
+  // ⚡ أثناء التحميل ما نرسمش أي حاجة: الكارت أصلاً بيختفي لأغلب المستخدمين (مدير/كاشير مش بائع)،
+  // ولو رسمنا placeholder هيظهر 3 ثواني وبعدين المحتوى كله يقفز لفوق (layout shift).
+  if (loading) return null
+  // 🛡️ الميزة مقفولة أو المستخدم مش بائع → الكارت مش بيظهر خالص
   if (!data || !data.enabled || !data.isSeller) return null
 
   const targetPct = data.target && data.target > 0 ? Math.min(100, Math.round((data.netBase / data.target) * 100)) : null

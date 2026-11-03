@@ -607,13 +607,12 @@ export function UsersView() {
             <BadgeCard key={u.id} u={u} i={i} now={now} onEdit={openEdit} onToggle={toggleActive} />
           ))}
           {!hasFilter && (
-            // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
             <button
               type="button"
               onClick={openAdd}
               className="group flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-violet-300/70 bg-violet-500/[0.03] p-6 text-violet-700 transition-colors hover:border-violet-500 hover:bg-violet-500/[0.07] dark:border-violet-400/30 dark:text-violet-300"
             >
-              <span className="flex size-12 items-center justify-center rounded-2xl bg-violet-500/10">
+              <span className="flex size-12 items-center justify-center rounded-2xl bg-violet-500/10 transition-transform group-hover:scale-105">
                 <Plus className="size-6" />
               </span>
               <span className="text-sm font-bold">إضافة عضو للفريق</span>

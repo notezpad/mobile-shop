@@ -81,11 +81,10 @@ function Hero({ s }: { s: Summary }) {
           </p>
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
-            {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
-            <Button asChild size="lg" className="bg-white text-indigo-700 font-bold shadow-[0_6px_0_rgb(226,232,240)] hover:bg-white hover:text-indigo-700 hover:shadow-[0_2px_0_rgb(226,232,240)] transition-all">
+            <Button asChild size="lg" className="bg-white text-indigo-700 font-bold shadow-[0_6px_0_rgb(226,232,240)] hover:bg-white hover:text-indigo-700 hover:shadow-[0_2px_0_rgb(226,232,240)] hover:translate-y-[4px] transition-all">
               <Link href="/hr/attendance">تسجيل الحضور</Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="border-white/30 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 hover:text-white hover:border-white/40 shadow-[0_6px_0_rgba(255,255,255,0.1)] hover:shadow-[0_2px_0_rgba(255,255,255,0.1)] transition-all">
+            <Button asChild size="lg" variant="outline" className="border-white/30 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 hover:text-white hover:border-white/40 shadow-[0_6px_0_rgba(255,255,255,0.1)] hover:shadow-[0_2px_0_rgba(255,255,255,0.1)] hover:translate-y-[4px] transition-all">
               <Link href="/hr/attendance?kiosk=1"><MonitorSmartphone className="size-4 me-2" />كشك الحضور</Link>
             </Button>
           </div>
@@ -154,9 +153,9 @@ function QuickActions() {
           <Link
             key={link.href}
             href={link.href}
-            className="group relative flex flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border border-white/60 bg-white/80 p-5 text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] dark:border-white/10 dark:bg-slate-900/80 backdrop-blur-xl"
+            className="group relative flex flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border border-white/60 bg-white/80 p-5 text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] dark:border-white/10 dark:bg-slate-900/80 backdrop-blur-xl"
           >
-            <div className={cn('grid size-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br text-white shadow-lg', link.cls)}>
+            <div className={cn('grid size-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br text-white shadow-lg transition-transform duration-300 group-hover:scale-110', link.cls)}>
               <link.icon className="size-6 drop-shadow-md" strokeWidth={2} />
             </div>
             <div>
@@ -185,7 +184,7 @@ function Tile({ icon: Icon, tone, label, value, hint, footer, progress }: any) {
   const t = TILE_TONE[tone as keyof typeof TILE_TONE]
   return (
     <div className={cn(
-      'relative flex flex-col justify-between overflow-hidden rounded-2xl border border-s-4 bg-white dark:bg-slate-900 p-5 transition-all duration-300',
+      'relative flex flex-col justify-between overflow-hidden rounded-2xl border border-s-4 bg-white dark:bg-slate-900 p-5 transition-all duration-300 hover:-translate-y-1',
       'shadow-[0_10px_40px_-10px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,1)] dark:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.1)]',
       t.border
     )}>
@@ -303,7 +302,7 @@ function EmptyHero({ today }: { today: string }) {
         </span>
         <h1 className="text-3xl font-black sm:text-4xl drop-shadow-md">مرحباً بك في نظام الموارد البشرية</h1>
         <p className="max-w-md text-blue-100">ابدأ بإضافة موظفيك لتتمكن من تسجيل الحضور، إدارة الإجازات، وإصدار مسير الرواتب.</p>
-        <Button asChild size="lg" className="mt-4 bg-white text-indigo-700 shadow-[0_6px_0_rgb(224,231,255)] hover:bg-white hover:shadow-[0_2px_0_rgb(224,231,255)] transition-all">
+        <Button asChild size="lg" className="mt-4 bg-white text-indigo-700 shadow-[0_6px_0_rgb(224,231,255)] hover:bg-white hover:shadow-[0_2px_0_rgb(224,231,255)] hover:translate-y-[4px] transition-all">
           <Link href="/hr/employees">إضافة أول موظف</Link>
         </Button>
       </div>
@@ -374,7 +373,7 @@ export function HrHomeView() {
                   icon={Banknote} tone={payrollTone as any}
                   label="رواتب الشهر" value={payrollLabel} hint={payrollHint}
                   footer={
-                    <Button asChild size="sm" variant={s.payroll.status === 'paid' ? 'outline' : 'default'} className="w-fit px-4 text-xs font-bold mt-1 shadow-[0_4px_0_rgba(0,0,0,0.1)] hover:shadow-[0_2px_0_rgba(0,0,0,0.1)] transition-all">
+                    <Button asChild size="sm" variant={s.payroll.status === 'paid' ? 'outline' : 'default'} className="w-fit px-4 text-xs font-bold mt-1 shadow-[0_4px_0_rgba(0,0,0,0.1)] hover:shadow-[0_2px_0_rgba(0,0,0,0.1)] hover:translate-y-[2px] transition-all">
                       <Link href="/hr/payroll">{s.payroll.status === 'paid' ? 'عرض التفاصيل' : 'تجهيز الآن'}</Link>
                     </Button>
                   }

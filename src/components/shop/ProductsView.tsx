@@ -1732,8 +1732,7 @@ function ProductTag({
       <div
         className={cn(
           'relative origin-top overflow-hidden rounded-2xl border bg-card shadow-sm transition-all duration-slow ease-spring',
-          // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
-          'hover:shadow-lg',
+          'hover:shadow-lg motion-safe:hover:-rotate-[0.8deg]',
           selected ? 'border-primary ring-2 ring-primary/40' : 'border-foreground/15',
           !p.active && 'grayscale-[0.6]'
         )}

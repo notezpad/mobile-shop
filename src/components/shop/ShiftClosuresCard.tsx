@@ -234,12 +234,11 @@ export function ShiftClosuresCard({
         </div>
       </div>
 
-      {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
       {/* ───── الإحصائيات (Bento Stats) ───── */}
       {summary.total > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {/* عدد الإغلاقات */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 shadow-sm flex items-center justify-between transition-[border-color,box-shadow] hover:shadow-md">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 shadow-sm flex items-center justify-between transition-transform hover:-translate-y-0.5">
             <div className="flex flex-col">
               <span className="text-[11px] font-bold text-slate-500">عدد الإغلاقات</span>
               <span className="text-2xl font-black mt-1 text-slate-800 dark:text-slate-100">{summary.total}</span>
@@ -250,7 +249,7 @@ export function ShiftClosuresCard({
           </div>
 
           {/* مطابقة تماماً */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 shadow-sm flex items-center justify-between transition-[border-color,box-shadow] hover:shadow-md">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 shadow-sm flex items-center justify-between transition-transform hover:-translate-y-0.5">
             <div className="flex flex-col">
               <span className="text-[11px] font-bold text-slate-500">مطابقة تماماً</span>
               <span className="text-2xl font-black text-slate-700 mt-1 dark:text-slate-300">{summary.match}</span>
@@ -262,7 +261,7 @@ export function ShiftClosuresCard({
 
           {/* إجمالي العجز */}
           <div className={cn(
-            "rounded-2xl border p-4 shadow-sm flex items-center justify-between transition-[border-color,box-shadow] hover:shadow-md",
+            "rounded-2xl border p-4 shadow-sm flex items-center justify-between transition-transform hover:-translate-y-0.5",
             summary.shortTotal > 0 
               ? "bg-rose-50/50 border-rose-200 dark:bg-rose-950/20 dark:border-rose-900/30" 
               : "bg-white border-slate-100 dark:bg-slate-900 dark:border-slate-800"
@@ -283,7 +282,7 @@ export function ShiftClosuresCard({
 
           {/* إجمالي الزيادة */}
           <div className={cn(
-            "rounded-2xl border p-4 shadow-sm flex items-center justify-between transition-[border-color,box-shadow] hover:shadow-md",
+            "rounded-2xl border p-4 shadow-sm flex items-center justify-between transition-transform hover:-translate-y-0.5",
             summary.overTotal > 0 
               ? "bg-sky-50/50 border-sky-200 dark:bg-sky-950/20 dark:border-sky-900/30" 
               : "bg-white border-slate-100 dark:bg-slate-900 dark:border-slate-800"

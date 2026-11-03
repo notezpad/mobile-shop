@@ -92,10 +92,9 @@ export function HrLeavesView() {
             </div>
 
             <div className="z-10 flex flex-wrap gap-3">
-              {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
               <Button 
                 onClick={() => setAdding(true)} 
-                className="bg-white text-cyan-700 font-bold hover:bg-cyan-50 hover:text-cyan-800 shadow-[0_6px_0_rgb(207,250,254)] hover:shadow-[0_2px_0_rgb(207,250,254)] transition-all gap-1.5"
+                className="bg-white text-cyan-700 font-bold hover:bg-cyan-50 hover:text-cyan-800 shadow-[0_6px_0_rgb(207,250,254)] hover:shadow-[0_2px_0_rgb(207,250,254)] hover:translate-y-[4px] transition-all gap-1.5"
               >
                 <CalendarPlus className="size-4" />إجازة / إذن جديد
               </Button>
@@ -152,7 +151,7 @@ export function HrLeavesView() {
                   {data.balances.map((b) => {
                     const pct = b.allowance > 0 ? Math.min(100, (b.used / b.allowance) * 100) : 0
                     return (
-                      <div key={b.employeeId} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm hover:shadow-md">
+                      <div key={b.employeeId} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm hover:-translate-y-1 transition-transform">
                         <div className="flex items-baseline justify-between gap-2 mb-3">
                           <span className="truncate font-bold text-slate-800 dark:text-slate-100">{b.name}</span>
                           <span className={cn("text-sm font-black tabular-nums", b.remaining < 0 ? 'text-rose-600' : 'text-cyan-600')}>
@@ -191,7 +190,7 @@ export function HrLeavesView() {
                     const Icon = LEAVE_ICONS[l.type]
                     const theme = LEAVE_THEMES[l.type]
                     return (
-                      <div key={l.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 flex flex-col transition-all hover:shadow-md" dir="rtl">
+                      <div key={l.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 flex flex-col transition-all hover:shadow-md hover:-translate-y-1" dir="rtl">
                         
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-3">
@@ -438,10 +437,10 @@ function LeaveDialog({ balances, onClose, onSaved }: { balances: Balance[]; onCl
         </DialogBody>
 
         <DialogFooter className="shrink-0 flex-row justify-end gap-3 border-t bg-background px-4 py-3.5 sm:px-6">
-          <Button variant="outline" onClick={onClose} className="h-11 rounded-xl px-6 font-bold shadow-[0_4px_0_rgba(15,23,42,0.08)] transition-all hover:shadow-[0_2px_0_rgba(15,23,42,0.08)]">إلغاء</Button>
+          <Button variant="outline" onClick={onClose} className="h-11 rounded-xl px-6 font-bold shadow-[0_4px_0_rgba(15,23,42,0.08)] transition-all hover:translate-y-[2px] hover:shadow-[0_2px_0_rgba(15,23,42,0.08)]">إلغاء</Button>
           <Button
             onClick={save} disabled={saving}
-            className="h-11 gap-2 rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 px-8 font-extrabold text-white shadow-[0_5px_0_rgb(8,116,144)] transition-all hover:from-sky-500 hover:to-cyan-600 hover:shadow-[0_2px_0_rgb(8,116,144)] disabled:opacity-60"
+            className="h-11 gap-2 rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 px-8 font-extrabold text-white shadow-[0_5px_0_rgb(8,116,144)] transition-all hover:translate-y-[3px] hover:from-sky-500 hover:to-cyan-600 hover:shadow-[0_2px_0_rgb(8,116,144)] disabled:opacity-60"
           >
             {saving ? <Loader2 className="size-4 animate-spin" /> : <CalendarPlus className="size-4" />}
             {isPerm ? 'تسجيل الإذن' : 'تسجيل الإجازة'}

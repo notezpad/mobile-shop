@@ -653,11 +653,10 @@ function ShipmentCard({ t, onOpen }: { t: Transfer; onOpen: () => void }) {
   const done = t.status === 'completed'
   const cancelled = t.status === 'cancelled'
   return (
-    // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
     <button
       type="button"
       onClick={onOpen}
-      className="group relative overflow-hidden rounded-2xl border bg-card text-start transition-all hover:shadow-md"
+      className="group relative overflow-hidden rounded-2xl border bg-card text-start transition-all hover:-translate-y-0.5 hover:shadow-md"
     >
       <div className="h-1.5" style={{ backgroundColor: st.color, opacity: cancelled ? 0.5 : 1 }} />
       <div className="space-y-3 p-4">

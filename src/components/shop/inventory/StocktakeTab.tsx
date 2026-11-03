@@ -702,10 +702,9 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
               const c = diffColor(diff)
               const max = Math.max(it.systemQty, it.countedQty, 1)
               return (
-                // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
                  <article
                   key={keyOf(it)}
-                   className="group relative overflow-hidden rounded-2xl border border-stocktake/15 bg-card shadow-xs transition-[border-color,box-shadow] hover:border-stocktake/35 hover:shadow-md"
+                   className="group relative overflow-hidden rounded-2xl border border-stocktake/15 bg-card shadow-xs transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-stocktake/35 hover:shadow-md"
                 >
                    <div className="flex items-start gap-3 border-b border-stocktake/10 bg-stocktake-soft p-4">
                      <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-card text-stocktake shadow-xs ring-1 ring-stocktake/15">
@@ -829,7 +828,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                   key={st.id}
                   type="button"
                   onClick={() => setViewing(st)}
-                  className="group relative overflow-hidden rounded-2xl border bg-card p-4 text-start transition-all hover:shadow-md"
+                  className="group relative overflow-hidden rounded-2xl border bg-card p-4 text-start transition-all hover:-translate-y-0.5 hover:shadow-md"
                 >
                   {/* خطوط ورقة */}
                   <div

@@ -427,9 +427,8 @@ function LogoutButton({ collapsed }: { collapsed?: boolean }) {
   const iconTile = (
     <span
       className={cn(
-        // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
         "grid size-8 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-red-500 to-red-700 text-white ring-1 ring-white/20",
-        "shadow-[0_4px_10px_-3px_rgba(239,68,68,0.65)]",
+        "shadow-[0_4px_10px_-3px_rgba(239,68,68,0.65)] transition-transform duration-base group-hover:scale-105",
       )}
     >
       <Power className="size-4" strokeWidth={2.4} />
@@ -458,7 +457,7 @@ function LogoutButton({ collapsed }: { collapsed?: boolean }) {
           <span className="flex-1 text-right text-sm font-bold">
             تسجيل الخروج
           </span>
-          <ChevronLeft className="size-4 opacity-50 group-hover:opacity-100" />
+          <ChevronLeft className="size-4 opacity-50 transition-transform duration-base group-hover:-translate-x-1 group-hover:opacity-100" />
         </>
       )}
     </button>

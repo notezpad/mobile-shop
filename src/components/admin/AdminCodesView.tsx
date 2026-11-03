@@ -1776,9 +1776,8 @@ function ScratchCard({
             {code}
           </span>
           {!revealed && (
-            // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
             <span className="absolute inset-0 flex items-center justify-center gap-1.5 font-sans text-xs font-black tracking-normal">
-              <Sparkles className="size-3.5" />
+              <Sparkles className="size-3.5 transition-transform group-hover:scale-125" />
               اكشف الكود — كشط
             </span>
           )}

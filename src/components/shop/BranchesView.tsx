@@ -538,7 +538,6 @@ export function BranchesView() {
             <span className="flex size-9 items-center justify-center rounded-full border-2 border-dashed border-lime-500/70 bg-background text-lime-700 dark:text-lime-400">
               <Plus className="size-4" />
             </span>
-            {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
             <button
               type="button"
               onClick={openNew}
@@ -548,7 +547,7 @@ export function BranchesView() {
                 <span className="block text-sm font-bold">{branches.length === 0 ? 'افتح أول فرع' : 'محطة جديدة'}</span>
                 <span className="block truncate text-xs text-muted-foreground">اسم وعنوان ورقم وابدأ تبيع</span>
               </span>
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-lime-400 text-stone-900">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-lime-400 text-stone-900 transition-transform group-hover:rotate-90">
                 <Plus className="size-4" />
               </span>
             </button>
@@ -933,7 +932,7 @@ function Station({
   return (
     <article
       className={cn(
-        'animate-in-up motion-reduce:animate-none relative rounded-2xl border bg-card shadow-sm transition-all duration-200 hover:shadow-lg',
+        'animate-in-up motion-reduce:animate-none relative rounded-2xl border bg-card shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg motion-reduce:hover:translate-y-0',
         !b.active && 'bg-muted/40',
       )}
     >

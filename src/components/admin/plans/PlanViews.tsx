@@ -304,9 +304,8 @@ export function PlanCard({
   return (
     <article
       className={cn(
-        // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
         'group/card animate-in-up relative flex flex-col overflow-hidden rounded-3xl border border-foreground/15 bg-card shadow-md transition-all duration-300',
-        'hover:shadow-xl hover:ring-1',
+        'hover:-translate-y-1 hover:shadow-xl hover:ring-1',
         theme.hoverRing,
         !p.isActive && 'opacity-75 saturate-[.7]',
       )}

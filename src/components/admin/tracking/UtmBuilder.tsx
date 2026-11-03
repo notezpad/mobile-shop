@@ -236,9 +236,8 @@ function Kpi({
   }
   const t = toneMap[tone]
   return (
-    // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
     <div
-      className="group animate-in-up relative overflow-hidden rounded-2xl transition-all hover:shadow-lg"
+      className="group animate-in-up relative overflow-hidden rounded-2xl transition-all hover:-translate-y-0.5 hover:shadow-lg"
       style={{
         borderWidth: 1,
         borderStyle: 'solid',
@@ -261,7 +260,7 @@ function Kpi({
       </span>
       <span
         className={cn(
-          'grid size-10 place-items-center rounded-xl ring-1 ring-inset',
+          'grid size-10 place-items-center rounded-xl ring-1 ring-inset transition-transform group-hover:scale-105',
           t.icon,
         )}
       >
@@ -401,7 +400,7 @@ function CampaignItem({
   return (
     <li
       className={cn(
-        'group grid gap-3 rounded-2xl border bg-card p-4 transition-all hover:border-border-strong hover:shadow-lg md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-center md:gap-5',
+        'group grid gap-3 rounded-2xl border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-border-strong hover:shadow-lg md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-center md:gap-5',
         c.archived && 'opacity-65',
       )}
     >
@@ -843,7 +842,7 @@ export function UtmBuilder() {
                           : 'hover:border-border-strong hover:bg-muted/40',
                       )}
                     >
-                      <span className={cn('grid size-9 place-items-center rounded-lg', ui.tile)}>
+                      <span className={cn('grid size-9 place-items-center rounded-lg transition-transform group-hover:scale-110', ui.tile)}>
                         <Icon className="size-4.5" aria-hidden />
                       </span>
                       <span className="truncate text-[11.5px] font-bold">{ui.short}</span>

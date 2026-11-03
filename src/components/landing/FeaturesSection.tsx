@@ -83,8 +83,7 @@ export function FeaturesSection() {
                   transition={{ duration: 0.45, delay: i * 0.06 }}
                   className="glass-card group flex flex-col rounded-2xl p-7"
                 >
-                  {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
-                  <div className={`size-14 shrink-0 ${c.tile}`}>
+                  <div className={`size-14 shrink-0 ${c.tile} transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3`}>
                     <Icon className="size-6" />
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col">

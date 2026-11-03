@@ -194,11 +194,10 @@ export function HrPayrollView() {
             </div>
 
             <div className="z-10 flex flex-wrap gap-3">
-              {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
               <Button 
                 variant="outline" 
                 onClick={() => setSettingsOpen(true)} 
-                className="border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 hover:text-white hover:border-white/30 gap-1.5 shadow-[0_4px_0_rgba(255,255,255,0.1)] hover:shadow-[0_2px_0_rgba(255,255,255,0.1)] transition-all"
+                className="border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 hover:text-white hover:border-white/30 gap-1.5 shadow-[0_4px_0_rgba(255,255,255,0.1)] hover:shadow-[0_2px_0_rgba(255,255,255,0.1)] hover:translate-y-[2px] transition-all"
               >
                 <Settings2 className="size-4" />قواعد الحساب
               </Button>
@@ -229,7 +228,7 @@ export function HrPayrollView() {
             </div>
             <h3 className="text-xl font-black text-slate-800 dark:text-slate-200">مفيش رواتب متجهزة لشهر {month ? monthLabel(month) : ''}</h3>
             <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">المسودة بتتجهّز تلقائياً من سجلات الحضور، الإجازات، والسلف. تقدر تراجعها وتعدلها قبل الاعتماد.</p>
-            <Button onClick={generate} disabled={busy || !month} className="mt-6 gap-2 h-12 px-8 text-base bg-blue-600 hover:bg-blue-700 text-white shadow-[0_6px_0_rgb(30,58,138)] hover:shadow-[0_2px_0_rgb(30,58,138)] transition-all">
+            <Button onClick={generate} disabled={busy || !month} className="mt-6 gap-2 h-12 px-8 text-base bg-blue-600 hover:bg-blue-700 text-white shadow-[0_6px_0_rgb(30,58,138)] hover:shadow-[0_2px_0_rgb(30,58,138)] hover:translate-y-[4px] transition-all">
               {busy ? <Loader2 className="size-5 animate-spin" /> : <Wallet className="size-5" />}
               جهّز رواتب الشهر
             </Button>
@@ -294,7 +293,7 @@ export function HrPayrollView() {
                 const theme = AVATAR_THEMES[index % AVATAR_THEMES.length]
 
                 return (
-                  <div key={p.id} className="w-full sm:w-[calc(50%-10px)] lg:w-[calc(33.333%-14px)] 2xl:w-[calc(25%-15px)] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-5 flex flex-col transition-all hover:shadow-md">
+                  <div key={p.id} className="w-full sm:w-[calc(50%-10px)] lg:w-[calc(33.333%-14px)] 2xl:w-[calc(25%-15px)] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-5 flex flex-col transition-all hover:shadow-md hover:-translate-y-1">
                     
                     {/* الرأس: الأفاتار والاسم والواتساب */}
                     <div className="flex items-center justify-between mb-4">
@@ -404,7 +403,7 @@ export function HrPayrollView() {
                   <Button
                     onClick={async () => { if (!dirty || (await saveEdits(true))) setPayOpen(true) }}
                     disabled={busy} 
-                    className="gap-2 h-11 px-6 text-base bg-emerald-600 hover:bg-emerald-700 text-white shadow-[0_6px_0_rgb(4,120,87)] hover:shadow-[0_2px_0_rgb(4,120,87)] transition-all font-black"
+                    className="gap-2 h-11 px-6 text-base bg-emerald-600 hover:bg-emerald-700 text-white shadow-[0_6px_0_rgb(4,120,87)] hover:shadow-[0_2px_0_rgb(4,120,87)] hover:translate-y-[4px] transition-all font-black"
                   >
                     <Wallet className="size-5" />اعتماد وصرف الرواتب
                   </Button>
@@ -442,7 +441,7 @@ export function HrPayrollView() {
                 <button 
                   key={r.id} 
                   onClick={() => setMonth(r.month)} 
-                  className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/60 bg-white/80 dark:border-white/10 dark:bg-slate-900/80 p-4 shadow-sm backdrop-blur-xl transition-all duration-300 hover:shadow-md hover:border-blue-300"
+                  className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/60 bg-white/80 dark:border-white/10 dark:bg-slate-900/80 p-4 shadow-sm backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:border-blue-300"
                   dir="rtl"
                 >
                   <div className={cn("absolute top-0 inset-x-0 h-1.5", r.status === 'paid' ? 'bg-emerald-500' : 'bg-amber-500')} />
@@ -602,7 +601,7 @@ function PayDialog({
         </DialogBody>
         <DialogFooter className="shrink-0 border-t bg-background px-4 py-3 sm:px-6">
           <Button variant="outline" onClick={onClose} disabled={busy} className="h-10">رجوع</Button>
-          <Button onClick={pay} disabled={busy} className="gap-1.5 h-10 bg-emerald-600 hover:bg-emerald-700 text-white shadow-[0_4px_0_rgb(4,120,87)] hover:shadow-none transition-all font-bold px-6">
+          <Button onClick={pay} disabled={busy} className="gap-1.5 h-10 bg-emerald-600 hover:bg-emerald-700 text-white shadow-[0_4px_0_rgb(4,120,87)] hover:translate-y-[2px] hover:shadow-none transition-all font-bold px-6">
             {busy && <Loader2 className="size-4 animate-spin" />}تأكيد الصرف
           </Button>
         </DialogFooter>
@@ -786,10 +785,10 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
         </DialogBody>
 
         <DialogFooter className="shrink-0 flex-row justify-end gap-3 border-t bg-background px-4 py-3.5 sm:px-6">
-          <Button variant="outline" onClick={onClose} className="h-11 rounded-xl px-6 font-bold shadow-[0_4px_0_rgba(15,23,42,0.08)] transition-all hover:shadow-[0_2px_0_rgba(15,23,42,0.08)]">إلغاء</Button>
+          <Button variant="outline" onClick={onClose} className="h-11 rounded-xl px-6 font-bold shadow-[0_4px_0_rgba(15,23,42,0.08)] transition-all hover:translate-y-[2px] hover:shadow-[0_2px_0_rgba(15,23,42,0.08)]">إلغاء</Button>
           <Button
             onClick={save} disabled={saving || !s}
-            className="h-11 gap-2 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 px-8 font-extrabold text-white shadow-[0_5px_0_rgb(30,58,138)] transition-all hover:from-blue-500 hover:to-indigo-600 hover:shadow-[0_2px_0_rgb(30,58,138)] disabled:opacity-60"
+            className="h-11 gap-2 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 px-8 font-extrabold text-white shadow-[0_5px_0_rgb(30,58,138)] transition-all hover:translate-y-[3px] hover:from-blue-500 hover:to-indigo-600 hover:shadow-[0_2px_0_rgb(30,58,138)] disabled:opacity-60"
           >
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Settings2 className="size-4" />}حفظ القواعد
           </Button>

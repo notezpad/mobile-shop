@@ -792,10 +792,9 @@ export function AdminPlansView() {
               onClick={() => stats.expiring > 0 && setQuick(quick === 'expiring' ? 'none' : 'expiring')}
               disabled={stats.expiring === 0}
               className={cn(
-                // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
                 'min-w-0 rounded-3xl border p-3.5 text-start shadow-sm backdrop-blur transition-all sm:p-4',
                 stats.expiring > 0
-                  ? 'border-amber-500/30 bg-amber-500/[0.09] hover:shadow-md'
+                  ? 'border-amber-500/30 bg-amber-500/[0.09] hover:-translate-y-0.5 hover:shadow-md'
                   : 'cursor-default bg-card',
               )}
             >
@@ -1159,11 +1158,10 @@ export function AdminPlansView() {
             />
           ))}
           {!hasFilters && (
-            // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
             <button
               type="button"
               onClick={() => openCreate()}
-              className="animate-in-up group flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed bg-card p-6 text-foreground/70 transition-all hover:border-indigo-500/50 hover:bg-indigo-500/[0.05] hover:text-indigo-600 dark:hover:text-indigo-300"
+              className="animate-in-up group flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed bg-card p-6 text-foreground/70 transition-all hover:-translate-y-1 hover:border-indigo-500/50 hover:bg-indigo-500/[0.05] hover:text-indigo-600 dark:hover:text-indigo-300"
             >
               <span className="flex size-12 items-center justify-center rounded-2xl border-2 border-dashed transition-colors group-hover:border-indigo-500/50">
                 <Plus className="size-6" />

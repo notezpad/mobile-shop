@@ -108,10 +108,9 @@ export function HrAdvancesView() {
             </div>
 
             <div className="z-10 flex flex-wrap gap-3">
-              {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
               <Button 
                 onClick={() => setAdding(true)} 
-                className="bg-white text-rose-700 font-bold hover:bg-rose-50 hover:text-rose-800 shadow-[0_6px_0_rgb(254,205,211)] hover:shadow-[0_2px_0_rgb(254,205,211)] transition-all gap-1.5"
+                className="bg-white text-rose-700 font-bold hover:bg-rose-50 hover:text-rose-800 shadow-[0_6px_0_rgb(254,205,211)] hover:shadow-[0_2px_0_rgb(254,205,211)] hover:translate-y-[4px] transition-all gap-1.5"
               >
                 <Plus className="size-4" />سلفة جديدة
               </Button>
@@ -174,7 +173,7 @@ export function HrAdvancesView() {
                 const theme = AVATAR_THEMES[index % AVATAR_THEMES.length]
 
                 return (
-                  <div key={a.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 flex flex-col transition-all hover:shadow-md">
+                  <div key={a.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 flex flex-col transition-all hover:shadow-md hover:-translate-y-1">
                     
                     {/* الرأس: الأفاتار والاسم */}
                     <div className="flex items-start justify-between mb-3">
@@ -233,7 +232,7 @@ export function HrAdvancesView() {
                           size="sm" 
                           disabled={cancelId === a.id} 
                           onClick={() => cancel(a.id)} 
-                          className="w-full h-8 gap-1.5 text-xs bg-rose-600 hover:bg-rose-700 text-white shadow-[0_3px_0_rgb(159,18,57)] hover:shadow-none transition-all font-bold"
+                          className="w-full h-8 gap-1.5 text-xs bg-rose-600 hover:bg-rose-700 text-white shadow-[0_3px_0_rgb(159,18,57)] hover:translate-y-[2px] hover:shadow-none transition-all font-bold"
                         >
                           {cancelId === a.id ? <Loader2 className="size-3.5 animate-spin" /> : <Undo2 className="size-3.5" />}إلغاء السلفة
                         </Button>
@@ -426,10 +425,10 @@ function AdvanceDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
         </DialogBody>
 
         <DialogFooter className="shrink-0 flex-row justify-end gap-3 border-t bg-background px-4 py-3.5 sm:px-6">
-          <Button variant="outline" onClick={onClose} className="h-11 rounded-xl px-6 font-bold shadow-[0_4px_0_rgba(15,23,42,0.08)] transition-all hover:shadow-[0_2px_0_rgba(15,23,42,0.08)]">إلغاء</Button>
+          <Button variant="outline" onClick={onClose} className="h-11 rounded-xl px-6 font-bold shadow-[0_4px_0_rgba(15,23,42,0.08)] transition-all hover:translate-y-[2px] hover:shadow-[0_2px_0_rgba(15,23,42,0.08)]">إلغاء</Button>
           <Button
             onClick={save} disabled={saving}
-            className="h-11 gap-2 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 px-8 font-extrabold text-white shadow-[0_5px_0_rgb(159,18,57)] transition-all hover:from-rose-500 hover:to-pink-600 hover:shadow-[0_2px_0_rgb(159,18,57)] disabled:opacity-60"
+            className="h-11 gap-2 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 px-8 font-extrabold text-white shadow-[0_5px_0_rgb(159,18,57)] transition-all hover:translate-y-[3px] hover:from-rose-500 hover:to-pink-600 hover:shadow-[0_2px_0_rgb(159,18,57)] disabled:opacity-60"
           >
             {saving ? <Loader2 className="size-4 animate-spin" /> : <HandCoins className="size-4" />}
             تسجيل السلفة

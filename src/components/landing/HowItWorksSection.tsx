@@ -82,8 +82,7 @@ export function HowItWorksSection() {
                 >
                   {i + 1}
                 </span>
-                {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
-                <div className="landing-tile is-deep relative size-14 shrink-0">
+                <div className="landing-tile is-deep relative size-14 shrink-0 transition-transform duration-300 group-hover:scale-110">
                   <Icon className="size-6" />
                 </div>
                 <div className="relative min-w-0 flex-1">

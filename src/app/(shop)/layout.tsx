@@ -341,8 +341,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           <Link
             href="/dashboard"
             aria-label="الرئيسية — لوحة المعلومات"
-            // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
-            className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-500/20 ring-1 ring-white/20 transition-transform active:scale-90"
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-500/20 ring-1 ring-white/20 transition-transform active:scale-90 hover:scale-105"
           >
             <Home className="size-[18px]" strokeWidth={1.9} />
           </Link>
@@ -423,12 +422,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           </header>
 
           {/* Scrollable content area */}
-          {/* 🛡️ 2026-11-03: scrollbar-gutter: stable — ظهور/اختفاء السكرولبار العمودي
-              مكانيش يغيّر عرض المحتوى (~15px) فيقفز التخطيط أفقيًا في ديسكتوب */}
-          <div
-            className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain min-h-0 min-w-0"
-            style={{ scrollbarGutter: 'stable' }}
-          >
+          <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain min-h-0 min-w-0">
             <div className="p-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 min-w-0">
               {hrBlocked ? null : children}
             </div>

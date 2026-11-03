@@ -193,10 +193,9 @@ export function HrAttendanceView() {
             </div>
 
             <div className="z-10 flex flex-wrap gap-3">
-              {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
               <Button 
                 onClick={() => setKiosk(true)} 
-                className="bg-white text-emerald-700 font-bold hover:bg-emerald-50 hover:text-emerald-800 shadow-[0_6px_0_rgb(167,243,208)] hover:shadow-[0_2px_0_rgb(167,243,208)] transition-all gap-1.5"
+                className="bg-white text-emerald-700 font-bold hover:bg-emerald-50 hover:text-emerald-800 shadow-[0_6px_0_rgb(167,243,208)] hover:shadow-[0_2px_0_rgb(167,243,208)] hover:translate-y-[4px] transition-all gap-1.5"
               >
                 <MonitorSmartphone className="size-4" />كشك الحضور (PIN)
               </Button>
@@ -255,7 +254,7 @@ export function HrAttendanceView() {
                 </button>
               </div>
 
-              <Button onClick={presentAll} disabled={busy || emps.length === 0} className="w-full xl:w-auto gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-[0_4px_0_rgb(4,120,87)] hover:shadow-[0_2px_0_rgb(4,120,87)] transition-all">
+              <Button onClick={presentAll} disabled={busy || emps.length === 0} className="w-full xl:w-auto gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-[0_4px_0_rgb(4,120,87)] hover:shadow-[0_2px_0_rgb(4,120,87)] hover:translate-y-[2px] transition-all">
                 <UserCheck className="size-4" />تسجيل حضور للكل
               </Button>
             </div>
@@ -268,7 +267,7 @@ export function HrAttendanceView() {
                 { label: 'غائب', val: counts.absent, icon: CalendarX, grad: 'from-rose-400 to-rose-600', shadow: 'shadow-rose-500/30' },
                 { label: 'إجازة', val: counts.leave, icon: Plane, grad: 'from-sky-400 to-sky-600', shadow: 'shadow-sky-500/30' },
               ].map((item, i) => (
-                <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 shadow-sm flex items-center justify-between hover:shadow-md">
+                <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 shadow-sm flex items-center justify-between hover:-translate-y-1 transition-transform">
                   <div className="flex flex-col gap-1">
                     <span className="text-xs font-bold text-slate-500">{item.label}</span>
                     <span className="text-2xl font-black">{item.val}</span>
@@ -292,7 +291,7 @@ export function HrAttendanceView() {
                   const theme = AVATAR_THEMES[index % AVATAR_THEMES.length]
 
                   return (
-                    <div key={e.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 transition-all hover:shadow-md" dir="rtl">
+                    <div key={e.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 transition-all hover:shadow-md hover:-translate-y-1" dir="rtl">
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center gap-3">
                           <div className={cn("grid size-12 place-items-center rounded-xl bg-gradient-to-br text-white shadow-lg shrink-0", theme.bg, theme.shadow)}>
@@ -587,7 +586,7 @@ function KioskDialog({ onClose }: { onClose: () => void }) {
                     <button
                       key={e.id} type="button" disabled={!e.hasPin}
                       onClick={() => { setPicked(raw); setPin('') }}
-                      className="group relative flex flex-col items-center gap-3 overflow-hidden rounded-2xl border border-slate-100 bg-white px-3 pb-4 pt-6 text-center shadow-[0_5px_0_rgba(15,23,42,0.08),0_14px_24px_-12px_rgba(0,0,0,0.18)] transition-all duration-200 hover:shadow-[0_5px_0_rgba(16,185,129,0.35),0_18px_28px_-12px_rgba(16,185,129,0.35)] active:translate-y-[3px] disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900"
+                      className="group relative flex flex-col items-center gap-3 overflow-hidden rounded-2xl border border-slate-100 bg-white px-3 pb-4 pt-6 text-center shadow-[0_5px_0_rgba(15,23,42,0.08),0_14px_24px_-12px_rgba(0,0,0,0.18)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_5px_0_rgba(16,185,129,0.35),0_18px_28px_-12px_rgba(16,185,129,0.35)] active:translate-y-[3px] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 dark:border-slate-800 dark:bg-slate-900"
                     >
                       <span aria-hidden className={cn('absolute inset-x-0 top-0 h-1.5 bg-gradient-to-l', theme.bg)} />
                       <span className={cn('relative grid size-14 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br text-white shadow-lg ring-1 ring-inset ring-white/25', theme.bg, theme.shadow)}>
@@ -636,7 +635,7 @@ function KioskDialog({ onClose }: { onClose: () => void }) {
                 type="button"
                 disabled={pin.length < 4 || busy}
                 onClick={() => submit(pin)}
-                className="mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-lg font-extrabold text-white shadow-[0_6px_0_rgb(4,120,87)] transition-all hover:shadow-[0_3px_0_rgb(4,120,87)] active:translate-y-[6px] active:shadow-none disabled:translate-y-0 disabled:opacity-50 disabled:shadow-[0_6px_0_rgb(4,120,87)]"
+                className="mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-lg font-extrabold text-white shadow-[0_6px_0_rgb(4,120,87)] transition-all hover:translate-y-[3px] hover:shadow-[0_3px_0_rgb(4,120,87)] active:translate-y-[6px] active:shadow-none disabled:translate-y-0 disabled:opacity-50 disabled:shadow-[0_6px_0_rgb(4,120,87)]"
               >
                 {busy ? <Loader2 className="size-5 animate-spin" /> : <ShieldCheck className="size-5" />}
                 تأكيد الحضور

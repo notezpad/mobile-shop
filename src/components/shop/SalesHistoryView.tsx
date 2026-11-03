@@ -162,9 +162,6 @@ function calcSale(s: Sale): Calc {
 export function SalesHistoryView() {
   const [sales, setSales] = React.useState<Sale[]>([])
   const [loading, setLoading] = React.useState(true)
-  // 🛡️ 2026-11-03: منع قفز التخطيط — السكيليتون لأول تحميل ناجح بس؛
-  // التحديثات الخلفية (useDataRefresh/ترقيم/فلاتر) بتحافظ على المحتوى القديم مكانه.
-  const loadedOnceRef = React.useRef(false)
   const [query, setQuery] = React.useState('')
   const [from, setFrom] = React.useState('')
   const [to, setTo] = React.useState('')
@@ -193,7 +190,7 @@ export function SalesHistoryView() {
   )
 
   const load = React.useCallback(async (f?: string, t?: string, p = 1) => {
-    if (!loadedOnceRef.current) setLoading(true)
+    setLoading(true)
     try {
       const params = new URLSearchParams()
       if (f) params.set('from', f)
@@ -208,7 +205,6 @@ export function SalesHistoryView() {
     } catch (e: any) {
       toast.error(e?.message || 'فشل تحميل المبيعات')
     } finally {
-      loadedOnceRef.current = true
       setLoading(false)
     }
   }, [])
@@ -685,7 +681,7 @@ export function SalesHistoryView() {
       {/* ═════════ الدفتر: كعوب الفواتير + الإيصال ═════════ */}
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="@container space-y-5">
-          {!loadedOnceRef.current && loading ? (
+          {loading ? (
             <div className="space-y-2">
               {Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-[68px] w-full rounded-xl" />)}
             </div>
@@ -737,8 +733,7 @@ export function SalesHistoryView() {
                             'sm:min-h-[84px] sm:grid-cols-[104px_minmax(0,1fr)_auto]',
                             // 🖥️ @xl: نضيف عمود حالة الدفع
                             '@xl:grid-cols-[112px_minmax(0,1fr)_170px_136px]',
-                            // 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس.
-                            'hover:border-yellow-400/70 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/60',
+                            'hover:-translate-y-px hover:border-yellow-400/70 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/60',
                             active && 'border-yellow-400 shadow-[0_8px_24px_-12px_rgb(250_204_21/0.7)]',
                             ret && 'text-muted-foreground'
                           )}

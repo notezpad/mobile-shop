@@ -94,11 +94,10 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
               variants={fadeUp}
               className="flex w-full flex-col items-stretch gap-3 pt-1 sm:w-auto sm:flex-row sm:items-center sm:justify-start sm:pt-2"
             >
-              {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
               <Button
                 size="lg"
                 onClick={() => onOpenAuth('signup')}
-                className="h-12 w-full gap-2 rounded-xl bg-white px-6 text-base sm:h-14 sm:px-8 sm:text-lg font-extrabold text-[#00573f] shadow-xl shadow-[#00402c]/30 hover:bg-[#effcf7] sm:w-auto"
+                className="h-12 w-full gap-2 rounded-xl bg-white px-6 text-base sm:h-14 sm:px-8 sm:text-lg font-extrabold text-[#00573f] shadow-xl shadow-[#00402c]/30 transition-transform hover:-translate-y-0.5 hover:bg-[#effcf7] sm:w-auto"
               >
                 <Rocket className="size-5" />
                 ابدأ تجربتك المجانية
@@ -261,7 +260,7 @@ export function HeroSection({ onOpenAuth }: HeroSectionProps) {
                               className="flex h-full flex-1 flex-col items-center justify-end gap-1"
                             >
                             <div
-                              className="w-full rounded-t-md bg-gradient-to-t from-[#00946a] to-[#19e0a2] shadow-[0_2px_8px_-2px_rgba(0,148,106,0.5)]"
+                              className="w-full rounded-t-md bg-gradient-to-t from-[#00946a] to-[#19e0a2] shadow-[0_2px_8px_-2px_rgba(0,148,106,0.5)] transition-transform duration-300 hover:scale-x-105"
                               style={{ height: `${bar.v}%` }}
                             />
                             <span className="text-[9px] text-[#5b7a6e]">{bar.d}</span>

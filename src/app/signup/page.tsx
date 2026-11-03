@@ -1025,10 +1025,9 @@ function SignupContent() {
               <div className="relative space-y-2 sm:space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <Link href="/" className="inline-flex items-center gap-2.5 group" aria-label="Nezam POS">
-                    {/* 🛡️ 2026-11-03: أزلنا حركات hover (translate/scale/rotate) — لما الماوس بيعدي على العناصر أثناء سكرول بالعجلة كانت بتتحرك فبيبان كأن المحتوى بيقفز. التغذية الراجعة بقت بالظل/اللون بس. */}
                     <img
                       src="/logo.svg" alt="" width={38} height={38}
-                      className="size-7 sm:size-[38px] rounded-xl shadow-md shadow-[#00c98b]/35 ring-2 ring-white"
+                      className="size-7 sm:size-[38px] rounded-xl shadow-md shadow-[#00c98b]/35 ring-2 ring-white transition-transform group-hover:scale-105 group-hover:-rotate-3"
                     />
                     <div className="leading-none">
                       <p dir="ltr" className="text-[17px] font-black tracking-tight text-foreground text-right">
