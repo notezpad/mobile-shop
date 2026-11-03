@@ -135,13 +135,13 @@ function Icon3D({ icon: Icon, tone, className }: { icon: React.ElementType; tone
     <span
       aria-hidden
       className={cn(
-        'relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br text-white shadow-lg ring-1 ring-inset ring-white/25',
+        'relative grid size-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br text-white shadow-lg ring-1 ring-inset ring-white/25',
         t.grad,
         t.shadow,
         className,
       )}
     >
-      <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+      <span className="pointer-events-none absolute rounded-t-[inherit] inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
       <Icon className="relative size-5 drop-shadow-md" strokeWidth={2.3} />
     </span>
   )
@@ -694,7 +694,7 @@ export function CommissionsView() {
                     <header className="flex items-start gap-3">
                       <div className="relative shrink-0">
                         <span className="relative grid size-12 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 text-lg font-black text-white shadow-lg shadow-emerald-500/30 ring-1 ring-inset ring-white/25">
-                          <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+                          <span className="pointer-events-none absolute rounded-t-[inherit] inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
                           <span className="relative drop-shadow-md">{initial(s.name)}</span>
                         </span>
                         {medal && (

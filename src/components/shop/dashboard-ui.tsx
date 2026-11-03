@@ -236,7 +236,7 @@ export function KpiCard({
     >
       <span
         aria-hidden
-        className={cn('pointer-events-none absolute -bottom-10 -start-10 size-28 rounded-full bg-gradient-to-br blur-2xl', TONE3D[tone].wash)}
+        className={cn('pointer-events-none absolute -bottom-16 -start-16 size-52 rounded-full bg-gradient-to-br', TONE3D[tone].wash)}
       />
       <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">

@@ -738,8 +738,8 @@ export function DashboardView() {
                   return (
                     <li key={p.name + i} className="flex items-center gap-3 rounded-2xl px-2 py-2.5 transition-colors hover:bg-muted/50">
                       {medal ? (
-                        <span className={cn('relative grid size-8 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br text-xs font-black text-white shadow-md ring-1 ring-inset ring-white/30', medal)}>
-                          <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+                        <span className={cn('relative grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br text-xs font-black text-white shadow-md ring-1 ring-inset ring-white/30', medal)}>
+                          <span className="pointer-events-none absolute rounded-t-[inherit] inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
                           <span className="relative drop-shadow">{i + 1}</span>
                         </span>
                       ) : (

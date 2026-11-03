@@ -186,12 +186,12 @@ function Icon3D({ icon: Icon, tone = 'sky', size = 'md', className }: {
     <span
       aria-hidden
       className={cn(
-        'relative grid shrink-0 place-items-center overflow-hidden bg-gradient-to-br text-white shadow-lg ring-1 ring-inset ring-white/25',
+        'relative grid shrink-0 place-items-center bg-gradient-to-br text-white shadow-lg ring-1 ring-inset ring-white/25',
         t.grad, t.shadow, s.box, className,
       )}
     >
-      <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
-      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/15 to-transparent" />
+      <span className="pointer-events-none absolute rounded-t-[inherit] inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+      <span className="pointer-events-none absolute rounded-b-[inherit] inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/15 to-transparent" />
       <Icon className={cn('relative drop-shadow-md', s.icon)} strokeWidth={2.2} />
     </span>
   )
