@@ -1,15 +1,12 @@
 'use client'
 
 import * as React from 'react'
-import { useVocab, foodTerm } from '@/lib/vocab'
+import { useVocab } from '@/lib/vocab'
 import { formatQtyUnit } from '@/lib/unit-label'
 import {
   Wallet,
   TrendingUp,
-  Banknote,
   AlertTriangle,
-  Loader2,
-  PackageX,
   Activity,
   ShoppingBag,
   Users,
@@ -34,24 +31,36 @@ import {
   Bar,
   BarChart as RechartsBarChart,
   CartesianGrid,
+  Cell,
   LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { StatusDot } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
 import { runCycleCountAutomation } from '@/lib/cycle-count-client'
 import { MyCommissionCard } from './MyCommissionCard'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { useIsMobile } from '@/hooks/use-mobile'
+import {
+  Chip,
+  EmptyState,
+  Icon3D,
+  Meter,
+  PANEL,
+  PanelHeader,
+  SoftLink,
+  StatCell,
+  TONE3D,
+  StatStrip,
+  type ChipTone,
+  type Tone3D,
+} from './dashboard-ui'
 
 interface DashboardData {
   todaySales: number
@@ -110,6 +119,12 @@ function compactNum(v: number): string {
   return String(Math.round(v))
 }
 
+/* رقم فلوس موحّد: من غير كسور لو صحيح، وإلا قرشين ثابتين (59,837.30 مش 59,837.3) */
+function fmtMoney(v: number | null | undefined): string {
+  const x = Number(v ?? 0)
+  return x.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(x) ? 0 : 2, maximumFractionDigits: 2 })
+}
+
 /* ───────── تاريخ ووقت بتوقيت المحل — نص هادي من غير كبسولة ───────── */
 
 const AR_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
@@ -152,162 +167,15 @@ function DateStamp({ iso, tz, className }: { iso: string | null | undefined; tz:
   )
 }
 
-/* حالة بنقطة + نص — بدل الشارات الصلبة القديمة */
-type Tone = 'success' | 'warning' | 'danger' | 'info' | 'primary' | 'neutral'
-const TONE: Record<Tone, { chip: string; dot: string }> = {
-  success: { chip: 'bg-success-subtle text-success-subtle-foreground', dot: 'bg-success' },
-  warning: { chip: 'bg-warning-subtle text-warning-subtle-foreground', dot: 'bg-warning' },
-  danger: { chip: 'bg-destructive-subtle text-destructive-subtle-foreground', dot: 'bg-destructive' },
-  info: { chip: 'bg-info-subtle text-info-subtle-foreground', dot: 'bg-info' },
-  primary: { chip: 'bg-primary-subtle text-primary-subtle-foreground', dot: 'bg-primary' },
-  neutral: { chip: 'bg-muted text-muted-foreground', dot: 'bg-muted-foreground/60' },
-}
+/* عدد الفواتير المعروضة في «آخر المبيعات» — الباقي في سجل المبيعات */
+const RECENT_SALES_LIMIT = 6
 
-function StatusChip({ tone, children }: { tone: Tone; children: React.ReactNode }) {
+/* أيقونة حالة صغيرة مسطّحة — بتظهر بس للفواتير اللي حالتها تستاهل الانتباه (مرتجعة / متبقي) */
+function StatusGlyph({ icon: Icon, tone }: { icon: React.ElementType; tone: Tone3D }) {
   return (
-    <span className={cn('inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-bold', TONE[tone].chip)}>
-      <span className={cn('size-1.5 rounded-full', TONE[tone].dot)} />
-      {children}
+    <span aria-hidden className={cn('grid size-6 shrink-0 place-items-center rounded-md [&_svg]:size-3.5', TONE3D[tone].soft)}>
+      <Icon strokeWidth={2.4} />
     </span>
-  )
-}
-
-function maintenanceTone(s: string): Tone {
-  switch (s) {
-    case 'مستلم': return 'info'
-    case 'قيد العمل': return 'warning'
-    case 'مكتمل': return 'primary'
-    case 'مُسلَّم': return 'success'
-    default: return 'neutral'
-  }
-}
-
-/* maintenanceStatusVariant — maps Arabic maintenance status strings to
- * badge variants. These strings come from the database (receivedAt, status)
- * and are user-facing, so they stay in Arabic. */
-function maintenanceStatusVariant(s: string): { variant: 'info' | 'warning' | 'default' | 'success' | 'outline' } {
-  switch (s) {
-    case 'مستلم':
-      return { variant: 'info' }
-    case 'قيد العمل':
-      return { variant: 'warning' }
-    case 'مكتمل':
-      return { variant: 'default' }
-    case 'مُسلَّم':
-      return { variant: 'success' }
-    default:
-      return { variant: 'outline' }
-  }
-}
-
-/* rankBadgeStyle — gold/silver/bronze for top-3 products.
- * Returns inline classes since these are one-off colors not in the token system. */
-function rankBadgeStyle(rank: number): string {
-  switch (rank) {
-    case 1:
-      return 'bg-accent2-100 text-accent2-600 border-accent2-200'
-    case 2:
-      return 'bg-muted text-muted-foreground border-border'
-    case 3:
-      return 'bg-accent2-50 text-accent2-500 border-accent2-100'
-    default:
-      return 'bg-muted text-muted-foreground border-border'
-  }
-}
-
-/* شريط أرقام: خلية بخط رفيع بدل كارت مستقل */
-function StatCell({
-  label,
-  value,
-  foot,
-  dot,
-  loading,
-  className,
-}: {
-  label: string
-  value: string
-  foot?: React.ReactNode
-  dot?: string
-  loading?: boolean
-  className?: string
-}) {
-  return (
-    <div className={cn('min-w-0 p-3.5 sm:p-5', className)}>
-      <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground sm:text-sm">
-        {dot && <span className={cn('size-2 shrink-0 rounded-full', dot)} />}
-        <span className="truncate">{label}</span>
-      </p>
-      {loading ? (
-        <Skeleton className="mt-2 h-7 w-28" />
-      ) : (
-        <p className="mt-1.5 break-words text-[17px] font-extrabold leading-snug tracking-tight tabular-nums text-foreground min-[400px]:text-xl sm:text-2xl">
-          {value}
-        </p>
-      )}
-      {foot && <div className="mt-1 text-[11px] text-muted-foreground sm:text-xs">{foot}</div>}
-    </div>
-  )
-}
-
-/* صف مؤشر للجوال: الاسم يمين، الرقم + الوحدة شمال في نفس السطر (مفيش لف ولا قص) */
-function MobileStat({
-  label, value, unit, dot, sub, href, loading,
-}: {
-  label: string
-  value: string
-  unit?: string
-  dot: string
-  sub?: React.ReactNode
-  href?: string
-  loading?: boolean
-}) {
-  const body = (
-    <div className="flex items-center justify-between gap-3 px-4 py-3.5">
-      <div className="min-w-0">
-        <p className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
-          <span className={cn('size-2 shrink-0 rounded-full', dot)} />
-          <span className="truncate">{label}</span>
-        </p>
-        {sub && <p className="mt-0.5 ps-4 text-[11px] text-muted-foreground/80">{sub}</p>}
-      </div>
-      {loading ? (
-        <Skeleton className="h-6 w-24 shrink-0" />
-      ) : (
-        <p className="flex shrink-0 items-baseline gap-1 whitespace-nowrap">
-          <span className="text-lg font-extrabold tabular-nums text-foreground">{value}</span>
-          {unit && <span className="text-[11px] font-semibold text-muted-foreground">{unit}</span>}
-          {href && <ArrowUpLeft className="size-3.5 self-center text-muted-foreground/60" />}
-        </p>
-      )}
-    </div>
-  )
-  return href ? (
-    <Link href={href} className="block transition-colors active:bg-muted/50">{body}</Link>
-  ) : (
-    body
-  )
-}
-
-/* عنوان قسم موحّد */
-function PanelTitle({
-  icon: Icon,
-  title,
-  tone = 'text-primary',
-  action,
-}: {
-  icon: React.ElementType
-  title: string
-  tone?: string
-  action?: React.ReactNode
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2.5">
-      <h2 className="flex items-center gap-2 text-[15px] font-bold">
-        <Icon className={cn('size-4', tone)} />
-        {title}
-      </h2>
-      {action}
-    </div>
   )
 }
 
@@ -342,7 +210,7 @@ export function DashboardView() {
   // 📅 التاريخ بالعربي بتوقيت المحل
   const todayAr = React.useMemo(() => {
     try {
-      return new Intl.DateTimeFormat('ar-EG', {
+      return new Intl.DateTimeFormat('ar-EG-u-nu-latn', {
         timeZone: tz, weekday: 'long', day: 'numeric', month: 'long',
       }).format(new Date())
     } catch {
@@ -398,7 +266,7 @@ export function DashboardView() {
 
   // آخر الفواتير مجمّعة بالأيام (بتوقيت المحل) — المرتجع مش بيدخل في الإجماليات
   const saleGroups = (() => {
-    const rows = data?.last10Sales ?? []
+    const rows = (data?.last10Sales ?? []).slice(0, RECENT_SALES_LIMIT)
     const map = new Map<string, { key: string; label: string; rows: typeof rows; total: number }>()
     for (const r of rows) {
       const st = stampOf(r.createdAt, tz)
@@ -411,6 +279,10 @@ export function DashboardView() {
     const groups = [...map.values()]
     return { groups, count: rows.length, total: groups.reduce((a, g) => a + g.total, 0) }
   })()
+
+  const hasRemaining = (data?.last10Sales ?? []).slice(0, RECENT_SALES_LIMIT).some(
+    (r) => r.status !== 'مرتجعة' && Math.max(0, (r.total ?? 0) - (r.paid ?? 0)) > 0,
+  )
 
   const days = data?.last7DaysSales ?? []
   // كل التواريخ ظاهرة على 7 أيام (من غير ما الرسم يخفي يوم ويوم) وتخفيف منتظم على 14/30
@@ -452,7 +324,25 @@ export function DashboardView() {
     return { text: `أقل من أمس بـ ${Math.round(Math.abs(diff))}%`, tone: 'warning' as const }
   })()
 
-  const margin = weekTotal > 0 ? Math.round((weekProfit / weekTotal) * 100) : null
+  const monthMargin = (data?.monthSales ?? 0) > 0 ? Math.round(((data?.monthProfit ?? 0) / (data?.monthSales ?? 1)) * 100) : null
+  const avgDaily = days.length ? weekTotal / days.length : 0
+  const bestDay = days.reduce<(typeof days)[number] | null>((b, d) => (!b || d.total > b.total ? d : b), null)
+  const todayDate = days.length ? days[days.length - 1].date : ''
+  // تيك المحور السيني: آخر يوم يظهر «اليوم» بلون الهوية
+  const renderTick = (p: { x?: number; y?: number; payload?: { value: string } }) => {
+    const isToday = p.payload?.value === todayDate
+    return (
+      <text
+        x={p.x}
+        y={(p.y ?? 0) + 10}
+        textAnchor="middle"
+        fontSize={isMobile ? 10 : 11}
+        className={isToday ? 'fill-primary font-extrabold' : 'fill-muted-foreground'}
+      >
+        {isToday ? 'اليوم' : p.payload?.value}
+      </text>
+    )
+  }
 
   // 🛡️ ملخص الفواتير المتأخرة (لو موجودة)
   const overdueTotal = (data?.overdueInvoices ?? []).reduce((a, i) => a + i.remaining, 0)
@@ -463,361 +353,360 @@ export function DashboardView() {
       {/* ═════════ 💰 عمولتي (التحديث الثالث عشر) — للبائع بس ═════════ */}
       <MyCommissionCard />
 
-      {/* ═════════ Hero — مبيعات اليوم + منحنى الأيام الأخيرة ═════════ */}
-      <section className="overflow-hidden rounded-3xl border bg-card text-card-foreground shadow-sm">
-        <div
-          className="grid grid-cols-1 gap-6 p-4 sm:p-7 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]"
-          style={{ background: 'radial-gradient(560px 220px at 100% 0%, color-mix(in srgb, var(--primary) 12%, transparent), transparent)' }}
-        >
-          {/* الرقم الأساسي */}
-          <div className="flex min-w-0 flex-col justify-between gap-5">
-            <div>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h1 className="text-lg font-bold tracking-tight sm:text-xl">
-                    {greeting}، <span className="text-primary">{user?.name ?? 'مستخدم'}</span>
-                  </h1>
-                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground sm:text-sm">
-                    <span>{todayAr}</span>
-                    {insight && (
-                      <>
-                        <span className="hidden h-3 w-px bg-border sm:block" aria-hidden />
-                        <span
-                          className={cn(
-                            'inline-flex items-center gap-1 font-semibold',
-                            insight.tone === 'success' && 'text-success',
-                            insight.tone === 'warning' && 'text-warning-subtle-foreground',
-                            insight.tone === 'neutral' && 'text-muted-foreground',
-                          )}
-                        >
-                          {insight.tone === 'success' && <TrendingUp className="size-3" />}
-                          {insight.tone === 'warning' && <TrendingDown className="size-3" />}
-                          {insight.tone === 'neutral' && <Minus className="size-3" />}
-                          {insight.text}
-                        </span>
-                      </>
-                    )}
-                  </p>
-                </div>
+      {/* ═════════ Hero — سطح واحد: مبيعات اليوم + منحنى الأيام (من غير كروت متداخلة) ═════════ */}
+      <section className={cn(PANEL, 'overflow-hidden')}>
+        <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-3.5">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
+            <h1 className="text-lg font-extrabold tracking-tight sm:text-xl">
+              {greeting}، <span className="text-primary">{user?.name ?? 'مستخدم'}</span>
+            </h1>
+            <p className="text-xs text-muted-foreground sm:text-sm">{todayAr}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => load()}
+            disabled={loading}
+            aria-label="تحديث"
+            className="inline-flex h-9 shrink-0 items-center gap-2 rounded-xl border bg-card px-3 text-xs font-bold text-foreground/80 transition-colors hover:bg-muted/60 disabled:opacity-60"
+          >
+            <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
+            <span className="hidden sm:inline">تحديث</span>
+          </button>
+        </div>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => load()}
-                  disabled={loading}
-                  className="shrink-0 gap-2"
-                >
-                  <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
-                  تحديث
-                </Button>
-              </div>
-
-              <p className="mt-6 flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <span className="size-2 rounded-full bg-primary" />
-                مبيعات اليوم
+        <div className="grid grid-cols-1 border-t lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+          {/* مبيعات اليوم */}
+          <div className="flex min-w-0 flex-col gap-5 bg-gradient-to-bl from-primary/[0.05] to-transparent p-4 sm:p-6">
+            <div className="flex items-center gap-2.5">
+              <span aria-hidden className="grid size-8 place-items-center rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                <ShoppingBag className="size-4" strokeWidth={2.2} />
+              </span>
+              <div>
+                <p className="text-sm font-extrabold">مبيعات اليوم</p>
                 {/* 🛡️ ج-2: الأرقام صافي بعد المرتجعات — عشان المدير يعرف المعيار */}
-                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                  صافي بعد المرتجعات
+                <p className="text-[11px] font-medium text-muted-foreground">صافي بعد المرتجعات</p>
+              </div>
+            </div>
+
+            <div className="my-auto flex flex-col gap-5">
+            {loadingFirst ? (
+              <Skeleton className="h-14 w-56" />
+            ) : (
+              <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
+                <span className="text-5xl font-black leading-none tracking-tight tabular-nums [overflow-wrap:anywhere] sm:text-6xl">
+                  {fmtMoney(data?.todaySales)}
                 </span>
+                <span className="text-base font-bold text-muted-foreground">جنيه</span>
               </p>
-              {loadingFirst ? (
-                <Skeleton className="mt-3 h-14 w-56" />
-              ) : (
-                <div className="mt-2 flex flex-wrap items-baseline gap-2">
-                  <span className="max-w-full break-all text-[2.35rem] font-extrabold leading-tight tracking-tight tabular-nums min-[380px]:text-5xl sm:text-6xl">
-                    {Number(data?.todaySales ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}
-                  </span>
-                  <span className="text-lg font-semibold text-muted-foreground">جنيه</span>
-                </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {insight && (
+                <Chip tone={insight.tone === 'success' ? 'success' : insight.tone === 'warning' ? 'warning' : 'neutral'} className="gap-1 font-semibold">
+                  {insight.tone === 'success' && <TrendingUp className="size-3" />}
+                  {insight.tone === 'warning' && <TrendingDown className="size-3" />}
+                  {insight.tone === 'neutral' && <Minus className="size-3" />}
+                  {insight.text}
+                </Chip>
               )}
-              <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <CalendarDays className="size-3.5" />
-                  {data?.todaySalesCount ?? 0} فاتورة اليوم
-                </span>
-                {data?.canViewProfits !== false && (() => {
-                  const pr = data?.todayProfit ?? 0
-                  const tone = pr > 0 ? TONE.success.chip : pr < 0 ? TONE.danger.chip : TONE.neutral.chip
-                  const PIcon = pr > 0 ? TrendingUp : pr < 0 ? TrendingDown : Minus
-                  return (
-                    <span className={cn('inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-semibold', tone)}>
-                      <PIcon className="size-3" />
-                      ربح {formatCurrency(pr)}
-                    </span>
-                  )
-                })()}
-              </p>
+              <Chip tone="neutral" className="gap-1.5 font-semibold">
+                <Receipt className="size-3.5" />
+                {data?.todaySalesCount ?? 0} فاتورة
+              </Chip>
+              {data?.canViewProfits !== false && (() => {
+                const pr = data?.todayProfit ?? 0
+                const tone: ChipTone = pr > 0 ? 'success' : pr < 0 ? 'danger' : 'neutral'
+                return (
+                  <Chip tone={tone} className="gap-1 font-semibold">
+                    ربح {formatCurrency(pr)}
+                  </Chip>
+                )
+              })()}
+            </div>
             </div>
 
             {compareRows.length > 0 && (
-              <div className="space-y-2.5 border-t border-border pt-4">
-                {compareRows.map((r) => (
-                  <div key={r.label} className="flex items-center gap-3 text-xs">
-                    <span className={cn('w-24 shrink-0', r.strong ? 'font-bold text-foreground' : 'text-muted-foreground')}>
-                      {r.label}
-                    </span>
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={cn('h-full rounded-full', r.strong ? 'bg-primary' : 'bg-muted-foreground/35')}
-                        style={{ width: r.v > 0 ? `${Math.max(3, (r.v / compareMax) * 100)}%` : '0%' }}
-                      />
-                    </div>
-                    <span className="w-24 shrink-0 text-end font-bold tabular-nums">{formatCurrency(Math.round(r.v))}</span>
+              <dl className="grid grid-cols-2 overflow-hidden rounded-2xl border bg-card/70 [&>div+div]:border-s">
+                {compareRows.filter((r) => !r.strong).map((r) => (
+                  <div key={r.label} className="min-w-0 px-3 py-2.5">
+                    <dt className={cn('truncate text-[11px]', r.strong ? 'font-extrabold text-primary' : 'font-medium text-muted-foreground')}>{r.label}</dt>
+                    <dd className="mt-0.5 truncate text-sm font-extrabold tabular-nums">{fmtMoney(Math.round(r.v))}</dd>
                   </div>
                 ))}
-              </div>
+              </dl>
             )}
           </div>
 
           {/* منحنى المبيعات */}
-          <div className="min-w-0">
-            <PanelTitle
-              icon={Activity}
-              title={`مبيعات آخر ${chartDays} يوم`}
-              action={
-                <div className="flex items-center gap-0.5 rounded-xl border border-border bg-muted/50 p-0.5">
-                  {([7, 14, 30] as const).map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => {
-                        setChartDays(d)
-                        load(d)
-                      }}
-                      className={cn(
-                        'whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors',
-                        chartDays === d
-                          ? 'bg-card text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground',
-                      )}
-                    >
-                      {d} يوم
-                    </button>
-                  ))}
-                </div>
-              }
-            />
-            <div className="mt-3 h-48 w-full sm:h-52">
+          <div className="min-w-0 border-t p-4 sm:p-6 lg:border-s lg:border-t-0">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2.5">
+              <div className="flex items-center gap-2.5">
+                <span aria-hidden className="grid size-8 place-items-center rounded-lg bg-sky-500/10 text-sky-700 dark:text-sky-300">
+                  <Activity className="size-4" strokeWidth={2.2} />
+                </span>
+                <h2 className="text-sm font-extrabold">{`مبيعات آخر ${chartDays} يوم`}</h2>
+              </div>
+              <div role="tablist" className="flex items-center gap-0.5 rounded-xl bg-muted p-0.5">
+                {([7, 14, 30] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    role="tab"
+                    aria-selected={chartDays === d}
+                    onClick={() => {
+                      setChartDays(d)
+                      load(d)
+                    }}
+                    className={cn(
+                      'whitespace-nowrap rounded-lg px-3 py-1 text-xs font-bold transition-all',
+                      chartDays === d ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {d} يوم
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="relative mt-4 h-52 w-full sm:h-60">
               {loadingFirst ? (
                 <Skeleton className="h-full w-full" />
               ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <RechartsBarChart data={days} margin={{ top: showBarLabels ? 20 : 8, right: 8, left: isMobile ? 8 : 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      tickLine={false}
-                      axisLine={false}
-                      fontSize={isMobile ? 10 : 11}
-                      ticks={xTicks}
-                      interval={0}
-                      tickMargin={6}
-                    />
-                    <YAxis
-                      hide={isMobile}
-                      tickLine={false}
-                      axisLine={false}
-                      fontSize={11}
-                      width={40}
-                      tickCount={4}
-                      tickFormatter={compactNum}
-                    />
-                    <Tooltip
-                      cursor={{ fill: 'color-mix(in srgb, var(--primary) 8%, transparent)' }}
-                      content={({ active, payload }) => {
-                        const row = active ? (payload?.[0]?.payload as { date: string; total: number; profit: number } | undefined) : undefined
-                        if (!row) return null
-                        return (
-                          <div className="rounded-xl border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md">
-                            <p className="mb-1 font-bold tabular-nums">{row.date}</p>
-                            <p className="flex items-center justify-between gap-4">
-                              <span className="text-muted-foreground">المبيعات</span>
-                              <span className="font-bold tabular-nums">{formatCurrency(row.total)}</span>
-                            </p>
-                            <p className="flex items-center justify-between gap-4">
-                              {showProfits && <span className="text-muted-foreground">الربح</span>}
-                              {showProfits && <span className="font-bold tabular-nums text-success">{formatCurrency(row.profit ?? 0)}</span>}
-                            </p>
-                          </div>
-                        )
-                      }}
-                    />
-                    <Bar
-                      dataKey="total"
-                      name="المبيعات"
-                      fill="var(--primary)"
-                      radius={[8, 8, 0, 0]}
-                      maxBarSize={44}
-                      minPointSize={(v: number | null | undefined) => ((v ?? 0) > 0 ? 4 : 0)}
-                    >
-                      {showBarLabels && (
-                        <LabelList
-                          dataKey="total"
-                          position="top"
-                          fontSize={10}
-                          className="fill-muted-foreground font-semibold"
-                          formatter={(v: number) => (v > 0 ? compactNum(v) : '')}
-                        />
-                      )}
-                    </Bar>
-                  </RechartsBarChart>
-                </ResponsiveContainer>
+                <>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RechartsBarChart data={days} margin={{ top: showBarLabels ? 20 : 8, right: 8, left: isMobile ? 8 : 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="2 6" className="stroke-border" vertical={false} />
+                      <XAxis dataKey="date" tickLine={false} axisLine={false} ticks={xTicks} interval={0} tickMargin={6} tick={renderTick} />
+                      <YAxis
+                        hide={isMobile}
+                        tickLine={false}
+                        axisLine={false}
+                        fontSize={11}
+                        width={40}
+                        tickCount={4}
+                        tick={{ fill: 'var(--muted-foreground)' }}
+                        tickFormatter={compactNum}
+                      />
+                      <Tooltip
+                        cursor={{ fill: 'color-mix(in srgb, var(--primary) 7%, transparent)', radius: 10 }}
+                        content={({ active, payload }) => {
+                          const row = active ? (payload?.[0]?.payload as { date: string; total: number; profit: number } | undefined) : undefined
+                          if (!row) return null
+                          return (
+                            <div className="rounded-2xl border bg-popover px-3.5 py-2.5 text-xs text-popover-foreground shadow-lg">
+                              <p className="mb-1.5 font-extrabold tabular-nums">{row.date}</p>
+                              <p className="flex items-center justify-between gap-5">
+                                <span className="text-muted-foreground">المبيعات</span>
+                                <span className="font-extrabold tabular-nums">{formatCurrency(row.total)}</span>
+                              </p>
+                              {showProfits && (
+                                <p className="mt-0.5 flex items-center justify-between gap-5">
+                                  <span className="text-muted-foreground">الربح</span>
+                                  <span className="font-extrabold tabular-nums text-emerald-600 dark:text-emerald-400">{formatCurrency(row.profit ?? 0)}</span>
+                                </p>
+                              )}
+                            </div>
+                          )
+                        }}
+                      />
+                      <Bar dataKey="total" name="المبيعات" radius={[8, 8, 3, 3]} maxBarSize={44} minPointSize={3}>
+                        {days.map((d, i) => (
+                          <Cell
+                            key={i}
+                            fill={
+                              i === days.length - 1
+                                ? 'var(--primary)'
+                                : d.total > 0
+                                  ? 'color-mix(in srgb, var(--primary) 50%, transparent)'
+                                  : 'var(--border)'
+                            }
+                          />
+                        ))}
+                        {showBarLabels && (
+                          <LabelList
+                            dataKey="total"
+                            position="top"
+                            fontSize={10}
+                            className="fill-muted-foreground font-bold"
+                            formatter={(v: number) => (v > 0 ? compactNum(v) : '')}
+                          />
+                        )}
+                      </Bar>
+                    </RechartsBarChart>
+                  </ResponsiveContainer>
+                  {weekTotal === 0 && (
+                    <p className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-xs font-semibold text-muted-foreground">
+                      مفيش مبيعات في الفترة دي
+                    </p>
+                  )}
+                </>
               )}
             </div>
-            <div className="mt-1.5 flex items-center gap-1.5 ps-1 text-[11px] text-muted-foreground">
-              <span className="size-2.5 rounded-sm bg-primary" />
-              مبيعات
-              <span className="text-muted-foreground/60">— <span className="hidden sm:inline">مرّر الماوس</span><span className="sm:hidden">المس</span> أي يوم لعرض الربح</span>
-            </div>
+
+            {/* ملخص الفترة بدل سطر «مرّر الماوس» */}
+            <dl className={cn('mt-4 grid grid-cols-2 gap-y-3 border-t pt-4 text-xs sm:[&>div+div]:border-s sm:[&>div]:px-4 sm:[&>div:first-child]:ps-0', showProfits ? 'sm:grid-cols-4' : 'sm:grid-cols-3')}>
+              {[
+                { k: 'إجمالي الفترة', v: fmtMoney(weekTotal) },
+                { k: 'متوسط يومي', v: fmtMoney(Math.round(avgDaily)) },
+                { k: 'أفضل يوم', v: bestDay && bestDay.total > 0 ? `${fmtMoney(bestDay.total)}` : '—', sub: bestDay && bestDay.total > 0 ? bestDay.date : undefined },
+                ...(showProfits ? [{ k: 'ربح الفترة', v: fmtMoney(weekProfit) }] : []),
+              ].map((s) => (
+                <div key={s.k} className="min-w-0">
+                  <dt className="text-[11px] font-medium text-muted-foreground">{s.k}</dt>
+                  <dd className="mt-0.5 truncate text-sm font-extrabold tabular-nums">{s.v}</dd>
+                  <dd className="h-4 text-[11px] font-medium tabular-nums text-muted-foreground">{'sub' in s && s.sub ? s.sub : ''}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
-        </div>
-
-        {/* شريط الأرقام */}
-        {/* الجوال: قائمة صفوف بعرض كامل */}
-        <div className="divide-y divide-border border-t border-border sm:hidden">
-          {(() => {
-            const n = (v: number | undefined) =>
-              Number(v ?? 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-            const low = data?.lowStockCount ?? 0
-            return (
-              <>
-                <MobileStat label="رصيد الخزنة" value={n(data?.cashBalance)} unit="جنيه" dot="bg-sky-500" loading={loadingFirst} />
-                <MobileStat label="مبيعات الشهر" value={n(data?.monthSales)} unit="جنيه" dot="bg-primary" loading={loadingFirst} />
-                {data?.canViewProfits !== false && (
-                  <MobileStat
-                    label="ربح الشهر"
-                    value={n(data?.monthProfit)}
-                    unit="جنيه"
-                    dot="bg-emerald-500"
-                    sub={showProfits && margin !== null ? `هامش آخر ${chartDays} يوم: ${margin}%` : undefined}
-                    loading={loadingFirst}
-                  />
-                )}
-                <MobileStat label="العملاء" value={String(data?.customersCount ?? 0)} dot="bg-teal-500" href="/customers" loading={loadingFirst} />
-                <MobileStat
-                  label="تنبيهات المخزون"
-                  value={String(low)}
-                  dot={low > 0 ? 'bg-amber-500' : 'bg-emerald-500'}
-                  sub={low > 0 ? 'مراجعة المخزون' : t('كل المنتجات فوق الحد الأدنى')}
-                  href={low > 0 ? '/inventory' : undefined}
-                  loading={loadingFirst}
-                />
-              </>
-            )
-          })()}
-        </div>
-
-        {/* الشاشات الأكبر: شريط الأرقام */}
-        <div className="hidden grid-cols-2 border-t border-border sm:grid lg:grid-cols-5">
-          <StatCell
-            className="border-b border-e lg:border-b-0"
-            label="رصيد الخزنة"
-            value={formatCurrency(data?.cashBalance ?? 0)}
-            loading={loadingFirst}
-            dot="bg-sky-500"
-          />
-          <StatCell
-            className="border-b lg:border-b-0 lg:border-e"
-            label="مبيعات الشهر"
-            value={formatCurrency(data?.monthSales ?? 0)}
-            foot="صافي بعد المرتجعات"
-            loading={loadingFirst}
-            dot="bg-primary"
-          />
-          {data?.canViewProfits !== false && (
-            <StatCell
-              className="border-b border-e lg:border-b-0"
-              label="ربح الشهر"
-              value={formatCurrency(data?.monthProfit ?? 0)}
-              loading={loadingFirst}
-              dot="bg-emerald-500"
-              foot={margin !== null ? <span>هامش آخر {chartDays} يوم: {margin}%</span> : undefined}
-            />
-          )}
-          <StatCell
-            className="border-b lg:border-b-0 lg:border-e"
-            label="العملاء"
-            value={String(data?.customersCount ?? 0)}
-            loading={loadingFirst}
-            dot="bg-teal-500"
-            foot={
-              <Link href="/customers" className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
-                عرض العملاء <ArrowUpLeft className="size-3" />
-              </Link>
-            }
-          />
-          <StatCell
-            className="col-span-2 lg:col-span-1"
-            label="تنبيهات المخزون"
-            value={String(data?.lowStockCount ?? 0)}
-            loading={loadingFirst}
-            dot={(data?.lowStockCount ?? 0) > 0 ? 'bg-amber-500' : 'bg-emerald-500'}
-            foot={
-              (data?.lowStockCount ?? 0) > 0 ? (
-                <Link href="/inventory" className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
-                  مراجعة المخزون <ArrowUpLeft className="size-3" />
-                </Link>
-              ) : (
-                <span>{t('كل المنتجات فوق الحد الأدنى')}</span>
-              )
-            }
-          />
         </div>
       </section>
 
+      {/* ═════════ كروت المؤشرات ═════════ */}
+      {(() => {
+        const n = fmtMoney
+        const low = data?.lowStockCount ?? 0
+        const cellCount = 4 + (showProfits ? 1 : 0) + (hasMaintenance ? 1 : 0)
+        return (
+          <>
+            {/* الجوال: صفوف بعرض كامل */}
+            <div className={cn(PANEL, 'divide-y divide-border overflow-hidden sm:hidden')}>
+              {[
+                { label: 'رصيد الخزنة', value: n(data?.cashBalance), unit: 'جنيه', icon: Wallet, tone: 'sky' as Tone3D },
+                { label: 'مبيعات الشهر', value: n(data?.monthSales), unit: 'جنيه', icon: ShoppingBag, tone: 'emerald' as Tone3D },
+                ...(showProfits
+                  ? [{
+                      label: 'ربح الشهر', value: n(data?.monthProfit), unit: 'جنيه', icon: TrendingUp, tone: 'teal' as Tone3D,
+                      sub: monthMargin !== null ? `هامش الربح ${monthMargin}%` : undefined,
+                    }]
+                  : []),
+                { label: 'العملاء', value: String(data?.customersCount ?? 0), icon: Users, tone: 'violet' as Tone3D, href: '/customers' },
+                ...(hasMaintenance
+                  ? [{ label: 'صيانة نشطة', value: String(data?.activeMaintenance ?? 0), icon: Wrench, tone: 'sky' as Tone3D, href: '/maintenance' }]
+                  : []),
+                {
+                  label: 'تنبيهات المخزون', value: String(low), icon: AlertTriangle, tone: (low > 0 ? 'amber' : 'emerald') as Tone3D,
+                  sub: low > 0 ? 'مراجعة المخزون' : t('كل المنتجات فوق الحد الأدنى'), href: low > 0 ? '/inventory' : undefined,
+                },
+              ].map((r) => {
+                const body = (
+                  <div className="flex items-center gap-3 px-4 py-3.5">
+                    <Icon3D icon={r.icon} tone={r.tone} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-bold text-muted-foreground">{r.label}</p>
+                      {'sub' in r && r.sub && <p className="mt-0.5 truncate text-[11px] text-muted-foreground/80">{r.sub}</p>}
+                    </div>
+                    {loadingFirst ? (
+                      <Skeleton className="h-6 w-24 shrink-0" />
+                    ) : (
+                      <p className="flex shrink-0 items-baseline gap-1 whitespace-nowrap">
+                        <span className="text-lg font-black tabular-nums">{r.value}</span>
+                        {'unit' in r && r.unit && <span className="text-[11px] font-semibold text-muted-foreground">{r.unit}</span>}
+                        {'href' in r && r.href && <ArrowUpLeft className="size-3.5 self-center text-muted-foreground/60" />}
+                      </p>
+                    )}
+                  </div>
+                )
+                return 'href' in r && r.href ? (
+                  <Link key={r.label} href={r.href} className="block transition-colors active:bg-muted/50">{body}</Link>
+                ) : (
+                  <div key={r.label}>{body}</div>
+                )
+              })}
+            </div>
+            {/* الشاشات الأكبر: شريط مؤشرات بسطح واحد */}
+            <StatStrip className={cn('hidden grid-cols-2 sm:grid', ({ 4: 'lg:grid-cols-4', 5: 'lg:grid-cols-5', 6: 'lg:grid-cols-6' } as Record<number, string>)[cellCount])}>
+              <StatCell label="رصيد الخزنة" value={n(data?.cashBalance)} unit="جنيه" icon={Wallet} tone="sky" loading={loadingFirst} foot="الرصيد الحالي" />
+              <StatCell label="مبيعات الشهر" value={n(data?.monthSales)} unit="جنيه" icon={ShoppingBag} tone="emerald" loading={loadingFirst} foot="صافي بعد المرتجعات" />
+              {showProfits && (
+                <StatCell
+                  label="ربح الشهر"
+                  value={n(data?.monthProfit)}
+                  unit="جنيه"
+                  icon={TrendingUp}
+                  tone="teal"
+                  loading={loadingFirst}
+                  foot={monthMargin !== null ? `هامش الربح ${monthMargin}%` : 'الربح التقديري'}
+                />
+              )}
+              <StatCell
+                label="العملاء"
+                value={String(data?.customersCount ?? 0)}
+                icon={Users}
+                tone="violet"
+                loading={loadingFirst}
+                href="/customers"
+                foot={<><span className="font-bold text-primary">عرض العملاء</span><ArrowUpLeft className="size-3 text-primary" /></>}
+              />
+              {hasMaintenance && (
+                <StatCell
+                  label="صيانة نشطة"
+                  value={String(data?.activeMaintenance ?? 0)}
+                  icon={Wrench}
+                  tone="sky"
+                  loading={loadingFirst}
+                  href="/maintenance"
+                  foot={<><span className="font-bold text-primary">أوامر الصيانة</span><ArrowUpLeft className="size-3 text-primary" /></>}
+                />
+              )}
+              <StatCell
+                className={cellCount % 2 === 1 ? 'col-span-2 lg:col-span-1' : undefined}
+                label="تنبيهات المخزون"
+                value={String(low)}
+                icon={AlertTriangle}
+                tone={low > 0 ? 'amber' : 'emerald'}
+                loading={loadingFirst}
+                href={low > 0 ? '/inventory' : undefined}
+                foot={
+                  low > 0 ? (
+                    <><span className="font-bold text-primary">مراجعة المخزون</span><ArrowUpLeft className="size-3 text-primary" /></>
+                  ) : (
+                    <span>{t('كل المنتجات فوق الحد الأدنى')}</span>
+                  )
+                }
+              />
+            </StatStrip>
+          </>
+        )
+      })()}
+
       {/* ═════════ بانر الفواتير المتأخرة — يظهر بس لو فيه متأخرات ═════════ */}
       {hasOverdue && (
-        <section className="overflow-hidden rounded-3xl border border-orange-300/60 bg-orange-50/70 dark:border-orange-500/30 dark:bg-orange-500/10 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-orange-300/50 dark:border-orange-500/20 px-5 py-3.5">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-orange-500 text-white">
-                <AlertTriangle className="size-4" strokeWidth={2.5} />
-              </span>
-              <div className="min-w-0">
-                <h2 className="text-sm font-bold">فواتير متأخرة محتاجة تحصيل</h2>
-                <p className="text-[11px] text-muted-foreground">
+        <section className={cn(PANEL, 'overflow-hidden border-amber-300/50 bg-gradient-to-l from-amber-50/70 via-card to-card dark:border-amber-500/25 dark:from-amber-500/10')}>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-300/40 px-5 py-4 dark:border-amber-500/15">
+            <PanelHeader
+              icon={AlertTriangle}
+              tone="amber"
+              title="فواتير متأخرة محتاجة تحصيل"
+              subtitle={
+                <>
                   {data!.overdueInvoices.length} فاتورة • إجمالي{' '}
-                  <span className="font-bold text-orange-700 dark:text-orange-300">{formatCurrency(overdueTotal)}</span>
-                </p>
-              </div>
-            </div>
-            <Link
-              href="/sales"
-              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-orange-300/60 bg-card px-2.5 text-[11px] font-bold text-orange-700 transition-colors hover:bg-orange-50 dark:border-orange-500/30 dark:text-orange-300 dark:hover:bg-orange-500/10"
-            >
-              عرض الكل
-              <ArrowUpLeft className="size-3" />
-            </Link>
+                  <span className="font-extrabold text-amber-700 dark:text-amber-300">{formatCurrency(overdueTotal)}</span>
+                </>
+              }
+            />
+            <SoftLink href="/sales">عرض الكل</SoftLink>
           </div>
-          <ul className="divide-y divide-border">
+          <ul className="divide-y divide-border/70">
             {data!.overdueInvoices.slice(0, 3).map((inv) => {
               const days = inv.dueDate
                 ? Math.max(0, Math.floor((Date.now() - new Date(inv.dueDate).getTime()) / 86400000))
                 : 0
               return (
-                <li key={inv.id} className="flex items-center justify-between gap-3 px-5 py-2.5">
+                <li key={inv.id} className="flex items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-amber-500/5">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold">{inv.customerName ?? 'عميل'}</p>
                     <p className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
                       <span className="tabular-nums">{inv.invoiceNo ?? `#${inv.id}`}</span>
-                      {days > 0 && (
-                        <>
-                          <span className="h-3 w-px bg-border" />
-                          <span className="font-semibold text-orange-700 dark:text-orange-300">
-                            متأخرة {days} يوم
-                          </span>
-                        </>
-                      )}
+                      {days > 0 && <Chip tone="warning" className="px-1.5 py-0.5">متأخرة {days} يوم</Chip>}
                     </p>
                   </div>
-                  <p className="shrink-0 text-sm font-extrabold tabular-nums">
-                    {formatCurrency(inv.remaining)}
-                  </p>
+                  <p className="shrink-0 text-sm font-black tabular-nums">{formatCurrency(inv.remaining)}</p>
                 </li>
               )
             })}
             {data!.overdueInvoices.length > 3 && (
-              <li className="px-5 py-2 text-center text-[11px] font-semibold text-warning-subtle-foreground">
+              <li className="px-5 py-2.5 text-center text-[11px] font-bold text-amber-700 dark:text-amber-300">
                 + {data!.overdueInvoices.length - 3} فواتير أخرى
               </li>
             )}
@@ -825,48 +714,47 @@ export function DashboardView() {
         </section>
       )}
 
-      {/* ═════════ أكثر المنتجات + المخزون المنخفض + الصيانة ═════════ */}
-      <div className={cn('grid grid-cols-1 gap-4 md:grid-cols-2', hasMaintenance ? 'xl:grid-cols-3' : 'xl:grid-cols-2')}>
+      {/* ═════════ أكثر المنتجات + المخزون المنخفض ═════════ */}
+      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
         {/* أكثر المنتجات مبيعاً */}
-        <Card className="min-w-0 gap-4 rounded-3xl py-5 shadow-sm">
-          <CardHeader className="px-5">
-            <PanelTitle icon={Trophy} title={t('أكثر المنتجات مبيعاً')} tone="text-amber-500" />
-            <p className="text-xs text-muted-foreground">آخر 30 يوم</p>
-          </CardHeader>
-          <CardContent className="px-5">
+        <section className={cn(PANEL, 'min-w-0 p-5')}>
+          <PanelHeader icon={Trophy} tone="amber" title={t('أكثر المنتجات مبيعاً')} subtitle="آخر 30 يوم" />
+          <div className="mt-4">
             {loading && !data ? (
               <div className="space-y-2">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <Skeleton key={i} className="h-11 w-full" />
+                  <Skeleton key={i} className="h-12 w-full rounded-xl" />
                 ))}
               </div>
             ) : data?.topProducts?.length ? (
-              <ol className="divide-y divide-border">
-                {data.topProducts.map((p, i) => {
+              <ol className="space-y-1">
+                {data.topProducts.slice(0, 5).map((p, i) => {
                   const maxQty = data.topProducts[0]?.quantity || 1
+                  const medal = [
+                    'from-amber-300 to-amber-500 shadow-amber-500/30',
+                    'from-slate-300 to-slate-400 shadow-slate-500/25',
+                    'from-orange-300 to-orange-500 shadow-orange-500/25',
+                  ][i]
                   return (
-                    <li key={p.name + i} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                      <span
-                        className={cn(
-                          'flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-bold tabular-nums',
-                          rankBadgeStyle(i + 1),
-                        )}
-                      >
-                        {i + 1}
-                      </span>
+                    <li key={p.name + i} className="flex items-center gap-3 rounded-2xl px-2 py-2.5 transition-colors hover:bg-muted/50">
+                      {medal ? (
+                        <span className={cn('relative grid size-8 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br text-xs font-black text-white shadow-md ring-1 ring-inset ring-white/30', medal)}>
+                          <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
+                          <span className="relative drop-shadow">{i + 1}</span>
+                        </span>
+                      ) : (
+                        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-xs font-bold tabular-nums text-muted-foreground">
+                          {i + 1}
+                        </span>
+                      )}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-baseline justify-between gap-2">
-                          <p className="truncate text-sm font-semibold">{p.name}</p>
-                          <p className="shrink-0 text-xs font-semibold tabular-nums">{formatCurrency(p.total)}</p>
+                          <p className="truncate text-sm font-bold">{p.name}</p>
+                          <p className="shrink-0 text-xs font-extrabold tabular-nums">{formatCurrency(p.total)}</p>
                         </div>
                         <div className="mt-1.5 flex items-center gap-2">
-                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                            <div
-                              className="h-full rounded-full bg-primary/80"
-                              style={{ width: `${Math.max(6, (p.quantity / maxQty) * 100)}%` }}
-                            />
-                          </div>
-                          <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                          <Meter pct={Math.max(6, (p.quantity / maxQty) * 100)} tone="emerald" className="h-1.5 flex-1" />
+                          <span className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground">
                             {formatQtyUnit(p.quantity, p.unitLabel)}
                           </span>
                         </div>
@@ -876,263 +764,268 @@ export function DashboardView() {
                 })}
               </ol>
             ) : (
-              <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
-                <ShoppingBag className="size-8 text-muted-foreground/50" />
-                <p className="text-sm font-medium text-muted-foreground">لا توجد مبيعات خلال آخر 30 يوم</p>
-                <Link href="/pos" className="text-xs font-semibold text-primary hover:underline">
-                  ابدأ البيع من نقطة البيع
-                </Link>
-              </div>
+              <EmptyState
+                icon={ShoppingBag}
+                tone="amber"
+                title="لا توجد مبيعات خلال آخر 30 يوم"
+                action={
+                  <Link href="/pos" className="text-xs font-bold text-primary hover:underline">
+                    ابدأ البيع من نقطة البيع
+                  </Link>
+                }
+              />
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
         {/* مخزون منخفض */}
-        <Card className="min-w-0 gap-4 rounded-3xl py-5 shadow-sm">
-          <CardHeader className="px-5">
-            <PanelTitle
-              icon={AlertCircle}
-              title="مخزون منخفض"
-              tone="text-destructive"
-              action={
-                (data?.lowStockProducts?.length ?? 0) > 0 ? (
-                  <Link href="/inventory" className="text-xs font-semibold text-primary hover:underline">
-                    عرض الكل
-                  </Link>
-                ) : undefined
-              }
-            />
-            <p className="text-xs text-muted-foreground">{t('المنتجات تحت الحد الأدنى')}</p>
-          </CardHeader>
-          <CardContent className="px-5">
+        <section className={cn(PANEL, 'min-w-0 p-5')}>
+          <PanelHeader
+            icon={AlertCircle}
+            tone="rose"
+            title="مخزون منخفض"
+            subtitle={t('المنتجات تحت الحد الأدنى')}
+            action={(data?.lowStockProducts?.length ?? 0) > 0 ? <SoftLink href="/inventory">عرض الكل</SoftLink> : undefined}
+          />
+          <div className="mt-4">
             {loading && !data ? (
               <div className="space-y-2">
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-10 w-full" />
+                  <Skeleton key={i} className="h-12 w-full rounded-xl" />
                 ))}
               </div>
             ) : data?.lowStockProducts?.length ? (
               <>
-              <ul className="space-y-1.5">
-                {data.lowStockProducts.slice(0, 8).map((p) => (
-                  <li
-                    key={p.id}
-                    className="flex items-center gap-2.5 rounded-xl bg-destructive-subtle/50 px-3 py-2.5 text-sm"
-                  >
-                    <StatusDot status="danger" pulse />
-                    <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span>
-                    <span className="shrink-0 text-xs font-bold tabular-nums text-destructive-subtle-foreground">
-                      {p.quantity} / {p.minQuantity}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {data.lowStockProducts.length > 8 && (
-                <Link href="/inventory" className="mt-2.5 block text-center text-xs font-semibold text-primary hover:underline">
-                  + {data.lowStockProducts.length - 8} منتج آخر — عرض الكل
-                </Link>
-              )}
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
-                <CheckCircle2 className="size-8 text-success" />
-                <p className="text-sm font-medium text-muted-foreground">المخزون في مستوى جيد</p>
-                <p className="text-xs text-muted-foreground/70">لا توجد منتجات تحت الحد الأدنى</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* صيانة نشطة */}
-        {hasMaintenance && (
-          <Card className="min-w-0 gap-4 rounded-3xl py-5 shadow-sm md:col-span-2 xl:col-span-1">
-            <CardHeader className="px-5">
-              <PanelTitle
-                icon={Wrench}
-                title="صيانة نشطة"
-                action={
-                  <Link href="/maintenance" className="text-xs font-semibold text-primary hover:underline">
-                    عرض الكل
-                  </Link>
-                }
-              />
-              <p className="text-xs text-muted-foreground">أوامر الصيانة الجارية</p>
-            </CardHeader>
-            <CardContent className="px-5">
-              {loading && !data ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <Skeleton key={i} className="h-11 w-full" />
-                  ))}
-                </div>
-              ) : data?.activeMaintenanceOrders?.length ? (
-                <ul className="divide-y divide-border">
-                  {data.activeMaintenanceOrders.map((o) => (
-                    <li key={o.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold">{o.customerName}</p>
-                        <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                          <span className="truncate">{o.device}</span>
-                          <span className="h-3 w-px shrink-0 bg-border" />
-                          <DateStamp iso={o.receivedAt} tz={tz} />
-                        </p>
-                      </div>
-                      <StatusChip tone={maintenanceTone(o.status)}>{o.status}</StatusChip>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
-                  <Wrench className="size-8 text-muted-foreground/50" />
-                  <p className="text-sm font-medium text-muted-foreground">لا توجد أوامر صيانة نشطة</p>
-                  <Link href="/maintenance" className="text-xs font-semibold text-primary hover:underline">
-                    إضافة أمر صيانة جديد
-                  </Link>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* ═════════ آخر المبيعات + المركز المالي ═════════ */}
-      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-      {/* ═════════ آخر المبيعات — سجل مجمّع بالأيام ═════════ */}
-      <section className="min-w-0 overflow-hidden rounded-3xl border bg-card shadow-sm xl:flex xl:h-[620px] xl:flex-col">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
-          <div>
-            <PanelTitle icon={Receipt} title="آخر المبيعات" />
-            <p className="mt-1 text-xs text-muted-foreground">
-              {saleGroups.count > 0 ? `آخر ${saleGroups.count} فاتورة` : 'لسه مفيش فواتير'}
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            {saleGroups.groups.length > 1 && (
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground">إجمالي المعروض</p>
-                <p className="text-lg font-extrabold tabular-nums leading-tight">{formatCurrency(saleGroups.total)}</p>
-              </div>
-            )}
-            <Link
-              href="/sales"
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-bold text-foreground transition-colors hover:border-primary/40 hover:bg-primary-subtle hover:text-primary-subtle-foreground"
-            >
-              سجل المبيعات
-              <ArrowUpLeft className="size-3.5" />
-            </Link>
-          </div>
-        </div>
-
-        {/* القائمة قابلة للتمرير جوّانيًا على شاشات كبيرة */}
-        <div className="min-h-0 flex-1 xl:overflow-y-auto">
-          {loading && !data ? (
-            <div className="space-y-2 p-5">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-14 w-full" />
-              ))}
-            </div>
-          ) : saleGroups.count === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 px-5 py-12 text-center">
-              <Receipt className="size-8 text-muted-foreground/50" />
-              <p className="text-sm font-medium text-muted-foreground">لا توجد مبيعات بعد</p>
-              <Link href="/pos" className="text-xs font-semibold text-primary hover:underline">
-                ابدأ أول فاتورة من نقطة البيع
-              </Link>
-            </div>
-          ) : (
-            saleGroups.groups.map((g) => (
-              <div key={g.key}>
-                <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/40 px-5 py-2 text-xs">
-                  <span className="font-bold text-foreground/80">{g.label}</span>
-                  <span className="flex items-center gap-3 text-muted-foreground">
-                    <span>{g.rows.length} فاتورة</span>
-                    <span className="font-bold tabular-nums text-foreground/80">{formatCurrency(g.total)}</span>
-                  </span>
-                </div>
-                <ul className="divide-y divide-border">
-                  {g.rows.map((s) => {
-                    const returned = s.status === 'مرتجعة'
-                    const done = s.status === 'مكتملة'
-                    const remaining = Math.max(0, (s.total ?? 0) - (s.paid ?? 0))
-                    const Icon = returned ? Undo2 : done ? Check : Clock
-                    const tone: Tone = returned ? 'danger' : done ? 'success' : 'warning'
+                <ul className="divide-y divide-border/70">
+                  {data.lowStockProducts.slice(0, 5).map((p) => {
+                    const out = p.quantity <= 0
+                    const pct = p.minQuantity > 0 ? (p.quantity / p.minQuantity) * 100 : 0
                     return (
-                      <li
-                        key={s.id}
-                        className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-1 px-5 py-3.5 transition-colors hover:bg-muted/40 md:grid-cols-[auto_minmax(0,1.3fr)_minmax(0,1fr)_auto]"
-                      >
-                        <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl', TONE[tone].chip)}>
-                          <Icon className="size-4" strokeWidth={2.4} />
-                          <span className="sr-only">{s.status}</span>
-                        </span>
-
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-bold tabular-nums">{s.invoiceNo ?? `#${s.id}`}</p>
-                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                            {s.customerName ?? 'بدون عميل'}
-                          </p>
-                        </div>
-
-                        <DateStamp iso={s.createdAt} tz={tz} className="hidden md:inline-flex" />
-
-                        <div className="text-end">
-                          <p className={cn('text-[15px] font-extrabold tabular-nums', returned && 'text-muted-foreground line-through decoration-destructive/60')}>
-                            {formatCurrency(s.total)}
-                          </p>
-                          {returned ? (
-                            <p className="mt-0.5 text-[11px] font-bold text-destructive">مرتجعة</p>
-                          ) : remaining > 0 ? (
-                            <p className="mt-0.5 text-[11px] font-bold text-warning-subtle-foreground">
-                              متبقي {formatCurrency(remaining)}
-                            </p>
+                      <li key={p.id} className="px-2 py-3 transition-colors hover:bg-muted/50">
+                        <div className="flex items-center justify-between gap-2.5">
+                          <span className="min-w-0 flex-1 truncate text-sm font-bold">{p.name}</span>
+                          {out ? (
+                            <Chip tone="danger" dot>نفد</Chip>
                           ) : (
-                            <DateStamp iso={s.createdAt} tz={tz} className="md:hidden" />
+                            <span className="shrink-0 text-xs font-extrabold tabular-nums text-rose-700 dark:text-rose-300">
+                              {p.quantity} / {p.minQuantity}
+                            </span>
                           )}
                         </div>
+                        <Meter pct={out ? 0 : Math.max(5, pct)} tone="rose" className="mt-2 h-1.5" />
                       </li>
                     )
                   })}
                 </ul>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-      {/* ═════════ المركز المالي — عمود جانبي ═════════ */}
-      <section className="min-w-0 overflow-hidden rounded-3xl border bg-card shadow-sm">
-        <div className="flex items-center gap-2 border-b border-border px-5 py-4">
-          <Boxes className="size-4 text-primary" />
-          <h2 className="text-[15px] font-bold">المركز المالي</h2>
-        </div>
-        <ul className="divide-y divide-border">
-          {[
-            { label: 'المخزون (تكلفة)', v: data?.stockValueCost ?? 0, dot: 'bg-slate-400' },
-            { label: 'المخزون (بيع)', v: data?.stockValuePrice ?? 0, dot: 'bg-primary' },
-            { label: 'ديون العملاء', v: data?.totalOutstandingDebt ?? 0, dot: 'bg-amber-500' },
-            { label: 'مستحق الموردين', v: data?.totalSupplierDebt ?? 0, dot: 'bg-rose-500' },
-          ].map((r) => (
-            <li key={r.label} className="flex items-center justify-between gap-3 px-5 py-3.5">
-              <span className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className={cn('size-2 rounded-full', r.dot)} />
-                {r.label}
-              </span>
-              {loadingFirst ? (
-                <Skeleton className="h-5 w-20" />
-              ) : (
-                <span className="text-base font-extrabold tabular-nums">{formatCurrency(r.v)}</span>
-              )}
-            </li>
-          ))}
-        </ul>
-        {data?.canViewProfits !== false && (
-          <div className="flex items-center justify-between gap-3 border-t border-border bg-primary-subtle/60 px-5 py-3.5">
-            <span className="text-xs font-semibold text-primary-subtle-foreground">الربح المتوقع من المخزون</span>
-            <span className="text-base font-extrabold tabular-nums text-primary-subtle-foreground">
-              {formatCurrency((data?.stockValuePrice ?? 0) - (data?.stockValueCost ?? 0))}
-            </span>
+                {data.lowStockProducts.length > 5 && (
+                  <Link href="/inventory" className="mt-3 block text-center text-xs font-bold text-primary hover:underline">
+                    + {data.lowStockProducts.length - 5} منتج آخر — عرض الكل
+                  </Link>
+                )}
+              </>
+            ) : (
+              <EmptyState icon={CheckCircle2} tone="emerald" title="المخزون في مستوى جيد" hint="لا توجد منتجات تحت الحد الأدنى" />
+            )}
           </div>
-        )}
-      </section>
+        </section>
+      </div>
+
+      {/* ═════════ آخر المبيعات + المركز المالي ═════════ */}
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        {/* ═════════ آخر المبيعات — جدول حديث مجمّع بالأيام ═════════ */}
+        <section className={cn(PANEL, 'min-w-0 overflow-hidden')}>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
+            <PanelHeader
+              icon={Receipt}
+              tone="emerald"
+              title="آخر المبيعات"
+              subtitle={saleGroups.count > 0 ? `آخر ${saleGroups.count} فاتورة` : 'لسه مفيش فواتير'}
+            />
+            <div className="flex items-center gap-4">
+              {saleGroups.groups.length > 1 && (
+                <div className="text-end">
+                  <p className="text-[11px] font-medium text-muted-foreground">إجمالي المعروض</p>
+                  <p className="text-lg font-black leading-tight tabular-nums">{formatCurrency(saleGroups.total)}</p>
+                </div>
+              )}
+              <SoftLink href="/sales">سجل المبيعات</SoftLink>
+            </div>
+          </div>
+
+          <div>
+            {loading && !data ? (
+              <div className="space-y-2 p-5">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-14 w-full rounded-xl" />
+                ))}
+              </div>
+            ) : saleGroups.count === 0 ? (
+              <EmptyState
+                icon={Receipt}
+                tone="emerald"
+                title="لا توجد مبيعات بعد"
+                action={
+                  <Link href="/pos" className="text-xs font-bold text-primary hover:underline">
+                    ابدأ أول فاتورة من نقطة البيع
+                  </Link>
+                }
+              />
+            ) : (
+              <>
+                {/* الشاشات المتوسطة فأكبر: جدول */}
+                <table className="hidden w-full text-sm md:table">
+                  <thead>
+                    <tr className="border-b text-[11px] font-bold text-muted-foreground">
+                      <th className="px-5 py-2.5 text-start font-bold">الفاتورة</th>
+                      <th className="px-3 py-2.5 text-start font-bold">العميل</th>
+                      <th className="px-3 py-2.5 text-start font-bold">الوقت</th>
+                      <th className="px-3 py-2.5 text-center font-bold">الحالة</th>
+                      <th className="px-3 py-2.5 text-end font-bold">الإجمالي</th>
+                      {hasRemaining && <th className="px-5 py-2.5 text-end font-bold">المتبقي</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {saleGroups.groups.map((g) => (
+                      <React.Fragment key={g.key}>
+                        <tr>
+                          <td colSpan={hasRemaining ? 6 : 5} className="border-b bg-muted/40 px-5 py-2 text-xs">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-extrabold text-foreground/80">{g.label}</span>
+                              <span className="flex items-center gap-3 text-muted-foreground">
+                                <span>{g.rows.length} فاتورة</span>
+                                <span className="font-extrabold tabular-nums text-foreground/80">{formatCurrency(g.total)}</span>
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                        {g.rows.map((s) => {
+                          const returned = s.status === 'مرتجعة'
+                          const done = s.status === 'مكتملة'
+                          const remaining = Math.max(0, (s.total ?? 0) - (s.paid ?? 0))
+                          const Icon = returned ? Undo2 : done ? Check : Clock
+                          const tone: Tone3D = returned ? 'rose' : done ? 'emerald' : 'amber'
+                          const chipTone: ChipTone = returned ? 'danger' : done ? 'success' : 'warning'
+                          return (
+                            <tr key={s.id} className="border-b border-border/70 transition-colors last:border-b-0 hover:bg-muted/40">
+                              <td className="px-5 py-3">
+                                <div className="flex items-center gap-2.5">
+                                  <span className="font-extrabold tabular-nums">{s.invoiceNo ?? `#${s.id}`}</span>
+                                  {!done && <StatusGlyph icon={Icon} tone={tone} />}
+                                </div>
+                              </td>
+                              <td className="max-w-[180px] truncate px-3 py-3 text-muted-foreground">{s.customerName ?? 'بدون عميل'}</td>
+                              <td className="px-3 py-3"><DateStamp iso={s.createdAt} tz={tz} /></td>
+                              <td className="px-3 py-3 text-center"><Chip tone={chipTone} dot>{s.status}</Chip></td>
+                              <td className={cn('px-3 py-3 text-end text-[15px] font-black tabular-nums', returned && 'text-muted-foreground line-through decoration-rose-500/60')}>
+                                {formatCurrency(s.total)}
+                              </td>
+                              {hasRemaining && (
+                                <td className="px-5 py-3 text-end tabular-nums">
+                                  {!returned && remaining > 0 ? (
+                                    <span className="text-xs font-extrabold text-amber-700 dark:text-amber-300">{formatCurrency(remaining)}</span>
+                                  ) : (
+                                    <span className="text-muted-foreground/50">—</span>
+                                  )}
+                                </td>
+                              )}
+                            </tr>
+                          )
+                        })}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* الجوال: قائمة */}
+                <div className="md:hidden">
+                  {saleGroups.groups.map((g) => (
+                    <div key={g.key}>
+                      <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2 text-xs">
+                        <span className="font-extrabold text-foreground/80">{g.label}</span>
+                        <span className="flex items-center gap-3 text-muted-foreground">
+                          <span>{g.rows.length} فاتورة</span>
+                          <span className="font-extrabold tabular-nums text-foreground/80">{formatCurrency(g.total)}</span>
+                        </span>
+                      </div>
+                      <ul className="divide-y divide-border/70">
+                        {g.rows.map((s) => {
+                          const returned = s.status === 'مرتجعة'
+                          const done = s.status === 'مكتملة'
+                          const remaining = Math.max(0, (s.total ?? 0) - (s.paid ?? 0))
+                          const Icon = returned ? Undo2 : done ? Check : Clock
+                          const tone: Tone3D = returned ? 'rose' : done ? 'emerald' : 'amber'
+                          return (
+                            <li key={s.id} className="flex items-center gap-3 px-4 py-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="flex items-center gap-2 text-sm font-extrabold tabular-nums">
+                                  <span className="truncate">{s.invoiceNo ?? `#${s.id}`}</span>
+                                  {!done && <StatusGlyph icon={Icon} tone={tone} />}
+                                </p>
+                                <p className="mt-0.5 truncate text-xs text-muted-foreground">{s.customerName ?? 'بدون عميل'}</p>
+                              </div>
+                              <div className="text-end">
+                                <p className={cn('text-[15px] font-black tabular-nums', returned && 'text-muted-foreground line-through decoration-rose-500/60')}>
+                                  {formatCurrency(s.total)}
+                                </p>
+                                {returned ? (
+                                  <p className="mt-0.5 text-[11px] font-bold text-rose-600 dark:text-rose-400">مرتجعة</p>
+                                ) : remaining > 0 ? (
+                                  <p className="mt-0.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">متبقي {formatCurrency(remaining)}</p>
+                                ) : (
+                                  <DateStamp iso={s.createdAt} tz={tz} />
+                                )}
+                              </div>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* ═════════ المركز المالي — عمود جانبي ═════════ */}
+        <section className={cn(PANEL, 'min-w-0 overflow-hidden')}>
+          <div className="border-b px-5 py-4">
+            <PanelHeader icon={Boxes} tone="violet" title="المركز المالي" subtitle="قيمة المخزون والمديونيات" />
+          </div>
+          <ul className="divide-y divide-border/70">
+            {[
+              { label: 'المخزون (تكلفة)', v: data?.stockValueCost ?? 0, icon: Boxes, tone: 'slate' as Tone3D },
+              { label: 'المخزون (بيع)', v: data?.stockValuePrice ?? 0, icon: ShoppingBag, tone: 'emerald' as Tone3D },
+              { label: 'ديون العملاء', v: data?.totalOutstandingDebt ?? 0, icon: Users, tone: 'amber' as Tone3D },
+              { label: 'مستحق الموردين', v: data?.totalSupplierDebt ?? 0, icon: Truck, tone: 'rose' as Tone3D },
+            ].map((r) => (
+              <li key={r.label} className="flex items-center justify-between gap-3 px-5 py-3.5 transition-colors hover:bg-muted/40">
+                <span className="flex items-center gap-3 text-sm font-medium text-muted-foreground">
+                  <span aria-hidden className={cn('grid size-8 shrink-0 place-items-center rounded-lg [&_svg]:size-4', TONE3D[r.tone].soft)}>
+                    <r.icon strokeWidth={2.2} />
+                  </span>
+                  {r.label}
+                </span>
+                {loadingFirst ? (
+                  <Skeleton className="h-5 w-20" />
+                ) : (
+                  <span className="text-base font-black tabular-nums">{formatCurrency(r.v)}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+          {showProfits && (
+            <div className="m-4 flex items-center justify-between gap-3 rounded-2xl border border-emerald-500/20 bg-gradient-to-l from-emerald-500/10 to-emerald-500/[0.03] px-4 py-3.5">
+              <span className="flex items-center gap-2 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                <TrendingUp className="size-4" />
+                الربح المتوقع من المخزون
+              </span>
+              <span className="text-base font-black tabular-nums text-emerald-800 dark:text-emerald-300">
+                {formatCurrency((data?.stockValuePrice ?? 0) - (data?.stockValueCost ?? 0))}
+              </span>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   )

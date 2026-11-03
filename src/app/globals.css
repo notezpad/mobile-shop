@@ -265,7 +265,7 @@
 :root {
   --radius: 0.75rem;
 
-  --background: oklch(0.955 0.004 95);
+  --background: oklch(0.97 0.004 95);
   --background-subtle: oklch(0.97 0.005 95);
   --background-muted: oklch(0.94 0.007 95);
   --foreground: oklch(0.21 0.02 162);

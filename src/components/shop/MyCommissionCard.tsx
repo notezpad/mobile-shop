@@ -10,11 +10,12 @@
  */
 
 import * as React from 'react'
-import { HandCoins } from 'lucide-react'
+import { CheckCircle2, HandCoins } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useDataRefresh } from '@/lib/offline/data-events'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { Chip, Icon3D, Meter, PANEL } from './dashboard-ui'
 
 interface MyCommissionData {
   enabled: boolean
@@ -65,53 +66,64 @@ export function MyCommissionCard() {
   const targetPct = data.target && data.target > 0 ? Math.min(100, Math.round((data.netBase / data.target) * 100)) : null
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-bl from-emerald-500/10 via-card to-card p-4 shadow-sm" aria-label="عمولتي هذا الشهر">
-      <header className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
-            <HandCoins className="size-[18px]" />
-          </span>
-          <div>
-            <h2 className="text-sm font-extrabold">عمولتي هذا الشهر</h2>
-            <p className="text-[11px] text-muted-foreground">
+    <section
+      className={cn(
+        PANEL,
+        'relative overflow-hidden border-emerald-500/20 bg-gradient-to-bl from-emerald-500/[0.07] via-card to-card p-4 sm:p-5',
+      )}
+      aria-label="عمولتي هذا الشهر"
+    >
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -end-12 -top-12 size-40 rounded-full bg-emerald-400/15 blur-3xl"
+      />
+      <header className="relative flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <Icon3D icon={HandCoins} tone="emerald" />
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-extrabold leading-tight">عمولتي هذا الشهر</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {data.invoices} فاتورة · مبيعات {formatCurrency(data.salesTotal)}
               {data.returnsTotal > 0 ? ` · مرتجعات ${formatCurrency(data.returnsTotal)}` : ''}
             </p>
           </div>
         </div>
         <div className="text-end">
-          <p className={cn('text-xl font-extrabold tabular-nums', data.commission < 0 && 'text-rose-600 dark:text-rose-400')}>
+          <p
+            className={cn(
+              'text-2xl font-black tabular-nums leading-tight sm:text-3xl',
+              data.commission < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-300',
+            )}
+          >
             {formatCurrency(data.commission)}
           </p>
-          <p className="text-[10px] font-bold text-muted-foreground">تقديري حتى الآن</p>
+          <Chip tone="neutral" className="mt-1 px-2 py-0.5 text-[10px]">تقديري حتى الآن</Chip>
         </div>
       </header>
 
       {data.target != null && targetPct != null && (
-        <div className="mt-3">
-          <div className="mb-1 flex items-center justify-between text-[11px] font-bold">
-            <span className={data.targetMet ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
-              {data.targetMet ? '✓ حققت التارجت' : `التارجت: ${formatCurrency(data.target)}`}
+        <div className="relative mt-4 rounded-2xl border bg-background/60 p-3.5">
+          <div className="mb-2 flex items-center justify-between gap-2 text-xs font-bold">
+            <span className={data.targetMet ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>
+              {data.targetMet ? '✓ حققت التارجت' : 'لسه ما حققتش التارجت'}
             </span>
-            <span className="tabular-nums text-muted-foreground">{targetPct}%</span>
+            <span className="tabular-nums text-muted-foreground">
+              {formatCurrency(data.netBase)} من {formatCurrency(data.target)} · {targetPct}%
+            </span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className={cn('h-full rounded-full transition-all', data.targetMet ? 'bg-emerald-500' : 'bg-amber-500')}
-              style={{ width: `${targetPct}%` }}
-            />
-          </div>
+          <Meter pct={targetPct} tone={data.targetMet ? 'emerald' : 'amber'} />
           {!data.targetMet && (
-            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-              أوصل {formatCurrency(data.netBase)} من {formatCurrency(data.target)} — لما تحقق التارجت عمولتك بتتحسب على مبيعات الشهر كلها.
+            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+              لما تحقق التارجت عمولتك بتتحسب على مبيعات الشهر كلها.
             </p>
           )}
         </div>
       )}
 
       {data.payout && (
-        <p className="mt-3 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
-          ✓ تم صرف {formatCurrency(data.payout.amount)} {data.payout.viaPayroll ? '(مع الراتب)' : ''}
+        <p className="relative mt-3 flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+          <CheckCircle2 className="size-4 shrink-0" />
+          تم صرف {formatCurrency(data.payout.amount)} {data.payout.viaPayroll ? '(مع الراتب)' : ''}
         </p>
       )}
     </section>

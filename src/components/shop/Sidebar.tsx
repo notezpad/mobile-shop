@@ -9,7 +9,7 @@ import {
   PackagePlus, Wallet, ReceiptText, Banknote, Warehouse, Building2,
   BarChart3, Settings as SettingsIcon, UserCog, Power, ChevronLeft, ChevronDown, Store,
   Boxes, Activity, ArrowRightLeft, ClipboardCheck, UsersRound, CalendarCheck, HandCoins, BadgeDollarSign, TreePalm as PalmtreeIcon, Award,
-  Percent, CircleUserRound,
+  Percent, CircleUserRound, Plus, Minus, // 🛑 ضفنا Plus و Minus
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -115,11 +115,11 @@ function NavButton({
       onClick={onNavigate}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'group relative flex w-full items-center gap-3 rounded-xl transition-all duration-200',
-        'min-h-[52px] px-3 py-2.5 text-[14px]',
+        'group relative flex w-full items-center gap-3.5 rounded-xl transition-all duration-200',
+        'min-h-[48px] px-3 py-2 text-[15px]',
         active
           ? 'bg-gradient-to-l from-emerald-50 to-transparent dark:from-emerald-500/10 dark:to-transparent text-emerald-800 dark:text-emerald-300 font-bold shadow-[0_2px_10px_-4px_rgba(16,185,129,0.3)]'
-          : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200 font-medium',
+          : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200 font-semibold',
         collapsed && 'justify-center px-0',
       )}
     >
@@ -135,7 +135,7 @@ function NavButton({
             : 'bg-transparent text-slate-400 group-hover:text-emerald-500 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-500/10',
         )}
       >
-        <Icon strokeWidth={active ? 2.5 : 2} className="size-5" />
+        <Icon strokeWidth={active ? 2.5 : 2.2} className="size-[20px]" />
       </span>
 
       {!collapsed && (
@@ -236,35 +236,54 @@ function InventoryGroup({
         onFocus={warmInventory}
         aria-expanded={open}
         className={cn(
-          'group relative flex min-h-[52px] w-full items-center gap-3 rounded-xl px-3 py-2.5 text-right text-[14px] transition-all duration-200',
-          inInventory
+          'group relative flex min-h-[48px] w-full items-center gap-3.5 rounded-xl px-3 py-2 text-right text-[15px] transition-all duration-300',
+          inInventory || open
             ? 'bg-gradient-to-l from-emerald-50 to-transparent dark:from-emerald-500/10 dark:to-transparent text-emerald-800 dark:text-emerald-300 font-bold shadow-[0_2px_10px_-4px_rgba(16,185,129,0.3)]'
-            : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 font-medium',
+            : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 font-semibold',
         )}
       >
         {inInventory && (
           <span className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-6 rounded-l-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.6)]" />
         )}
+        
         <span
           className={cn(
-            'relative grid size-9 shrink-0 place-items-center rounded-lg transition-all duration-200',
-            inInventory
+            'relative grid size-9 shrink-0 place-items-center rounded-lg transition-all duration-300',
+            inInventory || open
               ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
               : 'text-slate-400 group-hover:text-emerald-500 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-500/10',
           )}
         >
-          <Warehouse strokeWidth={inInventory ? 2.5 : 2} className="size-5" />
+          <Warehouse strokeWidth={inInventory ? 2.5 : 2.2} className="size-[20px]" />
         </span>
+        
         <span className="flex-1 truncate mt-0.5">المخزون</span>
-        <ChevronDown className={cn('size-4 shrink-0 opacity-60 transition-transform duration-200', open && 'rotate-180')} />
+        
+        {/* 🛑 السحر هنا: زرار الزائد/الناقص */}
+        <span 
+          className={cn(
+            'grid size-6 shrink-0 place-items-center rounded-full transition-all duration-300',
+            open 
+              ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 rotate-180' 
+              : 'bg-slate-100 text-slate-400 dark:bg-slate-800/50 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'
+          )}
+        >
+          {open ? <Minus className="size-3.5" strokeWidth={3} /> : <Plus className="size-3.5" strokeWidth={3} />}
+        </span>
       </button>
 
       <div
         style={{ display: open ? 'block' : 'none' }}
-        className={open ? 'animate-in slide-in-from-top-1 fade-in duration-200' : undefined}
+        className={open ? 'animate-in slide-in-from-top-1 fade-in duration-300' : undefined}
       >
         <div className="relative mt-1 space-y-1 pe-0 pb-1">
-          <span className="absolute bottom-2 top-0 w-px bg-slate-200 dark:bg-slate-800" style={{ insetInlineStart: '24px' }} />
+          <span 
+            className="absolute bottom-2 top-0 w-px transition-colors duration-300" 
+            style={{ 
+              insetInlineStart: '24px', 
+              backgroundColor: open ? 'rgba(16,185,129,0.3)' : 'var(--border)' // 🛑 الخط بينور لما يفتح
+            }} 
+          />
           {(blindOnly ? INVENTORY_CHILDREN.filter((c) => c.path === '/inventory/stocktake') : INVENTORY_CHILDREN).map((child) => {
             const active = pathname === child.path
             const ChildIcon = child.icon
@@ -279,10 +298,10 @@ function InventoryGroup({
                 onFocus={warm}
                 onClick={onNavigate}
                 className={cn(
-                  'group/child relative flex min-h-[42px] items-center gap-3 rounded-lg py-1.5 pe-2 text-sm transition-all duration-200 ps-[42px]',
+                  'group/child relative flex min-h-[42px] items-center gap-3 rounded-lg py-1.5 pe-2 text-[14px] transition-all duration-200 ps-[42px]',
                   active
                     ? 'bg-emerald-50/50 dark:bg-emerald-500/5 font-bold text-emerald-800 dark:text-emerald-200'
-                    : 'font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/30',
+                    : 'font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/30',
                 )}
               >
                 <span className="absolute top-1/2 h-px w-[12px]" style={{ insetInlineStart: '24px', backgroundColor: active ? child.color : 'var(--border)' }} />
@@ -290,7 +309,7 @@ function InventoryGroup({
                   className="relative grid size-8 shrink-0 place-items-center rounded-md transition-all duration-200 group-hover/child:scale-105"
                   style={active ? { backgroundColor: child.color, color: '#fff', boxShadow: `0 2px 8px -2px ${child.color}80` } : { backgroundColor: `${child.color}15`, color: child.color }}
                 >
-                  <ChildIcon strokeWidth={active ? 2.4 : 2} className="size-4" />
+                  <ChildIcon strokeWidth={active ? 2.4 : 2.2} className="size-[18px]" />
                 </span>
                 <span className="relative flex-1 truncate mt-0.5">{child.label}</span>
               </Link>
@@ -370,10 +389,10 @@ function HrGroup({ collapsed, onNavigate, staffOnly }: { collapsed?: boolean; on
         onFocus={warmHr}
         aria-expanded={open}
         className={cn(
-          'group relative flex min-h-[52px] w-full items-center gap-3 rounded-xl px-3 py-2.5 text-right text-[14px] transition-all duration-200',
-          inHr
+          'group relative flex min-h-[48px] w-full items-center gap-3.5 rounded-xl px-3 py-2 text-right text-[15px] transition-all duration-300',
+          inHr || open
             ? 'bg-gradient-to-l from-emerald-50 to-transparent dark:from-emerald-500/10 dark:to-transparent text-emerald-800 dark:text-emerald-300 font-bold shadow-[0_2px_10px_-4px_rgba(16,185,129,0.3)]'
-            : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 font-medium',
+            : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 font-semibold',
         )}
       >
         {inHr && (
@@ -381,21 +400,38 @@ function HrGroup({ collapsed, onNavigate, staffOnly }: { collapsed?: boolean; on
         )}
         <span
           className={cn(
-            'relative grid size-9 shrink-0 place-items-center rounded-lg transition-all duration-200',
-            inHr
+            'relative grid size-9 shrink-0 place-items-center rounded-lg transition-all duration-300',
+            inHr || open
               ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
               : 'text-slate-400 group-hover:text-emerald-500 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-500/10',
           )}
         >
-          <UsersRound strokeWidth={inHr ? 2.5 : 2} className="size-5" />
+          <UsersRound strokeWidth={inHr ? 2.5 : 2.2} className="size-[20px]" />
         </span>
         <span className="flex-1 truncate mt-0.5">الموارد البشرية</span>
-        <ChevronDown className={cn('size-4 shrink-0 opacity-60 transition-transform duration-200', open && 'rotate-180')} />
+        
+        {/* 🛑 السحر هنا: زرار الزائد/الناقص */}
+        <span 
+          className={cn(
+            'grid size-6 shrink-0 place-items-center rounded-full transition-all duration-300',
+            open 
+              ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 rotate-180' 
+              : 'bg-slate-100 text-slate-400 dark:bg-slate-800/50 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'
+          )}
+        >
+          {open ? <Minus className="size-3.5" strokeWidth={3} /> : <Plus className="size-3.5" strokeWidth={3} />}
+        </span>
       </button>
 
-      <div style={{ display: open ? 'block' : 'none' }} className={open ? 'animate-in slide-in-from-top-1 fade-in duration-200' : undefined}>
+      <div style={{ display: open ? 'block' : 'none' }} className={open ? 'animate-in slide-in-from-top-1 fade-in duration-300' : undefined}>
         <div className="relative mt-1 space-y-1 pe-0 pb-1">
-          <span className="absolute bottom-2 top-0 w-px bg-slate-200 dark:bg-slate-800" style={{ insetInlineStart: '24px' }} />
+          <span 
+            className="absolute bottom-2 top-0 w-px transition-colors duration-300" 
+            style={{ 
+              insetInlineStart: '24px', 
+              backgroundColor: open ? 'rgba(16,185,129,0.3)' : 'var(--border)'
+            }} 
+          />
           {children.map((child) => {
             const active = pathname === child.path
             const ChildIcon = child.icon
@@ -410,10 +446,10 @@ function HrGroup({ collapsed, onNavigate, staffOnly }: { collapsed?: boolean; on
                 onFocus={warm}
                 onClick={onNavigate}
                 className={cn(
-                  'group/child relative flex min-h-[42px] items-center gap-3 rounded-lg py-1.5 pe-2 text-sm transition-all duration-200 ps-[42px]',
+                  'group/child relative flex min-h-[42px] items-center gap-3 rounded-lg py-1.5 pe-2 text-[14px] transition-all duration-200 ps-[42px]',
                   active
                     ? 'bg-emerald-50/50 dark:bg-emerald-500/5 font-bold text-emerald-800 dark:text-emerald-200'
-                    : 'font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/30',
+                    : 'font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/30',
                 )}
               >
                 <span className="absolute top-1/2 h-px w-[12px]" style={{ insetInlineStart: '24px', backgroundColor: active ? child.color : 'var(--border)' }} />
@@ -421,7 +457,7 @@ function HrGroup({ collapsed, onNavigate, staffOnly }: { collapsed?: boolean; on
                   className="relative grid size-8 shrink-0 place-items-center rounded-md transition-all duration-200 group-hover/child:scale-105"
                   style={active ? { backgroundColor: child.color, color: '#fff', boxShadow: `0 2px 8px -2px ${child.color}80` } : { backgroundColor: `${child.color}15`, color: child.color }}
                 >
-                  <ChildIcon strokeWidth={active ? 2.4 : 2} className="size-4" />
+                  <ChildIcon strokeWidth={active ? 2.4 : 2.2} className="size-[18px]" />
                 </span>
                 <span className="relative flex-1 truncate mt-0.5">{child.label}</span>
               </Link>
@@ -486,9 +522,8 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
 
 function SectionLabel({ label }: { label: string }) {
   return (
-    // 🛑 قللنا الـ pt من 5 إلى 1.5 عشان نقرب الكلمة من الهيدر
-    <div className="flex items-center gap-3 px-3 pb-2 pt-1.5">
-      <p className="select-none text-[11px] font-bold tracking-widest text-slate-400/80 dark:text-slate-500/80">
+    <div className="flex items-center gap-3 px-3 pb-1.5 pt-2">
+      <p className="select-none text-xs font-bold tracking-widest text-slate-400/80 dark:text-slate-500/80">
         {label}
       </p>
       <div className="h-px flex-1 bg-gradient-to-l from-slate-200 to-transparent dark:from-slate-800 to-transparent" />
@@ -580,7 +615,7 @@ function StatusCard({ collapsed }: { collapsed?: boolean }) {
   return (
     <div className="flex h-[42px] items-center gap-2.5 rounded-full border border-slate-200/60 bg-white dark:border-slate-800/60 dark:bg-slate-900/50 px-3 shadow-sm">
       <Led online={online} />
-      <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-slate-700 dark:text-slate-300">{label}</span>
+      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-700 dark:text-slate-300">{label}</span>
       {online && <span dir="ltr" className="text-[10px] tabular-nums font-medium text-slate-400 dark:text-slate-500" style={{ fontFamily: MONO }}>{clock}</span>}
       <SignalBars level={bars} />
     </div>
@@ -611,7 +646,7 @@ function LogoutButton({ collapsed }: { collapsed?: boolean }) {
       {collapsed ? iconTile('size-7') : (
         <>
           {iconTile('size-8')}
-          <span className="flex-1 text-right text-[13px] font-bold">تسجيل الخروج</span>
+          <span className="flex-1 text-right text-sm font-bold">تسجيل الخروج</span>
           <ChevronLeft className="size-3.5 opacity-50 transition-transform duration-200 group-hover:-translate-x-0.5 group-hover:opacity-100" />
         </>
       )}
@@ -724,8 +759,7 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
           </div>
 
           {!collapsed ? (
-            // 🛑 هنا ضفنا mt-4 عشان نفصل قسم "الإدارة" عن قسم "الرئيسية" بشكل مريح
-            <div className="mt-4"><SectionLabel label="الإدارة" /></div>
+            <div className="mt-3"><SectionLabel label="الإدارة" /></div>
           ) : (
             <div className="my-3 mx-auto h-px w-6 bg-slate-200 dark:bg-slate-800" />
           )}
