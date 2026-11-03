@@ -91,7 +91,7 @@ function LiveClock({ timeZone }: { timeZone: string }) {
     return () => clearInterval(id)
   }, [])
 
-  if (!mounted) return <div className="h-9 w-[220px] shrink-0 rounded-xl bg-muted/50 animate-pulse" />
+  if (!mounted) return <div className="h-10 w-[220px] shrink-0 rounded-full bg-slate-100 dark:bg-slate-800 animate-pulse" />
 
   const pad = (n: number) => String(n).padStart(2, '0')
   const wall = getWallTimeInTz(now, timeZone)
@@ -106,26 +106,27 @@ function LiveClock({ timeZone }: { timeZone: string }) {
   const year = wall.year
 
   return (
-    <div className="inline-flex h-10 shrink-0 items-stretch overflow-hidden rounded-xl border border-border bg-card">
+    // 🛑 التصميم الجديد للكبسولة (Pill) الخاص بالوقت والتاريخ
+    <div className="inline-flex h-10 shrink-0 items-stretch overflow-hidden rounded-full border border-slate-200/60 bg-white shadow-sm dark:border-slate-800/60 dark:bg-slate-900/50">
       {/* ── الوقت ── */}
-      <div className="flex items-center gap-2 px-3">
-        <span className="relative flex size-1.5 shrink-0">
+      <div className="flex items-center gap-2 px-4">
+        <span className="relative flex size-2 shrink-0">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-          <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
+          <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
         </span>
         <div dir="ltr" className="flex items-baseline gap-px tabular-nums">
-          <span className="text-sm font-bold tracking-tight text-foreground">{pad(h)}:{m}</span>
-          <span className="text-[11px] font-medium text-muted-foreground/60">:{s}</span>
-          <span className="ml-1 text-[10px] font-bold text-muted-foreground">{period}</span>
+          <span className="text-[13px] font-bold tracking-tight text-slate-700 dark:text-slate-200">{pad(h)}:{m}</span>
+          <span className="text-[10px] font-medium text-slate-400">:{s}</span>
+          <span className="ml-1 text-[10px] font-bold text-slate-500 dark:text-slate-400">{period}</span>
         </div>
       </div>
 
-      <div className="w-px shrink-0 bg-border" />
+      <div className="w-px shrink-0 bg-slate-200/60 dark:bg-slate-800" />
 
       {/* ── التاريخ ── */}
-      <div className="flex items-center gap-1.5 bg-muted/40 px-3">
-        <CalendarDays className="size-3.5 shrink-0 text-muted-foreground/60" />
-        <span dir="rtl" className="whitespace-nowrap text-xs font-semibold text-muted-foreground">
+      <div className="flex items-center gap-1.5 bg-slate-50/50 dark:bg-slate-800/30 px-4">
+        <CalendarDays className="size-3.5 shrink-0 text-slate-400" />
+        <span dir="rtl" className="whitespace-nowrap text-[11px] font-semibold text-slate-600 dark:text-slate-300">
           {dayName}، {day} {month} {year}
         </span>
       </div>
@@ -179,38 +180,16 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
     let alive = true
     ;(async () => {
       // ⚡ PERF FIX (2026-10-05 — بطء فتح أي صفحة على الجوال):
-      //
-      // القديم: getMe() ← في انتظار → وبعدها /api/tenant + /api/subscription
-      // بالتوازي ← في انتظار → وبعدها bootState='authed' والصفحة تظهر.
-      // يعني shell كامل واقف ورا سبينر لحد ما تخلص **2 مرات متتالية** من
-      // الـ round-trips على شبكة موبايل + سيرفر بيقعد يفتح اتصال Postgres
-      // جديد لكل ريكويست. ده كان بيضيف 1-3 ثواني على كل فتح للتطبيق.
-      //
-      // الجديد:
-      //   1) bootState بيتقفل بمجرد ما getMe يرجع (أسرع FCP ممكن) —
-      //      بيانات المحل/الاشتراك دي للعرض فقط (اسم المحل، اللوجو،
-      //      البانر، الساعة) فمش لازم تحجب الشاشة.
-      //   2) tenant + subscription بييجوا في الخلفية بالتوازي بعد me.
-      //   3) fast-boot: للزيارات المتكررة في نفس التاب (أو PWA)، بنرجّع
-      //      اليوزر من sessionStorage فوراً ونفتح الشل على طول، وبعدين
-      //      نعيد التحقق من السيشن في الخلفية — لو السيشن خلصت فعلاً،
-      //      آلية الـ 401 الموجودة (SessionGuard + notifySessionExpired)
-      //      هتفرّغ اليوزر وترجّعه للوجين زي ما هي.
       let cachedUser: AuthUser | null = null
       try {
         const raw = sessionStorage.getItem('boot-user-v1')
         const parsed = raw ? JSON.parse(raw) : null
-        // صلاحية قصيرة جداً (10 دقايق) — كفاية للتنقل السريع بين فتح
-        // وتقفيل التاب، وقصيرة كفاية إن أي تغيير حساب حقيقي يتشاف فوراً
-        // من إعادة التحقق في الخلفية.
         if (parsed?.user?.userId && Date.now() - parsed.at < 10 * 60 * 1000) {
           cachedUser = parsed.user as AuthUser
         }
       } catch { /* ignore */ }
 
       if (cachedUser) {
-        // اسم المحل المخبّأ (نفس اليوزر + نفس صلاحية الـ 10 دقايق) — عشان السايدبار
-        // يظهر الاسم الصح من أول فريم بدل ما يستنى /api/tenant.
         try {
           const rawShop = sessionStorage.getItem('boot-shop-v1')
           const ps = rawShop ? JSON.parse(rawShop) : null
@@ -223,13 +202,11 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         setBootState('authed')
       }
 
-      // الخطوة 1: السيشن (no-store دايمًا — مصدر الحقيقة للأمان)
       const meResult = await Promise.allSettled([getMe()]).then((r) => r[0])
       if (!alive) return
 
       const me = meResult.status === 'fulfilled' ? meResult.value : null
       if (!me) {
-        // مفيش سيشن حقيقية → نمسح أي fast-boot مخبّأ ونطلع للوجين
         try { sessionStorage.removeItem('boot-user-v1') } catch { /* ignore */ }
         setUser(null)
         setBootState('guest')
@@ -238,7 +215,6 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
       try { sessionStorage.setItem('boot-user-v1', JSON.stringify({ user: me, at: Date.now() })) } catch { /* ignore */ }
       setUser(me)
 
-      // الخطوة 2 (خلفية): بيانات المحل + الاشتراك — بالتوازي وبغير حاجب
       ;(async () => {
         const [tenantResult, subResult] = await Promise.allSettled([
           api<{ shopName?: string; phone?: string | null; address?: string | null; logoPath?: string | null; invoicePrefix?: string; timezone?: string; paymentMethodsConfig?: string; sellerCommissionsEnabled?: boolean }>('/api/tenant'),
@@ -257,13 +233,8 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
             address: t?.address ?? null,
             logoPath: t?.logoPath ?? null,
             invoicePrefix: t?.invoicePrefix || 'INV',
-            // 🛡️ 2026-09-27: تولبار الساعة/التاريخ فوق بيتبع دلوقتي المنطقة
-            // الزمنية بتاعة المحل (مش جهاز المستخدم) — راجع LiveClock تحت.
             timezone: t?.timezone || 'Africa/Cairo',
-            // 💳 وسائل الدفع المفعّلة للمحل — نقطة البيع ودفعات العملاء بيقراوها من هنا.
-            // parse آمن: أي شكل قديم/تالف بيرجع للسلوك القديم من غير ما يكسر حاجة.
             paymentMethods: parsePaymentMethodsConfig(t?.paymentMethodsConfig),
-            // 💰 (التحديث الثالث عشر) عمولات البائعين — بتتحكم في خانة «البائع» في نقطة البيع
             sellerCommissionsEnabled: t?.sellerCommissionsEnabled === true,
           })
         }
@@ -283,7 +254,6 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           })
           if (Array.isArray(d?.enabledModules)) {
             setPlan({
-              // 🥬 2026-10-12: أضفنا النشاط الغذائي 'food' (عطارة/مجمدات/بقالة/منظفات)
               businessType:
                 d.businessType === 'fashion'
                   ? 'fashion'
@@ -297,7 +267,6 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         }
       })()
 
-      // الخطوة 3: SUPER_ADMIN يتحوّل للوحة الأدمن (نفس السلوك القديم)
       if (me.role === 'SUPER_ADMIN' && !(me as any).impersonating) {
         setBootState('admin')
         router.replace('/')
@@ -321,8 +290,6 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
     }
   }, [bootState, router])
 
-  // 👥 الموارد البشرية: لو الباقة مفيهاش الموديول (أساسية/غذائية) الصفحات كأنها مش موجودة،
-  // والمشرف (hr_attendance) مايدخلش غير الحضور والإجازات. الـ API بيرفض برضه (ده مجرد غلاف للواجهة).
   const isAdminUser = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN'
   const hrPath = pathname.replace(/\/+$/, '')
   const hrBlocked =
@@ -351,17 +318,8 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    // 🛡️ الشِل ثابت (fixed inset-0) بدل h-screen: كده الهيدر والسايدبار مش
-    // بيتحركوا أبدًا مع سكرول الصفحة على الموبايل — السكرول بس داخل منطقة
-    // المحتوى. (h-screen = 100vh كان أطول من الشاشة الظاهرة في كروم موبايل.)
     <div className="fixed inset-0 flex flex-col bg-background overflow-hidden overscroll-none">
-      {/* 🎨 v15 — البانرات العائمة (اشتراك/أوفلاين/مزامنة):
-          حاوية fixed أسفل الشاشة بـ pointer-events-none — البانرات بتظهر
-          كطبقة عائمة فوق المحتوى بدون ما تاخد أي ارتفاع من تدفق الصفحة
-          = صفر إزاحة للهيدر/التولبار/العناصر مهما ظهرت أو اختفت.
-          الكروت نفسها pointer-events-auto فبتستقبل الضغط هي فقط.
-          على نقطة البيع (موبايل/تابلت) بترتفع فوق شريط إتمام البيع الثابت.
-          الترتيب: كارت الاشتراك فوق، وبانر الحالة تحته قريب من الحافة. */}
+      {/* 🎨 البانرات العائمة */}
       <div
         className={`pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-2 px-3 ${
           pathname === '/pos'
@@ -373,68 +331,49 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         <TrialExpiredBanner />
         <OfflineIndicator />
       </div>
-      {/* Mobile top bar */}
-      <header className="z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-card/90 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-md lg:hidden">
+
+      {/* ──────────────── Mobile top bar ──────────────── */}
+      <header className="z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-slate-200/60 bg-white/80 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-md dark:border-slate-800/60 dark:bg-slate-950/80 lg:hidden">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <button type="button" aria-label="فتح القائمة" className="shell-icon-btn" onClick={() => setMobileOpen(true)}>
             <Menu className="size-5" />
           </button>
-          {/* زر الرئيسية: نفس شكل لوجو السايدبار، يرجّع للوحة المعلومات */}
           <Link
             href="/dashboard"
             aria-label="الرئيسية — لوحة المعلومات"
-            className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-sm ring-1 ring-brand-500/20 transition-transform active:scale-90"
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-500/20 ring-1 ring-white/20 transition-transform active:scale-90 hover:scale-105"
           >
             <Home className="size-[18px]" strokeWidth={1.9} />
           </Link>
-          <div className="header-divider" />
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-2">
           <ThemeToggle />
-          <div className="header-divider" />
           <NotificationBell />
-          <div className="header-divider" />
           <RoleBadge role={user?.role as any} />
         </div>
       </header>
 
-      {/* Mobile sidebar */}
-      {/* 🛡️ 2026-10-06 — إصلاح تجمّد الجوال بالكامل: درَجер بسيط بدون Radix Dialog
-          خالص. التاريخ: باتش v5 حط forceMount على SheetContent عشان يسرّع
-          الفتح، بس ده خلّى Radix Overlay (اللي جوّه RemoveScroll) متركّب
-          على طول → listeners غير passiva على document بتعمل preventDefault
-          لكل touchmove = سكرول الجوال ميت + أي لمسة بتنزل 1px الـ click
-          بتاعها بيتلغى. وحتى بعد modal={false}، اختبارات المتصفح أثبتت إن
-          وجود الشيت الـ forceMounted بيفسد dispatch بتاع React للضغطات
-          الحقيقية (isTrusted) على الهيدر كله (المصدر: react-dialog 1.1.23
-          + Presence/DismissableLayer مع forceMount).
-          الحل النهائي: درَجر عادي — div ثابت بيتحرك بـ translate-x CSS.
-          * شجرة السايدبار متجمّعة دايمًا جوّاه → الفتح فوري (300ms أنيميشن
-            CSS نضيف من غير إعادة بناء — نفس هدف forceMount بالظبط).
-          * مقفول = translate-x-full (بره الشاشة) + inert (مش بياخد focus
-            ولا يترى لقارئات الشاشة) — مفيش أي طبقة فوق الصفحة.
-          * مفيش قفل سكرول خالص: الشل fixed inset-0 + overflow-hidden،
-            والمس على الـ Overlay (غير قابل للسكرول) مش بيسكرول حاجة وراه. */}
-      {/* الظل الخلفي */}
+      {/* Mobile sidebar overlay */}
       <div
         aria-hidden="true"
         onClick={() => setMobileOpen(false)}
-        className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 ${
+        className={`fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-300 ${
           mobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
       />
-      {/* الدرج نفسه */}
+      
+      {/* Mobile sidebar drawer */}
       <div
         role="dialog"
         aria-modal="true"
         aria-label="قائمة التنقل"
         data-state={mobileOpen ? 'open' : 'closed'}
         inert={!mobileOpen}
-        className={`fixed inset-y-0 right-0 z-50 flex h-dvh w-[82vw] max-w-[300px] flex-col bg-background shadow-lg transition-transform duration-300 ease-in-out ${
+        className={`fixed inset-y-0 right-0 z-50 flex h-dvh w-[82vw] max-w-[300px] flex-col bg-background shadow-2xl transition-transform duration-300 ease-in-out ${
           mobileOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        {/* مقبض جانبي في منتصف الحافة، بعيد عن الشعار وعناصر التنقل */}
         <Button
           type="button"
           variant="sidebar-handle"
@@ -449,49 +388,46 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           </span>
           <ChevronRight className="size-4" aria-hidden="true" strokeWidth={2.2} />
         </Button>
-        {/* w-full: السايدبار يملا الدرج بالكامل */}
         <Sidebar className="w-full border-l-0" onNavigate={() => setMobileOpen(false)} />
       </div>
-      {/* إغلاق بزرار Escape (سلوك الشيت القديم) */}
       <EscapeCloser onEscape={() => setMobileOpen(false)} enabled={mobileOpen} />
 
-      {/*
-        Sidebar + Main content in a flex-row.
-        البانرات (اشتراك/أوفلاين/مزامنة) بقت عائمة fixed أسفل الشاشة —
-        فالسايدبار والمحتوى بياخدوا الارتفاع الكامل دايماً بدون أي إزاحة.
-      */}
+      {/* ──────────────── Main Layout ──────────────── */}
       <div className="flex flex-1 min-h-0">
-        {/* Icon rail sidebar — md to lg only (68px collapsed) */}
+        
+        {/* Icon rail sidebar — md to lg only */}
         <div className="hidden md:max-lg:flex shrink-0 h-full">
           <Sidebar collapsed />
         </div>
 
-        {/* Desktop sidebar — lg and up (260px full) */}
+        {/* Desktop sidebar — lg and up */}
         <div className="hidden lg:flex shrink-0 h-full">
           <Sidebar />
         </div>
 
         {/* Main content */}
         <div className="flex min-w-0 flex-1 flex-col min-h-0">
-        {/* Desktop header */}
-        <header className="sticky top-0 z-20 hidden h-16 shrink-0 items-center justify-between border-b bg-card/90 px-6 backdrop-blur-md lg:flex">
-          <LiveClock timeZone={tenantTimezone || 'Africa/Cairo'} />
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <div className="header-divider" />
-            <NotificationBell />
-            <div className="header-divider" />
-            <RoleBadge role={user?.role as any} />
-          </div>
-        </header>
+          
+          {/* ──────────────── Desktop Header ──────────────── */}
+          <header className="sticky top-0 z-20 hidden h-[72px] shrink-0 items-center justify-between border-b border-slate-200/60 bg-white/80 px-6 backdrop-blur-md dark:border-slate-800/60 dark:bg-slate-950/80 lg:flex">
+            <LiveClock timeZone={tenantTimezone || 'Africa/Cairo'} />
+            
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
+              <div className="h-5 w-px bg-slate-200 dark:bg-slate-800" />
+              <NotificationBell />
+              <div className="h-5 w-px bg-slate-200 dark:bg-slate-800" />
+              <RoleBadge role={user?.role as any} />
+            </div>
+          </header>
 
-        {/* Scrollable content area — renders the page */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain min-h-0 min-w-0">
-          <div className="p-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 min-w-0">
-            {hrBlocked ? null : children}
+          {/* Scrollable content area */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain min-h-0 min-w-0">
+            <div className="p-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 min-w-0">
+              {hrBlocked ? null : children}
+            </div>
           </div>
         </div>
-      </div>
       </div>
       <PWAInstallPrompt />
     </div>

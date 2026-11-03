@@ -116,31 +116,30 @@ function NavButton({
       aria-current={active ? 'page' : undefined}
       className={cn(
         'group relative flex w-full items-center gap-3 rounded-xl transition-all duration-200',
-        'min-h-[48px] px-3 py-2 text-[15px]',
+        'min-h-[52px] px-3 py-2.5 text-[14px]',
         active
-          ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-100 font-bold shadow-sm ring-1 ring-emerald-500/20'
-          : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200 font-semibold',
+          ? 'bg-gradient-to-l from-emerald-50 to-transparent dark:from-emerald-500/10 dark:to-transparent text-emerald-800 dark:text-emerald-300 font-bold shadow-[0_2px_10px_-4px_rgba(16,185,129,0.3)]'
+          : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200 font-medium',
         collapsed && 'justify-center px-0',
       )}
     >
-      {/* 🛑 خط ملون يمتد بطول التاب النشط ليعطيه ثباتاً وقوة */}
       {active && !collapsed && (
-        <span className="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-xl bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.6)]" />
+        <span className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-6 rounded-l-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.6)]" />
       )}
 
       <span
         className={cn(
           'relative grid place-items-center size-9 shrink-0 rounded-lg transition-all duration-200',
           active
-            ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-sm shadow-emerald-500/30'
+            ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
             : 'bg-transparent text-slate-400 group-hover:text-emerald-500 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-500/10',
         )}
       >
-        <Icon strokeWidth={active ? 2.5 : 2.2} className="size-5" />
+        <Icon strokeWidth={active ? 2.5 : 2} className="size-5" />
       </span>
 
       {!collapsed && (
-        <span className="flex-1 truncate">
+        <span className="flex-1 truncate mt-0.5">
           {t(item.label)}
         </span>
       )}
@@ -237,26 +236,26 @@ function InventoryGroup({
         onFocus={warmInventory}
         aria-expanded={open}
         className={cn(
-          'group relative flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3 py-2 text-right text-[15px] transition-all duration-200',
+          'group relative flex min-h-[52px] w-full items-center gap-3 rounded-xl px-3 py-2.5 text-right text-[14px] transition-all duration-200',
           inInventory
-            ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-100 font-bold shadow-sm ring-1 ring-emerald-500/20'
-            : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 font-semibold',
+            ? 'bg-gradient-to-l from-emerald-50 to-transparent dark:from-emerald-500/10 dark:to-transparent text-emerald-800 dark:text-emerald-300 font-bold shadow-[0_2px_10px_-4px_rgba(16,185,129,0.3)]'
+            : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 font-medium',
         )}
       >
         {inInventory && (
-          <span className="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-xl bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.6)]" />
+          <span className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-6 rounded-l-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.6)]" />
         )}
         <span
           className={cn(
             'relative grid size-9 shrink-0 place-items-center rounded-lg transition-all duration-200',
             inInventory
-              ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-sm shadow-emerald-500/30'
+              ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
               : 'text-slate-400 group-hover:text-emerald-500 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-500/10',
           )}
         >
-          <Warehouse strokeWidth={inInventory ? 2.5 : 2.2} className="size-5" />
+          <Warehouse strokeWidth={inInventory ? 2.5 : 2} className="size-5" />
         </span>
-        <span className="flex-1 truncate">المخزون</span>
+        <span className="flex-1 truncate mt-0.5">المخزون</span>
         <ChevronDown className={cn('size-4 shrink-0 opacity-60 transition-transform duration-200', open && 'rotate-180')} />
       </button>
 
@@ -283,7 +282,7 @@ function InventoryGroup({
                   'group/child relative flex min-h-[42px] items-center gap-3 rounded-lg py-1.5 pe-2 text-sm transition-all duration-200 ps-[42px]',
                   active
                     ? 'bg-emerald-50/50 dark:bg-emerald-500/5 font-bold text-emerald-800 dark:text-emerald-200'
-                    : 'font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/30',
+                    : 'font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/30',
                 )}
               >
                 <span className="absolute top-1/2 h-px w-[12px]" style={{ insetInlineStart: '24px', backgroundColor: active ? child.color : 'var(--border)' }} />
@@ -291,9 +290,9 @@ function InventoryGroup({
                   className="relative grid size-8 shrink-0 place-items-center rounded-md transition-all duration-200 group-hover/child:scale-105"
                   style={active ? { backgroundColor: child.color, color: '#fff', boxShadow: `0 2px 8px -2px ${child.color}80` } : { backgroundColor: `${child.color}15`, color: child.color }}
                 >
-                  <ChildIcon strokeWidth={active ? 2.4 : 2.2} className="size-4" />
+                  <ChildIcon strokeWidth={active ? 2.4 : 2} className="size-4" />
                 </span>
-                <span className="relative flex-1 truncate">{child.label}</span>
+                <span className="relative flex-1 truncate mt-0.5">{child.label}</span>
               </Link>
             )
           })}
@@ -371,26 +370,26 @@ function HrGroup({ collapsed, onNavigate, staffOnly }: { collapsed?: boolean; on
         onFocus={warmHr}
         aria-expanded={open}
         className={cn(
-          'group relative flex min-h-[48px] w-full items-center gap-3 rounded-xl px-3 py-2 text-right text-[15px] transition-all duration-200',
+          'group relative flex min-h-[52px] w-full items-center gap-3 rounded-xl px-3 py-2.5 text-right text-[14px] transition-all duration-200',
           inHr
-            ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-100 font-bold shadow-sm ring-1 ring-emerald-500/20'
-            : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 font-semibold',
+            ? 'bg-gradient-to-l from-emerald-50 to-transparent dark:from-emerald-500/10 dark:to-transparent text-emerald-800 dark:text-emerald-300 font-bold shadow-[0_2px_10px_-4px_rgba(16,185,129,0.3)]'
+            : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 font-medium',
         )}
       >
         {inHr && (
-          <span className="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-xl bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.6)]" />
+          <span className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-6 rounded-l-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.6)]" />
         )}
         <span
           className={cn(
             'relative grid size-9 shrink-0 place-items-center rounded-lg transition-all duration-200',
             inHr
-              ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-sm shadow-emerald-500/30'
+              ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
               : 'text-slate-400 group-hover:text-emerald-500 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-500/10',
           )}
         >
-          <UsersRound strokeWidth={inHr ? 2.5 : 2.2} className="size-5" />
+          <UsersRound strokeWidth={inHr ? 2.5 : 2} className="size-5" />
         </span>
-        <span className="flex-1 truncate">الموارد البشرية</span>
+        <span className="flex-1 truncate mt-0.5">الموارد البشرية</span>
         <ChevronDown className={cn('size-4 shrink-0 opacity-60 transition-transform duration-200', open && 'rotate-180')} />
       </button>
 
@@ -414,7 +413,7 @@ function HrGroup({ collapsed, onNavigate, staffOnly }: { collapsed?: boolean; on
                   'group/child relative flex min-h-[42px] items-center gap-3 rounded-lg py-1.5 pe-2 text-sm transition-all duration-200 ps-[42px]',
                   active
                     ? 'bg-emerald-50/50 dark:bg-emerald-500/5 font-bold text-emerald-800 dark:text-emerald-200'
-                    : 'font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/30',
+                    : 'font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/30',
                 )}
               >
                 <span className="absolute top-1/2 h-px w-[12px]" style={{ insetInlineStart: '24px', backgroundColor: active ? child.color : 'var(--border)' }} />
@@ -422,9 +421,9 @@ function HrGroup({ collapsed, onNavigate, staffOnly }: { collapsed?: boolean; on
                   className="relative grid size-8 shrink-0 place-items-center rounded-md transition-all duration-200 group-hover/child:scale-105"
                   style={active ? { backgroundColor: child.color, color: '#fff', boxShadow: `0 2px 8px -2px ${child.color}80` } : { backgroundColor: `${child.color}15`, color: child.color }}
                 >
-                  <ChildIcon strokeWidth={active ? 2.4 : 2.2} className="size-4" />
+                  <ChildIcon strokeWidth={active ? 2.4 : 2} className="size-4" />
                 </span>
-                <span className="relative flex-1 truncate">{child.label}</span>
+                <span className="relative flex-1 truncate mt-0.5">{child.label}</span>
               </Link>
             )
           })}
@@ -437,15 +436,20 @@ function HrGroup({ collapsed, onNavigate, staffOnly }: { collapsed?: boolean; on
 /* ───────────────────────── Brand & Header ───────────────────────── */
 
 function ShopAvatar({ logoPath, collapsed }: { logoPath?: string | null; collapsed?: boolean }) {
+  const baseClass = cn(
+    'shrink-0 overflow-hidden rounded-xl transition-transform duration-300 hover:scale-105 cursor-pointer',
+    collapsed ? 'size-10' : 'size-11'
+  )
+
   if (logoPath) {
     return (
-      <div className={cn('shrink-0 overflow-hidden rounded-xl shadow-md ring-1 ring-white/20', collapsed ? 'size-10' : 'size-11')}>
+      <div className={cn(baseClass, 'shadow-sm ring-1 ring-slate-900/10 dark:ring-white/10')}>
         <img src={logoPath} alt="شعار المحل" className="h-full w-full object-cover" />
       </div>
     )
   }
   return (
-    <div className={cn('relative grid shrink-0 place-items-center overflow-hidden rounded-xl', 'bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-700', 'shadow-lg shadow-emerald-500/30 ring-2 ring-white/20', collapsed ? 'size-10' : 'size-11')}>
+    <div className={cn(baseClass, 'relative grid place-items-center bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-700 shadow-md shadow-emerald-500/20 ring-1 ring-white/20')}>
       <span className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/10 to-white/30" />
       <Store className="relative size-5 text-white drop-shadow-md" strokeWidth={2.2} />
     </div>
@@ -456,28 +460,20 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
   const shopName = useShopStore((s) => s.shopName)
   const logoPath = useShopStore((s) => s.branding?.logoPath)
   
-  // 🛑 الفكرة الذكية 1: تصغير الخط تلقائياً بناءً على عدد الحروف
   const nameLength = shopName?.length || 0
-  const fontSizeClass = nameLength > 22 ? 'text-sm' : nameLength > 14 ? 'text-base' : 'text-xl'
+  const fontSizeClass = nameLength > 22 ? 'text-sm' : nameLength > 14 ? 'text-base' : 'text-lg'
 
   return (
-    <div className={cn('flex items-center gap-2.5 border-b border-slate-200/60 dark:border-slate-800/60 px-3 py-3', collapsed && 'justify-center px-0 py-4')}>
+    <div className={cn('flex items-center gap-3 border-b border-slate-100 dark:border-slate-800/60 px-4 py-3.5 bg-slate-50/30 dark:bg-transparent', collapsed && 'justify-center px-0 py-4')}>
       <ShopAvatar logoPath={logoPath} collapsed={collapsed} />
       {!collapsed && (
-        <div 
-          className="min-w-0 flex-1 flex flex-col justify-center overflow-hidden"
-          style={{
-            // 🛑 الفكرة الذكية 2: تلاشي النص بنعومة من اليسار بدلاً من القطع المفاجئ (...)
-            maskImage: 'linear-gradient(to left, #000 80%, transparent 100%)',
-            WebkitMaskImage: 'linear-gradient(to left, #000 80%, transparent 100%)'
-          }}
-        >
+        <div className="min-w-0 flex-1 flex flex-col justify-center overflow-hidden">
           <p 
             className={cn(
-              'truncate whitespace-nowrap font-bold leading-tight text-black dark:text-white transition-all duration-300',
+              'truncate whitespace-nowrap font-extrabold leading-tight text-slate-900 dark:text-white tracking-tight',
               fontSizeClass
             )} 
-            title={shopName} // 🛑 الفكرة الذكية 3: إظهار الاسم بالكامل عند وضع الماوس
+            title={shopName}
             style={{ fontFamily: 'Tajawal, Cairo, sans-serif' }}
           >
             {shopName || <span className="inline-block h-5 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-700 align-middle" />}
@@ -490,11 +486,12 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
 
 function SectionLabel({ label }: { label: string }) {
   return (
-    <div className="flex items-center gap-2 px-2 pb-1.5 pt-4">
-      <p className="select-none text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+    // 🛑 قللنا الـ pt من 5 إلى 1.5 عشان نقرب الكلمة من الهيدر
+    <div className="flex items-center gap-3 px-3 pb-2 pt-1.5">
+      <p className="select-none text-[11px] font-bold tracking-widest text-slate-400/80 dark:text-slate-500/80">
         {label}
       </p>
-      <div className="h-px flex-1 bg-slate-100 dark:bg-slate-800/60" />
+      <div className="h-px flex-1 bg-gradient-to-l from-slate-200 to-transparent dark:from-slate-800 to-transparent" />
     </div>
   )
 }
@@ -541,7 +538,7 @@ function useSessionClock() {
 function Led({ online }: { online: boolean }) {
   const c = online ? 'bg-emerald-500' : 'bg-amber-500'
   return (
-    <span className="relative grid size-6 shrink-0 place-items-center">
+    <span className="relative grid size-5 shrink-0 place-items-center">
       {online && <span className={cn('absolute inline-flex size-2.5 animate-ping rounded-full opacity-60', c)} />}
       <span className={cn('relative inline-flex size-2 rounded-full', c)} style={{ boxShadow: `0 0 8px 0 ${online ? 'rgba(16,185,129,0.8)' : 'rgba(245,158,11,0.8)'}` }} />
     </span>
@@ -550,9 +547,9 @@ function Led({ online }: { online: boolean }) {
 
 function SignalBars({ level }: { level: number }) {
   return (
-    <span aria-hidden dir="ltr" className="flex h-3.5 shrink-0 items-end gap-[2px]">
-      {[4, 7, 10, 13].map((h, i) => (
-        <span key={h} className={cn('w-[2.5px] rounded-sm transition-colors', i < level ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700')} style={{ height: h }} />
+    <span aria-hidden dir="ltr" className="flex h-3 shrink-0 items-end gap-[2px]">
+      {[3, 6, 9, 12].map((h, i) => (
+        <span key={h} className={cn('w-[2px] rounded-sm transition-colors', i < level ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700')} style={{ height: h }} />
       ))}
     </span>
   )
@@ -565,10 +562,10 @@ function StatusCard({ collapsed }: { collapsed?: boolean }) {
 
   if (collapsed) {
     return (
-      <div className="flex justify-center">
+      <div className="flex justify-center mt-2">
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="grid size-10 place-items-center rounded-lg border border-slate-200/60 bg-slate-50 dark:border-slate-800/60 dark:bg-slate-900/50 shadow-inner">
+            <span className="grid size-10 place-items-center rounded-xl border border-slate-200/60 bg-slate-50 dark:border-slate-800/60 dark:bg-slate-900/50 shadow-sm">
               <Led online={online} />
             </span>
           </TooltipTrigger>
@@ -581,10 +578,10 @@ function StatusCard({ collapsed }: { collapsed?: boolean }) {
   }
 
   return (
-    <div className="flex h-10 items-center gap-2 rounded-lg border border-slate-200/60 bg-white dark:border-slate-800/60 dark:bg-slate-900/50 px-2.5 shadow-sm backdrop-blur-md">
+    <div className="flex h-[42px] items-center gap-2.5 rounded-full border border-slate-200/60 bg-white dark:border-slate-800/60 dark:bg-slate-900/50 px-3 shadow-sm">
       <Led online={online} />
-      <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-slate-700 dark:text-slate-300">{label}</span>
-      {online && <span dir="ltr" className="text-[10px] tabular-nums font-semibold text-slate-400 dark:text-slate-500" style={{ fontFamily: MONO }}>{clock}</span>}
+      <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-slate-700 dark:text-slate-300">{label}</span>
+      {online && <span dir="ltr" className="text-[10px] tabular-nums font-medium text-slate-400 dark:text-slate-500" style={{ fontFamily: MONO }}>{clock}</span>}
       <SignalBars level={bars} />
     </div>
   )
@@ -699,13 +696,13 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
     <TooltipProvider delayDuration={200}>
       <aside
         className={cn(
-          'flex h-full flex-col bg-white dark:bg-slate-950 border-l border-slate-200/60 dark:border-slate-800/60',
+          'flex h-full flex-col bg-white dark:bg-slate-950 border-l border-slate-200/60 dark:border-slate-800/60 shadow-[1px_0_10px_rgba(0,0,0,0.02)]',
           'relative isolate',
-          collapsed ? 'w-[72px]' : 'w-[250px]', // 🛑 تم تقليل العرض من 280 إلى 250
+          collapsed ? 'w-[72px]' : 'w-[250px]',
           className,
         )}
       >
-        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-32 bg-gradient-to-b from-slate-50 to-transparent dark:from-slate-900/50" />
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-32 bg-gradient-to-b from-slate-50 to-transparent dark:from-slate-900/30" />
 
         <Brand collapsed={collapsed} />
 
@@ -713,7 +710,7 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
           ref={navRef}
           onScroll={measure}
           style={moreBelow ? { WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 36px), transparent)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 36px), transparent)' } : undefined}
-          className={cn('sidebar-nav flex-1 overflow-y-auto overflow-x-hidden', 'px-2.5 py-2')}
+          className={cn('sidebar-nav flex-1 overflow-y-auto overflow-x-hidden', 'px-2.5 py-1.5')}
           aria-label="القائمة الرئيسية"
         >
           {!collapsed && <SectionLabel label="الرئيسية" />}
@@ -727,7 +724,8 @@ export function Sidebar({ collapsed, onNavigate, className }: SidebarProps) {
           </div>
 
           {!collapsed ? (
-            <div className="mt-1"><SectionLabel label="الإدارة" /></div>
+            // 🛑 هنا ضفنا mt-4 عشان نفصل قسم "الإدارة" عن قسم "الرئيسية" بشكل مريح
+            <div className="mt-4"><SectionLabel label="الإدارة" /></div>
           ) : (
             <div className="my-3 mx-auto h-px w-6 bg-slate-200 dark:bg-slate-800" />
           )}
