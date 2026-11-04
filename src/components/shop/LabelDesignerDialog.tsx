@@ -23,6 +23,7 @@
 
 import * as React from 'react'
 import {
+  AlertTriangle,
   AlignCenter,
   AlignLeft,
   AlignRight,
@@ -40,6 +41,7 @@ import {
   Tag,
   Trash2,
   Type,
+  Undo2,
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -62,6 +64,9 @@ import {
   elementHeightMm,
   maxLinesFor,
   alignOf,
+  computeSnap,
+  elementsOverlap,
+  overlapPairs,
 } from '@/lib/label-design'
 
 const MM = MM_PX // 1mm ≈ 3.78px @96dpi
@@ -130,15 +135,20 @@ export function LabelElementContent({
   size,
   color,
   svg,
+  /** 🛠️ للمصمم بس: العنصر الفاضي (مقاس/لون بدون بيانات) بيتعرض كشبح باهت
+   *  عشان يبقى ظاهر وقابل للسحب/التحديد — في المعاينة والطباعة بيفضل فاضي
+   *  فعلاً (WYSIWYG) عشان مطابق للي هيطبع. */
+  ghost = false,
 }: {
   el: LabelElement
-  design: Pick<LabelDesign, 'heightMm'>
+  design: Pick<LabelDesign, 'heightMm' | 'elements'>
   name: string
   barcode: string
   price?: number | null
   size?: string | null
   color?: string | null
   svg: string
+  ghost?: boolean
 }) {
   const family = "'Tahoma', 'Cairo', sans-serif"
   const align: React.CSSProperties = { textAlign: alignOf(el) }
@@ -167,7 +177,28 @@ export function LabelElementContent({
       )
     case 'variant': {
       const v = [size, color].filter((x) => !!x && String(x).trim()).join(' · ')
-      if (!v) return null
+      if (!v) {
+        if (!ghost) return null
+        return (
+          <div
+            dir="rtl"
+            style={{
+              ...align,
+              fontFamily: family,
+              fontSize: `${el.fontSizePt ?? 9}pt`,
+              fontWeight: el.bold !== false ? 700 : 400,
+              lineHeight: 1.15,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              opacity: 0.38,
+              fontStyle: 'italic',
+            }}
+          >
+            بدون مقاس/لون — مش هيُطبع
+          </div>
+        )
+      }
       return (
         <div
           dir="rtl"
@@ -282,6 +313,29 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
   const [tname, setTname] = React.useState('')
   const [snap, setSnap] = React.useState(true)
   const [busy, setBusy] = React.useState(false)
+  // 🛡️ إصلاح (2026-11-05): أدلة محاذاة أثناء السحب + كشف التداخل الفوري —
+  // قبل كده المستخدم كان يقدر يفلت السعر فوق خطوط الباركود بدون أي تنبيه
+  // فيطبع ملصقات أسود غير قابلة للمسح وياكتشف بعد إهدار ورقة كاملة.
+  const [guidesV, setGuidesV] = React.useState<number[]>([])
+  const [guidesH, setGuidesH] = React.useState<number[]>([])
+  const [draggingId, setDraggingId] = React.useState<string | null>(null)
+  // ↩️ تراجع بسيط (قبل كده «رجّع الترتيب التلقائي» والحذف كانوا بينفذوا فوراً
+  // بدون تأكيد ولا Undo — عشر دقائق ضبط ممكن تضيع بضغطة واحدة)
+  const historyRef = React.useRef<LabelDesign[]>([])
+  const [canUndo, setCanUndo] = React.useState(false)
+
+  const pushHistory = (d: LabelDesign) => {
+    historyRef.current = [...historyRef.current.slice(-19), d]
+    setCanUndo(true)
+  }
+
+  const undo = () => {
+    const prev = historyRef.current.pop()
+    if (!prev || !design) return
+    setDesign(prev)
+    setSelected(null)
+    setCanUndo(historyRef.current.length > 0)
+  }
 
   const s: DesignerSample = React.useMemo(() => {
     if (sample && sample.barcode) return sample
@@ -347,6 +401,11 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
   const updateEl = (id: string, patch: Partial<LabelElement>) =>
     setDesign((prev) => (prev ? { ...prev, elements: prev.elements.map((e) => (e.id === id ? { ...e, ...patch } : e)) } : prev))
 
+  /** نسخة قبل أي عملية هدمية (حذف/تصفير/تغيير مقاس/قالب) — عشان التراجع */
+  const snapshot = () => {
+    if (design) pushHistory(design)
+  }
+
   const addElement = (type: LabelElementType) => {
     if (!design) return
     const W = design.widthMm
@@ -360,6 +419,7 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
     // نزحزح العنصر الجديد شوية لو فيه عنصر تاني في نفس المكان تقريباً
     const clash = design.elements.some((e) => Math.abs(e.yMm - newEl.yMm) < 1 && Math.abs(e.xMm - newEl.xMm) < 1)
     if (clash) newEl.yMm = Math.round(Math.min(H - elementHeightMm(newEl), newEl.yMm + 4) * 10) / 10
+    snapshot()
     setDesign({ ...design, elements: [...design.elements, newEl] })
     setSelected(newEl.id)
   }
@@ -372,27 +432,41 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
       xMm: Math.round(Math.min(design.widthMm - 2, e0.xMm + 2) * 10) / 10,
       yMm: Math.round(Math.min(design.heightMm - elementHeightMm(e0), e0.yMm + 2) * 10) / 10,
     }
+    snapshot()
     setDesign({ ...design, elements: [...design.elements, copy] })
     setSelected(copy.id)
   }
 
   const deleteEl = (id: string) => {
     if (!design) return
+    const victim = design.elements.find((e) => e.id === id)
+    snapshot()
     setDesign({ ...design, elements: design.elements.filter((e) => e.id !== id) })
     setSelected(null)
+    // ↩️ بدل الحذف الصامت — إشعار فيه زر تراجع
+    if (victim) {
+      toast.success(`اتمسح ${LABEL_ELEMENT_META[victim.type].label}`, {
+        action: { label: 'تراجع', onClick: undo },
+      })
+    }
   }
 
   const changeSize = (w: number, h: number) => {
     if (!design) return
+    snapshot()
     setDesign(refitDesign(design, w, h))
   }
 
   const resetAuto = () => {
     if (!design) return
+    if (!window.confirm('رجوع للترتيب التلقائي هيشيل كل تعديلاتك على الملصق — متأكد؟')) return
+    const before = design
     const hasText = design.elements.some((e) => e.type === 'barcodeText')
     setDesign(defaultDesign(design.widthMm, design.heightMm, { variant: variantsEnabled, text: hasText }))
     setSelected(null)
-    toast.info('رجعنا الترتيب التلقائي — عدّل براحتك')
+    toast.info('رجعنا الترتيب التلقائي — عدّل براحتك', {
+      action: { label: 'تراجع', onClick: () => setDesign(before) },
+    })
   }
 
   /* ── السحب بالإصبع/الماوس (Pointer Events — شغال على الموبايل والكمبيوتر) ── */
@@ -407,6 +481,9 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
     e.preventDefault()
     e.stopPropagation()
     setSelected(target.id)
+    setDraggingId(target.id)
+    // ↩️ السحبة نفسها قابلة للتراجع — بنحفظ الحالة قبل ما العنصر يتحرك
+    pushHistory(design)
     try {
       ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     } catch {
@@ -422,14 +499,31 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
     const dy = (e.clientY - d.py) / (MM * scale)
     const maxX = Math.max(0, design.widthMm - Math.min(target.wMm, design.widthMm))
     const maxY = Math.max(0, design.heightMm - Math.min(elementHeightMm(target), design.heightMm))
-    updateEl(target.id, {
-      xMm: Math.max(0, Math.min(maxX, snapV(d.ox + dx))),
-      yMm: Math.max(0, Math.min(maxY, snapV(d.oy + dy))),
-    })
+    let nx = Math.max(0, Math.min(maxX, snapV(d.ox + dx)))
+    let ny = Math.max(0, Math.min(maxY, snapV(d.oy + dy)))
+
+    // 🛡️ أدلة محاذاة ذكية (زي Canva) — لو snap مقفول بـ Shift نتجاهلها كمان
+    if (snap && !e.shiftKey) {
+      const others = design.elements.filter((o) => o.id !== target.id)
+      const sn = computeSnap(nx, ny, target, others, design)
+      if (sn.guidesV.length || sn.guidesH.length) {
+        nx = Math.max(0, Math.min(maxX, snapV(sn.x)))
+        ny = Math.max(0, Math.min(maxY, snapV(sn.y)))
+        setGuidesV(sn.guidesV)
+        setGuidesH(sn.guidesH)
+      } else if (guidesV.length || guidesH.length) {
+        setGuidesV([])
+        setGuidesH([])
+      }
+    }
+    updateEl(target.id, { xMm: nx, yMm: ny })
   }
 
   const endDrag = () => {
     dragRef.current = null
+    setDraggingId(null)
+    setGuidesV([])
+    setGuidesH([])
   }
 
   // ⌨️ الأسهم بتحرّك العنصر المختار — ضبط دقيق نص مم (Shift = ممّين)
@@ -460,17 +554,26 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
       toast.error('القالب ده فيه بيانات غير صالحة')
       return
     }
+    snapshot()
     setDesign(d)
     setTid(t.id)
     setTname(t.name)
     setSelected(null)
   }
 
+  /** اسم فريد مش مكرر مع القوالب الموجودة — قبل كده «تصميم N» كان بيتكرر بعد الحذف */
+  const uniqueTemplateName = () => {
+    const taken = new Set(templates.map((t) => t.name.trim()))
+    let n = templates.length + 1
+    while (taken.has(`تصميم ${n}`)) n++
+    return `تصميم ${n}`
+  }
+
   const saveAsNew = async () => {
     if (!design || busy) return
     setBusy(true)
     try {
-      const name = tname.trim() || `تصميم ${templates.length + 1}`
+      const name = tname.trim() || uniqueTemplateName()
       const created = await api<TemplateRow>('/api/label-templates', {
         method: 'POST',
         body: { name, widthMm: design.widthMm, heightMm: design.heightMm, elements: design.elements },
@@ -529,10 +632,35 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
       toast.error('التصميم فاضي — ضيف عنصر واحد على الأقل (أو رجّع الترتيب التلقائي)')
       return
     }
+    // 🛡️ إصلاح (2026-11-05): تحذير التداخل قبل التطبيق — بدل ما المستخدم
+    // يكتشف بعد الطباعة إن الملصقات طلعت أسود فوق بعض وغير قابلة للمسح.
+    const pairs = overlapPairs(design)
+    if (pairs.length > 0) {
+      const desc = pairs
+        .slice(0, 3)
+        .map((p) => `${LABEL_ELEMENT_META[p.a.type].label} + ${LABEL_ELEMENT_META[p.b.type].label}`)
+        .join('، ')
+      const more = pairs.length > 3 ? ` و${pairs.length - 3} أزواج تانية` : ''
+      const ok = window.confirm(
+        `فيه ${pairs.length} ${pairs.length === 1 ? 'زوج عناصر متداخلة' : 'أزواج عناصر متداخلة'} في التصميم: ${desc}${more}.\n\nالطباعة هتطلع العناصر فوق بعض وممكن الباركود مي تتقري. متأكد إنك عايز تطبّق على أي حال؟\n\n(الأفضل: افصل العناصر — أدلة المحاذاة بتساعدك أثناء السحب)`,
+      )
+      if (!ok) return
+    }
     onApply(design, tid, tname.trim() || null)
   }
 
   const selectedEl = el
+  // 🛡️ العناصر المتداخلة حالياً — بتتعرض بإطار أحمر في المصمم فوراً أثناء السحب
+  const overlappingIds = React.useMemo(() => {
+    if (!design) return new Set<string>()
+    const ids = new Set<string>()
+    for (const p of overlapPairs(design)) {
+      ids.add(p.a.id)
+      ids.add(p.b.id)
+    }
+    return ids
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [design])
   const sizePresets = [
     { w: 40, h: 30 },
     { w: 50, h: 30 },
@@ -604,14 +732,34 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                         backgroundSize: `${MM}px ${MM}px`,
                       }}
                     >
+                      {/* 🛡️ أدلة المحاذاة أثناء السحب (زي Canva/Figma) — خطوط قرمزي بتوضح
+                          إمتى العنصر اتمعّا مع حدود الملصق أو مركز/أحرف عنصر تاني */}
+                      {guidesV.map((g) => (
+                        <span
+                          key={`gv-${g}`}
+                          aria-hidden
+                          className="pointer-events-none absolute bg-rose-500/80"
+                          style={{ left: g * MM, top: 0, bottom: 0, width: 1 }}
+                        />
+                      ))}
+                      {guidesH.map((g) => (
+                        <span
+                          key={`gh-${g}`}
+                          aria-hidden
+                          className="pointer-events-none absolute bg-rose-500/80"
+                          style={{ top: g * MM, left: 0, right: 0, height: 1 }}
+                        />
+                      ))}
                       {design.elements.map((e0) => {
                         const on = selected === e0.id
                         const Icon = ELEMENT_ICONS[e0.type]
+                        const isOverlap = overlappingIds.has(e0.id)
                         return (
                           <div
                             key={e0.id}
                             role="button"
-                            aria-label={`${LABEL_ELEMENT_META[e0.type].label} — اسحب لتحريكه`}
+                            tabIndex={0}
+                            aria-label={`${LABEL_ELEMENT_META[e0.type].label} — اسحب لتحريكه أو استخدم الأسهم`}
                             onPointerDown={(ev) => startDrag(ev, e0)}
                             onPointerMove={(ev) => moveDrag(ev, e0)}
                             onPointerUp={endDrag}
@@ -627,11 +775,17 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                               width: e0.wMm * MM,
                               cursor: 'grab',
                               touchAction: 'none',
-                              outline: on ? '2px solid #17843f' : '1px dashed transparent',
+                              // 🛡️ إطار التداخل أحمر بيقول للمستخدم فوراً إن العنصر
+                              // فوق عنصر تاني — بدل ما يكتشف بعد الطباعة
+                              outline: isOverlap
+                                ? '2px solid #dc2626'
+                                : on
+                                  ? '2px solid #17843f'
+                                  : '1px dashed transparent',
                               outlineOffset: 2,
                               borderRadius: 2,
                             }}
-                            className={cn('group', !on && 'hover:outline-dashed hover:outline-foreground/40')}
+                            className={cn('group', !on && !isOverlap && 'hover:outline-dashed hover:outline-foreground/40')}
                           >
                             <LabelElementContent
                               el={e0}
@@ -642,8 +796,9 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                               size={s.size}
                               color={s.color}
                               svg={e0.type === 'barcode' ? svg : ''}
+                              ghost
                             />
-                            {on && (
+                            {on && draggingId !== e0.id && (
                               <span className="pointer-events-none absolute -top-2.5 start-0 flex items-center gap-1 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground shadow">
                                 <Move className="size-2.5" aria-hidden />
                                 {LABEL_ELEMENT_META[e0.type].label}
@@ -671,6 +826,16 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
             <div className="pointer-events-none absolute bottom-2 start-0 end-0 text-center text-[11px] font-medium text-foreground/50" dir="rtl">
               اسحب العناصر بالإصبع أو الماوس · الأسهم = ضبط بنص مم · <bdi dir="ltr">{design?.widthMm}×{design?.heightMm}</bdi> مم
             </div>
+            {overlappingIds.size > 0 && (
+              <div
+                role="alert"
+                className="absolute top-2 start-2 end-2 flex items-center gap-2 rounded-xl bg-destructive px-3 py-2 text-xs font-bold text-white shadow-lg"
+                dir="rtl"
+              >
+                <AlertTriangle className="size-4 shrink-0" aria-hidden />
+                عناصر متداخلة: هتطبع فوق بعض — افصلها (أدلة المحاذاة بتظهر أثناء السحب)
+              </div>
+            )}
           </div>
 
           {/* لوحة الخصائص */}
@@ -758,6 +923,12 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                 <p className="rounded-xl bg-muted p-3 text-[11px] font-medium leading-relaxed text-foreground/60">
                   اسحب العنصر لأي مكان — أو حرّكه بالأسهم (Shift + سهم = ممّين دفعة واحدة).
                 </p>
+                {overlappingIds.has(selectedEl.id) && (
+                  <p className="flex items-start gap-2 rounded-xl bg-destructive/10 p-3 text-[11px] font-bold leading-relaxed text-destructive">
+                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                    العنصر ده متداخل مع عنصر تاني — هتطبع فوق بعض والباركود ممكن مي تتقري. افصلهم قبل الطباعة.
+                  </p>
+                )}
               </>
             ) : (
               <>
@@ -791,6 +962,9 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                   <NumField label="العرض (مم)" value={design?.widthMm ?? 40} min={10} max={300} step={1} onChange={(v) => changeSize(v, design?.heightMm ?? 30)} />
                   <NumField label="الارتفاع (مم)" value={design?.heightMm ?? 30} min={10} max={300} step={1} onChange={(v) => changeSize(design?.widthMm ?? 40, v)} />
                 </div>
+                <p className="text-[11px] font-medium leading-relaxed text-foreground/55">
+                  الشبكة بتثبّت بنص مم · المقاس مسموح من <bdi dir="ltr">10</bdi> لـ <bdi dir="ltr">300</bdi> مم — أي قيمة برّه الحدود بتتقص تلقائياً.
+                </p>
 
                 <div className="flex items-center justify-between rounded-xl border bg-background px-3 py-2.5">
                   <span className="text-sm font-bold">
@@ -823,10 +997,22 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                   </div>
                 </div>
 
-                <Button variant="outline" className="h-10 w-full rounded-xl font-bold" onClick={resetAuto}>
-                  <RotateCcw className="size-4" />
-                  رجّع الترتيب التلقائي
-                </Button>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <Button variant="outline" className="h-10 rounded-xl font-bold" onClick={resetAuto}>
+                    <RotateCcw className="size-4" />
+                    رجّع الترتيب التلقائي
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-10 rounded-xl font-bold"
+                    onClick={undo}
+                    disabled={!canUndo}
+                    title={canUndo ? 'تراجع عن آخر تعديل' : 'مفيش تعديلات للتراجع عنها'}
+                  >
+                    <Undo2 className="size-4" />
+                    تراجع
+                  </Button>
+                </div>
 
                 <p className="rounded-xl bg-muted p-3 text-[11px] font-medium leading-relaxed text-foreground/60">
                   اضغط على أي عنصر في الملصق لتعديل حجمه ومحاذاته. <b>{design?.elements.length ?? 0}</b> عناصر في التصميم.
@@ -836,7 +1022,10 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
           </aside>
         </div>
 
-        {/* ═══ الشريط السفلي: قوالب + تطبيق ═══ */}
+        {/* ═══ الشريط السفلي: قوالب + تطبيق ═══
+            📱 إصلاح (2026-11-05): كان صف واحد بأربعة عناصر — على 390px الاسم
+            بيتقشر لعرض سهم والقايمة بتبقى مربع صغير غير قابل للاستخدام.
+            دلوقتي على الشاشات الصغيرة بيتوزع على صفين مرنّين. */}
         <footer className="shrink-0 space-y-2.5 border-t bg-card px-4 py-3 sm:px-6">
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -845,7 +1034,7 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                 const t = templates.find((x) => x.id === Number(ev.target.value))
                 if (t) applyTemplate(t)
               }}
-              className="h-10 min-w-0 flex-1 rounded-xl border bg-background px-3 text-sm font-bold outline-none focus-visible:ring-[3px] focus-visible:ring-primary/40 sm:flex-none sm:w-56"
+              className="h-10 min-w-0 flex-1 basis-40 rounded-xl border bg-background px-3 text-sm font-bold outline-none focus-visible:ring-[3px] focus-visible:ring-primary/40 sm:flex-none sm:w-56"
               aria-label="القوالب المحفوظة"
             >
               <option value="">{templates.length ? '— اختار قالب محفوظ —' : '— مفيش قوالب محفوظة —'}</option>
@@ -860,27 +1049,32 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
               onChange={(ev) => setTname(ev.target.value)}
               placeholder="اسم القالب"
               maxLength={60}
-              className="h-10 min-w-0 flex-1 rounded-xl border bg-background px-3 text-sm font-bold outline-none placeholder:font-medium placeholder:text-foreground/40 focus-visible:ring-[3px] focus-visible:ring-primary/40 sm:max-w-44"
+              className="h-10 min-w-0 flex-1 basis-40 rounded-xl border bg-background px-3 text-sm font-bold outline-none placeholder:font-medium placeholder:text-foreground/40 focus-visible:ring-[3px] focus-visible:ring-primary/40 sm:max-w-44"
               aria-label="اسم القالب"
             />
-            <Button variant="outline" className="h-10 rounded-xl px-3 font-bold" onClick={saveUpdate} disabled={busy || !design}>
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              {tid ? 'تحديث' : 'حفظ'}
-            </Button>
-            {tid != null && (
-              <>
-                <Button variant="outline" className="h-10 rounded-xl px-3 font-bold" onClick={saveAsNew} disabled={busy || !design}>
-                  حفظ كنسخة
+            <div className="flex items-center gap-2 max-sm:w-full max-sm:justify-between">
+              <div className="flex items-center gap-2">
+                <Button variant="outline" className="h-10 rounded-xl px-3 font-bold" onClick={saveUpdate} disabled={busy || !design}>
+                  {busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                  {tid ? 'تحديث' : 'حفظ'}
                 </Button>
-                <Button variant="outline" className="h-10 rounded-xl px-3 text-destructive hover:bg-destructive/10" onClick={deleteTemplate} disabled={busy}>
-                  <Trash2 className="size-4" />
-                </Button>
-              </>
-            )}
-            <Button className="ms-auto h-10 rounded-xl px-5 font-bold" onClick={apply} disabled={!design}>
-              <PenTool className="size-4" />
-              تطبيق على الطباعة
-            </Button>
+                {tid != null && (
+                  <>
+                    <Button variant="outline" className="h-10 rounded-xl px-3 font-bold max-sm:hidden" onClick={saveAsNew} disabled={busy || !design}>
+                      حفظ كنسخة
+                    </Button>
+                    <Button variant="outline" className="h-10 rounded-xl px-3 text-destructive hover:bg-destructive/10" onClick={deleteTemplate} disabled={busy} title="مسح القالب المحدد">
+                      <Trash2 className="size-4" />
+                      <span className="sr-only">مسح القالب</span>
+                    </Button>
+                  </>
+                )}
+              </div>
+              <Button className="h-10 rounded-xl px-5 font-bold" onClick={apply} disabled={!design}>
+                <PenTool className="size-4" />
+                تطبيق على الطباعة
+              </Button>
+            </div>
           </div>
         </footer>
       </DialogContent>

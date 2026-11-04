@@ -135,7 +135,11 @@ interface PosVariant {
   quantity: number
 }
 
-function variantLabelOf(v: PosVariant): string {
+/** 🛠️ إصلاح tsc: دايلوج اختيار المواصفة بيبعت نسخة خفيفة (price اختيارية) —
+ *  الهاندلر بيستخدم id/quantity/color/size بس فبيقبل الاثنين. */
+type VariantPickLite = Pick<PosVariant, 'id' | 'size' | 'color' | 'quantity'> & { price?: number | null }
+
+function variantLabelOf(v: VariantPickLite): string {
   return [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`
 }
 
@@ -1498,7 +1502,7 @@ export function POSView() {
     }
   }
 
-  const handleVariantPick = (variant: PosVariant) => {
+  const handleVariantPick = (variant: VariantPickLite) => {
     if (!variantPickerProduct) return
     addToCartDirect(
       variantPickerProduct,

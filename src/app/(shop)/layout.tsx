@@ -13,6 +13,7 @@ import { OfflineIndicator } from '@/components/shop/OfflineIndicator'
 import { TrialExpiredBanner } from '@/components/shop/TrialExpiredBanner'
 import { DemoDataBanner } from '@/components/shop/DemoDataBanner'
 import { RoleBadge } from '@/components/shop/RoleBadge'
+import { useBulkSelectionActive } from '@/lib/use-bulk-selection-active'
 import { useOfflineReady } from '@/lib/offline/use-offline'
 import { scheduleIdleWarmup } from '@/lib/view-preload'
 import { useShopStore } from '@/lib/store'
@@ -293,6 +294,9 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   }, [bootState, router])
 
   const isAdminUser = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN'
+  // 🛡️ إصلاح (2026-11-05): البانرات العائمة أسفل الشاشة (z-[60]) كانت بتغطي
+  // شريط التحديد الجماعي (z-50) — نفس عيب بانر PWA. بتتخفى طالما التحديد نشط.
+  const bulkSelectionActive = useBulkSelectionActive()
   const hrPath = pathname.replace(/\/+$/, '')
   const hrBlocked =
     hrPath.startsWith('/hr') && bootState === 'authed' && planLoaded && (
@@ -321,9 +325,11 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="fixed inset-0 flex flex-col bg-background overflow-hidden overscroll-none">
-      {/* 🎨 البانرات العائمة */}
+      {/* 🎨 البانرات العائمة — بتتخفى طالما شريط التحديد الجماعي نشط 🛡️ */}
       <div
         className={`pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-2 px-3 ${
+          bulkSelectionActive ? 'hidden' : ''
+        } ${
           pathname === '/pos'
             ? 'pb-[calc(env(safe-area-inset-bottom)+5.25rem)] lg:pb-[calc(env(safe-area-inset-bottom)+0.75rem)]'
             : 'pb-[calc(env(safe-area-inset-bottom)+0.75rem)]'

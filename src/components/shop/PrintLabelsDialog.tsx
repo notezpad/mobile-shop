@@ -51,7 +51,7 @@ import { printBarcodeLabelsDirect } from '@/lib/label-printer'
 import { isWebUsbSupported, usbErrorMessage } from '@/lib/thermal-printer'
 import { computeLabelLayout, A4, LABEL_LH, LABEL_GAP_MM, fmtLabelPrice, type LabelLayout } from '@/lib/print'
 import { normalizeBarcode, isRenderableBarcode, barcodeFormatFor } from '@/lib/barcode'
-import { type LabelDesign, sanitizeDesign } from '@/lib/label-design'
+import { type LabelDesign, sanitizeDesign, refitDesign } from '@/lib/label-design'
 import { LabelDesignerDialog, LabelElementContent } from '@/components/shop/LabelDesignerDialog'
 import { cn } from '@/lib/utils'
 
@@ -183,15 +183,23 @@ interface Prefs {
   /** 🎨 التحديث 27: قالب التصميم الحر المفعّل (null = الترتيب التلقائي) */
   designId?: number | null
   designName?: string | null
+  /** 🛡️ إصلاح (2026-11-05): نسخة محلية من التصميم — لو الشبكة فشلت وقت فتح
+   *  الدايلوج بنرجّع آخر نسخة بدل ما التفعيل يضيع بصمت ويكتب معرف فارغ. */
+  designJson?: LabelDesign | null
+  /** آخر تبويب مفتوح — بيرجع عند فتح الدايلوج تاني */
+  tab?: 'products' | 'settings'
 }
 
 const fmtPrice = (n: number) =>
-  n.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const num = (n: number) => n.toLocaleString('en-US')
 /** جمع عربي مبسّط: 1 / 2 / 3-10 / 11+ */
 const ar = (n: number, one: string, two: string, few: string, many: string) =>
   n === 1 ? one : n === 2 ? two : n >= 3 && n <= 10 ? few : many
 const labelsWord = (n: number) => ar(n, 'ملصق', 'ملصقين', 'ملصقات', 'ملصق')
+/** 🐞 إصلاح (2026-11-05): «طباعة 2 ملصقين» كانت غلط نحوي — العدد مش بيتلحق
+ *  بالمثنى. الصحيح: «ملصق» / «ملصقين» / «3 ملصقات». */
+const numLabels = (n: number) => (n <= 2 ? labelsWord(n) : `${num(n)} ${labelsWord(n)}`)
 const clampInt = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.floor(n) || 0))
 
 const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩'
@@ -250,7 +258,6 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
     setFocusKey(null)
     setOpenColors({})
     setView('sheet')
-    setTab('products')
     try {
       const raw = localStorage.getItem(PREFS_KEY)
       if (raw) {
@@ -267,10 +274,21 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
         if (typeof p.namePct === 'number') setNamePct(clampInt(p.namePct, 60, 150) || 100)
         if (typeof p.pricePct === 'number') setPricePct(clampInt(p.pricePct, 60, 150) || 100)
         if (typeof p.barcodePct === 'number') setBarcodePct(clampInt(p.barcodePct, 50, 100) || 100)
-        // 🎨 التصميم الحر: بنحفظ رقم القالب واسمه — المحتوى نفسه بيرجع من السيرفر
+        // آخر تبويب مفتوح — بيرجع بدل ما نرجع دايماً للمنتجات
+        if (p.tab === 'products' || p.tab === 'settings') setTab(p.tab)
+        else setTab('products')
+        // 🎨 التصميم الحر: بنحفظ رقم القالب واسمه — المحتوى نفسه بيرجع من السيرفر،
+        // ومعاه 🛡️ نسخة محلية (designJson) بتشتغل فوراً ولو الشبكة واقفة
         if (typeof p.designId === 'number' && p.designId > 0) {
           designTidRef.current = p.designId
           setDesignTid(p.designId)
+          const cached = sanitizeDesign(p.designJson)
+          if (cached) {
+            setDesign(cached)
+            setPreset('custom')
+            setCw(Math.round(cached.widthMm))
+            setCh(Math.round(cached.heightMm))
+          }
         }
         if (typeof p.designName === 'string' && p.designName) setDesignName(p.designName)
       }
@@ -282,7 +300,10 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
   }, [open, productIdsKey])
 
   // 🎨 التحديث 27: قوالب التصميم الحر — بنجيبها مرة واحدة كل ما الدايلوج يفتح
-  // عشان نرجّع آخر تصميم مفعّل (prefs.designId). لو القالب اتمسح نرجع للكلاسيكي.
+  // عشان نرجّع آخر تصميم مفعّل (prefs.designId). 🛡️ إصلاح (2026-11-05):
+  // قبل كده أي فشل شبكي كان بيمسح التفعيل بصمت — دلوقتي بنميّز 3 حالات:
+  // القالب موجود → نسخة السيرفر (الأحدث)، القالب اتمسح → إشعار واضح ورجوع
+  // للكلاسيكي، الشبكة فشلت → نستمر بآخر نسخة محلية مع إشعار تحذيري.
   React.useEffect(() => {
     if (!open) return
     let cancelled = false
@@ -307,15 +328,23 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
             setPreset('custom')
             setCw(Math.round(d.widthMm))
             setCh(Math.round(d.heightMm))
-          } else {
+          } else if (!t) {
+            // القالب موجود في التفضيلات بس اتمسح من السيرفر — رسالة واضحة مش صمت
             setDesign(null)
             setDesignName(null)
             designTidRef.current = null
             setDesignTid(null)
+            toast.info('القالب المحفوظ اتمسح من السيرفر — رجعنا الترتيب التلقائي')
           }
+          // لو القالب موجود بس بياناته غير صالحة → نفضل على النسخة المحلية المفعّلة
         }
       } catch {
-        /* أوفلاين — نفضل على الوضع الحالي */
+        // 🛡️ الشبكة فشلت (أوفلاين/سيرفر واقف): مفيش مسح للتفعيل — النسخة
+        // المحلية (designJson) مفعّلة فوق، والمستخدم يعرف السبب
+        if (cancelled) return
+        if (designTidRef.current != null) {
+          toast.warning('مقدرش نجيب قوالب التصميم من السيرفر — بنستخدم آخر نسخة محفوظة محلياً')
+        }
       }
     })()
     return () => {
@@ -416,12 +445,25 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
   React.useEffect(() => {
     if (!open || !hydrated.current) return
     try {
-      const p: Prefs = { mode, preset, cw, ch, name: showName, price: showPrice, text: showText, variant: showVariant, lang: printLang, namePct, pricePct, barcodePct, designId: designTid, designName: designName }
+      const p: Prefs = { mode, preset, cw, ch, name: showName, price: showPrice, text: showText, variant: showVariant, lang: printLang, namePct, pricePct, barcodePct, designId: designTid, designName: designName, designJson: design, tab }
       localStorage.setItem(PREFS_KEY, JSON.stringify(p))
     } catch {
       /* ignore */
     }
-  }, [open, mode, preset, cw, ch, showName, showPrice, showText, showVariant, printLang, namePct, pricePct, barcodePct, designTid, designName])
+  }, [open, mode, preset, cw, ch, showName, showPrice, showText, showVariant, printLang, namePct, pricePct, barcodePct, designTid, designName, design, tab])
+
+  // 🛡️ إصلاح (2026-11-05) — أهم إصلاح في التقريرين: مصالحة مقاس التصميم الحر
+  // مع مقاس الملصق — محطوطة بعد حساب labelSize تحت (بتعتمد عليه)
+  // 🐞 إصلاح: بعد تطبيق تصميم بمقاس جاهز (40×30 مثلاً) المقاس
+  // بيتحول لـ «مخصص» فتظهر كارتين بنفس الأرقام والمستخدم ميفرقش بينهم.
+  // دلوقتي لو «المخصص» طابق مقاس جاهز بنرجع الاختيار للجاهز تلقائياً.
+  React.useEffect(() => {
+    if (!open || preset !== 'custom') return
+    const w = Math.max(10, cw)
+    const h = Math.max(10, ch)
+    const match = PRESETS.find((p) => p.key !== 'custom' && p.w === w && p.h === h)
+    if (match) setPreset(match.key)
+  }, [open, preset, cw, ch])
 
   // كل منتج → إمّا صف واحد (منتج عادي)، أو صف لكل لون/مقاس (منتج له متغيرات، مجمّعة بالألوان)
   // صفوف وحدات الجملة (كرتونة/دستة...) — اللي ليها باركود بس. السعر = سعر الوحدة المسجّل، أو سعر القطعة × عدد القطع
@@ -493,6 +535,19 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
   const qtyOf = (r: LabelRow) => qty[r.key] ?? r.defaultQty
   const total = withBarcode.reduce((s, r) => s + qtyOf(r), 0)
 
+  /** 🧹 إصلاح (2026-11-05): لما سطر «المقاس واللون» بيتطبع، الاسم يطلع بدون
+   *  اللاحقة — قبل كده المعلومة كانت بتتكرر مرتين على ملصق ضيق:
+   *  «سماعة بلوتوث — S / أسود» + سطر «S · أسود». */
+  const stripVariantSuffix = (name: string, variantLabel: string | null) => {
+    if (!variantLabel) return name
+    const suffix = ` — ${variantLabel}`
+    return name.endsWith(suffix) ? name.slice(0, name.length - suffix.length) : name
+  }
+  /** اسم الطباعة: بدون لاحقة المتغير لو سطر المقاس/اللون هيتطبع (ملصق المتغير
+   *  أو الوحدة بيقوم باسم المنتج الأساسي بدون لاحقة الوحدة كمان لما مناسبة) */
+  const printNameOf = (r: LabelRow) =>
+    effectiveShowVariant && (r.size || r.color) ? stripVariantSuffix(r.name, r.variantLabel) : r.name
+
   const labelSize =
     preset === 'custom'
       ? { widthMm: Math.max(10, cw), heightMm: Math.max(10, ch) }
@@ -538,6 +593,28 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
   React.useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 })
   }, [tab])
+
+  // 🛡️ إصلاح (2026-11-05) — أهم إصلاح في التقريرين: مصالحة مقاس التصميم الحر
+  // مع مقاس الملصق. قبل كده لو المستخدم فعّل تصميم 30×40 وبعدين اختار مقاس
+  // 20×30، المعاينة كانت بترسم التصميم القديم فوق خليتين والطباعة بتخرج
+  // متداخلة. دلوقتي أي تغيير في المقاس بيعاير التصميم تلقائياً (refit) —
+  // مفيش طريق للتعارض أصلاً، والمعاينة بتطابق المطبوع دايماً.
+  const prevLabelSizeRef = React.useRef<{ w: number; h: number } | null>(null)
+  React.useEffect(() => {
+    const prev = prevLabelSizeRef.current
+    const sizeChanged = !!prev && (prev.w !== labelSize.widthMm || prev.h !== labelSize.heightMm)
+    prevLabelSizeRef.current = { w: labelSize.widthMm, h: labelSize.heightMm }
+    if (!open || !design) return
+    if (design.widthMm === labelSize.widthMm && design.heightMm === labelSize.heightMm) return
+    const refitted = refitDesign(design, labelSize.widthMm, labelSize.heightMm)
+    const changedShape = JSON.stringify(refitted.elements) !== JSON.stringify(design.elements)
+    setDesign(refitted)
+    if (changedShape && sizeChanged) {
+      toast.info(`التصميم الحر اتعاير على المقاس الجديد (${labelSize.widthMm}×${labelSize.heightMm} مم) عشان المعاينة تطابق المطبوع`, {
+        description: 'لو حابب تعدّل التوزيع، افتح المصمم من قسم «تصميم حر للملصق».',
+      })
+    }
+  }, [open, design, labelSize.widthMm, labelSize.heightMm])
 
   const sheetWarn = !!hint && mode === 'sheet'
 
@@ -621,8 +698,9 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
       )
     }
     // 👕 المقاس واللون بيروحوا مع الملصق (بيتطبعوا بس لللي ليهم قيمة فعلاً)
+    // 🧹 الاسم بدون لاحقة المتغير لو السطر بتاعها هيتطبع — مفيش تكرار
     const printItems = printable.map((r) => ({
-      name: r.name,
+      name: printNameOf(r),
       barcode: r.barcode as string,
       price: r.price,
       quantity: qtyOf(r),
@@ -697,6 +775,28 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
       showText={showText}
       showVariant={effectiveShowVariant}
       sheets={sheets}
+      /** 🧹 الاسم بنسخة الطباعة (بدون لاحقة المتغير لو السطر بتاعها بيظهر) */
+      nameOf={printNameOf}
+    />
+  )
+  // نسخة الموبايل من نفس المعاينة — بدون ترويسة داخلية (زر الطي بيعمل نفس الدور)
+  const previewPanelMobile = (
+    <PreviewPanel
+      mode={mode}
+      view={view}
+      onView={setView}
+      layout={layout}
+      design={design}
+      products={withBarcode}
+      qtyOf={qtyOf}
+      focus={focus}
+      showName={showName}
+      showPrice={showPrice}
+      showText={showText}
+      showVariant={effectiveShowVariant}
+      sheets={sheets}
+      nameOf={printNameOf}
+      compactHeader
     />
   )
 
@@ -755,7 +855,9 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
                   onClick={() => setTab('products')}
                   icon={Package}
                   label="المنتجات والكميات"
-                  badge={String(withBarcode.length)}
+                  /* 🐞 إصلاح: البادج كان بيعرض عدد الصفوف (منتجات + كل متغير/وحدة)
+                     بيتضيع معناه — دلوقتي عدد المنتجات اللي ليها باركود فعلاً */
+                  badge={String(entries.filter((e) => e.rows.some((r) => r.barcode)).length)}
                 />
                 <TabBtn
                   on={tab === 'settings'}
@@ -772,7 +874,8 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
               role="tabpanel"
               className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-4 sm:p-6"
             >
-            {/* معاينة (موبايل) */}
+            {/* معاينة (موبايل) — 🐞 إصلاح: الترويسة الداخلية كانت بتكرر عنوان
+                زر الطي («معاينة حية» فوق «معاينة حية») — مخفية على الموبايل */}
             <div className="overflow-hidden rounded-2xl border bg-card lg:hidden">
               <button
                 type="button"
@@ -784,7 +887,7 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
                 معاينة حية
                 <span className="ms-auto text-xs font-semibold text-foreground/60">{previewOpen ? 'إخفاء' : 'عرض'}</span>
               </button>
-              {previewOpen && <div className="h-[380px] border-t">{previewPanel}</div>}
+              {previewOpen && <div className="h-[380px] border-t">{previewPanelMobile}</div>}
             </div>
 
               {tab === 'products' ? (
@@ -888,7 +991,7 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
                 aside={
                   <span className="text-xs font-semibold tabular-nums text-foreground/65">
                     {entries.filter((e) => e.rows.some((r) => r.barcode)).length}{' '}
-                    {ar(entries.filter((e) => e.rows.some((r) => r.barcode)).length, 'منتج', 'منتجين', 'منتجات', 'منتج')} · {num(total)} {labelsWord(total)}
+                    {ar(entries.filter((e) => e.rows.some((r) => r.barcode)).length, 'منتج', 'منتجين', 'منتجات', 'منتج')} · {numLabels(total)}
                   </span>
                 }
               >
@@ -1056,10 +1159,12 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
                         />
                       </span>
                       <span dir="ltr" className="text-sm font-extrabold tabular-nums leading-none">
-                        {isCustom ? (on ? `${w} × ${h}` : 'مخصص') : `${p.w} × ${p.h}`}
+                        {isCustom ? 'مخصص' : `${p.w} × ${p.h}`}
                       </span>
                       <span className="text-[11px] font-medium leading-none text-foreground/60">
-                        {per ? `${per} / ورقة` : isCustom ? 'قياس حرّ' : 'مم'}
+                        {/* 🐞 إصلاح: كارت «مخصص» كان بيطبع أرقامه فيختلط مع الجاهز
+                            المطابق — دلوقتي كلمة مخصص دايماً ظاهرة والأرقام تحتها */}
+                        {isCustom ? (on ? `${w} × ${h} مم — قياس حر` : 'قياس حرّ') : per ? `${per} / ورقة` : 'مم'}
                       </span>
                     </button>
                   )
@@ -1107,14 +1212,15 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
               </p>
             )}
 
-            {/* 3) المحتوى */}
+            {/* 3) المحتوى — 🐞 مع التصميم الحر المفاتيح دي شكلياً (بتتجاوز) —
+                معطّلة بصرياً مع رسالة واضحة بدل ما المستخدم يجرب بلا نتيجة */}
             <section>
               <Title n={3}>اللي يظهر على الملصق</Title>
-              <div className="grid grid-cols-2 gap-2.5">
-                <ToggleRow icon={Type} label="اسم المنتج" on={showName} onChange={setShowName} />
-                <ToggleRow icon={BarcodeIcon} label="رقم الباركود" on={showText} onChange={setShowText} />
-                <ToggleRow icon={Tag} label="السعر" on={showPrice} onChange={setShowPrice} />
-                <ToggleRow icon={Shirt} label="المقاس واللون" on={showVariant} onChange={setShowVariant} />
+              <div className={cn('grid grid-cols-2 gap-2.5', design && 'opacity-55')}>
+                <ToggleRow icon={Type} label="اسم المنتج" on={showName} onChange={setShowName} disabled={!!design} />
+                <ToggleRow icon={BarcodeIcon} label="رقم الباركود" on={showText} onChange={setShowText} disabled={!!design} />
+                <ToggleRow icon={Tag} label="السعر" on={showPrice} onChange={setShowPrice} disabled={!!design} />
+                <ToggleRow icon={Shirt} label="المقاس واللون" on={showVariant} onChange={setShowVariant} disabled={!!design} />
               </div>
               <p className="mt-2.5 text-xs font-medium leading-relaxed text-foreground/65">
                 أي عنصر بتقفله بيدّي مساحة أكبر للباركود، فيتقري أسهل. سطر «المقاس واللون» بيظهر بس للمنتجات
@@ -1149,18 +1255,21 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
                   label="اسم المنتج (٪)"
                   value={namePct}
                   step={10}
+                  disabled={!!design}
                   onChange={(v) => setNamePct(clampInt(v, 60, 150))}
                 />
                 <Dim
                   label="السعر (٪)"
                   value={pricePct}
                   step={10}
+                  disabled={!!design}
                   onChange={(v) => setPricePct(clampInt(v, 60, 150))}
                 />
                 <Dim
                   label="طول خطوط الباركود (٪)"
                   value={barcodePct}
                   step={10}
+                  disabled={!!design}
                   onChange={(v) => setBarcodePct(clampInt(v, 50, 100))}
                 />
               </div>
@@ -1283,7 +1392,7 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
                     )}
                   >
                     <Package className="size-4" />
-                    تمام — رجوع للمنتجات ({num(total)} {labelsWord(total)})
+                    تمام — رجوع للمنتجات ({numLabels(total)})
                   </button>
                 </>
               )}
@@ -1299,8 +1408,11 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
           <div className="flex items-center gap-3">
             <div className="min-w-0 flex-1">
               <p className="flex items-baseline gap-1.5">
-                <span className="text-2xl font-extrabold leading-none tabular-nums">{num(total)}</span>
-                <span className="text-sm font-bold text-foreground/70">{labelsWord(total)}</span>
+                <span className="text-2xl font-extrabold leading-none tabular-nums">
+                  {/* 🐞 إصلاح الجمع: 0→«0»، 1→«ملصق»، 2→«ملصقين» بدون عدد، 3+→«3 ملصقات» */}
+                  {total === 0 ? num(0) : total <= 2 ? labelsWord(total) : num(total)}
+                </span>
+                {total > 2 && <span className="text-sm font-bold text-foreground/70">{labelsWord(total)}</span>}
               </p>
               <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs font-medium tabular-nums text-foreground/65">
                 {mode === 'sheet' ? (
@@ -1325,9 +1437,23 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
             <Button variant="outline" onClick={() => onOpenChange(false)} className="h-11 rounded-xl px-5 font-bold">
               إلغاء
             </Button>
-            <Button onClick={handlePrint} disabled={total === 0 || vState.loading || uState.loading} className="h-11 rounded-xl px-6 font-bold">
-              <Printer className="size-4" />
-              طباعة {total > 0 ? `${num(total)} ${labelsWord(total)}` : ''}
+            <Button
+              onClick={handlePrint}
+              disabled={total === 0 || vState.loading || uState.loading}
+              title={vState.loading || uState.loading ? 'بنجيب الألوان والمقاسات والوحدات — ثواني ويفتح الطباعة' : undefined}
+              className="h-11 rounded-xl px-6 font-bold"
+            >
+              {vState.loading || uState.loading ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  بنجيب المتغيرات…
+                </>
+              ) : (
+                <>
+                  <Printer className="size-4" />
+                  طباعة {total > 0 ? numLabels(total) : ''}
+                </>
+              )}
             </Button>
           </div>
         </div>
@@ -1341,7 +1467,13 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
           variantsEnabled={variantsEnabled}
           sample={
             focus
-              ? { name: focus.name, barcode: focus.barcode as string, price: focus.price, size: focus.size, color: focus.color }
+              ? {
+                  name: printNameOf(focus),
+                  barcode: focus.barcode as string,
+                  price: focus.price,
+                  size: focus.size,
+                  color: focus.color,
+                }
               : null
           }
           onApply={(d, tid2, tname2) => {
@@ -1403,7 +1535,8 @@ function PlainRow({
           </span>
         )}
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-extrabold leading-snug">{r.name}</span>
+          {/* 🐞 bdi: الاسم بلاحقة متغير لاتينية («— S / أسود») كان بيتعرض ملتوٍ في RTL */}
+          <span className="block truncate text-sm font-extrabold leading-snug"><bdi>{r.name}</bdi></span>
           <span className="mt-0.5 flex items-center gap-2 text-[11px] font-medium text-foreground/60">
             <bdi dir="ltr" className="font-mono tabular-nums">{r.barcode}</bdi>
             {showPrice && <span className="tabular-nums">{fmtPrice(r.price)} ج.م</span>}
@@ -1492,7 +1625,7 @@ function UnitsBlock({
             <p className="truncate text-sm font-extrabold leading-snug">وحدات الجملة — {productName}</p>
             <p className="mt-0.5 text-[11px] font-medium tabular-nums text-foreground/60">
               {rows.length} {ar(rows.length, 'وحدة', 'وحدتين', 'وحدات', 'وحدة')} بباركود
-              {picked > 0 ? ` · ${picked} مختار (${num(labels)} ${labelsWord(labels)})` : ''}
+              {picked > 0 ? ` · ${picked} مختار (${numLabels(labels)})` : ''}
             </p>
           </div>
         </div>
@@ -1544,7 +1677,7 @@ function VariantProductCard({
             <p className="truncate text-sm font-extrabold leading-snug">{entry.product.name}</p>
             <p className="mt-0.5 text-[11px] font-medium tabular-nums text-foreground/60">
               {groups.length} {ar(groups.length, 'لون', 'لونين', 'ألوان', 'لون')} · {printable.length} متغير بباركود
-              {picked > 0 ? ` · ${picked} مختار (${num(labels)} ${labelsWord(labels)})` : ''}
+              {picked > 0 ? ` · ${picked} مختار (${numLabels(labels)})` : ''}
             </p>
           </div>
         </div>
@@ -1766,25 +1899,29 @@ function RollArt() {
 }
 
 function ToggleRow({
-  icon: Icon, label, on, onChange,
+  icon: Icon, label, on, onChange, disabled,
 }: {
   icon: React.ComponentType<{ className?: string }>
   label: string
   on: boolean
   onChange: (v: boolean) => void
+  /** 🐞 مع التصميم الحر المفتاح بيتجاوز — معطّل بصرياً بدل ما يجرب بلا نتيجة */
+  disabled?: boolean
 }) {
   return (
     <label
       className={cn(
-        'flex cursor-pointer items-center gap-3 rounded-2xl border bg-card p-3.5 transition-colors',
-        on ? 'border-primary/50 bg-primary/5' : 'hover:bg-muted/60'
+        'flex items-center gap-3 rounded-2xl border bg-card p-3.5 transition-colors',
+        on ? 'border-primary/50 bg-primary/5' : 'hover:bg-muted/60',
+        disabled && 'cursor-not-allowed'
       )}
+      title={disabled ? 'مع التصميم الحر — عدّل المحتوى من المصمم نفسه' : undefined}
     >
       <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors', on ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground/60')}>
         <Icon className="size-4" />
       </span>
       <span className="min-w-0 flex-1 text-sm font-extrabold leading-tight">{label}</span>
-      <Switch checked={on} onCheckedChange={onChange} aria-label={label} />
+      <Switch checked={on} onCheckedChange={onChange} disabled={disabled} aria-label={label} />
     </label>
   )
 }
@@ -1794,22 +1931,26 @@ function Dim({
   value,
   onChange,
   step = 1,
+  disabled,
 }: {
   label: string
   value: number
   onChange: (v: number) => void
   /** مقدار تغيير أزرار +/− — 1 للمقاسات بالمم، 10 للنسب المئوية */
   step?: number
+  /** 🐞 مع التصميم الحر الحقول دي بتتجاوز — معطّلة بصرياً */
+  disabled?: boolean
 }) {
   return (
-    <div>
+    <div className={cn(disabled && 'opacity-55')} title={disabled ? 'مع التصميم الحر — عدّل الأحجام من المصمم' : undefined}>
       <p className="mb-1.5 text-xs font-bold">{label}</p>
       <div className="flex items-center gap-1.5" dir="ltr">
         <button
           type="button"
           onClick={() => onChange(value - step)}
+          disabled={disabled}
           aria-label={`تقليل ${label}`}
-          className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl border bg-background transition-colors hover:bg-muted', ring)}
+          className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl border bg-background transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-background', ring)}
         >
           <Minus className="size-4" />
         </button>
@@ -1817,6 +1958,7 @@ function Dim({
           inputMode="numeric"
           aria-label={label}
           value={value}
+          readOnly={disabled}
           onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => onChange(parseInt(digitsOnly(e.target.value) || '0', 10))}
           className="h-10 w-full min-w-0 rounded-xl border bg-background text-center text-base font-extrabold tabular-nums outline-none transition-shadow focus:border-primary focus:ring-[3px] focus:ring-primary/25"
@@ -1824,8 +1966,9 @@ function Dim({
         <button
           type="button"
           onClick={() => onChange(value + step)}
+          disabled={disabled}
           aria-label={`زيادة ${label}`}
-          className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl border bg-background transition-colors hover:bg-muted', ring)}
+          className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl border bg-background transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-background', ring)}
         >
           <Plus className="size-4" />
         </button>
@@ -1841,7 +1984,9 @@ function Qty({ value, onChange, label }: { value: number; onChange: (v: number) 
   )
   return (
     <div className="flex shrink-0 items-center gap-1" dir="ltr" role="group" aria-label={label}>
-      <button type="button" className={btn} onClick={() => onChange(value - 1)} disabled={value <= 0} aria-label="تقليل الكمية">
+      {/* 🐞 إصلاح (2026-11-05): الأزرار كانت 36px — أقل من حد اللمس الموصى به
+          (44px) وخطأ الكمية على الموبايل مكلف (ملصقات بتتطبع غلط). */}
+      <button type="button" className={cn(btn, 'size-11 sm:size-9')} onClick={() => onChange(value - 1)} disabled={value <= 0} aria-label="تقليل الكمية">
         <Minus className="size-4" />
       </button>
       <input
@@ -1850,9 +1995,9 @@ function Qty({ value, onChange, label }: { value: number; onChange: (v: number) 
         value={value}
         onFocus={(e) => e.currentTarget.select()}
         onChange={(e) => onChange(parseInt(digitsOnly(e.target.value) || '0', 10))}
-        className="h-9 w-12 rounded-xl border bg-background text-center text-sm font-extrabold tabular-nums outline-none transition-shadow focus:border-primary focus:ring-[3px] focus:ring-primary/25"
+        className="h-11 w-14 rounded-xl border bg-background text-center text-sm font-extrabold tabular-nums outline-none transition-shadow focus:border-primary focus:ring-[3px] focus:ring-primary/25 sm:h-9 sm:w-12"
       />
-      <button type="button" className={btn} onClick={() => onChange(value + 1)} disabled={value >= MAX_QTY} aria-label="زيادة الكمية">
+      <button type="button" className={cn(btn, 'size-11 sm:size-9')} onClick={() => onChange(value + 1)} disabled={value >= MAX_QTY} aria-label="زيادة الكمية">
         <Plus className="size-4" />
       </button>
     </div>
@@ -1877,7 +2022,7 @@ function useFit(natW: number, natH: number, max: number) {
 }
 
 function PreviewPanel({
-  mode, view, onView, layout, design, products, qtyOf, focus, showName, showPrice, showText, showVariant, sheets,
+  mode, view, onView, layout, design, products, qtyOf, focus, showName, showPrice, showText, showVariant, sheets, nameOf, compactHeader,
 }: {
   mode: Mode
   view: 'sheet' | 'label'
@@ -1893,11 +2038,15 @@ function PreviewPanel({
   showText: boolean
   showVariant: boolean
   sheets: number
+  /** اسم الطباعة (بدون لاحقة المتغير لو سطرها بيظهر) — 🧹 إصلاح التكرار */
+  nameOf: (r: LabelRow) => string
+  /** موبايل: بدون ترويسة داخلية — زر الطي الخارجي بيعمل نفس الدور 🐞 */
+  compactHeader?: boolean
 }) {
   const showSheet = mode === 'sheet' && view === 'sheet' && !!layout.sheet
 
   const sample: Sample = focus
-    ? { name: focus.name, barcode: focus.barcode as string, price: focus.price, size: focus.size, color: focus.color }
+    ? { name: nameOf(focus), barcode: focus.barcode as string, price: focus.price, size: focus.size, color: focus.color }
     : { name: 'منتج تجريبي', barcode: '2000000000017', price: 25 }
 
   // 🛡️ 2026-10-19: باركود كل منتج بيتولّد مرة واحدة لكل مقاس (نفس طريقة print-client) —
@@ -1940,29 +2089,32 @@ function PreviewPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b px-4 py-3">
-        <Eye className="size-4 text-foreground/60" aria-hidden />
-        <h3 className="text-sm font-extrabold">معاينة حية</h3>
-        {mode === 'sheet' && (
-          <div className="ms-auto flex items-center gap-0.5 rounded-xl bg-muted p-0.5" role="group" aria-label="نوع المعاينة">
-            {(['sheet', 'label'] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => onView(v)}
-                aria-pressed={view === v}
-                className={cn(
-                  'h-7 rounded-lg px-3 text-xs font-bold transition-colors',
-                  ring,
-                  view === v ? 'bg-background text-foreground shadow-sm' : 'text-foreground/65 hover:text-foreground'
-                )}
-              >
-                {v === 'sheet' ? 'الورقة' : 'الملصق'}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* 🐞 إصلاح: على الموبايل الترويسة بقت مخفية — كانت بتكرر عنوان زر الطي */}
+      {!compactHeader && (
+        <div className="flex shrink-0 items-center gap-2 border-b px-4 py-3">
+          <Eye className="size-4 text-foreground/60" aria-hidden />
+          <h3 className="text-sm font-extrabold">معاينة حية</h3>
+          {mode === 'sheet' && (
+            <div className="ms-auto flex items-center gap-0.5 rounded-xl bg-muted p-0.5" role="group" aria-label="نوع المعاينة">
+              {(['sheet', 'label'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => onView(v)}
+                  aria-pressed={view === v}
+                  className={cn(
+                    'h-7 rounded-lg px-3 text-xs font-bold transition-colors',
+                    ring,
+                    view === v ? 'bg-background text-foreground shadow-sm' : 'text-foreground/65 hover:text-foreground'
+                  )}
+                >
+                  {v === 'sheet' ? 'الورقة' : 'الملصق'}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="relative min-h-0 flex-1 bg-muted/40 text-foreground">
         <span
@@ -1985,6 +2137,7 @@ function PreviewPanel({
             showPrice={showPrice}
             showText={showText}
             showVariant={showVariant}
+            nameOf={nameOf}
           />
         ) : (
           <LabelStage
@@ -2005,7 +2158,7 @@ function PreviewPanel({
         {showSheet
           ? `الورقة الأولى${sheets > 1 ? ` من ${sheets}` : ''} بترتيب الطباعة الفعلي. المعاينة تقريبية — الباركود بيتطبع بالحجم الحقيقي.`
           : focus
-            ? `ملصق «${focus.name}» — اضغط على أي منتج في القايمة لمعاينته.`
+            ? `ملصق «${focus.name}» — اضغط على أي منتج في القايمة لمعاينه.`
             : 'المعاينة تقريبية — الباركود بيتطبع بالحجم الحقيقي.'}
       </div>
     </div>
@@ -2224,8 +2377,8 @@ function LabelStage({
 
 /** ورقة A4 كاملة: الخانات بتتملي بالترتيب الفعلي (منتج × كميته) لأول ورقة */
 function SheetStage({
-  layout, design, products, qtyOf, svgFor, showName, showPrice, showText, showVariant,
-}: FaceProps & { design: LabelDesign | null; products: LabelRow[]; qtyOf: (r: LabelRow) => number; svgFor: (code: string) => string }) {
+  layout, design, products, qtyOf, svgFor, showName, showPrice, showText, showVariant, nameOf,
+}: FaceProps & { design: LabelDesign | null; products: LabelRow[]; qtyOf: (r: LabelRow) => number; svgFor: (code: string) => string; nameOf: (r: LabelRow) => string }) {
   const g = layout.sheet!
   const cells = g.columns * g.rows
 
@@ -2234,12 +2387,13 @@ function SheetStage({
     for (const p of products) {
       const n = qtyOf(p)
       for (let i = 0; i < n && out.length < cells; i++) {
-        out.push({ name: p.name, barcode: p.barcode as string, price: p.price, size: p.size, color: p.color })
+        // 🧹 الاسم بنسخة الطباعة — مفيش تكرار للمقاس/اللون في المعاينة
+        out.push({ name: nameOf(p), barcode: p.barcode as string, price: p.price, size: p.size, color: p.color })
       }
       if (out.length >= cells) break
     }
     return out
-  }, [products, qtyOf, cells])
+  }, [products, qtyOf, cells, nameOf])
 
   // لو المستخدم طابع كام ملصق بس، نعرض أول الصفوف المستخدمة (+ صف) ونكبّرهم بدل ورقة كاملة بملصقات مجهرية
   const rowsUsed = Math.ceil(filled.length / g.columns)

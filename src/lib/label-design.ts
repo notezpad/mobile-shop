@@ -83,13 +83,21 @@ export function elementHeightMm(el: LabelElement): number {
   return pt * PT_MM * lh
 }
 
-/** كم سطر نص يتسع للعنصر من موضعه لحد خرم الملصق (بهامش أمان 0.3مم) —
- *  نفس الرقم بيتطبق في المعاينة (WebkitLineClamp) والطباعة HTML والكانفس،
- *  فالقص متطابق في التلاتة. */
-export function maxLinesFor(el: LabelElement, design: Pick<LabelDesign, 'heightMm'>): number {
+/** كم سطر نص يتسع للعنصر من موضعه لحد أول عنصر تاني تحته (ولا خرم الملصق لو
+ *  مفيش حاجة تحته) — بهامش أمان.
+ *
+ *  🐞 إصلاح (2026-11-05): قبل كده الحد كان «خرم الملصق» بس — فالاسم الطويل كان
+ *  بيتوسّع لحد 7 سطور على مقاس 20×30 وبيغطي المقاس/اللون والباركود اللي تحته
+ *  (الملصق الحر عناصره absolute — مفيش flexbox يدفعهم). دلوقتي اللف بيقف عند
+ *  سقف العنصر اللي تحت فعلاً — نفس القيد بيتطبق في المعاينة (WebkitLineClamp)
+ *  وطباعة HTML (print.ts → freeElementHtml) فالقص متطابق في التلاتة. */
+export function maxLinesFor(el: LabelElement, design: Pick<LabelDesign, 'heightMm' | 'elements'>): number {
   if (el.type === 'barcode' || el.type === 'variant') return 1
   const lineH = elementHeightMm(el)
-  const avail = Math.max(lineH, design.heightMm - el.yMm - 0.3)
+  // سقف العناصر اللي تحت ده (أقرب yMm أكبر من عنصرنا بهامش) — ومفيش: خرم الملصق
+  const below = design.elements.filter((e) => e.id !== el.id && e.yMm > el.yMm + 0.15)
+  const limitBottom = below.length ? Math.min(...below.map((e) => e.yMm)) : design.heightMm - 0.3
+  const avail = Math.max(lineH, limitBottom - el.yMm - 0.2)
   return Math.max(1, Math.floor(avail / lineH + 1e-6))
 }
 
@@ -202,6 +210,21 @@ function clampNum(n: unknown, lo: number, hi: number, fallback: number): number 
   return Math.max(lo, Math.min(hi, v))
 }
 
+/** بيتأكد إن العنصر جوّه حدود الملصق فعلًا (الموضع + العرض + الارتفاع) —
+ *  قبل كده كان التنظيف بيتحقق من xMm وحده ووMm وحده، فقالب قديم تالف كان ممكن
+ *  يرسم عنصر نص نصه برّه الملصق (xMm + wMm > W) أو باركود بيطول من الورق. */
+function containElement(el: LabelElement, W: number, H: number): LabelElement {
+  const out = { ...el }
+  const minXHeight = 1.6 // أقصر ارتفاع نص عملي (4pt)
+  out.yMm = r2(clampNum(out.yMm, 0, Math.max(0, H - minXHeight), 0))
+  out.xMm = r2(clampNum(out.xMm, 0, Math.max(0, W - 2), 0))
+  out.wMm = r2(Math.max(4, Math.min(out.wMm, W - out.xMm)))
+  if (out.type === 'barcode') {
+    out.heightMm = r2(Math.max(2, Math.min(out.heightMm ?? 8, H - out.yMm)))
+  }
+  return out
+}
+
 /**
  * ينظّف تصميم قادم من قاعدة البيانات أو من المتصفح (Defense in depth):
  * مقاسات ضمن 10–300مم، إحداثيات جوّه الملصق، أنواع معروفة بس، 12 عنصر كحد أقصى.
@@ -244,21 +267,153 @@ export function sanitizeDesign(raw: unknown, fallbackW = 40, fallbackH = 30): La
       const a = o.align
       el.align = a === 'right' || a === 'left' ? a : 'center'
     }
-    els.push(el)
+    els.push(containElement(el, W, H))
   }
   return { v: 1, widthMm: W, heightMm: H, elements: els }
 }
 
-/** يضبط إحداثيات العناصر بعد تغيير مقاس الملصق (بتصغير/تكبير) — مفيش عنصر يطلع برّه. */
+/** يضبط إحداثيات العناصر بعد تغيير مقاس الملصق (تصغير/تكبير) — مفيش عنصر يطلع برّه.
+ *
+ *  🛠️ إصلاح (2026-11-05): كان بيقص المواضع فقط (clamp) — فالسعر الموجود عند
+ *  أسفل ملصق 30×مم كان بيتحط عند حافة ملصق 20مم ويتقص نصه عند الطباعة.
+ *  دلوقتي المواضع والعرض بيتحجّموا بنفس النسبة (زي أي برنامج ملصقات) —
+ *  التوزيع النسبي بيفضل محفوظ، وبعدها احتواء أمان لأي عنصر فضل برّه. */
 export function refitDesign(design: LabelDesign, widthMm: number, heightMm: number): LabelDesign {
   const W = clampDim(widthMm, 10, 300)
   const H = clampDim(heightMm, 10, 300)
-  const elements = design.elements.map((el) => ({
-    ...el,
-    xMm: r2(clampNum(el.xMm, 0, Math.max(0, W - 2), 0)),
-    yMm: r2(clampNum(el.yMm, 0, Math.max(0, H - 1), 0)),
-    wMm: r2(clampNum(el.wMm, 4, W, Math.min(W, 30))),
-    ...(el.type === 'barcode' ? { heightMm: r2(clampNum(el.heightMm, 2, H, 8)) } : {}),
-  }))
+  const sx = design.widthMm > 0 ? W / design.widthMm : 1
+  const sy = design.heightMm > 0 ? H / design.heightMm : 1
+  const elements = design.elements.map((el) =>
+    containElement(
+      {
+        ...el,
+        xMm: r2(el.xMm * sx),
+        yMm: r2(el.yMm * sy),
+        wMm: r2(Math.min(el.wMm * sx, W)),
+        // طول خطوط الباركود بيتحجّم بنفس النسبة عشان المسافات النسبية ماتبوظش
+        ...(el.type === 'barcode' && sy !== 1
+          ? { heightMm: r2(Math.max(2, (el.heightMm ?? 8) * sy)) }
+          : {}),
+      },
+      W,
+      H,
+    ),
+  )
   return { v: 1, widthMm: W, heightMm: H, elements }
+}
+
+/* ───────────────── التداخل وأدلة المحاذاة (سحب وإفلات آمن) ───────────────── */
+
+/** هامش التسامح: ملامسة الحواف مش تداخل — لازم مساحة فعلية فوق بعض (0.15مم). */
+export const OVERLAP_TOLERANCE_MM = 0.15
+
+/** صندوق العنصر بالمليمتر — الارتفاع المحجوز لكل نوع (سطر نص واحد أو الباركود). */
+export function elementBox(el: LabelElement, design: Pick<LabelDesign, 'heightMm'>) {
+  return {
+    x: el.xMm,
+    y: el.yMm,
+    w: el.wMm,
+    h: elementHeightMm(el),
+    bottomLimit: design.heightMm,
+  }
+}
+
+/** هل العنصرين متداخلين فعلاً (بمساحة محسوسة مش مجرد ملامسة)؟ */
+export function elementsOverlap(
+  a: LabelElement,
+  b: LabelElement,
+  design: Pick<LabelDesign, 'heightMm'>,
+): boolean {
+  const t = OVERLAP_TOLERANCE_MM
+  const ba = elementBox(a, design)
+  const bb = elementBox(b, design)
+  const wOverlap = Math.min(ba.x + ba.w, bb.x + bb.w) - Math.max(ba.x, bb.x)
+  const hOverlap = Math.min(ba.y + ba.h, bb.y + bb.h) - Math.max(ba.y, bb.y)
+  return wOverlap > t && hOverlap > t
+}
+
+/** كل أزواج العناصر المتداخلة في التصميم — للتحذير في المصمم وعند التطبيق. */
+export function overlapPairs(design: LabelDesign): { a: LabelElement; b: LabelElement }[] {
+  const out: { a: LabelElement; b: LabelElement }[] = []
+  for (let i = 0; i < design.elements.length; i++) {
+    for (let j = i + 1; j < design.elements.length; j++) {
+      const a = design.elements[i]
+      const b = design.elements[j]
+      if (elementsOverlap(a, b, design)) out.push({ a, b })
+    }
+  }
+  return out
+}
+
+/** إرجاع موضع مزوّد بأدلة محاذاة ذكية (زي Canva/Figma): لو حرف أو مركز
+ *  العنصر قرب من حرف/مركز عنصر تاني أو حدود الملصق — بينزلق ليه ويرجّع خطوط
+ *  الدليل المطلوب رسمها (بالملليمتر جوّه الملصق).
+ *
+ *  tol = مسافة الالتقاط بالمم (0.75مم ≈ 3px على شاشة 100%). */
+export function computeSnap(
+  x: number,
+  y: number,
+  moving: LabelElement,
+  others: LabelElement[],
+  design: Pick<LabelDesign, 'widthMm' | 'heightMm'>,
+  tol = 0.75,
+): { x: number; y: number; guidesV: number[]; guidesH: number[] } {
+  const mvW = moving.wMm
+  const mvH = elementHeightMm(moving)
+  const W = design.widthMm
+  const H = design.heightMm
+
+  // مراسي رأسية: x لحدود الملصق + مراكز/أحرف العناصر التانية
+  const vAnchors: number[] = [0, W, W / 2]
+  const hAnchors: number[] = [0, H, H / 2]
+  for (const o of others) {
+    const oh = elementHeightMm(o)
+    vAnchors.push(o.xMm, o.xMm + o.wMm, o.xMm + o.wMm / 2)
+    hAnchors.push(o.yMm, o.yMm + oh, o.yMm + oh / 2)
+  }
+
+  // مواضع المرشحة لحرف/مركز العنصر المتحرك
+  const snapTo = (candidates: number[], value: number): { v: number; guide: number } | null => {
+    let best: { v: number; guide: number; d: number } | null = null
+    for (const a of candidates) {
+      const d = Math.abs(value - a)
+      if (d <= tol && (!best || d < best.d)) best = { v: a, guide: a, d }
+    }
+    return best ? { v: best.v, guide: best.guide } : null
+  }
+
+  let guidesV: number[] = []
+  let guidesH: number[] = []
+
+  // المحاذاة الرأسية (x): نجرب حرف الشمال، مركز، حرف اليمين
+  let nx = x
+  const tryX = (value: number): boolean => {
+    const s = snapTo(vAnchors, value)
+    if (s) {
+      nx = s.v
+      guidesV = [s.guide]
+      return true
+    }
+    return false
+  }
+  if (!tryX(x) && !tryX(x + mvW / 2) && !tryX(x + mvW)) {
+    guidesV = []
+  }
+
+  // المحاذاة الأفقية (y)
+  let ny = y
+  const tryY = (value: number): boolean => {
+    const s = snapTo(hAnchors, value)
+    if (s) {
+      ny = s.v
+      guidesH = [s.guide]
+      return true
+    }
+    return false
+  }
+  if (!tryY(y) && !tryY(y + mvH / 2) && !tryY(y + mvH)) {
+    guidesH = []
+  }
+
+  return { x: nx, y: ny, guidesV, guidesH }
 }

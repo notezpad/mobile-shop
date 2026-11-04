@@ -127,10 +127,15 @@ export async function checkLowStockAndNotify(sql: Sql, tenantId: string) {
   if (toCreate.length === 0) return
 
   try {
+    // 🐞 إصلاح (2026-11-05): كان JSON.stringify(toCreate)::jsonb — postgres.js
+    // بيعمل JSON-encode تاني للنص فيطلع «نص» جوه jsonb مش مصفوفة →
+    // "cannot call jsonb_to_recordset on a non-array" على كل فحص مخزون منخفض.
+    // النمط الصحيح موثّق في bulk-sql.ts: sql.json(...) (شوف ملاحظة السطر 24 هناك).
+    const json = sql.json(toCreate as never)
     await sql`
       INSERT INTO "Notification" ("tenantId", "userId", "type", "title", "message", "link")
       SELECT x."tenantId", x."userId", x."type", x."title", x."message", x."link"
-      FROM jsonb_to_recordset(${JSON.stringify(toCreate)}::jsonb)
+      FROM jsonb_to_recordset(${json})
         AS x("tenantId" text, "userId" text, "type" text, "title" text, "message" text, "link" text)`
   } catch (e) {
     console.error('[checkLowStockAndNotify] bulk insert failed:', e)

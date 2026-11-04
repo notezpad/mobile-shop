@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { Download, X, Smartphone, Share } from 'lucide-react'
+import { useBulkSelectionActive } from '@/lib/use-bulk-selection-active'
 
 /**
  * PWAInstallPrompt 2026 — premium install experience.
@@ -32,6 +33,9 @@ export function PWAInstallPrompt() {
   const [showBanner, setShowBanner] = React.useState(false)
   const [isIOS, setIsIOS] = React.useState(false)
   const [installed, setInstalled] = React.useState(false)
+  // 🛡️ إصلاح (2026-11-05): البانر كان بيقف فوق شريط التحديد الجماعي في صفحة
+  // المنتجات وبيمنع النقر على «طباعة ملصقات» — بيختفي طالما التحديد نشط.
+  const bulkSelectionActive = useBulkSelectionActive()
 
   React.useEffect(() => {
     let cancelled = false
@@ -155,7 +159,7 @@ export function PWAInstallPrompt() {
     localStorage.setItem('pwa-install-dismissed-at', String(Date.now()))
   }
 
-  if (installed || !showBanner) return null
+  if (installed || !showBanner || bulkSelectionActive) return null
 
   return (
     <div

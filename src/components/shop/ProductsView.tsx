@@ -774,6 +774,26 @@ export function ProductsView() {
   // سعر القطعة خاص بباقة الجملة (الاحترافية) فقط — القطاعي بيكتب سعره وخلاص
   const isWholesale = capabilities.includes('multi_unit')
   const selectionMode = selectedIds.size > 0
+
+  // 🛡️ إصلاح (2026-11-05): شريط التحديد الجماعي كان مغطّى ببانر «تثبيت التطبيق»
+  // (بانر z-40 ثابت أسفل الشاشة فوق الشريط z-30) — أول جلسة للمستخدم الجديد
+  // كانت تبوظ تماماً: زر «طباعة ملصقات» مش بيستقبل نقر خالص. دلوقتي:
+  // 1) الشريط اترفع لـ z-50 فوق البانر. 2) البانر نفسه بيتخفى طول ما
+  // التحديد الجماعي نشط (حدث مخصص — PWAInstallPrompt بيسمعه).
+  React.useEffect(() => {
+    try {
+      window.dispatchEvent(new CustomEvent('nezam:bulk-selection', { detail: selectionMode }))
+    } catch {
+      /* ignore */
+    }
+    return () => {
+      try {
+        window.dispatchEvent(new CustomEvent('nezam:bulk-selection', { detail: false }))
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [selectionMode])
   // تلقائي: بطاقة الصورة لو نص منتجات الصفحة على الأقل ليها صور، وإلا البطاقة المضغوطة
   const imageShare = products.length > 0 ? products.filter((p) => !!p.imagePath).length / products.length : 0
   const cardVariant: 'image' | 'compact' =
@@ -1422,9 +1442,10 @@ export function ProductsView() {
         </>
       )}
 
-      {/* ═══ شريط التحديد الجماعي (لاصق أسفل الشاشة) ═══ */}
+      {/* ═══ شريط التحديد الجماعي (لاصق أسفل الشاشة) ═══
+          🛡️ z-50 فوق بانر تثبيت التطبيق (z-40) — الزرار ما بيتغطاش أكتر */}
       {selectionMode && (
-        <div className="sticky bottom-4 z-30 flex justify-center">
+        <div className="sticky bottom-4 z-50 flex justify-center">
           <div className="animate-in-up flex flex-wrap items-center gap-1.5 rounded-2xl bg-foreground px-3 py-2 text-background shadow-xl">
             <span className="px-2 text-sm font-extrabold tabular-nums">
               {selectedIds.size} محدد
