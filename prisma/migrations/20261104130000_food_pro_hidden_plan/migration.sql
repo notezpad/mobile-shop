@@ -1,11 +1,5 @@
 -- 🥬 2026-11-04 (التحديث 26): الباقة الاحترافية الغذائية المخفية (food-pro)
 --
--- 🔧 إصلاح خطأ 42702 (column reference "enabledModules" is ambiguous):
---   جوّه ON CONFLICT DO UPDATE، أي مرجع عمود عاري (من غير سَند) بيتحصل
---   من جدولين: صف "Plan" الموجود + صف الـ VALUES الجديد — فلازم السَند.
---   التغيير: INSERT INTO "Plan" AS p + كل مراجع "enabledModules"
---   جوّه الـ CASE بقت p."enabledModules". EXCLUDED زي ما هي.
---
 -- الخلفية:
 --   زميل التطوير كان قال قبل إضافة الإضافات المدفوعة: «الغذائية مالهاش مسار
 --   لـ HR — قاعدة الحذف بتشمل أي باقة food، ومفيش food-pro، فعميل الغذائي
@@ -31,15 +25,10 @@
 --    ~20 ج/شهر. لو عايز تعدل: UPDATE "Plan" SET "priceMonthly"=X WHERE "code"='food-pro';
 --    أو من لوحة الأدمن → الباقات.
 --
--- ⚠️ ملاحظة إعادة التشغيل: السكريبت idempotent — لكن خد بالك إن الـ upsert
---    بيحدّث (name/description/الأسعار/features/sortOrder/capabilities) من
---    القيم اللي هنا كل مرة تشغّله. المحمي الوحيد هو enabledModules
---    (بيتكمل بـ hr لو ناقص بس، ومش بيمسح تخصيص الأدمن).
---
 -- ⚠️ طبّق على قاعدة البيانات الإنتاجية قبل الـ deploy، وبعدها شغّل الاختياري:
 --    bun run tsx prisma/seed-food-pro-plan.ts (idempotent — نفس البيانات)
 
-INSERT INTO "Plan" AS p (
+INSERT INTO "Plan" (
   "code", "name", "description", "priceMonthly", "priceYearly",
   "maxUsers", "maxProducts", "maxBranches", "trialDays",
   "features", "isActive", "sortOrder", "businessType",
@@ -70,25 +59,12 @@ INSERT INTO "Plan" AS p (
   -- ملاحظة: enabledModules مش بنمسحها في الـ UPDATE عشان لو الأدمن ظبطها
   -- يدوياً من اللوحة متترجعش. لكن نتأكد إن hr موجودة لو ناقصة:
   "enabledModules" = CASE
-    WHEN p."enabledModules" IS NOT NULL
-     AND p."enabledModules" <> ''
-     AND jsonb_typeof(p."enabledModules"::jsonb) = 'array'
-     AND NOT ((p."enabledModules"::jsonb) ? 'hr')
-    THEN ((p."enabledModules"::jsonb) || '"hr"'::jsonb)::text
-    ELSE p."enabledModules"
+    WHEN "enabledModules" IS NOT NULL
+     AND "enabledModules" <> ''
+     AND jsonb_typeof("enabledModules"::jsonb) = 'array'
+     AND NOT (("enabledModules"::jsonb) ? 'hr')
+    THEN (("enabledModules"::jsonb) || '"hr"'::jsonb)::text
+    ELSE "enabledModules"
   END,
   "capabilities" = EXCLUDED."capabilities",
   "visibility" = 'hidden';
-
--- ── الفحص النهائي: صف واحد فيه has_hr = true وvisibility = hidden ──
--- (محصّن ضد القيم الغريبة: فاضي / مش array / NULL → has_hr ترجع NULL بدل ما تكسر)
-SELECT "code", "visibility", "priceMonthly", "priceYearly", "sortOrder",
-       CASE WHEN "enabledModules" IS NOT NULL
-             AND "enabledModules" <> ''
-             AND jsonb_typeof("enabledModules"::jsonb) = 'array'
-            THEN ("enabledModules"::jsonb) ? 'hr'
-            ELSE NULL
-       END AS has_hr,
-       "enabledModules"
-FROM "Plan"
-WHERE "code" = 'food-pro';

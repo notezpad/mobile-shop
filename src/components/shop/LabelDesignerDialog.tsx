@@ -254,19 +254,24 @@ export function LabelElementContent({
 
 /* ───────────────────────────── المصمم ───────────────────────────── */
 
-/** يقيس الحاوية ويرجّع أكبر scale يخلّي الملصق يدخل جواها (نفس useFit في دايلوج الطباعة). */
+/** يقيس الحاوية ويرجّع أكبر scale يخلّي الملصق يدخل جواها (نفس useFit في دايلوج الطباعة).
+ *
+ *  🐞 إصلاح v28.1 (المعاينة كانت فاضية): الكانفس بيتولد بس لما design تجهز —
+ *  يعني بعد أول commit — فكان useLayoutEffect بـ deps فاضية بيلاقي ref فاضي
+ *  في أول (وآخر) تنفيذ له، والـ ResizeObserver مكانش بيتوصل أبدًا → scale فضل
+ *  0 → الملصق ظل visibility:hidden للأبد. الحل: callback ref + state — أول ما
+ *  الحاوية تتركب بترجّع node ونوصل الـ observer وقتها (وبنفكه لو اتشالت). */
 function useStage(natW: number, natH: number, max = 3.5) {
-  const ref = React.useRef<HTMLDivElement>(null)
+  const [node, setNode] = React.useState<HTMLDivElement | null>(null)
   const [box, setBox] = React.useState({ w: 0, h: 0 })
-  React.useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
+  React.useEffect(() => {
+    if (!node) return
     const ro = new ResizeObserver(([e]) => setBox({ w: e.contentRect.width, h: e.contentRect.height }))
-    ro.observe(el)
+    ro.observe(node)
     return () => ro.disconnect()
-  }, [])
+  }, [node])
   const scale = box.w > 0 && box.h > 0 ? Math.min(max, box.w / natW, box.h / natH) : 0
-  return { ref, scale }
+  return { ref: setNode, scale }
 }
 
 export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, variantsEnabled, sample, onApply }: Props) {
