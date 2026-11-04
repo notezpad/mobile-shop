@@ -247,7 +247,7 @@ export function LabelElementContent({
             width: '100%',
             height: barHeightPx(el.heightMm ?? 8),
             background: 'repeating-linear-gradient(90deg, #000 0, #000 2px, transparent 2px, transparent 4px)',
-            opacity: 0.25,
+            opacity: 0.5,
           }}
         />
       )
@@ -302,7 +302,10 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
   const barEl = design?.elements.find((e) => e.type === 'barcode') ?? null
 
   // SVG الباركود للعينة — بارتفاع عنصر الباركود الحالي (نفس معادلة الطباعة)
-  const svg = React.useMemo(() => {
+  // 🛡️ التحديث 29: لو باركود المنتج المعروض مش قابل للتحويل لSVG (حروف غير ASCII
+  // مثلاً) كنا بنعرض مربع شبه مخفي (شفافية 25%) — بيبان كأن «الباركود مختفي».
+  // دلوقتي: لو الرسم فشل بنعرض باركود تجريبي + إشعار واضح تحت الكانفس.
+  const svgRaw = React.useMemo(() => {
     if (typeof window === 'undefined' || !design || !s.barcode) return ''
     return renderBarcodeSvg(s.barcode, {
       height: barHeightPx(barEl?.heightMm ?? 8),
@@ -312,6 +315,22 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design?.widthMm, barEl?.heightMm, barEl?.wMm, barEl?.id, s.barcode])
+
+  // باركود تجريبي مضمون الرسم — احتياط لما باركود المنتج يفشل
+  const svgFallback = React.useMemo(() => {
+    if (typeof window === 'undefined' || !design) return ''
+    return renderBarcodeSvg(DEFAULT_SAMPLE.barcode, {
+      height: barHeightPx(barEl?.heightMm ?? 8),
+      availMm: barEl ? barEl.wMm : design.widthMm,
+      fontSize: 8,
+      displayValue: false,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [design?.widthMm, barEl?.heightMm, barEl?.wMm, barEl?.id])
+
+  const svg = svgRaw || svgFallback
+  // هل بنعرض باركود تجريبي بدل بتاع المنتج فعلاً؟ (للإشعار تحت الكانفس)
+  const barcodeFallbackUsed = !!design && !svgRaw && !!svgFallback
 
   /* ── فتح المصمم: ابدأ من آخر تصميم أو الترتيب الافتراضي، وجيب القوالب ── */
   React.useEffect(() => {
@@ -654,21 +673,59 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
               <DialogTitle className="mt-1.5 text-lg font-extrabold leading-tight text-zinc-50">
                 مصمم الملصقات — سحب وإفلات
               </DialogTitle>
-              <DialogDescription className="mt-0.5 text-xs font-medium text-zinc-300">
+              <DialogDescription className="mt-0.5 hidden text-xs font-medium text-zinc-300 sm:block">
                 اسحب أي عنصر لأي مكان، واضغط عليه لتغيير حجمه ومحاذاته — التراجع Ctrl+Z متاح دايماً، وللإغلاق زر إغلاق فوق أو Esc.
               </DialogDescription>
             </div>
-            {/* ✖ التحديث 29: زر إغلاق واضح — كان أصلاً مفيش طريقة ظاهرة لقفل المصمم */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => onOpenChange(false)}
-              title="إغلاق المصمم (Esc)"
-              aria-label="إغلاق المصمم"
-              className="size-9 shrink-0 rounded-xl text-zinc-300 hover:bg-white/15 hover:text-white focus-visible:ring-white/40"
-            >
-              <X className="size-5" />
-            </Button>
+            {/* 🧰 التحديث 29: تراجع/إعادة/تلقائي في الرأس — ظاهرين دايماً ومش بيغطوا الملصق
+                (كانوا شريط عائم فوق الكانفس وبيمكن يغطّي عنصر نيّف وضعته المستخدم في الركن) */}
+            <div className="flex shrink-0 items-center gap-0.5">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={undo}
+                disabled={!canUndo}
+                title="تراجع (Ctrl+Z)"
+                aria-label="تراجع"
+                className="rounded-xl text-zinc-300 hover:bg-white/15 hover:text-white focus-visible:ring-white/40"
+              >
+                <Undo2 className="size-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={redo}
+                disabled={!canRedo}
+                title="إعادة (Ctrl+Y)"
+                aria-label="إعادة"
+                className="rounded-xl text-zinc-300 hover:bg-white/15 hover:text-white focus-visible:ring-white/40"
+              >
+                <Redo2 className="size-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={resetAuto}
+                disabled={!design}
+                title="رجّع الترتيب التلقائي"
+                aria-label="رجّع الترتيب التلقائي"
+                className="rounded-xl text-zinc-300 hover:bg-white/15 hover:text-white focus-visible:ring-white/40"
+              >
+                <RotateCcw className="size-4" />
+              </Button>
+              <span aria-hidden className="mx-1.5 h-6 w-px bg-white/20" />
+              {/* ✖ زر إغلاق واضح — كان أصلاً مفيش طريقة ظاهرة لقفل المصمم */}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onOpenChange(false)}
+                title="إغلاق المصمم (Esc)"
+                aria-label="إغلاق المصمم"
+                className="rounded-xl text-zinc-300 hover:bg-white/15 hover:text-white focus-visible:ring-white/40"
+              >
+                <X className="size-5" />
+              </Button>
+            </div>
           </div>
         </header>
 
@@ -685,49 +742,15 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                 backgroundSize: '20px 20px',
               }}
             />
-            {/* 🧰 التحديث 29: شريط أدوات عائم — تراجع/إعادة/ترتيب تلقائي ظاهرين دايماً مهما كان مختار */}
-            <div dir="rtl" className="absolute end-3 top-3 z-10 flex items-center gap-0.5 rounded-2xl border border-foreground/10 bg-card/95 p-1 shadow-lg backdrop-blur">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={undo}
-                disabled={!canUndo}
-                title="تراجع (Ctrl+Z)"
-                aria-label="تراجع"
-                className="h-8 gap-1.5 rounded-xl px-2 font-bold"
+            {/* ⚠️ التحديث 29: لو التصميم مفيهوش عنصر باركود — تحذير واضح بدل مفاجأة عند الطباعة */}
+            {design && !design.elements.some((e0) => e0.type === 'barcode') && (
+              <div
+                dir="rtl"
+                className="absolute start-3 top-3 z-10 max-w-72 rounded-xl bg-amber-100 px-3 py-2 text-[11px] font-bold leading-relaxed text-amber-900 shadow ring-1 ring-amber-300"
               >
-                <Undo2 className="size-4" />
-                <span className="hidden sm:inline">تراجع</span>
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={redo}
-                disabled={!canRedo}
-                title="إعادة (Ctrl+Y)"
-                aria-label="إعادة"
-                className="h-8 gap-1.5 rounded-xl px-2 font-bold"
-              >
-                <Redo2 className="size-4" />
-                <span className="hidden sm:inline">إعادة</span>
-              </Button>
-              <span aria-hidden className="mx-0.5 h-6 w-px bg-foreground/15" />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={resetAuto}
-                disabled={!design}
-                title="رجّع الترتيب التلقائي"
-                aria-label="رجّع الترتيب التلقائي"
-                className="h-8 gap-1.5 rounded-xl px-2 font-bold"
-              >
-                <RotateCcw className="size-4" />
-                <span className="hidden sm:inline">تلقائي</span>
-              </Button>
-            </div>
+                التصميم مفيهوش عنصر «خطوط الباركود» — الملصق هيطبع من غير باركود! ضيفه من لوحة «ضيف عنصر».
+              </div>
+            )}
             {design && (
               <div
                 ref={stage.ref}
@@ -828,6 +851,14 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+            {barcodeFallbackUsed && (
+              <div
+                dir="rtl"
+                className="absolute bottom-7 start-3 end-3 rounded-lg bg-amber-100 px-3 py-1.5 text-center text-[11px] font-bold text-amber-900 ring-1 ring-amber-300"
+              >
+                رقم باركود المنتج المعروض مش قابل للتحويل لباركود (حروف غير مدعومة؟) — المعاينة بتستخدم باركود تجريبي. عدّل رقم الباركود من شاشة المنتج.
               </div>
             )}
             <div className="pointer-events-none absolute bottom-2 start-0 end-0 text-center text-[11px] font-medium text-foreground/50" dir="rtl">
