@@ -144,7 +144,7 @@ export function resourceTagsForUrl(url: string): DataTag[] {
   // 🆕 العمولات: أي بيع بيغيّر أرقام البائعين، وصرف/إعدادات العمولة بتغيّرها
   if (has('/api/commissions')) tags.add('commissions')
   // 💵 صرف/إلغاء صرف العمولة بيتخصم من الخزنة وبيسجّل/يشيل مصروف — الخزنة والمصروفات والتقارير لازم تتحدث
-  if (has('/api/commissions/payout')) {
+  if (has('/api/commissions/payout') || has('/api/commissions/advance')) {
     tags.add('cash')
     tags.add('expenses')
   }

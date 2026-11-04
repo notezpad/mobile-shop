@@ -89,6 +89,17 @@ interface SellerRow {
   } | null
 }
 
+interface Advance {
+  id: number
+  userId: string
+  amount: number
+  method: string | null
+  note: string | null
+  paidAt: string
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100
+
 interface ReportData {
   month: string
   currentMonth: string
@@ -443,6 +454,31 @@ export function CommissionsView() {
   const [payTarget, setPayTarget] = React.useState<SellerRow | null>(null)
   const [voidTarget, setVoidTarget] = React.useState<SellerRow | null>(null)
   const [voiding, setVoiding] = React.useState(false)
+  // 💵 الدفعات المقدمة — للباقات من غير HR بس (مع HR العمولة بتنزل في كشف الرواتب والسلفة من «سلف الموظفين»)
+  const hasHr = useShopStore((s) => s.plan.enabledModules).includes('hr')
+  const advancesEnabled = isAdmin && !hasHr
+  const [advances, setAdvances] = React.useState<Advance[]>([])
+  const [advTarget, setAdvTarget] = React.useState<SellerRow | null>(null)
+  const [cancelAdv, setCancelAdv] = React.useState<Advance | null>(null)
+  const [cancelingAdv, setCancelingAdv] = React.useState(false)
+
+  const doCancelAdv = async () => {
+    if (!cancelAdv || cancelingAdv) return
+    setCancelingAdv(true)
+    try {
+      const r = await api<{ cashReversed: boolean }>(
+        `/api/commissions/advance?id=${cancelAdv.id}`,
+        { method: 'DELETE' },
+      )
+      toast.success(r?.cashReversed ? 'اتلغت الدفعة ورجعت الفلوس للخزنة' : 'اتلغت الدفعة')
+      setCancelAdv(null)
+      if (month) void load(month, true)
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل إلغاء الدفعة')
+    } finally {
+      setCancelingAdv(false)
+    }
+  }
 
   const doVoid = async () => {
     if (!voidTarget || voiding) return
@@ -474,13 +510,25 @@ export function CommissionsView() {
       setData(r)
       setMonth(r.month)
       setCurrentMonth(r.currentMonth)
+      if (advancesEnabled) {
+        try {
+          const ad = await api<{ advances: Advance[] }>(
+            `/api/commissions/advance?month=${encodeURIComponent(r.month)}`,
+          )
+          setAdvances(ad.advances ?? [])
+        } catch {
+          setAdvances([])
+        }
+      } else {
+        setAdvances([])
+      }
     } catch (e: any) {
       toast.error(e?.message || 'فشل تحميل تقرير العمولات')
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [advancesEnabled])
 
   // 🔄 بيع جديد أو صرف عمولة → التقرير يتحدث لحظياً (بدون سبينر)
   useDataRefresh(['commissions'], () => void load(month, true))
@@ -696,6 +744,9 @@ export function CommissionsView() {
             <div className="grid gap-5">
               {ranked.map((s, idx) => {
                 const paid = !!s.payout
+                const sellerAdvances = advances.filter((a) => a.userId === s.userId)
+                const advTotal = r2(sellerAdvances.reduce((t, a) => t + a.amount, 0))
+                const advAvailable = r2(s.commission - advTotal)
                 const disabled = paid || !s.targetMet || s.commission === 0
                 const targetPct = s.target && s.target > 0 ? Math.min(100, Math.round((s.netBase / s.target) * 100)) : null
                 const medal = ranked.length > 1 && s.netBase > 0 && idx < 3 ? MEDALS[idx] : null
@@ -892,6 +943,45 @@ export function CommissionsView() {
                           )}
                           </>
                         ) : (
+                          <>
+                          {advancesEnabled && (sellerAdvances.length > 0 || (s.targetMet && advAvailable > 0)) && (
+                            <div className="mb-3 space-y-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3">
+                              <div className="flex items-center justify-between gap-2 text-xs font-extrabold text-amber-800 dark:text-amber-300">
+                                <span>دفعات مقدمة{sellerAdvances.length > 0 ? ` (${sellerAdvances.length})` : ''}</span>
+                                {advTotal > 0 && <span className="tabular-nums">{formatCurrency(advTotal)}</span>}
+                              </div>
+                              {sellerAdvances.map((a) => (
+                                <div key={a.id} className="flex items-center justify-between gap-2 text-[11px] font-bold text-muted-foreground">
+                                  <span className="tabular-nums">
+                                    {formatCurrency(a.amount)}
+                                    {a.method ? ` · ${PAYOUT_METHODS.find((m) => m.id === a.method)?.label ?? a.method}` : ''}
+                                    {a.note ? ` · ${a.note}` : ''}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCancelAdv(a)}
+                                    className="text-rose-600 underline-offset-2 hover:underline dark:text-rose-400"
+                                  >
+                                    إلغاء
+                                  </button>
+                                </div>
+                              ))}
+                              {advTotal > 0 && (
+                                <p className="text-[11px] font-semibold leading-relaxed text-muted-foreground">
+                                  هتتخصم تلقائياً من الصرف النهائي.
+                                </p>
+                              )}
+                              {s.targetMet && advAvailable > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setAdvTarget(s)}
+                                  className="w-full rounded-xl border border-amber-500/40 bg-background/60 py-1.5 text-xs font-extrabold text-amber-800 transition-colors hover:bg-amber-500/15 dark:text-amber-300"
+                                >
+                                  + دفعة مقدمة (متاح {formatCurrency(advAvailable)})
+                                </button>
+                              )}
+                            </div>
+                          )}
                           <button
                             type="button"
                             disabled={disabled}
@@ -908,6 +998,7 @@ export function CommissionsView() {
                             <BadgeDollarSign className="size-4" />
                             صرف العمولة
                           </button>
+                          </>
                         )}
                       </div>
                     )}
@@ -936,7 +1027,7 @@ export function CommissionsView() {
                 ? `هيتلغي صرف ${formatCurrency(voidTarget.payout.amount)} المسجّل عن ${month ? monthLabel(month) : 'الشهر ده'}، والشهر هيتفتح تاني للصرف بالرقم الحالي. `
                 : ''}
               لو الصرف كان متخصم من الخزنة، الفلوس هترجع لها والمصروف هيتشال. ولو كنت فعلاً سلّمت للبائع جزء من الفلوس،
-              استخدم «إضافات / خصومات» بالسالب مع ملاحظة (سلفة) وقت الصرف الجديد.
+              سجّله بعد الإلغاء كـ «دفعة مقدمة» (أو كخصم بالسالب مع ملاحظة لو باقتك فيها الموارد البشرية).
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -954,7 +1045,50 @@ export function CommissionsView() {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AdvanceDialog
+        target={advTarget}
+        month={month}
+        monthLabel={month ? monthLabel(month) : ''}
+        available={
+          advTarget
+            ? r2(advTarget.commission - advances.filter((a) => a.userId === advTarget.userId).reduce((t, a) => t + a.amount, 0))
+            : 0
+        }
+        onClose={() => setAdvTarget(null)}
+        onDone={() => {
+          setAdvTarget(null)
+          if (month) void load(month, true)
+        }}
+      />
+
+      <AlertDialog open={cancelAdv !== null} onOpenChange={(o) => !o && !cancelingAdv && setCancelAdv(null)}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>إلغاء الدفعة المقدمة؟</AlertDialogTitle>
+            <AlertDialogDescription className="leading-relaxed">
+              {cancelAdv ? `هتتلغي دفعة ${formatCurrency(cancelAdv.amount)}. ` : ''}
+              لو كانت متخصمة من الخزنة، الفلوس هترجع لها والمصروف هيتشال.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelingAdv}>تراجع</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={cancelingAdv}
+              onClick={(e) => {
+                e.preventDefault()
+                void doCancelAdv()
+              }}
+            >
+              {cancelingAdv ? 'جاري الإلغاء…' : 'إلغاء الدفعة'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <PayoutDialog
+        advancesTotal={
+          payTarget ? r2(advances.filter((a) => a.userId === payTarget.userId).reduce((t, a) => t + a.amount, 0)) : 0
+        }
         target={payTarget}
         month={month}
         monthLabel={month ? monthLabel(month) : ''}
@@ -971,7 +1105,169 @@ export function CommissionsView() {
 
 /* ─────────────── دايلوج الصرف ─────────────── */
 
+/** 💵 دفعة مقدمة من العمولة — الصرف على دفعات قبل آخر الشهر (الباقات من غير HR). */
+function AdvanceDialog({
+  target,
+  month,
+  monthLabel,
+  available,
+  onClose,
+  onDone,
+}: {
+  target: SellerRow | null
+  month: string
+  monthLabel: string
+  available: number
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [amount, setAmount] = React.useState('')
+  const [method, setMethod] = React.useState('cash')
+  const [note, setNote] = React.useState('')
+  const [deduct, setDeduct] = React.useState(true)
+  const [saving, setSaving] = React.useState(false)
+  const busyRef = React.useRef(false)
+
+  React.useEffect(() => {
+    if (target) {
+      setAmount('')
+      setMethod('cash')
+      setNote('')
+      setDeduct(true)
+    }
+  }, [target])
+
+  if (!target) return null
+
+  const amt = amount.trim() === '' ? 0 : Number(amount)
+  const valid = Number.isFinite(amt) && amt > 0 && amt <= available + 0.001
+
+  const submit = async () => {
+    if (busyRef.current || saving) return
+    if (!valid) {
+      toast.error(`المبلغ لازم يكون أكبر من صفر ومايزيدش عن ${formatCurrency(available)}`)
+      return
+    }
+    busyRef.current = true
+    setSaving(true)
+    try {
+      await api('/api/commissions/advance', {
+        method: 'POST',
+        body: { userId: target.userId, month, amount: amt, method, note: note.trim() || null, deductFromCash: deduct },
+      })
+      toast.success(
+        deduct
+          ? `تم صرف دفعة ${formatCurrency(amt)} لـ ${target.name} وخصمها من الخزنة`
+          : `تم تسجيل دفعة ${formatCurrency(amt)} لـ ${target.name}`,
+      )
+      onDone()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل تسجيل الدفعة')
+    } finally {
+      busyRef.current = false
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md overflow-hidden rounded-3xl p-0" dir="rtl">
+        <div className="relative overflow-hidden bg-gradient-to-br from-amber-500 via-orange-500 to-amber-600 p-5 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3)]">
+          <div className="relative flex items-center gap-3">
+            <Icon3D icon={HandCoins} tone="amber" />
+            <div className="min-w-0">
+              <h2 className="text-base font-black leading-snug drop-shadow-md">دفعة مقدمة لـ {target.name}</h2>
+              <p className="text-xs font-bold text-white/85">{monthLabel}</p>
+            </div>
+          </div>
+          <p className="relative mt-3 text-[11px] leading-relaxed text-amber-50/95">
+            بتصرف جزء من العمولة المستحقة دلوقتي من غير ما الشهر يتقفل. الصرف النهائي بعد كده بيخصم الدفعات دي تلقائياً.
+          </p>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <div className="flex justify-between rounded-2xl border bg-muted/30 p-3.5 text-sm shadow-inner">
+            <span className="text-muted-foreground">المتاح للدفعة (مستحق − دفعات سابقة)</span>
+            <b className="tabular-nums text-emerald-600 dark:text-emerald-400">{formatCurrency(available)}</b>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">مبلغ الدفعة</Label>
+              <Input
+                type="number"
+                step="any"
+                inputMode="decimal"
+                placeholder="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                dir="ltr"
+                className="h-11 rounded-xl bg-slate-50 text-left font-semibold shadow-inner dark:bg-slate-800/50"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">وسيلة الصرف</Label>
+              <Select value={method} onValueChange={setMethod}>
+                <SelectTrigger className="h-11 rounded-xl bg-slate-50 font-semibold shadow-inner dark:bg-slate-800/50"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PAYOUT_METHODS.filter((m) => m.id !== 'with_salary').map((m) => (
+                    <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-2xl border bg-muted/30 p-3 shadow-inner">
+            <input
+              type="checkbox"
+              checked={deduct}
+              onChange={(e) => setDeduct(e.target.checked)}
+              className="mt-0.5 size-4 accent-amber-600"
+            />
+            <span className="text-xs leading-relaxed">
+              <b>خصم الدفعة من الخزنة</b>
+              <span className="block font-semibold text-muted-foreground">
+                {deduct
+                  ? 'هتتسجل كمصروف وحركة خزنة صادرة بوسيلة الصرف المختارة.'
+                  : 'سجل بس — الخزنة والمصروفات مش هيتأثروا (الدفع حصل برا النظام).'}
+              </span>
+            </span>
+          </label>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold">ملاحظة (اختياري)</Label>
+            <Textarea
+              rows={2}
+              placeholder="مثال: سلفة على العمولة"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="rounded-xl bg-slate-50 shadow-inner dark:bg-slate-800/50"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2.5">
+            <Button variant="outline" onClick={onClose} disabled={saving} className="h-11 rounded-xl px-5 font-bold">
+              إلغاء
+            </Button>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={saving || !valid}
+              className="flex h-11 min-w-36 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 px-5 text-sm font-extrabold text-white shadow-[0_5px_0_rgb(180,83,9)] transition-all hover:translate-y-[2px] hover:shadow-[0_3px_0_rgb(180,83,9)] active:translate-y-[5px] active:shadow-none disabled:translate-y-0 disabled:opacity-60 disabled:shadow-[0_5px_0_rgb(180,83,9)]"
+            >
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <HandCoins className="size-4" />}
+              صرف {valid ? formatCurrency(amt) : 'دفعة'}
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function PayoutDialog({
+  advancesTotal,
   target,
   month,
   monthLabel,
@@ -979,6 +1275,7 @@ function PayoutDialog({
   onClose,
   onDone,
 }: {
+  advancesTotal: number
   target: SellerRow | null
   month: string
   monthLabel: string
@@ -1011,7 +1308,8 @@ function PayoutDialog({
   if (!target) return null
 
   const adjNum = adjustments.trim() === '' ? 0 : Number(adjustments)
-  const finalAmount = Math.round(((target.commission || 0) + (Number.isFinite(adjNum) ? adjNum : 0)) * 100) / 100
+  // الدفعات المقدمة بتتخصم على السيرفر تلقائياً — هنا بس بنعرض الصافي المتوقع
+  const finalAmount = Math.round(((target.commission || 0) + (Number.isFinite(adjNum) ? adjNum : 0) - advancesTotal) * 100) / 100
 
   const submit = async () => {
     if (busyRef.current || saving) return
@@ -1072,7 +1370,7 @@ function PayoutDialog({
             </div>
           </div>
           <p className="relative mt-3 text-[11px] leading-relaxed text-emerald-50/90">
-            بتسجل لقطة نهائية مغلقة: الأرقام بتتحسب لحظة التأكيد، والشهر بيتقفل للبائع ده. الأفضل تصرف بعد آخر الشهر (لو صرفت بدري ممكن تلغي الصرف وتصرف تاني).
+            بتسجل لقطة نهائية مغلقة: الأرقام بتتحسب لحظة التأكيد، والشهر بيتقفل للبائع ده. الأفضل تصرف بعد آخر الشهر. ولو عايز تصرف جزء بدري استخدم «دفعة مقدمة» وهتتخصم من الصافي تلقائياً.
           </p>
         </div>
 
@@ -1084,6 +1382,12 @@ function PayoutDialog({
             <div className="flex justify-between border-t pt-1.5"><span className="text-muted-foreground">الصافي</span><b className="tabular-nums">{formatCurrency(target.netBase)}</b></div>
             <div className="flex justify-between"><span className="text-muted-foreground">النسبة</span><b className="tabular-nums">{target.rate != null ? `${target.rate}%` : '—'}</b></div>
             <div className="flex justify-between border-t pt-1.5 text-base"><span className="font-bold">العمولة</span><b className="tabular-nums text-emerald-600 dark:text-emerald-400">{formatCurrency(target.commission)}</b></div>
+            {advancesTotal > 0 && (
+              <>
+                <div className="flex justify-between"><span className="text-muted-foreground">دفعات مقدمة اتصرفت</span><b className="tabular-nums text-amber-700 dark:text-amber-400">- {formatCurrency(advancesTotal)}</b></div>
+                <div className="flex justify-between border-t pt-1.5"><span className="font-bold">الباقي للصرف</span><b className="tabular-nums">{formatCurrency(finalAmount)}</b></div>
+              </>
+            )}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -1141,7 +1445,7 @@ function PayoutDialog({
             <Label className="text-xs font-bold">ملاحظة (إجبارية مع الخصم)</Label>
             <Textarea
               rows={2}
-              placeholder="مثال: سلفة على العمولة 500 ج..."
+              placeholder="مثال: خصم تأخير / تسوية..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
               className="rounded-xl bg-slate-50 shadow-inner dark:bg-slate-800/50"

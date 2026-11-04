@@ -68,9 +68,9 @@ async function __DELETE(
   // 💵 مصروف عمولة البائع بيتولّد من صرف العمولة (حركة الخزنة مرتبطة بسجل الصرف
   // نفسه refId=payout.id) — حذفه من هنا كان هيرجّع الفلوس للخزنة ويسيب سجل الصرف
   // ظاهر «مصروف» من غير مقابل.
-  if ((expense as any).source === 'seller_commission') {
+  if ((expense as any).source === 'seller_commission' || (expense as any).source === 'seller_commission_advance') {
     return NextResponse.json(
-      { error: 'مصروف عمولة البائع مرتبط بسجل صرف العمولة ولا يمكن حذفه من هنا' },
+      { error: 'مصروف عمولة البائع مرتبط بسجل صرف/دفعة العمولة ولا يمكن حذفه من هنا — الغي الصرف أو الدفعة من شاشة العمولات' },
       { status: 409 },
     )
   }
@@ -161,9 +161,9 @@ async function __PATCH(
       { status: 409 },
     )
   }
-  if ((expense as any).source === 'seller_commission') {
+  if ((expense as any).source === 'seller_commission' || (expense as any).source === 'seller_commission_advance') {
     return NextResponse.json(
-      { error: 'مصروف عمولة البائع مرتبط بسجل صرف العمولة ولا يمكن تعديله من هنا' },
+      { error: 'مصروف عمولة البائع مرتبط بسجل صرف/دفعة العمولة ولا يمكن تعديله من هنا' },
       { status: 409 },
     )
   }

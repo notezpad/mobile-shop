@@ -1060,7 +1060,7 @@ export function ExpensesView() {
 
                     <ul className="divide-y">
                       {g.items.map((e) => {
-                        const locked = e.locked ?? (e.source === 'damage' || e.source === 'seller_commission')
+                        const locked = e.locked ?? (e.source === 'damage' || e.source === 'seller_commission' || e.source === 'seller_commission_advance')
                         const { icon: Icon, color } = metaOf(e.category)
                         const dayShare = g.sum > 0 ? (e.amount / g.sum) * 100 : 0
                         const isBiggest = g.items.length >= 3 && e.amount === g.biggest

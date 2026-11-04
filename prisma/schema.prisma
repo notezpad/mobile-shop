@@ -92,6 +92,7 @@ model Tenant {
   cycleCountSchedules CycleCountSchedule[]
   // 💰 (التحديث الثالث عشر) تسويات عمولات البائعين
   commissionPayouts   CommissionPayout[]
+  commissionAdvances  CommissionAdvance[]
   suppliers         Supplier[]
   purchaseOrders    PurchaseOrder[]
   supplierPayments  SupplierPayment[]
@@ -674,6 +675,27 @@ model CommissionPayout {
   @@unique([tenantId, userId, month])
   @@index([tenantId, month])
   @@index([tenantId, userId])
+}
+
+// 💵 دفعة مقدمة من عمولة بائع قبل آخر الشهر — عدة دفعات للبائع في الشهر (عكس CommissionPayout).
+// الصرف النهائي (CommissionPayout) بيخصم مجموعها تلقائياً. مفيش علاقة بمسير الرواتب (HR):
+// الميزة متاحة للباقات اللي من غير موديول hr بس (الاحترافي بيستخدم سلف الموظفين).
+model CommissionAdvance {
+  id       Int      @id @default(autoincrement())
+  tenantId String
+  userId   String   // البائع — نص خالص بدون FK (نفس نمط CommissionPayout)
+  month    String   // YYYY-MM بتوقيت المحل
+  amount   Decimal  @db.Decimal(12,2)
+  method   String?  // وسيلة الصرف (درج الخصم لو اتخصمت من الخزنة)
+  note     String?
+  paidById String?
+  paidAt   DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, month])
+  @@index([tenantId, month])
 }
 
 model SaleItem {

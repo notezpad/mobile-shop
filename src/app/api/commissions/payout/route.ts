@@ -42,6 +42,8 @@ const COMMISSION_EXPENSE_CATEGORY = 'مرتبات'
  *    المبلغ الصفر/السالب (خصم) مفيهوش خروج فلوس → مفيش حركة خزنة.
  *    ملحوظة: الأساسي مفيهوش HR → الزر ده الطريق الوحيد لصرف العمولة هناك.
  *  - لو العمولة محجوزة جوه مسير رواتب (viaPayroll) → بتترفض (اتصرفت بالفعل).
+ *  - 💵 (التحديث 24) أي دفعات مقدمة (CommissionAdvance) للبائع/الشهر بتتخصم تلقائياً من الصافي
+ *    (بتظهر كخصم في adjustments)، تحت قفل advisory مشترك مع /api/commissions/advance.
  */
 export async function POST(req: NextRequest) {
   let session: Session
@@ -115,10 +117,22 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       )
     }
-    const amount = round2(commission + adjustments)
-
     try {
-      const { payout, expenseId, cashEntryId } = await sql.begin(async (tx) => {
+      const { payout, expenseId, cashEntryId, amount, adjustmentsFinal, advancesTotal } = await sql.begin(async (tx) => {
+        // 💵 (التحديث 24) الدفعات المقدمة بتتخصم تلقائياً من الصافي. نفس قفل صفحة الدفعات
+        // (محل/بائع/شهر) → دفعة متزامنة مع الصرف مش هتتحسب غلط ولا تفلت من الخصم.
+        await tx`SELECT pg_advisory_xact_lock(hashtext(${`${session.tenantId}:${userId}:${month}`}))`
+        const advRow = await tx<{ s: number }[]>`
+          SELECT COALESCE(SUM("amount"), 0)::float8 AS "s" FROM "CommissionAdvance"
+          WHERE "tenantId" = ${session.tenantId} AND "userId" = ${userId} AND "month" = ${month}`
+        const advancesTotal = round2(Number(advRow[0]?.s ?? 0))
+        // الهوية القديمة بتفضل: amount = commission + adjustments (الدفعات بتظهر كخصم في adjustments)
+        const adjustmentsFinal = round2(adjustments - advancesTotal)
+        const amount = round2(commission + adjustmentsFinal)
+        const noteFinal =
+          advancesTotal > 0
+            ? [note, `منها دفعات مقدمة اتصرفت قبل كده ${advancesTotal} ج`].filter(Boolean).join(' — ').slice(0, 300)
+            : note
         const rows = await tx<any[]>`
           INSERT INTO "CommissionPayout"
             ("tenantId", "userId", "month", "salesTotal", "returnsTotal", "netBase",
@@ -127,8 +141,8 @@ export async function POST(req: NextRequest) {
           VALUES
             (${session.tenantId}, ${userId}, ${month}, ${nums.salesTotal}, ${nums.returnsTotal}, ${nums.netBase},
              ${resolveSellerRate(seller.sellerCommissionRate, tenantCfg.sellerCommissionRate) ?? 0},
-             ${target}, ${targetMet}, ${adjustments}, ${amount},
-             false, ${payMethod}, ${note}, ${session.userId}, NOW())
+             ${target}, ${targetMet}, ${adjustmentsFinal}, ${amount},
+             false, ${payMethod}, ${noteFinal}, ${session.userId}, NOW())
           RETURNING *`
         const row = rows[0]
         let expId: number | null = null
@@ -153,7 +167,7 @@ export async function POST(req: NextRequest) {
             RETURNING "id"`
           ceId = ce[0].id
         }
-        return { payout: row, expenseId: expId, cashEntryId: ceId }
+        return { payout: row, expenseId: expId, cashEntryId: ceId, amount, adjustmentsFinal, advancesTotal }
       })
       // ⚡ قايمة المصروفات متخزنة في edge cache (20 ث) — نمسحها زي /api/expenses ورواتب HR
       if (expenseId !== null) {
@@ -170,7 +184,8 @@ export async function POST(req: NextRequest) {
             salesTotal: nums.salesTotal,
             returnsTotal: nums.returnsTotal,
             netBase: nums.netBase,
-            adjustments,
+            adjustments: adjustmentsFinal,
+            advancesDeducted: advancesTotal,
             amount,
             method: payMethod,
             deductedFromCash: cashEntryId !== null,
