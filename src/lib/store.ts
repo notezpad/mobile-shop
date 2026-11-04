@@ -31,6 +31,11 @@ export interface ShopBranding {
   logoPath: string | null
   invoicePrefix: string
   /**
+   * 🧾 التحديث 28: كلام حر أسفل الفاتورة المطبوعة (A4/PDF) — شروط الضمان،
+   * سياسة الاستبدال... إلخ. '' = الذيل الافتراضي بس.
+   */
+  invoiceTerms: string
+  /**
    * IANA timezone of the shop (e.g. "Africa/Cairo", "Asia/Riyadh").
    * 🛡️ 2026-09-27: added so the toolbar clock/date can follow the shop's
    * configured timezone instead of the device/browser's local clock —
@@ -254,7 +259,7 @@ export const useShopStore = create<ShopState>()(
       setActiveView: (v) => set({ activeView: v }),
       shopName: '', // فاضي لحد ما الاسم الحقيقي يوصل من /api/tenant (كان placeholder بيظهر في السايدبار)
       setShopName: (n) => set({ shopName: n }),
-      branding: { phone: null, address: null, logoPath: null, invoicePrefix: 'INV', timezone: 'Africa/Cairo', paymentMethods: defaultPaymentMethodsConfig(), sellerCommissionsEnabled: false },
+      branding: { phone: null, address: null, logoPath: null, invoicePrefix: 'INV', invoiceTerms: '', timezone: 'Africa/Cairo', paymentMethods: defaultPaymentMethodsConfig(), sellerCommissionsEnabled: false },
       setBranding: (b) => set((s) => ({ branding: { ...s.branding, ...b } })),
       user: null,
       setUser: (u) => set({ user: u }),

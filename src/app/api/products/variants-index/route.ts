@@ -27,6 +27,8 @@ type Row = {
   size: string | null
   color: string | null
   barcode: string | null
+  // 💰 التحديث 28: سعر المواصفة (null = سعر المنتج العام) — للملصقات والأوفلاين
+  price: number | null
   quantity: number
 }
 
@@ -76,7 +78,7 @@ export async function GET(req: NextRequest) {
 
     if (ids.length > 0) {
       const rows = await sql<Row[]>`
-        SELECT v."id", v."productId", v."size", v."color", v."barcode", v."quantity"
+        SELECT v."id", v."productId", v."size", v."color", v."barcode", v."price", v."quantity"
         FROM "ProductVariant" v
         JOIN "Product" p ON p."id" = v."productId"
         WHERE p."tenantId" = ${session.tenantId}
@@ -90,7 +92,7 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(2000, Math.max(1, parseInt(sp.get('limit') || '1000', 10) || 1000))
 
     const rows = await sql<Row[]>`
-      SELECT v."id", v."productId", v."size", v."color", v."barcode", v."quantity"
+      SELECT v."id", v."productId", v."size", v."color", v."barcode", v."price", v."quantity"
       FROM "ProductVariant" v
       JOIN "Product" p ON p."id" = v."productId"
       WHERE p."tenantId" = ${session.tenantId} AND v."id" > ${cursor}

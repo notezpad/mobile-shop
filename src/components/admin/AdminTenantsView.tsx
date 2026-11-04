@@ -56,6 +56,7 @@ import {
   Sparkles,
   Crown,
   Repeat,
+  Puzzle,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -109,6 +110,8 @@ import { formatCurrency, formatShortDate } from '@/lib/format'
 import { toast } from 'sonner'
 import { useShopStore } from '@/lib/store'
 import { FakeSignupsDialog } from './FakeSignupsDialog'
+// 🧩 2026-11-04 (التحديث 25): كتالوج الإضافات المدفوعة (client-safe)
+import { ADDON_CATALOG, ADDON_ORDER } from '@/lib/addons'
 
 /**
  * أيقونة موبايل حديث (smartphone) مرسومة يدويًا — جسم بزوايا مدوّرة، فتحة سماعة
@@ -1640,6 +1643,11 @@ function TenantDetailDialog({
   const [loading, setLoading] = React.useState(true)
   const [notes, setNotes] = React.useState('')
   const [savingNotes, setSavingNotes] = React.useState(false)
+  // 🧩 منح/إلغاء الإضافات المدفوعة
+  const [grantKey, setGrantKey] = React.useState<string>('hr')
+  const [grantQty, setGrantQty] = React.useState<number>(1)
+  const [granting, setGranting] = React.useState(false)
+  const [revokingKey, setRevokingKey] = React.useState<string | null>(null)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -1672,6 +1680,48 @@ function TenantDetailDialog({
       setSavingNotes(false)
     }
   }
+
+  // 🧩 منح إضافة فوراً (بدون دفع — بيتسجل admin_grant في السجل والتدقيق)
+  const grantAddOn = async () => {
+    if (granting) return
+    setGranting(true)
+    try {
+      await api(`/api/admin/tenants/${id}/addons`, {
+        method: 'POST',
+        body: { action: 'grant', addOnKey: grantKey, quantity: grantQty },
+      })
+      toast.success('تم منح الإضافة — شغّالة فوراً')
+      await load()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل المنح')
+    } finally {
+      setGranting(false)
+    }
+  }
+
+  // 🧩 إلغاء إضافة نشطة فوراً
+  const revokeAddOn = async (key: string) => {
+    if (revokingKey) return
+    if (!confirm(`إلغاء الإضافة «${ADDON_CATALOG[key as keyof typeof ADDON_CATALOG]?.name ?? key}» فوراً؟ القسم/الحد بيتقفل حالاً.`)) return
+    setRevokingKey(key)
+    try {
+      await api(`/api/admin/tenants/${id}/addons`, {
+        method: 'POST',
+        body: { action: 'revoke', addOnKey: key },
+      })
+      toast.success('تم إلغاء الإضافة')
+      await load()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل الإلغاء')
+    } finally {
+      setRevokingKey(null)
+    }
+  }
+
+  const activeAddOns: any[] = (data?.addOns ?? []).filter(
+    (a: any) => a.status === 'active' && new Date(a.endDate) > new Date()
+  )
+  const grantDef = ADDON_CATALOG[grantKey as keyof typeof ADDON_CATALOG]
 
   const detailStats: Array<{ icon: LucideIcon; label: string; value: string; color: string }> = data
     ? [
@@ -1868,6 +1918,90 @@ function TenantDetailDialog({
                     </TableBody>
                   </Table>
                 </div>
+              </section>
+
+              {/* 🧩 الإضافات المدفوعة (التحديث 25) — منح/إلغاء فوري */}
+              <section>
+                <h3 className="mb-2.5 flex items-center gap-1.5 text-sm font-extrabold">
+                  <Puzzle className="size-4 text-amber-600 dark:text-amber-400" />
+                  الإضافات المدفوعة ({activeAddOns.length} مفعّلة)
+                </h3>
+                <div className="space-y-1.5">
+                  {activeAddOns.length === 0 ? (
+                    <p className="rounded-xl border py-4 text-center text-xs text-muted-foreground">
+                      لا توجد إضافات مفعّلة — الشراء الذاتي بيتم من الإعدادات عند العميل، أو امنحه يدوياً من تحت
+                    </p>
+                  ) : (
+                    activeAddOns.map((a: any) => {
+                      const def = ADDON_CATALOG[a.addOnKey as keyof typeof ADDON_CATALOG]
+                      return (
+                        <div key={a.id} className="flex flex-wrap items-center gap-2 rounded-xl border bg-card px-3 py-2">
+                          <span className="min-w-0 flex-1 truncate text-xs font-bold">
+                            {def?.name ?? a.addOnKey}
+                            {a.quantity > 1 ? ` ×${a.quantity}` : ''}
+                          </span>
+                          {a.paymentMethod === 'admin_grant' ? (
+                            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">منح إداري</span>
+                          ) : (
+                            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                              {formatCurrency(a.amountPaid)}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-muted-foreground">حتى {formatShortDate(a.endDate)}</span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 gap-1 rounded-lg px-2 text-[11px]"
+                            disabled={revokingKey !== null}
+                            onClick={() => revokeAddOn(a.addOnKey)}
+                          >
+                            {revokingKey === a.addOnKey ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
+                            إلغاء
+                          </Button>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+
+                {/* نموذج المنح اليدوي — هدية/تسوية/دفع كاش برا النظام */}
+                <div className="mt-2 flex flex-wrap items-end gap-2 rounded-xl border border-dashed p-3">
+                  <div className="min-w-40 flex-1">
+                    <Label className="text-[10px] text-muted-foreground">منح إضافة</Label>
+                    <Select value={grantKey} onValueChange={(v) => { setGrantKey(v); setGrantQty(1) }}>
+                      <SelectTrigger className="h-9 rounded-xl text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ADDON_ORDER.map((k) => (
+                          <SelectItem key={k} value={k} className="text-xs">
+                            {ADDON_CATALOG[k].name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {grantDef?.quantifiable && (
+                    <div className="w-24">
+                      <Label className="text-[10px] text-muted-foreground">الكمية ({grantDef.unitLabel})</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={grantDef.maxQuantity}
+                        value={grantQty}
+                        onChange={(e) => setGrantQty(Math.max(1, Math.min(grantDef.maxQuantity, Math.floor(Number(e.target.value) || 1))))}
+                        className="h-9 rounded-xl text-center text-xs"
+                      />
+                    </div>
+                  )}
+                  <Button size="sm" onClick={grantAddOn} disabled={granting} className="h-9 gap-1.5 rounded-xl">
+                    {granting ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+                    منح فوري
+                  </Button>
+                </div>
+                <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
+                  المنح اليدوي بيتسجل «admin_grant» + سجل تدقيق — الانتهاء الافتراضي = تاريخ انتهاء اشتراك المحل (أو 30 يوم لو مفيش اشتراك شغّال). الإلغاء بيقفل القسم/الحد فوراً.
+                </p>
               </section>
 
               {/* الفريق */}

@@ -32,6 +32,9 @@ model Tenant {
   address                String?
   logoPath               String?
   invoicePrefix          String    @default("INV")
+  // 🧾 2026-11-04 (التحديث 28): كلام حر أسفل الفاتورة المطبوعة (A4/PDF) —
+  // شروط الضمان، سياسة الاستبدال... إلخ. '' = الذيل الافتراضي بس.
+  invoiceTerms           String    @default("")
   commissionVodafoneCash Float     @default(1.0)
   commissionInstapay     Float     @default(0.5)
   commissionFawry        Float     @default(1.0)
@@ -112,6 +115,15 @@ model Tenant {
   notifyLowStock            Boolean @default(true)
   notifyExpiringSubscription Boolean @default(true)
   notifyNewSales            Boolean @default(false)
+
+  // 🧩 2026-11-04 (التحديث 25): الإضافات المدفوعة (Add-ons) —
+  // HR / فروع إضافية / مستخدمين إضافيين — كل صف = عملية شراء مستقلة
+  // بتتدفع عبر Paymob زي الباقة بالظبط (pending → active).
+  addOns TenantAddOn[]
+
+  // 🎨 2026-11-04 (التحديث 27): قوالب تصميم ملصقات الباركود (سحب وإفلات) —
+  // كل قالب = مقاس ملصق + مواضع عناصر (اسم/سعر/باركود/رقم) JSON.
+  labelTemplates LabelTemplate[]
 }
 
 model Plan {
@@ -369,6 +381,11 @@ model ProductVariant {
   color     String?
   // 🏬 2026-10-18: فريد جوه المنتج (index) وجوه نفس الفرع (trigger) — migration 20261018
   barcode   String?
+  // 💰 2026-11-04 (التحديث 28): سعر خاص بالمواصفة — نفس الجهاز 8GB بـ X و16GB بـ Y.
+  // null = استخدم سعر المنتج العام. نقطة البيع بتستخدمه كالسعر الافتراضي لسطر السلة
+  // (تعديل السعر اليدوي في الكارت بيفضل شغال زي ما هو). للإلكترونيات الخانتين
+  // size/color بيتعرضوا باسم «المواصفة 1/2» — نفس الأعمدة بدون تغيير.
+  price     Float?
   quantity  Int      @default(0)
   // 👕 2026-10-22 (المخزن الداخلي): الكمية المعروضة من هذا اللون/المقاس —
   // الباقي (quantity - displayQty) في المخزن الداخلي. 0 <= displayQty <= quantity.
@@ -984,6 +1001,65 @@ model PlatformSetting {
   key       String   @unique
   value     String
   updatedAt DateTime @default(now())
+}
+
+// 🧩 2026-11-04 (التحديث 25): الإضافات المدفوعة (Add-ons) —
+// سطر مستقل عن الاشتراك عشان تنفع تتباع لأي باقة من غير ما نلمس جدول
+// Subscription (مفيش ترقية ولا خلط مع سجل الدفع الأصلي).
+//
+// دورة الحياة زي الباقة بالظبط:
+//   checkout → صف pending بمبلغ متوقع (amountExpected) → webhook Paymob
+//   يتحقق من المبلغ + الـ intention → UPDATE شرطي (status=pending) → active
+//   بـ endDate = آخر إضافة نشطة لنفس النوع + المدة (تمديد) أو من الآن.
+// الإضافة ليها تاريخ انتهاء مستقل — بتتدار من الإعدادات → «إضافات الباقة».
+model TenantAddOn {
+  id             Int      @id @default(autoincrement())
+  tenantId       String
+  // مفتاح الإضافة: 'hr' | 'extra_branch' | 'extra_users' (انظر src/lib/addons.ts)
+  addOnKey       String
+  // الكمية: فروع إضافية / مستخدمين إضافيين (الـ HR دايماً 1)
+  quantity       Int      @default(1)
+  // pending | active | failed | cancelled (نفس أسماء حالات الاشتراك)
+  status         String   @default("pending")
+  // monthly | yearly — لنفس فترات الباقة
+  period         String   @default("monthly")
+  // المبلغ المتوقع وقت الـ checkout — الـ webhook بيرفض التفعيل لو الدفع مختلف
+  amountExpected Decimal  @db.Decimal(12, 2) @default(0)
+  amountPaid     Decimal  @db.Decimal(12, 2) @default(0)
+  paymentMethod  String?
+  paymentNote    String?
+  startDate      DateTime @default(now())
+  endDate        DateTime
+  createdAt      DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([endDate])
+  @@index([tenantId, addOnKey])
+}
+
+// 🎨 2026-11-04 (التحديث 27): قوالب تصميم ملصقات الباركود — مصمم السحب والإفلات.
+// كل قالب مستقل بالمحل: مقاس الملصق + مواضع العناصر (مم) في JSON.
+// شكل elements: [{ id, type: 'name'|'price'|'barcode'|'barcodeText'|'variant',
+//                  xMm, yMm, wMm, fontSizePt?, bold?, align?, heightMm? }]
+// التحقق النهائي بيحصل في src/lib/label-design.ts → sanitizeDesign() قبل أي طباعة.
+model LabelTemplate {
+  id        Int      @id @default(autoincrement())
+  tenantId  String
+  name      String
+  widthMm   Float
+  heightMm  Float
+  elements  Json
+  // القالب الافتراضي اللي بيفتح معاه المصمم — واحد بس لكل محل (بيتصفّر الباقي عند التفعيل)
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
 }
 
 // ================= Inventory =================

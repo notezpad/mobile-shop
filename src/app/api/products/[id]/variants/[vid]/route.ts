@@ -6,6 +6,7 @@ import { requireCapability, featureErrorResponse, requireModuleWritePermission }
 import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
 import { normalizeBarcode } from '@/lib/barcode'
 import { canAccessProductBranch } from '@/lib/branch-scope-db'
+import { normalizeVariantPrice } from '@/lib/variant-price'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,6 +52,14 @@ async function __PUT(
   if (body.size !== undefined) data.size = body.size ? String(body.size).trim() : null
   if (body.color !== undefined) data.color = body.color ? String(body.color).trim() : null
   if (body.barcode !== undefined) data.barcode = normalizeBarcode(body.barcode)
+  // 💰 التحديث 28: سعر المواصفة — الحقل مبعوتش = مفيش تغيير؛ مبعوت فاضي = رجّعه لسعر المنتج العام
+  if (body.price !== undefined) {
+    const priceNorm = normalizeVariantPrice(body.price)
+    if (!priceNorm.ok) {
+      return NextResponse.json({ error: 'سعر غير صالح للمتغير' }, { status: 400 })
+    }
+    data.price = priceNorm.price
+  }
   if (body.quantity !== undefined) {
     // 🛡️ خ-2 (2026-11-02): رفض صريح للقيم غير الصالحة والسالبة — قبل كده
     // parseInt(...) || 0 كان بيمسك NaN بس ويسيب الكمية السالبة تعدّي فيبقى

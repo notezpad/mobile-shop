@@ -166,6 +166,7 @@ export function HomeGate({ children }: { children: React.ReactNode }) {
           address?: string | null
           logoPath?: string | null
           invoicePrefix?: string
+          invoiceTerms?: string
         }>('/api/tenant'),
       ]).then((r) => r[0])
       if (!alive) return
@@ -178,6 +179,8 @@ export function HomeGate({ children }: { children: React.ReactNode }) {
           address: t?.address ?? null,
           logoPath: t?.logoPath ?? null,
           invoicePrefix: t?.invoicePrefix || 'INV',
+          // 🧾 التحديث 28: كلام أسفل الفاتورة (شروط الضمان...)
+          invoiceTerms: t?.invoiceTerms ?? '',
         })
       }
       setBoot('shop')

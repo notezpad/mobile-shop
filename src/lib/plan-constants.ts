@@ -84,6 +84,10 @@ export const CANONICAL_PLAN_CODES = [
   'fashion-pro',
   // 🥬 2026-10-12: الباقة الغذائية المخفية (تُسند من الأدمن — مش عامة)
   'food-basic',
+  // 🥬 2026-11-04 (التحديث 26): الاحترافية الغذائية المخفية — كل مزايا
+  // الغذائية الأساسية + الموارد البشرية مشمولة. برضه تُسند من الأدمن
+  // أو بأكواد التفعيل (visibility='hidden' بيمنع التسجيل الذاتي والشراء الذاتي).
+  'food-pro',
 ] as const
 
 /**
@@ -184,11 +188,20 @@ export const FOOD_MANDATORY_CAPABILITIES = ['multi_unit'] as const
  *     شيل variants + collections + dynamic_retail_pricing (دي للملابس/pro)،
  *     وضمّن multi_unit (وحدات الكيلو/الكيس/الطبق).
  */
+/**
+ * 🧩 2026-11-04 (التحديث 25): الإضافات المدفوعة — كل المشتريات النشطة للمحل
+ * (مفاتيح AddOnKey من src/lib/addons.ts). بتتحمّل في features.ts وبتتحمر هنا
+ * عشان قواعد النشاط تحترمها:
+ *   - إضافة hr → مينفعش قاعدة «الأساسية بدون HR» تمسحها — العميل دفع فلوسها.
+ *   - باقة الغذائية بتفضل مستثنية من HR حتى مع الإضافة (قرار تجاري: كتالوج
+ *     الغذائية مابيبنيش أصلاً بموارد بشرية، والفروع/المستخدمين ليها حدود بدل كده).
+ */
 export function enforceVerticalRules(
   planCode: string | null | undefined,
   businessType: 'electronics' | 'fashion' | 'food',
   modules: string[],
   capabilities: string[],
+  addOns: readonly string[] = [],
 ): { modules: string[]; capabilities: string[] } {
   // Determine whether to enforce rules for this plan code:
   // - canonical plans → always enforce
@@ -263,9 +276,22 @@ export function enforceVerticalRules(
       capSet.add(c)
     }
   }
-  // 👥 الموارد البشرية: للباقات الاحترافية (موبايلات/ملابس) فقط — مش في الأساسية ولا الغذائية.
-  // بنشيلها هنا حتى لو الداتابيز/الأدمن ضافوها بالغلط (بتتحكم في الصفحة والـ API وصلاحية المشرف).
-  if (businessType === 'food' || planCode === 'electronics-basic' || planCode === 'fashion-basic') {
+  // 👥 الموارد البشرية: القاعدة الافتراضية — الأساسيات (موبايلات/ملابس) والغذائية
+  // من غير إضافة مدفوعة. بنشيلها هنا حتى لو الداتابيز/الأدمن ضافوها بالغلط
+  // (بتتحكم في الصفحة والـ API وصلاحية المشرف).
+  // 🧩 2026-11-04 (التحديث 25): إضافة HR المدفوعة بتفتح HR فوق الأساسية.
+  // 🧩 2026-11-04 (التحديث 26): القرار التجاري اتوسّع —
+  //   1) إضافة HR المدفوعة بتفتح HR فوق الغذائية برضه (نفس أسلوب الأساسية:
+  //      الغذائية الخفيفة بتفضل من غير HR ببلاش، واللي محتاجها بيدفع للميزة).
+  //   2) باقة food-pro فيها HR مشمولة أصلاً — القاعدة ما تمسحش منها.
+  //      (بدون الاستثناء ده القاعدة هتمسح HR من food-pro لأن businessType='food')
+  const hrAddOn = addOns.includes('hr')
+  const hrIncludedInPlan = planCode === 'food-pro'
+  if (
+    (businessType === 'food' || planCode === 'electronics-basic' || planCode === 'fashion-basic') &&
+    !hrAddOn &&
+    !hrIncludedInPlan
+  ) {
     moduleSet.delete('hr')
   }
   // 🛡️ 2026-10-03: التسعير الديناميكي (dynamic_retail_pricing) — باقة احترافية فقط.

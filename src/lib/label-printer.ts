@@ -17,6 +17,8 @@
  */
 
 import { computeLabelLayout, fmtLabelPrice, LABEL_LH, LABEL_GAP_MM, type LabelItem, type LabelOptions, type LabelLayout } from '@/lib/print'
+import type { LabelDesign } from '@/lib/label-design'
+import { maxLinesFor, alignOf } from '@/lib/label-design'
 import { renderBarcodeSvg } from '@/lib/print-client'
 import { connectUsbPrinter, sendRawToUsbPrinter, type UsbErrorKind } from '@/lib/thermal-printer'
 
@@ -203,6 +205,142 @@ async function renderLabelToCanvas(
   return canvas
 }
 
+/* ── 🎨 التحديث 27: رسم الملصق الحر (سحب وإفلات) على canvas ────────── */
+
+/** يلفّ نص على عرض صندوق العنصر مع علامة قطع … لو في كلام اتمقص —
+ *  نفس منطق لفّ الاسم في الرسم التلقائي (renderLabelToCanvas) بالظبط. */
+function wrapWords(ctx: CanvasRenderingContext2D, text: string, maxW: number, maxLines: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let line = ''
+  for (const word of words) {
+    const cand = line ? `${line} ${word}` : word
+    if (ctx.measureText(cand).width <= maxW || !line) line = cand
+    else {
+      lines.push(line)
+      line = word
+    }
+    if (lines.length >= maxLines) break
+  }
+  if (lines.length < maxLines && line) lines.push(line)
+  // في كلام اتمقص — نضيف علامة القطع على آخر سطر
+  if (
+    lines.length >= maxLines &&
+    lines.length > 0 &&
+    lines.join(' ').length < text.replace(/\s+/g, ' ').trim().length
+  ) {
+    let last = lines[lines.length - 1]
+    while (last.length > 1 && ctx.measureText(`${last}…`).width > maxW) last = last.slice(0, -1)
+    lines[lines.length - 1] = `${last}…`
+  }
+  return lines
+}
+
+/** يرسم سطر نص بمحاذاة صريحة داخل صندوق العنصر. بنستخدم textAlign='center'
+ *  مع حساب المركز يدوياً — center هي المحاذاة الوحيدة اللي معناها ثابت مهما
+ *  كان اتجاه الكانفس (direction rtl/ltr)، فنضمن تطابق الطباعة مع المعاينة. */
+function drawAligned(ctx: CanvasRenderingContext2D, text: string, x: number, w: number, y: number, align: 'center' | 'right' | 'left') {
+  const tw = ctx.measureText(text).width
+  let cx = x + w / 2
+  if (align === 'right') cx = x + w - tw / 2
+  else if (align === 'left') cx = x + tw / 2
+  ctx.fillText(text, cx, y)
+}
+
+/** رسم ملصق بتصميم حر على canvas بدقة نقاط الطابعة — نفس إحداثيات المعاينة
+ *  والطباعة HTML بالمليمتر، محوّلة لنقاط 203dpi. (التحديث 27) */
+async function renderFreeLabelToCanvas(
+  it: LabelItem,
+  design: LabelDesign,
+): Promise<HTMLCanvasElement> {
+  const W = Math.round(design.widthMm * DOTS_PER_MM)
+  const H = Math.round(design.heightMm * DOTS_PER_MM)
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) throw new Error('canvas 2d unavailable')
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(0, 0, W, H)
+  ctx.fillStyle = '#000'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  try {
+    ;(ctx as { direction?: string }).direction = 'rtl'
+  } catch {
+    /* متصفح قديم — ignore */
+  }
+
+  const PT_PX = (pt: number) => Math.max(5, Math.round(pt * (4 / 3) * PX_TO_DOT))
+  const family = `Cairo, Tahoma, sans-serif`
+  const mono = `Consolas, 'Courier New', monospace`
+
+  for (const el of design.elements) {
+    const x = el.xMm * DOTS_PER_MM
+    const y = el.yMm * DOTS_PER_MM
+    const w = el.wMm * DOTS_PER_MM
+    const align = alignOf(el)
+
+    switch (el.type) {
+      case 'name': {
+        if (!it.name) break
+        const px = PT_PX(el.fontSizePt ?? 9)
+        ctx.font = `${el.bold !== false ? 'bold ' : ''}${px}px ${family}`
+        const lines = wrapWords(ctx, it.name, w, maxLinesFor(el, design))
+        const lineH = px * LABEL_LH.name
+        for (let i = 0; i < lines.length; i++) drawAligned(ctx, lines[i], x, w, y + i * lineH, align)
+        break
+      }
+      case 'variant': {
+        const v = variantLineOf(it)
+        if (!v) break
+        const px = PT_PX(el.fontSizePt ?? 9)
+        ctx.font = `${el.bold !== false ? 'bold ' : ''}${px}px ${family}`
+        // سطر المقاس/اللون سطر واحد — بنقص لو أطول من الصندوق
+        let text = v
+        while (text.length > 1 && ctx.measureText(text).width > w) text = text.slice(0, -1)
+        if (text !== v) text = `${text}…`
+        drawAligned(ctx, text, x, w, y, align)
+        break
+      }
+      case 'price': {
+        if (it.price == null) break
+        const px = PT_PX(el.fontSizePt ?? 9)
+        ctx.font = `${el.bold !== false ? '800 ' : '600 '}${px}px ${family}`
+        drawAligned(ctx, `${fmtLabelPrice(it.price as number)} ج.م`, x, w, y, align)
+        break
+      }
+      case 'barcodeText': {
+        if (!it.barcode) break
+        const px = PT_PX(el.fontSizePt ?? 9)
+        ctx.font = `bold ${px}px ${mono}`
+        drawAligned(ctx, it.barcode, x, w, y, align)
+        break
+      }
+      case 'barcode': {
+        const img = it.barcodeSvg ? await loadImage(it.barcodeSvg) : null
+        const dims = it.barcodeSvg ? svgSize(it.barcodeSvg) : { w: 0, h: 0 }
+        if (img && dims.w > 0 && dims.h > 0) {
+          // 1:1 من CSS px لنقاط الطابعة — الـ SVG نفسه متولّد بارتفاع العنصر
+          // وعرضه متقصّ على نقاط 203dpi، فالخطوط بتطلع بعدد صحيح من النقاط.
+          const bw = Math.round(dims.w * PX_TO_DOT)
+          const bh = Math.round(dims.h * PX_TO_DOT)
+          const off = align === 'right' ? w - bw : align === 'left' ? 0 : Math.round((w - bw) / 2)
+          ctx.drawImage(img, Math.round(x + off), Math.round(y), bw, bh)
+        } else if (it.barcode) {
+          const px = PT_PX(8)
+          ctx.font = `bold ${px}px ${mono}`
+          drawAligned(ctx, it.barcode, x, w, y, align)
+        }
+        break
+      }
+      default:
+        break
+    }
+  }
+  return canvas
+}
+
 /* ── تحويل الرسم لصورة أحادية اللون ─────────────────────────────── */
 
 /** بكسلات الملصق كصفوف بت (bit=1 أسود) — نفس ترتيب ^GFA في ZPL. */
@@ -336,19 +474,25 @@ export async function printBarcodeLabelsDirect(
 
   const mode = opts.mode ?? 'roll'
   const labelSize = opts.labelSize
+  const design = opts.design ?? null // 🎨 التحديث 27: تصميم حر مفعّل؟
   const showName = opts.showName ?? true
   const showPrice = opts.showPrice ?? true
   const showText = opts.showBarcodeText ?? true
   const showVariant = opts.showVariant ?? true
-  const layout = computeLabelLayout(labelSize.widthMm, labelSize.heightMm, mode, {
-    showName,
-    showPrice,
-    showBarcodeText: showText,
-    showVariant,
-    nameScale: opts.nameScale,
-    priceScale: opts.priceScale,
-    barcodeScale: opts.barcodeScale,
-  })
+  const layout = computeLabelLayout(
+    design ? design.widthMm : labelSize.widthMm,
+    design ? design.heightMm : labelSize.heightMm,
+    mode,
+    {
+      showName,
+      showPrice,
+      showBarcodeText: showText,
+      showVariant,
+      nameScale: opts.nameScale,
+      priceScale: opts.priceScale,
+      barcodeScale: opts.barcodeScale,
+    },
+  )
 
   // 1) الاتصال الأول — نفس مسار الفواتير (بيستخدم الأجهزة المصرّح ليها قبل ما يفتح نافذة إذن)
   const conn = await connectUsbPrinter(true)
@@ -361,20 +505,27 @@ export async function printBarcodeLabelsDirect(
     /* ignore */
   }
 
+  // 🎨 في التصميم الحر: الباركود بيتولّد بارتفاع عنصر الباركود وعلى عرض صندوقه
+  const freeBarEl = design?.elements.find((e) => e.type === 'barcode') ?? null
+  const barHpx = Math.max(10, Math.round((freeBarEl?.heightMm ?? 8) * 3.78))
+  const barAvailMm = freeBarEl ? freeBarEl.wMm : layout.widthMm - layout.paddingMm * 2
+
   const byContent = new Map<string, RasterLabel>()
   let labels = 0
   for (const it of items) {
     const copies = Math.max(1, Math.floor(it.quantity) || 1)
     labels += copies
     const svg = it.barcodeSvg || (it.barcode ? renderBarcodeSvg(it.barcode, {
-      height: layout.barcodeHeightPx,
-      availMm: layout.widthMm - layout.paddingMm * 2,
+      height: design ? barHpx : layout.barcodeHeightPx,
+      availMm: barAvailMm,
       fontSize: layout.barcodeTextFontSizePt,
       displayValue: false,
     }) : '')
     const key = `${it.name}|${it.size ?? ''}|${it.color ?? ''}|${it.price ?? ''}|${it.barcode}|${svg.length}`
     if (!byContent.has(key)) {
-      const canvas = await renderLabelToCanvas({ ...it, barcodeSvg: svg }, layout, { showName, showPrice, showText, showVariant })
+      const canvas = design
+        ? await renderFreeLabelToCanvas({ ...it, barcodeSvg: svg }, design)
+        : await renderLabelToCanvas({ ...it, barcodeSvg: svg }, layout, { showName, showPrice, showText, showVariant })
       byContent.set(key, { blackBits: canvasToBlackBits(canvas), copies: 0 })
     }
     const label = byContent.get(key)!
@@ -382,7 +533,9 @@ export async function printBarcodeLabelsDirect(
   }
 
   const rasterLabels = [...byContent.values()]
-  const payload = lang === 'zpl' ? buildZplPayload(rasterLabels) : buildTsplPayload(rasterLabels, labelSize.widthMm, labelSize.heightMm)
+  const pageW = design ? design.widthMm : labelSize.widthMm
+  const pageH = design ? design.heightMm : labelSize.heightMm
+  const payload = lang === 'zpl' ? buildZplPayload(rasterLabels) : buildTsplPayload(rasterLabels, pageW, pageH)
 
   // 3) الإرسال
   const sent = await sendRawToUsbPrinter(payload)

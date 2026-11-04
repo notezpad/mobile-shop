@@ -1,4 +1,6 @@
 import { printHtmlInFrame } from '@/lib/print-frame'
+import type { LabelDesign, LabelElement } from '@/lib/label-design'
+import { maxLinesFor, alignOf } from '@/lib/label-design'
 
 export interface PrintableSaleItem {
   name: string
@@ -24,6 +26,8 @@ export interface ShopInfo {
   address?: string
   logo?: string
   invoicePrefix?: string
+  /** 🧾 التحديث 28: كلام أسفل الفاتورة (شروط الضمان...) — '' = بدون */
+  terms?: string
 }
 
 export function fmt(n: number) {
@@ -105,6 +109,12 @@ export function baseDocStyles(): string {
       text-align: center; font-size: 11px; color: ${BRAND.sub};
     }
     .doc-footer .thanks { font-size: 13px; font-weight: 700; color: ${BRAND.primary}; margin-bottom: 3px; }
+    /* 🧾 التحديث 28: كلام الفاتورة الحر (شروط الضمان...) — بين «شكراً» وسطر اسم المحل */
+    .doc-terms {
+      margin: 6px auto 4px; max-width: 92%;
+      font-size: 10.5px; line-height: 1.65; color: ${BRAND.ink}; opacity: .85;
+      background: ${BRAND.primaryLight}; border-radius: 6px; padding: 7px 10px;
+    }
     @media print {
       body { background: #fff; }
       .page { max-width: none; padding: 0 6mm; }
@@ -231,6 +241,7 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
 
         <div class="doc-footer">
           <div class="thanks">شكراً لتعاملكم معنا</div>
+          ${shop?.terms ? `<div class="doc-terms">${escapeHtml(shop.terms).replace(/\n/g, '<br/>')}</div>` : ''}
           <div>${escapeHtml(shop?.name || 'محل الاتصالات')} — تم إصدار الفاتورة إلكترونياً</div>
         </div>
       </div>
@@ -283,6 +294,10 @@ export interface LabelOptions {
   showVariant?: boolean
   /** 🖨️ اللغة المباشرة للطابعات الحرارية — تُهمل في نافذة المتصفح، تُستخدم في `printBarcodeLabelsDirect`. */
   directLang?: 'tspl' | 'zpl'
+  /** 🎨 التحديث 27: تصميم حر (سحب وإفلات) — لو موجود بيتجاهل كل مفاتيح
+   *  الظهور (show*) والأحجام (scales) والتخطيط التلقائي، وبيطبع العناصر
+   *  في مواضعها المحددة بالمليمتر. شوف src/lib/label-design.ts. */
+  design?: LabelDesign
 }
 
 /** line-height والهوامش الرأسية (مم) لعناصر الملصق — مشتركة بين حساب التخطيط وCSS الطباعة والمعاينة
@@ -699,6 +714,179 @@ export function openPrintWindow(html: string, onPopupBlocked?: () => void): void
   const ok = printHtmlInFrame(html, 'طباعة')
   if (!ok) onPopupBlocked?.()
 }
+
+/* ═══════════ 🎨 التحديث 27: طباعة التصميم الحر (سحب وإفلات) ═══════════ */
+
+/** محاذاة عنصر لنص عادي (جوّه dir مناسب). */
+function elTextAlign(el: LabelElement): string {
+  return alignOf(el)
+}
+
+/** محاذاة عنصر باركود في حاوية flex بـ dir=ltr (flex-start = يسار فعلي). */
+function elJustify(el: LabelElement): string {
+  const a = alignOf(el)
+  return a === 'right' ? 'flex-end' : a === 'left' ? 'flex-start' : 'center'
+}
+
+/** HTML لعنصر واحد من التصميم الحر — نفس تنسيقات معاينة المصمم بالظبط
+ *  (نفس الخطوط ونفس اللف والقص) عشان الطباعة تطابق المعاينة. */
+function freeElementHtml(el: LabelElement, f: LabelItem, design: LabelDesign): string {
+  const pos = `left:${el.xMm}mm;top:${el.yMm}mm;width:${el.wMm}mm;`
+  const alignCss = `text-align:${elTextAlign(el)};`
+  const family = `'Tahoma','Cairo',sans-serif`
+
+  switch (el.type) {
+    case 'name': {
+      const lines = maxLinesFor(el, design)
+      return `<div class="el" dir="rtl" style="${pos}${alignCss}font-family:${family};font-size:${el.fontSizePt ?? 9}pt;font-weight:${el.bold !== false ? 700 : 400};line-height:1.15;word-break:break-word;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:${lines};text-overflow:ellipsis;">${escapeHtml(f.name)}</div>`
+    }
+    case 'variant': {
+      const v = [f.size, f.color].filter((x) => !!x && String(x).trim()).join(' · ')
+      if (!v) return ''
+      return `<div class="el" dir="rtl" style="${pos}${alignCss}font-family:${family};font-size:${el.fontSizePt ?? 9}pt;font-weight:${el.bold !== false ? 700 : 400};line-height:1.15;white-space:nowrap;text-overflow:ellipsis;">${escapeHtml(v)}</div>`
+    }
+    case 'price': {
+      if (f.price == null) return ''
+      return `<div class="el" dir="rtl" style="${pos}${alignCss}font-family:${family};font-size:${el.fontSizePt ?? 9}pt;font-weight:${el.bold !== false ? 800 : 600};line-height:1.2;">${fmtLabelPrice(f.price)} ج.م</div>`
+    }
+    case 'barcodeText': {
+      if (!f.barcode) return ''
+      return `<div class="el" dir="ltr" style="${pos}${alignCss}font-family:'Consolas','Courier New',monospace;font-size:${el.fontSizePt ?? 9}pt;font-weight:700;letter-spacing:0.06em;line-height:1.2;">${escapeHtml(f.barcode)}</div>`
+    }
+    case 'barcode': {
+      const hMm = el.heightMm ?? 8
+      const inner = f.barcodeSvg
+        ? f.barcodeSvg
+        : f.barcode
+          ? `<div class="el-fallback" dir="ltr">${escapeHtml(f.barcode)}</div>`
+          : ''
+      if (!inner) return ''
+      return `<div class="el el-bar" dir="ltr" style="${pos}height:${hMm}mm;display:flex;align-items:flex-start;justify-content:${elJustify(el)};">${inner}</div>`
+    }
+    default:
+      return ''
+  }
+}
+
+/** Builds a self-contained printable HTML page for FREE-designed barcode labels
+ *  (التحديث 27). نفس عقد `printBarcodeLabelsHtml`: الباركودات واصلة كـ SVG
+ *  مُ render مسبقاً في `LabelItem.barcodeSvg` — صفر جافاسكريبت وصفر طلبات شبكة
+ *  جوه صفحة الطباعة، فمستحيل تطلع ورقة فاضية. كل عنصر متحطّط absolutely
+ *  بالمليمتر على مقاس الملصق — نفس إحداثيات المصمم والمعاينة. */
+export function printFreeLabelsHtml(
+  items: LabelItem[],
+  design: LabelDesign,
+  opts: { mode?: 'sheet' | 'roll' } = {},
+): string {
+  const mode = opts.mode ?? 'roll'
+
+  const flat: LabelItem[] = []
+  items.forEach((it) => {
+    const copies = Math.max(1, Math.floor(it.quantity) || 1)
+    for (let i = 0; i < copies; i++) flat.push({ ...it })
+  })
+
+  const buildLabelHtml = (f: LabelItem) => {
+    const parts = design.elements.map((el) => freeElementHtml(el, f, design)).filter(Boolean)
+    return `<div class="label" style="width:${design.widthMm}mm;height:${Math.max(1, design.heightMm - (mode === 'roll' ? 0.3 : 0))}mm;">${parts.join('')}</div>`
+  }
+
+  // شبكة A4 — نفس حسابات الوضع القديم (اعتماداً على مقاس الملصق فقط)
+  const grid =
+    mode === 'sheet'
+      ? computeLabelLayout(design.widthMm, design.heightMm, 'sheet', {}).sheet
+      : undefined
+  const perPage = grid?.perSheet ?? (flat.length || 1)
+  const pages: LabelItem[][] = []
+  for (let i = 0; i < flat.length; i += perPage) pages.push(flat.slice(i, i + perPage))
+  const sheetsHtml =
+    mode === 'sheet'
+      ? pages.map((pg) => `<div class="sheet">${pg.map(buildLabelHtml).join('')}</div>`).join('')
+      : `<div class="sheet">${flat.map(buildLabelHtml).join('')}</div>`
+
+  // Per-label CSS: الحاوية relative والعناصر absolute — الملصق نفسه RTL للنصوص،
+  // وكل عنصر بيحدد اتجاهه بنفسه (dir=ltr للباركود وأرقامه).
+  const labelCss = `
+  .label {
+    position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
+    background: #fff;
+    direction: rtl;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .el {
+    position: absolute;
+    overflow: hidden;
+    color: #000;
+    box-sizing: border-box;
+  }
+  .el-bar svg { max-width: 100%; height: auto; display: block; }
+  .el-fallback {
+    font-family: 'Consolas','Courier New',monospace;
+    font-size: 8pt; font-weight: 700; letter-spacing: 0.05em; color: #000;
+  }
+  `
+
+  let pageCss: string
+  if (mode === 'roll') {
+    pageCss = `
+  @page { size: ${design.widthMm}mm ${design.heightMm}mm; margin: 0; }
+  html, body { margin: 0; padding: 0; background: #fff; }
+  .sheet { display: block; margin: 0; padding: 0; overflow: hidden; }
+  /* ارتفاع الملصق أقل من الصفحة بـ 0.3مم (مطبّق فوق في style) — يمنع صفحة فاضية */
+  .label { margin: 0; border: none; break-after: page; page-break-after: always; }
+  .label:last-child { break-after: auto; page-break-after: auto; }
+    `
+  } else {
+    const g = grid!
+    pageCss = `
+  @page { size: A4; margin: ${g.pageMarginMm}mm; }
+  html, body { margin: 0; padding: 0; background: #fff; }
+  .sheet {
+    display: grid;
+    direction: ltr; /* ترتيب الاستيكرز الفعلي — زي الوضع القديم بالظبط */
+    grid-template-columns: repeat(${g.columns}, ${design.widthMm}mm);
+    grid-template-rows: repeat(${g.rows}, ${design.heightMm}mm);
+    gap: ${g.gapYMm}mm ${g.gapXMm}mm;
+    justify-content: start;
+    align-content: start;
+    break-after: page;
+    page-break-after: always;
+  }
+  .sheet:last-child { break-after: auto; page-break-after: auto; }
+  .label { border: 1px dashed #c8c8c8; border-radius: 1mm; }
+  @media print { .label { border: none; } }
+    `
+  }
+
+  return `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>طباعة ملصقات الباركود</title>
+<style>
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { background: #fff; }
+  body { font-family: 'Tahoma','Cairo',sans-serif; color: #000; }
+  ${labelCss}
+  ${pageCss}
+  .empty-msg { padding: 40px; text-align: center; color: #888; font-size: 14px; }
+</style>
+</head>
+<body>
+  ${
+    flat.length > 0
+      ? sheetsHtml
+      : `<div class="empty-msg">لا توجد ملصقات لطباعتها</div>`
+  }
+  ${printCloseBarHtml()}
+</body>
+</html>`
+}
+
 
 export interface ListReportColumn {
   header: string

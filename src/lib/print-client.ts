@@ -5,11 +5,13 @@ import { barcodeFormatFor } from '@/lib/barcode'
 import {
   printInvoiceHtml,
   printBarcodeLabelsHtml,
+  printFreeLabelsHtml,
   computeLabelLayout,
   type PrintableSale,
   type LabelItem,
   type LabelOptions,
 } from '@/lib/print'
+import type { LabelDesign } from '@/lib/label-design'
 import { printHtmlInFrame } from '@/lib/print-frame'
 
 /** نقطة طابعة الملصقات الشائعة (203dpi) بالمم — عرض الوحدة بيتقصّ لمضاعفاتها
@@ -36,6 +38,8 @@ export function printSale(sale: PrintableSale, shop?: {
   address?: string
   logo?: string
   invoicePrefix?: string
+  /** 🧾 التحديث 28: كلام أسفل الفاتورة (شروط الضمان...) */
+  terms?: string
 }) {
   printHtml(printInvoiceHtml(sale, shop), `فاتورة ${sale.invoiceNo ?? sale.id}`)
 }
@@ -49,6 +53,8 @@ export function exportSalePdf(sale: PrintableSale, shop?: {
   address?: string
   logo?: string
   invoicePrefix?: string
+  /** 🧾 التحديث 28: كلام أسفل الفاتورة (شروط الضمان...) */
+  terms?: string
 }) {
   const baseHtml = printInvoiceHtml(sale, shop)
   // Inject PDF-optimized styles: hide browser print chrome, force A5 portrait
@@ -167,6 +173,11 @@ export function renderBarcodeSvg(
  *  لو المستخدم كنسلها الصفحة تفضل شغالة ويقدر يضغط طباعة تاني فوراً)،
  *  false = الطباعة ماقدرتش تنطلق (حالة نظرية — البيئة مش متصفح). */
 export function printBarcodeLabels(items: LabelItem[], opts?: LabelOptions): boolean {
+  // 🎨 التحديث 27: لو فيه تصميم حر مفعّل → مسار التصميم الحر بالكامل.
+  // عناصر التصميم (المواضع/الأحجام/المحاذاة) هي مصدر الحقيقة الوحيد.
+  if (opts?.design) {
+    return printBarcodeLabelsFree(items, opts.design, { mode: opts?.mode ?? 'sheet' })
+  }
   const mode = opts?.mode ?? 'sheet'
   const labelSize = opts?.labelSize ?? opts?.rollSize ?? { widthMm: 40, heightMm: 30 }
   const showName = opts?.showName ?? true
@@ -208,5 +219,46 @@ export function printBarcodeLabels(items: LabelItem[], opts?: LabelOptions): boo
   // عرض الإطار = عرض صفحة الطباعة: A4 للورق، أو مقاس الملصق نفسه للرول
   // (عشان ترتيب المستند يطابق صفحة @page في الوضعين).
   const pageWidthPx = mode === 'sheet' ? 794 : Math.round(labelSize.widthMm * 3.78)
+  return printHtmlInFrame(html, 'طباعة ملصقات الباركود', { pageWidthPx })
+}
+
+/** 🎨 التحديث 27: طباعة ملصقات بتصميم حر (سحب وإفلات).
+ *
+ *  نفس عقد `printBarcodeLabels` بالظبط — الفرق الوحيد إن مصدر الحقيقة هو
+ *  `LabelDesign` (مواضع العناصر بالمليمتر) بدل التخطيط التلقائي المرصوص:
+ *  - الباركود بيتولّد بارتفاع عنصر الباركود في التصميم وعرضه متقصّ على نقاط
+ *    طابعة 203dpi (نفس measureBarcodeModuleMm) فبيطلع حاد وقابل للمسح.
+ *  - وضع sheet بنفس شبكة A4 التلقائية حسب مقاس التصميم.
+ *  بترجّع true لو أمر الطباعة انطلق. */
+export function printBarcodeLabelsFree(
+  items: LabelItem[],
+  design: LabelDesign,
+  opts?: { mode?: 'sheet' | 'roll' },
+): boolean {
+  const mode = opts?.mode ?? 'roll'
+  const barEl = design.elements.find((e) => e.type === 'barcode')
+  const textEl = design.elements.find((e) => e.type === 'barcodeText')
+  const barHpx = Math.max(10, Math.round((barEl?.heightMm ?? 8) * 3.78))
+  const availMm = barEl ? barEl.wMm : design.widthMm
+
+  // Pre-render كل باركود مختلف مرة واحدة — نفس تحسين النسخة القديمة
+  const svgCache = new Map<string, string>()
+  const enriched = items.map((it) => {
+    if (!it.barcode) return it
+    let svg = svgCache.get(it.barcode)
+    if (!svg) {
+      svg = renderBarcodeSvg(it.barcode, {
+        height: barHpx,
+        availMm,
+        fontSize: textEl?.fontSizePt ?? 8,
+        displayValue: false,
+      })
+      svgCache.set(it.barcode, svg)
+    }
+    return { ...it, barcodeSvg: svg }
+  })
+
+  const html = printFreeLabelsHtml(enriched, design, { mode })
+  const pageWidthPx = mode === 'sheet' ? 794 : Math.round(design.widthMm * 3.78)
   return printHtmlInFrame(html, 'طباعة ملصقات الباركود', { pageWidthPx })
 }

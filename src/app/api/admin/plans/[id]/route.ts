@@ -133,7 +133,7 @@ async function __DELETE(
   // 🛡️ 2026-09-17 (v3): Canonical plans can only be soft-deleted
   // (deactivated). Custom plans can be hard-deleted IF no subscriptions
   // reference them.
-  const CANONICAL_CODES = ['electronics-basic', 'electronics-pro', 'fashion-basic', 'fashion-pro', 'food-basic']
+  const CANONICAL_CODES = ['electronics-basic', 'electronics-pro', 'fashion-basic', 'fashion-pro', 'food-basic', 'food-pro']
   const isCanonical = CANONICAL_CODES.includes(existing.code)
 
   if (isCanonical) {

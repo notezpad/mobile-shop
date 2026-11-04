@@ -6,6 +6,9 @@ import { readEnv } from '@/lib/env'
 import { computeEndDate, computeAmount } from '@/lib/admin-utils'
 import { runNonBlocking, trackServerEvent } from '@/lib/tracking/server'
 import { TRACKING_EVENTS } from '@/lib/tracking/types'
+// 🧩 2026-11-04 (التحديث 25): إبطال كاش سياق الباقة بعد تفعيل إضافة
+import { invalidatePlanContextCache } from '@/lib/features'
+import { ADDON_CATALOG } from '@/lib/addons'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,12 +77,29 @@ async function __POST(req: NextRequest) {
   }
 
   // merchantOrderId = "sub-<subscriptionId>" (set in /api/paymob/checkout)
-  const subIdMatch = merchantOrderId.match(/^sub-(\d+)$/)
-  if (!subIdMatch) {
+  // 🧩 أو "addon-<addOnRowId>" (set in /api/addons/checkout) — إضافة مدفوعة
+  const orderIdMatch = merchantOrderId.match(/^(sub|addon)-(\d+)$/)
+  if (!orderIdMatch) {
     console.warn(`[paymob/webhook] Unrecognized merchant_order_id: ${merchantOrderId}`)
     return NextResponse.json({ ok: true }) // 200 so Paymob doesn't retry
   }
-  const subscriptionId = Number(subIdMatch[1])
+  const orderKind = orderIdMatch[1] as 'sub' | 'addon'
+  const orderRowId = Number(orderIdMatch[2])
+
+  // 🧩 مسار الإضافات المدفوعة — نفس بروتوكول التحقق (HMAC + مبلغ + intention)
+  // بس على TenantAddOn بدل Subscription. بيتنفذ مستقل وبيرجع — عشان منطق
+  // الاشتراكات يفضل زي ما هو من غير ما نلمسه.
+  if (orderKind === 'addon') {
+    return handleAddOnWebhook({
+      addOnId: orderRowId,
+      txnId,
+      success: success && !isVoided && !isRefunded,
+      isVoided: isVoided || isRefunded,
+      obj,
+    })
+  }
+
+  const subscriptionId = orderRowId
 
   // ── Process the update ────────────────────────────────────────────
   try {
@@ -257,6 +277,166 @@ async function __GET() {
     ok: true,
     message: 'Paymob webhook endpoint. Configure this URL in your Paymob dashboard.',
   })
+}
+
+/**
+ * 🧩 2026-11-04 (التحديث 25): تفعيل الإضافات المدفوعة من webhook Paymob.
+ *
+ * نفس طبقات حماية الاشتراكات بالظبط:
+ *   (أ) التحقق من المبلغ: الدفع من Paymob مقابل amountExpected المخزّن وقت
+ *       الـ checkout (سماحية قرش واحد للتقريب) — عدم التطابق: تسجيل للمراجعة
+ *       ورفض التفعيل.
+ *   (أ-2) ربط جلسة الدفع: لو الـ payload فيه intention ومخزّن مختلف → رفض.
+ *   (ب+ج) تفعيل بـ UPDATE شرطي واحد (status لازم يفضل 'pending') — بيقفل
+ *       السباق والـ replay وإحياء الملغي مرة واحدة.
+ *   (د) حساب endDate: تمديد على آخر إضافة نشطة لنفس النوع (لو لسه شغالة)،
+ *       وإلا من الآن + المدة — نفس منطق تجديد الاشتراكات (التمديد من
+ *       تاريخ الانتهاء مش من تاريخ الدفع).
+ *
+ * بعد التفعيل: إبطال كاش سياق الباقة — الموديول/الحد الجديد يظهر فوراً.
+ */
+async function handleAddOnWebhook(input: {
+  addOnId: number
+  txnId: string
+  success: boolean
+  isVoided: boolean
+  // any زي الـ __POST الأصلي — الـ payload بتيجي من JSON.parse/URLSearchParams
+  obj: any
+}): Promise<NextResponse> {
+  const { addOnId, txnId, success, isVoided, obj } = input
+  try {
+    const row = await db.tenantAddOn.findUnique({
+      where: { id: addOnId },
+      include: { tenant: true },
+    })
+
+    if (!row) {
+      console.warn(`[paymob/webhook] Add-on ${addOnId} not found`)
+      return NextResponse.json({ ok: true })
+    }
+
+    // 🛡️ Idempotency — نفس مبدأ الاشتراكات
+    if (success && !isVoided && row.status === 'active') {
+      console.log(`[paymob/webhook] Add-on ${addOnId} already active — ignoring duplicate callback`)
+      return NextResponse.json({ ok: true })
+    }
+
+    if (success && !isVoided) {
+      // (أ) تحقق المبلغ مقابل المبلغ المتوقع المخزّن وقت الـ checkout
+      const amountCents = Number(obj.amount_cents ?? 0)
+      const expectedCents = toCents(Number(row.amountExpected))
+      if (expectedCents > 0 && Math.abs(amountCents - expectedCents) > 1) {
+        console.warn(`[paymob/webhook] Add-on ${addOnId} amount mismatch: got ${amountCents}, expected ${expectedCents} — manual review`)
+        if (row.status === 'pending' && !(row.paymentNote ?? '').includes(`paymob-txn:${txnId}`)) {
+          await db.tenantAddOn.update({
+            where: { id: addOnId },
+            data: { paymentNote: `paymob-txn:${txnId}|amount-mismatch:got-${amountCents}-expected-${expectedCents}` },
+          })
+        }
+        return NextResponse.json({ ok: true }) // 200 عشان Paymob مايعيدش — المراجعة يدوية
+      }
+
+      // (أ-2) ربط جلسة الدفع (intention) — لو الحقلين موجودين ومختلفين → رفض
+      const storedIntention = (row.paymentNote ?? '').match(/paymob-intention:([^|]+)/)?.[1]
+      const payloadIntention = String(obj.intention_id ?? obj.order?.intention_id ?? '')
+      if (storedIntention && payloadIntention && payloadIntention !== storedIntention) {
+        console.warn(`[paymob/webhook] Add-on ${addOnId} intention mismatch`)
+        if (row.status === 'pending' && !(row.paymentNote ?? '').includes(`paymob-txn:${txnId}`)) {
+          await db.tenantAddOn.update({
+            where: { id: addOnId },
+            data: { paymentNote: `paymob-txn:${txnId}|intention-mismatch:got-${payloadIntention}-expected-${storedIntention}` },
+          })
+        }
+        return NextResponse.json({ ok: true })
+      }
+
+      // (د) حساب endDate — تمديد على آخر إضافة نشطة لنفس النوع، وإلا من الآن
+      const now = new Date()
+      const sibling = await db.tenantAddOn.findFirst({
+        where: {
+          tenantId: row.tenantId,
+          addOnKey: row.addOnKey,
+          status: 'active',
+          endDate: { gt: now },
+          id: { not: addOnId },
+        },
+        orderBy: { endDate: 'desc' },
+      })
+      const baseDate = sibling && sibling.endDate > now ? sibling.endDate : now
+      const newEndDate = new Date(baseDate)
+      newEndDate.setDate(newEndDate.getDate() + (row.period === 'yearly' ? 365 : 30))
+
+      // (ب+ج) تفعيل بـ UPDATE شرطي واحد — نفس الحماية ضد السباق/replay
+      const activated = await db.tenantAddOn.updateMany({
+        where: { id: addOnId, status: 'pending' },
+        data: {
+          status: 'active',
+          startDate: now,
+          endDate: newEndDate,
+          amountPaid: Number(row.amountExpected),
+          paymentMethod: 'paymob',
+          paymentNote: `paymob-txn:${txnId}|order:${obj.order?.id ?? ''}`,
+        },
+      })
+      if (activated.count !== 1) {
+        console.log(`[paymob/webhook] Add-on ${addOnId} not pending (status=${row.status}) — ignoring duplicate/replayed callback`)
+        return NextResponse.json({ ok: true })
+      }
+
+      // 🧩 الإضافة اتفعّلت — الكاش القديم يحتوي وصف باقتها بدونها: أبطله فوراً
+      invalidatePlanContextCache(row.tenantId)
+
+      console.log(`[paymob/webhook] Add-on ${addOnId} (${row.addOnKey}) activated — end ${newEndDate.toISOString()}`)
+
+      // ═══ 📊 Tracking: Purchase — تأكيد الدفع الحقيقي (نفس eventId الثابت) ═══
+      const def = ADDON_CATALOG[row.addOnKey as keyof typeof ADDON_CATALOG]
+      const paidAmount = Number(row.amountExpected)
+      runNonBlocking(() => trackServerEvent({
+        eventName: TRACKING_EVENTS.Purchase,
+        eventId: `purchase-addon-${addOnId}`,
+        params: {
+          value: paidAmount,
+          currency: 'EGP',
+          transactionId: String(txnId || obj.order?.id || addOnId),
+          contentName: def?.name ?? row.addOnKey, contentType: 'subscription_addon',
+          contentId: row.addOnKey, planId: row.addOnKey,
+          planName: def?.name ?? row.addOnKey, period: row.period,
+        },
+        context: {
+          email: row.tenant?.ownerEmail || undefined,
+          externalId: row.tenantId,
+        },
+      }))
+    } else if (isVoided) {
+      // ── Transaction voided / refunded — نفس سلوك الاشتراكات ──
+      if (row.status === 'pending') {
+        await db.tenantAddOn.update({
+          where: { id: addOnId },
+          data: { status: 'failed', paymentNote: `paymob-txn:${txnId}|voided/refunded` },
+        })
+      } else {
+        await db.tenantAddOn.update({
+          where: { id: addOnId },
+          data: { paymentNote: `paymob-txn:${txnId}|voided/refunded-on-active-addon` },
+        })
+      }
+      console.log(`[paymob/webhook] Add-on ${addOnId} void/refund recorded`)
+    } else {
+      // ── Payment failed — mark failed ──
+      if (row.status === 'pending') {
+        await db.tenantAddOn.update({
+          where: { id: addOnId },
+          data: { status: 'failed', paymentNote: `paymob-txn:${txnId}|payment-failed` },
+        })
+      }
+      console.log(`[paymob/webhook] Add-on ${addOnId} payment failed`)
+    }
+  } catch (e: any) {
+    console.error('[paymob/webhook] Error processing add-on webhook:', e?.message ?? e)
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+  }
+
+  return NextResponse.json({ ok: true })
 }
 
 export async function POST(...args: Parameters<typeof __POST>) {

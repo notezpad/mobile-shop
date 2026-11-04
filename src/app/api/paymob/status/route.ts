@@ -36,12 +36,33 @@ async function __GET(req: NextRequest) {
     return NextResponse.json({ error: 'merchant_order_id required' }, { status: 400 })
   }
 
-  // Parse sub-<id> format
-  const match = merchantOrderId.match(/^sub-(\d+)$/)
+  // Parse sub-<id> / 🧩 addon-<id> formats
+  const match = merchantOrderId.match(/^(sub|addon)-(\d+)$/)
   if (!match) {
     return NextResponse.json({ error: 'Invalid merchant_order_id format' }, { status: 400 })
   }
-  const subscriptionId = Number(match[1])
+  const orderKind = match[1] as 'sub' | 'addon'
+  const orderRowId = Number(match[2])
+
+  // 🧩 2026-11-04: حالة إضافة مدفوعة — نفس رد الحالة (pending/paid/failed)
+  if (orderKind === 'addon') {
+    const row = await db.tenantAddOn.findUnique({
+      where: { id: orderRowId },
+      select: { id: true, status: true, tenantId: true },
+    })
+    if (!row) return NextResponse.json({ status: 'failed' })
+    // Security: only the tenant owner (or super admin) can check status
+    if (session.role !== 'SUPER_ADMIN' && session.tenantId !== row.tenantId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    let addonStatus: 'pending' | 'paid' | 'failed'
+    if (row.status === 'active') addonStatus = 'paid'
+    else if (row.status === 'failed' || row.status === 'cancelled') addonStatus = 'failed'
+    else addonStatus = 'pending'
+    return NextResponse.json({ status: addonStatus })
+  }
+
+  const subscriptionId = orderRowId
 
   const sub = await db.subscription.findUnique({
     where: { id: subscriptionId },

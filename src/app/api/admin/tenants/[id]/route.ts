@@ -3,6 +3,8 @@ import { hardDeleteTenant } from '@/lib/admin-fake-tenants'
 import { db, withDb } from '@/lib/db'
 import { requireSuperAdmin, authErrorResponse, PLATFORM_TENANT_ID } from '@/lib/auth'
 import { logAudit } from '@/lib/audit'
+// 🧩 2026-11-04 (التحديث 25): إبطال كاش سياق الباقة بعد إلغاء إضافات المحل
+import { invalidatePlanContextCache } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +29,11 @@ async function __GET(
       subscriptions: {
         orderBy: { createdAt: 'desc' },
         include: { plan: true },
+      },
+      // 🧩 2026-11-04 (التحديث 25): الإضافات المدفوعة للمحل (نشطة + منتهية)
+      addOns: {
+        orderBy: { createdAt: 'desc' },
+        take: 20,
       },
     },
   })
@@ -110,6 +117,20 @@ async function __GET(
       last30Sales: sales30Total,
       last30Profit: profit30,
     },
+    // 🧩 الإضافات المدفوعة (نفس شكل /api/admin/tenants/<id>/addons)
+    addOns: tenant.addOns.map((a) => ({
+      id: a.id,
+      addOnKey: a.addOnKey,
+      quantity: a.quantity,
+      status: a.status,
+      period: a.period,
+      amountPaid: Number(a.amountPaid ?? 0),
+      startDate: a.startDate.toISOString(),
+      endDate: a.endDate.toISOString(),
+      createdAt: a.createdAt.toISOString(),
+      paymentMethod: a.paymentMethod,
+      paymentNote: a.paymentNote,
+    })),
   })
 }
 
@@ -225,6 +246,12 @@ async function __DELETE(
     where: { tenantId: id, status: 'active' },
     data: { status: 'cancelled' },
   })
+  // 🧩 إلغاء الإضافات النشطة برضه — إلغاء المحل يلغى كل حاجة مرتبطة بيه
+  await db.tenantAddOn.updateMany({
+    where: { tenantId: id, status: 'active' },
+    data: { status: 'cancelled' },
+  })
+  invalidatePlanContextCache(id)
 
   await logAudit({ action: 'tenant.cancel', targetType: 'tenant', targetId: id, details: { shopName: existing.shopName } }, req)
   return NextResponse.json({ ok: true })

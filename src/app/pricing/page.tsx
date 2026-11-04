@@ -17,6 +17,19 @@ import { trackEvent } from '@/lib/tracking/client'
 import { TRACKING_EVENTS } from '@/lib/tracking/types'
 import { planFeatureItems } from '@/lib/plan-features'
 
+// 🧩 2026-11-04 (التحديث 25): الإضافات المدفوعة تحت كروت الباقات
+interface AddOnPublicItem {
+  key: string
+  name: string
+  desc: string
+  unitLabel: string
+  quantifiable: boolean
+  maxQuantity: number
+  bullets: string[]
+  priceMonthly: number
+  priceYearly: number
+}
+
 interface Plan {
   id: number
   code: string
@@ -86,6 +99,8 @@ export default function PricingPage() {
   // نعرض له «ابدأ تجربة 14 يوم» تاني، لازم «اشترك الآن» وتحويل مباشر للدفع
   const [trialUsed, setTrialUsed] = React.useState(false)
   const [trialStarting, setTrialStarting] = React.useState<string | null>(null)
+  // 🧩 الإضافات المدفوعة — كتالوج عام بأسعار حقيقية (PlatformSetting أو الافتراضي)
+  const [addons, setAddons] = React.useState<AddOnPublicItem[]>([])
 
   // Load public plans + auth state in parallel
   React.useEffect(() => {
@@ -93,13 +108,17 @@ export default function PricingPage() {
     setLoading(true)
     Promise.allSettled([
       api<{ items: Plan[] }>('/api/plans/public'),
+      api<{ items: AddOnPublicItem[] }>('/api/addons/public'),
       getMe().catch(() => null),
-    ]).then(([plansRes, meRes]) => {
+    ]).then(([plansRes, addonsRes, meRes]) => {
       if (!alive) return
       if (plansRes.status === 'fulfilled') {
         setPlans(plansRes.value?.items ?? [])
       } else {
         toast.error('فشل تحميل الباقات')
+      }
+      if (addonsRes.status === 'fulfilled') {
+        setAddons(addonsRes.value?.items ?? [])
       }
       if (meRes.status === 'fulfilled' && meRes.value) {
         setAuthed(true)
@@ -432,6 +451,40 @@ export default function PricingPage() {
                 </motion.div>
               )
             })}
+          </div>
+        )}
+
+        {/* 🧩 الإضافات المدفوعة — بيع «قطعة ميزة» من غير ترقية الباقة كلها */}
+        {addons.length > 0 && (
+          <div className="pg-addons-strip">
+            <div className="mb-3 text-center">
+              <h3 className="text-lg font-extrabold">إضافات بمقابل لأي باقة</h3>
+              <p className="pg-addon-sub mt-1 text-xs">
+                محتاج ميزة واحدة بس؟ اشترِها لوحدها — بتتضاف فوق باقتك الحالية وبتتجدد بشكل مستقل.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {addons.map((a) => (
+                <div key={a.key} className="pg-addon-card p-4">
+                  <p className="pg-addon-name text-sm font-extrabold">{a.name}</p>
+                  <p className="pg-addon-desc mt-1 text-[11px] leading-relaxed">{a.desc}</p>
+                  <div className="mt-3 flex items-baseline gap-1">
+                    <span className="pg-addon-price text-2xl font-black">{a.priceMonthly.toLocaleString('en-US')}</span>
+                    <span className="pg-addon-note text-[10px]">جنيه/شهر</span>
+                    <span className="pg-addon-note ms-auto text-[10px]">
+                      أو {a.priceYearly.toLocaleString('en-US')} سنوياً
+                    </span>
+                  </div>
+                  <a
+                    href={authed ? `/checkout?addon=${a.key}&cycle=monthly` : `/signup`}
+                    className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-l from-brand-500 to-brand-700 text-[13px] font-bold text-white shadow-md shadow-brand-600/30 hover:from-brand-400 hover:to-brand-600"
+                  >
+                    اشترِ الإضافة
+                    <ArrowLeft className="size-3.5" />
+                  </a>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

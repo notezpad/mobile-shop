@@ -39,7 +39,8 @@ async function __GET(req: NextRequest) {
   return NextResponse.json({
     found: true,
     product: v.product,
-    variant: { id: v.id, size: v.size, color: v.color, barcode: v.barcode, quantity: v.quantity },
+    // 💰 التحديث 28: سعر المواصفة بيتسرب في الرد (null = سعر المنتج العام)
+    variant: { id: v.id, size: v.size, color: v.color, barcode: v.barcode, price: v.price, quantity: v.quantity },
   })
 }
 

@@ -423,6 +423,8 @@ export function SalesHistoryView() {
     address: shopBranding.address || undefined,
     logo: shopBranding.logoPath || undefined,
     invoicePrefix: shopBranding.invoicePrefix,
+    // 🧾 التحديث 28: كلام أسفل الفاتورة (شروط الضمان...)
+    terms: shopBranding.invoiceTerms || undefined,
   }
   const reprint = (s: Sale) => printSale(toPrintable(s), shopInfo)
   const exportPdf = (s: Sale) => exportSalePdf(toPrintable(s), shopInfo)

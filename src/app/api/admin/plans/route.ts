@@ -26,6 +26,8 @@ async function __GET() {
     // 🥬 2026-10-12: الباقة الغذائية المخفية — canonical (protected from
     // hard-delete) زي الباقية الأربعة.
     'food-basic',
+    // 🥬 2026-11-04 (التحديث 26): الاحترافية الغذائية المخفية — نفس الحماية.
+    'food-pro',
   ]
 
   // 🎨 2026-10-09 (plans redesign): richer per-plan analytics for the admin

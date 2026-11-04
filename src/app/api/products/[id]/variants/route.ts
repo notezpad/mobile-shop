@@ -7,6 +7,7 @@ import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
 import { withSql } from '@/lib/sql'
 import { normalizeBarcode } from '@/lib/barcode'
 import { canAccessProductBranch } from '@/lib/branch-scope-db'
+import { normalizeVariantPrice } from '@/lib/variant-price'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +40,8 @@ type VariantRow = {
   size: string | null
   color: string | null
   barcode: string | null
+  // 💰 التحديث 28: سعر المواصفة (null = سعر المنتج العام)
+  price: number | null
   quantity: number
   displayQty: number
   createdAt: Date
@@ -88,7 +91,7 @@ export async function GET(
     }
 
     const variants = await sql<VariantRow[]>`
-      SELECT "id", "productId", "size", "color", "barcode", "quantity", "displayQty", "createdAt"
+      SELECT "id", "productId", "size", "color", "barcode", "price", "quantity", "displayQty", "createdAt"
       FROM "ProductVariant"
       WHERE "productId" = ${pid}
       ORDER BY "id" ASC`
@@ -131,6 +134,12 @@ async function __POST(
   const color = body?.color ? String(body.color).trim() || null : null
   const barcode = normalizeBarcode(body?.barcode)
   const quantity = parseInt(body?.quantity ?? 0, 10) || 0
+  // 💰 التحديث 28: سعر المواصفة (اختياري — فاضي = سعر المنتج العام)
+  const priceNorm = normalizeVariantPrice(body?.price)
+  if (!priceNorm.ok) {
+    return NextResponse.json({ error: 'سعر غير صالح للمتغير' }, { status: 400 })
+  }
+  const price = priceNorm.price
   if (!size && !color) {
     return NextResponse.json({ error: 'لازم مقاس أو لون على الأقل' }, { status: 400 })
   }
@@ -158,7 +167,7 @@ async function __POST(
   try {
     // 👕 الرصيد الافتتاحي للمقاس بيدخل معروضاً بالكامل
     const created = await db.productVariant.create({
-      data: { productId: pid, size, color, barcode, quantity, displayQty: quantity },
+      data: { productId: pid, size, color, barcode, price, quantity, displayQty: quantity },
     })
     // Keep Product.quantity as the sum of all its variants from here on.
     await syncProductQuantityFromVariants(db, pid)

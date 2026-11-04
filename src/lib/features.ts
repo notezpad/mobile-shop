@@ -28,6 +28,8 @@ export type { ModuleKey, Capability } from './plan-constants'
 
 import type { ModuleKey, Capability } from './plan-constants'
 import { CRITICAL_MODULES, enforceVerticalRules } from './plan-constants'
+// 🧩 2026-11-04 (التحديث 25): مفاتيح الإضافات المدفوعة (HR / فروع / مستخدمين)
+import { ADDON_KEYS } from './addons'
 
 function safeParseArray(raw: string | null | undefined): string[] | null {
   if (!raw) return null
@@ -45,6 +47,10 @@ export type PlanContext = {
   businessType: 'electronics' | 'fashion' | 'food'
   enabledModules: string[]
   capabilities: string[]
+  /** 🧩 2026-11-04 (التحديث 25): الإضافات المدفوعة النشطة — بدون تكرار.
+   * 'hr' = الموارد البشرية مفتوحة على باقة أساسية، والحدود تحت بتشمل كميات
+   * الفروع/المستخدمين الإضافية المشتراة. */
+  addOns: string[]
   /** 🛡️ 2026-10-10: حدود الباقة — بتتقرا من نفس Plan المحفوظ.
    * لو مفيش اشتراك/باقة (tenant منتهي مثلاً) القيمة = UNLIMITED_PLAN_LIMIT
    * عشان ما نمنعش مرتين — الـ auth layer هو اللي بيقفل المنتهي أصلاً. */
@@ -105,6 +111,15 @@ export async function getPlanContext(tenantId: string): Promise<PlanContext> {
   return value
 }
 
+/**
+ * 🧩 2026-11-04 (التحديث 25): إبطال كاش سياق الباقة لمحل معين.
+ * بيتنادى بعد تفعيل/إلغاء إضافة (webhook Paymob / منح الأدمن) عشان
+ * الإضافة تظهر فوراً من غير ما نستنى انتهاء الـ TTL (60 ثانية).
+ */
+export function invalidatePlanContextCache(tenantId: string): void {
+  planCtxCache.delete(tenantId)
+}
+
 async function loadPlanContext(tenantId: string): Promise<PlanContext> {
   // ⚡ استعلام واحد بدل findFirst + include plan (مرة واحدة على الشبكة)
   const sql = getSql()
@@ -126,11 +141,40 @@ async function loadPlanContext(tenantId: string): Promise<PlanContext> {
     ORDER BY s."endDate" DESC
     LIMIT 1`
   const plan = rows[0] ?? null
+
+  // 🧩 2026-11-04 (التحديث 25): الإضافات المدفوعة النشطة — استعلام خفيف ثانٍ.
+  // شرط الـ endDate > now() هو اللي بيقفل الإضافة تلقائياً يوم انتهائها
+  // (من غير cron ولا مهام مجدولة). الكميات بتتراكم: صفّين extra_branch
+  // نشطين بكمية 2 و 1 = +3 فروع فوق حد الباقة.
+  // 🛡️ لو الـ migration مش متطبقة بعد (الجدول لسه ماعملش) — ممنوع الدهmma
+  // دي تكسر سياق الباقة كله: بنرجّع قائمة فاضية والباقي يشتغل عادي.
+  type AddOnRow = { addOnKey: string; quantity: number }
+  let addOnRows: AddOnRow[] = []
+  try {
+    addOnRows = await sql<AddOnRow[]>`
+      SELECT "addOnKey", "quantity"
+      FROM "TenantAddOn"
+      WHERE "tenantId" = ${tenantId}
+        AND "status" = 'active'
+        AND "endDate" > now()
+        AND "addOnKey" IN (${ADDON_KEYS})`
+  } catch {
+    addOnRows = []
+  }
+  const addOnQty = new Map<string, number>()
+  for (const r of addOnRows) {
+    if (!(ADDON_KEYS as readonly string[]).includes(r.addOnKey)) continue
+    addOnQty.set(r.addOnKey, (addOnQty.get(r.addOnKey) ?? 0) + Math.max(1, Number(r.quantity) || 1))
+  }
+  const addOns = Array.from(addOnQty.keys())
+
   const parsedModules = safeParseArray(plan?.enabledModules ?? null)
   // 🛡️ Force-include the CRITICAL_MODULES in EVERY plan response
   // (just settings + users — everything else is plan-gated)
   const moduleSet = new Set<string>(parsedModules ?? [...ALL_MODULES_LOCAL])
   for (const m of CRITICAL_MODULES) moduleSet.add(m)
+  // 🧩 إضافة HR المشتَراة بتتضاف هنا (وقبل قواعد النشاط عشان نعرف نحترمها)
+  if (addOns.includes('hr')) moduleSet.add('hr')
   const caps = safeParseArray(plan?.capabilities ?? null) ?? []
   // 🥬 2026-10-12: النشاط الغذائي 'food' — بيتقرا زي ما هو، وأي قيمة
   // تانية غير معروفة بترجع 'electronics' (نفس السلوك القديم).
@@ -141,21 +185,25 @@ async function loadPlanContext(tenantId: string): Promise<PlanContext> {
   // 🛡️ 2026-09-15 (v3): Apply vertical rules at runtime — fixes the
   // user's "still seeing maintenance + finance in fashion plan" bug
   // even if they haven't applied the migration SQL yet.
+  // 🧩 بنمرر الإضافات عشان قاعدة «الأساسية بدون HR» ما تمسحش إضافة مدفوعة.
   const enforced = enforceVerticalRules(
     plan?.code ?? null,
     businessType,
     Array.from(moduleSet),
     caps,
+    addOns,
   )
 
   return {
     businessType,
     enabledModules: enforced.modules,
     capabilities: enforced.capabilities,
+    addOns,
     limits: {
-      maxUsers: plan?.maxUsers ?? UNLIMITED_PLAN_LIMIT,
+      // 🧩 الفروع/المستخدمين الإضافيين بيزيدوا الحد فوق قيمة الباقة
+      maxUsers: (plan?.maxUsers ?? UNLIMITED_PLAN_LIMIT) + (addOnQty.get('extra_users') ?? 0),
       maxProducts: plan?.maxProducts ?? UNLIMITED_PLAN_LIMIT,
-      maxBranches: plan?.maxBranches ?? UNLIMITED_PLAN_LIMIT,
+      maxBranches: (plan?.maxBranches ?? UNLIMITED_PLAN_LIMIT) + (addOnQty.get('extra_branch') ?? 0),
     },
   }
 }

@@ -177,8 +177,16 @@ export function TrialExpiredBanner() {
         </div>
 
         {/* CTA — primary */}
+        {/* 🧩 2026-11-04 (التحديث 26): التجديد الذاتي — لو المحل عليه باقة
+            فعلية (مش تجربة) الزرار بيودّي على صفحة دفع باقته الحالية مباشرة،
+            عشان الباقات المخفية (food-basic / food-pro) ماتقدرش تتجدد إلا
+            من أكواد التفعيل. لو مفيش باقة أو لسه في التجربة → /pricing عادي. */}
         <Link
-          href="/pricing"
+          href={
+            subscription.planCode && subscription.planCode !== '-' && subscription.period !== 'trial'
+              ? `/checkout?plan=${encodeURIComponent(subscription.planCode)}&cycle=${subscription.period === 'yearly' ? 'yearly' : 'monthly'}`
+              : '/pricing'
+          }
           className={`inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-white px-3 text-xs font-extrabold max-sm:order-last max-sm:w-full shadow-sm transition-all hover:brightness-95 active:scale-95 sm:px-4 sm:text-sm ${
             isExpired
               ? 'text-red-700 shadow-red-950/20'

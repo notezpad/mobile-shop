@@ -130,6 +130,8 @@ interface PosVariant {
   id: number
   size: string | null
   color: string | null
+  /** 💰 التحديث 28: سعر المواصفة — null = سعر المنتج العام */
+  price: number | null
   quantity: number
 }
 
@@ -936,6 +938,8 @@ export function POSView() {
     productName: string
     variants: PosVariant[]
     selectedId: number | null
+    /** 💰 التحديث 28: سعر المنتج العام — عشان الدايلوج يعرض السعر الفعلي لكل خيار */
+    productPrice: number | null
   } | null>(null)
   useBackLayer(cartVariantEdit != null, () => setCartVariantEdit(null))
 
@@ -1119,6 +1123,8 @@ export function POSView() {
   const shopName = useShopStore((s) => s.shopName)
   const shopBranding = useShopStore((s) => s.branding)
   const capabilities = useShopStore((s) => s.plan.capabilities)
+  // 📱 التحديث 28: محلات الإلكترونيات بتشوف الخانتين باسم «المواصفة 1/2» بدل لون/مقاس
+  const isElectronics = useShopStore((s) => s.plan.businessType) === 'electronics'
   const hasUnitsCap = capabilities.includes('multi_unit')
   const hasVariantsCap = capabilities.includes('variants')
 
@@ -1339,11 +1345,18 @@ export function POSView() {
     const cartKey = `${product.id}-${unitId ?? 'x'}-${variantId ?? 'x'}`
     const unit = unitId ? availableUnits.find((u) => u.id === unitId) : null
     const factor = unit?.factor ?? 1
+    // 💰 التحديث 28: سعر المواصفة هو الافتراضي للسطر — الوحدة اللي ليها سعر مسجل
+    // بتفضل الأولوية عليها، والمتغير من غير سعر بيرجع لسعر المنتج العام.
+    const variantPrice =
+      variantId != null
+        ? (availableVariants.find((v) => v.id === variantId)?.price ?? null)
+        : null
+    const basePiece = variantPrice ?? piecePrice(product)
     const perPiecePrice = unit
       ? unit.price != null
         ? unit.price / factor
-        : product.price
-      : piecePrice(product)
+        : basePiece
+      : basePiece
     const startQty = factor
 
     const cur = cartRef.current
@@ -1446,6 +1459,8 @@ export function POSView() {
                     id: v.id,
                     size: v.size,
                     color: v.color,
+                    // 💰 التحديث 28: سعر المواصفة (null = سعر المنتج العام)
+                    price: v.price ?? null,
                     quantity: v.quantity,
                   }))
                 )
@@ -1629,11 +1644,17 @@ export function POSView() {
         const newUnitId = unit?.id ?? null
         const newKey = `${i.product.id}-${newUnitId ?? 'x'}-${i.variantId ?? 'x'}`
         const factor = unit?.factor ?? 1
+        // 💰 التحديث 28: نفس أولوية السعر — سعر الوحدة المسجل ← سعر المتغير ← سعر المنتج
+        const lineVariantPrice =
+          i.variantId != null
+            ? (i.availableVariants.find((v) => v.id === i.variantId)?.price ?? null)
+            : null
+        const lineBase = lineVariantPrice ?? piecePrice(i.product)
         const perPiecePrice = unit
           ? unit.price != null
             ? unit.price / factor
-            : i.product.price
-          : piecePrice(i.product)
+            : lineBase
+          : lineBase
         const baseStock = i.variantId
           ? i.availableVariants.find((v) => v.id === i.variantId)?.quantity ?? 0
           : i.product.quantity
@@ -1667,11 +1688,18 @@ export function POSView() {
         const baseStock = variant ? variant.quantity : i.product.quantity
         const newMax =
           i.unitFactor > 1 ? Math.floor(baseStock / i.unitFactor) * i.unitFactor : baseStock
+        // 💰 التحديث 28: تغيير المواصفة بيحدّث السعر الافتراضي للسطر (اللي عدّله الكاشير يدويًا بيتحدّث برضه —
+        // ده المطلوب: كل مواصفة ليها سعرها). الوحدة اللي ليها سعر مسجل بتفضل الأولوية.
+        const unit = i.unitId ? i.availableUnits.find((u) => u.id === i.unitId) ?? null : null
+        const basePiece = variant?.price ?? piecePrice(i.product)
+        const linePrice =
+          unit && unit.price != null ? unit.price / i.unitFactor : basePiece
         return {
           ...i,
           cartKey: newKey,
           variantId: newVariantId,
           variantLabel: variant ? variantLabelOf(variant) : null,
+          price: linePrice,
           quantity: Math.min(i.unitFactor, newMax),
           maxQuantity: newMax,
         }
@@ -1755,6 +1783,8 @@ export function POSView() {
           address: shopBranding.address || undefined,
           logo: shopBranding.logoPath || undefined,
           invoicePrefix: shopBranding.invoicePrefix,
+          // 🧾 التحديث 28: كلام أسفل الفاتورة (شروط الضمان...)
+          terms: shopBranding.invoiceTerms || undefined,
         }
       )
 
@@ -1932,7 +1962,9 @@ export function POSView() {
               const d = await api<any[]>(`/api/products/${id}/variants`)
               freshVariants.set(
                 id,
-                d.map((v: any) => ({ id: v.id, size: v.size, color: v.color, quantity: v.quantity }))
+                // 💰 التحديث 28: السعر بيتسحب مع الباقي عشان availableVariants تفضل كاملة —
+                // أسعار السطور المحفوظة نفسها بتسيب زي ما هي (الكاشير ممكن يكون عدّلها عمدًا)
+                d.map((v: any) => ({ id: v.id, size: v.size, color: v.color, price: v.price ?? null, quantity: v.quantity }))
               )
             } else {
               const q = it.product.barcode || it.product.name
@@ -2729,6 +2761,7 @@ export function POSView() {
                           productName: it.product.name,
                           variants: it.availableVariants,
                           selectedId: it.variantId,
+                          productPrice: piecePrice(it.product),
                         })
                       }
                       className="h-10 text-base min-w-full"
@@ -2841,6 +2874,7 @@ export function POSView() {
                       productName: it.product.name,
                       variants: it.availableVariants,
                       selectedId: it.variantId,
+                      productPrice: piecePrice(it.product),
                     })
                   }
                   className="h-9 text-sm"
@@ -3648,6 +3682,8 @@ export function POSView() {
         productName={variantPickerProduct?.name}
         variants={variantPickerVariants}
         onPick={handleVariantPick}
+        productPrice={variantPickerProduct ? piecePrice(variantPickerProduct) : undefined}
+        isElectronics={isElectronics}
       />
 
       {/* تغيير اللون/المقاس من السلة */}
@@ -3659,6 +3695,8 @@ export function POSView() {
         productName={cartVariantEdit?.productName}
         variants={cartVariantEdit?.variants ?? []}
         selectedId={cartVariantEdit?.selectedId ?? null}
+        productPrice={cartVariantEdit?.productPrice ?? undefined}
+        isElectronics={isElectronics}
         onPick={(v) => {
           if (!cartVariantEdit) return
           updateVariant(cartVariantEdit.cartKey, v as PosVariant)

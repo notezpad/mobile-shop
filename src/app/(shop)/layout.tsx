@@ -217,7 +217,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
 
       ;(async () => {
         const [tenantResult, subResult] = await Promise.allSettled([
-          api<{ shopName?: string; phone?: string | null; address?: string | null; logoPath?: string | null; invoicePrefix?: string; timezone?: string; paymentMethodsConfig?: string; sellerCommissionsEnabled?: boolean }>('/api/tenant'),
+          api<{ shopName?: string; phone?: string | null; address?: string | null; logoPath?: string | null; invoicePrefix?: string; invoiceTerms?: string; timezone?: string; paymentMethodsConfig?: string; sellerCommissionsEnabled?: boolean }>('/api/tenant'),
           api<any>('/api/subscription'),
         ])
         if (!alive) return
@@ -233,6 +233,8 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
             address: t?.address ?? null,
             logoPath: t?.logoPath ?? null,
             invoicePrefix: t?.invoicePrefix || 'INV',
+            // 🧾 التحديث 28: كلام أسفل الفاتورة (شروط الضمان...)
+            invoiceTerms: t?.invoiceTerms ?? '',
             timezone: t?.timezone || 'Africa/Cairo',
             paymentMethods: parsePaymentMethodsConfig(t?.paymentMethodsConfig),
             sellerCommissionsEnabled: t?.sellerCommissionsEnabled === true,

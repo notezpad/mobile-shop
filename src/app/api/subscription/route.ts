@@ -119,6 +119,14 @@ async function __GET() {
     daysLeft,
     planName: latestSub.plan.name,
     planCode: latestSub.plan.code,
+    // 🧩 2026-11-04 (التحديث 26): بيانات الباقة الكاملة للتجديد الذاتي —
+    // صفحة الدفع بتستخدمها كـ fallback للباقات المخفية (زي food-basic /
+    // food-pro): لو الباقة المطلوبة مش في القائمة العامة والمحل عليها
+    // فعلاً، بيجدد من هنا بدل ما يوصل لـ «فشل تحميل الباقة».
+    // حقول إضافية فقط — كل المستهلكين الحاليين مش متأثرين.
+    planId: latestSub.plan.id,
+    planPriceMonthly: Number(latestSub.plan.priceMonthly),
+    planPriceYearly: Number(latestSub.plan.priceYearly),
     period: latestSub.period,
     expired,
     expiringSoon,

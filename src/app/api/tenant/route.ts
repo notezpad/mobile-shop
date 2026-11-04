@@ -31,7 +31,7 @@ async function __GET() {
   // نفس الأعمدة المحددة select بنفس الشكل. PUT فضل Prisma (عملية نادرة).
   return withSql(async (sql) => {
     const rows = await sql`
-      SELECT "id", "shopName", "phone", "address", "logoPath", "invoicePrefix",
+      SELECT "id", "shopName", "phone", "address", "logoPath", "invoicePrefix", "invoiceTerms",
              "timezone", "commissionVodafoneCash", "commissionInstapay",
              "commissionFawry", "retailEnabled", "dynamicRetailPricingEnabled",
              "defaultRetailMarginPercent", "productCardStyle", "paymentMethodsConfig",
@@ -80,6 +80,9 @@ async function __PUT(req: NextRequest) {
     data.logoPath = body.logoPath ? String(body.logoPath) : null
   if (body.invoicePrefix !== undefined)
     data.invoicePrefix = String(body.invoicePrefix || 'INV')
+  // 🧾 التحديث 28: كلام أسفل الفاتورة (شروط الضمان...) — نص حر بسقف معقول 600 حرف
+  if (body.invoiceTerms !== undefined)
+    data.invoiceTerms = String(body.invoiceTerms ?? '').trim().slice(0, 600)
   if (body.timezone !== undefined) {
     const tz = String(body.timezone || '').trim()
     // ✅ لازم يكون اسم منطقة زمنية IANA صحيح (زي "Africa/Cairo") — بنتأكد
@@ -202,6 +205,7 @@ async function __PUT(req: NextRequest) {
       address: true,
       logoPath: true,
       invoicePrefix: true,
+      invoiceTerms: true,
       timezone: true,
       commissionVodafoneCash: true,
       commissionInstapay: true,

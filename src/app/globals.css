@@ -7729,6 +7729,36 @@ html[data-hg-boot] body::after {
 }
 .pg-support-btn--email:hover { background: #effcf7; }
 
+/* 🧩 2026-11-04 (التحديث 25): شريط الإضافات المدفوعة في /pricing */
+.pg-addons-strip {
+  margin: 44px auto 0;
+  max-width: 1280px;
+}
+.pg-addons-strip h3 {
+  color: #0b2a20;
+}
+.pg-addons-strip .pg-addon-sub {
+  color: #5b7a6e;
+}
+.pg-addon-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 87, 63, 0.10);
+  box-shadow: 0 1px 2px rgba(0, 60, 40, 0.05), 0 16px 36px -24px rgba(0, 60, 40, 0.25);
+  border-radius: 16px;
+}
+.pg-addon-card .pg-addon-name {
+  color: #0b2a20;
+}
+.pg-addon-card .pg-addon-desc {
+  color: #5b7a6e;
+}
+.pg-addon-card .pg-addon-price {
+  color: #0b2a20;
+}
+.pg-addon-card .pg-addon-note {
+  color: #5b7a6e;
+}
+
 /* ── 5) صفحة الدفع (checkout) — مكوناتها الخاصة من co-* ──────────────────── */
 /* الملاحظة: co-topbar / co-container / co-logo / co-back مشمولة في PAGES V2 */
 

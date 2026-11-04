@@ -16,10 +16,30 @@ import { toast } from 'sonner'
 import { getMe } from '@/lib/auth-client'
 import { trackEvent, relayEventToServer } from '@/lib/tracking/client'
 import { TRACKING_EVENTS } from '@/lib/tracking/types'
+// 🧩 2026-11-04 (التحديث 25): وضع الإضافات المدفوعة في نفس صفحة الدفع
+import { isAddOnKey, type AddOnKey } from '@/lib/addons'
+
+interface AddOnPublicItem {
+  key: AddOnKey
+  name: string
+  desc: string
+  unitLabel: string
+  quantifiable: boolean
+  maxQuantity: number
+  bullets: string[]
+  priceMonthly: number
+  priceYearly: number
+}
 
 function CheckoutContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+
+  // 🧩 وضع الإضافة: /checkout?addon=hr&qty=1&cycle=monthly — بيدعم نفس الدورة
+  // (مراجعة → بيانات العميل → Paymob) بس على الإضافة بدل الباقة.
+  const addonParam = searchParams.get('addon')
+  const isAddonMode = isAddOnKey(addonParam)
+  const addonQtyParam = Math.max(1, Math.min(20, Math.floor(Number(searchParams.get('qty')) || 1)))
 
   const planCode = searchParams.get('plan') || 'electronics-pro'
   const cycle = (searchParams.get('cycle') as 'monthly' | 'yearly') || 'monthly'
@@ -33,20 +53,36 @@ function CheckoutContent() {
     priceYearly: number
   } | null>(null)
   const [planId, setPlanId] = React.useState<number | null>(null)
+  const [addOn, setAddOn] = React.useState<AddOnPublicItem | null>(null)
   const [loading, setLoading] = React.useState(true)
 
   const planMeta = React.useMemo(() => {
+    if (isAddonMode) {
+      return { icon: <Sparkles className="size-5" />, gradient: 'linear-gradient(135deg, #10b981, #047857)', desc: 'إضافة مدفوعة لباقتك الحالية' }
+    }
     if (!plan) return { icon: <Sparkles className="size-5" />, gradient: 'linear-gradient(135deg, #6b7089, #454a5e)', desc: '' }
     if (plan.code === 'trial') return { icon: <Sparkles className="size-5" />, gradient: 'linear-gradient(135deg, #6b7089, #454a5e)', desc: 'للتجربة والشركات الصغيرة' }
     if (plan.code.endsWith('-basic')) return { icon: <Star className="size-5" />, gradient: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', desc: 'للشركات المتوسطة' }
     if (plan.code.endsWith('-pro')) return { icon: <Crown className="size-5" />, gradient: 'linear-gradient(135deg, #fbbf24, #d97706)', desc: 'للشركات الكبيرة' }
     return { icon: <Store className="size-5" />, gradient: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', desc: '' }
-  }, [plan])
+  }, [plan, isAddonMode])
 
   React.useEffect(() => {
     let alive = true
+    if (isAddonMode) {
+      // 🧩 وضع الإضافة — نحمّل الكتالوج العام (الأسعار الحقيقية بعد تجاوزات الأدمن)
+      api<{ items: AddOnPublicItem[] }>('/api/addons/public')
+        .then((d) => {
+          if (!alive) return
+          const found = d?.items?.find((a) => a.key === addonParam)
+          if (found) setAddOn(found)
+        })
+        .catch(() => {})
+        .finally(() => { if (alive) setLoading(false) })
+      return () => { alive = false }
+    }
     api<{ items: { id: number; code: string; name: string; description: string | null; priceMonthly: number; priceYearly: number }[] }>('/api/plans/public')
-      .then((d) => {
+      .then(async (d) => {
         if (!alive) return
         const found = d?.items?.find((p) => p.code === planCode)
         if (found) {
@@ -70,14 +106,52 @@ function CheckoutContent() {
             trackEvent(TRACKING_EVENTS.ViewContent, { ...vcParams, eventId: vcEventId })
             void relayEventToServer(TRACKING_EVENTS.ViewContent, vcEventId, vcParams)
           } catch { /* التتبع لا يوقف الصفحة */ }
+          return
         }
+        // 🥬 2026-11-04 (التحديث 26): fallback التجديد الذاتي للباقات المخفية
+        // (food-basic / food-pro). الباقة المخفية مش في /api/plans/public
+        // أبدًا — لكن paymob/checkout بيسمح بالتجديد لو المحل عليها فعلاً
+        // (شرط hasPlan). فلو المستخدم مسجّل دخول وباقته الحالية هي نفسها
+        // المطلوبة في الرابط، نحمّل بياناتها من /api/subscription ونكمّل.
+        // زائر مسجّل الخروج → النداء بيفشل بهدوء → نفس سلوك «فشل تحميل
+        // الباقة» القديم. ولو حاول يفتح باقة مخفية مش بتاعته → النداء
+        // بيرجّع باقته هو ومش هتطابق planCode → مفيش تسريب.
+        try {
+          const s = await api<{
+            planCode: string | null
+            planId?: number
+            planName?: string
+            planPriceMonthly?: number
+            planPriceYearly?: number
+          }>('/api/subscription')
+          if (!alive) return
+          if (s?.planCode === planCode && s.planId) {
+            const renewalPlan = {
+              id: s.planId,
+              code: planCode,
+              name: s.planName ?? planCode,
+              description: null,
+              priceMonthly: Number(s.planPriceMonthly ?? 0),
+              priceYearly: Number(s.planPriceYearly ?? 0),
+            }
+            setPlan(renewalPlan)
+            setPlanId(renewalPlan.id)
+          }
+        } catch { /* غير مسجل دخول أو فشل — نفس السلوك القديم */ }
       })
       .catch(() => {})
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [planCode, cycle])
+  }, [planCode, cycle, isAddonMode, addonParam])
 
-  const price = plan ? (cycle === 'monthly' ? plan.priceMonthly : plan.priceYearly) : 0
+  // 🧩 الإضافة: السعر الفعلي من الكتالوج × الكمية (السيرفر بيحسب نفس الحساب —
+  // والتطبيق النهائي بيتم في الـ webhook بمقارنة amountExpected)
+  // الكمية بتنضّل على حد الكتالوج نفسه عشان العرض يطابق اللي بيتخصم بالظبط
+  const addOnQty = addOn?.quantifiable ? Math.max(1, Math.min(addOn.maxQuantity, addonQtyParam)) : 1
+  const addOnUnitPrice = addOn ? (cycle === 'monthly' ? addOn.priceMonthly : addOn.priceYearly) : 0
+  const price = isAddonMode
+    ? Math.round(addOnUnitPrice * addOnQty * 100) / 100
+    : plan ? (cycle === 'monthly' ? plan.priceMonthly : plan.priceYearly) : 0
   const displayAmount = price.toLocaleString('en-US')
   const displayCurrency = ''
   const displayCycleLabel = cycle === 'monthly' ? 'شهرياً' : 'سنوياً'
@@ -117,7 +191,42 @@ function CheckoutContent() {
   async function handleSubmit(ev: React.FormEvent) {
     ev.preventDefault()
     if (!validate()) { toast.error('يرجى تصحيح البيانات قبل المتابعة'); return }
-    if (!authed) { toast.error('يجب تسجيل الدخول أولاً لإتمام عملية الاشتراك'); router.push('/login'); return }
+    if (!authed) { toast.error('يجب تسجيل الدخول أولاً لإتمام العملية'); router.push('/login'); return }
+    if (isAddonMode) {
+      // 🧩 مسار الإضافة — نفس الدورة بس على /api/addons/checkout
+      if (!addOn) { toast.error('فشل تحميل الإضافة — حاول مرة أخرى'); return }
+      setSubmitting(true)
+      try {
+        const result = await api<{ ok: boolean; checkoutUrl: string; addOnId: number; tracking?: { checkoutEventId: string; value: number; currency: string; planId: string; planName: string; period: string } }>('/api/addons/checkout', {
+          method: 'POST',
+          body: {
+            addOnKey: addOn.key, quantity: addOnQty, period: cycle,
+            customer: { name: customer.name.trim(), phone: customer.phone.trim(), email: customer.email.trim() },
+            successUrl: '/checkout/callback?status=success',
+            cancelUrl: '/checkout/callback?status=failed&reason=user_cancelled',
+          },
+        })
+        if (!result?.checkoutUrl) throw new Error('استجابة غير صالحة من بوابة الدفع')
+        try {
+          trackEvent(TRACKING_EVENTS.InitiateCheckout, {
+            eventId: result.tracking?.checkoutEventId,
+            value: result.tracking?.value,
+            currency: result.tracking?.currency ?? 'EGP',
+            planId: result.tracking?.planId,
+            planName: result.tracking?.planName,
+            period: result.tracking?.period,
+            contentName: result.tracking?.planName,
+            contentType: 'subscription_addon',
+          })
+        } catch { /* التتبع لا يوقف الدفع */ }
+        window.location.href = result.checkoutUrl
+      } catch (err: any) {
+        console.error('[Checkout] Add-on Paymob session error:', err)
+        toast.error(err?.message || 'حدث خطأ أثناء إنشاء جلسة الدفع')
+        setSubmitting(false)
+      }
+      return
+    }
     if (!planId) { toast.error('فشل تحميل الباقة — حاول مرة أخرى'); return }
     setSubmitting(true)
     try {
@@ -169,10 +278,10 @@ function CheckoutContent() {
     )
   }
 
-  if (!plan) {
+  if (!plan && !addOn) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4">
-        <p className="text-white">الباقة غير موجودة</p>
+        <p className="text-white">{isAddonMode ? 'الإضافة غير موجودة' : 'الباقة غير موجودة'}</p>
         <Link href="/pricing" className="co-back">العودة للأسعار</Link>
       </div>
     )
@@ -195,13 +304,17 @@ function CheckoutContent() {
           <div className="co-summary-card">
             <div className="co-summary-header">
               <span className="co-summary-eyebrow">ملخص الطلب</span>
-              <h2>مراجعة الباقة</h2>
+              <h2>{isAddonMode ? 'مراجعة الإضافة' : 'مراجعة الباقة'}</h2>
             </div>
             <div className="co-plan-box">
               <div className="co-plan-icon" style={{ background: planMeta.gradient }}>{planMeta.icon}</div>
               <div className="co-plan-info">
-                <div className="co-plan-name">{plan.name}</div>
-                <div className="co-plan-desc">{planMeta.desc}</div>
+                <div className="co-plan-name">
+                  {isAddonMode
+                    ? `${addOn!.name}${addOn!.quantifiable && addOnQty > 1 ? ` ×${addOnQty}` : ''}`
+                    : plan!.name}
+                </div>
+                <div className="co-plan-desc">{isAddonMode ? addOn!.desc : planMeta.desc}</div>
                 <div className="co-plan-cycle"><Calendar className="size-3" />{cycle === 'monthly' ? 'اشتراك شهري' : 'اشتراك سنوي'}</div>
               </div>
             </div>
@@ -214,20 +327,32 @@ function CheckoutContent() {
               </div>
             </div>
             <div className="co-features">
-              <div className="co-features-title"><CheckCircle2 className="size-4" />يشمل الباقة:</div>
+              <div className="co-features-title"><CheckCircle2 className="size-4" />{isAddonMode ? 'الإضافة تشمل:' : 'يشمل الباقة:'}</div>
               <ul>
-                {plan.code === 'trial' && ['14 يوم تجربة مجانية', 'كل الميزات الأساسية', 'بدون بطاقة ائتمان'].map((f) => <li key={f}><CheckCircle2 className="size-4" /><span>{f}</span></li>)}
-                {plan.code.endsWith('-basic') && ['حتى 500 منتج', 'حتى 3 مستخدمين', 'كل ميزات نقطة البيع', 'إدارة المخزون والعملاء', 'المعاملات المالية', 'دعم عبر البريد'].map((f) => <li key={f}><CheckCircle2 className="size-4" /><span>{f}</span></li>)}
-                {plan.code.endsWith('-pro') && ['حتى 5000 منتج', 'حتى 10 مستخدمين', 'حتى 5 فروع', 'كل ميزات الباقة الأساسية', 'تقارير متقدمة + Excel', 'بيع بالجملة (وحدات وقسم)', 'دعم أولوية على واتساب'].map((f) => <li key={f}><CheckCircle2 className="size-4" /><span>{f}</span></li>)}
+                {isAddonMode && addOn && addOn.bullets.map((f) => <li key={f}><CheckCircle2 className="size-4" /><span>{f}</span></li>)}
+                {!isAddonMode && plan!.code === 'trial' && ['14 يوم تجربة مجانية', 'كل الميزات الأساسية', 'بدون بطاقة ائتمان'].map((f) => <li key={f}><CheckCircle2 className="size-4" /><span>{f}</span></li>)}
+                {!isAddonMode && plan!.code.endsWith('-basic') && ['حتى 500 منتج', 'حتى 3 مستخدمين', 'كل ميزات نقطة البيع', 'إدارة المخزون والعملاء', 'المعاملات المالية', 'دعم عبر البريد'].map((f) => <li key={f}><CheckCircle2 className="size-4" /><span>{f}</span></li>)}
+                {!isAddonMode && plan!.code.endsWith('-pro') && ['حتى 5000 منتج', 'حتى 10 مستخدمين', 'حتى 5 فروع', 'كل ميزات الباقة الأساسية', 'تقارير متقدمة + Excel', 'بيع بالجملة (وحدات وقسم)', 'دعم أولوية على واتساب'].map((f) => <li key={f}><CheckCircle2 className="size-4" /><span>{f}</span></li>)}
               </ul>
             </div>
-            <div className="co-guarantee">
-              <ShieldCheck className="size-5" />
-              <div>
-                <strong>ضمان استرداد 14 يوم</strong>
-                <span>جرّب الباقة بدون مخاطرة — ترجع للمجاني في أي وقت</span>
+            {isAddonMode && (
+              <div className="co-guarantee">
+                <ShieldCheck className="size-5" />
+                <div>
+                  <strong>الإضافة مستقلة عن باقتك</strong>
+                  <span>ليها تاريخ انتهاء خاص — بتتجدد من الإعدادات ← «إضافات الباقة»</span>
+                </div>
               </div>
-            </div>
+            )}
+            {!isAddonMode && (
+              <div className="co-guarantee">
+                <ShieldCheck className="size-5" />
+                <div>
+                  <strong>ضمان استرداد 14 يوم</strong>
+                  <span>جرّب الباقة بدون مخاطرة — ترجع للمجاني في أي وقت</span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="co-trust">
             {trustItems.map((t) => (
@@ -282,7 +407,7 @@ function CheckoutContent() {
                   <span>يجب تسجيل الدخول أولاً لإتمام الاشتراك.{' '}<Link href="/login">سجّل الدخول أو أنشئ حساب</Link></span>
                 </div>
               )}
-              <button type="submit" className="co-submit" style={{ background: planMeta.gradient }} disabled={submitting || checkingAuth || !authed || !planId}>
+              <button type="submit" className="co-submit" style={{ background: planMeta.gradient }} disabled={submitting || checkingAuth || !authed || (isAddonMode ? !addOn : !planId)}>
                 {submitting ? (
                   <><span className="inline-block size-4 animate-spin rounded-full border-2 border-current border-r-transparent" />جاري تجهيز جلسة الدفع...</>
                 ) : (

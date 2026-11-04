@@ -23,6 +23,7 @@ import {
   Loader2,
   Minus,
   Package,
+  PenTool,
   Plus,
   Printer,
   Shirt,
@@ -50,6 +51,8 @@ import { printBarcodeLabelsDirect } from '@/lib/label-printer'
 import { isWebUsbSupported, usbErrorMessage } from '@/lib/thermal-printer'
 import { computeLabelLayout, A4, LABEL_LH, LABEL_GAP_MM, fmtLabelPrice, type LabelLayout } from '@/lib/print'
 import { normalizeBarcode, isRenderableBarcode, barcodeFormatFor } from '@/lib/barcode'
+import { type LabelDesign, sanitizeDesign } from '@/lib/label-design'
+import { LabelDesignerDialog, LabelElementContent } from '@/components/shop/LabelDesignerDialog'
 import { cn } from '@/lib/utils'
 
 export interface LabelProduct {
@@ -78,6 +81,8 @@ interface VariantData {
   size: string | null
   color: string | null
   barcode: string | null
+  /** 💰 التحديث 28: سعر المواصفة — null = سعر المنتج العام */
+  price: number | null
   quantity: number
 }
 
@@ -175,6 +180,9 @@ interface Prefs {
   pricePct: number
   /** 🎚️ طول خطوط الباركود ٪ من أقصى ارتفاع متاح (50–100) */
   barcodePct: number
+  /** 🎨 التحديث 27: قالب التصميم الحر المفعّل (null = الترتيب التلقائي) */
+  designId?: number | null
+  designName?: string | null
 }
 
 const fmtPrice = (n: number) =>
@@ -220,6 +228,12 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
   const [namePct, setNamePct] = React.useState(100)
   const [pricePct, setPricePct] = React.useState(100)
   const [barcodePct, setBarcodePct] = React.useState(100)
+  // 🎨 التحديث 27: التصميم الحر (سحب وإفلات) — null = الترتيب التلقائي الكلاسيكي
+  const [design, setDesign] = React.useState<LabelDesign | null>(null)
+  const [designTid, setDesignTid] = React.useState<number | null>(null)
+  const [designName, setDesignName] = React.useState<string | null>(null)
+  const [designerOpen, setDesignerOpen] = React.useState(false)
+  const designTidRef = React.useRef<number | null>(null)
   const [view, setView] = React.useState<'sheet' | 'label'>('sheet')
   const [previewOpen, setPreviewOpen] = React.useState(false) // موبايل فقط
   const [tab, setTab] = React.useState<'products' | 'settings'>('products')
@@ -253,6 +267,12 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
         if (typeof p.namePct === 'number') setNamePct(clampInt(p.namePct, 60, 150) || 100)
         if (typeof p.pricePct === 'number') setPricePct(clampInt(p.pricePct, 60, 150) || 100)
         if (typeof p.barcodePct === 'number') setBarcodePct(clampInt(p.barcodePct, 50, 100) || 100)
+        // 🎨 التصميم الحر: بنحفظ رقم القالب واسمه — المحتوى نفسه بيرجع من السيرفر
+        if (typeof p.designId === 'number' && p.designId > 0) {
+          designTidRef.current = p.designId
+          setDesignTid(p.designId)
+        }
+        if (typeof p.designName === 'string' && p.designName) setDesignName(p.designName)
       }
     } catch {
       /* التخزين غير متاح — عادي */
@@ -260,6 +280,48 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
     hydrated.current = true
      
   }, [open, productIdsKey])
+
+  // 🎨 التحديث 27: قوالب التصميم الحر — بنجيبها مرة واحدة كل ما الدايلوج يفتح
+  // عشان نرجّع آخر تصميم مفعّل (prefs.designId). لو القالب اتمسح نرجع للكلاسيكي.
+  React.useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const rows = await api<unknown>('/api/label-templates')
+        if (cancelled) return
+        type TRow = { id: number; name: string; widthMm: number; heightMm: number; elements: unknown; isDefault: boolean }
+        const list: TRow[] = Array.isArray(rows)
+          ? (rows as TRow[])
+          : Array.isArray((rows as { data?: unknown })?.data)
+            ? (rows as { data: TRow[] }).data
+            : []
+        const wanted = designTidRef.current
+        if (wanted != null) {
+          const t = list.find((x) => x.id === wanted)
+          const d = t ? sanitizeDesign({ widthMm: t.widthMm, heightMm: t.heightMm, elements: t.elements }) : null
+          if (t && d) {
+            setDesign(d)
+            setDesignName(t.name)
+            // 🎯 مقاس الدايلوج يمشي مع التصميم (الشبكة/الرول والمعاينة على نفس المقاس)
+            setPreset('custom')
+            setCw(Math.round(d.widthMm))
+            setCh(Math.round(d.heightMm))
+          } else {
+            setDesign(null)
+            setDesignName(null)
+            designTidRef.current = null
+            setDesignTid(null)
+          }
+        }
+      } catch {
+        /* أوفلاين — نفضل على الوضع الحالي */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open])
 
   // ⚡ جلب متغيرات المنتجات المختارة في طلب واحد (variants-index?ids=…) —
   // كان قبل كده طلب لكل منتج (100 منتج = 100 طلب). نفس شكل الاستجابة،
@@ -290,6 +352,8 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
             size: v.size ?? null,
             color: v.color ?? null,
             barcode: v.barcode ?? null,
+            // 💰 التحديث 28: سعر المواصفة (كاش أوفلاين قديم بيرجع null — بيرجع لسعر المنتج)
+            price: typeof v.price === 'number' ? v.price : null,
             quantity: v.quantity ?? 0,
           })
         }
@@ -352,12 +416,12 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
   React.useEffect(() => {
     if (!open || !hydrated.current) return
     try {
-      const p: Prefs = { mode, preset, cw, ch, name: showName, price: showPrice, text: showText, variant: showVariant, lang: printLang, namePct, pricePct, barcodePct }
+      const p: Prefs = { mode, preset, cw, ch, name: showName, price: showPrice, text: showText, variant: showVariant, lang: printLang, namePct, pricePct, barcodePct, designId: designTid, designName: designName }
       localStorage.setItem(PREFS_KEY, JSON.stringify(p))
     } catch {
       /* ignore */
     }
-  }, [open, mode, preset, cw, ch, showName, showPrice, showText, showVariant, printLang, namePct, pricePct, barcodePct])
+  }, [open, mode, preset, cw, ch, showName, showPrice, showText, showVariant, printLang, namePct, pricePct, barcodePct, designTid, designName])
 
   // كل منتج → إمّا صف واحد (منتج عادي)، أو صف لكل لون/مقاس (منتج له متغيرات، مجمّعة بالألوان)
   // صفوف وحدات الجملة (كرتونة/دستة...) — اللي ليها باركود بس. السعر = سعر الوحدة المسجّل، أو سعر القطعة × عدد القطع
@@ -386,7 +450,8 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
           productId: p.id,
           name: `${p.name} — ${variantLabelOf(v)}`,
           barcode: normalizeBarcode(v.barcode),
-          price: p.price,
+          // 💰 التحديث 28: ملصق المواصفة بيطلع بسعرها الخاص (فاضي = سعر المنتج)
+          price: v.price ?? p.price,
           size: v.size,
           color: v.color,
           variantLabel: variantLabelOf(v),
@@ -480,7 +545,10 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
   // CODE128 بوفير وحدات كتير — على مقاس صغير عرض الوحدة بيتقصّ لنقطة طابعة واحدة
   // (0.125مم) فالخطوط مش هتتقري غالباً. EAN-13 على نفس المقاس بيطلع 0.25مم وسليم.
   // القياس هنا بنفس حساب الطباعة بالظبط (measureBarcodeModuleMm = نقاط 203dpi).
-  const availMm = layout.widthMm - layout.paddingMm * 2
+  // 🎨 في التصميم الحر: المساحة المتاحة = عرض صندوق الباركود في التصميم
+  const availMm = design
+    ? (design.elements.find((e) => e.type === 'barcode')?.wMm ?? design.widthMm)
+    : layout.widthMm - layout.paddingMm * 2
   const widthCodesKey = withBarcode.map((r) => r.barcode).join('|')
   const narrowByCode = React.useMemo(() => {
     const m = new Map<string, number>()
@@ -571,6 +639,8 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
       nameScale: namePct / 100,
       priceScale: pricePct / 100,
       barcodeScale: barcodePct / 100,
+      // 🎨 التحديث 27: التصميم الحر لو مفعّل — بيتجاوز كل إعدادات التخطيط التلقائي
+      design: design ?? undefined,
     }
 
     // 🖨️ الطباعة المباشرة: رول + USB مدعوم + المستخدم مختار TSPL/ZPL —
@@ -618,6 +688,7 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
       view={view}
       onView={setView}
       layout={layout}
+      design={design}
       products={withBarcode}
       qtyOf={qtyOf}
       focus={focus}
@@ -1028,6 +1099,14 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
               )}
             </section>
 
+            {/* 🎨 التحديث 27: لو التصميم الحر مفعّل — المفاتيح دي مش بتأثير */}
+            {design && (
+              <p className="flex items-start gap-2 rounded-xl bg-primary/10 p-3 text-xs font-medium leading-relaxed text-primary">
+                <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                التصميم الحر مفعّل — مفاتيح «اللي يظهر على الملصق» و«أحجام العناصر» مش بتأثر عليه. عدّل من المصمم أو أوقف التصميم من قسم «تصميم حر للملصق» تحت.
+              </p>
+            )}
+
             {/* 3) المحتوى */}
             <section>
               <Title n={3}>اللي يظهر على الملصق</Title>
@@ -1140,6 +1219,61 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
               )}
             </section>
 
+            {/* 6) 🎨 التحديث 27: التصميم الحر — سحب وإفلات */}
+            <section>
+              <Title
+                n={6}
+                aside={
+                  design ? (
+                    <span className="rounded-lg bg-primary/10 px-2 py-1 text-xs font-extrabold text-primary">مفعّل ✓</span>
+                  ) : undefined
+                }
+              >
+                تصميم حر للملصق (سحب وإفلات)
+              </Title>
+              {design ? (
+                <div className="rounded-2xl border border-primary/40 bg-primary/5 p-3.5">
+                  <p className="text-sm font-bold">
+                    التصميم الحالي: {designName ?? 'تصميم مخصص'} — <bdi dir="ltr">{design.widthMm}×{design.heightMm}</bdi> مم · {design.elements.length} عناصر
+                  </p>
+                  <p className="mt-1 text-xs font-medium leading-relaxed text-foreground/65">
+                    الملصق بيتطبع بالعناصر دي في مواضعها بالظبط — في نافذة المتصفح وعلى الطابعة الحرارية المباشرة.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button variant="outline" className="h-10 rounded-xl font-bold" onClick={() => setDesignerOpen(true)}>
+                      <PenTool className="size-4" />
+                      تعديل التصميم
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-10 rounded-xl font-bold"
+                      onClick={() => {
+                        setDesign(null)
+                        setDesignTid(null)
+                        designTidRef.current = null
+                        setDesignName(null)
+                        toast.info('رجعنا الترتيب التلقائي زي الأول')
+                      }}
+                    >
+                      <X className="size-4" />
+                      إيقاف — رجوع للترتيب التلقائي
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-xs font-medium leading-relaxed text-foreground/65">
+                    عاوز الاسم في مكان، والسعر في مكان، والباركود في مكان تاني؟ افتح المصمم واسحب كل عنصر لأي مكان بإصبعك أو
+                    الماوس، وبعدين احفظه كقالب يشتغل مع كل مرات الطباعة.
+                  </p>
+                  <Button className="mt-3 h-11 rounded-xl px-5 font-bold" onClick={() => setDesignerOpen(true)}>
+                    <PenTool className="size-4" />
+                    افتح مصمم الملصقات
+                  </Button>
+                </div>
+              )}
+            </section>
+
                   <button
                     type="button"
                     onClick={() => setTab('products')}
@@ -1197,6 +1331,32 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
             </Button>
           </div>
         </div>
+
+        {/* ═══ 🎨 التحديث 27: مصمم الملصقات الحر (دايلوج مستقل فوق دايلوج الطباعة) ═══ */}
+        <LabelDesignerDialog
+          open={designerOpen}
+          onOpenChange={setDesignerOpen}
+          initial={design}
+          labelSize={labelSize}
+          variantsEnabled={variantsEnabled}
+          sample={
+            focus
+              ? { name: focus.name, barcode: focus.barcode as string, price: focus.price, size: focus.size, color: focus.color }
+              : null
+          }
+          onApply={(d, tid2, tname2) => {
+            setDesign(d)
+            setDesignTid(tid2)
+            designTidRef.current = tid2
+            setDesignName(tname2)
+            // 🎯 مقاس الدايلوج يمشي مع التصميم — الشبكة/الرول والمعاينة على نفس المقاس
+            setPreset('custom')
+            setCw(Math.round(d.widthMm))
+            setCh(Math.round(d.heightMm))
+            setDesignerOpen(false)
+            toast.success('تم تطبيق التصميم — المعاينة والطباعة هيستخدموه')
+          }}
+        />
       </DialogContent>
     </Dialog>
   )
@@ -1717,12 +1877,14 @@ function useFit(natW: number, natH: number, max: number) {
 }
 
 function PreviewPanel({
-  mode, view, onView, layout, products, qtyOf, focus, showName, showPrice, showText, showVariant, sheets,
+  mode, view, onView, layout, design, products, qtyOf, focus, showName, showPrice, showText, showVariant, sheets,
 }: {
   mode: Mode
   view: 'sheet' | 'label'
   onView: (v: 'sheet' | 'label') => void
   layout: LabelLayout
+  /** 🎨 التحديث 27: التصميم الحر المفعّل (null = الترتيب التلقائي) */
+  design: LabelDesign | null
   products: LabelRow[]
   qtyOf: (r: LabelRow) => number
   focus: LabelRow | null
@@ -1748,22 +1910,32 @@ function PreviewPanel({
   const codesKey = codes.join('|')
   const svgByCode = React.useMemo(() => {
     const m = new Map<string, string>()
+    // 🎨 في التصميم الحر: الباركود بيتولّد بارتفاع صندوق الباركود في التصميم —
+    // نفس معادلة الطباعة (print-client) بالظبط عشان المعاينة = المطبوع
+    const barEl = design?.elements.find((e) => e.type === 'barcode')
     for (const code of codes) {
       m.set(
         code,
         typeof window === 'undefined'
           ? ''
-          : renderBarcodeSvg(code, {
-              height: layout.barcodeHeightPx,
-              availMm: layout.widthMm - layout.paddingMm * 2,
-              fontSize: layout.barcodeTextFontSizePt,
-              displayValue: false,
-            }),
+          : renderBarcodeSvg(code, barEl
+              ? {
+                  height: Math.max(10, Math.round((barEl.heightMm ?? 8) * 3.78)),
+                  availMm: barEl.wMm,
+                  fontSize: 8,
+                  displayValue: false,
+                }
+              : {
+                  height: layout.barcodeHeightPx,
+                  availMm: layout.widthMm - layout.paddingMm * 2,
+                  fontSize: layout.barcodeTextFontSizePt,
+                  displayValue: false,
+              }),
       )
     }
     return m
      
-  }, [codesKey, layout.barcodeHeightPx, layout.widthMm, layout.paddingMm, layout.barcodeTextFontSizePt])
+  }, [codesKey, design, layout.barcodeHeightPx, layout.widthMm, layout.paddingMm, layout.barcodeTextFontSizePt])
   const svgFor = (code: string) => svgByCode.get(code) ?? ''
 
   return (
@@ -1805,6 +1977,7 @@ function PreviewPanel({
         {showSheet ? (
           <SheetStage
             layout={layout}
+            design={design}
             products={products}
             qtyOf={qtyOf}
             svgFor={svgFor}
@@ -1816,6 +1989,7 @@ function PreviewPanel({
         ) : (
           <LabelStage
             layout={layout}
+            design={design}
             sample={sample}
             svg={svgFor(sample.barcode)}
             stack={focus ? qtyOf(focus) > 1 : false}
@@ -1971,10 +2145,56 @@ function LabelFace({
   )
 }
 
+/** 🎨 التحديث 27: ملصق بالتصميم الحر — كل عنصر في موضعه المطلق بالمليمتر.
+ *  نفس إحداثيات المصمم ونفس مكون المحتوى، فالمعاينة تطابق الطباعة حرفياً. */
+function FreeLabelFace({
+  design, sample, svg, dashed,
+}: { design: LabelDesign; sample: Sample; svg: string; dashed?: boolean }) {
+  return (
+    <div
+      style={{
+        width: design.widthMm * MM,
+        height: design.heightMm * MM,
+        position: 'relative',
+        overflow: 'hidden',
+        background: '#fff',
+        color: '#000',
+        border: dashed ? '1px dashed #c8c8c8' : '1px solid #d4d4d4',
+        borderRadius: dashed ? '1mm' : 0,
+        boxSizing: 'border-box',
+      }}
+    >
+      {design.elements.map((el) => (
+        <div
+          key={el.id}
+          style={{
+            position: 'absolute',
+            left: el.xMm * MM,
+            top: el.yMm * MM,
+            width: el.wMm * MM,
+            overflow: 'hidden',
+          }}
+        >
+          <LabelElementContent
+            el={el}
+            design={design}
+            name={sample.name}
+            barcode={sample.barcode}
+            price={sample.price}
+            size={sample.size}
+            color={sample.color}
+            svg={el.type === 'barcode' ? svg : ''}
+          />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /** ملصق واحد مكبّر (رول، أو «الملصق» في وضع الورقة) */
 function LabelStage({
-  layout, sample, svg, stack, showName, showPrice, showText, showVariant,
-}: FaceProps & { sample: Sample; svg: string; stack: boolean }) {
+  layout, design, sample, svg, stack, showName, showPrice, showText, showVariant,
+}: FaceProps & { design: LabelDesign | null; sample: Sample; svg: string; stack: boolean }) {
   const pad = stack ? 10 : 0
   const natW = layout.widthMm * MM + pad
   const natH = layout.heightMm * MM + pad
@@ -1990,7 +2210,11 @@ function LabelStage({
             </>
           )}
           <div className="absolute left-0 top-0 shadow-[0_6px_24px_rgba(0,0,0,0.14)]">
-            <LabelFace layout={layout} showName={showName} showPrice={showPrice} showText={showText} showVariant={showVariant} sample={sample} svg={svg} />
+            {design ? (
+              <FreeLabelFace design={design} sample={sample} svg={svg} />
+            ) : (
+              <LabelFace layout={layout} showName={showName} showPrice={showPrice} showText={showText} showVariant={showVariant} sample={sample} svg={svg} />
+            )}
           </div>
         </div>
       </div>
@@ -2000,8 +2224,8 @@ function LabelStage({
 
 /** ورقة A4 كاملة: الخانات بتتملي بالترتيب الفعلي (منتج × كميته) لأول ورقة */
 function SheetStage({
-  layout, products, qtyOf, svgFor, showName, showPrice, showText, showVariant,
-}: FaceProps & { products: LabelRow[]; qtyOf: (r: LabelRow) => number; svgFor: (code: string) => string }) {
+  layout, design, products, qtyOf, svgFor, showName, showPrice, showText, showVariant,
+}: FaceProps & { design: LabelDesign | null; products: LabelRow[]; qtyOf: (r: LabelRow) => number; svgFor: (code: string) => string }) {
   const g = layout.sheet!
   const cells = g.columns * g.rows
 
@@ -2057,17 +2281,21 @@ function SheetStage({
           {Array.from({ length: cells }).map((_, i) => {
             const s = filled[i]
             return s ? (
-              <LabelFace
-                key={i}
-                layout={layout}
-                showName={showName}
-                showPrice={showPrice}
-                showText={showText}
-                showVariant={showVariant}
-                sample={s}
-                svg={svgFor(s.barcode)}
-                dashed
-              />
+              design ? (
+                <FreeLabelFace key={i} design={design} sample={s} svg={svgFor(s.barcode)} dashed />
+              ) : (
+                <LabelFace
+                  key={i}
+                  layout={layout}
+                  showName={showName}
+                  showPrice={showPrice}
+                  showText={showText}
+                  showVariant={showVariant}
+                  sample={s}
+                  svg={svgFor(s.barcode)}
+                  dashed
+                />
+              )
             ) : (
               <div
                 key={i}

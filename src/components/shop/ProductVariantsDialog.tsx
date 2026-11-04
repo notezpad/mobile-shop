@@ -24,6 +24,8 @@ export interface ProductVariant {
   size: string | null
   color: string | null
   barcode: string | null
+  /** 💰 التحديث 28: سعر المواصفة — null = سعر المنتج العام */
+  price: number | null
   quantity: number
 }
 
@@ -36,11 +38,19 @@ interface Props {
 
 export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }: Props) {
   const confirm = useConfirm()
+  // 📱 التحديث 28: في محلات الإلكترونيات (موبايلات/كمبيوتر) الخانتين بتتعرضوا
+  // باسم «المواصفة 1 / المواصفة 2» بدل اللون/المقاس — نفس الأعمدة بالظبط
+  // (المواصفة 1 = عمود اللون — اللي بيتجمع عليه في نقطة البيع، والمواصفة 2 = عمود المقاس).
+  const businessType = useShopStore((s) => s.plan.businessType)
+  const isElectronics = businessType === 'electronics'
+  const opt1Label = isElectronics ? 'المواصفة 1' : 'اللون'
+  const opt2Label = isElectronics ? 'المواصفة 2' : 'المقاس'
+  const noOpt1Label = isElectronics ? 'بدون مواصفة' : 'بدون لون'
   const [vq, setVq] = React.useState('')
   const [variants, setVariants] = React.useState<ProductVariant[]>([])
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
-  const [form, setForm] = React.useState({ size: '', color: '', barcode: '', quantity: 0 })
+  const [form, setForm] = React.useState({ size: '', color: '', barcode: '', quantity: 0, price: '' })
   const [smartText, setSmartText] = React.useState('')
   const [preview, setPreview] = React.useState<ParsedVariantRow[] | null>(null)
   const [previewWarnings, setPreviewWarnings] = React.useState<string[]>([])
@@ -50,6 +60,8 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
   // أقسام الألوان المفتوحة يدويًا (الافتراضي: مقفولة) + خانة «كمية اللون كله» لكل لون
   const [openColors, setOpenColors] = React.useState<Set<string>>(() => new Set())
   const [colorQty, setColorQty] = React.useState<Record<string, string>>({})
+  // 💰 مسودّات تعديل السعر لكل صف (فاضي في الماب = نعرض القيمة المحفوظة)
+  const [priceDraft, setPriceDraft] = React.useState<Record<number, string>>({})
   const [applyingColor, setApplyingColor] = React.useState<string | null>(null)
   const capabilities = useShopStore((s) => s.plan.capabilities)
   const enabled = capabilities.includes('variants')
@@ -82,6 +94,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
     if (open) {
       setOpenColors(new Set())
       setColorQty({})
+      setPriceDraft({})
       setVq('')
     }
   }, [open, product?.id])
@@ -148,8 +161,19 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
   const addVariant = async () => {
     if (!product) return
     if (!form.size.trim() && !form.color.trim()) {
-      toast.error('لازم مقاس أو لون على الأقل')
+      toast.error(`لازم ${opt2Label} أو ${opt1Label} على الأقل`)
       return
+    }
+    // 💰 التحديث 28: السعر اختياري — فاضي = سعر المنتج العام
+    const priceRaw = form.price.trim()
+    let price: number | null = null
+    if (priceRaw !== '') {
+      price = Number(priceRaw.replace(/,/g, '.'))
+      if (!Number.isFinite(price) || price < 0) {
+        toast.error('السعر لازم يكون رقم صالح')
+        return
+      }
+      price = Math.round(price * 100) / 100
     }
     setSaving(true)
     try {
@@ -159,11 +183,12 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
           size: form.size.trim() || null,
           color: form.color.trim() || null,
           barcode: normalizeBarcode(form.barcode),
+          price,
           quantity: form.quantity || 0,
         },
       })
       toast.success('تم إضافة المتغير')
-      setForm({ size: '', color: '', barcode: '', quantity: 0 })
+      setForm({ size: '', color: '', barcode: '', quantity: 0, price: '' })
       await load()
       onChanged?.()
     } catch (e: any) {
@@ -199,6 +224,32 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
     }
   }
 
+  /** 💰 التحديث 28: تعديل سعر مواصفة من الجدول — فاضي = رجوع لسعر المنتج العام. */
+  const updatePrice = async (id: number, raw: string) => {
+    if (!product) return
+    const trimmed = raw.trim()
+    let price: number | null = null
+    if (trimmed !== '') {
+      price = Number(trimmed.replace(/,/g, '.'))
+      if (!Number.isFinite(price) || price < 0) {
+        toast.error('السعر لازم يكون رقم صالح')
+        await load()
+        return
+      }
+      price = Math.round(price * 100) / 100
+    }
+    try {
+      await api(`/api/products/${product.id}/variants/${id}`, {
+        method: 'PUT',
+        body: { price },
+      })
+      setVariants((prev) => prev.map((v) => (v.id === id ? { ...v, price } : v)))
+      onChanged?.()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل تحديث السعر')
+    }
+  }
+
   const toggleColor = (key: string) =>
     setOpenColors((prev) => {
       const next = new Set(prev)
@@ -220,7 +271,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
       toast.error('كمية غير صحيحة')
       return
     }
-    const label = colorKey || 'بدون لون'
+    const label = colorKey || noOpt1Label
     const ok = await confirm({
       title: `ضبط كمية «${label}» على ${qty}؟`,
       description: `هتتغيّر كمية ${items.length} مقاس${needle ? ' (نتايج البحث الحالية بس)' : ''} لتبقى ${qty} لكل مقاس.`,
@@ -313,18 +364,22 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
   // يفتح لوحده لو فيه لون واحد بس أو البحث شغال
   const autoOpen = needle !== '' || groups.length === 1
   const missingCount = variants.filter((v) => !v.barcode).length
+  // ترقيم الأقسام: في الإلكترونيات بنخفي المساعد الذكي (محلّل عامية الملابس)
+  const secAdd = isElectronics ? 1 : 2
+  const secList = isElectronics ? 2 : 3
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHero icon={Shirt} title="متغيرات المنتج" subtitle={product?.name} />
+        <DialogHero icon={Shirt} title={isElectronics ? 'مواصفات المنتج' : 'متغيرات المنتج'} subtitle={product?.name} />
 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain bg-muted/20 p-4 sm:p-6">
           {!enabled ? (
-            <LockedNote>ميزة المتغيرات (مقاسات/ألوان) متاحة في باقات الملابس والأحذية فقط.</LockedNote>
+            <LockedNote>ميزة المتغيرات (مواصفات/ألوان لكل منتج بسعر وكمية وباركود مستقل) مش مفعّلة في باقتك الحالية.</LockedNote>
           ) : (
             <>
-              {/* ═════════ 1) المساعد الذكي ═════════ */}
+              {/* ═════════ 1) المساعد الذكي — محلّل عامية الملابس، بنخفيه في الإلكترونيات ═════════ */}
+              {!isElectronics && (
               <section>
                 <SectionTitle n={1}>مساعد الإدخال الذكي</SectionTitle>
                 <div className="space-y-3 rounded-2xl border bg-card p-4">
@@ -409,17 +464,31 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                   )}
                 </div>
               </section>
+              )}
 
-              {/* ═════════ 2) إضافة متغير يدويًا ═════════ */}
+              {/* ═════════ إضافة متغير يدويًا ═════════ */}
               <section>
-                <SectionTitle n={2}>إضافة متغير</SectionTitle>
+                <SectionTitle n={secAdd}>إضافة متغير</SectionTitle>
                 <div className="grid grid-cols-2 gap-4 rounded-2xl border bg-card p-4 sm:grid-cols-4">
-                  <Field label="المقاس" htmlFor="v-size">
-                    <InkInput id="v-size" placeholder="S / 42" value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} />
-                  </Field>
-                  <Field label="اللون" htmlFor="v-color">
-                    <InkInput id="v-color" placeholder="أحمر" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} />
-                  </Field>
+                  {isElectronics ? (
+                    <>
+                      <Field label="المواصفة 1" htmlFor="v-color">
+                        <InkInput id="v-color" placeholder="أسود / 256GB" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} />
+                      </Field>
+                      <Field label="المواصفة 2" htmlFor="v-size">
+                        <InkInput id="v-size" placeholder="8GB / 42" value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} />
+                      </Field>
+                    </>
+                  ) : (
+                    <>
+                      <Field label="المقاس" htmlFor="v-size">
+                        <InkInput id="v-size" placeholder="S / 42" value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} />
+                      </Field>
+                      <Field label="اللون" htmlFor="v-color">
+                        <InkInput id="v-color" placeholder="أحمر" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} />
+                      </Field>
+                    </>
+                  )}
                   <Field label="الكمية" htmlFor="v-qty" className="col-span-2 sm:col-span-1">
                     <InkInput
                       id="v-qty"
@@ -428,6 +497,18 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                       min={0}
                       value={form.quantity}
                       onChange={(e) => setForm({ ...form, quantity: parseInt(e.target.value) || 0 })}
+                    />
+                  </Field>
+                  <Field label="السعر (اختياري)" htmlFor="v-price">
+                    <InkInput
+                      id="v-price"
+                      num
+                      type="number"
+                      min={0}
+                      step="any"
+                      placeholder="سعر المنتج"
+                      value={form.price}
+                      onChange={(e) => setForm({ ...form, price: e.target.value })}
                     />
                   </Field>
                   <Field label="الباركود" htmlFor="v-barcode" className="col-span-2 sm:col-span-4">
@@ -462,10 +543,10 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                 </div>
               </section>
 
-              {/* ═════════ 3) المتغيرات الحالية ═════════ */}
+              {/* ═════════ المتغيرات الحالية ═════════ */}
               <section>
                 <SectionTitle
-                  n={3}
+                  n={secList}
                   aside={
                     missingCount > 0 && (
                       <Button
@@ -493,7 +574,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                     <input
                       value={vq}
                       onChange={(e) => setVq(e.target.value)}
-                      placeholder={`دوّر في ${variants.length} متغير (مقاس / لون / باركود)…`}
+                      placeholder={`دوّر في ${variants.length} متغير (${isElectronics ? 'مواصفة / باركود' : 'مقاس / لون / باركود'})…`}
                       aria-label="بحث في المتغيرات"
                       className="h-full w-full bg-transparent pe-3 text-sm outline-none placeholder:text-muted-foreground/80"
                       style={{ paddingInlineStart: '2.5rem' }}
@@ -529,23 +610,23 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                               className={cn('size-4 shrink-0 text-foreground/60 transition-transform', isOpen ? 'rotate-0' : '-rotate-90')}
                               aria-hidden
                             />
-                            {key ? <Swatch name={key} className="size-5" /> : null}
-                            <span className="min-w-0 flex-1 truncate text-sm font-extrabold">{key || 'بدون لون'}</span>
+                            {key && !isElectronics ? <Swatch name={key} className="size-5" /> : null}
+                            <span className="min-w-0 flex-1 truncate text-sm font-extrabold">{key || noOpt1Label}</span>
                             <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground/65">
-                              {g.items.length} مقاس · {g.total} قطعة
+                              {g.items.length} {opt2Label} · {g.total} قطعة
                             </span>
                           </button>
 
                           {isOpen && (
                             <div className="border-t">
                               <div className="flex items-center gap-2 bg-muted/40 px-3 py-2">
-                                <span className="shrink-0 text-[11px] font-bold text-foreground/70">كمية كل المقاسات</span>
+                                <span className="shrink-0 text-[11px] font-bold text-foreground/70">كمية كل {isElectronics ? 'المواصفات' : 'المقاسات'}</span>
                                 <InkInput
                                   num
                                   size="sm"
                                   type="number"
                                   min={0}
-                                  aria-label={`كمية كل مقاسات ${key || 'بدون لون'}`}
+                                  aria-label={`كمية كل ${isElectronics ? 'المواصفات' : 'المقاسات'} ${key || noOpt1Label}`}
                                   placeholder="0"
                                   wrapperClassName="w-20"
                                   value={colorQty[key] ?? ''}
@@ -564,16 +645,17 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                                 </Button>
                               </div>
                               <ul className="divide-y">
-                                <li className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_5rem_2.25rem] gap-2 bg-muted/20 px-3 py-1.5 text-[11px] font-bold text-foreground/65">
-                                  <span>المقاس</span>
+                                <li className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_5.5rem_5rem_2.25rem] gap-2 bg-muted/20 px-3 py-1.5 text-[11px] font-bold text-foreground/65">
+                                  <span>{opt2Label}</span>
                                   <span>الباركود</span>
+                                  <span className="text-center">السعر</span>
                                   <span className="text-center">الكمية</span>
                                   <span />
                                 </li>
                                 {g.items.map((v) => (
                                   <li
                                     key={v.id}
-                                    className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_5rem_2.25rem] items-center gap-2 px-3 py-1.5 text-sm"
+                                    className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_5.5rem_5rem_2.25rem] items-center gap-2 px-3 py-1.5 text-sm"
                                   >
                                     <span className="truncate font-bold">{v.size ?? '—'}</span>
                                     <span dir="ltr" className="truncate text-start font-mono text-xs text-foreground/75">
@@ -587,6 +669,29 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                                         </IconBtn>
                                       )}
                                     </span>
+                                    <InkInput
+                                      num
+                                      size="sm"
+                                      type="number"
+                                      min={0}
+                                      step="any"
+                                      placeholder="سعر المنتج"
+                                      aria-label={`سعر ${v.size ?? ''} ${v.color ?? ''}`}
+                                      value={priceDraft[v.id] ?? (v.price ?? '')}
+                                      onChange={(e) => setPriceDraft((p) => ({ ...p, [v.id]: e.target.value }))}
+                                      onBlur={(e) => {
+                                        const raw = e.target.value.trim()
+                                        const saved = v.price ?? ''
+                                        if (raw === String(saved)) return
+                                        setPriceDraft((p) => {
+                                          const n = { ...p }
+                                          delete n[v.id]
+                                          return n
+                                        })
+                                        void updatePrice(v.id, raw)
+                                      }}
+                                      className="text-center"
+                                    />
                                     <InkInput
                                       num
                                       size="sm"

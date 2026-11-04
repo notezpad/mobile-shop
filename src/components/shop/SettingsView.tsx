@@ -11,6 +11,7 @@ import { PrinterSettingsDialog } from './PrinterSettingsDialog'
 import { RedeemCodeCard } from './RedeemCodeCard'
 import { ShiftSettingsCard } from './ShiftSettingsCard'
 import { SellerCommissionsCard } from './SellerCommissionsCard'
+import { AddOnsCard } from './AddOnsCard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,6 +40,8 @@ interface TenantData {
   address: string | null
   logoPath: string | null
   invoicePrefix: string
+  /** 🧾 التحديث 28: كلام أسفل الفاتورة المطبوعة (شروط الضمان...) — '' = الذيل الافتراضي */
+  invoiceTerms: string
   timezone: string
   commissionVodafoneCash: number
   commissionInstapay: number
@@ -85,6 +88,7 @@ const TRACKED: { key: keyof TenantData; label: string }[] = [
   { key: 'phone', label: 'التليفون' },
   { key: 'address', label: 'العنوان' },
   { key: 'invoicePrefix', label: 'بادئة الفواتير' },
+  { key: 'invoiceTerms', label: 'كلام أسفل الفاتورة' },
   { key: 'timezone', label: 'المنطقة الزمنية' },
   { key: 'commissionVodafoneCash', label: 'عمولة المحافظ' },
   { key: 'commissionInstapay', label: 'عمولة انستاباي' },
@@ -286,6 +290,8 @@ export function SettingsView() {
         address: out.address,
         logoPath: out.logoPath,
         invoicePrefix: out.invoicePrefix,
+        // 🧾 التحديث 28: الكلام الجديد بيوصل فورًا لكل الطباعات من غير refresh
+        invoiceTerms: out.invoiceTerms ?? '',
         timezone: out.timezone,
         // 💳 تحديث وسائل الدفع فوراً في المتجر المحلي — نقطة البيع ودفعات
         // العملاء بتعكس الإعداد الجديد من غير refresh.
@@ -543,6 +549,16 @@ export function SettingsView() {
                   </SelectContent>
                 </Select>
               </Field>
+              <Field label="كلام أسفل الفاتورة (اختياري)" className="sm:col-span-2">
+                <textarea
+                  aria-label="كلام أسفل الفاتورة"
+                  placeholder="مثال: الجهاز بضمان المحل 14 يوم ضد عيوب الصناعة — الضمان لا يشمل سوء الاستخدام أو الكسر أو المياه"
+                  rows={3}
+                  value={data?.invoiceTerms ?? ''}
+                  onChange={(e) => update('invoiceTerms', e.target.value)}
+                  className={cn(INK_FIELD, 'h-auto min-h-[4.5rem] resize-y py-2.5 leading-relaxed')}
+                />
+              </Field>
               <p className="flex items-start gap-2 rounded-xl border border-dashed px-3 py-2 text-[11px] leading-relaxed text-muted-foreground sm:col-span-2 sm:items-center sm:text-xs">
                 <Led tone="on" pulse />
                 <span>
@@ -598,6 +614,7 @@ export function SettingsView() {
               <div className="space-y-0.5 text-center text-[10px] text-stone-500">
                 <p dir="ltr" className="font-mono text-xs font-bold tracking-wider text-stone-900">{prefix}-000124</p>
                 <p dir="ltr" className="tabular-nums">{fmtTz(now, tz, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</p>
+                {data?.invoiceTerms ? <p className="whitespace-pre-line leading-snug">{data.invoiceTerms}</p> : null}
                 <p>شكراً لزيارتكم</p>
               </div>
             </div>
@@ -637,6 +654,11 @@ export function SettingsView() {
               refreshSubscription().finally(() => setSubLoading(false))
             }}
           />
+        </div>
+
+        {/* ═════════ 🧩 إضافات الباقة (التحديث 25) — HR / فروع / مستخدمين بمقابل ═════════ */}
+        <div className="stagger-4 lg:col-span-12">
+          <AddOnsCard />
         </div>
 
         {/* ═════════ الإشعارات ═════════ */}
@@ -990,6 +1012,19 @@ function SubscriptionBody({ sub }: { sub: SubInfo }) {
     ? new Date(sub.endDate).toLocaleDateString('ar-EG-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' })
     : '—'
   const btnLabel = sub.expired ? 'اشترك الآن' : sub.expiringSoon ? 'تجديد الاشتراك' : 'ترقية الباقة'
+  // 🧩 2026-11-04 (التحديث 26): روابط التجديد الذاتي — نية التجديد (منتهي/
+  // قريب من الانتهاء) بتودّي على صفحة دفع باقته الحالية مباشرة بدل /pricing،
+  // عشان الباقات المخفية (زي food-basic / food-pro) كانت مستحيلة التجديد
+  // من الواجهة (مش بتظهر في صفحة الأسعار). نية الترقية زي ما هي → /pricing.
+  const renewAvailable = !!sub.planCode && sub.planCode !== '-' && sub.period !== 'trial'
+  const renewCycle = sub.period === 'yearly' ? 'yearly' : 'monthly'
+  const primaryHref =
+    (sub.expired || sub.expiringSoon) && renewAvailable
+      ? `/checkout?plan=${encodeURIComponent(sub.planCode)}&cycle=${renewCycle}`
+      : '/pricing'
+  const yearlyHref = renewAvailable
+    ? `/checkout?plan=${encodeURIComponent(sub.planCode)}&cycle=yearly`
+    : '/pricing'
 
   return (
     <div className="w-full space-y-4 sm:space-y-5">
@@ -1025,10 +1060,10 @@ function SubscriptionBody({ sub }: { sub: SubInfo }) {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <a href="/pricing" className={cn('inline-flex h-9 items-center rounded-xl px-3 text-[13px] font-semibold transition-colors sm:px-4 sm:text-sm', INK_BTN)}>
+            <a href={primaryHref} className={cn('inline-flex h-9 items-center rounded-xl px-3 text-[13px] font-semibold transition-colors sm:px-4 sm:text-sm', INK_BTN)}>
               {btnLabel}
             </a>
-            <a href="/pricing" className={cn('inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-[13px] font-medium transition-colors sm:px-4 sm:text-sm', INK_BTN_OUTLINE)}>
+            <a href={yearlyHref} className={cn('inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-[13px] font-medium transition-colors sm:px-4 sm:text-sm', INK_BTN_OUTLINE)}>
               <CalendarDays className="size-3.5 text-muted-foreground" />
               اشتراك سنوي
               <span className="rounded-md border border-dashed px-1.5 py-0.5 text-[10px] font-bold leading-none">وفّر 17%</span>
