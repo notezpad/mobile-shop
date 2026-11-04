@@ -27,15 +27,12 @@ import {
   AlignLeft,
   AlignRight,
   Barcode as BarcodeIcon,
-  ChevronRight,
   Copy,
   Hash,
-  Layers,
   Loader2,
   Move,
   PenTool,
   Plus,
-  Redo2,
   RotateCcw,
   Ruler,
   Save,
@@ -43,8 +40,6 @@ import {
   Tag,
   Trash2,
   Type,
-  Undo2,
-  X,
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -247,7 +242,7 @@ export function LabelElementContent({
             width: '100%',
             height: barHeightPx(el.heightMm ?? 8),
             background: 'repeating-linear-gradient(90deg, #000 0, #000 2px, transparent 2px, transparent 4px)',
-            opacity: 0.5,
+            opacity: 0.25,
           }}
         />
       )
@@ -259,19 +254,24 @@ export function LabelElementContent({
 
 /* ───────────────────────────── المصمم ───────────────────────────── */
 
-/** يقيس الحاوية ويرجّع أكبر scale يخلّي الملصق يدخل جواها (نفس useFit في دايلوج الطباعة). */
+/** يقيس الحاوية ويرجّع أكبر scale يخلّي الملصق يدخل جواها (نفس useFit في دايلوج الطباعة).
+ *
+ *  🐞 إصلاح v28.1 (المعاينة كانت فاضية): الكانفس بيتولد بس لما design تجهز —
+ *  يعني بعد أول commit — فكان useLayoutEffect بـ deps فاضية بيلاقي ref فاضي
+ *  في أول (وآخر) تنفيذ له، والـ ResizeObserver مكانش بيتوصل أبدًا → scale فضل
+ *  0 → الملصق ظل visibility:hidden للأبد. الحل: callback ref + state — أول ما
+ *  الحاوية تتركب بترجّع node ونوصل الـ observer وقتها (وبنفكه لو اتشالت). */
 function useStage(natW: number, natH: number, max = 3.5) {
-  const ref = React.useRef<HTMLDivElement>(null)
+  const [node, setNode] = React.useState<HTMLDivElement | null>(null)
   const [box, setBox] = React.useState({ w: 0, h: 0 })
-  React.useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
+  React.useEffect(() => {
+    if (!node) return
     const ro = new ResizeObserver(([e]) => setBox({ w: e.contentRect.width, h: e.contentRect.height }))
-    ro.observe(el)
+    ro.observe(node)
     return () => ro.disconnect()
-  }, [])
+  }, [node])
   const scale = box.w > 0 && box.h > 0 ? Math.min(max, box.w / natW, box.h / natH) : 0
-  return { ref, scale }
+  return { ref: setNode, scale }
 }
 
 export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, variantsEnabled, sample, onApply }: Props) {
@@ -282,13 +282,6 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
   const [tname, setTname] = React.useState('')
   const [snap, setSnap] = React.useState(true)
   const [busy, setBusy] = React.useState(false)
-  // ↩️ التحديث 29: سجل تراجع/إعادة — كل تعديل بيدفع نسخة من التصميم قبل التغيير (لحد 60 خطوة)
-  const histRef = React.useRef<{ past: LabelDesign[]; future: LabelDesign[] }>({ past: [], future: [] })
-  const [, bumpHist] = React.useReducer((n: number) => n + 1, 0)
-  // 🖐️ التحديث 29: مين ماسك عنصر وسحبه دلوقتي — عشان نرفعه ونضلّله أثناء السحب
-  const [draggingId, setDraggingId] = React.useState<string | null>(null)
-  const designRef = React.useRef<LabelDesign | null>(null)
-  designRef.current = design
 
   const s: DesignerSample = React.useMemo(() => {
     if (sample && sample.barcode) return sample
@@ -302,10 +295,7 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
   const barEl = design?.elements.find((e) => e.type === 'barcode') ?? null
 
   // SVG الباركود للعينة — بارتفاع عنصر الباركود الحالي (نفس معادلة الطباعة)
-  // 🛡️ التحديث 29: لو باركود المنتج المعروض مش قابل للتحويل لSVG (حروف غير ASCII
-  // مثلاً) كنا بنعرض مربع شبه مخفي (شفافية 25%) — بيبان كأن «الباركود مختفي».
-  // دلوقتي: لو الرسم فشل بنعرض باركود تجريبي + إشعار واضح تحت الكانفس.
-  const svgRaw = React.useMemo(() => {
+  const svg = React.useMemo(() => {
     if (typeof window === 'undefined' || !design || !s.barcode) return ''
     return renderBarcodeSvg(s.barcode, {
       height: barHeightPx(barEl?.heightMm ?? 8),
@@ -316,22 +306,6 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design?.widthMm, barEl?.heightMm, barEl?.wMm, barEl?.id, s.barcode])
 
-  // باركود تجريبي مضمون الرسم — احتياط لما باركود المنتج يفشل
-  const svgFallback = React.useMemo(() => {
-    if (typeof window === 'undefined' || !design) return ''
-    return renderBarcodeSvg(DEFAULT_SAMPLE.barcode, {
-      height: barHeightPx(barEl?.heightMm ?? 8),
-      availMm: barEl ? barEl.wMm : design.widthMm,
-      fontSize: 8,
-      displayValue: false,
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [design?.widthMm, barEl?.heightMm, barEl?.wMm, barEl?.id])
-
-  const svg = svgRaw || svgFallback
-  // هل بنعرض باركود تجريبي بدل بتاع المنتج فعلاً؟ (للإشعار تحت الكانفس)
-  const barcodeFallbackUsed = !!design && !svgRaw && !!svgFallback
-
   /* ── فتح المصمم: ابدأ من آخر تصميم أو الترتيب الافتراضي، وجيب القوالب ── */
   React.useEffect(() => {
     if (!open) return
@@ -340,8 +314,6 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
     setSelected(null)
     setTid(null)
     setTname('')
-    histRef.current = { past: [], future: [] }
-    bumpHist()
     let cancelled = false
     ;(async () => {
       try {
@@ -371,73 +343,12 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  /* ── ↩️ التراجع/الإعادة: نسخة قبل كل تعديل — عشان المستخدم يرجّع أي غلطة بضغطة ── */
-  const pushHistory = React.useCallback(() => {
-    const cur = designRef.current
-    if (!cur) return
-    const h = histRef.current
-    const last = h.past[h.past.length - 1]
-    if (last && JSON.stringify(last) === JSON.stringify(cur)) return
-    h.past = [...h.past, cur].slice(-60)
-    h.future = []
-    bumpHist()
-  }, [])
-
-  const undo = React.useCallback(() => {
-    const h = histRef.current
-    const cur = designRef.current
-    if (!cur || !h.past.length || dragRef.current) return
-    const prev = h.past[h.past.length - 1]
-    h.past = h.past.slice(0, -1)
-    h.future = [cur, ...h.future].slice(0, 60)
-    setDesign(prev)
-    bumpHist()
-    // لو العنصر المختار مش موجود في النسخة المرجّعة نلغي تحديده
-    setSelected((s0) => (s0 && prev.elements.some((e) => e.id === s0) ? s0 : null))
-  }, [])
-
-  const redo = React.useCallback(() => {
-    const h = histRef.current
-    const cur = designRef.current
-    if (!cur || !h.future.length || dragRef.current) return
-    const next = h.future[0]
-    h.future = h.future.slice(1)
-    h.past = [...h.past, cur].slice(-60)
-    setDesign(next)
-    bumpHist()
-    setSelected((s0) => (s0 && next.elements.some((e) => e.id === s0) ? s0 : null))
-  }, [])
-
-  // ⌨️ Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y في أي حتة في المصمم — ما عدا المستخدم بيكتب في حقل
-  React.useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null
-      const typing = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
-      const mod = e.ctrlKey || e.metaKey
-      if (typing || !mod) return
-      const k = e.key.toLowerCase()
-      if (k === 'z' && !e.shiftKey) {
-        e.preventDefault()
-        undo()
-      } else if ((k === 'z' && e.shiftKey) || k === 'y') {
-        e.preventDefault()
-        redo()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, undo, redo])
-
   /* ── تعديل التصميم ── */
-  const updateEl = (id: string, patch: Partial<LabelElement>, record = true) => {
-    if (record) pushHistory()
+  const updateEl = (id: string, patch: Partial<LabelElement>) =>
     setDesign((prev) => (prev ? { ...prev, elements: prev.elements.map((e) => (e.id === id ? { ...e, ...patch } : e)) } : prev))
-  }
 
   const addElement = (type: LabelElementType) => {
     if (!design) return
-    pushHistory()
     const W = design.widthMm
     const H = design.heightMm
     const pad = 2
@@ -455,7 +366,6 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
 
   const duplicateEl = (e0: LabelElement) => {
     if (!design) return
-    pushHistory()
     const copy: LabelElement = {
       ...e0,
       id: nextElementId(design, e0.type),
@@ -468,20 +378,17 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
 
   const deleteEl = (id: string) => {
     if (!design) return
-    pushHistory()
     setDesign({ ...design, elements: design.elements.filter((e) => e.id !== id) })
     setSelected(null)
   }
 
   const changeSize = (w: number, h: number) => {
     if (!design) return
-    pushHistory()
     setDesign(refitDesign(design, w, h))
   }
 
   const resetAuto = () => {
     if (!design) return
-    pushHistory()
     const hasText = design.elements.some((e) => e.type === 'barcodeText')
     setDesign(defaultDesign(design.widthMm, design.heightMm, { variant: variantsEnabled, text: hasText }))
     setSelected(null)
@@ -489,7 +396,7 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
   }
 
   /* ── السحب بالإصبع/الماوس (Pointer Events — شغال على الموبايل والكمبيوتر) ── */
-  const dragRef = React.useRef<{ id: string; px: number; py: number; ox: number; oy: number; pushed: boolean } | null>(null)
+  const dragRef = React.useRef<{ id: string; px: number; py: number; ox: number; oy: number } | null>(null)
   const stage = useStage(design ? design.widthMm * MM : 1, design ? design.heightMm * MM : 1)
   const scale = stage.scale
 
@@ -500,23 +407,17 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
     e.preventDefault()
     e.stopPropagation()
     setSelected(target.id)
-    setDraggingId(target.id)
     try {
       ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     } catch {
       /* ignore */
     }
-    dragRef.current = { id: target.id, px: e.clientX, py: e.clientY, ox: target.xMm, oy: target.yMm, pushed: false }
+    dragRef.current = { id: target.id, px: e.clientX, py: e.clientY, ox: target.xMm, oy: target.yMm }
   }
 
   const moveDrag = (e: React.PointerEvent, target: LabelElement) => {
     const d = dragRef.current
     if (!d || d.id !== target.id || !design) return
-    // نسجّل خطوة تراجع واحدة لأول حركة فعلية بس — مش مع كل حركة صغيرة
-    if (!d.pushed) {
-      pushHistory()
-      d.pushed = true
-    }
     const dx = (e.clientX - d.px) / (MM * scale)
     const dy = (e.clientY - d.py) / (MM * scale)
     const maxX = Math.max(0, design.widthMm - Math.min(target.wMm, design.widthMm))
@@ -524,12 +425,11 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
     updateEl(target.id, {
       xMm: Math.max(0, Math.min(maxX, snapV(d.ox + dx))),
       yMm: Math.max(0, Math.min(maxY, snapV(d.oy + dy))),
-    }, false)
+    })
   }
 
   const endDrag = () => {
     dragRef.current = null
-    setDraggingId(null)
   }
 
   // ⌨️ الأسهم بتحرّك العنصر المختار — ضبط دقيق نص مم (Shift = ممّين)
@@ -560,7 +460,6 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
       toast.error('القالب ده فيه بيانات غير صالحة')
       return
     }
-    pushHistory()
     setDesign(d)
     setTid(t.id)
     setTname(t.name)
@@ -624,10 +523,6 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
     }
   }
 
-  const selectedEl = el
-  const canUndo = histRef.current.past.length > 0 && !draggingId
-  const canRedo = histRef.current.future.length > 0 && !draggingId
-
   const apply = () => {
     if (!design) return
     if (design.elements.length === 0) {
@@ -637,6 +532,7 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
     onApply(design, tid, tname.trim() || null)
   }
 
+  const selectedEl = el
   const sizePresets = [
     { w: 40, h: 30 },
     { w: 50, h: 30 },
@@ -647,17 +543,6 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         mobileSheet
-        onEscapeKeyDown={(ev) => {
-          // أول Esc بيلغي تحديد العنصر، والتاني بيقفل المصمم — مفيش إحساس إنك محبوس
-          if (dragRef.current) {
-            ev.preventDefault()
-            return
-          }
-          if (selected) {
-            ev.preventDefault()
-            setSelected(null)
-          }
-        }}
         className="flex h-[94dvh] max-h-[94dvh] w-full flex-col gap-0 overflow-hidden rounded-2xl border-foreground/10 bg-card p-0 shadow-2xl sm:max-w-6xl"
       >
         {/* ═══ الرأس ═══ */}
@@ -673,58 +558,9 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
               <DialogTitle className="mt-1.5 text-lg font-extrabold leading-tight text-zinc-50">
                 مصمم الملصقات — سحب وإفلات
               </DialogTitle>
-              <DialogDescription className="mt-0.5 hidden text-xs font-medium text-zinc-300 sm:block">
-                اسحب أي عنصر لأي مكان، واضغط عليه لتغيير حجمه ومحاذاته — التراجع Ctrl+Z متاح دايماً، وللإغلاق زر إغلاق فوق أو Esc.
+              <DialogDescription className="mt-0.5 text-xs font-medium text-zinc-300">
+                اسحب أي عنصر لأي مكان، واضغط عليه لتغيير حجمه ومحاذاته — واللي تشوفه هو اللي هيطبع.
               </DialogDescription>
-            </div>
-            {/* 🧰 التحديث 29: تراجع/إعادة/تلقائي في الرأس — ظاهرين دايماً ومش بيغطوا الملصق
-                (كانوا شريط عائم فوق الكانفس وبيمكن يغطّي عنصر نيّف وضعته المستخدم في الركن) */}
-            <div className="flex shrink-0 items-center gap-0.5">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={undo}
-                disabled={!canUndo}
-                title="تراجع (Ctrl+Z)"
-                aria-label="تراجع"
-                className="rounded-xl text-zinc-300 hover:bg-white/15 hover:text-white focus-visible:ring-white/40"
-              >
-                <Undo2 className="size-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={redo}
-                disabled={!canRedo}
-                title="إعادة (Ctrl+Y)"
-                aria-label="إعادة"
-                className="rounded-xl text-zinc-300 hover:bg-white/15 hover:text-white focus-visible:ring-white/40"
-              >
-                <Redo2 className="size-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={resetAuto}
-                disabled={!design}
-                title="رجّع الترتيب التلقائي"
-                aria-label="رجّع الترتيب التلقائي"
-                className="rounded-xl text-zinc-300 hover:bg-white/15 hover:text-white focus-visible:ring-white/40"
-              >
-                <RotateCcw className="size-4" />
-              </Button>
-              <span aria-hidden className="mx-1.5 h-6 w-px bg-white/20" />
-              {/* ✖ زر إغلاق واضح — كان أصلاً مفيش طريقة ظاهرة لقفل المصمم */}
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => onOpenChange(false)}
-                title="إغلاق المصمم (Esc)"
-                aria-label="إغلاق المصمم"
-                className="rounded-xl text-zinc-300 hover:bg-white/15 hover:text-white focus-visible:ring-white/40"
-              >
-                <X className="size-5" />
-              </Button>
             </div>
           </div>
         </header>
@@ -742,15 +578,6 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                 backgroundSize: '20px 20px',
               }}
             />
-            {/* ⚠️ التحديث 29: لو التصميم مفيهوش عنصر باركود — تحذير واضح بدل مفاجأة عند الطباعة */}
-            {design && !design.elements.some((e0) => e0.type === 'barcode') && (
-              <div
-                dir="rtl"
-                className="absolute start-3 top-3 z-10 max-w-72 rounded-xl bg-amber-100 px-3 py-2 text-[11px] font-bold leading-relaxed text-amber-900 shadow ring-1 ring-amber-300"
-              >
-                التصميم مفيهوش عنصر «خطوط الباركود» — الملصق هيطبع من غير باركود! ضيفه من لوحة «ضيف عنصر».
-              </div>
-            )}
             {design && (
               <div
                 ref={stage.ref}
@@ -779,7 +606,6 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                     >
                       {design.elements.map((e0) => {
                         const on = selected === e0.id
-                        const dragging = draggingId === e0.id
                         const Icon = ELEMENT_ICONS[e0.type]
                         return (
                           <div
@@ -790,7 +616,6 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                             onPointerMove={(ev) => moveDrag(ev, e0)}
                             onPointerUp={endDrag}
                             onPointerCancel={endDrag}
-                            onLostPointerCapture={endDrag}
                             onClick={(ev) => {
                               ev.stopPropagation()
                               setSelected(e0.id)
@@ -800,19 +625,14 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                               left: e0.xMm * MM,
                               top: e0.yMm * MM,
                               width: e0.wMm * MM,
-                              cursor: dragging ? 'grabbing' : 'grab',
+                              cursor: 'grab',
                               touchAction: 'none',
-                              outline: on || dragging ? '2px solid #17843f' : '1px dashed rgba(0,0,0,0.35)',
+                              outline: on ? '2px solid #17843f' : '1px dashed transparent',
                               outlineOffset: 2,
                               borderRadius: 2,
-                              zIndex: dragging ? 30 : on ? 20 : 1,
-                              background: dragging ? 'rgba(255,255,255,0.88)' : undefined,
-                              boxShadow: dragging ? '0 10px 26px rgba(0,0,0,0.30)' : undefined,
                             }}
-                            className="group"
+                            className={cn('group', !on && 'hover:outline-dashed hover:outline-foreground/40')}
                           >
-                            {/* 🎯 التحديث 29: منطقة إمساك أوسع حوالين العنصر (+6px) — العناصر الصغيرة بتبقى سهلة الضغط والسحب */}
-                            <span aria-hidden className="absolute -inset-1.5" style={{ touchAction: 'none' }} />
                             <LabelElementContent
                               el={e0}
                               design={design}
@@ -827,11 +647,6 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                               <span className="pointer-events-none absolute -top-2.5 start-0 flex items-center gap-1 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground shadow">
                                 <Move className="size-2.5" aria-hidden />
                                 {LABEL_ELEMENT_META[e0.type].label}
-                                {dragging && (
-                                  <bdi dir="ltr" className="ms-1 rounded bg-black/20 px-1 tabular-nums">
-                                    {e0.xMm},{e0.yMm}
-                                  </bdi>
-                                )}
                               </span>
                             )}
                             {!on && (
@@ -853,16 +668,8 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                 </div>
               </div>
             )}
-            {barcodeFallbackUsed && (
-              <div
-                dir="rtl"
-                className="absolute bottom-7 start-3 end-3 rounded-lg bg-amber-100 px-3 py-1.5 text-center text-[11px] font-bold text-amber-900 ring-1 ring-amber-300"
-              >
-                رقم باركود المنتج المعروض مش قابل للتحويل لباركود (حروف غير مدعومة؟) — المعاينة بتستخدم باركود تجريبي. عدّل رقم الباركود من شاشة المنتج.
-              </div>
-            )}
             <div className="pointer-events-none absolute bottom-2 start-0 end-0 text-center text-[11px] font-medium text-foreground/50" dir="rtl">
-              اسحب العناصر بالماوس أو الإصبع · الأسهم = تحريك بنص مم · Ctrl+Z تراجع · Esc يلغي التحديد ثم يقفل · <bdi dir="ltr">{design?.widthMm}×{design?.heightMm}</bdi> مم
+              اسحب العناصر بالإصبع أو الماوس · الأسهم = ضبط بنص مم · <bdi dir="ltr">{design?.widthMm}×{design?.heightMm}</bdi> مم
             </div>
           </div>
 
@@ -870,15 +677,6 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
           <aside className="w-full shrink-0 space-y-4 overflow-y-auto border-t bg-card p-4 lg:w-72 lg:border-s lg:border-t-0">
             {selectedEl ? (
               <>
-                {/* ↩️ التحديث 29: زر رجوع واضح لخصائص الملصق — المستخدم ما يبقاش حبيس في خصائص العنصر */}
-                <Button
-                  variant="ghost"
-                  onClick={() => setSelected(null)}
-                  className="h-8 w-full justify-start gap-1 rounded-xl px-2 font-bold text-primary hover:bg-primary/10"
-                >
-                  <ChevronRight className="size-4" />
-                  رجوع لخصائص الملصق
-                </Button>
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="flex items-center gap-1.5 text-sm font-extrabold">
                     {React.createElement(ELEMENT_ICONS[selectedEl.type], { className: 'size-4 text-primary' })}
@@ -1025,33 +823,13 @@ export function LabelDesignerDialog({ open, onOpenChange, initial, labelSize, va
                   </div>
                 </div>
 
-                {design && design.elements.length > 0 && (
-                  <div>
-                    <p className="mb-1.5 flex items-center gap-1.5 text-sm font-extrabold">
-                      <Layers className="size-4 text-primary" />
-                      عناصر الملصق ({design.elements.length})
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {design.elements.map((e0) => {
-                        const Icon = ELEMENT_ICONS[e0.type]
-                        return (
-                          <button
-                            key={e0.id}
-                            type="button"
-                            onClick={() => setSelected(e0.id)}
-                            className={cn('flex h-8 items-center gap-1 rounded-lg border bg-card px-2 text-[11px] font-bold transition-colors hover:border-primary/50 hover:bg-primary/10', ring)}
-                          >
-                            <Icon className="size-3 text-primary" />
-                            {LABEL_ELEMENT_META[e0.type].label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
+                <Button variant="outline" className="h-10 w-full rounded-xl font-bold" onClick={resetAuto}>
+                  <RotateCcw className="size-4" />
+                  رجّع الترتيب التلقائي
+                </Button>
 
                 <p className="rounded-xl bg-muted p-3 text-[11px] font-medium leading-relaxed text-foreground/60">
-                  اضغط على أي عنصر في الملصق لتعديله — أو اختاره من قائمة العناصر. التراجع والإعادة فوق في شريط الأدوات. <b>{design?.elements.length ?? 0}</b> عناصر في التصميم.
+                  اضغط على أي عنصر في الملصق لتعديل حجمه ومحاذاته. <b>{design?.elements.length ?? 0}</b> عناصر في التصميم.
                 </p>
               </>
             )}
