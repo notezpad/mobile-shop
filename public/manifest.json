@@ -1,0 +1,101 @@
+{
+  "name": "نظام المحل — إدارة المحلات",
+  "short_name": "نظام المحل",
+  "description": "نظام متكامل لإدارة المحلات — نقطة بيع، مخزون، عملاء، صيانة، تقارير مالية",
+  "lang": "ar",
+  "dir": "rtl",
+  "id": "/?source=pwa",
+  "start_url": "/dashboard?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui", "browser"],
+  "orientation": "portrait-primary",
+  "background_color": "#0c0e14",
+  "theme_color": "#10b981",
+  "categories": ["business", "productivity", "shopping"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512-monochrome.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "monochrome"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "نقطة البيع",
+      "short_name": "POS",
+      "description": "فتح شاشة البيع",
+      "url": "/pos?source=shortcut",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "المنتجات",
+      "short_name": "المنتجات",
+      "description": "إدارة المنتجات والمخزون",
+      "url": "/products?source=shortcut",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "لوحة المعلومات",
+      "short_name": "الداشبورد",
+      "description": "نظرة عامة على الأداء",
+      "url": "/dashboard?source=shortcut",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "المعاملات المالية",
+      "short_name": "المالية",
+      "description": "سجل المعاملات المالية",
+      "url": "/finance?source=shortcut",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "نقطة البيع على الموبايل"
+    },
+    {
+      "src": "/screenshot-desktop.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "لوحة المعلومات على الديسكتوب"
+    }
+  ],
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
+  "edge_side_panel": {
+    "preferred_width": 480
+  }
+}
