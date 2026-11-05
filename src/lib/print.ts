@@ -49,6 +49,22 @@ export function fmtDate(d: string | Date) {
   return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+/** التاريخ فقط — YYYY/MM/DD */
+export function fmtDateOnly(d: string | Date): string {
+  const date = typeof d === 'string' ? new Date(d) : d
+  if (isNaN(date.getTime())) return ''
+  const pad = (x: number) => String(x).padStart(2, '0')
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())}`
+}
+
+/** الوقت فقط — HH:MM */
+export function fmtTimeOnly(d: string | Date): string {
+  const date = typeof d === 'string' ? new Date(d) : d
+  if (isNaN(date.getTime())) return ''
+  const pad = (x: number) => String(x).padStart(2, '0')
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 /** Shared brand tokens so every printed/exported document (invoice, report,
  *  labels) looks like it came from the same professional design system. */
 export const BRAND = {
@@ -138,26 +154,34 @@ export function printCloseBarHtml(): string {
   <style>@media print { #print-close-bar { display: none !important; } }</style>`
 }
 
+/** 🧾 استايل "أسود/دهبي" (Tajawal) — منفصل عمدًا عن BRAND/baseDocStyles المشتركين
+ *  مع التقارير وملفات الإكسل، عشان تغيير شكل الفاتورة ما يأثرش عليهم. */
 export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
+  const GOLD = '#d4af37'
+  const INK = '#111111'
+  const INK_SOFT = '#1a1a1a'
+
   const itemsRows = sale.items
     .map(
       (it, i) => `
         <tr>
-          <td style="color:${BRAND.sub}">${i + 1}</td>
-          <td style="text-align:right;font-weight:600">${escapeHtml(it.name)}</td>
-          <td>${it.quantity}</td>
-          <td>${fmt(it.price)}</td>
-          <td style="font-weight:700">${fmt(it.price * it.quantity)}</td>
+          <td style="color:#9ca3af">${i + 1}</td>
+          <td style="text-align:right;font-weight:800;color:${INK}">${escapeHtml(it.name)}</td>
+          <td class="center">${it.quantity}</td>
+          <td class="center">${fmt(it.price)} ج.م</td>
+          <td class="center" style="color:#b45309;font-weight:800">${fmt(it.price * it.quantity)} ج.م</td>
         </tr>`
     )
     .join('')
+
   const remaining = sale.total - sale.paid
   const prefix = shop?.invoicePrefix || 'INV'
   const invoiceNo = sale.invoiceNo ?? `${prefix}-${String(sale.id).padStart(6, '0')}`
 
-  let statusBadge = `<span class="badge badge-green">مدفوعة بالكامل</span>`
-  if (remaining > 0.009 && sale.paid > 0.009) statusBadge = `<span class="badge badge-amber">مدفوعة جزئياً</span>`
-  else if (remaining > 0.009) statusBadge = `<span class="badge badge-red">غير مدفوعة</span>`
+  let statusLabel = '✔️ مدفوعة بالكامل'
+  let statusColor = '#10b981'
+  if (remaining > 0.009 && sale.paid > 0.009) { statusLabel = '◐ مدفوعة جزئياً'; statusColor = GOLD }
+  else if (remaining > 0.009) { statusLabel = '✕ غير مدفوعة'; statusColor = '#ef4444' }
 
   return `<!doctype html>
 <html lang="ar" dir="rtl">
@@ -165,86 +189,127 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
 <meta charset="utf-8" />
 <title>فاتورة ${escapeHtml(invoiceNo)}</title>
 <style>
-  ${baseDocStyles()}
-  .invoice-shell { position: relative; }
-  ${
-    remaining > 0.009
-      ? `.watermark {
-        position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-        pointer-events: none; z-index: 0; overflow: hidden;
-      }
-      .watermark span {
-        font-size: 78px; font-weight: 800; color: ${BRAND.red}; opacity: .06; transform: rotate(-28deg);
-        white-space: nowrap;
-      }`
-      : ''
-  }
-  .customer-line { font-size: 12.5px; margin-bottom: 12px; background: ${BRAND.primaryLight}; border-radius: 8px; padding: 9px 12px; }
-  .customer-line b { color: ${BRAND.primaryDark}; }
-  .totals-wrap { display: flex; justify-content: flex-start; margin-top: 18px; }
-  .totals { width: 300px; font-size: 13.5px; }
-  .totals .row { display: flex; justify-content: space-between; padding: 7px 2px; border-bottom: 1px dashed ${BRAND.border}; }
-  .totals .row span:last-child { font-weight: 700; }
-  .totals .grand {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-top: 8px; padding: 12px 14px; border-radius: 8px;
-    background: ${BRAND.primaryDark}; color: #fff; font-weight: 800; font-size: 16px;
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 0; }
+  html, body { margin: 0; padding: 0; background: #d1d5db; font-family: 'Tajawal','Cairo','Tahoma','Segoe UI',sans-serif; color: ${INK}; }
+  .mc-wrap { width: 850px; max-width: 100%; margin: 0 auto; background: #fff; position: relative; overflow: hidden; }
+  .mc-top { height: 6px; background: linear-gradient(90deg, ${GOLD} 0%, #f4e8c1 50%, ${GOLD} 100%); }
+  .mc-header { display: flex; justify-content: space-between; align-items: stretch; background: ${INK}; color: #fff; }
+  .mc-brand { padding: 20px 30px; flex: 1; border-left: 1px solid #333; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; }
+  .mc-brand h1 { font-size: 26px; font-weight: 900; color: ${GOLD}; margin-bottom: 6px; letter-spacing: .5px; text-shadow: 1px 1px 3px rgba(0,0,0,.8); }
+  .mc-meta-note { font-size: 11.5px; color: #d1d5db; margin-top: 3px; line-height: 1.6; }
+  .mc-phone-badge { display: inline-flex; align-items: center; gap: 6px; background: ${GOLD}; color: ${INK}; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 900; margin-top: 8px; }
+  .mc-meta { padding: 20px 30px; width: 300px; background: ${INK_SOFT}; display: flex; flex-direction: column; justify-content: center; }
+  .mc-meta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; border-bottom: 1px dashed #444; padding-bottom: 6px; }
+  .mc-meta-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+  .mc-meta-row span:first-child { color: #9ca3af; font-weight: 500; }
+  .mc-meta-row span:last-child { color: #fff; font-weight: 700; }
+  .mc-customer { background: #f9fafb; border-bottom: 2px solid ${GOLD}; padding: 14px 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .mc-customer h4 { font-size: 11px; color: #6b7280; font-weight: 700; margin-bottom: 5px; }
+  .mc-customer p { font-size: 13.5px; font-weight: 800; color: ${INK}; }
+  .mc-customer .dotted { color: #9ca3af; font-weight: 400; }
+  .mc-items { padding: 20px 30px; position: relative; z-index: 1; }
+  .mc-items table { width: 100%; border-collapse: collapse; }
+  .mc-items th { background: ${INK}; color: ${GOLD}; padding: 10px; font-size: 13px; font-weight: 700; text-align: center; }
+  .mc-items th:nth-child(2) { text-align: right; }
+  .mc-items td { padding: 14px 8px; border-bottom: 2px solid #f3f4f6; font-size: 13px; }
+  .mc-items td.center { text-align: center; }
+  .mc-totals-wrap { display: flex; justify-content: flex-start; padding: 0 30px 16px; }
+  .mc-totals { width: 300px; }
+  .mc-totals .row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13.5px; color: #4b5563; font-weight: 700; border-bottom: 1px solid #e5e7eb; }
+  .mc-totals .grand { display: flex; justify-content: space-between; align-items: center; background: ${INK}; color: ${GOLD}; padding: 13px 16px; border-radius: 6px; font-size: 18px; font-weight: 900; margin-top: 8px; }
+  .mc-totals .grand span:last-child { color: #fff; }
+  /* 🛡️ قسم الضمان والشروط — مُصحَّح: mc-terms أولاً ثم mc-terms.empty لضمان الـ cascade الصحيح */
+  .mc-terms { background: linear-gradient(135deg, #f9fafb 0%, #f0f4f0 100%); border-top: 2px solid ${GOLD}; border-bottom: 1px solid #e5e7eb; padding: 14px 30px; }
+  .mc-terms-header { font-size: 12.5px; font-weight: 900; color: ${INK}; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; border-bottom: 1px dashed #d9ddd9; padding-bottom: 7px; }
+  .mc-terms-body { font-size: 11.5px; color: #374151; line-height: 1.85; }
+  .mc-terms-line { display: flex; align-items: flex-start; gap: 7px; padding: 1.5px 0; }
+  .mc-terms-line::before { content: '◈'; color: ${GOLD}; font-size: 10px; flex-shrink: 0; margin-top: 3px; }
+  .mc-terms.empty { font-size: 11.5px; color: #9ca3af; font-style: italic; }
+  .mc-footer { padding: 18px 30px; display: flex; justify-content: space-between; align-items: flex-end; }
+  .mc-sign p { font-size: 12px; color: #6b7280; font-weight: 700; margin-bottom: 28px; }
+  .mc-sign-line { width: 150px; border-bottom: 2px dashed #9ca3af; }
+  .mc-thanks { text-align: center; }
+  .mc-thanks .big { font-size: 18px; font-weight: 900; color: ${GOLD}; margin-bottom: 3px; }
+  .mc-thanks .sub { font-size: 11px; color: #9ca3af; font-weight: 700; }
+  .mc-watermark { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 0; overflow: hidden; }
+  .mc-watermark span { font-size: 70px; font-weight: 800; color: #ef4444; opacity: .07; transform: rotate(-28deg); white-space: nowrap; }
+  @media print {
+    html, body { background: #fff; padding: 8mm 6mm; }
+    .mc-wrap { width: 100%; }
+    /* margin: 0 بيمنع البراوزر من إضافة التاريخ/الوقت/رقم الصفحة في الهامش */
+    @page { size: A4; margin: 0; }
   }
 </style>
 </head>
 <body>
-  <div class="brand-bar"></div>
-  <div class="page">
-    <div class="invoice-shell">
-      ${remaining > 0.009 ? `<div class="watermark"><span>غير مسدد بالكامل</span></div>` : ''}
-      <div style="position:relative;z-index:1">
-        <div class="doc-header">
-          <div class="shop-block">
-            ${shop?.logo ? `<img src="${shop.logo}" class="shop-logo" />` : ''}
-            <div>
-              <div class="shop-name">${escapeHtml(shop?.name || 'محل الاتصالات')}</div>
-              <div class="shop-meta">
-                ${shop?.phone ? `<div>تليفون: ${escapeHtml(shop.phone)}</div>` : ''}
-                ${shop?.address ? `<div>${escapeHtml(shop.address)}</div>` : ''}
-              </div>
-            </div>
-          </div>
-          <div class="doc-meta">
-            <div class="doc-title">فاتورة مبيعات</div>
-            <div class="doc-no">${escapeHtml(invoiceNo)}</div>
-            <div class="doc-date">${fmtDate(sale.createdAt)}</div>
-            <div style="margin-top:8px">${statusBadge}</div>
-          </div>
-        </div>
-
-        ${
-          sale.customer
-            ? `<div class="customer-line"><b>العميل:</b> ${escapeHtml(sale.customer.name)}${sale.customer.phone ? `&nbsp;&nbsp;|&nbsp;&nbsp; ${escapeHtml(sale.customer.phone)}` : ''}</div>`
-            : ''
-        }
-
-        <table>
-          <thead>
-            <tr><th>#</th><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr>
-          </thead>
-          <tbody>${itemsRows}</tbody>
-        </table>
-
-        <div class="totals-wrap">
-          <div class="totals">
-            <div class="row"><span>الإجمالي</span><span>${fmt(sale.total)} ج.م</span></div>
-            <div class="row"><span>المدفوع</span><span>${fmt(sale.paid)} ج.م</span></div>
-            ${remaining > 0.009 ? `<div class="row"><span>المتبقي</span><span style="color:${BRAND.red}">${fmt(remaining)} ج.م</span></div>` : ''}
-            <div class="grand"><span>الإجمالي النهائي</span><span>${fmt(sale.total)} ج.م</span></div>
-          </div>
-        </div>
-
-        <div class="doc-footer">
-          <div class="thanks">شكراً لتعاملكم معنا</div>
-          ${shop?.terms ? `<div class="doc-terms">${escapeHtml(shop.terms).replace(/\n/g, '<br/>')}</div>` : ''}
-          <div>${escapeHtml(shop?.name || 'محل الاتصالات')} — تم إصدار الفاتورة إلكترونياً</div>
-        </div>
+  <div class="mc-wrap">
+    <div class="mc-top"></div>
+    <div class="mc-header">
+      <div class="mc-brand">
+        <h1>${escapeHtml(shop?.name || 'محل الاتصالات')}</h1>
+        ${shop?.address ? `<div class="mc-meta-note">${escapeHtml(shop.address)}</div>` : ''}
+        ${shop?.phone ? `<div class="mc-phone-badge" dir="ltr"><span>📞</span><span>${escapeHtml(shop.phone)}</span></div>` : ''}
       </div>
+      <div class="mc-meta">
+        <div class="mc-meta-row"><span>رقم الفاتورة:</span><span dir="ltr">${escapeHtml(invoiceNo)}</span></div>
+        <div class="mc-meta-row"><span>التاريخ:</span><span dir="ltr">${fmtDateOnly(sale.createdAt)}</span></div>
+        <div class="mc-meta-row"><span>الوقت:</span><span dir="ltr">${fmtTimeOnly(sale.createdAt)}</span></div>
+        <div class="mc-meta-row"><span>الحالة:</span><span style="color:${statusColor}">${statusLabel}</span></div>
+      </div>
+    </div>
+
+    <div class="mc-customer">
+      <div>
+        <h4>بيانات العميل</h4>
+        <p>${sale.customer ? escapeHtml(sale.customer.name) : '<span class="dotted">......................................</span>'}</p>
+      </div>
+      <div>
+        <h4>رقم الهاتف</h4>
+        <p>${sale.customer?.phone ? escapeHtml(sale.customer.phone) : '<span class="dotted">.................</span>'}</p>
+      </div>
+    </div>
+
+    <div class="mc-items">
+      ${remaining > 0.009 ? `<div class="mc-watermark"><span>غير مسدد بالكامل</span></div>` : ''}
+      <table>
+        <thead><tr><th>#</th><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
+        <tbody>${itemsRows}</tbody>
+      </table>
+    </div>
+
+    <div class="mc-totals-wrap">
+      <div class="mc-totals">
+        <div class="row"><span>الإجمالي</span><span>${fmt(sale.total)} ج.م</span></div>
+        <div class="row"><span>المدفوع</span><span>${fmt(sale.paid)} ج.م</span></div>
+        ${remaining > 0.009 ? `<div class="row"><span>المتبقي</span><span style="color:#ef4444">${fmt(remaining)} ج.م</span></div>` : ''}
+        <div class="grand"><span>الإجمالي النهائي</span><span>${fmt(sale.total)} ج.م</span></div>
+      </div>
+    </div>
+
+    ${
+      shop?.terms
+        ? (() => {
+            const lines = escapeHtml(shop.terms)
+              .split('\n')
+              .map(l => l.trim())
+              .filter(l => l.length > 0)
+              .map(l => `<div class="mc-terms-line"><span>${l}</span></div>`)
+              .join('')
+            return `<div class="mc-terms">
+              <div class="mc-terms-header">🛡️ الضمان والشروط</div>
+              <div class="mc-terms-body">${lines}</div>
+            </div>`
+          })()
+        : `<div class="mc-terms empty" style="padding:12px 30px;font-size:11.5px;">🛡️ لم يتم إضافة شروط ضمان بعد — أضفها من الإعدادات ← «كلام أسفل الفاتورة» لتظهر هنا تلقائيًا في كل فاتورة.</div>`
+    }
+
+    <div class="mc-footer">
+      <div class="mc-sign"><p>توقيع البائع / ختم المحل</p><div class="mc-sign-line"></div></div>
+      <div class="mc-thanks">
+        <div class="big">شكراً لتعاملكم معنا</div>
+        <div class="sub">${escapeHtml(shop?.name || 'محل الاتصالات')} — تم إصدار الفاتورة إلكترونياً</div>
+      </div>
+      <div style="width:150px"></div>
     </div>
   </div>
   ${printCloseBarHtml()}
