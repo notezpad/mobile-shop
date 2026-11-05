@@ -66,6 +66,7 @@ model Tenant {
   users             User[]
   products          Product[]
   categories        Category[]
+  variantSuggestions VariantSuggestion[]
   customers         Customer[]
   sales             Sale[]
   maintenanceOrders MaintenanceOrder[]
@@ -1646,4 +1647,21 @@ model HrPinAttempt {
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@id([tenantId, employeeId])
+}
+
+// 📱 التحديث 31 (2026-11-05): اقتراحات المعالج وكارت الشاشة للابتوبات — بتتعلّم من اللي المحل بيكتبه.
+// خاصة بكل محل (tenantId) ومفيش قاموس مشترك. normalized = القيمة بعد التنضيف (حروف صغيرة/مسافات)
+// عشان «i7-8550h» و«I7-8550H» يبقوا نفس الاقتراح (بيتحفظ أول شكل اتكتب).
+model VariantSuggestion {
+  id         Int      @id @default(autoincrement())
+  tenantId   String
+  kind       String   // 'cpu' | 'gpu'
+  value      String
+  normalized String
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, kind, normalized])
+  @@index([tenantId, kind])
 }

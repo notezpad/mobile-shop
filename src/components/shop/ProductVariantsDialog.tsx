@@ -23,6 +23,224 @@ import {
   composeLaptopConfig, composePhoneSpec, detectElectronicsKind, type ElectronicsKind,
 } from '@/lib/electronics-variants'
 import { CONDITION_LABEL, type VariantCondition } from '@/lib/variant-condition'
+import { cleanSuggestionValue, normalizeSuggestionKey, type SuggestionKind } from '@/lib/variant-suggestions'
+import { highlightParts, loadHardwareDictionary, resolveExact, searchDictionary, type DictEntry, type HardwareDictionary } from '@/lib/hardware-dictionary'
+
+interface Suggestion { id: number; value: string }
+
+const BRAND_PILL: Record<string, string> = {
+  Intel: 'bg-sky-500/10 text-sky-700 dark:text-sky-300',
+  AMD: 'bg-red-500/10 text-red-700 dark:text-red-300',
+  Nvidia: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  Apple: 'bg-zinc-500/15 text-zinc-700 dark:text-zinc-300',
+}
+
+/** كلمات عامة في الأسماء الطويلة — بتتخفّف عشان رقم الموديل هو اللي يبان («GeForce RTX 2060 Mobile») */
+const NOISE_RE = /(GeForce|Radeon|Laptop GPU|Mobile|Core|Intel|AMD|Apple)/g
+function NameText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(NOISE_RE).map((seg, i) =>
+        i % 2 === 1 ? ( // split بمجموعة التقاط: العناصر الفردية هي الكلمات العامة
+          <span key={i} className="font-normal text-foreground/50">{seg}</span>
+        ) : (
+          <span key={i}>{seg}</span>
+        ),
+      )}
+    </>
+  )
+}
+
+/**
+ * 📱 التحديث 32: خانة كتابة مع قايمة قاموس عايمة (المعالج / كارت الشاشة).
+ * - قايمة فوق المحتوى (مش بتزق حاجة) وبتظهر والخانة متفعّلة بس.
+ * - تنقّل بالكيبورد: ↑ ↓ للتحريك · Enter للاختيار — وأول نتيجة متحدّدة تلقائي.
+ * - الجزء المطابق لللي كتبته مُبرّز، وكل نتيجة عليها الشركة (Intel/AMD/Nvidia/Apple) ونوعها (لابتوب/مكتبي).
+ * onMouseDown بيمنع فقدان الفوكس قبل ما الضغطة تتسجّل.
+ */
+function DictField({
+  id, placeholder, value, onChange, entries, ownValues, onPick, label,
+}: {
+  id: string
+  placeholder: string
+  value: string
+  onChange: (v: string) => void
+  entries?: DictEntry[]
+  ownValues: string[]
+  onPick: (v: string) => void
+  label: string
+}) {
+  const [focused, setFocused] = React.useState(false)
+  const [active, setActive] = React.useState(0)
+  const listRef = React.useRef<HTMLUListElement>(null)
+  const wrapRef = React.useRef<HTMLDivElement>(null)
+  // القايمة بتفتح لتحت، ولو المساحة تحت ضيقة (آخر الدايلوج) وفوق أوسع بتفتح لفوق — ومالهاش أبدًا تتقطع تحت الفوتر
+  const [place, setPlace] = React.useState<{ above: boolean; maxH: number }>({ above: false, maxH: 288 })
+  const hits = React.useMemo(() => {
+    if (!entries) return []
+    const own = new Set(ownValues.map(normalizeSuggestionKey))
+    const typed = normalizeSuggestionKey(value)
+    return searchDictionary(entries, value, 10).filter(
+      (e) => !own.has(normalizeSuggestionKey(e.name)) && normalizeSuggestionKey(e.name) !== typed,
+    )
+  }, [entries, ownValues, value])
+  React.useEffect(() => { setActive(0) }, [value])
+  React.useEffect(() => {
+    listRef.current?.querySelector<HTMLElement>('[data-active="true"]')?.scrollIntoView({ block: 'nearest' })
+  }, [active])
+  const open = focused && hits.length > 0
+  React.useLayoutEffect(() => {
+    if (!open || !wrapRef.current) return
+    const w = wrapRef.current.getBoundingClientRect()
+    const dlg = wrapRef.current.closest('[role="dialog"]')?.getBoundingClientRect()
+    const top = (dlg?.top ?? 0) + 112 // هيدر الدايلوج
+    const bottom = (dlg?.bottom ?? window.innerHeight) - 96 // فوتر الدايلوج
+    const below = bottom - w.bottom - 16
+    const above = w.top - top - 16
+    const wantAbove = below < 300 && above > below
+    setPlace({ above: wantAbove, maxH: Math.max(160, Math.min(320, wantAbove ? above : below) - 40) })
+  }, [open, hits.length])
+  const pick = (name: string) => { onPick(name); setFocused(false) }
+  const listId = `${id}-list`
+  return (
+    <div className="relative" ref={wrapRef}>
+      <InkInput
+        id={id}
+        placeholder={placeholder}
+        autoComplete="off"
+        value={value}
+        className="pe-10"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        aria-activedescendant={open ? `${id}-opt-${active}` : undefined}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onKeyDown={(e) => {
+          if (!open) return
+          if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => (i + 1) % hits.length) }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => (i - 1 + hits.length) % hits.length) }
+          else if (e.key === 'Enter') { e.preventDefault(); const h = hits[active]; if (h) pick(h.name) }
+        }}
+      />
+      <Search className="pointer-events-none absolute end-3.5 top-1/2 size-4 -translate-y-1/2 text-foreground/40" aria-hidden />
+      {open && (
+        <div className={cn('absolute inset-x-0 z-30 overflow-hidden rounded-2xl border border-foreground/15 bg-card shadow-2xl ring-1 ring-black/5', place.above ? 'bottom-full mb-1.5' : 'top-full mt-1.5')}>
+          <div className="flex items-center justify-between bg-muted/50 px-3.5 py-1.5 text-[11px] font-bold text-foreground/60">
+            <span>{label}</span>
+            <span className="hidden items-center gap-3 sm:flex">
+              <span className="flex items-center gap-1"><kbd className="rounded border bg-background px-1 font-sans text-[10px]" dir="ltr">↑↓</kbd> تنقّل</span>
+              <span className="flex items-center gap-1"><kbd className="rounded border bg-background px-1 font-sans text-[10px]" dir="ltr">Enter</kbd> اختيار</span>
+            </span>
+          </div>
+          <ul ref={listRef} id={listId} role="listbox" aria-label={label} style={{ maxHeight: place.maxH }} className="overflow-y-auto overflow-x-hidden">
+            {hits.map((e, i) => (
+              <li key={e.name} id={`${id}-opt-${i}`} role="option" aria-selected={i === active}>
+                <button
+                  type="button"
+                  data-active={i === active}
+                  onMouseDown={(ev) => ev.preventDefault()}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => pick(e.name)}
+                  className={cn(
+                    'flex w-full items-center gap-3 border-b border-s-[3px] px-3.5 py-2.5 text-start last:border-b-0',
+                    i === active ? 'border-s-foreground bg-foreground/[0.07]' : 'border-s-transparent hover:bg-muted/50',
+                  )}
+                >
+                  <span className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-foreground/90">
+                    {highlightParts(e.name, value).map((p, k) =>
+                      p.hit ? (
+                        <mark key={k} className="rounded-sm bg-foreground/10 px-0.5 font-extrabold text-foreground">{p.text}</mark>
+                      ) : (
+                        <NameText key={k} text={p.text} />
+                      ),
+                    )}
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-1">
+                    <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-bold tracking-wide', BRAND_PILL[e.brand] ?? 'bg-muted text-foreground/70')}>
+                      {e.brand}
+                    </span>
+                    <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-foreground/60">
+                      {e.dev === 'd' ? 'مكتبي' : e.dev === 'l' ? 'لابتوب' : 'لابتوب / مكتبي'}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * 📱 التحديث 31: اقتراحات المعالج/كارت الشاشة — اللي المحل كتبه قبل كده (خاصة بالمحل).
+ * بتتفلتر بالكتابة، وفيها × صغيرة لحذف اقتراح غلط. الاقتراحات الجاهزة (presets) بتظهر بس لو المحل لسه معندوش اقتراحات.
+ */
+function SuggestChips({
+  items, presets, value, onPick, onDelete, label,
+}: {
+  items: Suggestion[]
+  presets?: string[]
+  value: string
+  onPick: (v: string) => void
+  onDelete: (s: Suggestion) => void
+  label: string
+}) {
+  const q = normalizeSuggestionKey(value)
+  const own = items.filter((x) => !q || normalizeSuggestionKey(x.value).includes(q)).slice(0, 12)
+  const showPresets = items.length === 0 && !!presets?.length
+  if (!showPresets && own.length === 0) return null
+  const chip = 'h-8 rounded-full border text-xs font-bold transition-colors'
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label={label}>
+      {showPresets
+        ? presets!.map((c) => {
+            const on = normalizeSuggestionKey(value) === normalizeSuggestionKey(c)
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => onPick(on ? '' : c)}
+                aria-pressed={on}
+                className={cn(chip, 'px-3', on ? 'border-foreground bg-foreground text-background' : 'bg-background hover:border-foreground/60 hover:bg-muted/60')}
+              >
+                {c}
+              </button>
+            )
+          })
+        : own.map((sg) => {
+            const on = normalizeSuggestionKey(value) === normalizeSuggestionKey(sg.value)
+            return (
+              <span
+                key={sg.id}
+                className={cn(chip, 'inline-flex items-center overflow-hidden', on ? 'border-foreground bg-foreground text-background' : 'bg-background')}
+              >
+                <button
+                  type="button"
+                  onClick={() => onPick(on ? '' : sg.value)}
+                  aria-pressed={on}
+                  className={cn('h-full ps-3 pe-2', !on && 'hover:bg-muted/60')}
+                >
+                  {sg.value}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(sg)}
+                  aria-label={`حذف الاقتراح ${sg.value}`}
+                  className={cn('grid h-full w-7 place-items-center', on ? 'hover:bg-background/20' : 'text-foreground/45 hover:bg-destructive/10 hover:text-destructive')}
+                >
+                  <span aria-hidden className="text-sm leading-none">×</span>
+                </button>
+              </span>
+            )
+          })}
+    </div>
+  )
+}
 
 /** صف معاينة المساعد الذكي — الحالة للإلكترونيات بس (الملابس دايمًا null) */
 interface PreviewRow {
@@ -129,6 +347,53 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
   const [form, setForm] = React.useState<{ size: string; color: string; barcode: string; quantity: number; price: string; condition: '' | VariantCondition }>({ size: '', color: '', barcode: '', quantity: 0, price: '', condition: '' })
   // مكوّنات «السعة/الكونفيج» للإلكترونيات — بتتجمّع في form.color وقت الإضافة
   const [spec, setSpec] = React.useState({ ...EMPTY_LAPTOP_SPEC })
+  // 📱 التحديث 31: اقتراحات المعالج وكارت الشاشة (خاصة بالمحل)
+  const [sugs, setSugs] = React.useState<Record<SuggestionKind, Suggestion[]>>({ cpu: [], gpu: [] })
+  React.useEffect(() => {
+    if (!open || !isElectronics || kind !== 'laptop') return
+    let cancelled = false
+    void Promise.all([
+      api<Suggestion[]>('/api/variant-suggestions?kind=cpu').catch(() => [] as Suggestion[]),
+      api<Suggestion[]>('/api/variant-suggestions?kind=gpu').catch(() => [] as Suggestion[]),
+    ]).then(([cpu, gpu]) => {
+      if (!cancelled) setSugs({ cpu: Array.isArray(cpu) ? cpu : [], gpu: Array.isArray(gpu) ? gpu : [] })
+    })
+    return () => { cancelled = true }
+  }, [open, isElectronics, kind])
+  // 📱 التحديث 32: القاموس بيتحمّل lazy أول ما تفتح تاب اللابتوب (فشله مايعطّلش حاجة — الكتابة الحرة شغالة)
+  const [hw, setHw] = React.useState<HardwareDictionary | null>(null)
+  React.useEffect(() => {
+    if (!open || !isElectronics || kind !== 'laptop' || hw) return
+    let cancelled = false
+    loadHardwareDictionary().then((d) => { if (!cancelled) setHw(d) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [open, isElectronics, kind, hw])
+  const deleteSuggestion = async (k: SuggestionKind, sg: Suggestion) => {
+    try {
+      await api('/api/variant-suggestions', { method: 'DELETE', body: { id: sg.id } })
+      setSugs((p) => ({ ...p, [k]: p[k].filter((x) => x.id !== sg.id) }))
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل حذف الاقتراح')
+    }
+  }
+  /** القيمة بالشكل المحفوظ لو موجودة (i7-8550h → I7-8550H اللي اتكتب أول مرة) */
+  const canonicalOf = (k: SuggestionKind, raw: string) => {
+    const v = cleanSuggestionValue(raw)
+    if (!v) return ''
+    const hit = sugs[k].find((x) => normalizeSuggestionKey(x.value) === normalizeSuggestionKey(v))
+    if (hit) return hit.value
+    // اسم/اسم بديل لموديل واحد في القاموس («i7 8550u» أو «جي فورس 710») → الاسم الرسمي
+    const official = hw ? resolveExact(hw[k], v) : null
+    return official ?? v
+  }
+  const rememberSuggestion = async (k: SuggestionKind, raw: string) => {
+    const v = cleanSuggestionValue(raw)
+    if (!v || sugs[k].some((x) => normalizeSuggestionKey(x.value) === normalizeSuggestionKey(v))) return
+    try {
+      const created = await api<Suggestion>('/api/variant-suggestions', { method: 'POST', body: { kind: k, value: v } })
+      if (created?.id) setSugs((p) => (p[k].some((x) => x.id === created.id) ? p : { ...p, [k]: [created, ...p[k]] }))
+    } catch { /* الاقتراح تحسين بس — فشله مايعطّلش الإضافة */ }
+  }
   const [smartText, setSmartText] = React.useState('')
   const [preview, setPreview] = React.useState<PreviewRow[] | null>(null)
   const [previewWarnings, setPreviewWarnings] = React.useState<string[]>([])
@@ -254,7 +519,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
       ? kind === 'phone'
         ? composePhoneSpec(spec.ram, spec.storage)
         : kind === 'laptop'
-          ? composeLaptopConfig(spec)
+          ? composeLaptopConfig({ ...spec, cpu: canonicalOf('cpu', spec.cpu), gpu: canonicalOf('gpu', spec.gpu) })
           : form.color.trim()
       : form.color.trim()
     if (!form.size.trim() && !color1) {
@@ -288,6 +553,10 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
       toast.success('تم إضافة المتغير')
       // بنسيب الحالة والنوع زي ما هم — الغالب بتضيف أكتر من متغير ورا بعض
       setForm((f) => ({ size: '', color: '', barcode: '', quantity: 0, price: '', condition: f.condition }))
+      if (isElectronics && kind === 'laptop') {
+        void rememberSuggestion('cpu', canonicalOf('cpu', spec.cpu))
+        void rememberSuggestion('gpu', canonicalOf('gpu', spec.gpu))
+      }
       setSpec((sp) => ({ ...sp, ram: '', storage: '', hdd: '' }))
       await load()
       onChanged?.()
@@ -480,8 +749,8 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
   const ROW_GRID = isElectronics
     ? 'grid-cols-[minmax(0,1fr)_4.75rem_minmax(0,1.1fr)_5rem_4.5rem_2.25rem]'
     : 'grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_5.5rem_5rem_2.25rem]'
-  const secAdd = 2
-  const secList = 3
+  const secAdd = isElectronics ? 1 : 2
+  const secList = isElectronics ? 2 : 3
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -524,7 +793,8 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                 </div>
               )}
 
-              {/* ═════════ 1) مساعد الإدخال الذكي — عامية الملابس / الإلكترونيات ═════════ */}
+              {/* ═════════ 1) المساعد الذكي — عامية الملابس بس (الإلكترونيات بتتكتب بالخانات مباشرة) ═════════ */}
+              {!isElectronics && (
               <section>
                 <SectionTitle n={1}>مساعد الإدخال الذكي</SectionTitle>
                 <div className="space-y-3 rounded-2xl border bg-card p-4">
@@ -617,6 +887,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                   )}
                 </div>
               </section>
+              )}
 
               {/* ═════════ إضافة متغير يدويًا ═════════ */}
               <section>
@@ -643,8 +914,17 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                       {kind === 'laptop' && (
                         <>
                           <Field label="المعالج" htmlFor="v-cpu" className="col-span-2 sm:col-span-2">
-                            <InkInput id="v-cpu" placeholder="i7" value={spec.cpu} onChange={(e) => setSpec({ ...spec, cpu: e.target.value })} />
-                            <ChipRow items={LAPTOP_CPU_CHIPS} value={spec.cpu} onPick={(v) => setSpec({ ...spec, cpu: v })} label="معالجات سريعة" />
+                            <DictField
+                              id="v-cpu"
+                              placeholder="Core i7-8550H"
+                              label="المعالجات"
+                              value={spec.cpu}
+                              onChange={(v) => setSpec({ ...spec, cpu: v })}
+                              entries={hw?.cpu}
+                              ownValues={sugs.cpu.map((x) => x.value)}
+                              onPick={(v) => setSpec({ ...spec, cpu: v })}
+                            />
+                            <SuggestChips items={sugs.cpu} presets={LAPTOP_CPU_CHIPS} value={spec.cpu} onPick={(v) => setSpec({ ...spec, cpu: v })} onDelete={(sg) => void deleteSuggestion('cpu', sg)} label="معالجات" />
                           </Field>
                           <Field label="الرام" htmlFor="v-ram" className="col-span-2 sm:col-span-2">
                             <InkInput id="v-ram" placeholder="16GB" value={spec.ram} onChange={(e) => setSpec({ ...spec, ram: e.target.value })} />
@@ -659,7 +939,17 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                             <ChipRow items={LAPTOP_HDD_CHIPS} value={spec.hdd} onPick={(v) => setSpec({ ...spec, hdd: v })} label="هارد إضافي" />
                           </Field>
                           <Field label="كارت الشاشة (اختياري)" htmlFor="v-gpu" className="col-span-2 sm:col-span-2">
-                            <InkInput id="v-gpu" placeholder="RTX 3050 4GB" value={spec.gpu} onChange={(e) => setSpec({ ...spec, gpu: e.target.value })} />
+                            <DictField
+                              id="v-gpu"
+                              placeholder="RTX 3050 4GB"
+                              label="كروت الشاشة"
+                              value={spec.gpu}
+                              onChange={(v) => setSpec({ ...spec, gpu: v })}
+                              entries={hw?.gpu}
+                              ownValues={sugs.gpu.map((x) => x.value)}
+                              onPick={(v) => setSpec({ ...spec, gpu: v })}
+                            />
+                            <SuggestChips items={sugs.gpu} value={spec.gpu} onPick={(v) => setSpec({ ...spec, gpu: v })} onDelete={(sg) => void deleteSuggestion('gpu', sg)} label="كروت الشاشة" />
                           </Field>
                           <Field label="دقة الشاشة (اختياري)" htmlFor="v-res" className="col-span-2 sm:col-span-2">
                             <InkInput id="v-res" placeholder="FHD" value={spec.res} onChange={(e) => setSpec({ ...spec, res: e.target.value })} />
