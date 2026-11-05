@@ -8,6 +8,7 @@
  */
 
 import * as React from 'react'
+import { useShopStore } from '@/lib/store'
 import { commonUnit, formatQtyUnit } from '@/lib/unit-label'
 import { Check, ChevronDown, Grid3x3, Info, Loader2, PackagePlus, Plus, Search, Trash2, Truck, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -202,6 +203,12 @@ export function PurchaseOrderDialog({
     return out
      
   }, [matrix])
+  const matrixInitialCosts = React.useMemo(() => {
+    const out: Record<number, number> = {}
+    if (matrix) for (const i of cart) if (i.product.id === matrix.product.id && i.variant) out[i.variant.id] = i.cost
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matrix])
   const matrixInitialCost = React.useMemo(() => {
     if (!matrix) return 0
     const inCart = cart.find((i) => i.product.id === matrix.product.id && i.variant)
@@ -305,7 +312,8 @@ export function PurchaseOrderDialog({
       .map((v) => ({
         product,
         variant: { id: v.id, label: variantLabelOf(v), stock: v.quantity },
-        cost: r.cost,
+        // 💰 التحديث 30: تكلفة خاصة بالمتغير لو اتحددت، وإلا التكلفة الافتراضية
+        cost: r.costs?.[v.id] ?? r.cost,
         quantity: r.qty[v.id],
       }))
     setCart((prev) => {
@@ -334,7 +342,7 @@ export function PurchaseOrderDialog({
       const variants = await api<PurchaseVariantLite[]>(`/api/products/${p.id}/variants`)
       if (variants.length > 0) setMatrix({ product: p, variants })
     } catch {
-      toast.error('تعذّر تحميل الألوان والمقاسات')
+      toast.error(useShopStore.getState().plan.businessType === 'electronics' ? 'تعذّر تحميل المتغيرات' : 'تعذّر تحميل الألوان والمقاسات')
     }
   }
 
@@ -767,7 +775,7 @@ export function PurchaseOrderDialog({
                                         className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-cyan-700 hover:underline dark:text-cyan-300"
                                       >
                                         <Grid3x3 className="size-3" aria-hidden />
-                                        تعديل الألوان والمقاسات
+                                        {useShopStore.getState().plan.businessType === 'electronics' ? 'تعديل المتغيرات' : 'تعديل الألوان والمقاسات'}
                                       </button>
                                     )}
                                     {costChanged && (
@@ -974,6 +982,7 @@ export function PurchaseOrderDialog({
         variants={matrix?.variants ?? []}
         initialQty={matrixInitialQty}
         initialCost={matrixInitialCost}
+        initialCosts={matrixInitialCosts}
         onConfirm={confirmMatrix}
       />
 

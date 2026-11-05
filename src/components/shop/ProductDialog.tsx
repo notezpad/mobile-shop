@@ -97,6 +97,8 @@ export function ProductDialog({
   const isFoodVertical = useShopStore((s) => s.plan.businessType) === 'food'
   // 👕 2026-10-22: الموسم/المعروض بيظهروا لباقات الملابس فقط
   const isFashionVertical = useShopStore((s) => s.plan.businessType) === 'fashion'
+  // 📱 التحديث 30: محلات الموبايلات والكمبيوتر — تسميات وتلميحات تناسبهم (نفس الحقول والـ API)
+  const isElectronicsVertical = useShopStore((s) => s.plan.businessType) === 'electronics'
   const t = useVocab()
   const { onOpenChange: handleOpenChange } = useUnsavedConfirm({
     dirty,
@@ -266,7 +268,13 @@ export function ProductDialog({
           <section>
             <SectionTitle n={1}>البيانات الأساسية</SectionTitle>
             <div className="grid grid-cols-2 gap-4 rounded-2xl border bg-card p-4">
-              <Field label="الاسم" htmlFor="p-name" required className="col-span-2">
+              <Field
+                label="الاسم"
+                htmlFor="p-name"
+                required
+                className="col-span-2"
+                hint={isElectronicsVertical ? 'اكتب الماركة والموديل (مثال: Dell Latitude 5420 · ايفون 15 برو) — النظام بيعرف منها نوع الجهاز لحقول «المتغيرات»' : undefined}
+              >
                 <InkInput
                   id="p-name"
                   value={name}
@@ -293,7 +301,7 @@ export function ProductDialog({
 
               {hasCollections ? (
                 <Field
-                  label="الكوليكشن"
+                  label={isElectronicsVertical ? 'الماركة' : 'الكوليكشن'}
                   htmlFor="p-collection"
                   className="col-span-2 sm:col-span-1"
                   hint={t('لتجميع المنتجات وتطبيق خصم جماعي عليها')}
@@ -302,7 +310,7 @@ export function ProductDialog({
                     id="p-collection"
                     value={collection}
                     onChange={(e) => edit(setCollection)(e.target.value)}
-                    placeholder="مثال: صيف 2026"
+                    placeholder={isElectronicsVertical ? 'مثال: Dell · Samsung · Apple' : 'مثال: صيف 2026'}
                   />
                 </Field>
               ) : (
@@ -371,6 +379,7 @@ export function ProductDialog({
                 label={soldByWeight ? 'سعر الكيلو' : 'سعر البيع'}
                 htmlFor="p-price"
                 required
+                hint={isElectronicsVertical ? 'السعر الافتراضي — لو الجهاز بسعات/كونفيج مختلفة، سعر كل واحد بتحدده من «المتغيرات»' : undefined}
               >
                 <InkInput
                   id="p-price"
@@ -536,7 +545,7 @@ export function ProductDialog({
               <Field
                 label={soldByWeight ? 'الكمية (كيلو في المخزن)' : 'الكمية'}
                 htmlFor="p-qty"
-                hint={soldByWeight ? 'تقبل كسور — مثال: 45.5 يعني 45 كيلو ونص' : undefined}
+                hint={soldByWeight ? 'تقبل كسور — مثال: 45.5 يعني 45 كيلو ونص' : isElectronicsVertical ? 'لو الجهاز له متغيرات (سعة/لون/كونفيج) سيبها 0 وحدّد الكميات من «المتغيرات»' : undefined}
               >
                 <InkInput
                   id="p-qty"

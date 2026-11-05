@@ -19,7 +19,7 @@ import { groupByColor } from '@/lib/variant-sort'
 import { normalizeBarcode } from '@/lib/barcode'
 import { parseElectronicsText } from '@/lib/electronicsParser'
 import {
-  KIND_META, LAPTOP_CPU_CHIPS, LAPTOP_STORAGE_CHIPS, PHONE_COLOR_CHIPS, RAM_CHIPS, STORAGE_CHIPS,
+  EMPTY_LAPTOP_SPEC, KIND_META, LAPTOP_CPU_CHIPS, LAPTOP_HDD_CHIPS, LAPTOP_STORAGE_CHIPS, SCREEN_HZ_CHIPS, SCREEN_RES_CHIPS, PHONE_COLOR_CHIPS, RAM_CHIPS, STORAGE_CHIPS,
   composeLaptopConfig, composePhoneSpec, detectElectronicsKind, type ElectronicsKind,
 } from '@/lib/electronics-variants'
 import { CONDITION_LABEL, type VariantCondition } from '@/lib/variant-condition'
@@ -128,7 +128,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
   const [saving, setSaving] = React.useState(false)
   const [form, setForm] = React.useState<{ size: string; color: string; barcode: string; quantity: number; price: string; condition: '' | VariantCondition }>({ size: '', color: '', barcode: '', quantity: 0, price: '', condition: '' })
   // مكوّنات «السعة/الكونفيج» للإلكترونيات — بتتجمّع في form.color وقت الإضافة
-  const [spec, setSpec] = React.useState({ cpu: '', ram: '', storage: '' })
+  const [spec, setSpec] = React.useState({ ...EMPTY_LAPTOP_SPEC })
   const [smartText, setSmartText] = React.useState('')
   const [preview, setPreview] = React.useState<PreviewRow[] | null>(null)
   const [previewWarnings, setPreviewWarnings] = React.useState<string[]>([])
@@ -175,7 +175,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
       setPriceDraft({})
       setVq('')
       setKind(detectElectronicsKind(product?.name))
-      setSpec({ cpu: '', ram: '', storage: '' })
+      setSpec({ ...EMPTY_LAPTOP_SPEC })
       setPreview(null)
       setSmartText('')
     }
@@ -254,7 +254,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
       ? kind === 'phone'
         ? composePhoneSpec(spec.ram, spec.storage)
         : kind === 'laptop'
-          ? composeLaptopConfig(spec.cpu, spec.ram, spec.storage)
+          ? composeLaptopConfig(spec)
           : form.color.trim()
       : form.color.trim()
     if (!form.size.trim() && !color1) {
@@ -288,7 +288,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
       toast.success('تم إضافة المتغير')
       // بنسيب الحالة والنوع زي ما هم — الغالب بتضيف أكتر من متغير ورا بعض
       setForm((f) => ({ size: '', color: '', barcode: '', quantity: 0, price: '', condition: f.condition }))
-      setSpec((sp) => ({ ...sp, ram: '', storage: '' }))
+      setSpec((sp) => ({ ...sp, ram: '', storage: '', hdd: '' }))
       await load()
       onChanged?.()
     } catch (e: any) {
@@ -486,7 +486,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHero icon={KindIcon} title={isElectronics ? 'مواصفات المنتج' : 'متغيرات المنتج'} subtitle={product?.name} />
+        <DialogHero icon={KindIcon} title="متغيرات المنتج" subtitle={product?.name} />
 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain bg-muted/20 p-4 sm:p-6">
           {!enabled ? (
@@ -508,7 +508,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                         onClick={() => {
                           setKind(k)
                           setPreview(null)
-                          setSpec({ cpu: '', ram: '', storage: '' })
+                          setSpec({ ...EMPTY_LAPTOP_SPEC })
                           setForm((f) => ({ ...f, color: '', size: '' }))
                         }}
                         className={cn(
@@ -653,6 +653,37 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                           <Field label="التخزين" htmlFor="v-storage" className="col-span-2 sm:col-span-2">
                             <InkInput id="v-storage" placeholder="512GB SSD" value={spec.storage} onChange={(e) => setSpec({ ...spec, storage: e.target.value })} />
                             <ChipRow items={LAPTOP_STORAGE_CHIPS} value={spec.storage} onPick={(v) => setSpec({ ...spec, storage: v })} label="تخزين سريع" />
+                          </Field>
+                          <Field label="هارد إضافي HDD (اختياري)" htmlFor="v-hdd" className="col-span-2 sm:col-span-2">
+                            <InkInput id="v-hdd" placeholder="1TB HDD" value={spec.hdd} onChange={(e) => setSpec({ ...spec, hdd: e.target.value })} />
+                            <ChipRow items={LAPTOP_HDD_CHIPS} value={spec.hdd} onPick={(v) => setSpec({ ...spec, hdd: v })} label="هارد إضافي" />
+                          </Field>
+                          <Field label="كارت الشاشة (اختياري)" htmlFor="v-gpu" className="col-span-2 sm:col-span-2">
+                            <InkInput id="v-gpu" placeholder="RTX 3050 4GB" value={spec.gpu} onChange={(e) => setSpec({ ...spec, gpu: e.target.value })} />
+                          </Field>
+                          <Field label="دقة الشاشة (اختياري)" htmlFor="v-res" className="col-span-2 sm:col-span-2">
+                            <InkInput id="v-res" placeholder="FHD" value={spec.res} onChange={(e) => setSpec({ ...spec, res: e.target.value })} />
+                            <ChipRow items={SCREEN_RES_CHIPS} value={spec.res} onPick={(v) => setSpec({ ...spec, res: v })} label="دقة الشاشة" />
+                          </Field>
+                          <Field label="تردد الشاشة (اختياري)" htmlFor="v-hz" className="col-span-2 sm:col-span-2">
+                            <InkInput id="v-hz" placeholder="144Hz" value={spec.hz} onChange={(e) => setSpec({ ...spec, hz: e.target.value })} />
+                            <ChipRow items={SCREEN_HZ_CHIPS} value={spec.hz} onPick={(v) => setSpec({ ...spec, hz: v })} label="تردد الشاشة" />
+                          </Field>
+                          <Field label="نوع الشاشة" className="col-span-2 sm:col-span-2">
+                            <div className="flex h-11 overflow-hidden rounded-xl border bg-background p-1" role="radiogroup" aria-label="نوع الشاشة">
+                              {[{ v: false, t: 'عادية' }, { v: true, t: 'تاتش' }].map((o) => (
+                                <button
+                                  key={o.t}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={spec.touch === o.v}
+                                  onClick={() => setSpec({ ...spec, touch: o.v })}
+                                  className={cn('flex-1 rounded-lg px-3 text-sm font-bold transition-colors', spec.touch === o.v ? 'bg-foreground text-background' : 'text-foreground/70 hover:bg-muted/60')}
+                                >
+                                  {o.t}
+                                </button>
+                              ))}
+                            </div>
                           </Field>
                           <Field label="اللون (اختياري)" htmlFor="v-size" className="col-span-2 sm:col-span-2">
                             <InkInput id="v-size" placeholder={meta.opt2Placeholder} value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} />

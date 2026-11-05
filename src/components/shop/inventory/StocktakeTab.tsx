@@ -379,7 +379,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
       const variants = await api<PurchaseVariantLite[]>(`/api/products/${p.id}/variants`)
       if (variants.length > 0) setMatrix({ product: p, variants })
     } catch {
-      toast.error('تعذّر تحميل الألوان والمقاسات')
+      toast.error(useShopStore.getState().plan.businessType === 'electronics' ? 'تعذّر تحميل المتغيرات' : 'تعذّر تحميل الألوان والمقاسات')
     }
   }
 
@@ -718,7 +718,7 @@ export function StocktakeTab({ stocktakes, branches, products, userBranchId, onC
                        <h4 className="text-base font-black leading-snug [overflow-wrap:anywhere]">{it.name}</h4>
                        {it.variantId ? (
                          <button type="button" onClick={() => void editVariantsOf(it.productId)} className="mt-0.5 text-[11px] font-bold text-stocktake hover:underline">
-                           تعديل عدّ الألوان والمقاسات
+                           {useShopStore.getState().plan.businessType === 'electronics' ? 'تعديل عدّ المتغيرات' : 'تعديل عدّ الألوان والمقاسات'}
                          </button>
                        ) : null}
                        <p dir="ltr" className="mt-1 flex items-center gap-1 text-start font-mono text-xs text-muted-foreground"><Hash className="size-3 shrink-0" />{it.barcode || 'بدون باركود'}</p>

@@ -1698,7 +1698,7 @@ function ProductActions({ p, capabilities, onPrint, onUnits, onVariants, onToggl
         {capabilities.includes('variants') && (
           <DropdownMenuItem onClick={onVariants}>
             <Palette className="size-4" />
-            الألوان والمقاسات
+            {useShopStore.getState().plan.businessType === 'electronics' ? 'المتغيرات' : 'الألوان والمقاسات'}
           </DropdownMenuItem>
         )}
         <DropdownMenuItem onClick={onToggle}>

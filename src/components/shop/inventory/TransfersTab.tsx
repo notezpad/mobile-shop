@@ -278,7 +278,7 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
       const variants = await api<PurchaseVariantLite[]>(`/api/products/${p.id}/variants`)
       if (variants.length > 0) setMatrix({ product: p, variants })
     } catch {
-      toast.error('تعذّر تحميل الألوان والمقاسات')
+      toast.error(useShopStore.getState().plan.businessType === 'electronics' ? 'تعذّر تحميل المتغيرات' : 'تعذّر تحميل الألوان والمقاسات')
     }
   }
 
@@ -500,7 +500,7 @@ export function TransfersTab({ transfers, branches, products, userBranchId, onCh
                             onClick={() => void editVariantsOf(it.productId)}
                             className="mt-0.5 text-[11px] font-bold text-amber-700 hover:underline dark:text-amber-300"
                           >
-                            تعديل الألوان والمقاسات
+                            {useShopStore.getState().plan.businessType === 'electronics' ? 'تعديل المتغيرات' : 'تعديل الألوان والمقاسات'}
                           </button>
                         ) : null}
                       </div>

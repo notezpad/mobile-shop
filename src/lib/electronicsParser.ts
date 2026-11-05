@@ -169,8 +169,34 @@ function parseLaptop(text: string, warnings: string[]): { opt1s: string[]; opt2s
   t = t.replace(/(?:core\s*)?\bi\s?([3579])\b(?:[-\s]?\d{4,5}\w{0,2})?/gi, (_m, n) => { const c = `i${n}`; if (!cpus.includes(c)) cpus.push(c); return ' ' })
   t = t.replace(/(?:ryzen|رايزن)\s*([3579])/gi, (_m, n) => { const c = `Ryzen ${n}`; if (!cpus.includes(c)) cpus.push(c); return ' ' })
   t = t.replace(/\b(m[1-4])\b(?:\s*(pro|max))?/gi, (_m, n, x) => { const c = `${String(n).toUpperCase()}${x ? ' ' + String(x).replace(/^./, (ch: string) => ch.toUpperCase()) : ''}`; if (!cpus.includes(c)) cpus.push(c); return ' ' })
+  // كارت الشاشة (نص حر): RTX/GTX/RX/Radeon/Iris/Arc + رقم الموديل، أو «كارت شاشة X»
+  let gpu = ''
+  t = t.replace(/\b((?:rtx|gtx|rx|arc|mx|quadro)\s?-?\d{3,4}(?:\s?(?:ti|super|xt))?)(?:\s*(\d+)\s*gb)?/gi, (_m, g: string, v?: string) => {
+    gpu = `${g.toUpperCase().replace(/\s+/g, ' ')}${v ? ` ${v}GB` : ''}`
+    return ' '
+  })
+  // شاشة: دقة / تردد / تاتش
+  let res = ''
+  t = t.replace(/\b(fhd|فل اتش دي|فول اتش دي|qhd|2k|4k|uhd|wuxga|hd)\b/gi, (_m, r: string) => {
+    const k = r.toLowerCase()
+    res = /فل|فول/.test(k) ? 'FHD' : k === 'qhd' ? '2K' : k === 'uhd' ? '4K' : r.toUpperCase()
+    return ' '
+  })
+  let hz = ''
+  t = t.replace(/(\d{2,3})\s*(?:hz|هيرتز|هرتز)/gi, (_m, n: string) => { hz = `${n}Hz`; return ' ' })
+  let touch = false
+  t = t.replace(/تاتش|touch|لمس/gi, () => { touch = true; return ' ' })
+  // هارد إضافي HDD (SSD + HDD)
+  let hdd = ''
+  t = t.replace(/(\d+)\s*(tb|تيرا|ترا|gb|g|جيجا)?\s*(?:hdd|هارد ديسك)|(?:hdd|هارد ديسك)\s*(\d+)\s*(tb|تيرا|ترا|gb|g|جيجا)?/gi, (_m, a?: string, ua?: string, b?: string, ub?: string) => {
+    let n = parseInt((a ?? b) as string, 10)
+    const u = (ua ?? ub ?? '').toLowerCase()
+    if (/tb|تيرا|ترا/.test(u) || (!u && n <= 8)) n *= 1024
+    hdd = `${fmtGb(n)} HDD`
+    return ' '
+  })
   const isSsd = /ssd|اس اس دي|nvme|ام تو|m\.?2/i.test(t)
-  const isHdd = /hdd|هارد ديسك/i.test(t)
+  const isHdd = false
   const ramRes = numbersAfter(t, ['رام', 'ram'])
   t = ramRes.rest
   t = t.replace(/(\d+)\s*(?:gb|g|جيجا)?\s*(?:رام|ram)/gi, (_m, n) => { ramRes.nums.push(parseInt(n, 10)); return ' ' })
@@ -190,7 +216,7 @@ function parseLaptop(text: string, warnings: string[]): { opt1s: string[]; opt2s
   const stList: (number | null)[] = sts.length ? sts : [null]
   const configs: string[] = []
   for (const c of cpuList) for (const r of ramList) for (const s of stList) {
-    const label = [c, r ? fmtGb(r) : null, s ? `${fmtGb(s)}${typeSuffix}` : null].filter(Boolean).join(' · ')
+    const label = [c, r ? fmtGb(r) : null, s ? `${fmtGb(s)}${typeSuffix}${hdd ? ` + ${hdd}` : ''}` : (hdd || null), gpu || null, res || null, hz || null, touch ? 'تاتش' : null].filter(Boolean).join(' · ')
     if (label) configs.push(label)
   }
   if (configs.length === 0) warnings.push('لم يتم التعرف على أي مواصفات — اكتب مثلاً «i7 رام 16 هارد 512»')

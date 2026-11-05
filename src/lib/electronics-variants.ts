@@ -39,12 +39,12 @@ export const KIND_META: Record<ElectronicsKind, KindMeta> = {
     key: 'laptop',
     tab: 'لابتوب / كمبيوتر',
     opt1: 'الكونفيج',
-    opt1Placeholder: 'i7 · 16GB · 512GB SSD',
+    opt1Placeholder: 'i7 · 16GB · 512GB SSD · RTX 3050',
     opt2: 'اللون',
     opt2Placeholder: 'اختياري',
     noOpt1: 'بدون كونفيج',
     opt2Unit: 'خيار',
-    smartPlaceholder: 'مثال: لابتوب i5 و i7 رام 8 و16 هارد 256 و512 SSD مستعمل عدد 2',
+    smartPlaceholder: 'مثال: لابتوب i5 و i7 رام 8 و16 هارد 256 و512 SSD RTX 3050 مستعمل عدد 2',
   },
   other: {
     key: 'other',
@@ -85,11 +85,21 @@ export const STORAGE_CHIPS = ['64GB', '128GB', '256GB', '512GB', '1TB']
 export const RAM_CHIPS = ['4GB', '6GB', '8GB', '12GB', '16GB', '32GB']
 export const PHONE_COLOR_CHIPS = ['أسود', 'أبيض', 'أزرق', 'رمادي', 'ذهبي', 'فضي', 'بنفسجي', 'أخضر', 'وردي', 'تيتانيوم']
 export const LAPTOP_CPU_CHIPS = ['i3', 'i5', 'i7', 'i9', 'Ryzen 5', 'Ryzen 7', 'M1', 'M2', 'M3']
-export const LAPTOP_STORAGE_CHIPS = ['256GB SSD', '512GB SSD', '1TB SSD', '1TB HDD']
+export const LAPTOP_STORAGE_CHIPS = ['256GB SSD', '512GB SSD', '1TB SSD', '2TB SSD']
+export const LAPTOP_HDD_CHIPS = ['500GB HDD', '1TB HDD', '2TB HDD']
+export const SCREEN_RES_CHIPS = ['HD', 'FHD', '2K', '4K']
+export const SCREEN_HZ_CHIPS = ['60Hz', '90Hz', '120Hz', '144Hz', '165Hz', '240Hz']
 
-/** يركّب نص الكونفيج للابتوب من 3 خانات: «i7 · 16GB · 512GB SSD» */
-export function composeLaptopConfig(cpu: string, ram: string, storage: string): string {
-  return [cpu, ram, storage].map((x) => x.trim()).filter(Boolean).join(' · ')
+/** يركّب كونفيج اللابتوب: «i7 · 16GB · 512GB SSD + 1TB HDD · RTX 3050 · FHD · 144Hz · تاتش» (كله اختياري ما عدا اللي تكتبه) */
+export interface LaptopSpec {
+  cpu: string; ram: string; storage: string; hdd: string; gpu: string; res: string; hz: string; touch: boolean
+}
+export const EMPTY_LAPTOP_SPEC: LaptopSpec = { cpu: '', ram: '', storage: '', hdd: '', gpu: '', res: '', hz: '', touch: false }
+
+export function composeLaptopConfig(s: LaptopSpec): string {
+  const storage = [s.storage, s.hdd].map((x) => x.trim()).filter(Boolean).join(' + ')
+  return [s.cpu, s.ram, storage, s.gpu, s.res, s.hz, s.touch ? 'تاتش' : '']
+    .map((x) => x.trim()).filter(Boolean).join(' · ')
 }
 /** يركّب سعة الموبايل: «8GB / 256GB» أو «256GB» */
 export function composePhoneSpec(ram: string, storage: string): string {

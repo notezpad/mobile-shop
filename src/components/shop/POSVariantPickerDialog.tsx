@@ -141,7 +141,7 @@ export function POSVariantPickerDialog({
         <DialogBody className="space-y-3">
           {variants.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              {isElectronics ? 'لا توجد مواصفات مسجلة لهذا المنتج' : 'لا يوجد ألوان/مقاسات مسجلة لهذا المنتج'}
+              {isElectronics ? 'لا توجد متغيرات مسجلة لهذا المنتج' : 'لا يوجد ألوان/مقاسات مسجلة لهذا المنتج'}
             </p>
           ) : !active ? (
             /* ───── الخطوة ١: الألوان (المواصفة 1) ───── */
@@ -203,10 +203,10 @@ export function POSVariantPickerDialog({
                       setPicked(null)
                     }}
                     className={cn('h-9 shrink-0 gap-1 rounded-xl px-3 text-xs font-bold', INK_BTN_OUTLINE)}
-                    aria-label={isElectronics ? 'رجوع للمواصفات' : 'رجوع للألوان'}
+                    aria-label={isElectronics ? 'رجوع للمتغيرات' : 'رجوع للألوان'}
                   >
                     <ArrowRight className="size-3.5" aria-hidden />
-                    {isElectronics ? 'المواصفات' : 'الألوان'}
+                    {isElectronics ? 'رجوع' : 'الألوان'}
                   </Button>
                 )}
                 {active.color ? (

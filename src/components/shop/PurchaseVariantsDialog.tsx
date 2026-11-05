@@ -44,8 +44,10 @@ export interface PurchaseVariantLite {
 export interface PurchaseVariantsResult {
   /** variantId → الكمية (الخلايا الفاضية مش موجودة؛ والصفر موجود بس لو allowZero) */
   qty: Record<number, number>
-  /** تكلفة القطعة (واحدة لكل المنتج) — 0 لو showCost=false */
+  /** تكلفة القطعة الافتراضية للمنتج — 0 لو showCost=false */
   cost: number
+  /** 💰 التحديث 30: تكلفة خاصة لمتغيرات بعينها (variantId → تكلفة) — اللي مش هنا بتاخد `cost` */
+  costs?: Record<number, number>
 }
 
 const labelOf = (v: PurchaseVariantLite) => [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`
@@ -77,6 +79,7 @@ export function PurchaseVariantsDialog({
   variants: variantsIn,
   initialQty,
   initialCost,
+  initialCosts,
   onConfirm,
   showCost = true,
   allowZero = false,
@@ -95,6 +98,8 @@ export function PurchaseVariantsDialog({
   /** كميات موجودة بالفعل في السلة لنفس المنتج (للتعديل) */
   initialQty?: Record<number, number>
   initialCost: number
+  /** 💰 تكاليف مختلفة محفوظة لمتغيرات في السلة (variantId → تكلفة) */
+  initialCosts?: Record<number, number>
   onConfirm: (r: PurchaseVariantsResult) => void
   /** إظهار حقل تكلفة القطعة (الشراء فقط) */
   showCost?: boolean
@@ -123,8 +128,20 @@ export function PurchaseVariantsDialog({
   const eMeta = isElectronics ? KIND_META[detectElectronicsKind(productName)] : null
   const opt1Name = eMeta ? eMeta.opt1 : 'اللون'
   const opt2Name = eMeta ? eMeta.opt2 : 'المقاس'
+  // 📱 التحديث 30: عناوين/تلميحات الإلكترونيات «متغير» بدل «لون ومقاس» (حتى لو الكولر بعتها بصيغة الملابس)
+  const eText = (t: string) =>
+    eMeta
+      ? t
+          .replace('لكل لون ومقاس', 'لكل متغير')
+          .replace('لون/مقاس', 'متغير')
+          .replace('الألوان/المقاسات', 'المتغيرات')
+          .replace('الألوان والمقاسات', 'المتغيرات')
+      : t
   const [qty, setQty] = React.useState<Record<number, number>>({})
   const [cost, setCost] = React.useState(0)
+  // 💰 تكلفة خاصة لمتغيرات بعينها — اللي مش فيها بتتبع التكلفة الافتراضية
+  const [costs, setCosts] = React.useState<Record<number, number>>({})
+  const [showCosts, setShowCosts] = React.useState(false)
   const [fillAll, setFillAll] = React.useState('')
   const [query, setQuery] = React.useState('')
   const [onlyFilled, setOnlyFilled] = React.useState(false)
@@ -137,6 +154,10 @@ export function PurchaseVariantsDialog({
     if (!open) return
     setQty({ ...(initialQty ?? {}) })
     setCost(initialCost || 0)
+    const ov: Record<number, number> = {}
+    for (const [k, c] of Object.entries(initialCosts ?? {})) if (Math.abs(c - (initialCost || 0)) > 1e-9) ov[Number(k)] = c
+    setCosts(ov)
+    setShowCosts(Object.keys(ov).length > 0)
     setFillAll('')
     setQuery('')
     setOnlyFilled(false)
@@ -164,7 +185,7 @@ export function PurchaseVariantsDialog({
       setCollapsed({})
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialQty, initialCost])
+  }, [open, initialQty, initialCost, initialCosts])
 
   const colors = React.useMemo(() => [...new Set(variants.map((v) => v.color ?? ''))], [variants])
   const sizes = React.useMemo(
@@ -229,7 +250,9 @@ export function PurchaseVariantsDialog({
   const confirm = () => {
     const out: Record<number, number> = {}
     for (const [k, n] of Object.entries(qty)) if (counts(n)) out[Number(k)] = n
-    onConfirm({ qty: out, cost: showCost ? cost : 0 })
+    const outCosts: Record<number, number> = {}
+    if (showCost) for (const k of Object.keys(out)) { const c = costs[Number(k)]; if (c !== undefined && c !== cost) outCosts[Number(k)] = c }
+    onConfirm({ qty: out, cost: showCost ? cost : 0, costs: outCosts })
   }
 
   /* ── فلترة (بحث + المعبّأ فقط) ── */
@@ -341,7 +364,7 @@ export function PurchaseVariantsDialog({
       v,
       <>
         <span className="flex min-h-[1.75rem] items-center justify-center gap-1 px-1.5 pt-1.5 text-center text-[13px] font-extrabold leading-tight">
-          {swatchName ? <Swatch name={swatchName} /> : null}
+          {swatchName && !isElectronics ? <Swatch name={swatchName} /> : null}
           <span className="truncate">{label}</span>
         </span>
         {qtyInput(v)}
@@ -455,7 +478,7 @@ export function PurchaseVariantsDialog({
                 <tr key={c}>
                   <th className="sticky start-0 z-10 border-b bg-card px-3 py-1.5 text-start text-xs font-extrabold">
                     <span className="flex items-center gap-1.5">
-                      <Swatch name={c} className="size-3.5" />
+                      {!isElectronics && <Swatch name={c} className="size-3.5" />}
                       <span className="truncate">{c || '—'}</span>
                     </span>
                   </th>
@@ -497,7 +520,18 @@ export function PurchaseVariantsDialog({
   const matrixEl = mode === 'matrix' && isGrid ? renderMatrix() : null
   const nothingToShow = mode === 'matrix' && isGrid ? !matrixEl : !shownGroups || shownGroups.length === 0
   const showSearch = variants.length > 8
-  const totalCost = showCost ? total * cost : 0
+  const costOf = (id: number) => costs[id] ?? cost
+  const totalCost = showCost
+    ? Object.entries(qty).reduce((s, [id, n]) => s + (counts(n) ? n * costOf(Number(id)) : 0), 0)
+    : 0
+  const setCostFor = (id: number, n: number) =>
+    setCosts((p) => {
+      const next = { ...p }
+      if (n === cost) delete next[id]
+      else next[id] = n
+      return next
+    })
+  const filledVariants = variants.filter((v) => counts(qty[v.id]))
 
   const modeBtn = (m: Mode, label: string, Icon: React.ComponentType<{ className?: string }>) => (
     <button
@@ -518,7 +552,7 @@ export function PurchaseVariantsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
-        <DialogHero icon={isGrid ? Grid3x3 : Shirt} title={title} subtitle={productName} />
+        <DialogHero icon={isGrid ? Grid3x3 : Shirt} title={eText(title)} subtitle={productName} />
 
         {/* ───── شريط الأدوات: ثابت فوق على الشاشات الكبيرة، وجوه السكرول على الموبايل (عشان المساحة) ───── */}
         <div className="hidden shrink-0 space-y-3 border-b bg-muted/25 px-4 py-3 sm:block sm:px-6">
@@ -694,6 +728,41 @@ export function PurchaseVariantsDialog({
           </div>
           <div ref={bodyRef} className="space-y-3">
             {mode === 'matrix' && isGrid ? matrixEl : shownGroups}
+            {/* 💰 تكلفة مختلفة لمتغير بعينه — اختياري، بيظهر بعد ما تكتب كميات */}
+            {showCost && filledVariants.length > 0 && (
+              <section className="overflow-hidden rounded-2xl border bg-card">
+                <button
+                  type="button"
+                  onClick={() => setShowCosts((v) => !v)}
+                  aria-expanded={showCosts}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-start text-sm font-extrabold hover:bg-muted/40"
+                >
+                  <ChevronDown className={cn('size-4 shrink-0 text-foreground/60 transition-transform', showCosts ? 'rotate-0' : '-rotate-90')} aria-hidden />
+                  <span className="flex-1">تكلفة مختلفة لمتغير بعينه</span>
+                  <span className="text-[11px] font-semibold text-foreground/60">
+                    {Object.keys(costs).length > 0 ? `${Object.keys(costs).length} مختلفة` : 'اختياري'}
+                  </span>
+                </button>
+                {showCosts && (
+                  <ul className="divide-y border-t">
+                    {filledVariants.map((v) => (
+                      <li key={v.id} className="flex items-center gap-3 px-3 py-2">
+                        <span className="min-w-0 flex-1 truncate text-sm font-bold">{labelOf(v)}</span>
+                        <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground/60">× {qty[v.id]}</span>
+                        <DecimalInput
+                          size="sm"
+                          className="w-28 shrink-0"
+                          value={costOf(v.id)}
+                          onChange={(n) => setCostFor(v.id, n)}
+                          label={`تكلفة ${labelOf(v)}`}
+                          suffix="جنيه"
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            )}
             {nothingToShow && (
               <p className="rounded-2xl border border-dashed py-10 text-center text-sm font-semibold text-foreground/55">
                 {onlyFilled && !query ? 'لسه ما كتبتش أي كمية' : 'مفيش نتائج للبحث ده'}
@@ -707,14 +776,14 @@ export function PurchaseVariantsDialog({
             {lines > 0 ? (
               <>
                 <b className="text-base font-extrabold text-foreground">{total}</b> قطعة · {lines} صنف
-                {showCost && cost > 0 && (
+                {showCost && totalCost > 0 && (
                   <>
                     {' '}· <b className="font-extrabold text-foreground">{formatCurrency(totalCost)}</b>
                   </>
                 )}
               </>
             ) : (
-              emptyHint
+              eText(emptyHint)
             )}
           </p>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="h-11 rounded-xl px-5">
