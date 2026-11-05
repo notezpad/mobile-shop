@@ -11,6 +11,8 @@ export interface VariantPickItem {
   id: number
   size: string | null
   color: string | null
+  /** 📱 التحديث 30: حالة الجهاز (new/used/null) */
+  condition?: string | null
   quantity: number
 }
 
@@ -146,7 +148,10 @@ export function VariantPickerSection({
                   )}
                 >
                   <span className={cn('text-[10px] font-semibold', on ? 'opacity-85' : 'text-foreground/55')}>مقاس</span>
-                  <span className="text-base font-extrabold leading-none">{v.size || v.color || `#${v.id}`}</span>
+                  <span className="text-base font-extrabold leading-none">
+                    {v.size || v.color || `#${v.id}`}
+                    {v.condition === 'used' && <span className="ms-1.5 text-[11px] font-bold text-warning-subtle-foreground">مستعمل</span>}
+                  </span>
                   <span
                     className={cn(
                       'mt-1 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums',

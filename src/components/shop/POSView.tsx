@@ -51,6 +51,7 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency, formatNumber } from '@/lib/format'
+import { variantDisplayLabel } from '@/lib/variant-condition'
 import { cn } from '@/lib/utils'
 import { useShopStore } from '@/lib/store'
 import { enabledMethods } from '@/lib/payment-methods'
@@ -132,15 +133,18 @@ interface PosVariant {
   color: string | null
   /** 💰 التحديث 28: سعر المواصفة — null = سعر المنتج العام */
   price: number | null
+  /** 📱 التحديث 30: حالة الجهاز (new/used/null) */
+  condition?: string | null
   quantity: number
 }
 
 /** 🛠️ إصلاح tsc: دايلوج اختيار المواصفة بيبعت نسخة خفيفة (price اختيارية) —
  *  الهاندلر بيستخدم id/quantity/color/size بس فبيقبل الاثنين. */
-type VariantPickLite = Pick<PosVariant, 'id' | 'size' | 'color' | 'quantity'> & { price?: number | null }
+type VariantPickLite = Pick<PosVariant, 'id' | 'size' | 'color' | 'quantity'> & { price?: number | null; condition?: string | null }
 
 function variantLabelOf(v: VariantPickLite): string {
-  return [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`
+  // 📱 التحديث 30: «مستعمل» بيظهر في اسم المتغير (الجديد هو الأصل فمبيتكتبش)
+  return variantDisplayLabel(v) || `#${v.id}`
 }
 
 /** زر تغيير اللون/المقاس في سطر السلة — بيعرض الاختيار الحالي وبيفتح دايلوج الخطوتين (بدل select طويل). */
@@ -1465,6 +1469,8 @@ export function POSView() {
                     color: v.color,
                     // 💰 التحديث 28: سعر المواصفة (null = سعر المنتج العام)
                     price: v.price ?? null,
+                    // 📱 التحديث 30: حالة الجهاز
+                    condition: v.condition ?? null,
                     quantity: v.quantity,
                   }))
                 )
@@ -1732,7 +1738,7 @@ export function POSView() {
             name:
               it.name +
               (it.variant
-                ? ` ${[it.variant.color, it.variant.size].filter(Boolean).join('/')}`
+                ? ` ${variantDisplayLabel(it.variant).replace(/ \/ /g, '/')}`
                 : ''),
             // 🥬 2026-10-12: منتجات الوزن — الكمية بتتنضف من ضوضاء العوامات (1.65 مش 1.6500000001)
             qty: Math.round((it.unitQuantity ?? it.quantity) * 1000) / 1000,
@@ -1771,7 +1777,7 @@ export function POSView() {
             const displayPrice = hasUnit ? (it.price * it.quantity) / it.unitQuantity : it.price
             const unitSuffix = it.unitLabel ? ` (${displayQty} ${it.unitLabel})` : ''
             const variantSuffix = it.variant
-              ? ` — ${[it.variant.color, it.variant.size].filter(Boolean).join(' / ')}`
+              ? ` — ${variantDisplayLabel(it.variant)}`
               : ''
             return {
               name: it.name + variantSuffix + unitSuffix,
@@ -1968,7 +1974,7 @@ export function POSView() {
                 id,
                 // 💰 التحديث 28: السعر بيتسحب مع الباقي عشان availableVariants تفضل كاملة —
                 // أسعار السطور المحفوظة نفسها بتسيب زي ما هي (الكاشير ممكن يكون عدّلها عمدًا)
-                d.map((v: any) => ({ id: v.id, size: v.size, color: v.color, price: v.price ?? null, quantity: v.quantity }))
+                d.map((v: any) => ({ id: v.id, size: v.size, color: v.color, price: v.price ?? null, condition: v.condition ?? null, quantity: v.quantity }))
               )
             } else {
               const q = it.product.barcode || it.product.name

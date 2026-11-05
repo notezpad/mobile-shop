@@ -171,16 +171,18 @@ export interface SrcVariant {
   color: string | null
   size: string | null
   barcode: string | null
+  /** 📱 التحديث 30: حالة الجهاز (new/used/null) */
+  condition?: string | null
 }
 
-export const variantLabel = (v: { color: string | null; size: string | null; id: number }) =>
-  [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`
+export const variantLabel = (v: { color: string | null; size: string | null; id: number; condition?: string | null }) =>
+  [v.color, v.size, v.condition === 'used' ? 'مستعمل' : null].filter(Boolean).join(' / ') || `#${v.id}`
 
 export async function loadSrcVariants(q: Q, productIds: number[]): Promise<SrcVariant[]> {
   if (productIds.length === 0) return []
   const sql = q as Sql
   return (await sql<SrcVariant[]>`
-    SELECT "id", "productId", "color", "size", "barcode" FROM "ProductVariant"
+    SELECT "id", "productId", "color", "size", "barcode", "condition" FROM "ProductVariant"
     WHERE "productId" IN ${sql(productIds)} ORDER BY "id" ASC`) as unknown as SrcVariant[]
 }
 
@@ -188,7 +190,7 @@ export async function loadSrcVariants(q: Q, productIds: number[]): Promise<SrcVa
 export async function findDestVariant(
   q: Q,
   destProductId: number,
-  src: { color: string | null; size: string | null },
+  src: { color: string | null; size: string | null; condition?: string | null },
 ): Promise<{ id: number } | null> {
   const sql = q as Sql
   const rows = await sql<{ id: number }[]>`
@@ -196,6 +198,7 @@ export async function findDestVariant(
     WHERE "productId" = ${destProductId}
       AND "color" IS NOT DISTINCT FROM ${src.color}
       AND "size" IS NOT DISTINCT FROM ${src.size}
+      AND "condition" IS NOT DISTINCT FROM ${src.condition ?? null}
     LIMIT 1`
   return rows[0] ?? null
 }
@@ -220,8 +223,8 @@ export async function ensureDestVariant(
     if (taken.length > 0) barcode = null
   }
   const created = await tx<{ id: number }[]>`
-    INSERT INTO "ProductVariant" ("productId", "color", "size", "barcode", "quantity", "displayQty")
-    VALUES (${destProductId}, ${src.color}, ${src.size}, ${barcode}, 0, 0)
+    INSERT INTO "ProductVariant" ("productId", "color", "size", "condition", "barcode", "quantity", "displayQty")
+    VALUES (${destProductId}, ${src.color}, ${src.size}, ${src.condition ?? null}, ${barcode}, 0, 0)
     RETURNING "id"`
   return created[0].id
 }

@@ -235,7 +235,7 @@ async function __POST(req: NextRequest) {
   // المنتج بتتحسب دايماً من مجموع الـ variants.
   const variants = await db.productVariant.findMany({
     where: { productId },
-    select: { id: true, size: true, color: true, quantity: true },
+    select: { id: true, size: true, color: true, condition: true, quantity: true },
   })
   let variant: { id: number; size: string | null; color: string | null; quantity: number } | null = null
   if (variants.length > 0) {
@@ -253,7 +253,7 @@ async function __POST(req: NextRequest) {
   } else if (b?.variantId != null && b.variantId !== '') {
     return NextResponse.json({ error: 'المنتج ده ليس له ألوان أو مقاسات' }, { status: 400 })
   }
-  const variantLabel = variant ? [variant.color, variant.size].filter(Boolean).join(' / ') || `#${variant.id}` : null
+  const variantLabel = variant ? [variant.color, variant.size, variant.condition === 'used' ? 'مستعمل' : null].filter(Boolean).join(' / ') || `#${variant.id}` : null
   // المخزون المرجعي للفحص: مخزون الـ variant لو موجود، وإلا المنتج
   const stockRef = variant ? variant.quantity : product.quantity
 

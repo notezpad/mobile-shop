@@ -308,13 +308,13 @@ export async function GET(req: NextRequest) {
     // barcodes → matchedVariantId/Label (نفس سلوك القديم).
     let matchedVariantByProduct = new Map<number, { id: number; label: string }>()
     if (search && products.length > 0) {
-      const matchingVariants = await sql<{ id: number; productId: number; size: string | null; color: string | null }[]>`
-        SELECT "id", "productId", "size", "color" FROM "ProductVariant"
+      const matchingVariants = await sql<{ id: number; productId: number; size: string | null; color: string | null; condition: string | null }[]>`
+        SELECT "id", "productId", "size", "color", "condition" FROM "ProductVariant"
         WHERE "productId" IN ${sql(products.map((p) => p.id))} AND "barcode" = ${search}`
       matchedVariantByProduct = new Map(
         matchingVariants.map((v) => [
           Number(v.productId),
-          { id: v.id, label: [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}` },
+          { id: v.id, label: [v.color, v.size, v.condition === 'used' ? 'مستعمل' : null].filter(Boolean).join(' / ') || `#${v.id}` },
         ])
       )
     }

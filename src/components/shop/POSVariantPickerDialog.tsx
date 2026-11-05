@@ -11,6 +11,8 @@ import { INK_RING, InkInput } from './product-dialog-ui'
 import { DialogHero } from './sale-dialog-ui'
 import { Swatch, normAr } from '@/lib/color-swatch'
 import { groupByColor, normalizeDigits } from '@/lib/variant-sort'
+import { KIND_META, detectElectronicsKind } from '@/lib/electronics-variants'
+import { CONDITION_LABEL } from '@/lib/variant-condition'
 
 export interface PickerVariantLite {
   id: number
@@ -19,6 +21,8 @@ export interface PickerVariantLite {
   quantity: number
   /** 💰 التحديث 28: سعر المواصفة — null = سعر المنتج العام */
   price?: number | null
+  /** 📱 التحديث 30: حالة الجهاز (new/used/null) */
+  condition?: string | null
 }
 
 const LOW = 3
@@ -65,11 +69,15 @@ export function POSVariantPickerDialog({
   const groups = React.useMemo(() => groupByColor(variants), [variants])
   const singleGroup = groups.length === 1
 
-  const noOpt1Label = isElectronics ? NO_OPTION_ELECTRONICS : NO_COLOR
-  const step1Title = isElectronics ? 'اختار المواصفة 1' : 'اختار اللون'
-  const step2Title = isElectronics ? 'اختار المواصفة 2' : 'اختار المقاس'
-  const chip1 = isElectronics ? '١ المواصفة 1' : '١ اللون'
-  const chip2 = isElectronics ? '٢ المواصفة 2' : '٢ المقاس'
+  // 📱 التحديث 30: أسماء الخانتين بتتحدد من نوع الجهاز (موبايل: السعة ← اللون / لابتوب: الكونفيج ← اللون)
+  const kindMeta = isElectronics ? KIND_META[detectElectronicsKind(productName)] : null
+  const noOpt1Label = kindMeta ? kindMeta.noOpt1 : NO_COLOR
+  const step1Title = kindMeta ? `اختار ${kindMeta.opt1}` : 'اختار اللون'
+  const step2Title = kindMeta ? `اختار ${kindMeta.opt2}` : 'اختار المقاس'
+  const chip1 = kindMeta ? `١ ${kindMeta.opt1}` : '١ اللون'
+  const chip2 = kindMeta ? `٢ ${kindMeta.opt2}` : '٢ المقاس'
+  // «جديد» بيظهر على الخيارات بس لو في المنتج نسخة مستعملة (عشان التفرقة)، والمستعمل بيظهر دايمًا
+  const hasUsed = variants.some((x) => x.condition === 'used')
 
   /** السعر الفعلي المعروض على الخيار: سعر المواصفة، وإلا سعر المنتج. */
   const effPrice = (v: PickerVariantLite): number | null =>
@@ -208,7 +216,7 @@ export function POSVariantPickerDialog({
                   </span>
                 ) : null}
                 <span className="ms-auto whitespace-nowrap text-xs font-semibold tabular-nums text-foreground/65">
-                  {sizeCount} {isElectronics ? 'خيار' : 'مقاس'} · متاح {active.total}
+                  {sizeCount} {kindMeta ? kindMeta.opt2Unit : 'مقاس'} · متاح {active.total}
                 </span>
               </div>
 
@@ -240,7 +248,7 @@ export function POSVariantPickerDialog({
                           type="button"
                           disabled={out}
                           onClick={() => onPick(v)}
-                          aria-label={`${v.size ?? v.color ?? `#${v.id}`} ${out ? 'نفد' : `متاح ${v.quantity}`}${vPrice != null ? ` — ${formatCurrency(vPrice)}` : ''}`}
+                          aria-label={`${v.size ?? v.color ?? `#${v.id}`}${v.condition === 'used' ? ' مستعمل' : ''} ${out ? 'نفد' : `متاح ${v.quantity}`}${vPrice != null ? ` — ${formatCurrency(vPrice)}` : ''}`}
                           className={cn(
                             'flex w-full flex-col items-center gap-1 rounded-2xl border bg-background px-2 py-3 text-center transition-colors',
                             INK_RING,
@@ -253,6 +261,16 @@ export function POSVariantPickerDialog({
                           <span className="text-base font-extrabold leading-tight">
                             {v.size || v.color || `#${v.id}`}
                           </span>
+                          {(v.condition === 'used' || (hasUsed && v.condition === 'new')) && (
+                            <span
+                              className={cn(
+                                'rounded-full px-2 py-0.5 text-[11px] font-extrabold',
+                                v.condition === 'used' ? 'bg-warning-subtle text-warning-subtle-foreground' : 'bg-success-subtle text-success-subtle-foreground'
+                              )}
+                            >
+                              {CONDITION_LABEL[v.condition as 'new' | 'used']}
+                            </span>
+                          )}
                           <span
                             className={cn(
                               'whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums',

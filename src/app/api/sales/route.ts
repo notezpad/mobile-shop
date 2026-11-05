@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
       ? await sql<any[]>`
           SELECT "id", "saleId", "name", "price", "quantity", "cost",
                  "unitLabel", "unitQuantity", "pieceLabel", "returnedQty",
-                 (SELECT NULLIF(concat_ws(' / ', pv."color", pv."size"), '') FROM "ProductVariant" pv
+                 (SELECT NULLIF(concat_ws(' / ', pv."color", pv."size", CASE WHEN pv."condition" = 'used' THEN 'مستعمل' END), '') FROM "ProductVariant" pv
                   WHERE pv."id" = "SaleItem"."variantId") AS "variantLabel"
           FROM "SaleItem"
           WHERE "saleId" IN ${sql(saleIds)}

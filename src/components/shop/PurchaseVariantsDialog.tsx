@@ -27,6 +27,8 @@ import { formatCurrency } from '@/lib/format'
 import { DecimalInput, DialogHero, normalizeDigits } from './purchase-dialog-ui'
 import { compareSizes } from '@/lib/variant-sort'
 import { Swatch, normAr } from '@/lib/color-swatch'
+import { useShopStore } from '@/lib/store'
+import { KIND_META, detectElectronicsKind } from '@/lib/electronics-variants'
 
 export interface PurchaseVariantLite {
   id: number
@@ -34,6 +36,8 @@ export interface PurchaseVariantLite {
   color: string | null
   /** باركود اللون/المقاس (لو متسجل) */
   barcode?: string | null
+  /** 📱 التحديث 30: حالة الجهاز (new/used/null) */
+  condition?: string | null
   quantity: number
 }
 
@@ -70,7 +74,7 @@ export function PurchaseVariantsDialog({
   open,
   onOpenChange,
   productName,
-  variants,
+  variants: variantsIn,
   initialQty,
   initialCost,
   onConfirm,
@@ -105,6 +109,20 @@ export function PurchaseVariantsDialog({
   emptyHint?: string
   stockLabel?: string
 }) {
+  // 📱 التحديث 30: الشبكة بتتحدد بـ (لون|مقاس) — جديد ومستعمل بنفس المواصفة كانوا هيتدمجوا في خلية واحدة،
+  // فالمستعمل بيتميّز باسم مقاسه («256GB · مستعمل») وبكده كل متغير ليه خليته.
+  const variants = React.useMemo(
+    () =>
+      variantsIn.map((v) =>
+        v.condition === 'used' ? { ...v, size: [v.size, 'مستعمل'].filter(Boolean).join(' · ') } : v,
+      ),
+    [variantsIn],
+  )
+  // أسماء الخانتين في الإلكترونيات (سعة/كونفيج ← لون) بدل لون ← مقاس
+  const isElectronics = useShopStore((st) => st.plan.businessType) === 'electronics'
+  const eMeta = isElectronics ? KIND_META[detectElectronicsKind(productName)] : null
+  const opt1Name = eMeta ? eMeta.opt1 : 'اللون'
+  const opt2Name = eMeta ? eMeta.opt2 : 'المقاس'
   const [qty, setQty] = React.useState<Record<number, number>>({})
   const [cost, setCost] = React.useState(0)
   const [fillAll, setFillAll] = React.useState('')
@@ -355,7 +373,7 @@ export function PurchaseVariantsDialog({
               className="flex min-w-[13rem] flex-1 items-center gap-2 text-start"
             >
               <ChevronDown className={cn('size-4 shrink-0 text-foreground/50 transition-transform', isCollapsed && '-rotate-90')} />
-              {g.kind === 'color' ? <Swatch name={g.title === '—' ? '' : g.title} className="size-4" /> : null}
+              {g.kind === 'color' && !isElectronics ? <Swatch name={g.title === '—' ? '' : g.title} className="size-4" /> : null}
               <span className="truncate text-sm font-extrabold">{g.title}</span>
               <span className="shrink-0 rounded-md bg-background px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-foreground/60 ring-1 ring-border">
                 {filledCount}/{g.items.length}
@@ -419,7 +437,7 @@ export function PurchaseVariantsDialog({
           <thead>
             <tr className="bg-muted/40">
               <th className="sticky start-0 z-10 min-w-[6.5rem] border-b bg-muted px-3 py-2 text-start text-[11px] font-bold text-foreground/60">
-                اللون \ المقاس
+                {opt1Name} \ {opt2Name}
               </th>
               {cols.map((sz) => (
                 <th key={sz} className="min-w-[4.5rem] border-b px-1 py-2 text-center text-xs font-extrabold tabular-nums">
@@ -546,8 +564,8 @@ export function PurchaseVariantsDialog({
                   <input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="ابحث بلون أو مقاس…"
-                    aria-label="بحث في الألوان والمقاسات"
+                    placeholder={eMeta ? 'ابحث…' : 'ابحث بلون أو مقاس…'}
+                    aria-label={eMeta ? 'بحث في المتغيرات' : 'بحث في الألوان والمقاسات'}
                     className="h-9 w-full rounded-lg border bg-card ps-9 pe-8 text-sm outline-none focus:border-cyan-600 focus:ring-[3px] focus:ring-cyan-600/25"
                   />
                   {query && (
@@ -564,8 +582,8 @@ export function PurchaseVariantsDialog({
               )}
               {isGrid && (
                 <div className="flex items-center gap-1 rounded-xl bg-muted p-1" role="group" aria-label="طريقة العرض">
-                  {modeBtn('color', 'حسب اللون', Palette)}
-                  {modeBtn('size', 'حسب المقاس', Ruler)}
+                  {modeBtn('color', `حسب ${opt1Name}`, Palette)}
+                  {modeBtn('size', `حسب ${opt2Name}`, Ruler)}
                   {matrixFits && modeBtn('matrix', 'شبكة', Grid3x3)}
                 </div>
               )}
@@ -633,8 +651,8 @@ export function PurchaseVariantsDialog({
                     <input
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
-                      placeholder="ابحث بلون أو مقاس…"
-                      aria-label="بحث في الألوان والمقاسات"
+                      placeholder={eMeta ? 'ابحث…' : 'ابحث بلون أو مقاس…'}
+                      aria-label={eMeta ? 'بحث في المتغيرات' : 'بحث في الألوان والمقاسات'}
                       className="h-9 w-full rounded-lg border bg-card ps-9 pe-8 text-sm outline-none focus:border-cyan-600 focus:ring-[3px] focus:ring-cyan-600/25"
                     />
                     {query && (
@@ -651,8 +669,8 @@ export function PurchaseVariantsDialog({
                 )}
                 {isGrid && (
                   <div className="flex items-center gap-1 rounded-xl bg-muted p-1" role="group" aria-label="طريقة العرض">
-                    {modeBtn('color', 'حسب اللون', Palette)}
-                    {modeBtn('size', 'حسب المقاس', Ruler)}
+                    {modeBtn('color', `حسب ${opt1Name}`, Palette)}
+                    {modeBtn('size', `حسب ${opt2Name}`, Ruler)}
                     {matrixFits && modeBtn('matrix', 'شبكة', Grid3x3)}
                   </div>
                 )}

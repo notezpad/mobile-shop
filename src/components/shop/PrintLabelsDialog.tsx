@@ -83,6 +83,8 @@ interface VariantData {
   barcode: string | null
   /** 💰 التحديث 28: سعر المواصفة — null = سعر المنتج العام */
   price: number | null
+  /** 📱 التحديث 30: حالة الجهاز (new/used/null) */
+  condition?: string | null
   quantity: number
 }
 
@@ -116,8 +118,8 @@ interface LabelRow {
   factor?: number
 }
 
-const variantLabelOf = (v: Pick<VariantData, 'id' | 'color' | 'size'>) =>
-  [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`
+const variantLabelOf = (v: Pick<VariantData, 'id' | 'color' | 'size'> & { condition?: string | null }) =>
+  [v.color, v.size, v.condition === 'used' ? 'مستعمل' : null].filter(Boolean).join(' / ') || `#${v.id}`
 
 interface Entry {
   product: LabelProduct
@@ -383,6 +385,7 @@ export function PrintLabelsDialog({ open, onOpenChange, products, variantsEnable
             barcode: v.barcode ?? null,
             // 💰 التحديث 28: سعر المواصفة (كاش أوفلاين قديم بيرجع null — بيرجع لسعر المنتج)
             price: typeof v.price === 'number' ? v.price : null,
+            condition: v.condition === 'new' || v.condition === 'used' ? v.condition : null,
             quantity: v.quantity ?? 0,
           })
         }

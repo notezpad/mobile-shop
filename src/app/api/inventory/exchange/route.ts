@@ -47,8 +47,8 @@ interface ExchangeLine {
 }
 
 /** تسمية اللون/المقاس لعرضها في الرسائل وحركات المخزون */
-const variantLabel = (v: { color: string | null; size: string | null } | null | undefined) =>
-  v ? [v.color, v.size].filter(Boolean).join(' / ') : ''
+const variantLabel = (v: { color: string | null; size: string | null; condition?: string | null } | null | undefined) =>
+  v ? [v.color, v.size, v.condition === 'used' ? 'مستعمل' : null].filter(Boolean).join(' / ') : ''
 
 export async function POST(req: NextRequest) {
   return withIdempotency(req, () => __POST(req))

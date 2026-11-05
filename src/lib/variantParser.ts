@@ -39,12 +39,12 @@ const ARABIC_DIGITS: Record<string, string> = {
   '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
 }
 
-function normalizeDigits(text: string): string {
+export function normalizeDigits(text: string): string {
   return text.replace(/[٠-٩]/g, (d) => ARABIC_DIGITS[d] ?? d)
 }
 
 // Color aliases (raw dialect form → canonical Arabic name shown in the UI)
-const COLOR_MAP: Record<string, string> = {
+export const COLOR_MAP: Record<string, string> = {
   'اسود': 'أسود', 'أسود': 'أسود', 'إسود': 'أسود',
   'ابيض': 'أبيض', 'أبيض': 'أبيض', 'إبيض': 'أبيض',
   'كحلي': 'كحلي', 'نيلي': 'كحلي',
@@ -65,7 +65,7 @@ const COLOR_MAP: Record<string, string> = {
 }
 
 // Sorted longest-first so "كحلي غامق" (if ever added) matches before "كحلي"
-const COLOR_KEYS = Object.keys(COLOR_MAP).sort((a, b) => b.length - a.length)
+export const COLOR_KEYS = Object.keys(COLOR_MAP).sort((a, b) => b.length - a.length)
 
 // Letter-size ladder for clothes (S → 5XL)
 const LETTER_LADDER = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL']
@@ -132,7 +132,7 @@ function extractColors(text: string): string[] {
   return found
 }
 
-function extractQuantity(text: string): { quantity: number; warning?: string } {
+export function extractQuantity(text: string): { quantity: number; warning?: string } {
   // Prefer a plain number right after "كمية"/"الكمية"/"عدد"
   const numMatch = text.match(/(?:الكمية|كمية|عدد)\s*[:\-]?\s*(\d+)/)
   if (numMatch) return { quantity: parseInt(numMatch[1], 10) }

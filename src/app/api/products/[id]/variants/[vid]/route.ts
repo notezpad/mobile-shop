@@ -7,6 +7,7 @@ import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
 import { normalizeBarcode } from '@/lib/barcode'
 import { canAccessProductBranch } from '@/lib/branch-scope-db'
 import { normalizeVariantPrice } from '@/lib/variant-price'
+import { normalizeCondition } from '@/lib/variant-condition'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,6 +60,14 @@ async function __PUT(
       return NextResponse.json({ error: 'سعر غير صالح للمتغير' }, { status: 400 })
     }
     data.price = priceNorm.price
+  }
+  // 📱 التحديث 30: حالة الجهاز — مبعوتش = مفيش تغيير؛ فاضي = غير محددة
+  if (body.condition !== undefined) {
+    const condNorm = normalizeCondition(body.condition)
+    if (!condNorm.ok) {
+      return NextResponse.json({ error: 'حالة غير صالحة (جديد / مستعمل)' }, { status: 400 })
+    }
+    data.condition = condNorm.value
   }
   if (body.quantity !== undefined) {
     // 🛡️ خ-2 (2026-11-02): رفض صريح للقيم غير الصالحة والسالبة — قبل كده

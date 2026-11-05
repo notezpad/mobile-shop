@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { ChevronDown, Loader2, Plus, Search, Shirt, Sparkles, Trash2, Dices, Wand2 } from 'lucide-react'
+import { ChevronDown, Laptop, Loader2, Plug, Plus, Search, Shirt, Smartphone, Sparkles, Trash2, Dices, Wand2 } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -12,11 +12,79 @@ import { cn } from '@/lib/utils'
 import { useConfirm } from './ConfirmDialogProvider'
 import { DialogHero, Field, IconBtn, INK_INPUT, InkInput, LockedNote, SectionTitle } from './product-dialog-ui'
 import { INK_BTN, INK_BTN_OUTLINE } from './settings-ui'
-import { parseVariantText, type ParsedVariantRow } from '@/lib/variantParser'
+import { parseVariantText } from '@/lib/variantParser'
 import { fetchUniqueBarcode, fetchUniqueBarcodes } from '@/lib/barcode-client'
 import { Swatch, normAr } from '@/lib/color-swatch'
 import { groupByColor } from '@/lib/variant-sort'
 import { normalizeBarcode } from '@/lib/barcode'
+import { parseElectronicsText } from '@/lib/electronicsParser'
+import {
+  KIND_META, LAPTOP_CPU_CHIPS, LAPTOP_STORAGE_CHIPS, PHONE_COLOR_CHIPS, RAM_CHIPS, STORAGE_CHIPS,
+  composeLaptopConfig, composePhoneSpec, detectElectronicsKind, type ElectronicsKind,
+} from '@/lib/electronics-variants'
+import { CONDITION_LABEL, type VariantCondition } from '@/lib/variant-condition'
+
+/** صف معاينة المساعد الذكي — الحالة للإلكترونيات بس (الملابس دايمًا null) */
+interface PreviewRow {
+  color: string | null
+  size: string | null
+  condition: VariantCondition | null
+  quantity: number
+}
+
+const KIND_ICON = { phone: Smartphone, laptop: Laptop, other: Plug } as const
+
+/** شيبس اختيار سريعة — زر بيتعلّم لما يكون مختار */
+function ChipRow({ items, value, onPick, label }: { items: string[]; value: string; onPick: (v: string) => void; label: string }) {
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label={label}>
+      {items.map((c) => {
+        const on = value.trim().toLowerCase() === c.toLowerCase()
+        return (
+          <button
+            key={c}
+            type="button"
+            onClick={() => onPick(on ? '' : c)}
+            aria-pressed={on}
+            className={cn(
+              'h-8 rounded-full border px-3 text-xs font-bold transition-colors',
+              on ? 'border-foreground bg-foreground text-background' : 'bg-background hover:border-foreground/60 hover:bg-muted/60',
+            )}
+          >
+            {c}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** اختيار الحالة: جديد / مستعمل / (بدون تحديد) */
+function ConditionPick({ value, onChange }: { value: '' | VariantCondition; onChange: (v: '' | VariantCondition) => void }) {
+  const opts: { v: '' | VariantCondition; t: string }[] = [
+    { v: 'new', t: CONDITION_LABEL.new },
+    { v: 'used', t: CONDITION_LABEL.used },
+  ]
+  return (
+    <div className="flex h-11 overflow-hidden rounded-xl border bg-background p-1" role="radiogroup" aria-label="الحالة">
+      {opts.map((o) => (
+        <button
+          key={o.v}
+          type="button"
+          role="radio"
+          aria-checked={value === o.v}
+          onClick={() => onChange(value === o.v ? '' : o.v)}
+          className={cn(
+            'flex-1 rounded-lg px-3 text-sm font-bold transition-colors',
+            value === o.v ? 'bg-foreground text-background' : 'text-foreground/70 hover:bg-muted/60',
+          )}
+        >
+          {o.t}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export interface ProductVariant {
   id: number
@@ -26,6 +94,8 @@ export interface ProductVariant {
   barcode: string | null
   /** 💰 التحديث 28: سعر المواصفة — null = سعر المنتج العام */
   price: number | null
+  /** 📱 التحديث 30: حالة الجهاز — new / used / null (غير محددة) */
+  condition: string | null
   quantity: number
 }
 
@@ -43,16 +113,24 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
   // (المواصفة 1 = عمود اللون — اللي بيتجمع عليه في نقطة البيع، والمواصفة 2 = عمود المقاس).
   const businessType = useShopStore((s) => s.plan.businessType)
   const isElectronics = businessType === 'electronics'
-  const opt1Label = isElectronics ? 'المواصفة 1' : 'اللون'
-  const opt2Label = isElectronics ? 'المواصفة 2' : 'المقاس'
-  const noOpt1Label = isElectronics ? 'بدون مواصفة' : 'بدون لون'
+  // 📱 التحديث 30: الإلكترونيات ليها «نوع» (موبايل / لابتوب / إكسسوار) بيحدد أسماء الخانتين —
+  // بيتحدد تلقائيًا من اسم المنتج وتقدر تغيّره. التخزين نفسه ثابت (opt1 = عمود color، opt2 = عمود size).
+  const [kind, setKind] = React.useState<ElectronicsKind>(() => detectElectronicsKind(product?.name))
+  const meta = KIND_META[kind]
+  const opt1Label = isElectronics ? meta.opt1 : 'اللون'
+  const opt2Label = isElectronics ? meta.opt2 : 'المقاس'
+  const noOpt1Label = isElectronics ? meta.noOpt1 : 'بدون لون'
+  const opt2Unit = isElectronics ? meta.opt2Unit : 'مقاس'
+  const KindIcon = isElectronics ? KIND_ICON[kind] : Shirt
   const [vq, setVq] = React.useState('')
   const [variants, setVariants] = React.useState<ProductVariant[]>([])
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
-  const [form, setForm] = React.useState({ size: '', color: '', barcode: '', quantity: 0, price: '' })
+  const [form, setForm] = React.useState<{ size: string; color: string; barcode: string; quantity: number; price: string; condition: '' | VariantCondition }>({ size: '', color: '', barcode: '', quantity: 0, price: '', condition: '' })
+  // مكوّنات «السعة/الكونفيج» للإلكترونيات — بتتجمّع في form.color وقت الإضافة
+  const [spec, setSpec] = React.useState({ cpu: '', ram: '', storage: '' })
   const [smartText, setSmartText] = React.useState('')
-  const [preview, setPreview] = React.useState<ParsedVariantRow[] | null>(null)
+  const [preview, setPreview] = React.useState<PreviewRow[] | null>(null)
   const [previewWarnings, setPreviewWarnings] = React.useState<string[]>([])
   const [bulkSaving, setBulkSaving] = React.useState(false)
   const [generatingId, setGeneratingId] = React.useState<number | null>(null)
@@ -96,13 +174,23 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
       setColorQty({})
       setPriceDraft({})
       setVq('')
+      setKind(detectElectronicsKind(product?.name))
+      setSpec({ cpu: '', ram: '', storage: '' })
+      setPreview(null)
+      setSmartText('')
     }
-  }, [open, product?.id])
+  }, [open, product?.id, product?.name])
 
   const analyzeSmartText = () => {
     if (!smartText.trim()) return
+    if (isElectronics) {
+      const r = parseElectronicsText(smartText, kind)
+      setPreview(r.rows.map((x) => ({ color: x.opt1, size: x.opt2, condition: x.condition, quantity: x.quantity })))
+      setPreviewWarnings(r.warnings)
+      return
+    }
     const result = parseVariantText(smartText, product?.name)
-    setPreview(result.variants)
+    setPreview(result.variants.map((v) => ({ ...v, condition: null })))
     setPreviewWarnings(result.warnings)
   }
 
@@ -136,6 +224,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
             body: {
               size: row.size,
               color: row.color,
+              condition: row.condition,
               barcode,
               quantity: row.quantity || 0,
             },
@@ -160,7 +249,15 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
 
   const addVariant = async () => {
     if (!product) return
-    if (!form.size.trim() && !form.color.trim()) {
+    // 📱 التحديث 30: الإلكترونيات — «السعة/الكونفيج» بتتركّب من المكوّنات (أو من الخانة الحرة للإكسسوار)
+    const color1 = isElectronics
+      ? kind === 'phone'
+        ? composePhoneSpec(spec.ram, spec.storage)
+        : kind === 'laptop'
+          ? composeLaptopConfig(spec.cpu, spec.ram, spec.storage)
+          : form.color.trim()
+      : form.color.trim()
+    if (!form.size.trim() && !color1) {
       toast.error(`لازم ${opt2Label} أو ${opt1Label} على الأقل`)
       return
     }
@@ -181,14 +278,17 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
         method: 'POST',
         body: {
           size: form.size.trim() || null,
-          color: form.color.trim() || null,
+          color: color1 || null,
+          condition: isElectronics ? form.condition || null : null,
           barcode: normalizeBarcode(form.barcode),
           price,
           quantity: form.quantity || 0,
         },
       })
       toast.success('تم إضافة المتغير')
-      setForm({ size: '', color: '', barcode: '', quantity: 0, price: '' })
+      // بنسيب الحالة والنوع زي ما هم — الغالب بتضيف أكتر من متغير ورا بعض
+      setForm((f) => ({ size: '', color: '', barcode: '', quantity: 0, price: '', condition: f.condition }))
+      setSpec((sp) => ({ ...sp, ram: '', storage: '' }))
       await load()
       onChanged?.()
     } catch (e: any) {
@@ -250,6 +350,19 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
     }
   }
 
+  /** 📱 التحديث 30: تغيير حالة متغير (جديد/مستعمل) من الجدول */
+  const updateCondition = async (id: number, raw: string) => {
+    if (!product) return
+    const condition = raw === 'new' || raw === 'used' ? raw : null
+    try {
+      await api(`/api/products/${product.id}/variants/${id}`, { method: 'PUT', body: { condition } })
+      setVariants((prev) => prev.map((v) => (v.id === id ? { ...v, condition } : v)))
+      onChanged?.()
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل تحديث الحالة')
+    }
+  }
+
   const toggleColor = (key: string) =>
     setOpenColors((prev) => {
       const next = new Set(prev)
@@ -274,7 +387,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
     const label = colorKey || noOpt1Label
     const ok = await confirm({
       title: `ضبط كمية «${label}» على ${qty}؟`,
-      description: `هتتغيّر كمية ${items.length} مقاس${needle ? ' (نتايج البحث الحالية بس)' : ''} لتبقى ${qty} لكل مقاس.`,
+      description: `هتتغيّر كمية ${items.length} ${opt2Unit}${needle ? ' (نتايج البحث الحالية بس)' : ''} لتبقى ${qty} لكل ${opt2Unit}.`,
       confirmText: 'تطبيق',
       destructive: false,
     })
@@ -297,9 +410,9 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
     })
     setVariants((prev) => prev.map((v) => (done.has(v.id) ? { ...v, quantity: qty } : v)))
     setApplyingColor(null)
-    if (okCount) toast.success(`اتضبطت كمية ${okCount} مقاس على ${qty}`)
+    if (okCount) toast.success(`اتضبطت كمية ${okCount} ${opt2Unit} على ${qty}`)
     else if (!failCount) toast.message('الكميات كانت متضبطة بالفعل')
-    if (failCount) toast.error(`فشل تحديث ${failCount} مقاس`)
+    if (failCount) toast.error(`فشل تحديث ${failCount} ${opt2Unit}`)
     if (okCount) onChanged?.()
   }
 
@@ -354,7 +467,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
   const needleAr = normAr(vq)
   const shownVariants = needle
     ? variants.filter((v) =>
-        [v.size, v.color, v.barcode].some((x) => {
+        [v.size, v.color, v.barcode, v.condition ? CONDITION_LABEL[v.condition as VariantCondition] : null].some((x) => {
           const t = (x ?? '').toLowerCase()
           return t.includes(needle) || (needleAr !== '' && normAr(t).includes(needleAr))
         })
@@ -364,31 +477,65 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
   // يفتح لوحده لو فيه لون واحد بس أو البحث شغال
   const autoOpen = needle !== '' || groups.length === 1
   const missingCount = variants.filter((v) => !v.barcode).length
-  // ترقيم الأقسام: في الإلكترونيات بنخفي المساعد الذكي (محلّل عامية الملابس)
-  const secAdd = isElectronics ? 1 : 2
-  const secList = isElectronics ? 2 : 3
+  const ROW_GRID = isElectronics
+    ? 'grid-cols-[minmax(0,1fr)_4.75rem_minmax(0,1.1fr)_5rem_4.5rem_2.25rem]'
+    : 'grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_5.5rem_5rem_2.25rem]'
+  const secAdd = 2
+  const secList = 3
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHero icon={Shirt} title={isElectronics ? 'مواصفات المنتج' : 'متغيرات المنتج'} subtitle={product?.name} />
+        <DialogHero icon={KindIcon} title={isElectronics ? 'مواصفات المنتج' : 'متغيرات المنتج'} subtitle={product?.name} />
 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain bg-muted/20 p-4 sm:p-6">
           {!enabled ? (
             <LockedNote>ميزة المتغيرات (مواصفات/ألوان لكل منتج بسعر وكمية وباركود مستقل) مش مفعّلة في باقتك الحالية.</LockedNote>
           ) : (
             <>
-              {/* ═════════ 1) المساعد الذكي — محلّل عامية الملابس، بنخفيه في الإلكترونيات ═════════ */}
-              {!isElectronics && (
+              {/* ═════════ نوع المنتج — الإلكترونيات بس (بيغيّر أسماء الخانات) ═════════ */}
+              {isElectronics && (
+                <div className="flex gap-1.5 rounded-2xl border bg-card p-1.5" role="tablist" aria-label="نوع المنتج">
+                  {(Object.keys(KIND_META) as ElectronicsKind[]).map((k) => {
+                    const Icon = KIND_ICON[k]
+                    const on = kind === k
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        role="tab"
+                        aria-selected={on}
+                        onClick={() => {
+                          setKind(k)
+                          setPreview(null)
+                          setSpec({ cpu: '', ram: '', storage: '' })
+                          setForm((f) => ({ ...f, color: '', size: '' }))
+                        }}
+                        className={cn(
+                          'flex h-11 flex-1 items-center justify-center gap-2 rounded-xl px-2 text-sm font-bold transition-colors',
+                          on ? 'bg-foreground text-background' : 'text-foreground/70 hover:bg-muted/60',
+                        )}
+                      >
+                        <Icon className="size-4 shrink-0" aria-hidden />
+                        <span className="truncate">{KIND_META[k].tab}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* ═════════ 1) مساعد الإدخال الذكي — عامية الملابس / الإلكترونيات ═════════ */}
               <section>
                 <SectionTitle n={1}>مساعد الإدخال الذكي</SectionTitle>
                 <div className="space-y-3 rounded-2xl border bg-card p-4">
                   <p className="flex items-center gap-1.5 text-xs font-medium text-foreground/70">
                     <Sparkles className="size-3.5" aria-hidden />
-                    اكتب الوصف بالعامية وأنا أطلّع المقاسات والألوان والكميات.
+                    {isElectronics
+                      ? 'اكتب الوصف بالعامية وأنا أطلّع السعات والألوان والحالة والكميات.'
+                      : 'اكتب الوصف بالعامية وأنا أطلّع المقاسات والألوان والكميات.'}
                   </p>
                   <textarea
-                    placeholder="مثال: كوتشي فلات أسود وكحلي مقاسات زوجي من 40 لـ 44 والكمية قطعتين"
+                    placeholder={isElectronics ? meta.smartPlaceholder : 'مثال: كوتشي فلات أسود وكحلي مقاسات زوجي من 40 لـ 44 والكمية قطعتين'}
                     value={smartText}
                     onChange={(e) => setSmartText(e.target.value)}
                     rows={2}
@@ -423,16 +570,22 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                       ) : (
                         <>
                           <ul className="max-h-60 divide-y overflow-y-auto overscroll-contain rounded-lg border bg-card">
-                            <li className="grid grid-cols-[1fr_1fr_5rem_2.25rem] gap-2 bg-muted/50 px-3 py-1.5 text-[11px] font-bold text-foreground/65">
-                              <span>اللون</span>
-                              <span>المقاس</span>
+                            <li className={cn('grid gap-2 bg-muted/50 px-3 py-1.5 text-[11px] font-bold text-foreground/65', isElectronics ? 'grid-cols-[1.4fr_1fr_4.5rem_5rem_2.25rem]' : 'grid-cols-[1fr_1fr_5rem_2.25rem]')}>
+                              <span>{isElectronics ? opt1Label : 'اللون'}</span>
+                              <span>{isElectronics ? opt2Label : 'المقاس'}</span>
+                              {isElectronics && <span>الحالة</span>}
                               <span className="text-center">الكمية</span>
                               <span />
                             </li>
                             {preview.map((row, i) => (
-                              <li key={i} className="grid grid-cols-[1fr_1fr_5rem_2.25rem] items-center gap-2 px-3 py-1.5 text-sm font-semibold">
+                              <li key={i} className={cn('grid items-center gap-2 px-3 py-1.5 text-sm font-semibold', isElectronics ? 'grid-cols-[1.4fr_1fr_4.5rem_5rem_2.25rem]' : 'grid-cols-[1fr_1fr_5rem_2.25rem]')}>
                                 <span className="truncate">{row.color ?? '—'}</span>
                                 <span className="truncate">{row.size ?? '—'}</span>
+                                {isElectronics && (
+                                  <span className={cn('truncate text-xs font-bold', row.condition === 'used' ? 'text-warning-subtle-foreground' : 'text-foreground/70')}>
+                                    {row.condition ? CONDITION_LABEL[row.condition] : '—'}
+                                  </span>
+                                )}
                                 <InkInput
                                   num
                                   size="sm"
@@ -464,7 +617,6 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                   )}
                 </div>
               </section>
-              )}
 
               {/* ═════════ إضافة متغير يدويًا ═════════ */}
               <section>
@@ -472,11 +624,53 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                 <div className="grid grid-cols-2 gap-4 rounded-2xl border bg-card p-4 sm:grid-cols-4">
                   {isElectronics ? (
                     <>
-                      <Field label="المواصفة 1" htmlFor="v-color">
-                        <InkInput id="v-color" placeholder="أسود / 256GB" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} />
-                      </Field>
-                      <Field label="المواصفة 2" htmlFor="v-size">
-                        <InkInput id="v-size" placeholder="8GB / 42" value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} />
+                      {kind === 'phone' && (
+                        <>
+                          <Field label="السعة" htmlFor="v-storage" className="col-span-2 sm:col-span-2">
+                            <InkInput id="v-storage" placeholder="256GB" value={spec.storage} onChange={(e) => setSpec({ ...spec, storage: e.target.value })} />
+                            <ChipRow items={STORAGE_CHIPS} value={spec.storage} onPick={(v) => setSpec({ ...spec, storage: v })} label="سعات سريعة" />
+                          </Field>
+                          <Field label="الرام (اختياري)" htmlFor="v-ram" className="col-span-2 sm:col-span-2">
+                            <InkInput id="v-ram" placeholder="8GB" value={spec.ram} onChange={(e) => setSpec({ ...spec, ram: e.target.value })} />
+                            <ChipRow items={RAM_CHIPS} value={spec.ram} onPick={(v) => setSpec({ ...spec, ram: v })} label="رام سريع" />
+                          </Field>
+                          <Field label="اللون" htmlFor="v-size" className="col-span-2 sm:col-span-2">
+                            <InkInput id="v-size" placeholder={meta.opt2Placeholder} value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} />
+                            <ChipRow items={PHONE_COLOR_CHIPS} value={form.size} onPick={(v) => setForm({ ...form, size: v })} label="ألوان سريعة" />
+                          </Field>
+                        </>
+                      )}
+                      {kind === 'laptop' && (
+                        <>
+                          <Field label="المعالج" htmlFor="v-cpu" className="col-span-2 sm:col-span-2">
+                            <InkInput id="v-cpu" placeholder="i7" value={spec.cpu} onChange={(e) => setSpec({ ...spec, cpu: e.target.value })} />
+                            <ChipRow items={LAPTOP_CPU_CHIPS} value={spec.cpu} onPick={(v) => setSpec({ ...spec, cpu: v })} label="معالجات سريعة" />
+                          </Field>
+                          <Field label="الرام" htmlFor="v-ram" className="col-span-2 sm:col-span-2">
+                            <InkInput id="v-ram" placeholder="16GB" value={spec.ram} onChange={(e) => setSpec({ ...spec, ram: e.target.value })} />
+                            <ChipRow items={RAM_CHIPS} value={spec.ram} onPick={(v) => setSpec({ ...spec, ram: v })} label="رام سريع" />
+                          </Field>
+                          <Field label="التخزين" htmlFor="v-storage" className="col-span-2 sm:col-span-2">
+                            <InkInput id="v-storage" placeholder="512GB SSD" value={spec.storage} onChange={(e) => setSpec({ ...spec, storage: e.target.value })} />
+                            <ChipRow items={LAPTOP_STORAGE_CHIPS} value={spec.storage} onPick={(v) => setSpec({ ...spec, storage: v })} label="تخزين سريع" />
+                          </Field>
+                          <Field label="اللون (اختياري)" htmlFor="v-size" className="col-span-2 sm:col-span-2">
+                            <InkInput id="v-size" placeholder={meta.opt2Placeholder} value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} />
+                          </Field>
+                        </>
+                      )}
+                      {kind === 'other' && (
+                        <>
+                          <Field label={meta.opt1} htmlFor="v-color" className="col-span-2 sm:col-span-2">
+                            <InkInput id="v-color" placeholder={meta.opt1Placeholder} value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} />
+                          </Field>
+                          <Field label={meta.opt2} htmlFor="v-size" className="col-span-2 sm:col-span-2">
+                            <InkInput id="v-size" placeholder={meta.opt2Placeholder} value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} />
+                          </Field>
+                        </>
+                      )}
+                      <Field label="الحالة" className="col-span-2 sm:col-span-2">
+                        <ConditionPick value={form.condition} onChange={(v) => setForm({ ...form, condition: v })} />
                       </Field>
                     </>
                   ) : (
@@ -574,7 +768,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                     <input
                       value={vq}
                       onChange={(e) => setVq(e.target.value)}
-                      placeholder={`دوّر في ${variants.length} متغير (${isElectronics ? 'مواصفة / باركود' : 'مقاس / لون / باركود'})…`}
+                      placeholder={`دوّر في ${variants.length} متغير (${isElectronics ? 'سعة / لون / حالة / باركود' : 'مقاس / لون / باركود'})…`}
                       aria-label="بحث في المتغيرات"
                       className="h-full w-full bg-transparent pe-3 text-sm outline-none placeholder:text-muted-foreground/80"
                       style={{ paddingInlineStart: '2.5rem' }}
@@ -588,7 +782,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                   </p>
                 ) : variants.length === 0 ? (
                   <div className="rounded-2xl border border-dashed bg-card/60 px-4 py-8 text-center">
-                    <Shirt className="mx-auto size-6 text-foreground/40" aria-hidden />
+                    <KindIcon className="mx-auto size-6 text-foreground/40" aria-hidden />
                     <p className="mt-2 text-sm font-bold">لا توجد متغيرات بعد</p>
                   </div>
                 ) : (
@@ -613,20 +807,20 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                             {key && !isElectronics ? <Swatch name={key} className="size-5" /> : null}
                             <span className="min-w-0 flex-1 truncate text-sm font-extrabold">{key || noOpt1Label}</span>
                             <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground/65">
-                              {g.items.length} {opt2Label} · {g.total} قطعة
+                              {g.items.length} {opt2Unit} · {g.total} قطعة
                             </span>
                           </button>
 
                           {isOpen && (
                             <div className="border-t">
                               <div className="flex items-center gap-2 bg-muted/40 px-3 py-2">
-                                <span className="shrink-0 text-[11px] font-bold text-foreground/70">كمية كل {isElectronics ? 'المواصفات' : 'المقاسات'}</span>
+                                <span className="shrink-0 text-[11px] font-bold text-foreground/70">كمية كل {isElectronics ? (kind === 'phone' ? 'الألوان' : 'الخيارات') : 'المقاسات'}</span>
                                 <InkInput
                                   num
                                   size="sm"
                                   type="number"
                                   min={0}
-                                  aria-label={`كمية كل ${isElectronics ? 'المواصفات' : 'المقاسات'} ${key || noOpt1Label}`}
+                                  aria-label={`كمية كل ${isElectronics ? (kind === 'phone' ? 'الألوان' : 'الخيارات') : 'المقاسات'} ${key || noOpt1Label}`}
                                   placeholder="0"
                                   wrapperClassName="w-20"
                                   value={colorQty[key] ?? ''}
@@ -645,8 +839,9 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                                 </Button>
                               </div>
                               <ul className="divide-y">
-                                <li className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_5.5rem_5rem_2.25rem] gap-2 bg-muted/20 px-3 py-1.5 text-[11px] font-bold text-foreground/65">
+                                <li className={cn('grid gap-2 bg-muted/20 px-3 py-1.5 text-[11px] font-bold text-foreground/65', ROW_GRID)}>
                                   <span>{opt2Label}</span>
+                                  {isElectronics && <span>الحالة</span>}
                                   <span>الباركود</span>
                                   <span className="text-center">السعر</span>
                                   <span className="text-center">الكمية</span>
@@ -655,9 +850,24 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                                 {g.items.map((v) => (
                                   <li
                                     key={v.id}
-                                    className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_5.5rem_5rem_2.25rem] items-center gap-2 px-3 py-1.5 text-sm"
+                                    className={cn('grid items-center gap-2 px-3 py-1.5 text-sm', ROW_GRID)}
                                   >
                                     <span className="truncate font-bold">{v.size ?? '—'}</span>
+                                    {isElectronics && (
+                                      <select
+                                        aria-label={`حالة ${v.size ?? ''} ${v.color ?? ''}`}
+                                        value={v.condition === 'new' || v.condition === 'used' ? v.condition : ''}
+                                        onChange={(e) => void updateCondition(v.id, e.target.value)}
+                                        className={cn(
+                                          'h-9 w-full rounded-lg border bg-background px-1.5 text-xs font-bold outline-none focus:border-foreground',
+                                          v.condition === 'used' && 'border-warning-subtle bg-warning-subtle text-warning-subtle-foreground',
+                                        )}
+                                      >
+                                        <option value="">—</option>
+                                        <option value="new">{CONDITION_LABEL.new}</option>
+                                        <option value="used">{CONDITION_LABEL.used}</option>
+                                      </select>
+                                    )}
                                     <span dir="ltr" className="truncate text-start font-mono text-xs text-foreground/75">
                                       {v.barcode ?? (
                                         <IconBtn

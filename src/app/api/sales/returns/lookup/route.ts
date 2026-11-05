@@ -120,7 +120,7 @@ async function __GET(req: NextRequest) {
           unitLabel: true,
           unitQuantity: true,
           pieceLabel: true,
-          variant: { select: { color: true, size: true } },
+          variant: { select: { color: true, size: true, condition: true } },
         },
         orderBy: { id: 'asc' },
       },
@@ -156,7 +156,7 @@ async function __GET(req: NextRequest) {
         unitQuantity: it.unitQuantity,
         pieceLabel: it.pieceLabel,
         variantLabel:
-          [it.variant?.color, it.variant?.size].filter(Boolean).join(' / ') || null,
+          [it.variant?.color, it.variant?.size, it.variant?.condition === 'used' ? 'مستعمل' : null].filter(Boolean).join(' / ') || null,
       })),
     },
   })

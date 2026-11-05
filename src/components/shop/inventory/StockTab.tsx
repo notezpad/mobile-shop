@@ -1156,7 +1156,7 @@ function ExchangeDialog({
         cost: matrix.product.cost ?? 0,
         quantity: String(qty),
         variantId: Number(vid),
-        variantLabel: [v?.color, v?.size].filter(Boolean).join(' / ') || null,
+        variantLabel: [v?.color, v?.size, v?.condition === 'used' ? 'مستعمل' : null].filter(Boolean).join(' / ') || null,
       }
     })
     setter([...others, ...newLines])

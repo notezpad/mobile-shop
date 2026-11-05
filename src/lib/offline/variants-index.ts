@@ -18,6 +18,8 @@ export interface IndexedVariant {
   barcode: string | null
   /** 💰 التحديث 28: سعر المواصفة — null = سعر المنتج العام */
   price: number | null
+  /** 📱 التحديث 30: حالة الجهاز (new/used/null) */
+  condition: string | null
   quantity: number
 }
 
@@ -61,6 +63,8 @@ const slim = (v: any, productId: number): IndexedVariant => ({
   barcode: v.barcode ?? null,
   // 💰 التحديث 28: سعر المواصفة (فهرس قديم بيرجع undefined → null = سعر المنتج)
   price: typeof v.price === 'number' ? v.price : null,
+  // 📱 التحديث 30: حالة الجهاز (فهرس قديم → null)
+  condition: v.condition === 'new' || v.condition === 'used' ? v.condition : null,
   quantity: Number(v.quantity) || 0,
 })
 

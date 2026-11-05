@@ -49,7 +49,7 @@ interface CartItem {
 }
 
 const variantLabelOf = (v: PurchaseVariantLite) =>
-  [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`
+  [v.color, v.size, v.condition === 'used' ? 'مستعمل' : null].filter(Boolean).join(' / ') || `#${v.id}`
 /** مفتاح سطر السلة: منتج + (لون/مقاس) */
 const lineKey = (i: CartItem) => `${i.product.id}:${i.variant?.id ?? 0}`
 const lineName = (i: CartItem) => (i.variant ? `${i.product.name} — ${i.variant.label}` : i.product.name)

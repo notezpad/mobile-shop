@@ -172,10 +172,10 @@ async function __POST(req: NextRequest) {
 
     // 🎨 2026-10-18: المنتجات اللي ليها ألوان/مقاسات — الشراء لازم يتحدد على
     // المقاس/اللون نفسه، وإلا الكمية بتتضاف على المنتج بس وتتمسح عند أول بيعة.
-    type PoVariantRow = { id: number; productId: number; size: string | null; color: string | null }
+    type PoVariantRow = { id: number; productId: number; size: string | null; color: string | null; condition: string | null }
     const variantRows: PoVariantRow[] = ids.length
       ? await sql<PoVariantRow[]>`
-          SELECT "id", "productId", "size", "color" FROM "ProductVariant"
+          SELECT "id", "productId", "size", "color", "condition" FROM "ProductVariant"
           WHERE "productId" IN ${sql(ids)}
           ORDER BY "id" ASC`
       : []
@@ -185,8 +185,8 @@ async function __POST(req: NextRequest) {
       list.push(v)
       variantsByProduct.set(Number(v.productId), list)
     }
-    const variantLabel = (v: { size: string | null; color: string | null; id: number }) =>
-      [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`
+    const variantLabel = (v: { size: string | null; color: string | null; id: number; condition?: string | null }) =>
+      [v.color, v.size, v.condition === 'used' ? 'مستعمل' : null].filter(Boolean).join(' / ') || `#${v.id}`
 
     // validate items & compute total (نفس الرسائل والتحققات بالظبط)
     let total = 0

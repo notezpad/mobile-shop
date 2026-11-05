@@ -40,8 +40,8 @@ export interface TransferLine {
   quantity: number
 }
 
-const labelOf = (v: { color: string | null; size: string | null; id: number }) =>
-  [v.color, v.size].filter(Boolean).join(' / ') || `#${v.id}`
+const labelOf = (v: { color: string | null; size: string | null; id: number; condition?: string | null }) =>
+  [v.color, v.size, v.condition === 'used' ? 'مستعمل' : null].filter(Boolean).join(' / ') || `#${v.id}`
 
 /**
  * تحقق مشترك (قبل أي كتابة) من إن كل بند مكتوب صح بالنسبة للمقاسات:
@@ -61,7 +61,7 @@ export async function validateVariantLines(
   const pMap = new Map(products.map((p) => [p.id, p.name]))
   const variants = await db.productVariant.findMany({
     where: { productId: { in: ids } },
-    select: { id: true, productId: true, color: true, size: true },
+    select: { id: true, productId: true, color: true, size: true, condition: true },
   })
   const byProduct = new Map<number, typeof variants>()
   for (const v of variants) byProduct.set(v.productId, [...(byProduct.get(v.productId) ?? []), v])
@@ -93,11 +93,11 @@ export async function applyTransferItem(tx: Tx, ctx: TransferCtx, line: Transfer
   if (!src || src.tenantId !== tenantId) throw new TransferStockError('منتج غير صالح')
 
   // ── 1) خصم ذري من المصدر ───────────────────────────────────────────────
-  let srcVariant: { id: number; color: string | null; size: string | null; barcode: string | null } | null = null
+  let srcVariant: { id: number; color: string | null; size: string | null; barcode: string | null; condition: string | null } | null = null
   if (line.variantId != null) {
     srcVariant = await tx.productVariant.findFirst({
       where: { id: line.variantId, productId: src.id },
-      select: { id: true, color: true, size: true, barcode: true },
+      select: { id: true, color: true, size: true, barcode: true, condition: true },
     })
     if (!srcVariant) throw new TransferStockError('لون/مقاس غير صالح')
     // 👕 الخصم من المعروض الأول والباقي من المخزن الداخلي
@@ -197,7 +197,8 @@ export async function applyTransferItem(tx: Tx, ctx: TransferCtx, line: Transfer
   let destVariantId: number | null = null
   if (srcVariant) {
     let dv = await tx.productVariant.findFirst({
-      where: { productId: dest.id, color: srcVariant.color, size: srcVariant.size },
+      // 📱 التحديث 30: الحالة (جديد/مستعمل) جزء من هوية المتغير — مبنضمّش جديد على مستعمل
+      where: { productId: dest.id, color: srcVariant.color, size: srcVariant.size, condition: srcVariant.condition },
     })
     if (!dv) {
       // باركود المقاس: نفس باركود المصدر لو مش مستخدم في الوجهة، وإلا من غير باركود
@@ -210,7 +211,7 @@ export async function applyTransferItem(tx: Tx, ctx: TransferCtx, line: Transfer
         if (taken) vBarcode = null
       }
       dv = await tx.productVariant.create({
-        data: { productId: dest.id, color: srcVariant.color, size: srcVariant.size, barcode: vBarcode, quantity: 0 },
+        data: { productId: dest.id, color: srcVariant.color, size: srcVariant.size, condition: srcVariant.condition, barcode: vBarcode, quantity: 0 },
       })
     }
     // 👕 البضاعة الواصلة بتتعمل معروضة (زي الشراء) — والتقسيمة بقت حاجة الحركة تظبطها

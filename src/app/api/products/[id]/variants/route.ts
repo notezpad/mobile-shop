@@ -8,6 +8,7 @@ import { withSql } from '@/lib/sql'
 import { normalizeBarcode } from '@/lib/barcode'
 import { canAccessProductBranch } from '@/lib/branch-scope-db'
 import { normalizeVariantPrice } from '@/lib/variant-price'
+import { normalizeCondition, CONDITION_LABEL } from '@/lib/variant-condition'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,6 +43,8 @@ type VariantRow = {
   barcode: string | null
   // 💰 التحديث 28: سعر المواصفة (null = سعر المنتج العام)
   price: number | null
+  // 📱 التحديث 30: حالة الجهاز (new/used/null)
+  condition: string | null
   quantity: number
   displayQty: number
   createdAt: Date
@@ -91,7 +94,7 @@ export async function GET(
     }
 
     const variants = await sql<VariantRow[]>`
-      SELECT "id", "productId", "size", "color", "barcode", "price", "quantity", "displayQty", "createdAt"
+      SELECT "id", "productId", "size", "color", "barcode", "price", "condition", "quantity", "displayQty", "createdAt"
       FROM "ProductVariant"
       WHERE "productId" = ${pid}
       ORDER BY "id" ASC`
@@ -140,6 +143,12 @@ async function __POST(
     return NextResponse.json({ error: 'سعر غير صالح للمتغير' }, { status: 400 })
   }
   const price = priceNorm.price
+  // 📱 التحديث 30: حالة الجهاز (اختيارية — فاضي = غير محددة)
+  const condNorm = normalizeCondition(body?.condition)
+  if (!condNorm.ok) {
+    return NextResponse.json({ error: 'حالة غير صالحة (جديد / مستعمل)' }, { status: 400 })
+  }
+  const condition = condNorm.value
   if (!size && !color) {
     return NextResponse.json({ error: 'لازم مقاس أو لون على الأقل' }, { status: 400 })
   }
@@ -167,7 +176,7 @@ async function __POST(
   try {
     // 👕 الرصيد الافتتاحي للمقاس بيدخل معروضاً بالكامل
     const created = await db.productVariant.create({
-      data: { productId: pid, size, color, barcode, price, quantity, displayQty: quantity },
+      data: { productId: pid, size, color, barcode, price, condition, quantity, displayQty: quantity },
     })
     // Keep Product.quantity as the sum of all its variants from here on.
     await syncProductQuantityFromVariants(db, pid)
@@ -182,7 +191,7 @@ async function __POST(
           type: 'in',
           quantity,
           refType: 'manual',
-          note: `رصيد افتتاحي — ${[color, size].filter(Boolean).join(' / ')}`,
+          note: `رصيد افتتاحي — ${[color, size, condition ? CONDITION_LABEL[condition] : null].filter(Boolean).join(' / ')}`,
           userId: session.userId,
         },
       })
