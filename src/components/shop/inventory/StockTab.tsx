@@ -17,6 +17,7 @@ import {
   ArrowUpFromLine,
   Repeat,
   MapPin,
+  Smartphone,
   X,
   ArrowUp,
   ArrowDown,
@@ -46,6 +47,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { variantDisplayLabel } from '@/lib/variant-condition'
 import { Barcode } from '../Barcode'
 import { NoBarcode } from '../NoBarcode'
 import { ProductAvatar } from '../ProductAvatar'
@@ -63,6 +65,18 @@ interface Props {
   /** 🏬 فرع مختار من تبويبات الفروع فوق (all أو رقم). لو موجود بنخفي قائمة الفرع الداخلية */
   scopeBranch?: string
   onChanged: () => void
+}
+
+/** 📱 التحديث 33: نتيجة بحث IMEI — جهاز مسجل في مخزون المحل */
+interface ImeiHit {
+  id: number
+  imei: string
+  batteryHealth: number | null
+  status: string
+  productId: number
+  productName: string
+  branchName: string | null
+  variant: { id: number; size: string | null; color: string | null; condition: string | null }
 }
 
 // 📋 2026-10-18: الأسباب بقت أكواد محددة على السيرفر (lib/stock-policy) — القوايم هنا بتتقرا
@@ -189,6 +203,38 @@ export function StockTab({ products, branches, isEmployee, userBranchId, scopeBr
   const [statusFilter, setStatusFilter] = React.useState<string>('all')
   const [adjOpen, setAdjOpen] = React.useState<{ product: InventoryProduct; type: 'in' | 'out' | 'damage' } | null>(null)
   const [exchangeOpen, setExchangeOpen] = React.useState(false)
+
+  // ─── 📱 التحديث 33: بحث بالـ IMEI في مخزون المحل كله ───
+  // لما اللي في البحث يشبه IMEI/سيريال (4 حرف/رقم فأكتر بعد تنظيف الفواصل)،
+  // بنسأل السيرفر عن أي جهاز مسجل بالرقم ده — والنتيجة بتظهر في شريط فوق الجدول.
+  const [imeiResults, setImeiResults] = React.useState<ImeiHit[] | null>(null)
+  const [imeiSearching, setImeiSearching] = React.useState(false)
+  const imeiQuery = React.useMemo(() => search.trim().replace(/[^0-9a-zA-Z]/g, '').toUpperCase(), [search])
+  React.useEffect(() => {
+    if (imeiQuery.length < 4) {
+      setImeiResults(null)
+      setImeiSearching(false)
+      return
+    }
+    setImeiSearching(true)
+    let cancelled = false
+    const t = setTimeout(async () => {
+      try {
+        const r = await api<{ found: boolean; units?: ImeiHit[] }>(
+          `/api/inventory/imei-lookup?q=${encodeURIComponent(imeiQuery)}`,
+        )
+        if (!cancelled) setImeiResults(Array.isArray(r?.units) ? r.units : [])
+      } catch {
+        if (!cancelled) setImeiResults(null)
+      } finally {
+        if (!cancelled) setImeiSearching(false)
+      }
+    }, 350)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [imeiQuery])
 
   const filtered = React.useMemo(() => {
     return products.filter(p => {
@@ -318,7 +364,70 @@ export function StockTab({ products, branches, isEmployee, userBranchId, scopeBr
         </CardContent>
       </Card>
 
-      {/* Table */}
+      {/* ─── 📱 التحديث 33: نتايج بحث IMEI — بيظهر بس لما البحث يشبه IMEI/سيريال ─── */}
+      {imeiQuery.length >= 4 && (
+        <Card className="gap-0 py-0">
+          <CardContent className="p-3">
+            <p className="flex items-center gap-1.5 text-xs font-extrabold text-foreground/80">
+              <Smartphone className="size-4 text-primary" aria-hidden />
+              بحث بالـ IMEI في المخزون
+              {imeiSearching ? (
+                <span className="inline-flex items-center gap-1 text-foreground/55">
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  بيدوّر…
+                </span>
+              ) : (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-foreground/60" dir="ltr">
+                  {imeiQuery}
+                </span>
+              )}
+            </p>
+            {imeiResults && imeiResults.length > 0 ? (
+              <ul className="mt-2 space-y-1.5">
+                {imeiResults.map((h) => (
+                  <li
+                    key={h.id}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border bg-card px-3 py-2 text-sm"
+                  >
+                    <span dir="ltr" className="font-mono text-xs font-extrabold text-foreground">
+                      {h.imei}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-bold">{h.productName}</span>
+                    <span className="truncate text-xs font-semibold text-foreground/65">
+                      {variantDisplayLabel(h.variant) || '—'}
+                    </span>
+                    {h.batteryHealth != null && (
+                      <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-extrabold tabular-nums text-foreground/70">
+                        🔋 {h.batteryHealth}%
+                      </span>
+                    )}
+                    <span
+                      className={cn(
+                        'rounded-md px-1.5 py-0.5 text-[10px] font-bold',
+                        h.status === 'sold'
+                          ? 'bg-foreground/10 text-foreground/60'
+                          : 'bg-success-subtle text-success-subtle-foreground',
+                      )}
+                    >
+                      {h.status === 'sold' ? 'تم بيعه' : 'بالمخزن'}
+                    </span>
+                    {h.branchName && (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-foreground/55">
+                        <MapPin className="size-3" aria-hidden />
+                        {h.branchName}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : !imeiSearching && imeiQuery.length >= 8 ? (
+              <p className="mt-2 text-xs font-bold text-foreground/55">
+                مفيش جهاز مسجل بالـ IMEI ده في المحل — لو الجهاز جديد، سجّله من دايلوج «متغيرات المنتج» في تاب الموبايل.
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
       <Card className="gap-0 overflow-hidden py-0">
         <CardHeader className="border-b py-3.5">
           <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">

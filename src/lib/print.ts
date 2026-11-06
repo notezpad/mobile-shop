@@ -37,6 +37,14 @@ export function fmt(n: number) {
   })
 }
 
+/** تنسيق مبالغ الفاتورة: أرقام عربية بدون أصفار زيادة (١٥٬٠٠٠ بدل ١٥٬٠٠٠٫٠٠) */
+function fmtInv(n: number): string {
+  return n.toLocaleString('ar-EG', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })
+}
+
 /** سعر الملصق بأرقام إنجليزية — متسق مع رقم الباركود المطبوع تحته (والمعاينة بتستخدمه برضه). */
 export function fmtLabelPrice(n: number): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -168,8 +176,8 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
           <td style="color:#9ca3af">${i + 1}</td>
           <td style="text-align:right;font-weight:800;color:${INK}">${escapeHtml(it.name)}</td>
           <td class="center">${it.quantity}</td>
-          <td class="center">${fmt(it.price)} ج.م</td>
-          <td class="center" style="color:#b45309;font-weight:800">${fmt(it.price * it.quantity)} ج.م</td>
+          <td class="num">${fmtInv(it.price)} جنيه</td>
+          <td class="num" style="color:#b45309;font-weight:800">${fmtInv(it.price * it.quantity)} جنيه</td>
         </tr>`
     )
     .join('')
@@ -194,8 +202,10 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
   .mc-wrap { width: 850px; max-width: 100%; margin: 0 auto; background: #fff; position: relative; overflow: hidden; }
   .mc-top { height: 6px; background: linear-gradient(90deg, ${GOLD} 0%, #f4e8c1 50%, ${GOLD} 100%); }
   .mc-header { display: flex; justify-content: space-between; align-items: stretch; background: ${INK}; color: #fff; }
-  .mc-brand { padding: 20px 30px; flex: 1; border-left: 1px solid #333; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; }
-  .mc-brand h1 { font-size: 26px; font-weight: 900; color: ${GOLD}; margin-bottom: 6px; letter-spacing: .5px; text-shadow: 1px 1px 3px rgba(0,0,0,.8); }
+  .mc-brand { padding: 20px 30px; flex: 1; min-width: 0; border-left: 1px solid #333; display: flex; flex-direction: row; align-items: center; gap: 18px; }
+  .mc-brand-text { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; flex: 1; min-width: 0; }
+  .mc-brand h1 { font-size: 26px; font-weight: 900; color: ${GOLD}; margin-bottom: 6px; letter-spacing: .5px; text-shadow: 1px 1px 3px rgba(0,0,0,.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .mc-logo { width: 72px; height: 72px; object-fit: contain; border-radius: 12px; border: 2px solid ${GOLD}; background: #fff; flex-shrink: 0; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
   .mc-meta-note { font-size: 11.5px; color: #d1d5db; margin-top: 3px; line-height: 1.6; }
   .mc-phone-badge { display: inline-flex; align-items: center; gap: 6px; background: ${GOLD}; color: ${INK}; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 900; margin-top: 8px; }
   .mc-meta { padding: 20px 30px; width: 300px; background: ${INK_SOFT}; display: flex; flex-direction: column; justify-content: center; }
@@ -211,13 +221,19 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
   .mc-items table { width: 100%; border-collapse: collapse; }
   .mc-items th { background: ${INK}; color: ${GOLD}; padding: 10px; font-size: 13px; font-weight: 700; text-align: center; }
   .mc-items th:nth-child(2) { text-align: right; }
+  .mc-items th:nth-child(4), .mc-items th:nth-child(5) { text-align: right; padding-left: 16px; }
   .mc-items td { padding: 14px 8px; border-bottom: 2px solid #f3f4f6; font-size: 13px; }
   .mc-items td.center { text-align: center; }
-  .mc-totals-wrap { display: flex; justify-content: flex-start; padding: 0 30px 16px; }
-  .mc-totals { width: 300px; }
+  .mc-items td.num { text-align: right; padding-left: 16px; }
+  .mc-totals-wrap { display: flex; justify-content: space-between; align-items: center; padding: 0 30px 16px; gap: 20px; }
+  .mc-totals { width: 300px; flex-shrink: 0; }
   .mc-totals .row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13.5px; color: #4b5563; font-weight: 700; border-bottom: 1px solid #e5e7eb; }
   .mc-totals .grand { display: flex; justify-content: space-between; align-items: center; background: ${INK}; color: ${GOLD}; padding: 13px 16px; border-radius: 6px; font-size: 18px; font-weight: 900; margin-top: 8px; }
   .mc-totals .grand span:last-child { color: #fff; }
+  .mc-totals-note { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; opacity: .55; }
+  .mc-totals-note .tn-icon { font-size: 36px; }
+  .mc-totals-note .tn-text { font-size: 12.5px; font-weight: 800; color: ${INK}; text-align: center; line-height: 1.7; }
+  .mc-totals-note .tn-divider { width: 60px; height: 2px; background: linear-gradient(90deg, ${GOLD}, transparent); border-radius: 2px; }
   /* 🛡️ قسم الضمان والشروط — مُصحَّح: mc-terms أولاً ثم mc-terms.empty لضمان الـ cascade الصحيح */
   .mc-terms { background: linear-gradient(135deg, #f9fafb 0%, #f0f4f0 100%); border-top: 2px solid ${GOLD}; border-bottom: 1px solid #e5e7eb; padding: 14px 30px; }
   .mc-terms-header { font-size: 12.5px; font-weight: 900; color: ${INK}; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; border-bottom: 1px dashed #d9ddd9; padding-bottom: 7px; }
@@ -246,9 +262,12 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
     <div class="mc-top"></div>
     <div class="mc-header">
       <div class="mc-brand">
-        <h1>${escapeHtml(shop?.name || 'محل الاتصالات')}</h1>
-        ${shop?.address ? `<div class="mc-meta-note">${escapeHtml(shop.address)}</div>` : ''}
-        ${shop?.phone ? `<div class="mc-phone-badge" dir="ltr"><span>📞</span><span>${escapeHtml(shop.phone)}</span></div>` : ''}
+        ${shop?.logo ? `<img src="${shop.logo}" class="mc-logo" alt="لوجو المحل" />` : ''}
+        <div class="mc-brand-text">
+          <h1>${escapeHtml(shop?.name || 'محل الاتصالات')}</h1>
+          ${shop?.address ? `<div class="mc-meta-note">${escapeHtml(shop.address)}</div>` : ''}
+          ${shop?.phone ? `<div class="mc-phone-badge" dir="ltr"><span>📞</span><span>${escapeHtml(shop.phone)}</span></div>` : ''}
+        </div>
       </div>
       <div class="mc-meta">
         <div class="mc-meta-row"><span>رقم الفاتورة:</span><span dir="ltr">${escapeHtml(invoiceNo)}</span></div>
@@ -279,10 +298,18 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
 
     <div class="mc-totals-wrap">
       <div class="mc-totals">
-        <div class="row"><span>الإجمالي</span><span>${fmt(sale.total)} ج.م</span></div>
-        <div class="row"><span>المدفوع</span><span>${fmt(sale.paid)} ج.م</span></div>
-        ${remaining > 0.009 ? `<div class="row"><span>المتبقي</span><span style="color:#ef4444">${fmt(remaining)} ج.م</span></div>` : ''}
-        <div class="grand"><span>الإجمالي النهائي</span><span>${fmt(sale.total)} ج.م</span></div>
+        <div class="row"><span>الإجمالي</span><span>${fmtInv(sale.total)} جنيه</span></div>
+        <div class="row"><span>المدفوع</span><span>${fmtInv(sale.paid)} جنيه</span></div>
+        ${remaining > 0.009 ? `<div class="row"><span>المتبقي</span><span style="color:#ef4444">${fmtInv(remaining)} جنيه</span></div>` : ''}
+        <div class="grand">
+          <span>${remaining > 0.009 ? 'المدفوع فعلياً' : 'الإجمالي النهائي'}</span>
+          <span>${fmtInv(remaining > 0.009 ? sale.paid : sale.total)} جنيه</span>
+        </div>
+      </div>
+      <div class="mc-totals-note">
+        <div class="tn-icon">🤝</div>
+        <div class="tn-divider"></div>
+        <div class="tn-text">نقدر ثقتكم<br/>ونسعى دائماً<br/>لخدمتكم</div>
       </div>
     </div>
 

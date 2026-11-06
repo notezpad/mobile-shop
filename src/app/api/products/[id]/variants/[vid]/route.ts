@@ -8,6 +8,7 @@ import { normalizeBarcode } from '@/lib/barcode'
 import { canAccessProductBranch } from '@/lib/branch-scope-db'
 import { normalizeVariantPrice } from '@/lib/variant-price'
 import { normalizeCondition } from '@/lib/variant-condition'
+import { normalizeBoxCondition, normalizeWarrantyMonths, normalizeEdition, MAX_WARRANTY_MONTHS } from '@/lib/variant-device'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,6 +69,28 @@ async function __PUT(
       return NextResponse.json({ error: 'حالة غير صالحة (جديد / مستعمل)' }, { status: 400 })
     }
     data.condition = condNorm.value
+  }
+  // 📱 التحديث 33: بيانات جهاز الموبايل/التابلت — مبعوتش = مفيش تغيير؛ فاضي = بدون تحديد
+  if (body.warrantyMonths !== undefined) {
+    const wNorm = normalizeWarrantyMonths(body.warrantyMonths)
+    if (!wNorm.ok) {
+      return NextResponse.json({ error: `الضمان المتبقي لازم رقم من 0 لـ ${MAX_WARRANTY_MONTHS} شهر` }, { status: 400 })
+    }
+    data.warrantyMonths = wNorm.value
+  }
+  if (body.boxCondition !== undefined) {
+    const boxNorm = normalizeBoxCondition(body.boxCondition)
+    if (!boxNorm.ok) {
+      return NextResponse.json({ error: 'كرتونة غير صالحة (بالكرتونة الكاملة / الجهاز بس)' }, { status: 400 })
+    }
+    data.boxCondition = boxNorm.value
+  }
+  if (body.edition !== undefined) {
+    const edNorm = normalizeEdition(body.edition)
+    if (!edNorm.ok) {
+      return NextResponse.json({ error: 'الإصدار/النسخة طويلة — أقصى 60 حرف' }, { status: 400 })
+    }
+    data.edition = edNorm.value
   }
   if (body.quantity !== undefined) {
     // 🛡️ خ-2 (2026-11-02): رفض صريح للقيم غير الصالحة والسالبة — قبل كده

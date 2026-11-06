@@ -67,6 +67,7 @@ model Tenant {
   products          Product[]
   categories        Category[]
   variantSuggestions VariantSuggestion[]
+  variantUnits       VariantUnit[]
   customers         Customer[]
   sales             Sale[]
   maintenanceOrders MaintenanceOrder[]
@@ -389,6 +390,14 @@ model ProductVariant {
   price     Float?
   // 📱 2026-11-04 (التحديث 30): حالة الجهاز — 'new' | 'used' | null (غير محددة). للإلكترونيات.
   condition String?
+  // 📱 التحديث 33 (2026-11-06): بيانات جهاز الموبايل/التابلت — كلها اختيارية (null = مش محددة)
+  // ومش بتأثر على أي بيانات قديمة. بتظهر في دايلوج «موبايل/تابلت» بس (مش لابتوب/كمبيوتر).
+  // الضمان المتبقي بالشهور (ضمان الوكيل للأجهزة الجديدة) — بيفرّق كتير في البيع.
+  warrantyMonths Int?
+  // الكرتونة والملحقات: 'full' = بالكرتونة الكاملة | 'device' = الجهاز بس — بيأثر على السعر في سوق المستعمل.
+  boxCondition String?
+  // الإصدار/النسخة: «نسخة مصرية/سعودية/أمريكية» أو «مفتوح الشبكات/مقفول» — نص حر (مهم للآيفون تحديداً).
+  edition String?
   quantity  Int      @default(0)
   // 👕 2026-10-22 (المخزن الداخلي): الكمية المعروضة من هذا اللون/المقاس —
   // الباقي (quantity - displayQty) في المخزن الداخلي. 0 <= displayQty <= quantity.
@@ -397,9 +406,36 @@ model ProductVariant {
 
   product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
   saleItems SaleItem[]
+  // 📱 التحديث 33: أجهزة المتغير — IMEI/سيريال لكل قطعة على حدة (تتبع الضمان، الحماية من المسروق، بحث بالـ IMEI).
+  units     VariantUnit[]
 
   @@index([productId])
   @@index([barcode])
+}
+
+// 📱 التحديث 33 (2026-11-06): جهاز فردي جوه متغير (للموبايلات/التابلت).
+// المتغير بيتابع الكمية كرقم إجمالي («2 قطعة ايفون 256GB أسود») — الجدول ده بيربط كل قطعة
+// بـ IMEI/سيريال خاص بيها + نسبة صحة البطارية (للآيفون بس — بتختلف من جهاز لجهاز حتى لو نفس المواصفات).
+// status: 'in_stock' | 'sold' — 'sold' لما البيع بسحب IMEI يترابط مستقبلاً (خارج نطاق التحديث ده).
+model VariantUnit {
+  id        Int      @id @default(autoincrement())
+  tenantId  String
+  variantId Int
+  // الـ IMEI/السيريال زي ما اتكتب (للعرض) + نسخة موحّدة للفهرسة والبحث (بلا فواصل/مسافات، uppercase).
+  imei      String
+  imeiNorm  String
+  // نسبة صحة البطارية % (1-100) — للآيفون بس (بيتحقق منها السيرفر من اسم المنتج).
+  batteryHealth Int?
+  note      String?
+  status    String   @default("in_stock")
+  createdAt DateTime @default(now())
+
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, imeiNorm])
+  @@index([variantId])
+  @@index([tenantId])
 }
 
 model Category {

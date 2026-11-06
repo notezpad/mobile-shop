@@ -9,6 +9,7 @@ import { normalizeBarcode } from '@/lib/barcode'
 import { canAccessProductBranch } from '@/lib/branch-scope-db'
 import { normalizeVariantPrice } from '@/lib/variant-price'
 import { normalizeCondition, CONDITION_LABEL } from '@/lib/variant-condition'
+import { normalizeBoxCondition, normalizeWarrantyMonths, normalizeEdition, MAX_WARRANTY_MONTHS } from '@/lib/variant-device'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +46,10 @@ type VariantRow = {
   price: number | null
   // 📱 التحديث 30: حالة الجهاز (new/used/null)
   condition: string | null
+  // 📱 التحديث 33: بيانات جهاز الموبايل/التابلت (كلها nullable)
+  warrantyMonths: number | null
+  boxCondition: string | null
+  edition: string | null
   quantity: number
   displayQty: number
   createdAt: Date
@@ -94,7 +99,7 @@ export async function GET(
     }
 
     const variants = await sql<VariantRow[]>`
-      SELECT "id", "productId", "size", "color", "barcode", "price", "condition", "quantity", "displayQty", "createdAt"
+      SELECT "id", "productId", "size", "color", "barcode", "price", "condition", "warrantyMonths", "boxCondition", "edition", "quantity", "displayQty", "createdAt"
       FROM "ProductVariant"
       WHERE "productId" = ${pid}
       ORDER BY "id" ASC`
@@ -149,6 +154,19 @@ async function __POST(
     return NextResponse.json({ error: 'حالة غير صالحة (جديد / مستعمل)' }, { status: 400 })
   }
   const condition = condNorm.value
+  // 📱 التحديث 33: بيانات جهاز الموبايل/التابلت — كلها اختيارية (فاضي = بدون تحديد)
+  const boxNorm = normalizeBoxCondition(body?.boxCondition)
+  if (!boxNorm.ok) {
+    return NextResponse.json({ error: 'كرتونة غير صالحة (بالكرتونة الكاملة / الجهاز بس)' }, { status: 400 })
+  }
+  const warrantyNorm = normalizeWarrantyMonths(body?.warrantyMonths)
+  if (!warrantyNorm.ok) {
+    return NextResponse.json({ error: `الضمان المتبقي لازم رقم من 0 لـ ${MAX_WARRANTY_MONTHS} شهر` }, { status: 400 })
+  }
+  const editionNorm = normalizeEdition(body?.edition)
+  if (!editionNorm.ok) {
+    return NextResponse.json({ error: 'الإصدار/النسخة طويلة — أقصى 60 حرف' }, { status: 400 })
+  }
   if (!size && !color) {
     return NextResponse.json({ error: 'لازم مقاس أو لون على الأقل' }, { status: 400 })
   }
@@ -176,7 +194,7 @@ async function __POST(
   try {
     // 👕 الرصيد الافتتاحي للمقاس بيدخل معروضاً بالكامل
     const created = await db.productVariant.create({
-      data: { productId: pid, size, color, barcode, price, condition, quantity, displayQty: quantity },
+      data: { productId: pid, size, color, barcode, price, condition, warrantyMonths: warrantyNorm.value, boxCondition: boxNorm.value, edition: editionNorm.value, quantity, displayQty: quantity },
     })
     // Keep Product.quantity as the sum of all its variants from here on.
     await syncProductQuantityFromVariants(db, pid)

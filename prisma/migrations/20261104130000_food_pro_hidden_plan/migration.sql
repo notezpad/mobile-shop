@@ -59,12 +59,12 @@ INSERT INTO "Plan" (
   -- ملاحظة: enabledModules مش بنمسحها في الـ UPDATE عشان لو الأدمن ظبطها
   -- يدوياً من اللوحة متترجعش. لكن نتأكد إن hr موجودة لو ناقصة:
   "enabledModules" = CASE
-    WHEN "enabledModules" IS NOT NULL
-     AND "enabledModules" <> ''
-     AND jsonb_typeof("enabledModules"::jsonb) = 'array'
-     AND NOT (("enabledModules"::jsonb) ? 'hr')
-    THEN (("enabledModules"::jsonb) || '"hr"'::jsonb)::text
-    ELSE "enabledModules"
+    WHEN "Plan"."enabledModules" IS NOT NULL
+     AND "Plan"."enabledModules" <> ''
+     AND jsonb_typeof("Plan"."enabledModules"::jsonb) = 'array'
+     AND NOT (("Plan"."enabledModules"::jsonb) ? 'hr')
+    THEN (("Plan"."enabledModules"::jsonb) || '"hr"'::jsonb)::text
+    ELSE "Plan"."enabledModules"
   END,
   "capabilities" = EXCLUDED."capabilities",
   "visibility" = 'hidden';

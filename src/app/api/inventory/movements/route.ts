@@ -237,7 +237,7 @@ async function __POST(req: NextRequest) {
     where: { productId },
     select: { id: true, size: true, color: true, condition: true, quantity: true },
   })
-  let variant: { id: number; size: string | null; color: string | null; quantity: number } | null = null
+  let variant: { id: number; size: string | null; color: string | null; condition: string | null; quantity: number } | null = null
   if (variants.length > 0) {
     const vid = b?.variantId != null && b.variantId !== '' ? parseInt(b.variantId, 10) : NaN
     variant = variants.find((v) => v.id === vid) ?? null
