@@ -173,7 +173,7 @@ function serialsHtml(serials?: string | null): string {
   return list
     .map(
       (s) =>
-        `<div style="font-size:9px;font-weight:600;color:#9ca3af;margin-top:2px;direction:ltr;text-align:right;letter-spacing:.2px">IMEI: ${escapeHtml(s)}</div>`
+        `<div style="font-size:9px;font-weight:600;color:#9ca3af;margin-top:4px;direction:ltr;text-align:right;letter-spacing:.3px;font-family:'Courier New',monospace">IMEI: ${escapeHtml(s)}</div>`
     )
     .join('')
 }
@@ -235,14 +235,15 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
   .mc-items table { width: 100%; border-collapse: collapse; }
   .mc-items th { background: ${INK}; color: ${GOLD}; padding: 10px; font-size: 13px; font-weight: 700; text-align: center; }
   .mc-items th:nth-child(2) { text-align: right; }
-  .mc-items th:nth-child(4), .mc-items th:nth-child(5) { text-align: right; padding-left: 16px; }
-  .mc-items td { padding: 14px 8px; border-bottom: 2px solid #f3f4f6; font-size: 13px; }
+  .mc-items td { padding: 14px 8px; border-bottom: 2px solid #f3f4f6; font-size: 13px; vertical-align: middle; }
   .mc-items td.center { text-align: center; }
-  .mc-items td.num { text-align: right; padding-left: 16px; }
+  .mc-items td.num { text-align: center; }
   .mc-totals-wrap { display: flex; justify-content: space-between; align-items: center; padding: 0 30px 16px; gap: 20px; }
-  .mc-totals { width: 300px; flex-shrink: 0; }
-  .mc-totals .row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13.5px; color: #4b5563; font-weight: 700; border-bottom: 1px solid #e5e7eb; }
-  .mc-totals .grand { display: flex; justify-content: space-between; align-items: center; background: ${INK}; color: ${GOLD}; padding: 13px 16px; border-radius: 6px; font-size: 18px; font-weight: 900; margin-top: 8px; }
+  .mc-totals { width: 320px; flex-shrink: 0; }
+  .mc-totals .row { display: flex; align-items: baseline; gap: 6px; padding: 9px 0; font-size: 13.5px; color: #4b5563; font-weight: 700; border-bottom: 1px solid #e5e7eb; }
+  .mc-totals .row-label, .mc-totals .row-value { flex-shrink: 0; white-space: nowrap; }
+  .mc-totals .row-leader { flex: 1; min-width: 12px; border-bottom: 2px dotted #c9ced3; margin-bottom: 3px; }
+  .mc-totals .grand { display: flex; justify-content: space-between; align-items: center; background: ${INK}; color: ${GOLD}; padding: 14px 18px; border-radius: 0; font-size: 19px; font-weight: 900; margin-top: 10px; width: 100%; }
   .mc-totals .grand span:last-child { color: #fff; }
   .mc-totals-note { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; opacity: .55; }
   .mc-totals-note .tn-icon { font-size: 36px; }
@@ -256,8 +257,9 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
   .mc-terms-line::before { content: '◈'; color: ${GOLD}; font-size: 10px; flex-shrink: 0; margin-top: 3px; }
   .mc-terms.empty { font-size: 11.5px; color: #9ca3af; font-style: italic; }
   .mc-footer { padding: 18px 30px; display: flex; justify-content: space-between; align-items: flex-end; }
-  .mc-sign p { font-size: 12px; color: #6b7280; font-weight: 700; margin-bottom: 28px; }
-  .mc-sign-line { width: 150px; border-bottom: 2px dashed #9ca3af; }
+  .mc-sign { display: flex; align-items: flex-end; gap: 12px; }
+  .mc-sign p { font-size: 12px; color: #6b7280; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+  .mc-sign-line { flex: 1; min-width: 120px; width: 180px; border-bottom: 2px dashed #9ca3af; }
   .mc-thanks { text-align: center; }
   .mc-thanks .big { font-size: 18px; font-weight: 900; color: ${GOLD}; margin-bottom: 3px; }
   .mc-thanks .sub { font-size: 11px; color: #9ca3af; font-weight: 700; }
@@ -305,16 +307,16 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
     <div class="mc-items">
       ${remaining > 0.009 ? `<div class="mc-watermark"><span>غير مسدد بالكامل</span></div>` : ''}
       <table>
-        <thead><tr><th>#</th><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
+        <thead><tr><th style="width:36px">#</th><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
         <tbody>${itemsRows}</tbody>
       </table>
     </div>
 
     <div class="mc-totals-wrap">
       <div class="mc-totals">
-        <div class="row"><span>الإجمالي</span><span>${fmtInv(sale.total)} جنيه</span></div>
-        <div class="row"><span>المدفوع</span><span>${fmtInv(sale.paid)} جنيه</span></div>
-        ${remaining > 0.009 ? `<div class="row"><span>المتبقي</span><span style="color:#ef4444">${fmtInv(remaining)} جنيه</span></div>` : ''}
+        <div class="row"><span class="row-label">الإجمالي</span><span class="row-leader"></span><span class="row-value">${fmtInv(sale.total)} جنيه</span></div>
+        <div class="row"><span class="row-label">المدفوع</span><span class="row-leader"></span><span class="row-value">${fmtInv(sale.paid)} جنيه</span></div>
+        ${remaining > 0.009 ? `<div class="row"><span class="row-label">المتبقي</span><span class="row-leader"></span><span class="row-value" style="color:#ef4444">${fmtInv(remaining)} جنيه</span></div>` : ''}
         <div class="grand">
           <span>${remaining > 0.009 ? 'المدفوع فعلياً' : 'الإجمالي النهائي'}</span>
           <span>${fmtInv(remaining > 0.009 ? sale.paid : sale.total)} جنيه</span>
@@ -346,6 +348,7 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
 
     <div class="mc-footer">
       <div class="mc-sign"><p>توقيع البائع / ختم المحل</p><div class="mc-sign-line"></div></div>
+
       <div class="mc-thanks">
         <div class="big">شكراً لتعاملكم معنا</div>
         <div class="sub">${escapeHtml(shop?.name || 'محل الاتصالات')} — تم إصدار الفاتورة إلكترونياً</div>
