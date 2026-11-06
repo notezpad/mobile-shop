@@ -5,6 +5,7 @@ import { requireCapability, requireModule, requireModuleWritePermission, feature
 import { getTenantTimezone, localDateStrToUtcBounds, dateStrInTz } from '@/lib/tenantTime'
 import { purgeEdgeCache, PURGE_KEYS } from '@/lib/edgeCache'
 import { withSql, isUniqueViolation, type Sql } from '@/lib/sql'
+import { assignSaleSerials } from '@/lib/sale-serials'
 import { productBranchScopeSql, branchScopeSql } from '@/lib/branch-scope'
 import { resolveSellerRate } from '@/lib/seller-commissions'
 import { isValidSaleMethodId } from '@/lib/payment-methods'
@@ -86,7 +87,7 @@ export async function GET(req: NextRequest) {
     const itemRows = saleIds.length
       ? await sql<any[]>`
           SELECT "id", "saleId", "name", "price", "quantity", "cost",
-                 "unitLabel", "unitQuantity", "pieceLabel", "returnedQty",
+                 "unitLabel", "unitQuantity", "pieceLabel", "returnedQty", "serials",
                  (SELECT NULLIF(concat_ws(' / ', pv."color", pv."size", CASE WHEN pv."condition" = 'used' THEN 'مستعمل' END), '') FROM "ProductVariant" pv
                   WHERE pv."id" = "SaleItem"."variantId") AS "variantLabel"
           FROM "SaleItem"
@@ -125,6 +126,8 @@ export async function GET(req: NextRequest) {
         unitQuantity: it.unitQuantity ?? null,
         pieceLabel: it.pieceLabel ?? null,
         returnedQty: it.returnedQty ?? 0,
+        // 🧾 IMEI/السيريال المباع (سطر لكل جهاز) — للطباعة
+        serials: it.serials ?? null,
         // 🎨 اللون/المقاس (للتمييز بين سطور نفس المنتج في المرتجع)
         variantLabel: it.variantLabel ?? null,
       })),
@@ -618,6 +621,16 @@ export async function POST(req: NextRequest) {
         UPDATE "Sale"
         SET "sellerId" = ${sellerAttribution.id}, "commissionRate" = ${sellerAttribution.rate}
         WHERE "id" = ${sale.id} AND "tenantId" = ${session.tenantId} AND "sellerId" IS NULL`
+    }
+
+    // 🧾 2026-11-07: سحب IMEI/السيريال تلقائيًا للأجهزة المباعة (استعلام واحد ذرّي).
+    // فشله مبيوقفش البيع — الفاتورة بتتحفظ والسيريال بس مبيظهرش.
+    if (sale?.id) {
+      try {
+        await assignSaleSerials(sql, session.tenantId, sale)
+      } catch (e) {
+        console.error('[sales] assignSaleSerials failed', e)
+      }
     }
 
     // ⚡ EDGE CACHE purge (2026-10-06): البيع الجديد لازم يظهر فورًا في الداشبورد

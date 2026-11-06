@@ -98,7 +98,7 @@ export interface ThermalReceiptData {
   shopAddress?: string
   invoiceNo: string
   date: string
-  items: { name: string; qty: number; price: number; total: number }[]
+  items: { name: string; qty: number; price: number; total: number; serials?: string | null }[]
   total: number
   paid: number
   remaining: number
@@ -175,6 +175,11 @@ function buildEscPosReceipt(data: ThermalReceiptData, settings: PrinterSettings)
     const name = truncate(item.name, Math.floor(cols * 0.4))
     bytes.push(...textToBytes(padLine(name, String(item.qty), plainMoney(item.price), plainMoney(item.total), cols)))
     bytes.push(LF)
+    // 🧾 IMEI/السيريال تحت اسم الصنف
+    for (const s of (item.serials ?? '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean)) {
+      bytes.push(...textToBytes(truncate(`IMEI: ${s}`, cols)))
+      bytes.push(LF)
+    }
   })
 
   // Separator
@@ -263,7 +268,12 @@ export function printThermalReceiptBrowser(data: ThermalReceiptData, settings: P
     .map(
       (item) => `
       <tr>
-        <td class="name">${escapeHtml(item.name)}</td>
+        <td class="name">${escapeHtml(item.name)}${(item.serials ?? '')
+          .split(/\r?\n/)
+          .map((x) => x.trim())
+          .filter(Boolean)
+          .map((s) => `<div style="font-size:9px;color:#6b7280;direction:ltr;text-align:right">IMEI: ${escapeHtml(s)}</div>`)
+          .join('')}</td>
         <td class="qty">${item.qty}</td>
         <td class="price">${formatCurrency(item.price)}</td>
         <td class="total">${formatCurrency(item.total)}</td>

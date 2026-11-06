@@ -7,6 +7,8 @@ export interface PrintableSaleItem {
   price: number
   quantity: number
   cost?: number
+  /** 🧾 IMEI/سيريال الجهاز المباع (سطر لكل جهاز) — بيتطبع تحت اسم الصنف */
+  serials?: string | null
 }
 
 export interface PrintableSale {
@@ -164,6 +166,18 @@ export function printCloseBarHtml(): string {
 
 /** 🧾 استايل "أسود/دهبي" (Tajawal) — منفصل عمدًا عن BRAND/baseDocStyles المشتركين
  *  مع التقارير وملفات الإكسل، عشان تغيير شكل الفاتورة ما يأثرش عليهم. */
+/** 🧾 سطر/أسطر IMEI تحت اسم الصنف — خط صغير ورمادي خفيف */
+function serialsHtml(serials?: string | null): string {
+  const list = (serials ?? '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean)
+  if (list.length === 0) return ''
+  return list
+    .map(
+      (s) =>
+        `<div style="font-size:9px;font-weight:600;color:#9ca3af;margin-top:2px;direction:ltr;text-align:right;letter-spacing:.2px">IMEI: ${escapeHtml(s)}</div>`
+    )
+    .join('')
+}
+
 export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
   const GOLD = '#d4af37'
   const INK = '#111111'
@@ -174,7 +188,7 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
       (it, i) => `
         <tr>
           <td style="color:#9ca3af">${i + 1}</td>
-          <td style="text-align:right;font-weight:800;color:${INK}">${escapeHtml(it.name)}</td>
+          <td style="text-align:right;font-weight:800;color:${INK}">${escapeHtml(it.name)}${serialsHtml(it.serials)}</td>
           <td class="center">${it.quantity}</td>
           <td class="num">${fmtInv(it.price)} جنيه</td>
           <td class="num" style="color:#b45309;font-weight:800">${fmtInv(it.price * it.quantity)} جنيه</td>

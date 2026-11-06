@@ -61,16 +61,17 @@ export function warrantyLabel(months: number | null | undefined): string | null 
 // ── الإصدار/النسخة ──
 export const MAX_EDITION_LEN = 60
 
-/** اقتراحات سريعة للنسخة — أهم حاجة للآيفون (نسخة + مفتوح/مقفول). */
+/**
+ * اقتراحات سريعة للنسخة — الشائع بس في السوق المصري (التحديث 34):
+ * شيبس أقل = فورم أنضف. الكتابة الحرة لسه متاحة (السيرفر بيقبل أي نسخة لحد 60 حرف).
+ */
 export const EDITION_CHIPS = [
   'نسخة مصرية',
   'نسخة سعودية',
   'نسخة إماراتية',
   'نسخة أوروبية',
   'نسخة أمريكية',
-  'نسخة يابانية',
   'مفتوح الشبكات',
-  'مقفول على شبكة',
 ]
 
 export type NormalizedEdition = { ok: true; value: string | null } | { ok: false }

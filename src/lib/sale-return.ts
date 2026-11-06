@@ -53,6 +53,7 @@ import { createPrincipalCashEntry } from '@/lib/commission'
 import { round2 } from '@/lib/purchase-return'
 import { syncProductQuantityFromVariants } from '@/lib/sync-product-quantity'
 import { isValidSaleMethodId } from '@/lib/payment-methods'
+import { releaseSaleItemUnits } from '@/lib/sale-serials'
 
 export class SaleReturnError extends Error {
   status: number
@@ -397,6 +398,8 @@ export async function performSaleReturn(
         select: { quantity: true, cost: true },
       })
       if (it.variantId) {
+        // 🧾 الأجهزة المسجلة (IMEI) المرتبطة بالسطر ترجع «بالمخزن»
+        await releaseSaleItemUnits(tx, tenantId, it.id, qty)
         // Restore the variant's own stock (deductStock decremented it), then
         // re-sync the parent product's aggregate.
         // 👕 المرتجع بيرجع على الرف (معروض) — زي ما بيخرج من الشنطة للعرض.

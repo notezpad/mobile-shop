@@ -7,6 +7,7 @@ import { requireModule, featureErrorResponse } from '@/lib/features'
 import { createPrincipalCashEntry } from '@/lib/commission'
 import { logAudit } from '@/lib/audit'
 import { resolveSellerRate } from '@/lib/seller-commissions'
+import { releaseSaleItemUnits } from '@/lib/sale-serials'
 
 export const dynamic = 'force-dynamic'
 
@@ -171,6 +172,8 @@ async function __DELETE(
         if (it.productId == null) continue
 
         if (it.variantId && it.variant) {
+          // 🧾 الأجهزة المسجلة (IMEI) المرتبطة بالسطر ترجع «بالمخزن»
+          await releaseSaleItemUnits(tx, session.tenantId, it.id, restoreQty)
           // 👕 المرتجع بيرجع معروض (زي مرتجع البيع الجزئي)
           await tx.productVariant.update({
             where: { id: it.variantId },

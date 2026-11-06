@@ -428,6 +428,8 @@ model VariantUnit {
   batteryHealth Int?
   note      String?
   status    String   @default("in_stock")
+  // 🧾 2026-11-07: سطر الفاتورة اللي الجهاز اتباع عليه (null = لسه بالمخزن)
+  saleItemId Int?
   createdAt DateTime @default(now())
 
   tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -436,6 +438,7 @@ model VariantUnit {
   @@unique([tenantId, imeiNorm])
   @@index([variantId])
   @@index([tenantId])
+  @@index([saleItemId])
 }
 
 model Category {
@@ -785,6 +788,9 @@ model SaleItem {
 
   // Optional link to the specific size/color variant sold
   variantId Int?
+
+  // 🧾 2026-11-07: لقطة IMEI/سيريال الأجهزة المباعة في السطر (واحد في كل سطر جديد) — بتتسحب تلقائيًا من VariantUnit
+  serials String?
 
   // 🛡️ مت-15 (2026-11-02): tenantId مُلَوْحَن (denormalized) في جدول التفاصيل
   // — عزل حتى لو join اتسرب أو SQL خام جديد اتكتب من غير فلتر.

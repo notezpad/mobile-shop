@@ -40,6 +40,8 @@ interface SaleItem {
   returnedQty?: number
   /** 🎨 اللون/المقاس لو السطر على variant */
   variantLabel?: string | null
+  /** 🧾 IMEI/سيريال الجهاز المباع (سطر لكل جهاز) */
+  serials?: string | null
 }
 interface Sale {
   id: number
@@ -413,7 +415,7 @@ export function SalesHistoryView() {
     id: s.id, invoiceNo: s.invoiceNo, total: s.total, paid: s.paid, status: s.status, createdAt: s.createdAt,
     items: s.items.map((it) => {
       const l = displayLine(it)
-      return { name: itemTitle(it) + (l.unit ? ` (${l.qty} ${l.unit})` : ''), price: l.price, quantity: l.qty }
+      return { name: itemTitle(it) + (l.unit ? ` (${l.qty} ${l.unit})` : ''), price: l.price, quantity: l.qty, serials: it.serials ?? null }
     }),
     customer: s.customer ? { name: s.customer.name, phone: s.customer.phone } : null,
   })

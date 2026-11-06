@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { BadgeInfo, ChevronDown, Laptop, Loader2, Package, Plug, Plus, Search, ShieldCheck, Shirt, Smartphone, Sparkles, Trash2, Dices, Wand2 } from 'lucide-react'
+import { BadgeInfo, ChevronDown, Laptop, Loader2, Package, Plug, Plus, Search, ShieldCheck, Shirt, Smartphone, Sparkles, Trash2, Dices, Wand2, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -25,7 +25,7 @@ import {
 import { CONDITION_LABEL, type VariantCondition } from '@/lib/variant-condition'
 import {
   BOX_LABEL, BOX_SHORT, EDITION_CHIPS, MAX_WARRANTY_MONTHS, UNIT_STATUS_LABEL,
-  isIphoneDevice, warrantyLabel, type BoxCondition,
+  isIphoneDevice, normalizeImei, warrantyLabel, type BoxCondition, type UnitStatus,
 } from '@/lib/variant-device'
 import { cleanSuggestionValue, normalizeSuggestionKey, type SuggestionKind } from '@/lib/variant-suggestions'
 import { highlightParts, loadHardwareDictionary, resolveExact, searchDictionary, type DictEntry, type HardwareDictionary } from '@/lib/hardware-dictionary'
@@ -198,9 +198,9 @@ function SuggestChips({
   const own = items.filter((x) => !q || normalizeSuggestionKey(x.value).includes(q)).slice(0, 12)
   const showPresets = items.length === 0 && !!presets?.length
   if (!showPresets && own.length === 0) return null
-  const chip = 'h-8 rounded-full border text-xs font-bold transition-colors'
+  const chip = 'h-8 shrink-0 whitespace-nowrap rounded-full border text-xs font-bold transition-colors'
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label={label}>
+    <div className="mt-2.5 flex flex-wrap items-center gap-2" role="group" aria-label={label}>
       {showPresets
         ? presets!.map((c) => {
             const on = normalizeSuggestionKey(value) === normalizeSuggestionKey(c)
@@ -257,16 +257,9 @@ interface PreviewRow {
 const KIND_ICON = { phone: Smartphone, laptop: Laptop, other: Plug } as const
 
 /** شيبس اختيار سريعة — زر بيتعلّم لما يكون مختار */
-function ChipRow({ items, value, onPick, label, scrollable = false }: { items: string[]; value: string; onPick: (v: string) => void; label: string; scrollable?: boolean }) {
+function ChipRow({ items, value, onPick, label }: { items: string[]; value: string; onPick: (v: string) => void; label: string }) {
   return (
-    <div
-      className={cn(
-        'mt-2 flex gap-1.5 pb-1',
-        scrollable ? 'min-w-0 flex-nowrap overflow-x-auto overscroll-x-contain' : 'flex-wrap',
-      )}
-      role="group"
-      aria-label={label}
-    >
+    <div className="mt-2.5 flex flex-wrap items-center gap-2" role="group" aria-label={label}>
       {items.map((c) => {
         const on = value.trim().toLowerCase() === c.toLowerCase()
         return (
@@ -295,7 +288,7 @@ function ConditionPick({ value, onChange }: { value: '' | VariantCondition; onCh
     { v: 'used', t: CONDITION_LABEL.used },
   ]
   return (
-    <div className="flex h-11 overflow-hidden rounded-xl border bg-background p-1" role="radiogroup" aria-label="الحالة">
+    <div className="flex min-h-11 flex-wrap gap-2 rounded-xl border bg-background p-1" role="radiogroup" aria-label="الحالة">
       {opts.map((o) => (
         <button
           key={o.v}
@@ -304,8 +297,8 @@ function ConditionPick({ value, onChange }: { value: '' | VariantCondition; onCh
           aria-checked={value === o.v}
           onClick={() => onChange(value === o.v ? '' : o.v)}
           className={cn(
-            'flex-1 rounded-lg px-3 text-sm font-bold transition-colors',
-            value === o.v ? 'bg-foreground text-background' : 'text-foreground/70 hover:bg-muted/60',
+            'flex w-auto flex-auto items-center justify-center whitespace-nowrap rounded-lg px-3 py-2 text-center text-sm font-bold transition-colors',
+            value === o.v ? 'bg-foreground text-background shadow-sm' : 'text-foreground/70 hover:bg-foreground/10 hover:text-foreground',
           )}
         >
           {o.t}
@@ -322,7 +315,7 @@ function BoxPick({ value, onChange }: { value: '' | BoxCondition; onChange: (v: 
     { v: 'device', t: BOX_LABEL.device },
   ]
   return (
-    <div className="flex h-11 overflow-hidden rounded-xl border bg-background p-1" role="radiogroup" aria-label="الكرتونة والملحقات">
+    <div className="flex min-h-11 flex-wrap gap-2 rounded-xl border bg-background p-1" role="radiogroup" aria-label="الكرتونة والملحقات">
       {opts.map((o) => (
         <button
           key={o.v}
@@ -331,14 +324,32 @@ function BoxPick({ value, onChange }: { value: '' | BoxCondition; onChange: (v: 
           aria-checked={value === o.v}
           onClick={() => onChange(value === o.v ? '' : o.v)}
           className={cn(
-            'flex-1 whitespace-nowrap rounded-lg px-2 text-[13px] font-bold transition-colors',
-            value === o.v ? 'bg-foreground text-background' : 'text-foreground/70 hover:bg-muted/60',
+            'flex w-auto flex-auto items-center justify-center whitespace-nowrap rounded-lg px-3 py-2 text-center text-[13px] font-bold transition-colors',
+            value === o.v ? 'bg-foreground text-background shadow-sm' : 'text-foreground/70 hover:bg-foreground/10 hover:text-foreground',
           )}
         >
           {o.t}
         </button>
       ))}
     </div>
+  )
+}
+
+/** 📱 التحديث 34: بطاقة إحصائية في تاب الأجهزة — والضغط عليها بيفلتر بالحالة */
+function UnitStatCard({ n, t, active, tone, onClick }: { n: number; t: string; active: boolean; tone?: 'ok' | 'muted'; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'rounded-2xl border bg-card px-3 py-2.5 text-center transition-colors',
+        active ? 'border-foreground ring-2 ring-foreground/15' : 'hover:border-foreground/40',
+      )}
+    >
+      <span className={cn('block text-xl font-extrabold leading-none tabular-nums', tone === 'ok' ? 'text-success-subtle-foreground' : tone === 'muted' ? 'text-foreground/55' : '')}>{n}</span>
+      <span className="mt-1 block text-[11px] font-bold text-foreground/65">{t}</span>
+    </button>
   )
 }
 
@@ -470,14 +481,61 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
   const isIphone = showDeviceFields && isIphoneDevice(product?.name)
   // أجهزة المتغيرات (IMEI) — محملة لكل المنتج ومقسمة على المتغيرات
   const [units, setUnits] = React.useState<VariantUnitRow[]>([])
-  const [openDevices, setOpenDevices] = React.useState<Set<number>>(() => new Set())
-  const [imeiDraft, setImeiDraft] = React.useState<Record<number, string>>({})
   const [unitBatteryDraft, setUnitBatteryDraft] = React.useState<Record<number, string>>({})
-  const [newBatteryDraft, setNewBatteryDraft] = React.useState<Record<number, string>>({})
-  const [addingUnit, setAddingUnit] = React.useState<number | null>(null)
   const [removingUnit, setRemovingUnit] = React.useState<number | null>(null)
   // 📱 مسودّات تعديل الضمان/النسخة من لوحة الجهاز (فاضي في الماب = نعرض القيمة المحفوظة)
   const [deviceDraft, setDeviceDraft] = React.useState<Record<number, { warrantyMonths?: string; edition?: string }>>({})
+  // 📱 التحديث 35 (2026-11-07): نفس تاب «أجهزة المنتج (IMEI)» — بس من غير اللصق المجمّع
+  // اللي بييلخبط: تسجيل جهاز واحد زي الوضع القديم بالظبط (خانة IMEI + زرار تسجيل).
+  const [tab, setTab] = React.useState<'variants' | 'devices'>('variants')
+  const [devQuery, setDevQuery] = React.useState('')
+  const [devStatus, setDevStatus] = React.useState<'' | UnitStatus>('')
+  const [devVariant, setDevVariant] = React.useState<number | ''>('')
+  // 📱 فورم تسجيل جهاز واحد: المتغير (لو فيه أكتر من متغير) + IMEI + البطارية للآيفون بس
+  const [newUnitVariant, setNewUnitVariant] = React.useState<number | ''>('')
+  const [newImei, setNewImei] = React.useState('')
+  const [newBattery, setNewBattery] = React.useState('')
+  const [addingUnit, setAddingUnit] = React.useState(false)
+  const bodyRef = React.useRef<HTMLDivElement | null>(null)
+  // 🖱️ إصلاح عجلة الماوس: السكرول كان بيشتغل بس لما المؤشر يبقى على شريط التمرير.
+  // السبب إن قفل السكرول بتاع Radix (react-remove-scroll) بيلغي حدث الـ wheel لما يبقى
+  // الهدف عنصر جوه الجسم (كروت/جداول overflow-hidden). بنمسك الـ wheel بنفسنا على
+  // جسم الدايلوج ونسكرول أقرب حاوية تقدر تتحرك في الاتجاه ده (القوائم الداخلية الأول).
+  const wheelCleanup = React.useRef<(() => void) | null>(null)
+  const attachBody = React.useCallback((node: HTMLDivElement | null) => {
+    wheelCleanup.current?.()
+    wheelCleanup.current = null
+    bodyRef.current = node
+    if (!node) return
+    const canScroll = (el: HTMLElement, dy: number) => {
+      const oy = getComputedStyle(el).overflowY
+      if (oy !== 'auto' && oy !== 'scroll') return false
+      if (el.scrollHeight <= el.clientHeight + 1) return false
+      return dy < 0 ? el.scrollTop > 0 : el.scrollTop + el.clientHeight < el.scrollHeight - 1
+    }
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.deltaY === 0 || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return
+      const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * node.clientHeight : e.deltaY
+      let el = e.target instanceof HTMLElement ? e.target : null
+      while (el) {
+        if (canScroll(el, dy)) {
+          el.scrollTop += dy
+          e.preventDefault()
+          e.stopPropagation()
+          return
+        }
+        if (el === node) return
+        el = el.parentElement
+      }
+    }
+    node.addEventListener('wheel', onWheel, { passive: false })
+    wheelCleanup.current = () => node.removeEventListener('wheel', onWheel)
+  }, [])
+  React.useEffect(() => () => wheelCleanup.current?.(), [])
+  React.useEffect(() => {
+    // تغيير التاب بيرجّع السكرول لأول الصفحة — عشان المحتوى الجديد يبان من فوق
+    bodyRef.current?.scrollTo({ top: 0 })
+  }, [tab])
   const unitsByVariant = React.useMemo(() => {
     const m = new Map<number, VariantUnitRow[]>()
     for (const u of units) {
@@ -487,6 +545,74 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
     }
     return m
   }, [units])
+
+  // ─── 📱 التحديث 34: منطق تاب الأجهزة ───
+  const variantById = React.useMemo(() => new Map(variants.map((v) => [v.id, v])), [variants])
+  const unitsStats = React.useMemo(() => {
+    const sold = units.filter((u) => u.status === 'sold').length
+    return { total: units.length, inStock: units.length - sold, sold }
+  }, [units])
+  const shownUnits = React.useMemo(() => {
+    const q = devQuery.trim().toLowerCase()
+    const qAr = normAr(devQuery)
+    return units.filter((u) => {
+      if (devStatus && u.status !== devStatus) return false
+      if (devVariant !== '' && u.variantId !== devVariant) return false
+      if (!q) return true
+      const v = variantById.get(u.variantId)
+      const texts = [u.imei, v?.size, v?.color, v?.edition, v?.barcode]
+      return texts.some((x) => {
+        const t = (x ?? '').toLowerCase()
+        return t.includes(q) || (qAr !== '' && normAr(t).includes(qAr))
+      })
+    })
+  }, [units, devQuery, devStatus, devVariant, variantById])
+
+  /** فتح تاب الأجهزة متفلتر على متغير معين (زرار IMEI في جدول المتغيرات) —
+   * وفورم التسجيل تحت بيتجهّز على نفس المتغير عشان تسجّل على طول. */
+  const openDevicesForVariant = (variantId: number) => {
+    setTab('devices')
+    setDevVariant(variantId)
+    setDevQuery('')
+    setDevStatus('')
+    setNewUnitVariant(variantId)
+  }
+
+  /** 📱 التحديث 35: تسجيل جهاز واحد زي الوضع القديم — خانة IMEI واحدة + زرار تسجيل.
+   * لو فيه متغير واحد بيتسجل عليه على طول، ولو أكتر بنتختار من القايمة.
+   * البطارية للآيفون بس، والمكرر في المحل كله السيرفر بيرفضه تلقائي. */
+  const addUnit = async () => {
+    if (!product) return
+    const targetVariant = newUnitVariant !== '' ? newUnitVariant : variants.length === 1 ? variants[0]?.id ?? null : null
+    if (targetVariant == null) {
+      toast.error('اختار المتغير الأول')
+      return
+    }
+    const chk = normalizeImei(newImei)
+    if (!chk.ok) {
+      toast.error(chk.error)
+      return
+    }
+    setAddingUnit(true)
+    try {
+      const created = await api<VariantUnitRow>(`/api/products/${product.id}/variant-units`, {
+        method: 'POST',
+        body: {
+          variantId: targetVariant,
+          imei: chk.imei,
+          batteryHealth: isIphone && newBattery.trim() !== '' ? newBattery.trim() : null,
+        },
+      })
+      setUnits((prev) => [...prev, created])
+      setNewImei('')
+      setNewBattery('')
+      toast.success('تم تسجيل الجهاز')
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل تسجيل الجهاز')
+    } finally {
+      setAddingUnit(false)
+    }
+  }
 
   // All barcodes already used by this product's variants — passed to the
   // generator so a freshly-made code never collides with one already saved.
@@ -527,13 +653,18 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
       setSpec({ ...EMPTY_LAPTOP_SPEC })
       setPreview(null)
       setSmartText('')
-      // 📱 التحديث 33: تصفير بيانات الجهاز
-      setOpenDevices(new Set())
-      setImeiDraft({})
+      // 📱 التحديث 35: تصفير بيانات الجهاز + فورم التسجيل + تاب العرض والفلاتر
       setUnitBatteryDraft({})
-      setNewBatteryDraft({})
       setDeviceDraft({})
       setUnits([])
+      setTab('variants')
+      setDevQuery('')
+      setDevStatus('')
+      setDevVariant('')
+      setNewUnitVariant('')
+      setNewImei('')
+      setNewBattery('')
+      setAddingUnit(false)
     }
   }, [open, product?.id, product?.name])
 
@@ -790,44 +921,6 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
     }
   }
 
-  /** تسجيل جهاز جديد (IMEI + صحة البطارية للآيفون بس) على متغير */
-  const addUnit = async (variantId: number) => {
-    if (!product) return
-    const imei = (imeiDraft[variantId] ?? '').trim()
-    if (!imei) {
-      toast.error('اكتب الـ IMEI / السيريال الأول')
-      return
-    }
-    setAddingUnit(variantId)
-    try {
-      const batteryRaw = (newBatteryDraft[variantId] ?? '').trim()
-      const created = await api<VariantUnitRow>(`/api/products/${product.id}/variant-units`, {
-        method: 'POST',
-        body: {
-          variantId,
-          imei,
-          batteryHealth: isIphone && batteryRaw !== '' ? batteryRaw : null,
-        },
-      })
-      setUnits((prev) => [...prev, created])
-      setImeiDraft((p) => {
-        const n = { ...p }
-        delete n[variantId]
-        return n
-      })
-      setNewBatteryDraft((p) => {
-        const n = { ...p }
-        delete n[variantId]
-        return n
-      })
-      toast.success('تم تسجيل الجهاز')
-    } catch (e: any) {
-      toast.error(e?.message || 'فشل تسجيل الجهاز')
-    } finally {
-      setAddingUnit(null)
-    }
-  }
-
   const removeUnit = async (variantId: number, unitId: number) => {
     if (!product) return
     if (!(await confirm({ title: 'حذف الـ IMEI من المتغير؟', description: 'الحذف من سجل الأجهزة بس — الكمية مش بتتغير.' }))) return
@@ -878,14 +971,6 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
       })
     }
   }
-
-  const toggleDevicePanel = (id: number) =>
-    setOpenDevices((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
 
   const toggleColor = (key: string) =>
     setOpenColors((prev) => {
@@ -1014,17 +1099,275 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
       ? 'grid-cols-[minmax(0,1fr)_4.75rem_minmax(0,1.1fr)_5rem_4.5rem_3rem_2.25rem]'
       : 'grid-cols-[minmax(0,1fr)_4.75rem_minmax(0,1.1fr)_5rem_4.5rem_2.25rem]'
     : 'grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_5.5rem_5rem_2.25rem]'
+  // 📱 التحديث 34: جريد جدول الأجهزة في تاب IMEI — عمود «بيانات المتغير» يظهر من md وطالع
+  const UNIT_GRID = cn(
+    'grid items-center gap-2',
+    isIphone
+      ? 'grid-cols-[minmax(0,1fr)_4.5rem_4.75rem_minmax(0,1.3fr)_2.25rem] md:grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_minmax(0,1.4fr)_10rem_2.5rem]'
+      : 'grid-cols-[minmax(0,1fr)_4.75rem_minmax(0,1.3fr)_2.25rem] md:grid-cols-[minmax(0,1fr)_5.5rem_minmax(0,1.4fr)_10rem_2.5rem]',
+  )
+  const variantLabel = (v: ProductVariant) => [v.size, v.color].filter(Boolean).join(' · ') || `متغير #${v.id}`
+
+  /** 📱 التحديث 35: تاب «أجهزة المنتج (IMEI)» — كل الأجهزة في مساحة كاملة:
+   * تسجيل جهاز واحد زي القديم + إحصائيات + بحث وفلاتر + جدول عريض. */
+  const renderDevicesTab = () => (
+    <section aria-label="أجهزة المنتج (IMEI)" className="space-y-4">
+      <SectionTitle
+        aside={(
+          <span className="text-xs font-semibold tabular-nums text-foreground/65">
+            {devQuery.trim() || devStatus || devVariant !== '' ? `${shownUnits.length} نتيجة من ${units.length}` : `${units.length} جهاز`}
+          </span>
+        )}
+      >
+        أجهزة المنتج — IMEI / سيريال لكل قطعة
+      </SectionTitle>
+
+      {/* إحصائيات سريعة — كل بطاقة فلتر حالة بالضغط عليها */}
+      <div className="grid grid-cols-3 gap-2.5">
+        <UnitStatCard n={unitsStats.total} t="إجمالي المسجل" active={devStatus === ''} onClick={() => setDevStatus('')} />
+        <UnitStatCard n={unitsStats.inStock} t="بالمخزن" tone="ok" active={devStatus === 'in_stock'} onClick={() => setDevStatus(devStatus === 'in_stock' ? '' : 'in_stock')} />
+        <UnitStatCard n={unitsStats.sold} t="تم بيعه" tone="muted" active={devStatus === 'sold'} onClick={() => setDevStatus(devStatus === 'sold' ? '' : 'sold')} />
+      </div>
+
+      {/* ─── 📱 التحديث 35: تسجيل جهاز واحد زي الوضع القديم — خانة IMEI + زرار تسجيل (من غير لصق دفعة) ─── */}
+      <div className="rounded-2xl border bg-card p-3.5">
+        <p className="flex items-center gap-1.5 text-xs font-extrabold">
+          <Plus className="size-3.5 text-foreground/60" aria-hidden />
+          تسجيل جهاز — IMEI / سيريال لكل قطعة
+        </p>
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          {variants.length > 1 && (
+            <select
+              value={newUnitVariant}
+              onChange={(e) => setNewUnitVariant(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
+              aria-label="متغير الجهاز الجديد"
+              className="h-11 min-w-0 flex-1 rounded-xl border bg-background px-2 text-sm font-bold outline-none focus:border-foreground sm:max-w-48"
+            >
+              <option value="">— اختار المتغير —</option>
+              {variants.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {variantLabel(v)} (كمية {v.quantity})
+                </option>
+              ))}
+            </select>
+          )}
+          <InkInput
+            dir="rtl"
+            placeholder="IMEI / سيريال الجهاز"
+            aria-label="IMEI الجهاز الجديد"
+            wrapperClassName="min-w-0 flex-[2]"
+            className="font-mono text-sm [unicode-bidi:plaintext]"
+            autoComplete="off"
+            value={newImei}
+            onChange={(e) => setNewImei(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                void addUnit()
+              }
+            }}
+          />
+          {isIphone && (
+            <InkInput
+              num
+              size="sm"
+              type="number"
+              min={1}
+              max={100}
+              placeholder="بطارية %"
+              aria-label="صحة بطارية الجهاز الجديد"
+              wrapperClassName="w-24 shrink-0"
+              value={newBattery}
+              onChange={(e) => setNewBattery(e.target.value)}
+              className="text-center text-xs"
+            />
+          )}
+          <Button
+            type="button"
+            disabled={addingUnit || (variants.length > 1 && newUnitVariant === '')}
+            onClick={() => void addUnit()}
+            className={cn('h-11 shrink-0 rounded-xl px-5 font-bold', INK_BTN)}
+          >
+            {addingUnit ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+            تسجيل
+          </Button>
+        </div>
+        {variants.length === 0 ? (
+          <p className="mt-2 text-[11px] font-bold text-warning-subtle-foreground">
+            ضيف متغير الأول من تاب «المتغيرات» (سعة/لون) وبعدها سجّل الأجهزة هنا.
+          </p>
+        ) : (
+          <p className="mt-2 text-[11px] font-medium text-foreground/60">
+            {isIphone ? 'سجّل IMEI كل جهاز على حدة مع صحة البطارية — ' : 'سجّل IMEI كل جهاز على حدة — '}
+            نفس الرقم ممنوع يتسجل مرتين في المحل كله (تتبع الضمان والحماية من المسروق).
+          </p>
+        )}
+      </div>
+
+      {/* ─── بحث وفلاتر ─── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="relative flex h-11 min-w-0 flex-1 items-center rounded-xl border bg-card focus-within:border-foreground focus-within:ring-[3px] focus-within:ring-foreground/10 sm:min-w-56">
+          <Search className="pointer-events-none absolute start-3 size-4 text-foreground/60" aria-hidden />
+          <input
+            value={devQuery}
+            onChange={(e) => setDevQuery(e.target.value)}
+            placeholder="دوّر برقم IMEI / سيريال / لون / سعة…"
+            aria-label="بحث في الأجهزة"
+            className="h-full w-full bg-transparent ps-9 pe-3 text-sm outline-none placeholder:text-muted-foreground/80"
+          />
+          {devQuery && (
+            <button
+              type="button"
+              aria-label="مسح البحث"
+              onClick={() => setDevQuery('')}
+              className="absolute end-2.5 grid size-6 place-items-center rounded-md text-foreground/50 hover:bg-muted hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </label>
+        <select
+          value={devStatus}
+          onChange={(e) => setDevStatus(e.target.value as '' | UnitStatus)}
+          aria-label="فلتر حالة الجهاز"
+          className="h-11 rounded-xl border bg-card px-2.5 text-sm font-bold outline-none focus:border-foreground"
+        >
+          <option value="">كل الحالات</option>
+          <option value="in_stock">بالمخزن</option>
+          <option value="sold">تم بيعه</option>
+        </select>
+        <select
+          value={devVariant}
+          onChange={(e) => setDevVariant(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
+          aria-label="فلتر المتغير"
+          className="h-11 max-w-56 rounded-xl border bg-card px-2.5 text-sm font-bold outline-none focus:border-foreground"
+        >
+          <option value="">كل المتغيرات</option>
+          {variants.map((v) => (
+            <option key={v.id} value={v.id}>{variantLabel(v)}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* ─── جدول الأجهزة — عريض ومريح ─── */}
+      <div className="overflow-hidden rounded-2xl border bg-card">
+        <div className={cn(UNIT_GRID, 'bg-muted/40 px-3 py-2 text-[11px] font-bold text-foreground/65')}>
+          <span>المتغير</span>
+          {isIphone && <span className="text-center">بطارية</span>}
+          <span className="text-center">الحالة</span>
+          <span className="hidden md:block">بيانات المتغير</span>
+          <span className="text-end">IMEI / سيريال</span>
+          <span />
+        </div>
+        {shownUnits.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm font-medium text-foreground/65">
+            {units.length === 0 ? 'مفيش أجهزة مسجلة لسه — سجّل أول جهاز من فورم التسجيل فوق.' : 'مفيش أجهزة بالفلتر ده — جرب تغيّر البحث أو الفلاتر.'}
+          </p>
+        ) : (
+          <ul className="divide-y">
+            {shownUnits.map((u) => {
+              const v = variantById.get(u.variantId)
+              const badges = v
+                ? ([warrantyLabel(v.warrantyMonths), v.boxCondition ? BOX_SHORT[v.boxCondition as BoxCondition] : null, v.edition].filter(Boolean) as string[])
+                : []
+              return (
+                <li key={u.id} className={cn(UNIT_GRID, 'px-3 py-2 text-sm')}>
+                  <span className="min-w-0 truncate text-xs font-semibold" title={v ? variantLabel(v) : undefined}>
+                    {v ? variantLabel(v) : '—'}
+                  </span>
+                  {isIphone && (
+                    <InkInput
+                      num
+                      size="sm"
+                      type="number"
+                      min={1}
+                      max={100}
+                      placeholder="%"
+                      aria-label={`صحة بطارية ${u.imei}`}
+                      wrapperClassName="w-full"
+                      value={unitBatteryDraft[u.id] ?? (u.batteryHealth ?? '')}
+                      onChange={(e) => setUnitBatteryDraft((p) => ({ ...p, [u.id]: e.target.value }))}
+                      onBlur={(e) => void updateUnitBattery(u.id, e.target.value)}
+                      className="text-center text-xs"
+                    />
+                  )}
+                  <span className="justify-self-center">
+                    <span className={cn(
+                      'rounded-md px-1.5 py-0.5 text-[10px] font-bold',
+                      u.status === 'sold' ? 'bg-foreground/10 text-foreground/60' : 'bg-success-subtle text-success-subtle-foreground',
+                    )}>
+                      {UNIT_STATUS_LABEL[u.status as keyof typeof UNIT_STATUS_LABEL] ?? 'بالمخزن'}
+                    </span>
+                  </span>
+                  <span className="hidden min-w-0 truncate text-[11px] font-bold text-foreground/55 md:block" title={badges.join(' · ')}>
+                    {badges.length > 0 ? badges.join(' · ') : '—'}
+                  </span>
+                  <span dir="ltr" className="min-w-0 truncate text-start font-mono text-xs font-bold" title={u.imei}>
+                    {u.imei}
+                  </span>
+                  <IconBtn label="حذف الجهاز" danger disabled={removingUnit === u.id} onClick={() => void removeUnit(u.variantId, u.id)}>
+                    {removingUnit === u.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                  </IconBtn>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </section>
+  )
+
   const secAdd = isElectronics ? 1 : 2
   const secList = isElectronics ? 2 : 3
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent mobileSheet className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+      {/* 📱 التحديث 35 (2026-11-07): عرض الدايلوج 850px للإلكترونيات — والارتفاع زاد درجة (96dvh) */}
+      <DialogContent mobileSheet dir="rtl" className={cn('flex max-h-[96dvh] flex-col gap-0 overflow-hidden p-0 [&_input:not([dir=ltr])]:text-right [&_textarea]:text-right', isElectronics ? 'sm:max-w-[750px]' : 'sm:max-w-2xl')}>
         <DialogHero icon={KindIcon} title="متغيرات المنتج" subtitle={product?.name} />
 
-        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain bg-muted/20 p-4 sm:p-6">
+        <div ref={attachBody} className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain bg-muted/20 p-4 sm:p-6">
+          {/* 📱 التحديث 34: تاب العرض — «المتغيرات» أو «أجهزة المنتج (IMEI)» — لموبايل/تابلت بس */}
+          {enabled && showDeviceFields && (
+            <div className="flex gap-1.5 rounded-2xl border bg-card p-1.5" role="tablist" aria-label="تبويبات المتغيرات">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === 'variants'}
+                onClick={() => setTab('variants')}
+                className={cn(
+                  'flex h-11 flex-1 items-center justify-center gap-2 rounded-xl px-2 text-sm font-bold transition-colors',
+                  tab === 'variants' ? 'bg-foreground text-background' : 'text-foreground/70 hover:bg-muted/60',
+                )}
+              >
+                <Package className="size-4 shrink-0" aria-hidden />
+                المتغيرات
+                <span className={cn('rounded-md px-1.5 py-0.5 text-[11px] font-extrabold tabular-nums', tab === 'variants' ? 'bg-background/15' : 'bg-muted text-foreground/60')}>
+                  {variants.length}
+                </span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === 'devices'}
+                onClick={() => setTab('devices')}
+                className={cn(
+                  'flex h-11 flex-1 items-center justify-center gap-2 rounded-xl px-2 text-sm font-bold transition-colors',
+                  tab === 'devices' ? 'bg-foreground text-background' : 'text-foreground/70 hover:bg-muted/60',
+                )}
+              >
+                <Smartphone className="size-4 shrink-0" aria-hidden />
+                أجهزة المنتج (IMEI)
+                <span className={cn('rounded-md px-1.5 py-0.5 text-[11px] font-extrabold tabular-nums', tab === 'devices' ? 'bg-background/15' : 'bg-muted text-foreground/60')}>
+                  {units.length}
+                </span>
+              </button>
+            </div>
+          )}
           {!enabled ? (
             <LockedNote>ميزة المتغيرات (مواصفات/ألوان لكل منتج بسعر وكمية وباركود مستقل) مش مفعّلة في باقتك الحالية.</LockedNote>
+          ) : tab === 'devices' && showDeviceFields ? (
+            renderDevicesTab()
           ) : (
             <>
               {/* ═════════ نوع المنتج — الإلكترونيات بس (بيغيّر أسماء الخانات) ═════════ */}
@@ -1041,6 +1384,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                         aria-selected={on}
                         onClick={() => {
                           setKind(k)
+                          setTab('variants')
                           setPreview(null)
                           setSpec({ ...EMPTY_LAPTOP_SPEC })
                           setForm((f) => ({ ...f, color: '', size: '' }))
@@ -1157,7 +1501,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
               {/* ═════════ إضافة متغير يدويًا ═════════ */}
               <section>
                 <SectionTitle n={secAdd}>إضافة متغير</SectionTitle>
-                <div className="grid grid-cols-2 gap-4 rounded-2xl border bg-card p-4 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-6 rounded-2xl border bg-card p-4 sm:grid-cols-4 sm:p-5">
                   {isElectronics ? (
                     <>
                       {kind === 'phone' && (
@@ -1225,7 +1569,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                             <ChipRow items={SCREEN_HZ_CHIPS} value={spec.hz} onPick={(v) => setSpec({ ...spec, hz: v })} label="تردد الشاشة" />
                           </Field>
                           <Field label="نوع الشاشة" className="col-span-2 sm:col-span-2">
-                            <div className="flex h-11 overflow-hidden rounded-xl border bg-background p-1" role="radiogroup" aria-label="نوع الشاشة">
+                            <div className="flex min-h-11 flex-wrap gap-2 rounded-xl border bg-background p-1" role="radiogroup" aria-label="نوع الشاشة">
                               {[{ v: false, t: 'عادية' }, { v: true, t: 'تاتش' }].map((o) => (
                                 <button
                                   key={o.t}
@@ -1233,7 +1577,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                                   role="radio"
                                   aria-checked={spec.touch === o.v}
                                   onClick={() => setSpec({ ...spec, touch: o.v })}
-                                  className={cn('flex-1 rounded-lg px-3 text-sm font-bold transition-colors', spec.touch === o.v ? 'bg-foreground text-background' : 'text-foreground/70 hover:bg-muted/60')}
+                                  className={cn('flex w-auto flex-auto items-center justify-center whitespace-nowrap rounded-lg px-3 py-2 text-center text-sm font-bold transition-colors', spec.touch === o.v ? 'bg-foreground text-background shadow-sm' : 'text-foreground/70 hover:bg-foreground/10 hover:text-foreground')}
                                 >
                                   {o.t}
                                 </button>
@@ -1261,8 +1605,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                       {/* 📱 التحديث 33: بيانات جهاز الموبايل/التابلت — التاب ده بس (مش لابتوب/كمبيوتر) */}
                       {kind === 'phone' && (
                         <>
-                          <div className="col-span-full grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                          <Field label="الضمان المتبقي (شهور)" htmlFor="v-warranty" className="min-w-0">
+                          <Field label="الضمان المتبقي (شهور)" htmlFor="v-warranty">
                             <InkInput
                               id="v-warranty"
                               num
@@ -1275,10 +1618,10 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                             />
                             <ChipRow items={['3', '6', '12']} value={form.warrantyMonths} onPick={(v) => setForm({ ...form, warrantyMonths: v })} label="ضمان سريع" />
                           </Field>
-                          <Field label="الكرتونة والملحقات" className="min-w-0">
+                          <Field label="الكرتونة والملحقات">
                             <BoxPick value={form.boxCondition} onChange={(v) => setForm({ ...form, boxCondition: v })} />
                           </Field>
-                          <Field label="الإصدار / النسخة (اختياري)" htmlFor="v-edition" className="min-w-0 sm:col-span-2 lg:col-span-1">
+                          <Field label="الإصدار / النسخة (اختياري)" htmlFor="v-edition" className="col-span-2 sm:col-span-2">
                             <InkInput
                               id="v-edition"
                               placeholder="نسخة مصرية / مفتوح الشبكات"
@@ -1286,9 +1629,8 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                               value={form.edition}
                               onChange={(e) => setForm({ ...form, edition: e.target.value })}
                             />
-                            <ChipRow items={EDITION_CHIPS} value={form.edition} onPick={(v) => setForm({ ...form, edition: v })} label="نسخ سريعة" scrollable />
+                            <ChipRow items={EDITION_CHIPS} value={form.edition} onPick={(v) => setForm({ ...form, edition: v })} label="نسخ سريعة" />
                           </Field>
-                          </div>
                         </>
                       )}
                     </>
@@ -1310,6 +1652,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                       min={0}
                       value={form.quantity}
                       onChange={(e) => setForm({ ...form, quantity: parseInt(e.target.value) || 0 })}
+                      className="pl-5"
                     />
                   </Field>
                   <Field label="السعر (اختياري)" htmlFor="v-price">
@@ -1324,7 +1667,8 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                       onChange={(e) => setForm({ ...form, price: e.target.value })}
                     />
                   </Field>
-                  <Field label="الباركود" htmlFor="v-barcode" className="col-span-2 sm:col-span-4">
+                  {/* 📱 التحديث 35 (2026-11-07): الباركود بقى خانة عادية جنب السعر — مش صف كامل */}
+                  <Field label="الباركود" htmlFor="v-barcode" className="col-span-2 sm:col-span-2">
                     <div className="flex gap-2">
                       <InkInput
                         id="v-barcode"
@@ -1339,7 +1683,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                         variant="outline"
                         title="توليد باركود"
                         aria-label="توليد باركود"
-                        className={cn('h-11 rounded-xl px-3.5', INK_BTN_OUTLINE)}
+                        className={cn('h-11 shrink-0 rounded-xl px-3.5', INK_BTN_OUTLINE)}
                         onClick={async () => {
                           const code = await fetchUniqueBarcode(existingBarcodes)
                           setForm((f) => ({ ...f, barcode: code }))
@@ -1347,12 +1691,14 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                       >
                         <Dices className="size-4" />
                       </Button>
-                      <Button onClick={addVariant} disabled={saving} className={cn('h-11 rounded-xl px-5 font-bold', INK_BTN)}>
-                        {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                        إضافة
-                      </Button>
                     </div>
                   </Field>
+                  <div className="col-span-2 flex items-end justify-end sm:col-span-4">
+                    <Button onClick={addVariant} disabled={saving} className={cn('h-11 rounded-xl px-8 font-bold', INK_BTN)}>
+                      {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                      إضافة
+                    </Button>
+                  </div>
                 </div>
               </section>
 
@@ -1458,10 +1804,10 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                                 </Button>
                               </div>
                               <ul className="divide-y">
-                                <li className={cn('grid gap-2 bg-muted/20 px-3 py-1.5 text-[11px] font-bold text-foreground/65', ROW_GRID)}>
+                                <li className={cn('grid gap-2 bg-muted/20 px-4 py-1.5 text-[11px] font-bold text-foreground/65', ROW_GRID)}>
                                   <span>{opt2Label}</span>
                                   {isElectronics && <span>الحالة</span>}
-                                  <span>الباركود</span>
+                                  <span className="text-center">الباركود</span>
                                   <span className="text-center">السعر</span>
                                   <span className="text-center">الكمية</span>
                                   {isElectronics && kind === 'phone' && <span className="text-center">IMEI</span>}
@@ -1470,18 +1816,17 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                                 {g.items.map((v) => {
                                   // 📱 التحديث 33: بيانات جهاز الموبايل/التابلت
                                   const vUnits = unitsByVariant.get(v.id) ?? []
-                                  const deviceOpen = openDevices.has(v.id)
                                   const overUnits = showDeviceFields && vUnits.length > v.quantity
                                   const deviceBadges = showDeviceFields
                                     ? [warrantyLabel(v.warrantyMonths), v.boxCondition ? BOX_SHORT[v.boxCondition as BoxCondition] : null, v.edition].filter(Boolean) as string[]
                                     : []
                                   return (
                                   <li key={v.id} className="border-b border-border/60 last:border-b-0">
-                                    <div className={cn('grid items-center gap-2 px-3 py-1.5 text-sm', ROW_GRID)}>
-                                      <span className="min-w-0">
+                                    <div className={cn('grid items-center gap-2 px-4 py-1.5 text-sm', ROW_GRID)}>
+                                      <span className="min-w-0 max-w-full overflow-hidden">
                                         <span className="block truncate font-bold">{v.size ?? '—'}</span>
                                         {showDeviceFields && deviceBadges.length > 0 && (
-                                          <span className="mt-0.5 block truncate text-[10px] font-bold text-foreground/55" title={deviceBadges.join(' · ')}>
+                                          <span className="mt-0.5 block max-w-full overflow-hidden whitespace-normal break-words text-[10px] font-bold leading-snug text-foreground/55 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]" title={deviceBadges.join(' · ')}>
                                             {deviceBadges.join(' · ')}
                                           </span>
                                         )}
@@ -1501,7 +1846,7 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                                           <option value="used">{CONDITION_LABEL.used}</option>
                                         </select>
                                       )}
-                                      <span dir="ltr" className="truncate text-start font-mono text-xs text-foreground/75">
+                                      <span dir="ltr" className="min-w-0 overflow-hidden truncate text-center font-mono text-xs text-foreground/75">
                                         {v.barcode ?? (
                                           <IconBtn
                                             label="توليد باركود"
@@ -1548,16 +1893,13 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                                       {isElectronics && kind === 'phone' && (
                                         <button
                                           type="button"
-                                          aria-expanded={deviceOpen}
-                                          title="بيانات الجهاز — ضمان / كرتونة / نسخة / IMEI"
-                                          onClick={() => toggleDevicePanel(v.id)}
+                                          title="أجهزة المتغير — IMEI / سيريال (بحث وتسجيل وإدارة في تاب كامل)"
+                                          onClick={() => openDevicesForVariant(v.id)}
                                           className={cn(
                                             'mx-auto flex h-9 w-full items-center justify-center gap-1 rounded-lg border text-[10px] font-extrabold transition-colors',
-                                            deviceOpen
-                                              ? 'border-foreground bg-foreground text-background'
-                                              : overUnits
-                                                ? 'border-warning-subtle bg-warning-subtle text-warning-subtle-foreground hover:bg-warning-subtle/80'
-                                                : 'bg-background text-foreground/75 hover:border-foreground/60 hover:bg-muted/60',
+                                            overUnits
+                                              ? 'border-warning-subtle bg-warning-subtle text-warning-subtle-foreground hover:bg-warning-subtle/80'
+                                              : 'bg-background text-foreground/75 hover:border-foreground/60 hover:bg-muted/60',
                                           )}
                                         >
                                           <BadgeInfo className="size-3.5 shrink-0" aria-hidden />
@@ -1569,11 +1911,11 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                                       </IconBtn>
                                     </div>
 
-                                    {showDeviceFields && deviceOpen && (
+                                    {showDeviceFields && (
                                       <div className="space-y-3 border-t bg-muted/25 px-3 py-3">
                                         {/* ─── الضمان / الكرتونة / النسخة ─── */}
-                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                          <Field label="الضمان المتبقي (شهور)" htmlFor={`dw-${v.id}`} className="min-w-0">
+                                        <div className="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-4">
+                                          <Field label="الضمان المتبقي (شهور)" htmlFor={`dw-${v.id}`}>
                                             <InkInput
                                               id={`dw-${v.id}`}
                                               num
@@ -1607,13 +1949,13 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                                               className="text-center"
                                             />
                                           </Field>
-                                          <Field label="الكرتونة والملحقات" className="min-w-0">
+                                          <Field label="الكرتونة والملحقات">
                                             <BoxPick
                                               value={(v.boxCondition === 'full' || v.boxCondition === 'device' ? v.boxCondition : '') as '' | BoxCondition}
                                               onChange={(val) => void updateDeviceField(v.id, { boxCondition: val })}
                                             />
                                           </Field>
-                                          <Field label="الإصدار / النسخة" htmlFor={`de-${v.id}`} className="min-w-0 sm:col-span-2 lg:col-span-1">
+                                          <Field label="الإصدار / النسخة" htmlFor={`de-${v.id}`} className="col-span-2">
                                             <InkInput
                                               id={`de-${v.id}`}
                                               placeholder="نسخة مصرية / مفتوح الشبكات"
@@ -1646,123 +1988,24 @@ export function ProductVariantsDialog({ open, onOpenChange, product, onChanged }
                                               value={deviceDraft[v.id]?.edition ?? (v.edition ?? '')}
                                               onPick={(val) => void updateDeviceField(v.id, { edition: val })}
                                               label="نسخ سريعة"
-                                              scrollable
                                             />
                                           </Field>
                                         </div>
 
-                                        {/* ─── أجهزة المتغير: IMEI لكل قطعة + صحة البطارية (للآيفون بس) ─── */}
-                                        <div className="rounded-xl border bg-card p-3">
-                                          <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <p className="flex items-center gap-1.5 text-xs font-extrabold">
-                                              <Package className="size-3.5 text-foreground/60" aria-hidden />
-                                              أجهزة المتغير (IMEI / سيريال)
-                                            </p>
-                                            <span
-                                              className={cn(
-                                                'rounded-md px-1.5 py-0.5 text-[10px] font-extrabold tabular-nums',
-                                                overUnits ? 'bg-warning-subtle text-warning-subtle-foreground' : 'bg-muted text-foreground/65',
-                                              )}
-                                            >
-                                              {vUnits.length} مسجل من {v.quantity}
-                                            </span>
-                                          </div>
-                                          {overUnits && (
-                                            <p className="mt-1.5 text-[11px] font-bold text-warning-subtle-foreground">
-                                              عدد الأجهزة المسجلة أكتر من الكمية ({v.quantity}) — راجع الكمية أو سجل الأجهزة.
-                                            </p>
+                                        {/* 📱 التحديث 35: إدارة الـ IMEI كلها في تاب «أجهزة المنتج» — وفورم التسجيل هناك زي القديم */}
+                                        <button
+                                          type="button"
+                                          onClick={() => openDevicesForVariant(v.id)}
+                                          className={cn(
+                                            'flex w-full items-center justify-center gap-2 rounded-xl border border-dashed px-3 py-2.5 text-xs font-extrabold transition-colors',
+                                            overUnits
+                                              ? 'border-warning-subtle bg-warning-subtle text-warning-subtle-foreground hover:bg-warning-subtle/80'
+                                              : 'bg-card text-foreground/75 hover:border-foreground/50 hover:text-foreground',
                                           )}
-                                          {vUnits.length > 0 && (
-                                            <ul className="mt-2 space-y-1.5">
-                                              {vUnits.map((u) => (
-                                                <li key={u.id} className="flex items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5">
-                                                  <ShieldCheck
-                                                    className={cn('size-3.5 shrink-0', u.status === 'sold' ? 'text-foreground/35' : 'text-success-subtle-foreground')}
-                                                    aria-hidden
-                                                  />
-                                                  <span dir="ltr" className="min-w-0 flex-1 truncate font-mono text-xs font-bold" title={u.imei}>
-                                                    {u.imei}
-                                                  </span>
-                                                  {isIphone ? (
-                                                    <InkInput
-                                                      num
-                                                      size="sm"
-                                                      type="number"
-                                                      min={1}
-                                                      max={100}
-                                                      placeholder="بطارية %"
-                                                      aria-label={`صحة بطارية ${u.imei}`}
-                                                      wrapperClassName="w-24 shrink-0"
-                                                      value={unitBatteryDraft[u.id] ?? (u.batteryHealth ?? '')}
-                                                      onChange={(e) => setUnitBatteryDraft((p) => ({ ...p, [u.id]: e.target.value }))}
-                                                      onBlur={(e) => void updateUnitBattery(u.id, e.target.value)}
-                                                      className="text-center text-xs"
-                                                    />
-                                                  ) : null}
-                                                  <span
-                                                    className={cn(
-                                                      'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold',
-                                                      u.status === 'sold' ? 'bg-foreground/10 text-foreground/60' : 'bg-success-subtle text-success-subtle-foreground',
-                                                    )}
-                                                  >
-                                                    {UNIT_STATUS_LABEL[u.status as keyof typeof UNIT_STATUS_LABEL] ?? 'بالمخزن'}
-                                                  </span>
-                                                  <IconBtn label="حذف الجهاز" danger disabled={removingUnit === u.id} onClick={() => void removeUnit(v.id, u.id)}>
-                                                    {removingUnit === u.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-                                                  </IconBtn>
-                                                </li>
-                                              ))}
-                                            </ul>
-                                          )}
-                                          <div className="mt-2 flex items-center gap-2">
-                                            <InkInput
-                                              dir="ltr"
-                                              placeholder="IMEI / سيريال الجهاز"
-                                              aria-label={`IMEI جديد ${v.size ?? ''} ${v.color ?? ''}`}
-                                              wrapperClassName="min-w-0 flex-1"
-                                              className="text-start font-mono text-xs"
-                                              autoComplete="off"
-                                              value={imeiDraft[v.id] ?? ''}
-                                              onChange={(e) => setImeiDraft((p) => ({ ...p, [v.id]: e.target.value }))}
-                                              onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                  e.preventDefault()
-                                                  void addUnit(v.id)
-                                                }
-                                              }}
-                                            />
-                                            {isIphone && (
-                                              <InkInput
-                                                num
-                                                size="sm"
-                                                type="number"
-                                                min={1}
-                                                max={100}
-                                                placeholder="بطارية %"
-                                                aria-label={`صحة بطارية الجهاز الجديد ${v.size ?? ''} ${v.color ?? ''}`}
-                                                wrapperClassName="w-24 shrink-0"
-                                                value={newBatteryDraft[v.id] ?? ''}
-                                                onChange={(e) => setNewBatteryDraft((p) => ({ ...p, [v.id]: e.target.value }))}
-                                                className="text-center text-xs"
-                                              />
-                                            )}
-                                            <Button
-                                              type="button"
-                                              variant="outline"
-                                              disabled={addingUnit === v.id}
-                                              onClick={() => void addUnit(v.id)}
-                                              className={cn('h-9 shrink-0 rounded-lg px-3 text-xs font-bold', INK_BTN_OUTLINE)}
-                                            >
-                                              {addingUnit === v.id ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
-                                              تسجيل
-                                            </Button>
-                                          </div>
-                                          <p className="mt-1.5 text-[11px] font-medium text-foreground/60">
-                                            {isIphone
-                                              ? 'سجّل IMEI كل جهاز على حدة مع نسبة صحة البطارية — نفس الرقم ممنوع يتسجل مرتين في المحل كله.'
-                                              : 'سجّل IMEI كل جهاز على حدة — نفس الرقم ممنوع يتسجل مرتين في المحل كله (تتبع الضمان والحماية من المسروق).'}
-                                          </p>
-                                        </div>
+                                        >
+                                          <Package className="size-3.5 shrink-0" aria-hidden />
+                                          تسجيل / إدارة أجهزة المتغير (IMEI / سيريال) — {vUnits.length} مسجل من {v.quantity}
+                                        </button>
                                       </div>
                                     )}
                                   </li>

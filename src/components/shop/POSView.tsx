@@ -1744,6 +1744,7 @@ export function POSView() {
             qty: Math.round((it.unitQuantity ?? it.quantity) * 1000) / 1000,
             price: it.unitQuantity ? (it.price * it.quantity) / it.unitQuantity : it.price,
             total: it.price * it.quantity,
+            serials: it.serials ?? null,
           })),
           total: sale.total,
           paid: sale.paid,
@@ -1783,6 +1784,7 @@ export function POSView() {
               name: it.name + variantSuffix + unitSuffix,
               price: displayPrice,
               quantity: displayQty,
+              serials: it.serials ?? null,
             }
           }),
           customer: sale.customer ? { name: sale.customer.name, phone: sale.customer.phone } : null,
