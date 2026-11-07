@@ -88,7 +88,7 @@ export function fmtTimeOnly(d: string | Date): string {
   const suffix = h < 12 ? 'صباحاً' : 'مساءً'
   const h12 = h % 12 === 0 ? 12 : h % 12
   const hh = String(h12).padStart(2, '0')
-  return `${suffix} ${hh}:${p.minute}`
+  return `${hh}:${p.minute} ${suffix}`
 }
 
 /** Shared brand tokens so every printed/exported document (invoice, report,
