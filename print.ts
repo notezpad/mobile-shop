@@ -50,27 +50,41 @@ export function fmtLabelPrice(n: number): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+function cairoparts(d: string | Date) {
+  const date = typeof d === 'string' ? new Date(d) : d
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Africa/Cairo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+  return Object.fromEntries(fmt.formatToParts(date).map(({ type, value }) => [type, value]))
+}
+
 export function fmtDate(d: string | Date) {
   const date = typeof d === 'string' ? new Date(d) : d
   if (isNaN(date.getTime())) return ''
-  const pad = (x: number) => String(x).padStart(2, '0')
-  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+  const p = cairoparts(date)
+  return `${p.year}/${p.month}/${p.day} ${p.hour}:${p.minute}`
 }
 
-/** التاريخ فقط — YYYY/MM/DD */
+/** التاريخ فقط — YYYY/MM/DD (بتوقيت القاهرة) */
 export function fmtDateOnly(d: string | Date): string {
   const date = typeof d === 'string' ? new Date(d) : d
   if (isNaN(date.getTime())) return ''
-  const pad = (x: number) => String(x).padStart(2, '0')
-  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())}`
+  const p = cairoparts(date)
+  return `${p.year}/${p.month}/${p.day}`
 }
 
-/** الوقت فقط — HH:MM */
+/** الوقت فقط — HH:MM صباحاً/مساءً (بتوقيت القاهرة) */
 export function fmtTimeOnly(d: string | Date): string {
   const date = typeof d === 'string' ? new Date(d) : d
   if (isNaN(date.getTime())) return ''
-  const pad = (x: number) => String(x).padStart(2, '0')
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  const p = cairoparts(date)
+  const h = parseInt(p.hour, 10)
+  const suffix = h < 12 ? 'صباحاً' : 'مساءً'
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  const hh = String(h12).padStart(2, '0')
+  return `${suffix} ${hh}:${p.minute}`
 }
 
 /** Shared brand tokens so every printed/exported document (invoice, report,
@@ -237,23 +251,21 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
   .mc-items table { width: 100%; border-collapse: collapse; }
   .mc-items th { background: ${INK}; color: ${GOLD}; padding: 10px; font-size: 13px; font-weight: 700; text-align: center; }
   .mc-items th:nth-child(2) { text-align: right; }
-  .mc-items th:nth-child(4), .mc-items th:nth-child(5) { text-align: right; padding-left: 16px; }
-  .mc-items td { padding: 14px 8px; border-bottom: 2px solid #f3f4f6; font-size: 13px; }
+  .mc-items td { padding: 14px 8px; border-bottom: 2px solid #f3f4f6; font-size: 13px; vertical-align: middle; }
   .mc-items td.center { text-align: center; }
-  .mc-items td.num { text-align: right; padding-left: 16px; }
-  .mc-totals-wrap { display: flex; justify-content: space-between; align-items: center; padding: 0 30px 16px; gap: 20px; }
-  .mc-totals { width: 300px; flex-shrink: 0; }
-  /* 🪢 خط نقط رابط بين التسمية والرقم (Leader Dots) — بدل الفراغ الفاضي،
-   *  بيحوّل المسافة لعنصر تصميمي يربط العين بصريًا بين كل سطر وقيمته. */
-  .mc-totals .row { display: flex; align-items: baseline; gap: 6px; padding: 8px 0; font-size: 13.5px; color: #4b5563; font-weight: 700; border-bottom: 1px solid #e5e7eb; }
+  .mc-items td.num { text-align: center; }
+  .mc-totals-wrap { display: flex; align-items: stretch; padding: 0 30px 16px; gap: 24px; }
+  .mc-totals { flex: 0 0 44%; min-width: 260px; display: flex; flex-direction: column; justify-content: flex-end; }
+  /* 🪢 خط نقط رابط بين التسمية والرقم (Leader Dots) */
+  .mc-totals .row { display: flex; align-items: baseline; gap: 6px; padding: 9px 0; font-size: 13.5px; color: #4b5563; font-weight: 700; border-bottom: 1px solid #e5e7eb; }
   .mc-totals .row-label, .mc-totals .row-value { flex-shrink: 0; white-space: nowrap; }
-  .mc-totals .row-leader { flex: 1; min-width: 10px; border-bottom: 2px dotted #c9ced3; margin-bottom: 3px; }
-  .mc-totals .grand { display: flex; justify-content: space-between; align-items: center; background: ${INK}; color: ${GOLD}; padding: 13px 16px; border-radius: 6px; font-size: 18px; font-weight: 900; margin-top: 8px; }
+  .mc-totals .row-leader { flex: 1; min-width: 12px; border-bottom: 2px dotted #c9ced3; margin-bottom: 3px; }
+  .mc-totals .grand { display: flex; justify-content: space-between; align-items: center; background: ${INK}; color: ${GOLD}; padding: 14px 18px; border-radius: 0; font-size: 19px; font-weight: 900; margin-top: 10px; }
   .mc-totals .grand span:last-child { color: #fff; }
-  .mc-totals-note { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; opacity: .55; }
-  .mc-totals-note .tn-icon { font-size: 36px; }
-  .mc-totals-note .tn-text { font-size: 12.5px; font-weight: 800; color: ${INK}; text-align: center; line-height: 1.7; }
-  .mc-totals-note .tn-divider { width: 60px; height: 2px; background: linear-gradient(90deg, ${GOLD}, transparent); border-radius: 2px; }
+  .mc-totals-note { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; opacity: .5; border-right: 2px dashed #e5e7eb; padding-right: 24px; }
+  .mc-totals-note .tn-icon { font-size: 32px; }
+  .mc-totals-note .tn-text { font-size: 12px; font-weight: 800; color: ${INK}; text-align: center; line-height: 1.7; }
+  .mc-totals-note .tn-divider { width: 50px; height: 2px; background: linear-gradient(90deg, ${GOLD}, transparent); border-radius: 2px; }
   /* 🛡️ قسم الضمان والشروط — مُصحَّح: mc-terms أولاً ثم mc-terms.empty لضمان الـ cascade الصحيح */
   .mc-terms { background: linear-gradient(135deg, #f9fafb 0%, #f0f4f0 100%); border-top: 2px solid ${GOLD}; border-bottom: 1px solid #e5e7eb; padding: 14px 30px; }
   .mc-terms-header { font-size: 12.5px; font-weight: 900; color: ${INK}; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; border-bottom: 1px dashed #d9ddd9; padding-bottom: 7px; }
@@ -262,18 +274,18 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
   .mc-terms-line::before { content: '◈'; color: ${GOLD}; font-size: 10px; flex-shrink: 0; margin-top: 3px; }
   .mc-terms.empty { font-size: 11.5px; color: #9ca3af; font-style: italic; }
   .mc-footer { padding: 18px 30px; display: flex; justify-content: space-between; align-items: flex-end; }
-  .mc-sign p { font-size: 12px; color: #6b7280; font-weight: 700; margin-bottom: 28px; }
-  .mc-sign-line { width: 150px; border-bottom: 2px dashed #9ca3af; }
+  .mc-sign { display: flex; align-items: flex-end; gap: 12px; }
+  .mc-sign p { font-size: 12px; color: #6b7280; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+  .mc-sign-line { flex: 1; min-width: 120px; width: 180px; border-bottom: 2px dashed #9ca3af; }
   .mc-thanks { text-align: center; }
   .mc-thanks .big { font-size: 18px; font-weight: 900; color: ${GOLD}; margin-bottom: 3px; }
   .mc-thanks .sub { font-size: 11px; color: #9ca3af; font-weight: 700; }
   .mc-watermark { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 0; overflow: hidden; }
   .mc-watermark span { font-size: 70px; font-weight: 800; color: #ef4444; opacity: .07; transform: rotate(-28deg); white-space: nowrap; }
   @media print {
-    html, body { background: #fff; padding: 8mm 6mm; }
-    .mc-wrap { width: 100%; }
-    /* margin: 0 بيمنع البراوزر من إضافة التاريخ/الوقت/رقم الصفحة في الهامش */
-    @page { size: A4; margin: 0; }
+    html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+    .mc-wrap { width: 100% !important; max-width: none !important; margin: 0 !important; }
+    @page { size: A4; margin: 8mm 10mm; }
   }
 </style>
 </head>

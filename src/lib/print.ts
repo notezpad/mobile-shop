@@ -52,27 +52,43 @@ export function fmtLabelPrice(n: number): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+/** 🕐 مساعد: يعيد أجزاء التاريخ/الوقت بتوقيت القاهرة (Africa/Cairo = UTC+2) بغض النظر عن timezone السيرفر */
+function cairoparts(d: string | Date) {
+  const date = typeof d === 'string' ? new Date(d) : d
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Africa/Cairo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+  const p = Object.fromEntries(fmt.formatToParts(date).map(({ type, value }) => [type, value]))
+  return p  // { year, month, day, hour, minute }
+}
+
 export function fmtDate(d: string | Date) {
   const date = typeof d === 'string' ? new Date(d) : d
   if (isNaN(date.getTime())) return ''
-  const pad = (x: number) => String(x).padStart(2, '0')
-  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+  const p = cairoparts(date)
+  return `${p.year}/${p.month}/${p.day} ${p.hour}:${p.minute}`
 }
 
-/** التاريخ فقط — YYYY/MM/DD */
+/** التاريخ فقط — YYYY/MM/DD (بتوقيت القاهرة) */
 export function fmtDateOnly(d: string | Date): string {
   const date = typeof d === 'string' ? new Date(d) : d
   if (isNaN(date.getTime())) return ''
-  const pad = (x: number) => String(x).padStart(2, '0')
-  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())}`
+  const p = cairoparts(date)
+  return `${p.year}/${p.month}/${p.day}`
 }
 
-/** الوقت فقط — HH:MM */
+/** الوقت فقط — HH:MM صباحاً/مساءً (بتوقيت القاهرة) */
 export function fmtTimeOnly(d: string | Date): string {
   const date = typeof d === 'string' ? new Date(d) : d
   if (isNaN(date.getTime())) return ''
-  const pad = (x: number) => String(x).padStart(2, '0')
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  const p = cairoparts(date)
+  const h = parseInt(p.hour, 10)
+  const suffix = h < 12 ? 'صباحاً' : 'مساءً'
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  const hh = String(h12).padStart(2, '0')
+  return `${suffix} ${hh}:${p.minute}`
 }
 
 /** Shared brand tokens so every printed/exported document (invoice, report,
@@ -205,6 +221,19 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
   if (remaining > 0.009 && sale.paid > 0.009) { statusLabel = '◐ مدفوعة جزئياً'; statusColor = GOLD }
   else if (remaining > 0.009) { statusLabel = '✕ غير مدفوعة'; statusColor = '#ef4444' }
 
+  // 🧠 حجم خط اسم المحل يتقلص تدريجياً مع طول الاسم — يمنع الاقتطاع بـ ellipsis
+  const shopName = shop?.name || 'محل الاتصالات'
+  const brandNameFontPx = (() => {
+    const len = shopName.length
+    if (len <= 10) return 26
+    if (len <= 14) return 23
+    if (len <= 18) return 20
+    if (len <= 22) return 18
+    if (len <= 26) return 16
+    if (len <= 32) return 14
+    return 12
+  })()
+
   return `<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
@@ -218,7 +247,7 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
   .mc-header { display: flex; justify-content: space-between; align-items: stretch; background: ${INK}; color: #fff; }
   .mc-brand { padding: 20px 30px; flex: 1; min-width: 0; border-left: 1px solid #333; display: flex; flex-direction: row; align-items: center; gap: 18px; }
   .mc-brand-text { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; flex: 1; min-width: 0; }
-  .mc-brand h1 { font-size: 26px; font-weight: 900; color: ${GOLD}; margin-bottom: 6px; letter-spacing: .5px; text-shadow: 1px 1px 3px rgba(0,0,0,.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .mc-brand h1 { font-weight: 900; color: ${GOLD}; margin-bottom: 6px; letter-spacing: .5px; text-shadow: 1px 1px 3px rgba(0,0,0,.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .mc-logo { width: 72px; height: 72px; object-fit: contain; border-radius: 12px; border: 2px solid ${GOLD}; background: #fff; flex-shrink: 0; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
   .mc-meta-note { font-size: 11.5px; color: #d1d5db; margin-top: 3px; line-height: 1.6; }
   .mc-phone-badge { display: inline-flex; align-items: center; gap: 6px; background: ${GOLD}; color: ${INK}; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 900; margin-top: 8px; }
@@ -238,17 +267,18 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
   .mc-items td { padding: 14px 8px; border-bottom: 2px solid #f3f4f6; font-size: 13px; vertical-align: middle; }
   .mc-items td.center { text-align: center; }
   .mc-items td.num { text-align: center; }
-  .mc-totals-wrap { display: flex; justify-content: space-between; align-items: center; padding: 0 30px 16px; gap: 20px; }
-  .mc-totals { width: 320px; flex-shrink: 0; }
+  /* 🧾 Totals — layout جديد: المجاميع تأخذ نصف العرض اليمين، النوتة تملأ اليسار */
+  .mc-totals-wrap { display: flex; align-items: stretch; padding: 0 30px 16px; gap: 24px; }
+  .mc-totals { flex: 0 0 44%; min-width: 260px; display: flex; flex-direction: column; justify-content: flex-end; }
   .mc-totals .row { display: flex; align-items: baseline; gap: 6px; padding: 9px 0; font-size: 13.5px; color: #4b5563; font-weight: 700; border-bottom: 1px solid #e5e7eb; }
   .mc-totals .row-label, .mc-totals .row-value { flex-shrink: 0; white-space: nowrap; }
   .mc-totals .row-leader { flex: 1; min-width: 12px; border-bottom: 2px dotted #c9ced3; margin-bottom: 3px; }
-  .mc-totals .grand { display: flex; justify-content: space-between; align-items: center; background: ${INK}; color: ${GOLD}; padding: 14px 18px; border-radius: 0; font-size: 19px; font-weight: 900; margin-top: 10px; width: 100%; }
+  .mc-totals .grand { display: flex; justify-content: space-between; align-items: center; background: ${INK}; color: ${GOLD}; padding: 14px 18px; border-radius: 0; font-size: 19px; font-weight: 900; margin-top: 10px; }
   .mc-totals .grand span:last-child { color: #fff; }
-  .mc-totals-note { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; opacity: .55; }
-  .mc-totals-note .tn-icon { font-size: 36px; }
-  .mc-totals-note .tn-text { font-size: 12.5px; font-weight: 800; color: ${INK}; text-align: center; line-height: 1.7; }
-  .mc-totals-note .tn-divider { width: 60px; height: 2px; background: linear-gradient(90deg, ${GOLD}, transparent); border-radius: 2px; }
+  .mc-totals-note { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; opacity: .5; border-right: 2px dashed #e5e7eb; padding-right: 24px; }
+  .mc-totals-note .tn-icon { font-size: 32px; }
+  .mc-totals-note .tn-text { font-size: 12px; font-weight: 800; color: ${INK}; text-align: center; line-height: 1.7; }
+  .mc-totals-note .tn-divider { width: 50px; height: 2px; background: linear-gradient(90deg, ${GOLD}, transparent); border-radius: 2px; }
   /* 🛡️ قسم الضمان والشروط — مُصحَّح: mc-terms أولاً ثم mc-terms.empty لضمان الـ cascade الصحيح */
   .mc-terms { background: linear-gradient(135deg, #f9fafb 0%, #f0f4f0 100%); border-top: 2px solid ${GOLD}; border-bottom: 1px solid #e5e7eb; padding: 14px 30px; }
   .mc-terms-header { font-size: 12.5px; font-weight: 900; color: ${INK}; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; border-bottom: 1px dashed #d9ddd9; padding-bottom: 7px; }
@@ -266,10 +296,10 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
   .mc-watermark { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 0; overflow: hidden; }
   .mc-watermark span { font-size: 70px; font-weight: 800; color: #ef4444; opacity: .07; transform: rotate(-28deg); white-space: nowrap; }
   @media print {
-    html, body { background: #fff; padding: 8mm 6mm; }
-    .mc-wrap { width: 100%; }
-    /* margin: 0 بيمنع البراوزر من إضافة التاريخ/الوقت/رقم الصفحة في الهامش */
-    @page { size: A4; margin: 0; }
+    html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+    .mc-wrap { width: 100% !important; max-width: none !important; margin: 0 !important; }
+    /* الهوامش تتحكم بها @page فقط — مش body padding — عشان يتسع لأقصى عرض */
+    @page { size: A4; margin: 8mm 10mm; }
   }
 </style>
 </head>
@@ -280,7 +310,7 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
       <div class="mc-brand">
         ${shop?.logo ? `<img src="${shop.logo}" class="mc-logo" alt="لوجو المحل" />` : ''}
         <div class="mc-brand-text">
-          <h1>${escapeHtml(shop?.name || 'محل الاتصالات')}</h1>
+          <h1 style="font-size:${brandNameFontPx}px">${escapeHtml(shopName)}</h1>
           ${shop?.address ? `<div class="mc-meta-note">${escapeHtml(shop.address)}</div>` : ''}
           ${shop?.phone ? `<div class="mc-phone-badge" dir="ltr"><span>📞</span><span>${escapeHtml(shop.phone)}</span></div>` : ''}
         </div>
