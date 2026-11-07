@@ -52,43 +52,37 @@ export function fmtLabelPrice(n: number): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-/** 🕐 مساعد: يعيد أجزاء التاريخ/الوقت بتوقيت القاهرة (Africa/Cairo = UTC+2) بغض النظر عن timezone السيرفر */
-function cairoparts(d: string | Date) {
-  const date = typeof d === 'string' ? new Date(d) : d
-  const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Africa/Cairo',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  })
-  const p = Object.fromEntries(fmt.formatToParts(date).map(({ type, value }) => [type, value]))
-  return p  // { year, month, day, hour, minute }
-}
-
 export function fmtDate(d: string | Date) {
   const date = typeof d === 'string' ? new Date(d) : d
   if (isNaN(date.getTime())) return ''
-  const p = cairoparts(date)
-  return `${p.year}/${p.month}/${p.day} ${p.hour}:${p.minute}`
+  const pad = (x: number) => String(x).padStart(2, '0')
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-/** التاريخ فقط — YYYY/MM/DD (بتوقيت القاهرة) */
+/** التاريخ فقط — YYYY/MM/DD */
 export function fmtDateOnly(d: string | Date): string {
   const date = typeof d === 'string' ? new Date(d) : d
   if (isNaN(date.getTime())) return ''
-  const p = cairoparts(date)
-  return `${p.year}/${p.month}/${p.day}`
+  const pad = (x: number) => String(x).padStart(2, '0')
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())}`
 }
 
-/** الوقت فقط — HH:MM صباحاً/مساءً (بتوقيت القاهرة) */
+/** الوقت فقط — hh:mm صباحاً/مساءً (12 ساعة)
+ *  بيترجع HTML جاهز (مش نص عادي) لأن خلط أرقام إنجليزي + كلمة عربي
+ *  جوه صفحة RTL بيخلي المتصفح يقلب الترتيب البصري (يطلع "مساءً 01:02"
+ *  بدل "01:02 مساءً"). استخدام flex بـ direction:ltr + bdi لكل جزء
+ *  بيثبّت الترتيب البصري: الساعة الأول وبعدين صباحاً/مساءً، مهما كان
+ *  اتجاه الصفحة المحيطة. */
 export function fmtTimeOnly(d: string | Date): string {
   const date = typeof d === 'string' ? new Date(d) : d
   if (isNaN(date.getTime())) return ''
-  const p = cairoparts(date)
-  const h = parseInt(p.hour, 10)
-  const suffix = h < 12 ? 'صباحاً' : 'مساءً'
-  const h12 = h % 12 === 0 ? 12 : h % 12
-  const hh = String(h12).padStart(2, '0')
-  return `${hh}:${p.minute} ${suffix}`
+  const pad = (x: number) => String(x).padStart(2, '0')
+  let hours = date.getHours()
+  const period = hours >= 12 ? 'مساءً' : 'صباحاً'
+  hours = hours % 12
+  if (hours === 0) hours = 12
+  const hhmm = `${pad(hours)}:${pad(date.getMinutes())}`
+  return `<span style="display:inline-flex;direction:ltr;align-items:baseline;gap:4px"><bdi>${hhmm}</bdi><bdi>${period}</bdi></span>`
 }
 
 /** Shared brand tokens so every printed/exported document (invoice, report,
@@ -318,7 +312,7 @@ export function printInvoiceHtml(sale: PrintableSale, shop?: ShopInfo): string {
       <div class="mc-meta">
         <div class="mc-meta-row"><span>رقم الفاتورة:</span><span dir="ltr">${escapeHtml(invoiceNo)}</span></div>
         <div class="mc-meta-row"><span>التاريخ:</span><span dir="ltr">${fmtDateOnly(sale.createdAt)}</span></div>
-        <div class="mc-meta-row"><span>الوقت:</span><span dir="ltr">${fmtTimeOnly(sale.createdAt)}</span></div>
+        <div class="mc-meta-row"><span>الوقت:</span>${fmtTimeOnly(sale.createdAt)}</div>
         <div class="mc-meta-row"><span>الحالة:</span><span style="color:${statusColor}">${statusLabel}</span></div>
       </div>
     </div>
